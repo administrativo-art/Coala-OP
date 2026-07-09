@@ -3,12 +3,14 @@ import { initializeFirestore, connectFirestoreEmulator } from "firebase/firestor
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
+import { initializeClientAppCheck } from "./firebase-app-check";
 import { assertFirebaseClientConfig, firebaseClientConfig } from "./firebase-client-config";
 
 assertFirebaseClientConfig();
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseClientConfig) : getApp();
+initializeClientAppCheck(app);
 
 // Connect to the specific "coala" database using Firestore defaults.
 const db = initializeFirestore(
