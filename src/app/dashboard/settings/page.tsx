@@ -537,9 +537,9 @@ export default function SettingsPage() {
     },
     {
       value: "catalogo-qr",
-      label: "QR do catálogo",
-      title: "QR code do catálogo",
-      description: "Imprima o QR code para que atendentes acessem o catálogo de mercadorias diretamente pelo celular.",
+      label: "QR Codes",
+      title: "QR codes operacionais",
+      description: "Centralize QR codes, etiquetas e códigos usados em catálogo, patrimônio, estoque e leitura por scanner.",
       content: <CatalogoQRPanel />,
     },
   ].filter((tab) => {

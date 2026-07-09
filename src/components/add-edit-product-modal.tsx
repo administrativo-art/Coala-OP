@@ -262,6 +262,15 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         if (selectedCategory?.destination === 'uniform') {
             handleCategoryChange('Vestimenta');
         }
+        if (selectedCategory?.destination === 'asset') {
+            form.setValue('category', 'Unidade', { shouldDirty: true, shouldValidate: true });
+            form.setValue('packageType', 'Unidade', { shouldDirty: true, shouldValidate: true });
+            form.setValue('packageSize', 1, { shouldDirty: true, shouldValidate: true });
+            form.setValue('unit', 'un', { shouldDirty: true, shouldValidate: true });
+            form.setValue('defaultCountingUnit', 'package', { shouldDirty: true, shouldValidate: true });
+            form.setValue('baseProductId', '', { shouldDirty: true });
+            form.setValue('enableLogistics', false, { shouldDirty: true });
+        }
     };
 
     useEffect(() => {
@@ -831,11 +840,18 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                         <Select onValueChange={(value) => handleOperationalCategoryChange(value, field.onChange)} value={field.value}>
                                                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger></FormControl>
                                                             <SelectContent>
-                                                                {activeCategories.filter((category) => category.destination !== 'asset').map((category) => (
-                                                                    <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                                                                {activeCategories.map((category) => (
+                                                                    <SelectItem key={category.id} value={category.id}>
+                                                                        {category.name}
+                                                                    </SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
+                                                        {selectedOperationalCategory?.destination === 'asset' ? (
+                                                            <FormDescription>
+                                                                Esta categoria entra no fluxo de patrimônio: nas compras, cada unidade recebida pode gerar um bem patrimonial individual.
+                                                            </FormDescription>
+                                                        ) : null}
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}/>

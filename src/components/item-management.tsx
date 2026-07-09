@@ -341,13 +341,16 @@ function BulkEditProductsDialog({
             <Select value={operationalCategoryId} onValueChange={setOperationalCategoryId} disabled={!applyOperationalCategory}>
               <SelectTrigger><SelectValue placeholder="Selecione a categoria..." /></SelectTrigger>
               <SelectContent>
-                {activeCategories
-                  .filter((category) => category.destination !== 'asset')
-                  .map((category) => (
-                    <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
-                  ))}
+                {activeCategories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              A categoria define o fluxo de compra: estoque, vestimenta ou patrimônio.
+            </p>
           </div>
 
           <div className="rounded-md border p-4 space-y-3">
@@ -599,7 +602,7 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
             Insumos derivados cadastrados
           </CardTitle>
           <CardDescription className="text-base text-[#756a62] sm:text-lg">
-            Adicione e edite os itens de estoque derivados dos insumos base.
+            Adicione e edite os itens operacionais usados em estoque, vestimenta e compras patrimoniais.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5 px-0">
