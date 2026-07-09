@@ -1,9 +1,33 @@
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { requireUser } from '@/lib/auth-server';
+import { canViewTechnicalSheets } from '@/lib/commercial-permissions';
+import { logAction } from '@/lib/log-action';
 import { type ProductSimulation, type ProductSimulationItem, type BaseProduct, type SimulationCategory } from '@/types';
 
-export async function GET() {
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function getClientIp(request: NextRequest) {
+  return (
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    null
+  );
+}
+
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+export async function GET(request: NextRequest) {
   try {
+    const userContext = await requireUser(request).catch(() => null);
+    if (!userContext) return jsonError('Não autorizado.', 401);
+    if (!canViewTechnicalSheets(userContext.permissions)) {
+      return jsonError('Sem permissão para consultar fichas técnicas.', 403);
+    }
+
     const [simSnap, itemsSnap, baseProductsSnap, catSnap] = await Promise.all([
       dbAdmin.collection('productSimulations').get(),
       dbAdmin.collection('productSimulationItems').get(),
@@ -59,6 +83,24 @@ export async function GET() {
         if (numA !== numB) return numA - numB;
         return a.name.localeCompare(b.name, 'pt-BR');
       });
+
+    await logAction({
+      workspace_id: userContext.workspace_id,
+      user_id: userContext.userDoc.id,
+      username: userContext.userDoc.username,
+      module: 'catalogo',
+      action: 'technical_catalog_viewed',
+      metadata: {
+        route: '/catalogo',
+        product_count: products.length,
+        line_count: lines.length,
+        user_agent: request.headers.get('user-agent')?.slice(0, 240) ?? null,
+      },
+      ip_address: getClientIp(request),
+      ttl_days: 365,
+    }).catch((error) => {
+      console.error('Catalogo access log error:', error);
+    });
 
     return NextResponse.json({ lines, products });
   } catch (error) {

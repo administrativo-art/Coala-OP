@@ -10,7 +10,7 @@ const CATALOG_URL = 'https://op.coalashakes.com/catalogo';
 const QR_FEATURES = [
   {
     title: 'Catálogo de fichas técnicas',
-    description: 'QR público para consulta do modo de montagem e ficha técnica no celular.',
+    description: 'QR interno para consulta do modo de montagem e ficha técnica no celular, com login obrigatório.',
     icon: QrCode,
   },
   {

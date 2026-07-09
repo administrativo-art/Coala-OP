@@ -6,6 +6,7 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { type SimulationCategory } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
+import { useAuth } from '@/hooks/use-auth';
 
 export interface ProductSimulationCategoryContextType {
   categories: SimulationCategory[];
@@ -17,9 +18,14 @@ export interface ProductSimulationCategoryContextType {
 
 export const ProductSimulationCategoryContext = createContext<ProductSimulationCategoryContextType | undefined>(undefined);
 
-async function fetchCatalogLinesFallback(): Promise<SimulationCategory[]> {
+async function fetchCatalogLinesFallback(firebaseUser: { getIdToken: () => Promise<string> } | null): Promise<SimulationCategory[]> {
+    if (!firebaseUser) return [];
     try {
-        const response = await fetch('/api/catalogo');
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch('/api/catalogo', {
+            cache: 'no-store',
+            headers: { Authorization: `Bearer ${token}` },
+        });
         if (!response.ok) return [];
         const data = await response.json();
         if (!Array.isArray(data?.lines)) return [];
@@ -36,6 +42,7 @@ async function fetchCatalogLinesFallback(): Promise<SimulationCategory[]> {
 }
 
 export function ProductSimulationCategoryProvider({ children }: { children: React.ReactNode }) {
+    const { firebaseUser } = useAuth();
     const [categories, setCategories] = useState<SimulationCategory[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -44,7 +51,7 @@ export function ProductSimulationCategoryProvider({ children }: { children: Reac
         const unsubscribe = onSnapshot(q, async (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SimulationCategory));
             const hasLines = data.some(category => category.type === 'line');
-            const fallbackLines = hasLines ? [] : await fetchCatalogLinesFallback();
+            const fallbackLines = hasLines ? [] : await fetchCatalogLinesFallback(firebaseUser);
             const merged = [...data];
             fallbackLines.forEach((line) => {
                 if (!merged.some(category => category.id === line.id)) {
@@ -55,12 +62,12 @@ export function ProductSimulationCategoryProvider({ children }: { children: Reac
             setLoading(false);
         }, async (error) => {
             console.error("Error fetching simulation categories:", error);
-            const fallbackLines = await fetchCatalogLinesFallback();
+            const fallbackLines = await fetchCatalogLinesFallback(firebaseUser);
             setCategories(fallbackLines.sort((a,b) => a.name.localeCompare(b.name)));
             setLoading(false);
         });
         return () => unsubscribe();
-    }, []);
+    }, [firebaseUser]);
 
     const addCategory = useCallback(async (category: Omit<SimulationCategory, 'id'>): Promise<string | null> => {
         try {

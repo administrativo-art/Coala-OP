@@ -19,6 +19,8 @@ import {
   Video,
   LayoutDashboard,
 } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+import { canViewTechnicalSheets } from '@/lib/commercial-permissions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -497,28 +499,76 @@ function LineCard({ line, count, index, onClick }: { line: Line; count: number; 
 // ─── CatalogoView ─────────────────────────────────────────────────────────────
 
 export function CatalogoView({ embedded = false }: { embedded?: boolean } = {}) {
+  const { firebaseUser, loading: authLoading, permissions } = useAuth();
+  const canAccessCatalog = canViewTechnicalSheets(permissions);
   const [lines, setLines] = useState<Line[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedLine, setSelectedLine] = useState<Line | null>(null);
   const [expanded, setExpanded] = useState<{ product: Product; origin: DOMRect } | null>(null);
 
   useEffect(() => {
-    fetch('/api/catalogo')
-      .then(r => r.json())
-      .then((data) => {
+    let active = true;
+
+    const loadCatalog = async () => {
+      if (authLoading) {
+        setLoading(true);
+        return;
+      }
+
+      if (!firebaseUser) {
+        setLines([]);
+        setProducts([]);
+        setErrorMessage('Faça login no sistema para consultar as fichas técnicas.');
+        setLoading(false);
+        return;
+      }
+
+      if (!canAccessCatalog) {
+        setLines([]);
+        setProducts([]);
+        setErrorMessage('Seu perfil não tem permissão para consultar fichas técnicas.');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch('/api/catalogo', {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data?.error || 'Falha ao carregar fichas técnicas.');
+        }
+
+        if (!active) return;
         if (data?.products && Array.isArray(data.products)) {
           setProducts(data.products);
           setLines(data.lines ?? []);
         } else {
-          setError(true);
+          throw new Error('Resposta inválida ao carregar fichas técnicas.');
         }
-        setLoading(false);
-      })
-      .catch(() => { setError(true); setLoading(false); });
-  }, []);
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(error instanceof Error ? error.message : 'Erro ao carregar produtos.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void loadCatalog();
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, firebaseUser, canAccessCatalog]);
 
   const handleExpand = useCallback((product: Product, origin: DOMRect) => {
     setExpanded({ product, origin });
@@ -607,18 +657,24 @@ export function CatalogoView({ embedded = false }: { embedded?: boolean } = {}) 
           )}
 
           {/* Error */}
-          {error && (
+          {errorMessage && (
             <div className="flex flex-col items-center py-20 text-gray-400">
               <AlertCircle size={36} className="mb-3 opacity-40" />
-              <p className="text-sm font-medium">Erro ao carregar produtos</p>
-              <button className="mt-4 text-xs text-purple-600 font-semibold" onClick={() => window.location.reload()}>
-                Tentar novamente
-              </button>
+              <p className="text-center text-sm font-medium">{errorMessage}</p>
+              {!firebaseUser ? (
+                <button className="mt-4 text-xs text-purple-600 font-semibold" onClick={() => { window.location.href = '/login'; }}>
+                  Ir para login
+                </button>
+              ) : (
+                <button className="mt-4 text-xs text-purple-600 font-semibold" onClick={() => window.location.reload()}>
+                  Tentar novamente
+                </button>
+              )}
             </div>
           )}
 
           {/* Lines home */}
-          {!loading && !error && showLines && (
+          {!loading && !errorMessage && showLines && (
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {lines.map((line, i) => (
                 <LineCard
@@ -644,7 +700,7 @@ export function CatalogoView({ embedded = false }: { embedded?: boolean } = {}) 
           )}
 
           {/* Products grid */}
-          {!loading && !error && showProducts && (
+          {!loading && !errorMessage && showProducts && (
             <>
               {visibleProducts.length === 0 ? (
                 <div className="flex flex-col items-center py-16 text-gray-400">
