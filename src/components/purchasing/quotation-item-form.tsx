@@ -38,10 +38,13 @@ import { usePurchase } from '@/hooks/use-purchase';
 import { useProducts } from '@/hooks/use-products';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { useQuotations } from '@/hooks/use-quotations';
+import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 import { BarcodeScanner } from './barcode-scanner';
 import { PriceComparisonSheet } from './price-comparison-sheet';
 import { cacheBaseProducts, lookupByBarcode } from '@/lib/purchasing-offline-cache';
 import { getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
+import type { ProductLookupResponse } from '@/lib/barcode/product-lookup-types';
 import { type PriceHistoryEntry, type PurchaseUnitType, type QuotationMode } from '@/types';
 
 const schema = z.object({
@@ -110,12 +113,16 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
   const { products, getProductFullName } = useProducts();
   const { activeCategories } = useOperationalItemCategories();
   const { addItem } = useQuotations();
+  const { firebaseUser } = useAuth();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [isFreeText, setIsFreeText] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [lastScannedBarcode, setLastScannedBarcode] = useState<string | null>(null);
+  const [barcodeLookupLoading, setBarcodeLookupLoading] = useState(false);
+  const [barcodeLookupMessage, setBarcodeLookupMessage] = useState<string | null>(null);
   const [comparisonOpen, setComparisonOpen] = useState(false);
 
   // Warm up offline cache whenever base products load
@@ -268,11 +275,13 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
   const handleBarcodeDetected = async (barcode: string) => {
     setShowScanner(false);
     setLastScannedBarcode(barcode);
+    setBarcodeLookupMessage(null);
 
     if (isScaleBarcode(barcode)) {
       setIsFreeText(true);
       form.setValue('baseItemId', '');
       form.setValue('productId', '');
+      form.setValue('itemName', `Código de balança ${barcode}`);
       form.setValue('freeText', `Código de balança ${barcode}`);
       form.setValue('unit', '');
       form.setValue('purchaseUnitType', 'content');
@@ -289,9 +298,57 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
       form.setValue('purchaseUnitType', 'content');
       setIsFreeText(false);
     } else {
-      // Unknown barcode → free text item pre-filled with barcode
+      if (firebaseUser) {
+        setBarcodeLookupLoading(true);
+        try {
+          const token = await firebaseUser.getIdToken();
+          const response = await fetch(`/api/products/barcode/${encodeURIComponent(barcode)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || payload.mensagem || 'Falha ao consultar código de barras.');
+
+          const lookup = payload as ProductLookupResponse;
+          const internalOption = lookup.internalProduct?.id
+            ? productOptions.find((option) => option.id === lookup.internalProduct?.id)
+            : undefined;
+
+          if (internalOption) {
+            handleSelectProduct(internalOption);
+            setBarcodeLookupMessage(`Código ${barcode} encontrado na base interna.`);
+            return;
+          }
+
+          if (lookup.produto) {
+            const name = lookup.produto.nome || barcode;
+            setIsFreeText(true);
+            form.setValue('baseItemId', '');
+            form.setValue('productId', '');
+            form.setValue('itemName', name);
+            form.setValue('freeText', name);
+            form.setValue('unit', lookup.produto.unidade_medida || 'un');
+            form.setValue('purchaseUnitType', 'content');
+            setBarcodeLookupMessage(`Código ${barcode} preenchido por ${lookup.produto.origem_dados}. Normalize o item antes de comprar.`);
+            return;
+          }
+
+          setBarcodeLookupMessage(lookup.mensagem || `Código ${barcode} não encontrado nas bases consultadas.`);
+        } catch (error) {
+          toast({
+            variant: 'destructive',
+            title: 'Falha ao consultar código de barras',
+            description: error instanceof Error ? error.message : 'Tente novamente.',
+          });
+        } finally {
+          setBarcodeLookupLoading(false);
+        }
+      }
+
+      // Unknown barcode → free text item pre-filled with barcode.
       setIsFreeText(true);
       form.setValue('baseItemId', '');
+      form.setValue('productId', '');
+      form.setValue('itemName', barcode);
       form.setValue('freeText', barcode);
     }
   };
@@ -360,13 +417,18 @@ export function QuotationItemForm({ quotationId, mode, supplierId, onAdded }: Pr
               >
                 <ScanBarcode className="mr-2 h-4 w-4" />
                 Escanear código de barras
-                {lastScannedBarcode && (
+                {barcodeLookupLoading ? (
+                  <Loader2 className="ml-2 h-3.5 w-3.5 animate-spin" />
+                ) : lastScannedBarcode ? (
                   <span className="ml-2 font-mono text-xs text-muted-foreground">
                     ({lastScannedBarcode})
                   </span>
-                )}
+                ) : null}
               </Button>
             )}
+            {barcodeLookupMessage ? (
+              <p className="text-xs text-muted-foreground">{barcodeLookupMessage}</p>
+            ) : null}
           </div>
         )}
 

@@ -100,6 +100,14 @@ function normalizeAlias(value: string) {
         .trim();
 }
 
+function normalizeBarcodeDigits(value?: string | null) {
+    return String(value ?? '').replace(/\D/g, '');
+}
+
+function shouldAutoLookupBarcode(value?: string | null) {
+    return [8, 12, 13, 14].includes(normalizeBarcodeDigits(value).length);
+}
+
 interface AddEditProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -343,8 +351,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
 
     const handleScanSuccess = (decodedText: string) => {
-        form.setValue('barcode', decodedText, { shouldValidate: true });
+        form.setValue('barcode', decodedText, { shouldDirty: true, shouldValidate: true });
         setIsScannerOpen(false);
+        void handleBarcodeLookup(decodedText);
     };
 
     const applyLookupProduct = (product: NormalizedProductData) => {
@@ -377,8 +386,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
     };
 
-    const handleBarcodeLookup = async () => {
-        const barcode = form.getValues('barcode')?.trim();
+    async function handleBarcodeLookup(barcodeOverride?: string) {
+        const barcode = (barcodeOverride ?? form.getValues('barcode'))?.trim();
         setBarcodeLookupError(null);
         if (!barcode) {
             setBarcodeLookupError('Informe ou escaneie um codigo de barras antes de consultar.');
@@ -408,7 +417,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         } finally {
             setBarcodeLookupLoading(false);
         }
-    };
+    }
 
     /** Redimensiona e comprime um data URL para caber no limite do Firestore (1MB/doc). */
     const compressImage = (dataUrl: string, maxSide = 800, quality = 0.82): Promise<string> =>
@@ -744,9 +753,32 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <span className="text-xs text-muted-foreground">EAN-8 / EAN-13 / UPC / GTIN</span>
                                                         </div>
                                                         <div className="flex gap-2">
-                                                            <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
+                                                            <FormControl>
+                                                                <Input
+                                                                    placeholder="Escanear ou digitar"
+                                                                    {...field}
+                                                                    value={field.value ?? ''}
+                                                                    onChange={(event) => {
+                                                                        field.onChange(event);
+                                                                        setBarcodeLookup(null);
+                                                                        setSelectedLookupProduct(null);
+                                                                        setBarcodeLookupError(null);
+                                                                    }}
+                                                                    onBlur={(event) => {
+                                                                        field.onBlur();
+                                                                        const value = event.currentTarget.value;
+                                                                        const normalized = normalizeBarcodeDigits(value);
+                                                                        const currentLookupCode = normalizeBarcodeDigits(
+                                                                            barcodeLookup?.produto?.codigo_barras ?? barcodeLookup?.produto?.gtin,
+                                                                        );
+                                                                        if (shouldAutoLookupBarcode(value) && normalized !== currentLookupCode && !barcodeLookupLoading) {
+                                                                            void handleBarcodeLookup(value);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </FormControl>
                                                             <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><ScanLine className="h-4 w-4" /></Button>
-                                                            <Button type="button" variant="outline" onClick={handleBarcodeLookup} disabled={barcodeLookupLoading}>
+                                                            <Button type="button" variant="outline" onClick={() => void handleBarcodeLookup()} disabled={barcodeLookupLoading}>
                                                                 <Search className="mr-1.5 h-4 w-4" />
                                                                 {barcodeLookupLoading ? 'Consultando' : 'Consultar'}
                                                             </Button>
