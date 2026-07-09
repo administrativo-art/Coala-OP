@@ -10,7 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --import tsx --test tests/unit/**/*.test.ts",
-    "test:security:rules": "firebase emulators:exec --project demo-coala-security --only firestore,storage \"node --test tests/security/rules.test.mjs\"",
+    "test:security:rules": "node scripts/test-security-rules.mjs",
     "mcp": "node server.js",
     "migrate:dp": "node scripts/migrate-dp.mjs",
     "migrate:financial": "node scripts/migrate-financial.mjs",
