@@ -3224,18 +3224,10 @@ export function GoalsTrackingDashboard() {
                     </div>
                   </div>
 
-                  {/* ── Card de Meta do Mês ── */}
+                  {/* ── Bonificação, ranking e faturamento ── */}
                   {revenuePeriods.map(period => {
                     const stats = calcMonthlyStats(period, distributionSnapshot);
                     const { refDate, periodEnd } = getPeriodContext(period);
-                    const weekly = calcWeeklyStats(period, refDate, periodEnd, distributionSnapshot);
-                    const todayValue = period.dailyProgress?.[dateKey(refDate)] ?? 0;
-                    const dailyTarget = stats.alvo / Math.max(stats.totalDays, 1);
-                    const dailyUp = stats.up / Math.max(stats.totalDays, 1);
-                    const dailyTop = stats.top ? stats.top / Math.max(stats.totalDays, 1) : null;
-                    const monthlyActiveTone = getActiveTierTone(stats.value, stats.alvo, stats.up, stats.top);
-                    const activeWeeklyTarget = tierAmountByTone(monthlyActiveTone, weekly.alvo, weekly.up, weekly.top);
-                    const activeDailyTarget = tierAmountByTone(monthlyActiveTone, dailyTarget, dailyUp, dailyTop);
                     const periodEgs = employeeGoals.filter(goal => goal.periodId === period.id);
                     const collaboratorIds = Array.from(new Set(periodEgs.map(goal => goal.employeeId)));
                     const roleByCollaborator = new Map(collaboratorIds.map(id => {
@@ -3270,33 +3262,6 @@ export function GoalsTrackingDashboard() {
                         totalPeriodTurns,
                       }
                     );
-                    const currentPeriodStart = period.startDate?.toDate?.() ?? new Date();
-                    const monthlyComparisonRows = periods
-                      .filter(candidate => {
-                        const template = templates.find(item => item.id === candidate.templateId);
-                        const candidateStart = candidate.startDate?.toDate?.() ?? new Date(0);
-                        return candidate.kioskId === period.kioskId
-                          && template?.type === 'revenue'
-                          && (template.period ?? 'monthly') === 'monthly'
-                          && candidateStart <= currentPeriodStart;
-                      })
-                      .sort((a, b) => {
-                        const aStart = a.startDate?.toDate?.();
-                        const bStart = b.startDate?.toDate?.();
-                        return (aStart instanceof Date ? aStart.getTime() : 0) - (bStart instanceof Date ? bStart.getTime() : 0);
-                      })
-                      .slice(-4)
-                      .map(candidate => {
-                        const start = candidate.startDate?.toDate?.() ?? new Date();
-                        return {
-                          label: candidate.id === period.id ? 'Atual' : format(start, 'MMM/yy', { locale: ptBR }),
-                          value: candidate.currentValue,
-                          target: candidate.targetValue,
-                          up: candidate.upValue,
-                          top: candidate.topValue,
-                          current: candidate.id === period.id,
-                        };
-                      });
                     const reliefBonusById = new Map(reliefParticipantIds.map((id, index) => [
                       id,
                       bonusPreview?.reliefWorkerSplit?.reliefWorkerBonuses[index] ?? bonusPreview?.perCollaboratorBonus ?? 0,
@@ -3334,50 +3299,8 @@ export function GoalsTrackingDashboard() {
                     return (
                       <div key={period.id} className="space-y-8">
                         <Card className="relative overflow-hidden rounded-[24px] border border-white/80 bg-white p-7 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.45)]">
-                          <div className="grid gap-4 lg:grid-cols-3">
-                            <PeriodGoalCard
-                              label="Meta do mês"
-                              value={stats.value}
-                              target={stats.alvo}
-                              up={stats.up}
-                              top={stats.top}
-                              onClick={() => {
-                                setDailyModalPeriod(period);
-                                setDailyModalScope('monthly');
-                                setDailyModalMonthlyComparisonRows(monthlyComparisonRows);
-                                setDailyModalOpen(true);
-                              }}
-                            />
-                            <PeriodGoalCard
-                              label="Meta da semana"
-                              value={weekly.value}
-                              target={activeWeeklyTarget}
-                              showTiers={false}
-                              focusTone={monthlyActiveTone}
-                              onClick={() => {
-                                setDailyModalPeriod(period);
-                                setDailyModalScope('weekly');
-                                setDailyModalMonthlyComparisonRows(null);
-                                setDailyModalOpen(true);
-                              }}
-                            />
-                            <PeriodGoalCard
-                              label="Meta do dia"
-                              value={todayValue}
-                              target={activeDailyTarget}
-                              showTiers={false}
-                              focusTone={monthlyActiveTone}
-                              onClick={() => {
-                                setDailyModalPeriod(period);
-                                setDailyModalScope('daily');
-                                setDailyModalMonthlyComparisonRows(null);
-                                setDailyModalOpen(true);
-                              }}
-                            />
-                          </div>
-
                           {(bonusPreview || rankingRows.length > 0) && (
-                            <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.85fr)]">
+                            <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.85fr)]">
                               {bonusPreview && (
                                 <div className="rounded-[18px] border border-emerald-100 bg-emerald-50 px-4 py-3">
                                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
