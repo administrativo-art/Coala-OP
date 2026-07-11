@@ -17,5 +17,5 @@ export const rhDb = initializeFirestore(
 
 if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
   const { connectFirestoreEmulator: connect } = await import('firebase/firestore');
-  connect(rhDb, '127.0.0.1', 8081);
+  connect(rhDb, '127.0.0.1', 8080);
 }
