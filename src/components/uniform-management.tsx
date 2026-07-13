@@ -26,10 +26,12 @@ import {
   type Product,
   type UniformAssignment,
   type UniformCondition,
+  type UniformEvent,
   type UniformStockStatus,
 } from "@/types";
 import { cn } from "@/lib/utils";
 import { AddEditProductModal } from "@/components/add-edit-product-modal";
+import { UniformInstructionsDialog, hasUniformCareInstructions } from "@/components/uniform-instructions-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -401,6 +403,7 @@ export function UniformManagement() {
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [stockLotToAdjust, setStockLotToAdjust] = useState<LotEntry | null>(null);
+  const [instructionsTarget, setInstructionsTarget] = useState<LotEntry | UniformAssignment | UniformEvent | null>(null);
   const [adjustingStock, setAdjustingStock] = useState(false);
   const [activeTab, setActiveTab] = useState<UniformTab>("stock");
   const [query, setQuery] = useState("");
@@ -759,15 +762,22 @@ export function UniformManagement() {
                 {filteredLots.map((lot) => (
                   <TableRow key={lot.id} className="h-24 border-[#ececf0] hover:bg-[#fbfbfc]">
                     <TableCell className="px-6 py-5">
-                      <div className="flex min-w-0 items-center gap-4">
+                      <button
+                        type="button"
+                        className="flex min-w-0 items-center gap-4 text-left"
+                        onClick={() => setInstructionsTarget(lot)}
+                      >
                         <ItemPhoto item={lot} />
                         <div className="min-w-0">
                           <p className="truncate text-lg font-black text-[#1c1c25]">{lot.productName}</p>
                           {uniformDetails(lot) ? (
                             <p className="mt-1 truncate text-base font-semibold text-[#8f8f9b]">{uniformDetails(lot)}</p>
                           ) : null}
+                          {hasUniformCareInstructions(lot) ? (
+                            <p className="mt-1 text-xs font-black text-[#df2f78]">Instruções cadastradas</p>
+                          ) : null}
                         </div>
-                      </div>
+                      </button>
                     </TableCell>
                     <TableCell className="px-6 py-5">
                       <Pill className="border border-[#dedee6] bg-white text-[#555563]">{sizeLabel(getLotSize(lot))}</Pill>
@@ -859,15 +869,22 @@ export function UniformManagement() {
                       <TableRow key={item.id} className="h-24 border-[#ececf0] hover:bg-[#fbfbfc]">
                         <TableCell className="px-6 py-5" />
                         <TableCell className="px-6 py-5">
-                          <div className="flex min-w-0 items-center gap-4">
+                          <button
+                            type="button"
+                            className="flex min-w-0 items-center gap-4 text-left"
+                            onClick={() => setInstructionsTarget(item)}
+                          >
                             <ItemPhoto item={item} />
                             <div className="min-w-0">
                               <p className="truncate text-lg font-black text-[#1c1c25]">{item.productName}</p>
                               {uniformDetails(item) ? (
                                 <p className="mt-1 truncate text-base font-semibold text-[#8f8f9b]">{uniformDetails(item)}</p>
                               ) : null}
+                              {hasUniformCareInstructions(item) ? (
+                                <p className="mt-1 text-xs font-black text-[#df2f78]">Instruções cadastradas</p>
+                              ) : null}
                             </div>
-                          </div>
+                          </button>
                         </TableCell>
                         <TableCell className="px-6 py-5">
                           <Pill className="border border-[#dedee6] bg-white text-[#555563]">{sizeLabel(item.apparelSize)}</Pill>
@@ -913,15 +930,22 @@ export function UniformManagement() {
                       {event.collaboratorName || "Estoque"}
                     </TableCell>
                     <TableCell className="px-6 py-5">
-                      <div className="flex min-w-0 items-center gap-4">
+                      <button
+                        type="button"
+                        className="flex min-w-0 items-center gap-4 text-left"
+                        onClick={() => setInstructionsTarget(event)}
+                      >
                         <ItemPhoto item={event} />
                         <div className="min-w-0">
                           <p className="truncate text-lg font-black text-[#1c1c25]">{event.productName}</p>
                           {uniformDetails(event) ? (
                             <p className="mt-1 truncate text-base font-semibold text-[#8f8f9b]">{uniformDetails(event)}</p>
                           ) : null}
+                          {hasUniformCareInstructions(event) ? (
+                            <p className="mt-1 text-xs font-black text-[#df2f78]">Instruções cadastradas</p>
+                          ) : null}
                         </div>
-                      </div>
+                      </button>
                     </TableCell>
                     <TableCell className="px-6 py-5">
                       <Pill className="border border-[#dedee6] bg-white text-[#555563]">{sizeLabel(event.apparelSize)}</Pill>
@@ -960,6 +984,11 @@ export function UniformManagement() {
         onOpenChange={(open) => { if (!open) setStockLotToAdjust(null); }}
         onSave={handleAdjustUniformLot}
         saving={adjustingStock}
+      />
+      <UniformInstructionsDialog
+        item={instructionsTarget}
+        open={!!instructionsTarget}
+        onOpenChange={(open) => { if (!open) setInstructionsTarget(null); }}
       />
     </div>
   );

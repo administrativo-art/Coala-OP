@@ -4,15 +4,20 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Check, ChevronDown, Eye, EyeOff, Globe2, GripVertical, Lock, MoreHorizontal, Pencil, Plus, Save, Search, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Eye, EyeOff, Globe2, GripVertical, Link2, Lock, MoreHorizontal, Pencil, Plus, Save, Search, ShieldCheck, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import type { FieldMap, FieldMapEntry, FieldType, FieldVisibility, ProfileBlockConfig } from '@/types/rh';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { FieldMap, FieldMapEntry, FieldType, FieldVisibility, NormalizedFieldVisibility, ProfileAccessActor, ProfileAccessMatrix, ProfileAccessPermission, ProfileBlockConfig } from '@/types/rh';
+import { DEFAULT_PROFILE_ACCESS_MATRIX, normalizeFieldVisibility, normalizeProfileAccessMatrix } from '@/types/rh';
 
 type EditableFieldMapEntry = FieldMapEntry;
 type FieldTuple = [string, EditableFieldMapEntry];
+type AccessOption = { id: string; label: string; description?: string };
 
 const FIELD_TYPES: FieldType[] = ['text', 'multiline', 'date', 'number', 'currency', 'boolean', 'single_select', 'multi_select', 'ref:jobRoles'];
-const VISIBILITIES: FieldVisibility[] = ['public', 'sensitive', 'internal'];
+const VISIBILITIES: NormalizedFieldVisibility[] = ['public', 'restricted_partial', 'restricted_total', 'confidential'];
 
 const TYPE_LABELS: Record<FieldType, string> = {
   text: 'Texto',
@@ -27,10 +32,11 @@ const TYPE_LABELS: Record<FieldType, string> = {
   'ref:jobRoles': 'Cargo',
 };
 
-const VISIBILITY_LABELS: Record<FieldVisibility, string> = {
-  public: 'Operacional',
-  sensitive: 'Restrito',
-  internal: 'Confidencial',
+const VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
+  public: 'Sem restrição',
+  restricted_partial: 'Restrito parcial',
+  restricted_total: 'Restrito total',
+  confidential: 'Confidencial',
 };
 
 const LGPD_CATEGORY_LABELS = {
@@ -53,9 +59,32 @@ const RETENTION_LABELS = {
   manual_review: 'Revisão manual',
 } as const;
 
-const FIELD_GRID_TEMPLATE = '48px minmax(280px, 1.6fr) 150px 170px 150px 170px 120px';
-const ORDER_GRID_TEMPLATE = '44px 44px minmax(0, 1fr) 150px 140px';
+const FIELD_GRID_TEMPLATE = '48px 44px minmax(280px, 1.6fr) 150px 170px 150px 190px';
+const ORDER_GRID_TEMPLATE = '44px 44px minmax(0, 1fr) 150px 170px';
 const SYSTEM_BLOCKS_SECTION = '__system_blocks';
+
+const PROFILE_ACCESS_ACTORS: Array<{ key: ProfileAccessActor; label: string; helper: string }> = [
+  { key: 'authenticated', label: 'Autenticado', helper: 'Usuário com acesso base ao módulo.' },
+  { key: 'owner', label: 'Titular', helper: 'Colaborador vendo o próprio perfil.' },
+  { key: 'manager', label: 'Gestor', helper: 'Gestor/RH operacional com escopo de equipe.' },
+  { key: 'admin', label: 'Administrador', helper: 'Administrador ou RH elevado.' },
+  { key: 'explicit', label: 'Exceção', helper: 'Cargo, função ou pessoa liberada nesta visibilidade.' },
+];
+
+const PROFILE_ACCESS_PERMISSIONS: Array<{ value: ProfileAccessPermission; label: string }> = [
+  { value: 'hidden', label: 'Oculto' },
+  { value: 'view', label: 'Ver' },
+  { value: 'edit', label: 'Editar' },
+];
+
+const ACCESS_MATRIX_GRID = '210px repeat(5, minmax(0, 1fr))';
+
+const VISIBILITY_DOTS: Record<NormalizedFieldVisibility, { dot: string; halo: string }> = {
+  public: { dot: '#22a565', halo: 'rgba(34,165,101,.14)' },
+  restricted_partial: { dot: '#e0a112', halo: 'rgba(224,161,18,.14)' },
+  restricted_total: { dot: '#e5732a', halo: 'rgba(229,115,42,.14)' },
+  confidential: { dot: '#dc3b4b', halo: 'rgba(220,59,75,.14)' },
+};
 
 function makeKey(label: string) {
   const slug = label
@@ -80,9 +109,14 @@ function makeId(label: string) {
 
 function defaultLgpd(section: string, visibility: FieldVisibility): NonNullable<FieldMapEntry['lgpd']> {
   const lower = section.toLowerCase();
+  const normalizedVisibility = normalizeFieldVisibility(visibility);
   const consent = lower.includes('diversidade');
   return {
-    category: consent || visibility === 'internal' ? 'sensitive' : visibility === 'sensitive' ? 'confidential' : 'personal',
+    category: consent || normalizedVisibility === 'confidential'
+      ? 'sensitive'
+      : normalizedVisibility === 'restricted_total' || normalizedVisibility === 'restricted_partial'
+        ? 'confidential'
+        : 'personal',
     legal_basis: consent ? 'consent' : 'legal_obligation',
     retention: lower.includes('banc') ? 'termination_plus_90d' : lower.includes('aso') || consent ? 'termination_plus_2y' : 'employment_plus_5y',
     requires_consent: consent,
@@ -94,6 +128,48 @@ function formatConditionalValue(value: unknown) {
   if (value === false) return 'Não';
   if (value == null || value === '') return 'preenchido';
   return String(value);
+}
+
+function getSectionVisibilitySummary(items: FieldTuple[]) {
+  const visibility = normalizeFieldVisibility(items[0]?.[1]?.visibility ?? 'confidential');
+  return {
+    visibility,
+    mixed: items.some(([, entry]) => normalizeFieldVisibility(entry.visibility) !== visibility),
+  };
+}
+
+function cleanAccessIds(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function readAccessOptions(payload: unknown, key: 'roles' | 'functions'): AccessOption[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const list = (payload as Record<string, unknown>)[key];
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const record = item as Record<string, unknown>;
+      const id = typeof record.id === 'string' ? record.id.trim() : '';
+      const label = typeof record.name === 'string' ? record.name.trim() : id;
+      return id ? { id, label } : null;
+    })
+    .filter((item): item is AccessOption => Boolean(item))
+    .sort((left, right) => left.label.localeCompare(right.label, 'pt-BR'));
+}
+
+function uniqueUserOptions(users: Array<{ id?: string; username?: string; email?: string; jobRoleName?: string }>): AccessOption[] {
+  const byId = new Map<string, AccessOption>();
+  users.forEach((user) => {
+    const id = user.id?.trim();
+    if (!id || byId.has(id)) return;
+    byId.set(id, {
+      id,
+      label: user.username?.trim() || user.email?.trim() || id,
+      description: user.jobRoleName,
+    });
+  });
+  return Array.from(byId.values()).sort((left, right) => left.label.localeCompare(right.label, 'pt-BR'));
 }
 
 function ConditionBadge({
@@ -139,16 +215,380 @@ function TypeBadge({ type }: { type: FieldType }) {
 }
 
 function VisibilityBadge({ visibility }: { visibility: FieldVisibility }) {
-  const Icon = visibility === 'public' ? Globe2 : visibility === 'sensitive' ? Lock : EyeOff;
+  const normalizedVisibility = normalizeFieldVisibility(visibility);
+  const Icon = normalizedVisibility === 'public' ? Globe2 : normalizedVisibility === 'restricted_partial' ? Eye : normalizedVisibility === 'restricted_total' ? Lock : EyeOff;
   const tone =
-    visibility === 'public' ? 'bg-[#eafaf2] text-[#008963]' :
-    visibility === 'sensitive' ? 'bg-[#fff5db] text-[#d17400]' :
+    normalizedVisibility === 'public' ? 'bg-[#eafaf2] text-[#008963]' :
+    normalizedVisibility === 'restricted_partial' ? 'bg-[#eef7ff] text-[#2563eb]' :
+    normalizedVisibility === 'restricted_total' ? 'bg-[#fff5db] text-[#d17400]' :
     'bg-[#ffe9ef] text-[#d9275f]';
   return (
     <span className={`inline-flex w-fit items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-black ${tone}`}>
       <Icon className="h-3.5 w-3.5" />
-      {VISIBILITY_LABELS[visibility]}
+      {VISIBILITY_LABELS[normalizedVisibility]}
     </span>
+  );
+}
+
+function SectionVisibilitySelect({
+  visibility,
+  mixed,
+  onChange,
+}: {
+  visibility: NormalizedFieldVisibility;
+  mixed?: boolean;
+  onChange: (visibility: FieldVisibility) => void;
+}) {
+  return (
+    <label className="flex h-10 items-center gap-2 rounded-xl bg-white px-3 text-xs font-black text-[#6f6f7c] ring-1 ring-[#ececf0]">
+      Visibilidade do card
+      <select
+        value={visibility}
+        onChange={(event) => onChange(event.target.value as FieldVisibility)}
+        className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2 text-xs font-black text-[#1d1d26] outline-none"
+        title="Altera a visibilidade de todos os campos deste card"
+      >
+        {mixed ? <option value={visibility}>Visibilidade mista</option> : null}
+        {VISIBILITIES.map((option) => (
+          <option key={option} value={option}>
+            {VISIBILITY_LABELS[option]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+const PERMISSION_ICONS: Record<ProfileAccessPermission, typeof Eye> = {
+  hidden: EyeOff,
+  view: Eye,
+  edit: Pencil,
+};
+
+const PERMISSION_ACTIVE_STYLES: Record<ProfileAccessPermission, string> = {
+  hidden: 'bg-[#e2e5e9] text-[#5b616b]',
+  view: 'bg-[#334155] text-white shadow-[0_2px_5px_-2px_rgba(20,22,28,.4)]',
+  edit: 'bg-[#df2f78] text-white shadow-[0_2px_5px_-2px_rgba(20,22,28,.4)]',
+};
+
+function PermissionToggle({
+  value,
+  onChange,
+  label,
+}: {
+  value: ProfileAccessPermission;
+  onChange: (permission: ProfileAccessPermission) => void;
+  label: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex gap-0.5 rounded-[11px] bg-[#f1f2f4] p-[3px]">
+      {PROFILE_ACCESS_PERMISSIONS.map((permission) => {
+        const active = value === permission.value;
+        const Icon = PERMISSION_ICONS[permission.value];
+        return (
+          <button
+            key={permission.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(permission.value)}
+            title={`${label}: ${permission.label}`}
+            className={`grid h-[27px] w-[30px] place-items-center rounded-lg transition ${
+              active ? PERMISSION_ACTIVE_STYLES[permission.value] : 'text-[#aab0b9] hover:text-[#6a707a]'
+            }`}
+          >
+            <Icon className="h-[15px] w-[15px]" />
+            <span className="sr-only">{permission.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PermissionLegend() {
+  return (
+    <div className="flex items-center gap-4 text-[12.5px] font-medium text-[#6a707a]">
+      {PROFILE_ACCESS_PERMISSIONS.map((permission) => {
+        const Icon = PERMISSION_ICONS[permission.value];
+        return (
+          <span key={permission.value} className="inline-flex items-center gap-1.5">
+            <span className={`grid h-[22px] w-[22px] place-items-center rounded-[7px] ${PERMISSION_ACTIVE_STYLES[permission.value]}`}>
+              <Icon className="h-[13px] w-[13px]" />
+            </span>
+            {permission.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function AccessOptionPicker({
+  label,
+  helper,
+  options,
+  selectedIds,
+  onChange,
+  emptyLabel,
+}: {
+  label: string;
+  helper: string;
+  options: AccessOption[];
+  selectedIds?: string[];
+  onChange: (nextIds: string[]) => void;
+  emptyLabel: string;
+}) {
+  const selected = cleanAccessIds(selectedIds ?? []);
+  const optionById = new Map(options.map((option) => [option.id, option]));
+  const availableOptions = options.filter((option) => !selected.includes(option.id));
+
+  function add(id: string) {
+    if (!id) return;
+    onChange(cleanAccessIds([...selected, id]));
+  }
+
+  function remove(id: string) {
+    onChange(selected.filter((item) => item !== id));
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#e7e7ec] bg-white p-3">
+      <p className="text-xs font-black uppercase tracking-wide text-[#9d9da9]">{label}</p>
+      <Select value="" onValueChange={add} disabled={availableOptions.length === 0}>
+        <SelectTrigger
+          aria-label={`Adicionar ${label.toLowerCase()}`}
+          className="mt-2 h-11 w-full rounded-xl border-[#dedfe4] bg-white px-3 text-sm font-semibold text-[#1d1d26] disabled:bg-[#f7f7f9] disabled:text-[#9d9da9]"
+        >
+          <SelectValue placeholder={availableOptions.length === 0 ? emptyLabel : `Adicionar ${label.toLowerCase()}`} />
+        </SelectTrigger>
+        <SelectContent>
+          {availableOptions.map((option) => (
+            <SelectItem key={option.id} value={option.id} className="text-sm font-semibold">
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="mt-2 text-[11px] font-semibold leading-relaxed text-[#8f8f9b]">{helper}</p>
+      {selected.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {selected.map((id) => {
+            const option = optionById.get(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => remove(id)}
+                className="rounded-full border border-[#dbeafe] bg-[#eff6ff] px-3 py-1.5 text-left text-xs font-black text-[#2563eb] hover:border-[#bfdbfe]"
+                title="Remover acesso explícito"
+              >
+                {option?.label ?? id}
+                <span className="ml-2 text-[#7aa2f7]">×</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AccessMatrixPanel({
+  matrix,
+  onChange,
+  roleOptions,
+  functionOptions,
+  userOptions,
+  showHeader = true,
+}: {
+  matrix: ProfileAccessMatrix;
+  onChange: (matrix: ProfileAccessMatrix) => void;
+  roleOptions: AccessOption[];
+  functionOptions: AccessOption[];
+  userOptions: AccessOption[];
+  showHeader?: boolean;
+}) {
+  const normalizedMatrix = normalizeProfileAccessMatrix(matrix);
+
+  function permissionFor(visibility: NormalizedFieldVisibility, actor: ProfileAccessActor) {
+    return normalizedMatrix.visibility[visibility]?.[actor] ?? DEFAULT_PROFILE_ACCESS_MATRIX.visibility[visibility]?.[actor] ?? 'hidden';
+  }
+
+  function bindingsFor(visibility: NormalizedFieldVisibility) {
+    return normalizedMatrix.visibility[visibility]?.bindings ?? {};
+  }
+
+  function bindingCount(visibility: NormalizedFieldVisibility) {
+    const bindings = bindingsFor(visibility);
+    return (
+      cleanAccessIds(bindings.roleIds ?? []).length +
+      cleanAccessIds(bindings.functionIds ?? []).length +
+      cleanAccessIds(bindings.userIds ?? []).length
+    );
+  }
+
+  function updatePermission(visibility: NormalizedFieldVisibility, actor: ProfileAccessActor, permission: ProfileAccessPermission) {
+    const next = normalizeProfileAccessMatrix(normalizedMatrix);
+    next.visibility = {
+      ...next.visibility,
+      [visibility]: {
+        ...(next.visibility[visibility] ?? {}),
+        [actor]: permission,
+      },
+    };
+    onChange(next);
+  }
+
+  function updateBinding(visibility: NormalizedFieldVisibility, target: 'roleIds' | 'functionIds' | 'userIds', values: string[]) {
+    const nextValues = cleanAccessIds(values);
+    const next = normalizeProfileAccessMatrix(normalizedMatrix);
+    const rule = { ...(next.visibility[visibility] ?? {}) };
+    const nextBindings = {
+      ...(rule.bindings ?? {}),
+      [target]: nextValues.length ? nextValues : undefined,
+    };
+    const hasBindings =
+      cleanAccessIds(nextBindings.roleIds ?? []).length > 0 ||
+      cleanAccessIds(nextBindings.functionIds ?? []).length > 0 ||
+      cleanAccessIds(nextBindings.userIds ?? []).length > 0;
+
+    if (hasBindings) {
+      rule.bindings = {
+        ...(cleanAccessIds(nextBindings.roleIds ?? []).length ? { roleIds: cleanAccessIds(nextBindings.roleIds ?? []) } : {}),
+        ...(cleanAccessIds(nextBindings.functionIds ?? []).length ? { functionIds: cleanAccessIds(nextBindings.functionIds ?? []) } : {}),
+        ...(cleanAccessIds(nextBindings.userIds ?? []).length ? { userIds: cleanAccessIds(nextBindings.userIds ?? []) } : {}),
+      };
+    } else {
+      delete rule.bindings;
+    }
+
+    next.visibility = {
+      ...next.visibility,
+      [visibility]: rule,
+    };
+    onChange(next);
+  }
+
+  return (
+    <section className={showHeader ? "rounded-[22px] border border-[#dedfe4] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,0.06)]" : "bg-white"}>
+      {showHeader ? (
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[#df2f78]">Matriz de acesso</p>
+            <h2 className="mt-1 text-xl font-black text-[#181820]">Regra padrão por visibilidade</h2>
+            <p className="mt-1 max-w-4xl text-sm font-semibold leading-relaxed text-[#6f6f7c]">
+              O que cada perfil pode fazer em campos e cards. Vínculos de cargo, função e pessoa ficam na coluna Exceção.
+            </p>
+          </div>
+          <span className="rounded-full bg-[#fff0f6] px-3 py-1 text-xs font-black text-[#df2f78]">
+            Base do perfil
+          </span>
+        </div>
+      ) : null}
+      <div className={showHeader ? 'mt-5' : ''}>
+        <div className="overflow-x-auto rounded-[14px] border border-[#edeef1]">
+          <div className="min-w-[860px]">
+            <div
+              className="grid border-b border-[#edeef1] bg-[#fafbfc]"
+              style={{ gridTemplateColumns: ACCESS_MATRIX_GRID }}
+            >
+              <span className="px-[18px] py-[13px] text-[10.5px] font-bold uppercase tracking-[.09em] text-[#8a909a]">
+                Visibilidade
+              </span>
+              {PROFILE_ACCESS_ACTORS.map((actor) => (
+                <span
+                  key={`head:${actor.key}`}
+                  title={actor.helper}
+                  className="cursor-help px-2 py-[13px] text-center text-[10.5px] font-bold uppercase tracking-[.07em] text-[#8a909a]"
+                >
+                  {actor.label}
+                </span>
+              ))}
+            </div>
+
+            {VISIBILITIES.map((visibility) => (
+              <div
+                key={visibility}
+                className="grid items-start border-b border-[#f1f2f4] transition last:border-b-0 hover:bg-[#fcfcfd]"
+                style={{ gridTemplateColumns: ACCESS_MATRIX_GRID }}
+              >
+                <div className="flex min-w-0 items-center gap-2.5 px-[18px] py-[17px]">
+                  <span
+                    className="h-[9px] w-[9px] flex-none rounded-full"
+                    style={{
+                      background: VISIBILITY_DOTS[visibility].dot,
+                      boxShadow: `0 0 0 3px ${VISIBILITY_DOTS[visibility].halo}`,
+                    }}
+                  />
+                  <span className="truncate text-sm font-semibold text-[#22262d]">{VISIBILITY_LABELS[visibility]}</span>
+                </div>
+
+                {PROFILE_ACCESS_ACTORS.map((actor) => (
+                  <div key={`${visibility}:${actor.key}`} className="flex flex-col items-center gap-1.5 px-2 py-[17px]">
+                    <PermissionToggle
+                      value={permissionFor(visibility, actor.key)}
+                      onChange={(permission) => updatePermission(visibility, actor.key, permission)}
+                      label={`${VISIBILITY_LABELS[visibility]} · ${actor.label}`}
+                    />
+                    {actor.key === 'explicit' ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className={`inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[11.5px] font-semibold transition ${
+                              bindingCount(visibility) > 0
+                                ? 'text-[#df2f78] hover:text-[#c92368]'
+                                : 'text-[#8a909a] hover:text-[#5b616b]'
+                            }`}
+                          >
+                            <Link2 className="h-[13px] w-[13px]" />
+                            {bindingCount(visibility) > 0 ? `${bindingCount(visibility)} vínculo${bindingCount(visibility) === 1 ? '' : 's'}` : 'Vincular'}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-[340px] max-h-[420px] overflow-y-auto rounded-2xl p-4">
+                          <p className="text-sm font-black text-[#1d1d26]">Vínculos da exceção</p>
+                          <p className="mt-1 text-xs font-semibold leading-relaxed text-[#8f8f9b]">
+                            Pessoas destes cargos, funções ou usuários recebem a permissão de Exceção em{' '}
+                            {VISIBILITY_LABELS[visibility]}.
+                          </p>
+                          <div className="mt-3 space-y-3">
+                            <AccessOptionPicker
+                              label="Cargos"
+                              helper="Inclui todas as pessoas vinculadas a estes cargos."
+                              options={roleOptions}
+                              selectedIds={bindingsFor(visibility).roleIds}
+                              onChange={(values) => updateBinding(visibility, 'roleIds', values)}
+                              emptyLabel="Nenhum cargo disponível"
+                            />
+                            <AccessOptionPicker
+                              label="Funções"
+                              helper="Inclui pessoas com estas funções operacionais."
+                              options={functionOptions}
+                              selectedIds={bindingsFor(visibility).functionIds}
+                              onChange={(values) => updateBinding(visibility, 'functionIds', values)}
+                              emptyLabel="Nenhuma função disponível"
+                            />
+                            <AccessOptionPicker
+                              label="Pessoas"
+                              helper="Inclui usuários específicos quando cargo ou função não resolverem."
+                              options={userOptions}
+                              selectedIds={bindingsFor(visibility).userIds}
+                              onChange={(values) => updateBinding(visibility, 'userIds', values)}
+                              emptyLabel="Nenhuma pessoa disponível"
+                            />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -168,11 +608,13 @@ function LgpdBadge({ category }: { category: keyof typeof LGPD_CATEGORY_LABELS }
 function SortableFieldRow({
   id,
   entry,
+  position,
   onEdit,
   onDelete,
 }: {
   id: string;
   entry: EditableFieldMapEntry;
+  position: number;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -181,11 +623,14 @@ function SortableFieldRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, gridTemplateColumns: FIELD_GRID_TEMPLATE }}
-      className={`grid min-w-[1120px] items-center gap-4 border-b border-[#ececf0] bg-white px-5 py-4 text-sm last:border-b-0 ${isDragging ? 'opacity-60' : ''}`}
+      className={`grid min-w-[1080px] items-center gap-4 border-b border-[#ececf0] bg-white px-5 py-4 text-sm last:border-b-0 ${isDragging ? 'opacity-60' : ''}`}
     >
       <button type="button" className="text-[#b7b7c1]" {...attributes} {...listeners} aria-label="Arrastar campo">
         <GripVertical className="h-5 w-5" />
       </button>
+      <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#f1f2f5] text-xs font-black text-[#737381]" title={`Ordem visual ${position}`}>
+        {position}
+      </span>
       <div className="min-w-0">
         <p className="truncate text-base font-black text-[#1d1d26]">{entry.label}</p>
         <p className="truncate font-mono text-xs font-semibold text-[#9d9da9]">{id}</p>
@@ -193,17 +638,16 @@ function SortableFieldRow({
       <TypeBadge type={entry.type} />
       <VisibilityBadge visibility={entry.visibility} />
       <LgpdBadge category={entry.lgpd?.category ?? 'personal'} />
-      <div className="flex items-center gap-2">
-        <span className={`grid h-9 w-9 place-items-center rounded-lg ${entry.employee_visible ? 'bg-[#eafaf2] text-[#008963]' : 'bg-[#f1f2f5] text-[#a1a1ad]'}`} title={entry.employee_visible ? 'Visível ao colaborador' : 'Oculto para o colaborador'}>
-          {entry.employee_visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-        </span>
-        <span className={`grid h-9 w-9 place-items-center rounded-lg ${entry.employee_editable ? 'bg-[#eafaf2] text-[#008963]' : 'bg-white text-[#c2c2cc]'}`} title={entry.employee_editable ? 'Editável pelo colaborador' : 'Não editável pelo colaborador'}>
-          <Pencil className="h-4 w-4" />
-        </span>
-      </div>
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={onEdit} className="grid h-9 w-9 place-items-center rounded-lg text-[#8f8f9b] hover:bg-[#f1f2f5] hover:text-[#1d1d26]" aria-label={`Editar ${entry.label}`}>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-black text-[#6f6f7c] hover:bg-[#f1f2f5] hover:text-[#1d1d26]"
+          aria-label={`Configurar ${entry.label}`}
+          title="Configurar campo"
+        >
           <SlidersHorizontal className="h-4 w-4" />
+          Configurar
         </button>
         <button type="button" onClick={onDelete} className="grid h-9 w-9 place-items-center rounded-lg text-[#8f8f9b] hover:bg-[#fff0f6] hover:text-[#df2f78]" aria-label={`Remover ${entry.label}`}>
           <Trash2 className="h-4 w-4" />
@@ -272,6 +716,7 @@ function SortableProfileBlockRow({
 function SortableSectionOrderFrame({
   id,
   section,
+  position,
   count,
   countLabel,
   tag,
@@ -282,6 +727,7 @@ function SortableSectionOrderFrame({
 }: {
   id: string;
   section: string;
+  position: number;
   count: number;
   countLabel?: string;
   tag?: string;
@@ -302,6 +748,9 @@ function SortableSectionOrderFrame({
           <button type="button" className="text-[#c2c2cc]" {...attributes} {...listeners} aria-label={`Arrastar seção ${section}`}>
             <GripVertical className="h-5 w-5" />
           </button>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#f1f2f5] text-xs font-black text-[#737381]" title={`Ordem geral ${position}`}>
+            {position}
+          </span>
           <button type="button" onClick={onToggle} className="rounded-lg p-1 text-[#9d9da9] hover:bg-[#f1f2f5]" aria-label={collapsed ? `Expandir ${section}` : `Recolher ${section}`}>
             <ChevronDown className={`h-5 w-5 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
           </button>
@@ -323,19 +772,23 @@ function SortableSectionOrderFrame({
 }
 
 export function FieldConfigPage() {
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, activeUsers } = useAuth();
   const [fieldMap, setFieldMap] = useState<FieldMap | null>(null);
   const [loading, setLoading] = useState(true);
   const [fields, setFields] = useState<Record<string, EditableFieldMapEntry>>({});
   const [profileBlocks, setProfileBlocks] = useState<Record<string, ProfileBlockConfig>>({});
   const [sectionOrder, setSectionOrder] = useState<Record<string, number>>({});
+  const [accessMatrix, setAccessMatrix] = useState<ProfileAccessMatrix>(DEFAULT_PROFILE_ACCESS_MATRIX);
+  const [roleOptions, setRoleOptions] = useState<AccessOption[]>([]);
+  const [functionOptions, setFunctionOptions] = useState<AccessOption[]>([]);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [visibilityFilter, setVisibilityFilter] = useState<FieldVisibility | 'all'>('all');
+  const [visibilityFilter, setVisibilityFilter] = useState<NormalizedFieldVisibility | 'all'>('all');
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const userOptions = useMemo(() => uniqueUserOptions(activeUsers), [activeUsers]);
 
   useEffect(() => {
     let cancelled = false;
@@ -350,11 +803,27 @@ export function FieldConfigPage() {
       setMessage(null);
       try {
         const token = await firebaseUser.getIdToken();
+        async function fetchAccessOptions(path: string, key: 'roles' | 'functions') {
+          try {
+            const response = await fetch(path, {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: 'no-store',
+            });
+            const payload = await response.json().catch(() => ({}));
+            return response.ok ? readAccessOptions(payload, key) : [];
+          } catch {
+            return [];
+          }
+        }
         const response = await fetch('/api/rh/field-map', {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
-        const payload = await response.json().catch(() => ({}));
+        const [payload, roles, functions] = await Promise.all([
+          response.json().catch(() => ({})),
+          fetchAccessOptions('/api/hr/roles', 'roles'),
+          fetchAccessOptions('/api/hr/functions', 'functions'),
+        ]);
         if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'Falha ao carregar campos.');
         if (!cancelled) {
           const nextFieldMap = payload.fieldMap as FieldMap;
@@ -362,6 +831,9 @@ export function FieldConfigPage() {
           setFields(nextFieldMap.fields);
           setSectionOrder(nextFieldMap.section_order ?? {});
           setProfileBlocks(nextFieldMap.profile_blocks ?? {});
+          setAccessMatrix(normalizeProfileAccessMatrix(nextFieldMap.access_matrix));
+          setRoleOptions(roles);
+          setFunctionOptions(functions);
         }
       } catch (error) {
         if (!cancelled) {
@@ -399,7 +871,7 @@ export function FieldConfigPage() {
     const entries = Object.entries(grouped)
       .map(([section, items]) => {
         const nextItems = items.filter(([key, entry]) => {
-          const matchesVisibility = visibilityFilter === 'all' || entry.visibility === visibilityFilter;
+          const matchesVisibility = visibilityFilter === 'all' || normalizeFieldVisibility(entry.visibility) === visibilityFilter;
           const matchesQuery =
             !normalizedQuery ||
             section.toLowerCase().includes(normalizedQuery) ||
@@ -434,11 +906,32 @@ export function FieldConfigPage() {
   const editing = editingKey ? fields[editingKey] : null;
 
   function toggleSection(section: string) {
-    setCollapsedSections((current) => ({ ...current, [section]: !current[section] }));
+    setCollapsedSections((current) => ({ ...current, [section]: current[section] === false }));
   }
 
   function updateField(key: string, patch: Partial<EditableFieldMapEntry>) {
     setFields((current) => ({ ...current, [key]: { ...current[key], ...patch } }));
+  }
+
+  function updateSectionFieldsVisibility(section: string, visibility: FieldVisibility) {
+    setFields((current) => Object.fromEntries(
+      Object.entries(current).map(([key, entry]) => {
+        if (entry.section !== section) return [key, entry];
+        const nextLgpd = defaultLgpd(entry.section, visibility);
+        return [
+          key,
+          {
+            ...entry,
+            visibility,
+            lgpd: {
+              ...nextLgpd,
+              ...(entry.lgpd ?? {}),
+              category: nextLgpd.category,
+            },
+          },
+        ];
+      })
+    ) as Record<string, EditableFieldMapEntry>);
   }
 
   function addSection() {
@@ -700,7 +1193,7 @@ export function FieldConfigPage() {
       const response = await fetch('/api/rh/field-map', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ version: fieldMap?.version ?? 'coala-rh-v1.3', fields, section_order: sectionOrder, profile_blocks: profileBlocks }),
+        body: JSON.stringify({ version: fieldMap?.version ?? 'coala-rh-v1.3', fields, section_order: sectionOrder, profile_blocks: profileBlocks, access_matrix: accessMatrix }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : 'Falha ao salvar campos.');
@@ -709,6 +1202,7 @@ export function FieldConfigPage() {
         fields,
         section_order: sectionOrder,
         profile_blocks: profileBlocks,
+        access_matrix: accessMatrix,
       }));
       setMessage('Campos salvos.');
     } catch (error) {
@@ -727,12 +1221,12 @@ export function FieldConfigPage() {
     );
   }
 
-  const visibilityTabs: Array<{ value: FieldVisibility | 'all'; label: string; count: number }> = [
+  const visibilityTabs: Array<{ value: NormalizedFieldVisibility | 'all'; label: string; count: number }> = [
     { value: 'all', label: 'Todos', count: Object.keys(fields).length },
     ...VISIBILITIES.map((visibility) => ({
       value: visibility,
       label: VISIBILITY_LABELS[visibility],
-      count: Object.values(fields).filter((entry) => entry.visibility === visibility).length,
+      count: Object.values(fields).filter((entry) => normalizeFieldVisibility(entry.visibility) === visibility).length,
     })),
   ];
   const showIfRule = editing?.conditionals?.find((rule) => rule.kind === 'show_if');
@@ -762,6 +1256,62 @@ export function FieldConfigPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Dialog>
+            <DialogTrigger asChild>
+              <button type="button" className="inline-flex h-12 items-center gap-3 rounded-2xl border border-[#dedfe4] bg-white px-5 text-sm font-black text-[#4f4f5b] shadow-sm hover:bg-[#fbfbfc]">
+                <ShieldCheck className="h-5 w-5 text-[#df2f78]" />
+                Matriz de acesso
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[85vh] overflow-y-auto rounded-[20px] p-0 sm:max-w-[min(900px,calc(100vw-3rem))]" overlayClassName="bg-black/45">
+              <DialogHeader className="space-y-0 px-8 pb-5 pt-7 text-left">
+                <p className="text-[11.5px] font-bold uppercase tracking-[.12em] text-[#df2f78]">Matriz de acesso</p>
+                <DialogTitle className="mt-2 text-2xl font-bold leading-tight tracking-[-.02em] text-[#191c22]">
+                  Regra padrão por visibilidade
+                </DialogTitle>
+                <DialogDescription className="mt-2 max-w-[640px] text-sm leading-relaxed text-[#6a707a]">
+                  O que cada perfil pode fazer em campos e cards. Vínculos de cargo, função e pessoa ficam na coluna Exceção.
+                </DialogDescription>
+                <div className="!mt-3.5 inline-flex w-fit items-center gap-[7px] rounded-full border border-[#df2f78]/[.16] bg-[#df2f78]/[.07] py-1.5 pl-2.5 pr-3 text-[12.5px] font-semibold text-[#df2f78]">
+                  <span className="h-[7px] w-[7px] rounded-full bg-[#df2f78]" />
+                  Base do perfil
+                </div>
+              </DialogHeader>
+
+              <div className="px-8">
+                <AccessMatrixPanel
+                  matrix={accessMatrix}
+                  onChange={setAccessMatrix}
+                  roleOptions={roleOptions}
+                  functionOptions={functionOptions}
+                  userOptions={userOptions}
+                  showHeader={false}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-4 px-8 pb-7 pt-5">
+                <PermissionLegend />
+                <div className="flex items-center gap-2.5">
+                  <DialogClose asChild>
+                    <button
+                      type="button"
+                      className="h-[42px] rounded-[11px] border border-[#e2e4e8] bg-white px-5 text-sm font-semibold text-[#3d434c] hover:bg-[#f6f7f8]"
+                    >
+                      Cancelar
+                    </button>
+                  </DialogClose>
+                  <button
+                    type="button"
+                    onClick={() => void save()}
+                    disabled={saving}
+                    className="h-[42px] rounded-[11px] bg-[#df2f78] px-[22px] text-sm font-bold text-white shadow-[0_6px_16px_-6px_#df2f78] transition hover:brightness-[1.06] disabled:opacity-60"
+                  >
+                    {saving ? 'Salvando...' : 'Salvar alterações'}
+                  </button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
           <button type="button" onClick={addSection} className="inline-flex h-12 items-center gap-3 rounded-2xl border border-[#dedfe4] bg-white px-5 text-sm font-black text-[#4f4f5b] shadow-sm hover:bg-[#fbfbfc]">
             <Plus className="h-5 w-5" />
             Nova seção
@@ -816,17 +1366,18 @@ export function FieldConfigPage() {
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
         <SortableContext items={visibleSectionContainers.map((section) => `section:${section}`)} strategy={verticalListSortingStrategy}>
-          {visibleSectionContainers.map((section) => {
+          {visibleSectionContainers.map((section, containerIndex) => {
             if (section === SYSTEM_BLOCKS_SECTION) {
               return (
                 <SortableSectionOrderFrame
                   key={section}
                   id={`section:${section}`}
                   section="Blocos do sistema"
+                  position={containerIndex + 1}
                   count={displayedProfileBlocks.length}
                   countLabel={displayedProfileBlocks.length === 1 ? 'bloco' : 'blocos'}
                   tag="Sistema"
-                  collapsed={collapsedSections[SYSTEM_BLOCKS_SECTION] === true}
+                  collapsed={collapsedSections[SYSTEM_BLOCKS_SECTION] !== false}
                   onToggle={() => toggleSection(SYSTEM_BLOCKS_SECTION)}
                 >
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleProfileBlockDragEnd}>
@@ -837,7 +1388,7 @@ export function FieldConfigPage() {
                           <span>Ordem</span>
                           <span>Bloco</span>
                           <span>Tipo</span>
-                          <span>Colaborador</span>
+                          <span>Gestão do colaborador</span>
                         </div>
                         {displayedProfileBlocks.map(([key, block], index) => (
                           <SortableProfileBlockRow
@@ -857,15 +1408,22 @@ export function FieldConfigPage() {
             }
 
             const items = displayedGrouped[section] ?? [];
+            const sectionVisibility = getSectionVisibilitySummary(grouped[section] ?? items);
             return (
               <SortableSectionOrderFrame
                 key={section}
                 id={`section:${section}`}
                 section={section}
+                position={containerIndex + 1}
                 count={items.length}
                 tag="Seção"
                 actions={(
                   <>
+                    <SectionVisibilitySelect
+                      visibility={sectionVisibility.visibility}
+                      mixed={sectionVisibility.mixed}
+                      onChange={(visibility) => updateSectionFieldsVisibility(section, visibility)}
+                    />
                     <button type="button" onClick={() => addGroup(section)} className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-3 text-sm font-black text-[#6f6f7c] hover:bg-[#f7f7f9]">
                       <Plus className="h-4 w-4" />
                       Grupo
@@ -883,25 +1441,25 @@ export function FieldConfigPage() {
                     </button>
                   </>
                 )}
-                collapsed={collapsedSections[section] === true}
+                collapsed={collapsedSections[section] !== false}
                 onToggle={() => toggleSection(section)}
               >
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => handleDragEnd(section, event)}>
                   <SortableContext items={items.map(([key]) => key)} strategy={verticalListSortingStrategy}>
                     <div className="overflow-x-auto border-t border-[#ececf0]">
-                      <div className="grid min-w-[1120px] gap-4 bg-[#fbfbfc] px-5 py-3 text-xs font-black uppercase tracking-wide text-[#9d9da9]" style={{ gridTemplateColumns: FIELD_GRID_TEMPLATE }}>
+                      <div className="grid min-w-[1080px] gap-4 bg-[#fbfbfc] px-5 py-3 text-xs font-black uppercase tracking-wide text-[#9d9da9]" style={{ gridTemplateColumns: FIELD_GRID_TEMPLATE }}>
                         <span />
+                        <span>Ordem</span>
                         <span>Campo</span>
                         <span>Tipo</span>
                         <span>Visibilidade</span>
                         <span>LGPD</span>
-                        <span>Colaborador</span>
                         <span className="text-right">Ações</span>
                       </div>
                       {(() => {
                         let previousGroup = '';
                         let previousSubgroup = '';
-                        return items.map(([key, entry]) => {
+                        return items.map(([key, entry], index) => {
                           const group = entry.group;
                           const subgroup = entry.subgroup;
                           const groupKey = fieldGroupKey(entry);
@@ -913,7 +1471,7 @@ export function FieldConfigPage() {
                           return (
                             <Fragment key={key}>
                               {showGroup && group ? (
-                                <div className="min-w-[1120px] border-b border-[#f2d7e4] bg-[#fff8fc] px-5 py-3">
+                                <div className="min-w-[1080px] border-b border-[#f2d7e4] bg-[#fff8fc] px-5 py-3">
                                   <div className="flex flex-wrap items-center justify-between gap-3 pl-12">
                                     <div className="flex min-w-0 flex-wrap items-center gap-3">
                                       <ChevronDown className="h-4 w-4 text-[#bd185c]" />
@@ -945,7 +1503,7 @@ export function FieldConfigPage() {
                                 </div>
                               ) : null}
                               {showSubgroup && subgroup ? (
-                                <div className="min-w-[1120px] border-b border-[#f0e8ef] bg-[#fffbfd] px-5 py-3">
+                                <div className="min-w-[1080px] border-b border-[#f0e8ef] bg-[#fffbfd] px-5 py-3">
                                   <div className="flex flex-wrap items-center justify-between gap-3 pl-20">
                                     <div className="flex min-w-0 flex-wrap items-center gap-3">
                                       <ChevronDown className="h-4 w-4 text-[#9d9da9]" />
@@ -965,7 +1523,7 @@ export function FieldConfigPage() {
                                   </div>
                                 </div>
                               ) : null}
-                              <SortableFieldRow id={key} entry={entry} onEdit={() => setEditingKey(key)} onDelete={() => deleteField(key)} />
+                              <SortableFieldRow id={key} entry={entry} position={index + 1} onEdit={() => setEditingKey(key)} onDelete={() => deleteField(key)} />
                             </Fragment>
                           );
                         });
@@ -1014,8 +1572,8 @@ export function FieldConfigPage() {
               </label>
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">
                 Visibilidade
-                <select value={editing.visibility} onChange={(event) => {
-                  const visibility = event.target.value as FieldVisibility;
+                <select value={normalizeFieldVisibility(editing.visibility)} onChange={(event) => {
+                  const visibility = event.target.value as NormalizedFieldVisibility;
                   updateField(editingKey, { visibility, lgpd: defaultLgpd(editing.section, visibility) });
                 }} className="w-full rounded-2xl border border-[#dedfe4] px-4 py-3 text-sm font-semibold text-[#1d1d26] outline-none">
                   {VISIBILITIES.map((visibility) => <option key={visibility} value={visibility}>{VISIBILITY_LABELS[visibility]}</option>)}
@@ -1066,14 +1624,6 @@ export function FieldConfigPage() {
               <label className="flex items-center gap-2 rounded-2xl bg-[#f7f7f9] p-3 text-xs font-bold text-[#6f6f7c]">
                 <input type="checkbox" checked={editing.required === true} onChange={(event) => updateField(editingKey, { required: event.target.checked })} />
                 Obrigatório
-              </label>
-              <label className="flex items-center gap-2 rounded-2xl bg-[#f7f7f9] p-3 text-xs font-bold text-[#6f6f7c]">
-                <input type="checkbox" checked={editing.employee_visible === true} onChange={(event) => updateField(editingKey, { employee_visible: event.target.checked, employee_editable: event.target.checked ? editing.employee_editable : false })} />
-                Visível ao colaborador
-              </label>
-              <label className="flex items-center gap-2 rounded-2xl bg-[#f7f7f9] p-3 text-xs font-bold text-[#6f6f7c]">
-                <input type="checkbox" checked={editing.employee_editable === true} disabled={!editing.employee_visible} onChange={(event) => updateField(editingKey, { employee_editable: event.target.checked })} />
-                Editável pelo colaborador
               </label>
               <label className="flex items-center gap-2 rounded-2xl bg-[#f7f7f9] p-3 text-xs font-bold text-[#6f6f7c]">
                 <input type="checkbox" checked={editing.lgpd?.requires_consent === true} onChange={(event) => updateField(editingKey, { lgpd: { ...defaultLgpd(editing.section, editing.visibility), ...editing.lgpd, requires_consent: event.target.checked } })} />

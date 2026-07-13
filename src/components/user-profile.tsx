@@ -43,7 +43,7 @@ export function UserProfile() {
 
   if (!user) return null;
 
-  const kioskNames = user.assignedKioskIds
+  const kioskNames = (user.assignedKioskIds ?? [])
     .map(id => kiosks.find(k => k.id === id)?.name)
     .filter(Boolean)
     .join(', ');

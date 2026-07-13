@@ -8,7 +8,8 @@ import { ProfileCompletion } from './ProfileCompletion';
 import { SectionCard } from './SectionCard';
 import { AuditLogTab } from './AuditLogTab';
 import { SectionEditModal } from './SectionEditModal';
-import type { FieldMapEntry, EmployeeFieldValue, RhRole } from '@/types/rh';
+import { canEditField } from '@/types/rh';
+import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
 const SECTION_LABELS: Record<string, string> = {
   identity:     'Identidade',
@@ -38,6 +39,10 @@ type Props = { bizneoEmployeeId: string };
 
 function isLegacyUniformField(key: string, entry: FieldMapEntry) {
   return key.startsWith('employee.uniform_') || entry.section.toLowerCase() === 'uniforme';
+}
+
+function cleanIds(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
 }
 
 function Skeleton({ className }: { className: string }) {
@@ -104,6 +109,21 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
 
   const { employee, fieldValues, fieldMap, cache } = profileState.data;
   const role = cache.rh_role as RhRole;
+  const visibilityContext: FieldVisibilityContext = {
+    isOwner: cache.bizneo_employee_id === bizneoEmployeeId || employee.auth_uid === cache.auth_uid,
+    canViewConfidential: role === 'admin',
+    userId: cache.auth_uid ?? null,
+    roleIds: cleanIds([
+      cache.job_role_id,
+      ...(cache.job_role_ids ?? []),
+      ...(cache.role_ids ?? []),
+    ]),
+    functionIds: cleanIds([
+      cache.job_function_id,
+      ...(cache.job_function_ids ?? []),
+      ...(cache.function_ids ?? []),
+    ]),
+  };
 
   // Group fields by section
   const visibleProfileFields = Object.entries(fieldMap.fields).filter(
@@ -111,11 +131,16 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
   );
 
   const sections = visibleProfileFields.reduce<
-    Record<string, Array<{ key: string; entry: FieldMapEntry; fv?: EmployeeFieldValue }>>
+    Record<string, Array<{ key: string; entry: FieldMapEntry; fv?: EmployeeFieldValue; editable?: boolean }>>
   >((acc, [key, entry]) => {
     const sec = entry.section;
     if (!acc[sec]) acc[sec] = [];
-    acc[sec].push({ key, entry, fv: fieldValues[key] });
+    acc[sec].push({
+      key,
+      entry,
+      fv: fieldValues[key],
+      editable: role !== 'employee' && canEditField(entry, role, visibilityContext, fieldMap.access_matrix),
+    });
     return acc;
   }, {});
 

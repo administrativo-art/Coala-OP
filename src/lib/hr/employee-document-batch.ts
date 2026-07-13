@@ -13,7 +13,8 @@ export type UploadItemStatus =
   | "duplicate"
   | "filing"
   | "filed"
-  | "failed";
+  | "failed"
+  | "discarded";
 
 export type UploadBatchStatus =
   | "ANALYZING"
@@ -30,9 +31,10 @@ export interface BatchCounters {
   pendingFiles: number;
   filedFiles: number;
   failedFiles: number;
+  discardedFiles: number;
 }
 
-/** Estados que aguardam ação humana (não prontos, não arquivados). */
+/** Estados que aguardam ação humana (não prontos, não arquivados, não descartados). */
 const PENDING_STATUSES: UploadItemStatus[] = ["review", "blocked", "duplicate"];
 
 export function computeBatchCounters(items: { status: UploadItemStatus }[]): BatchCounters {
@@ -44,17 +46,21 @@ export function computeBatchCounters(items: { status: UploadItemStatus }[]): Bat
     pendingFiles: items.filter((i) => PENDING_STATUSES.includes(i.status)).length,
     filedFiles: count("filed"),
     failedFiles: count("failed"),
+    discardedFiles: count("discarded"),
   };
 }
 
 export function deriveBatchStatus(counters: BatchCounters): UploadBatchStatus {
-  const { totalFiles, analyzedFiles, readyFiles, pendingFiles, filedFiles, failedFiles } = counters;
+  const { totalFiles, analyzedFiles, readyFiles, pendingFiles, filedFiles, failedFiles, discardedFiles } = counters;
   if (totalFiles === 0) return "AWAITING_REVIEW";
   if (analyzedFiles < totalFiles) return "ANALYZING";
   if (filedFiles > 0 && (readyFiles > 0 || pendingFiles > 0)) return "PARTIALLY_FILED";
   if (filedFiles > 0 && readyFiles === 0 && pendingFiles === 0) return "FILED";
   if (readyFiles > 0 || pendingFiles > 0) return "AWAITING_REVIEW";
-  if (failedFiles === totalFiles) return "FAILED";
+  // Nada pronto/pendente e nada arquivado: lote resolvido só com descarte/falha.
+  if (filedFiles === 0 && discardedFiles + failedFiles === totalFiles) {
+    return failedFiles === totalFiles ? "FAILED" : "CANCELLED";
+  }
   return "AWAITING_REVIEW";
 }
 

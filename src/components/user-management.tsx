@@ -19,7 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, UserPlus, CircleDot, UserX } from 'lucide-react';
+import { Edit, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -28,6 +28,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuChe
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
+import { JUST_CAUSE_TYPES, TERMINATION_REASONS, requiresTerminationSubtype } from '@/lib/hr/termination-options';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
@@ -38,6 +39,9 @@ import { pickUserColor, getUserColor } from '@/lib/utils/user-colors';
 import { createAuditLog } from '@/features/audit/client';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import {
   calculateVacationHealth,
   CYCLE_STATUS_CONFIG,
@@ -122,32 +126,27 @@ function DerivedInfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-const TERMINATION_REASONS = [
-  'Dispensa sem justa causa',
-  'Dispensa por justa causa',
-  'Pedido de demissão (resilição pelo empregado)',
-  'Rescisão indireta',
-  'Rescisão por culpa recíproca',
-  'Rescisão por acordo entre as partes',
-  'Extinção legal ou por motivo de ordem pública',
-];
-
-const JUST_CAUSE_TYPES = [
-  'Abandono de emprego',
-  'Incontinência de conduta ou mau comportamento',
-  'Negociação habitual por conta própria ou de terceiros',
-  'Condenação criminal',
-  'Desídia no desempenho das funções',
-  'Embriaguez habitual ou em serviço',
-  'Violação de segredo da empresa',
-  'Ato de indisciplina ou de insubordinação',
-  'Ato lesivo da honra ou boa fama',
-  'Ofensas físicas',
-  'Prática constante de jogos de azar',
-  'Perda de habilitação ou requisitos legais para o exercício da função',
-  'Ato fraudulento em detrimento do empregador',
-  'Redução dolosa da produção ou produtividade',
-];
+function FieldHelpTooltip({ title, description }: { title: string; description: string }) {
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-pink-200 hover:text-pink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500/40"
+            aria-label={title}
+          >
+            <Info className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="start" className="max-w-[320px] p-3 text-xs leading-relaxed">
+          <p className="font-semibold text-slate-950">{title}</p>
+          <p className="mt-1 text-muted-foreground">{description}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 type InactivationMode = 'temporary' | 'contract_termination';
 type TransportVoucherStatus = 'none' | 'active' | 'suspended';
@@ -313,16 +312,28 @@ function userAuditDiff(before: User, after: Partial<User>) {
   return changes;
 }
 
-export function UserManagement() {
+type UserManagementProps = {
+  createOnly?: boolean;
+  onClose?: () => void;
+  contextLabel?: string;
+  showTransportVoucher?: boolean;
+};
+
+export function UserManagement({
+  createOnly = false,
+  onClose,
+  contextLabel = 'Configurações › Usuários',
+  showTransportVoucher = false,
+}: UserManagementProps = {}) {
   const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { roles, functions, units, loading: hrLoading } = useHrBootstrap();
-  const { shiftDefinitions, vacations } = useDP();
+  const { shiftDefinitions, shiftDefsLoading, vacations } = useDP();
   const { toast } = useToast();
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(createOnly);
   const [userToInactivate, setUserToInactivate] = useState<User | null>(null);
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [inactivationMode, setInactivationMode] = useState<InactivationMode>('temporary');
@@ -375,6 +386,7 @@ export function UserManagement() {
   const selectedRoleId = form.watch('jobRoleId') ?? '';
   const selectedFunctionIds = form.watch('jobFunctionIds') ?? [];
   const selectedProfileId = form.watch('profileId') ?? '';
+  const selectedKioskIds = form.watch('assignedKioskIds') ?? [];
   const admissionDateValue = form.watch('admissionDate');
   const birthDateValue = form.watch('birthDate');
   const needsTransportVoucherValue = form.watch('needsTransportVoucher');
@@ -426,6 +438,45 @@ export function UserManagement() {
     () => units.map((unit) => ({ value: unit.id, label: unit.name })),
     [units]
   );
+  const selectedWorkUnits = useMemo(() => {
+    const mapped = new Map<string, { id: string; name: string }>();
+
+    selectedKioskIds.forEach((kioskId) => {
+      const kiosk = kiosks.find((item) => item.id === kioskId);
+      const unit = kiosk ? matchDPUnitForKiosk(kiosk.name, units) : undefined;
+      if (unit) mapped.set(unit.id, { id: unit.id, name: unit.name });
+    });
+
+    return Array.from(mapped.values());
+  }, [kiosks, selectedKioskIds, units]);
+  const selectedWorkUnitIds = useMemo(
+    () => selectedWorkUnits.map((unit) => unit.id),
+    [selectedWorkUnits]
+  );
+  const filteredShiftDefinitions = useMemo(() => {
+    if (selectedKioskIds.length === 0) return shiftDefinitions;
+    if (selectedWorkUnitIds.length === 0) return [];
+
+    return shiftDefinitions.filter((definition) =>
+      selectedWorkUnitIds.some((unitId) => shiftDefinitionMatchesUnit(definition, unitId))
+    );
+  }, [selectedKioskIds.length, selectedWorkUnitIds, shiftDefinitions]);
+  const shiftDefinitionHint = useMemo(() => {
+    if (selectedKioskIds.length === 0) {
+      return 'Selecione um quiosque para filtrar os turnos pela unidade.';
+    }
+
+    if (selectedWorkUnits.length === 0) {
+      return 'Nenhuma unidade DP foi encontrada para o quiosque selecionado.';
+    }
+
+    const unitNames = selectedWorkUnits.map((unit) => unit.name).join(', ');
+    if (filteredShiftDefinitions.length === 0) {
+      return `Nenhum turno cadastrado para ${unitNames}.`;
+    }
+
+    return `Exibindo turnos de ${unitNames}.`;
+  }, [filteredShiftDefinitions.length, selectedKioskIds.length, selectedWorkUnits]);
   const effectiveDefaultProfileId = useMemo(
     () =>
       selectedFunctions.find((item) => item.defaultProfileId)?.defaultProfileId ??
@@ -444,7 +495,7 @@ export function UserManagement() {
 
   useEffect(() => {
     const allowedFunctionIds = new Set(compatibleFunctions.map((item) => item.id));
-    const nextValue = selectedFunctionIds.filter((id) => allowedFunctionIds.has(id));
+    const nextValue = selectedFunctionIds.filter((id) => allowedFunctionIds.has(id)).slice(0, 1);
     if (nextValue.length !== selectedFunctionIds.length) {
       form.setValue('jobFunctionIds', nextValue, { shouldDirty: true });
     }
@@ -458,6 +509,33 @@ export function UserManagement() {
       form.setValue('profileId', effectiveDefaultProfileId, { shouldDirty: true });
     }
   }, [effectiveDefaultProfileId, editingUser, form]);
+
+  useEffect(() => {
+    if (!createOnly || !showForm || editingUser) return;
+
+    const clearAutofill = () => {
+      form.setValue('username', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+      form.setValue('email', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+      form.setValue('password', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+    };
+
+    clearAutofill();
+    const timeout = window.setTimeout(clearAutofill, 200);
+    return () => window.clearTimeout(timeout);
+  }, [createOnly, editingUser, form, showForm]);
+
+  useEffect(() => {
+    const currentShiftDefinitionId = form.getValues('shiftDefinitionId');
+    if (!currentShiftDefinitionId || selectedKioskIds.length === 0) return;
+
+    const stillAvailable = filteredShiftDefinitions.some(
+      (definition) => definition.id === currentShiftDefinitionId
+    );
+
+    if (!stillAvailable) {
+      form.setValue('shiftDefinitionId', '', { shouldDirty: true });
+    }
+  }, [filteredShiftDefinitions, form, selectedKioskIds.length]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
@@ -501,6 +579,13 @@ export function UserManagement() {
     return [...map.values()].sort((a, b) => a.order - b.order || a.profileName.localeCompare(b.profileName));
   }, [filteredUsers, profiles, adminProfileId]);
 
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingUser(null);
+    setPendingTransportVoucherHistory([]);
+    if (createOnly) onClose?.();
+  };
 
   const handleAddNew = () => {
     setEditingUser(null);
@@ -641,7 +726,7 @@ export function UserManagement() {
         inactivationType: inactivationMode,
         terminationDate: inactivationMode === 'contract_termination' ? terminationDate : undefined,
         terminationReason: inactivationMode === 'contract_termination' ? terminationReason : undefined,
-        terminationCause: terminationReason === 'Dispensa por justa causa' ? terminationCause : undefined,
+        terminationCause: requiresTerminationSubtype(terminationReason) ? terminationCause : undefined,
         terminationNotes: terminationNotes || (inactivationMode === 'temporary' ? 'Inativação temporária pela tela de usuários.' : undefined),
       });
       await logUserAudit('user_inactivated', userToInactivate, {
@@ -704,6 +789,7 @@ export function UserManagement() {
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
+          unitIds: selectedWorkUnitIds.length > 0 ? selectedWorkUnitIds : undefined,
           admissionDate,
           birthDate,
           shiftDefinitionId: values.shiftDefinitionId || undefined,
@@ -747,6 +833,7 @@ export function UserManagement() {
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
+          unitIds: selectedWorkUnitIds.length > 0 ? selectedWorkUnitIds : undefined,
           admissionDate,
           birthDate,
       }, values.email, values.password);
@@ -763,8 +850,7 @@ export function UserManagement() {
         assigned_kiosk_count: values.assignedKioskIds.length,
       });
     }
-    setShowForm(false);
-    setEditingUser(null);
+    closeForm();
   };
   
   const handlePhotoUpdate = async (dataUrl: string) => {
@@ -843,6 +929,8 @@ export function UserManagement() {
     { label: 'Bloqueados', value: blockedCount, total: users.length, color: 'bg-rose-500', pct: users.length ? Math.round((blockedCount / users.length) * 100) : 0 },
   ];
 
+  if (createOnly && !showForm) return null;
+
   const lastAccessLabel = (value: unknown) => {
     if (!value) return 'Nunca';
     try {
@@ -866,28 +954,31 @@ export function UserManagement() {
     <>
       {showForm ? (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+          <form onSubmit={form.handleSubmit(onSubmit)} autoComplete={createOnly ? 'off' : 'on'} className={createOnly ? "space-y-4" : "space-y-5"}>
             {/* ── Back nav ── */}
-            <div className="flex items-center gap-3 mb-2">
-              <Button
-                type="button" variant="ghost" size="icon"
-                className="shrink-0 h-8 w-8 rounded-full"
-                onClick={() => { setShowForm(false); setEditingUser(null); }}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div>
-                <p className="font-semibold leading-tight">
-                  {editingUser ? editingUser.username : 'Novo usuário'}
-                </p>
-                <p className="text-xs text-muted-foreground">Configurações › Usuários</p>
+            {!createOnly ? (
+              <div className="flex items-center gap-3 mb-2">
+                <Button
+                  type="button" variant="ghost" size="icon"
+                  className="shrink-0 h-8 w-8 rounded-full"
+                  onClick={closeForm}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div>
+                  <p className="font-semibold leading-tight">
+                    {editingUser ? editingUser.username : 'Novo usuário'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{contextLabel}</p>
+                </div>
               </div>
-            </div>
+            ) : null}
 
             {/* ── Cartão 1: Departamento Pessoal + identidade ── */}
-            <Card style={{ padding: '1.25rem 1.5rem' }}>
-              <div className="flex gap-5 items-start">
+            <Card className={createOnly ? "shadow-none" : undefined} style={{ padding: createOnly ? '1rem' : '1.25rem 1.5rem' }}>
+              <div className={createOnly ? "grid gap-4" : "flex gap-5 items-start"}>
                 {/* Avatar + botões */}
+                {!createOnly ? (
                 <div className="flex flex-col items-center gap-2 shrink-0">
                   <Avatar className="h-20 w-20">
                     {isUploadingPhoto ? (
@@ -918,9 +1009,11 @@ export function UserManagement() {
                   </div>
                   <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
                 </div>
+                ) : null}
 
                 {/* Nome, e-mail, badges */}
                 <div className="flex-1 space-y-3 min-w-0">
+                  {!createOnly ? (
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex items-center gap-1.5">
                       <div
@@ -939,29 +1032,30 @@ export function UserManagement() {
                       </Badge>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  ) : null}
+                  <div className={createOnly ? "grid grid-cols-1 gap-3 lg:grid-cols-3" : "grid grid-cols-1 md:grid-cols-2 gap-3"}>
                     <FormField control={form.control} name="username" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome</FormLabel>
-                        <FormControl><Input placeholder="ex: Maria Silva" {...field} /></FormControl>
+                        <FormControl><Input placeholder="ex: Maria Silva" {...field} autoComplete={createOnly ? 'off' : 'name'} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="email" render={({ field }) => (
                       <FormItem>
                         <FormLabel>E-mail</FormLabel>
-                        <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
+                        <FormControl><Input type="email" placeholder="email@dominio.com" {...field} autoComplete={createOnly ? 'off' : 'email'} disabled={!!editingUser} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
                     {!editingUser && (
-                      <div className="col-span-full">
+                      <div className={createOnly ? "" : "col-span-full"}>
                         <FormField control={form.control} name="password" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Senha</FormLabel>
                             <div className="relative">
                               <FormControl>
-                                <Input type={showPassword ? 'text' : 'password'} placeholder="Mínimo 6 caracteres" {...field} />
+                                <Input type={showPassword ? 'text' : 'password'} placeholder="Mínimo 6 caracteres" {...field} autoComplete="new-password" />
                               </FormControl>
                               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground">
                                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1007,24 +1101,37 @@ export function UserManagement() {
                       )} />
                       <FormField control={form.control} name="jobFunctionIds" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Funções</FormLabel>
-                          <FormControl>
-                            <MultiSelect
-                              options={compatibleFunctionOptions}
-                              selected={field.value ?? []}
-                              onChange={field.onChange}
-                              placeholder={
-                                hrLoading
-                                  ? 'Carregando funções...'
-                                  : selectedRoleId
-                                    ? 'Selecione as funções'
-                                    : 'Selecione primeiro um cargo'
-                              }
-                              className={selectedRoleId ? '' : 'opacity-70'}
-                            />
-                          </FormControl>
+                          <FormLabel>Função</FormLabel>
+                          <Select
+                            value={(field.value ?? [])[0] ?? '__none__'}
+                            onValueChange={(value) => {
+                              field.onChange(value === '__none__' ? [] : [value]);
+                            }}
+                            disabled={hrLoading || !selectedRoleId}
+                          >
+                            <FormControl>
+                              <SelectTrigger className={selectedRoleId ? '' : 'opacity-70'}>
+                                <SelectValue placeholder={selectedRoleId ? 'Selecione a função' : 'Selecione primeiro um cargo'} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="__none__">
+                                {selectedRoleId ? 'Sem função' : 'Selecione primeiro um cargo'}
+                              </SelectItem>
+                              {compatibleFunctionOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                              {selectedRoleId && compatibleFunctionOptions.length === 0 && (
+                                <SelectItem value="__no_function_options__" disabled>
+                                  Nenhuma função para este cargo
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
                           <FormDescription className="text-xs">
-                            As funções listadas respeitam a compatibilidade do cargo.
+                            A função listada respeita a compatibilidade do cargo.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -1123,34 +1230,32 @@ export function UserManagement() {
                         </div>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField control={form.control} name="registrationIdBizneo" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Matrícula Bizneo</FormLabel>
-                          <FormControl><Input placeholder="Ex: 18043422" {...field} disabled={hasBizneoLink} /></FormControl>
-                          {hasBizneoLink && (
-                            <FormDescription className="text-xs">Sincronizado pelo Bizneo.</FormDescription>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      )} />
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                       <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Turno padrão</FormLabel>
-                          <Select value={field.value || '__none__'} onValueChange={v => field.onChange(v === '__none__' ? '' : v)}>
+                          <Select
+                            value={field.value || '__none__'}
+                            onValueChange={v => field.onChange(v === '__none__' ? '' : v)}
+                            disabled={shiftDefsLoading}
+                          >
                             <FormControl><SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger></FormControl>
                             <SelectContent>
                               <SelectItem value="__none__">— Nenhum —</SelectItem>
-                              {shiftDefinitions.map(def => (
+                              {filteredShiftDefinitions.map(def => (
                                 <SelectItem key={def.id} value={def.id}>{def.name} ({def.startTime}–{def.endTime})</SelectItem>
                               ))}
+                              {filteredShiftDefinitions.length === 0 && (
+                                <SelectItem value="__no_shift_options__" disabled>
+                                  Nenhum turno para esta unidade
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
+                          <FormDescription className="text-xs">{shiftDefinitionHint}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField control={form.control} name="admissionDate" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Data de admissão</FormLabel>
@@ -1166,6 +1271,7 @@ export function UserManagement() {
                         </FormItem>
                       )} />
                     </div>
+                    {!createOnly ? (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                       <DerivedInfoCard label="Tempo de empresa" value={dpDateSummary.tenure} />
                       <DerivedInfoCard label="Idade" value={dpDateSummary.age} />
@@ -1177,6 +1283,7 @@ export function UserManagement() {
                         vacations={vacations}
                       />
                     </div>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -1189,8 +1296,13 @@ export function UserManagement() {
                 <FormField control={form.control} name="operacional" render={({ field }) => (
                   <FormItem className="flex min-h-[82px] flex-row items-center justify-between gap-3 rounded-lg border p-3">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-sm font-medium">Operacional</FormLabel>
-                      <FormDescription className="text-xs">Escalas e relatórios.</FormDescription>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel className="text-sm font-medium">Operacional</FormLabel>
+                        <FieldHelpTooltip
+                          title="Usuário operacional"
+                          description="Inclui o colaborador nas rotinas de operação, como escala de trabalho e relatórios operacionais. Não altera cargo, função ou perfil de permissão."
+                        />
+                      </div>
                     </div>
                     <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
@@ -1198,13 +1310,19 @@ export function UserManagement() {
                 <FormField control={form.control} name="participatesInGoals" render={({ field }) => (
                   <FormItem className="flex min-h-[82px] flex-row items-center justify-between gap-3 rounded-lg border p-3">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-sm font-medium">Metas</FormLabel>
-                      <FormDescription className="text-xs">Acompanhamento.</FormDescription>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel className="text-sm font-medium">Metas</FormLabel>
+                        <FieldHelpTooltip
+                          title="Participa de metas"
+                          description="Inclui o colaborador nos acompanhamentos e seleções do módulo de metas. Não cria meta sozinho e não muda remuneração sem as regras do módulo."
+                        />
+                      </div>
                     </div>
                     <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
+                {showTransportVoucher ? (
+                  <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
                   <FormItem className="rounded-lg border p-3 md:col-span-3">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-[220px] space-y-1">
@@ -1274,13 +1392,14 @@ export function UserManagement() {
                       </div>
                     </div>
                   </FormItem>
-                )} />
+                  )} />
+                ) : null}
               </div>
             </Card>
 
             {/* ── Footer ── */}
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingUser(null); }}>Cancelar</Button>
+              <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
               <Button type="submit" disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}>
                 {editingUser ? 'Salvar alterações' : 'Criar usuário'}
               </Button>
@@ -1302,9 +1421,6 @@ export function UserManagement() {
               </Button>
               <Button variant="outline" className="h-10 rounded-xl border-slate-200 bg-white" onClick={() => setIsProfilesModalOpen(true)} disabled={!permissions.settings.manageProfiles}>
                 <Shield className="mr-2 h-4 w-4" /> Perfis
-              </Button>
-              <Button onClick={handleAddNew} disabled={!permissions.settings.manageUsers} className="h-10 rounded-xl bg-pink-500 text-white hover:bg-pink-600">
-                <UserPlus className="mr-2 h-4 w-4" /> Novo usuário
               </Button>
             </div>
           </div>
@@ -1401,7 +1517,6 @@ export function UserManagement() {
                       </span>
                       <span className="hidden text-xs font-semibold text-slate-400 md:inline">Acesso total ao sistema</span>
                     </div>
-                    <button onClick={handleAddNew} className="text-xs font-black text-pink-500">+ Adicionar</button>
                   </div>
                   <div className="divide-y divide-slate-100">
                     {group.users.map(user => (
@@ -1595,7 +1710,7 @@ export function UserManagement() {
                 </div>
                 <div>
                   <Label>Tipo de demissão</Label>
-                  <Select value={terminationReason} onValueChange={(value) => { setTerminationReason(value); if (value !== 'Dispensa por justa causa') setTerminationCause(''); }}>
+                  <Select value={terminationReason} onValueChange={(value) => { setTerminationReason(value); if (!requiresTerminationSubtype(value)) setTerminationCause(''); }}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       {TERMINATION_REASONS.map((reason) => (
@@ -1604,7 +1719,7 @@ export function UserManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-                {terminationReason === 'Dispensa por justa causa' && (
+                {requiresTerminationSubtype(terminationReason) && (
                   <div className="sm:col-span-2">
                     <Label>Tipo de justa causa</Label>
                     <Select value={terminationCause} onValueChange={setTerminationCause}>

@@ -18,21 +18,39 @@ import {
   type EmployeeMatchStatus,
 } from "@/lib/hr/employee-document-match";
 import { getDocumentTypeConfig, missingCriticalFields } from "@/lib/hr/employee-document-catalog";
-import { resolveDocumentDestination } from "@/lib/hr/employee-document-distribution";
+import {
+  resolveDocumentDestination,
+  resolveDuplicateAndVersion,
+  type ExistingDocumentRef,
+} from "@/lib/hr/employee-document-distribution";
 import { decideDocumentAction } from "@/lib/hr/employee-document-decision";
-import { loadExpectedIdentity, employeeCodeFrom, hashBuffer } from "@/lib/hr/employee-document-identity";
+import {
+  findEmployeeIdentityByExtractedIdentity,
+  loadExpectedIdentity,
+  employeeCodeFrom,
+  hashBuffer,
+} from "@/lib/hr/employee-document-identity";
 import {
   computeBatchCounters,
   deriveBatchStatus,
   type UploadItemStatus,
 } from "@/lib/hr/employee-document-batch";
+import { buildEmployeeProfileSuggestions } from "@/lib/hr/employee-document-profile-suggestions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BATCHES = "documentUploadBatches";
 const ITEMS = "documentUploadItems";
+const COLLECTION = "employeeDocuments";
 const BATCH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function tsToIso(value: unknown): string | null {
+  if (value && typeof (value as { toDate?: () => Date }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return null;
+}
 
 function error(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -68,8 +86,33 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
   const employeeCode = employeeCodeFrom(expectedIdentity, employeeId);
   const now = Timestamp.now();
 
+  // Documentos que o colaborador JÁ tem — base para avisar duplicidade na prévia.
+  const existingSnap = await hrDbAdmin.collection(COLLECTION).where("employeeId", "==", employeeId).get();
+  const existingDocs = existingSnap.docs.filter((d) => !d.get("deletedAt"));
+  const existingRefs: ExistingDocumentRef[] = existingDocs.map((d) => ({
+    id: d.id,
+    documentTypeCode: d.get("documentTypeCode") ?? null,
+    contentHash: d.get("contentHash") ?? null,
+    logicalKey: d.get("logicalKey") ?? null,
+    version: typeof d.get("version") === "number" ? d.get("version") : 1,
+  }));
+  const existingById = new Map(existingDocs.map((d) => [d.id, d]));
+  const summarize = (id: string | null) => {
+    if (!id) return null;
+    const d = existingById.get(id);
+    if (!d) return null;
+    return {
+      id: d.id,
+      documentType: d.get("documentType") ?? null,
+      storedName: d.get("storedName") ?? d.get("displayName") ?? null,
+      version: typeof d.get("version") === "number" ? d.get("version") : 1,
+      uploadedAt: tsToIso(d.get("uploadedAt")),
+    };
+  };
+
   const responseDocs = [];
   const itemStatuses: { status: UploadItemStatus }[] = [];
+  const batchHashSeen = new Map<string, { itemId: string; originalName: string }>();
 
   for (const [fileIndex, file] of files.entries()) {
     const itemId = randomUUID();
@@ -84,6 +127,10 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
     const tempStoragePath = `hr/pending-document-batches/${batchId}/items/${itemId}/original.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
     const contentHash = hashBuffer(buffer);
+    const duplicateInCurrentBatch = fileErrors.length === 0 ? batchHashSeen.get(contentHash) ?? null : null;
+    if (fileErrors.length === 0 && !duplicateInCurrentBatch) {
+      batchHashSeen.set(contentHash, { itemId, originalName: file.name });
+    }
     if (fileErrors.length === 0) {
       await bucket.file(tempStoragePath).save(buffer, {
         resumable: false,
@@ -100,19 +147,33 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
     const fields = ai?.extractedFields ?? {};
     const fieldConfidences = ai?.fieldConfidences ?? {};
 
+    const extractedIdentity = {
+      cpf: asString(fields.cpf),
+      registrationNumber: asString(fields.registrationNumber),
+      name: ai?.identifiedEmployeeName ?? asString(fields.employeeName),
+      birthDate: asString(fields.birthDate),
+      admissionDate: asString(fields.admissionDate),
+    };
     const backendMatch = ai && expectedIdentity
       ? matchEmployeeAgainstExpected({
-          extracted: {
-            cpf: asString(fields.cpf),
-            registrationNumber: asString(fields.registrationNumber),
-            name: ai.identifiedEmployeeName ?? asString(fields.employeeName),
-            birthDate: asString(fields.birthDate),
-            admissionDate: asString(fields.admissionDate),
-          },
+          extracted: extractedIdentity,
           expected: expectedIdentity,
         })
       : { status: "UNKNOWN" as EmployeeMatchStatus, reason: expectedIdentity ? "Sem análise de IA." : "Colaborador não localizado no RH.", matchedBy: "NONE" as const };
-    const employeeMatchStatus = backendMatch.status;
+    const locatedEmployee = ai ? await findEmployeeIdentityByExtractedIdentity(extractedIdentity, employeeId) : null;
+    let employeeMatchStatus = backendMatch.status;
+    let employeeMatchReason = backendMatch.reason;
+    let suggestedEmployeeId: string | null = null;
+    let suggestedEmployeeName: string | null = null;
+    if (locatedEmployee && locatedEmployee.employeeId !== employeeId) {
+      employeeMatchStatus = "MISMATCH";
+      suggestedEmployeeId = locatedEmployee.employeeId;
+      suggestedEmployeeName = locatedEmployee.name ?? null;
+      employeeMatchReason = `Documento pertence a ${locatedEmployee.name ?? "outro colaborador"}, que possui cadastro no sistema. Confirme o direcionamento para o dossiê correto.`;
+    } else if (locatedEmployee && locatedEmployee.employeeId === employeeId && employeeMatchStatus !== "MATCH") {
+      employeeMatchStatus = "MATCH";
+      employeeMatchReason = `${locatedEmployee.matchedBy === "CPF" ? "CPF" : locatedEmployee.matchedBy === "REGISTRATION" ? "Matrícula" : locatedEmployee.matchedBy === "NAME_BIRTH" ? "Nome e nascimento" : "Nome completo"} localizado no cadastro deste colaborador.`;
+    }
 
     const destination = resolveDocumentDestination({ config, employeeCode, fields, version: 1 });
     const decision = decideDocumentAction({
@@ -127,7 +188,30 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
       documentTypeConfidence: ai?.documentTypeConfidence ?? 0,
       confirmationThreshold: config.confirmationThreshold,
     });
-    const itemStatus = decision.status as UploadItemStatus;
+    // Duplicidade: o colaborador já tem esse documento? (não descarta — só avisa)
+    const dedupe = ai && employeeMatchStatus !== "MISMATCH"
+      ? resolveDuplicateAndVersion({
+          employeeId, code: config.code, strategy: config.duplicateStrategy,
+          keys: config.duplicateKeys, fields, contentHash, existing: existingRefs,
+        })
+      : { resolution: "NEW_DOCUMENT" as const, version: 1, existingDocumentId: null, logicalKey: "" };
+    const profileSuggestions = ai && employeeMatchStatus !== "MISMATCH"
+      ? await buildEmployeeProfileSuggestions({ employeeId, documentTypeCode: config.code, extractedFields: fields, fieldConfidences })
+      : [];
+    const requiresDuplicateReview =
+      duplicateInCurrentBatch != null ||
+      dedupe.resolution === "EXACT_DUPLICATE" ||
+      dedupe.resolution === "POSSIBLE_DUPLICATE";
+    const existingDocument = duplicateInCurrentBatch ? null : summarize(dedupe.existingDocumentId);
+    const duplicateResolution = duplicateInCurrentBatch ? "EXACT_DUPLICATE" : dedupe.resolution;
+    const duplicateWarnings = duplicateInCurrentBatch
+      ? [`Arquivo idêntico já selecionado neste lote: ${duplicateInCurrentBatch.originalName}. Descarte este item ou mantenha apenas um arquivo.`]
+      : [];
+
+    // Duplicata exata/ambígua exige revisão. Nova versão lógica é arquivável:
+    // o confirm reserva o próximo número de versão transacionalmente.
+    let itemStatus = decision.status as UploadItemStatus;
+    if (requiresDuplicateReview && itemStatus === "ready") itemStatus = "review";
     itemStatuses.push({ status: itemStatus });
 
     const itemPayload = {
@@ -150,11 +234,14 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
       accessPolicyId: config.accessPolicyId,
       confidence: ai?.documentTypeConfidence ?? 0,
       employeeMatchStatus,
-      employeeMatchReason: backendMatch.reason,
+      employeeMatchReason,
+      suggestedEmployeeId,
+      suggestedEmployeeName,
       aiEmployeeMatchStatus: ai?.employeeMatchStatus ?? "UNKNOWN",
       identifiedEmployeeName: ai?.identifiedEmployeeName ?? null,
       extractedFields: fields,
       fieldConfidences,
+      profileSuggestions,
       structure: ai?.structure ?? { legibility: "PARTIAL", multipleDocumentsDetected: false, pageCount: null },
       destination,
       analysisProvider: ai?.provider ?? "local_fallback",
@@ -164,8 +251,13 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
       estimatedCostUsd: ai?.estimatedCostUsd ?? null,
       promptVersion: ai?.promptVersion ?? "employee-document-v2",
       schemaVersion: ai?.schemaVersion ?? "employee-document-analysis-v2",
-      warnings: [...(ai?.warnings ?? [])],
+      warnings: [...(ai?.warnings ?? []), ...duplicateWarnings],
       errors: [...fileErrors, ...(ai?.issues ?? [])],
+      duplicateResolution,
+      duplicateOfId: duplicateInCurrentBatch?.itemId ?? dedupe.existingDocumentId,
+      duplicateOfItemId: duplicateInCurrentBatch?.itemId ?? null,
+      duplicateOfName: duplicateInCurrentBatch?.originalName ?? null,
+      existingDocument,
       filedDocumentId: null,
       createdAt: now,
       updatedAt: now,
@@ -197,10 +289,13 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
       decisionReason: decision.reason,
       employeeId,
       employeeMatchStatus,
-      employeeMatchReason: backendMatch.reason,
+      employeeMatchReason,
+      suggestedEmployeeId,
+      suggestedEmployeeName,
       identifiedEmployeeName: ai?.identifiedEmployeeName ?? null,
       extractedFields: fields,
       fieldConfidences,
+      profileSuggestions,
       structure: itemPayload.structure,
       analysisModel: itemPayload.analysisModel,
       warnings: itemPayload.warnings,
@@ -209,6 +304,11 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
       displayName: destination.displayName,
       destinationTrail: destination.pathSegments,
       storageSubfolder: `hr/employee-documents/${employeeId}/documents/${documentId}`,
+      duplicateResolution,
+      duplicateInBatch: duplicateInCurrentBatch
+        ? { itemId: duplicateInCurrentBatch.itemId, originalName: duplicateInCurrentBatch.originalName }
+        : null,
+      existingDocument,
     });
   }
 
@@ -221,7 +321,7 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
     status: batchStatus,
     ...counters,
     createdBy: access.decoded.uid,
-    createdByName: access.decoded.name ?? access.decoded.email ?? "Usuário",
+    createdByName: access.actorName,
     createdAt: now,
     updatedAt: now,
     expiresAt: Timestamp.fromMillis(now.toMillis() + BATCH_TTL_MS),

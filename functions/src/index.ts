@@ -24,6 +24,9 @@ const hrDb = getFirestore('coala-rh');
 const auth = getAuth();
 const STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET ?? 'smart-converter-752gf.firebasestorage.app';
 const BIZNEO_BASE_URL = 'https://coala.bizneohr.com/api/v1';
+const DOCUMENT_UPLOAD_BATCHES = 'documentUploadBatches';
+const DOCUMENT_UPLOAD_ITEMS = 'documentUploadItems';
+const MAX_EXPIRED_DOCUMENT_BATCHES_PER_RUN = 50;
 
 const BRT = 'America/Sao_Paulo';
 const DEV_DELETE_USER_UIDS = new Set(
@@ -103,6 +106,21 @@ function parseBizneoTimestamp(value?: string | null): Timestamp | undefined {
   if (!value) return undefined;
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.getTime()) ? undefined : Timestamp.fromDate(date);
+}
+
+async function canManageUserAccess(token: Record<string, any>): Promise<boolean> {
+  if (token.isDefaultAdmin) return true;
+
+  const profileId = token.profileId;
+  if (!profileId) return false;
+
+  const profileDoc = await db.collection('profiles').doc(profileId).get();
+  const perms = profileDoc.data()?.permissions;
+
+  return Boolean(
+    perms?.settings?.manageUsers === true ||
+    perms?.dp?.collaborators?.terminate === true
+  );
 }
 
 function resolveBizneoAdmissionDate(user: BizneoUserPayload): string | null {
@@ -561,6 +579,37 @@ export const cleanupExpiredActionLogs = onSchedule({
   console.log(`[cleanupExpiredActionLogs] ${snap.size} log(s) removido(s).`);
 });
 
+// Remove uploads de RH abandonados. A análise guarda arquivos em uma área
+// temporária até a confirmação do usuário; este job mantém essa área limitada.
+export const cleanupExpiredEmployeeDocumentBatches = onSchedule({
+  schedule: 'every 24 hours',
+  timeZone: BRT,
+  retryCount: 1,
+}, async () => {
+  const expired = await hrDb
+    .collection(DOCUMENT_UPLOAD_BATCHES)
+    .where('expiresAt', '<', Timestamp.now())
+    .limit(MAX_EXPIRED_DOCUMENT_BATCHES_PER_RUN)
+    .get();
+
+  let removedItems = 0;
+  for (const batchDoc of expired.docs) {
+    const batchId = batchDoc.id;
+    await getStorage().bucket(STORAGE_BUCKET)
+      .deleteFiles({ prefix: `hr/pending-document-batches/${batchId}/` })
+      .catch((cause) => console.warn(`[cleanupExpiredEmployeeDocumentBatches] Storage ${batchId}:`, cause));
+
+    const items = await hrDb.collection(DOCUMENT_UPLOAD_ITEMS).where('batchId', '==', batchId).get();
+    for (const itemDoc of items.docs) {
+      await hrDb.recursiveDelete(itemDoc.ref);
+      removedItems += 1;
+    }
+    await hrDb.recursiveDelete(batchDoc.ref);
+  }
+
+  console.log(`[cleanupExpiredEmployeeDocumentBatches] ${expired.size} lote(s) e ${removedItems} item(ns) removidos.`);
+});
+
 export const syncBizneoUsersMonthly = onSchedule({
   schedule: '0 3 1 * *',
   timeZone: BRT,
@@ -798,8 +847,8 @@ export const terminateUser = onCall(
   { cors: internalAppCors },
   async (request: any) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
-    if (!request.auth.token.isDefaultAdmin) {
-      throw new HttpsError('permission-denied', 'Apenas administradores podem desligar usuários.');
+    if (!(await canManageUserAccess(request.auth.token))) {
+      throw new HttpsError('permission-denied', 'Sem permissão para desligar usuários.');
     }
 
     const { uid, inactivationType, terminationReason, terminationCause, terminationNotes, terminationDate } = request.data;
@@ -839,6 +888,47 @@ export const terminateUser = onCall(
     } catch (error: any) {
       console.error('Erro ao desligar usuário:', error);
       throw new HttpsError('internal', error.message || 'Erro ao desligar usuário.');
+    }
+  }
+);
+
+// --- Reativação DP: reabilita no Auth e marca o cadastro como ativo novamente ---
+export const reactivateUser = onCall(
+  { cors: internalAppCors },
+  async (request: any) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    if (!(await canManageUserAccess(request.auth.token))) {
+      throw new HttpsError('permission-denied', 'Sem permissão para reativar usuários.');
+    }
+
+    const { uid } = request.data;
+    if (!uid) throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
+
+    try {
+      await auth.updateUser(uid, { disabled: false });
+
+      await db.collection('users').doc(uid).update({
+        isActive: true,
+        inactivationType: FieldValue.delete(),
+        terminationDate: FieldValue.delete(),
+        terminationReason: FieldValue.delete(),
+        terminationCause: FieldValue.delete(),
+        terminationNotes: FieldValue.delete(),
+        inactivationHistory: FieldValue.arrayUnion({
+          type: 'reactivation',
+          at: new Date().toISOString(),
+          actorUid: request.auth.uid,
+          reason: 'Reativação/recontratação',
+          cause: null,
+          notes: null,
+          terminationDate: null,
+        }),
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Erro ao reativar usuário:', error);
+      throw new HttpsError('internal', error.message || 'Erro ao reativar usuário.');
     }
   }
 );

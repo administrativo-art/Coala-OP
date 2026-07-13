@@ -11,6 +11,10 @@ const ITEMS = "documentUploadItems";
 const RESUMABLE_STATUSES = new Set(["AWAITING_REVIEW", "PARTIALLY_FILED", "ANALYZING"]);
 
 function error(message: string, status = 400) { return NextResponse.json({ error: message }, { status }); }
+function obj(value: unknown): Record<string, unknown> {
+  const s = serializeHrValue(value);
+  return s && typeof s === "object" && !Array.isArray(s) ? (s as Record<string, unknown>) : {};
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,8 +30,8 @@ export async function GET(request: NextRequest) {
       const items = await hrDbAdmin.collection(ITEMS).where("batchId", "==", batch.id).get();
       return {
         id: batch.id,
-        ...serializeHrValue(batch.data()),
-        items: items.docs.map((item) => ({ itemId: item.id, clientFileId: item.id, ...serializeHrValue(item.data()) })),
+        ...obj(batch.data()),
+        items: items.docs.map((item) => ({ itemId: item.id, clientFileId: item.id, ...obj(item.data()) })),
       };
     }));
     return NextResponse.json({ batches: result });

@@ -8,6 +8,7 @@ import {
   Brain,
   CheckCircle2,
   Download,
+  Eye,
   FileText,
   Folder,
   FolderTree,
@@ -38,8 +39,11 @@ type DocumentRow = {
   status: string;
   accessLevel: string;
   originalName: string;
+  mimeType?: string;
   destinationTrail?: string[];
+  profileSuggestions?: ProfileSuggestion[];
   uploadedAt: string;
+  uploadedBy?: string;
   uploadedByName?: string;
   validatedByName?: string;
   size: number;
@@ -63,15 +67,18 @@ type AnalysisDocument = {
   size: number;
   mimeType: string;
   confidence: number;
-  status: "ready" | "review" | "blocked";
+  status: "ready" | "review" | "blocked" | "duplicate" | "discarded";
   action?: string;
   employeeMatchStatus?: "MATCH" | "POSSIBLE_MATCH" | "MISMATCH" | "UNKNOWN";
   employeeId?: string;
   employeeMatchReason?: string;
+  suggestedEmployeeId?: string | null;
+  suggestedEmployeeName?: string | null;
   decisionReason?: string;
   identifiedEmployeeName?: string | null;
   extractedFields: Record<string, unknown>;
   fieldConfidences?: Record<string, number>;
+  profileSuggestions?: ProfileSuggestion[];
   structure?: {
     legibility?: string;
     multipleDocumentsDetected?: boolean;
@@ -87,6 +94,29 @@ type AnalysisDocument = {
   storageSubfolder: string;
   storagePath: string;
   destinationTrail: string[];
+  duplicateResolution?: string;
+  duplicateInBatch?: {
+    itemId: string;
+    originalName: string;
+  } | null;
+  existingDocument?: {
+    id: string;
+    documentType?: string | null;
+    storedName?: string | null;
+    version?: number | null;
+    uploadedAt?: string | null;
+  } | null;
+};
+
+type ProfileSuggestion = {
+  fieldKey: string;
+  fieldLabel: string;
+  section: string;
+  extractedField: string;
+  extractedValue: string;
+  currentValue: string | null;
+  confidence: number;
+  status: "MISSING_IN_PROFILE" | "FILLED_FROM_DOCUMENT" | "MATCHING_PROFILE" | "DIVERGENT";
 };
 
 type AnalysisPayload = {
@@ -111,6 +141,12 @@ type EmployeeCorrection = {
   employeeId: string;
   reason: string;
 };
+
+type PreviewState = {
+  url: string;
+  title: string;
+  mimeType?: string;
+} | null;
 
 function newId(prefix: string) {
   const randomPart = typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -139,23 +175,68 @@ function fieldPreview(value: unknown) {
   }
 }
 
+function profileSuggestionStatusLabel(status: ProfileSuggestion["status"]) {
+  if (status === "MISSING_IN_PROFILE") return "Será preenchido";
+  if (status === "FILLED_FROM_DOCUMENT") return "Preenchido";
+  if (status === "MATCHING_PROFILE") return "Sem divergência";
+  return "Revisar divergência";
+}
+
+function profileSuggestionStatusClass(status: ProfileSuggestion["status"]) {
+  if (status === "DIVERGENT") return "bg-amber-50 text-amber-700";
+  if (status === "MATCHING_PROFILE") return "bg-sky-50 text-sky-700";
+  return "bg-emerald-50 text-emerald-700";
+}
+
 function statusBadgeClass(status: AnalysisDocument["status"]) {
   if (status === "ready") return "bg-emerald-50 text-emerald-700";
-  if (status === "review") return "bg-amber-50 text-amber-700";
+  if (status === "review" || status === "duplicate") return "bg-amber-50 text-amber-700";
+  if (status === "discarded") return "bg-slate-100 text-slate-500";
   return "bg-rose-50 text-rose-700";
 }
 
 function statusLabel(status: AnalysisDocument["status"]) {
   if (status === "ready") return "Pronto";
   if (status === "review") return "Revisão";
+  if (status === "duplicate") return "Duplicado";
+  if (status === "discarded") return "Descartado";
   return "Bloqueado";
+}
+
+function isReadyDocument(document: AnalysisDocument) {
+  return document.status === "ready";
+}
+
+function isReviewDocument(document: AnalysisDocument) {
+  return document.status === "review" || document.status === "duplicate";
+}
+
+function isBlockedDocument(document: AnalysisDocument) {
+  return document.status === "blocked";
+}
+
+function correctionEmployeeId(document: AnalysisDocument, current: Record<string, EmployeeCorrection>, fallbackUserId: string) {
+  return current[document.itemId]?.employeeId ?? document.suggestedEmployeeId ?? document.employeeId ?? fallbackUserId;
+}
+
+function correctionReason(document: AnalysisDocument, current: Record<string, EmployeeCorrection>) {
+  return current[document.itemId]?.reason
+    ?? (document.suggestedEmployeeId && document.suggestedEmployeeId !== document.employeeId
+      ? "Documento identificado como pertencente a outro colaborador cadastrado."
+      : "");
+}
+
+function isEmailLike(value?: string | null) {
+  return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 export default function EmployeeDocumentsPage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = use(params);
-  const { firebaseUser, users, permissions } = useAuth();
+  const { firebaseUser, user: currentUser, users, permissions } = useAuth();
   const employee = users.find((item) => item.id === userId);
   const canManage = permissions.dp?.collaborators?.edit === true || permissions.settings?.manageUsers === true;
+  const ownProfileOnly = permissions.dp?.collaborators?.ownProfileOnly === true;
+  const canAccessThisProfile = !ownProfileOnly || currentUser?.id === userId;
   const [items, setItems] = useState<DocumentRow[]>([]);
   const [category, setCategory] = useState<EmployeeDocumentCategoryId>("personal");
   const [uploadFiles, setUploadFiles] = useState<UploadFileItem[]>([]);
@@ -163,6 +244,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [preview, setPreview] = useState<PreviewState>(null);
   const [message, setMessage] = useState("");
   const [employeeCorrections, setEmployeeCorrections] = useState<Record<string, EmployeeCorrection>>({});
   const [resumableBatches, setResumableBatches] = useState<ResumableBatch[]>([]);
@@ -178,6 +260,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
   const load = useCallback(async () => {
     if (!firebaseUser) return;
+    if (!canAccessThisProfile) {
+      setLoading(false);
+      setItems([]);
+      setResumableBatches([]);
+      return;
+    }
     setLoading(true);
     try {
       const data = await request(`/api/hr/employee-documents?employeeId=${encodeURIComponent(userId)}`);
@@ -191,7 +279,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     } finally {
       setLoading(false);
     }
-  }, [canManage, firebaseUser, request, userId]);
+  }, [canAccessThisProfile, canManage, firebaseUser, request, userId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -202,6 +290,14 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   }, [category, visible]);
   const selectedFileCount = uploadFiles.length;
   const selectedTotalBytes = uploadFiles.reduce((total, item) => total + item.file.size, 0);
+
+  function uploaderName(item: DocumentRow) {
+    const user = item.uploadedBy ? users.find((entry) => entry.id === item.uploadedBy) : null;
+    if (user?.username) return user.username;
+    if (item.uploadedByName && !isEmailLike(item.uploadedByName)) return item.uploadedByName;
+    if (user?.email) return user.email.split("@")[0];
+    return item.uploadedByName ?? "usuário";
+  }
 
   function resetAnalysis() {
     setAnalysis(null);
@@ -252,10 +348,13 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
         employeeId: typeof item.employeeId === "string" ? item.employeeId : userId,
         employeeMatchStatus: item.employeeMatchStatus as AnalysisDocument["employeeMatchStatus"],
         employeeMatchReason: typeof item.employeeMatchReason === "string" ? item.employeeMatchReason : undefined,
+        suggestedEmployeeId: typeof item.suggestedEmployeeId === "string" ? item.suggestedEmployeeId : null,
+        suggestedEmployeeName: typeof item.suggestedEmployeeName === "string" ? item.suggestedEmployeeName : null,
         decisionReason: typeof item.decisionReason === "string" ? item.decisionReason : undefined,
         identifiedEmployeeName: typeof item.identifiedEmployeeName === "string" ? item.identifiedEmployeeName : null,
         extractedFields: item.extractedFields && typeof item.extractedFields === "object" ? item.extractedFields as Record<string, unknown> : {},
         fieldConfidences: item.fieldConfidences && typeof item.fieldConfidences === "object" ? item.fieldConfidences as Record<string, number> : {},
+        profileSuggestions: Array.isArray(item.profileSuggestions) ? item.profileSuggestions as ProfileSuggestion[] : [],
         structure: item.structure && typeof item.structure === "object" ? item.structure as AnalysisDocument["structure"] : undefined,
         analysisModel: typeof item.analysisModel === "string" ? item.analysisModel : undefined,
         warnings: Array.isArray(item.warnings) ? item.warnings.filter((entry): entry is string => typeof entry === "string") : [],
@@ -266,13 +365,23 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
         storageSubfolder: typeof item.tempStoragePath === "string" ? item.tempStoragePath : "",
         storagePath: typeof item.tempStoragePath === "string" ? item.tempStoragePath : "",
         destinationTrail: Array.isArray(destination.pathSegments) ? destination.pathSegments.filter((entry): entry is string => typeof entry === "string") : [],
+        duplicateResolution: typeof item.duplicateResolution === "string" ? item.duplicateResolution : undefined,
+        duplicateInBatch: typeof item.duplicateOfItemId === "string"
+          ? {
+              itemId: item.duplicateOfItemId,
+              originalName: typeof item.duplicateOfName === "string" ? item.duplicateOfName : "arquivo anterior do lote",
+            }
+          : null,
+        existingDocument: item.existingDocument && typeof item.existingDocument === "object"
+          ? item.existingDocument as AnalysisDocument["existingDocument"]
+          : null,
       };
     });
     setAnalysis({
       batchId: batch.id, batchStatus: batch.status, totalFiles: documents.length,
-      readyFiles: documents.filter((item) => item.status === "ready").length,
-      reviewFiles: documents.filter((item) => item.status === "review").length,
-      blockedFiles: documents.filter((item) => item.status === "blocked").length,
+      readyFiles: documents.filter(isReadyDocument).length,
+      reviewFiles: documents.filter(isReviewDocument).length,
+      blockedFiles: documents.filter(isBlockedDocument).length,
       totalBytes: documents.reduce((sum, item) => sum + item.size, 0), documents,
     });
     setMessage("");
@@ -304,7 +413,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     setBusy(true);
     setMessage("");
     try {
-      const readyDocuments = analysis.documents.filter((document) => document.status === "ready");
+      const readyDocuments = analysis.documents.filter(isReadyDocument);
       if (!analysis.batchId) throw new Error("Lote de análise inválido.");
       // Arquiva a partir dos ITENS persistidos no servidor (os arquivos já estão
       // no temporário). O backend recalcula tudo — o cliente só aponta os itens.
@@ -343,12 +452,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
         if (!current) return current;
         const documents = current.documents.map((entry) =>
           entry.itemId === document.itemId
-            ? { ...entry, status: updated.status, action: updated.action, documentType: updated.documentType, documentTypeCode: updated.documentTypeCode, destinationTrail: updated.destinationTrail, fileName: updated.fileName }
+            ? { ...entry, status: updated.status, action: updated.action, documentType: updated.documentType, documentTypeCode: updated.documentTypeCode, destinationTrail: updated.destinationTrail, fileName: updated.fileName, profileSuggestions: updated.profileSuggestions ?? [] }
             : entry,
         );
-        const readyFiles = documents.filter((entry) => entry.status === "ready").length;
-        const reviewFiles = documents.filter((entry) => entry.status === "review").length;
-        const blockedFiles = documents.filter((entry) => entry.status === "blocked").length;
+        const readyFiles = documents.filter(isReadyDocument).length;
+        const reviewFiles = documents.filter(isReviewDocument).length;
+        const blockedFiles = documents.filter(isBlockedDocument).length;
         return { ...current, documents, readyFiles, reviewFiles, blockedFiles };
       });
     } catch (error) {
@@ -360,8 +469,10 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
   async function correctItemEmployee(document: AnalysisDocument) {
     const correction = employeeCorrections[document.itemId];
-    if (!correction?.employeeId || correction.employeeId === document.employeeId) return;
-    if (correction.reason.trim().length < 3) {
+    const targetEmployeeId = correction?.employeeId ?? document.suggestedEmployeeId ?? "";
+    const reason = correction?.reason ?? (document.suggestedEmployeeId ? "Documento identificado como pertencente a outro colaborador cadastrado." : "");
+    if (!targetEmployeeId || targetEmployeeId === document.employeeId) return;
+    if (reason.trim().length < 3) {
       setMessage("Informe uma justificativa de pelo menos 3 caracteres para trocar o colaborador.");
       return;
     }
@@ -374,8 +485,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           itemId: document.itemId,
-          employeeId: correction.employeeId,
-          reason: correction.reason.trim(),
+          employeeId: targetEmployeeId,
+          reason: reason.trim(),
         }),
       });
       const selectedEmployee = users.find((user) => user.id === updated.employeeId);
@@ -390,16 +501,19 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                 employeeId: updated.employeeId,
                 employeeMatchStatus: updated.employeeMatchStatus,
                 employeeMatchReason: updated.employeeMatchReason,
+                suggestedEmployeeId: updated.suggestedEmployeeId ?? null,
+                suggestedEmployeeName: updated.suggestedEmployeeName ?? null,
                 decisionReason: updated.decisionReason,
                 identifiedEmployeeName: selectedEmployee?.username ?? entry.identifiedEmployeeName,
                 destinationTrail: updated.destinationTrail,
                 fileName: updated.fileName,
+                profileSuggestions: updated.profileSuggestions ?? [],
               }
             : entry,
         );
-        const readyFiles = documents.filter((entry) => entry.status === "ready").length;
-        const reviewFiles = documents.filter((entry) => entry.status === "review").length;
-        const blockedFiles = documents.filter((entry) => entry.status === "blocked").length;
+        const readyFiles = documents.filter(isReadyDocument).length;
+        const reviewFiles = documents.filter(isReviewDocument).length;
+        const blockedFiles = documents.filter(isBlockedDocument).length;
         return { ...current, documents, readyFiles, reviewFiles, blockedFiles };
       });
       setEmployeeCorrections((current) => {
@@ -429,17 +543,20 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
           ...entry, status: updated.status, action: updated.action, documentType: updated.documentType,
           documentTypeCode: updated.documentTypeCode, category: updated.category,
           employeeMatchStatus: updated.employeeMatchStatus, employeeMatchReason: updated.employeeMatchReason,
+          suggestedEmployeeId: updated.suggestedEmployeeId ?? null,
+          suggestedEmployeeName: updated.suggestedEmployeeName ?? null,
           decisionReason: updated.decisionReason, destinationTrail: updated.destinationTrail,
           fileName: updated.fileName, fieldConfidences: updated.fieldConfidences,
+          profileSuggestions: updated.profileSuggestions ?? [],
           extractedFields: updated.extractedFields, warnings: updated.warnings, errors: updated.errors,
           analysisModel: updated.analysisModel,
         } : entry);
         return {
           ...current,
           documents,
-          readyFiles: documents.filter((entry) => entry.status === "ready").length,
-          reviewFiles: documents.filter((entry) => entry.status === "review").length,
-          blockedFiles: documents.filter((entry) => entry.status === "blocked").length,
+          readyFiles: documents.filter(isReadyDocument).length,
+          reviewFiles: documents.filter(isReviewDocument).length,
+          blockedFiles: documents.filter(isBlockedDocument).length,
         };
       });
     } catch (error) {
@@ -449,16 +566,60 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     }
   }
 
-  async function openDocument(item: DocumentRow) {
+  async function itemAction(document: AnalysisDocument, action: "discard" | "accept") {
+    if (action === "discard" && !window.confirm(`Descartar “${document.originalName}” desta prévia?`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await request("/api/hr/employee-documents/item", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: document.itemId, action }),
+      });
+      setAnalysis((current) => {
+        if (!current) return current;
+        const documents = action === "discard"
+          ? current.documents.filter((entry) => entry.itemId !== document.itemId)
+          : current.documents.map((entry) => entry.itemId === document.itemId ? { ...entry, status: "ready" as const } : entry);
+        return {
+          ...current,
+          documents,
+          readyFiles: documents.filter(isReadyDocument).length,
+          reviewFiles: documents.filter(isReviewDocument).length,
+          blockedFiles: documents.filter(isBlockedDocument).length,
+        };
+      });
+      setMessage(action === "discard" ? "Documento descartado." : "Documento marcado para arquivar.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha na operação.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function previewDocument(item: DocumentRow) {
     try {
       const data = await request("/api/hr/employee-documents/access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item.id, action: "view" }),
       });
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      setPreview({ url: data.url, title: item.documentType || item.originalName, mimeType: item.mimeType });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao abrir.");
+    }
+  }
+
+  async function downloadDocument(item: DocumentRow) {
+    try {
+      const data = await request("/api/hr/employee-documents/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id, action: "download" }),
+      });
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha ao baixar.");
     }
   }
 
@@ -489,6 +650,16 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!canAccessThisProfile) {
+    return (
+      <div className="mx-auto w-full max-w-[calc(100vw-4rem)] p-4 md:p-8">
+        <div className="rounded-2xl border bg-white p-5 text-sm font-semibold text-slate-600">
+          Este perfil permite visualizar apenas os próprios documentos da Gestão do colaborador.
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -601,6 +772,18 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                             <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
                           </button>
                         ) : null}
+                        {canManage ? (
+                          <button
+                            type="button"
+                            onClick={() => void itemAction(document, "discard")}
+                            disabled={busy}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-rose-100 px-2.5 text-xs font-black text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                            title="Descartar este item da prévia"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Descartar
+                          </button>
+                        ) : null}
                         <span className={`rounded-full px-3 py-1 text-xs font-black ${statusBadgeClass(document.status)}`}>
                           {statusLabel(document.status)}
                         </span>
@@ -618,29 +801,40 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       {document.decisionReason ? <p className="rounded-xl bg-slate-50 p-2">Decisão: {document.decisionReason}</p> : null}
                     </div>
 
+                    {document.employeeMatchStatus === "MISMATCH" && document.suggestedEmployeeId ? (
+                      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                        <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
+                        Documento identificado como pertencente a {document.suggestedEmployeeName ?? "outro colaborador"}.
+                        Esse colaborador tem cadastro no sistema; confirme abaixo para direcionar ao dossiê correto.
+                      </div>
+                    ) : null}
+
                     {canManage && document.status !== "ready" ? (
                       <div className="mt-3 grid gap-2 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                         <select
-                          value={employeeCorrections[document.itemId]?.employeeId ?? document.employeeId ?? userId}
+                          value={correctionEmployeeId(document, employeeCorrections, userId)}
                           onChange={(event) => setEmployeeCorrections((current) => ({
                             ...current,
                             [document.itemId]: {
                               employeeId: event.target.value,
-                              reason: current[document.itemId]?.reason ?? "",
+                              reason: current[document.itemId]?.reason ?? correctionReason(document, current),
                             },
                           }))}
                           disabled={busy}
                           className="h-9 min-w-0 rounded-lg border px-2 text-xs font-bold"
                           aria-label="Colaborador responsável pelo documento"
                         >
+                          {document.suggestedEmployeeId && !users.some((user) => user.id === document.suggestedEmployeeId) ? (
+                            <option value={document.suggestedEmployeeId}>{document.suggestedEmployeeName ?? "Colaborador sugerido"}</option>
+                          ) : null}
                           {users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
                         </select>
                         <input
-                          value={employeeCorrections[document.itemId]?.reason ?? ""}
+                          value={correctionReason(document, employeeCorrections)}
                           onChange={(event) => setEmployeeCorrections((current) => ({
                             ...current,
                             [document.itemId]: {
-                              employeeId: current[document.itemId]?.employeeId ?? document.employeeId ?? userId,
+                              employeeId: current[document.itemId]?.employeeId ?? correctionEmployeeId(document, current, userId),
                               reason: event.target.value,
                             },
                           }))}
@@ -651,10 +845,10 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                         <button
                           type="button"
                           onClick={() => void correctItemEmployee(document)}
-                          disabled={busy || !employeeCorrections[document.itemId]?.employeeId || employeeCorrections[document.itemId]?.employeeId === document.employeeId}
+                          disabled={busy || !correctionEmployeeId(document, employeeCorrections, userId) || correctionEmployeeId(document, employeeCorrections, userId) === document.employeeId}
                           className="h-9 rounded-lg border border-sky-200 bg-sky-50 px-3 text-xs font-black text-sky-800 disabled:opacity-50"
                         >
-                          Trocar colaborador
+                          {document.suggestedEmployeeId && document.suggestedEmployeeId !== document.employeeId ? "Direcionar colaborador" : "Trocar colaborador"}
                         </button>
                       </div>
                     ) : null}
@@ -668,6 +862,57 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                             {typeof document.fieldConfidences?.[key] === "number" ? <p className="mt-1 text-[10px] font-bold text-slate-400">Confiança {(document.fieldConfidences[key] * 100).toFixed(0)}%</p> : null}
                           </div>
                         ))}
+                      </div>
+                    ) : null}
+
+                    {document.profileSuggestions && document.profileSuggestions.length > 0 ? (
+                      <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 p-3">
+                        <p className="text-xs font-black text-sky-900">
+                          <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
+                          Cadastro do colaborador
+                        </p>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {document.profileSuggestions.map((suggestion) => (
+                            <div key={`${document.itemId}-${suggestion.fieldKey}`} className="rounded-xl bg-white p-3 text-xs shadow-sm">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="font-black text-slate-900">{suggestion.fieldLabel}</p>
+                                <span className={`rounded-full px-2 py-1 font-black ${profileSuggestionStatusClass(suggestion.status)}`}>
+                                  {profileSuggestionStatusLabel(suggestion.status)}
+                                </span>
+                              </div>
+                              <p className="mt-1 font-semibold text-slate-500">{suggestion.section}</p>
+                              <p className="mt-2 font-bold text-slate-700">Documento: {suggestion.extractedValue}</p>
+                              <p className="mt-1 font-bold text-slate-500">Cadastro atual: {suggestion.currentValue || "vazio"}</p>
+                              <p className="mt-1 text-[10px] font-bold text-slate-400">Confiança {(suggestion.confidence * 100).toFixed(0)}%</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {document.existingDocument && document.employeeMatchStatus !== "MISMATCH" ? (
+                      <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                        <p className="text-xs font-black text-amber-800">
+                          <AlertTriangle className="mr-1 inline h-3.5 w-3.5" />
+                          Este colaborador já tem esse documento
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-amber-700">
+                          {document.existingDocument.documentType ?? "Documento"}
+                          {document.existingDocument.version ? ` · v${String(document.existingDocument.version).padStart(2, "0")}` : ""}
+                          {document.existingDocument.uploadedAt ? ` · enviado em ${new Date(document.existingDocument.uploadedAt).toLocaleDateString("pt-BR")}` : ""}
+                          {document.duplicateResolution === "EXACT_DUPLICATE"
+                            ? " · arquivo idêntico"
+                            : document.duplicateResolution === "NEW_VERSION"
+                              ? " · seria uma nova versão"
+                              : ""}
+                        </p>
+                        {canManage && document.status !== "ready" && document.duplicateResolution !== "EXACT_DUPLICATE" ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button type="button" onClick={() => void itemAction(document, "accept")} disabled={busy} className="rounded-lg bg-[#df2f78] px-3 py-1.5 text-xs font-black text-white disabled:opacity-50">
+                              Arquivar mesmo assim
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 
@@ -711,14 +956,20 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                   <div key={item.id} className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0">
                       <p className="font-black text-slate-900">{item.documentType}</p>
-                      <p className="truncate text-xs text-slate-500">{item.originalName} · {formatBytes(item.size)} · enviado por {item.uploadedByName ?? "usuário"}</p>
+                      <p className="truncate text-xs text-slate-500">{item.originalName} · {formatBytes(item.size)} · enviado por {uploaderName(item)}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{STATUS[item.status] ?? item.status}</span>
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{ACCESS[item.accessLevel] ?? item.accessLevel}</span>
+                        {item.profileSuggestions?.length ? (
+                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                            {item.profileSuggestions.length} verificação(ões) de cadastro
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <button onClick={() => void openDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Visualizar"><Download className="h-4 w-4" /></button>
+                      <button onClick={() => void previewDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Pré-visualizar"><Eye className="h-4 w-4" /></button>
+                      <button onClick={() => void downloadDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Baixar"><Download className="h-4 w-4" /></button>
                       {canManage ? (
                         <>
                           <select value={item.status} onChange={(event) => void setStatus(item, event.target.value)} disabled={busy} className="h-9 rounded-lg border px-2 text-xs font-bold">
@@ -807,6 +1058,32 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
                 Enviar e analisar {selectedFileCount || ""} documento(s)
               </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {preview ? (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4">
+          <section className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
+              <div className="min-w-0">
+                <p className="truncate text-base font-black text-slate-900">{preview.title}</p>
+                <p className="text-xs font-bold text-slate-500">Pré-visualização somente leitura · link temporário</p>
+              </div>
+              <button type="button" onClick={() => setPreview(null)} className="grid h-9 w-9 place-items-center rounded-xl border text-slate-500 hover:bg-slate-50">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 bg-slate-100">
+              {preview.mimeType?.startsWith("image/") ? (
+                <div className="flex h-full items-center justify-center overflow-auto p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={preview.url} alt={preview.title} className="max-h-full max-w-full rounded-xl bg-white object-contain shadow" />
+                </div>
+              ) : (
+                <iframe title={preview.title} src={preview.url} className="h-full w-full bg-white" />
+              )}
             </div>
           </section>
         </div>

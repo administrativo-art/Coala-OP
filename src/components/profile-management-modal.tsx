@@ -374,7 +374,20 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
   const dpVacationViewWatch = form.watch('permissions.dp.vacation.viewAll' as any);
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
+  const dpCollaboratorsOwnOnlyWatch = form.watch('permissions.dp.collaborators.ownProfileOnly' as any);
   const purchasingModuleViewWatch = form.watch('permissions.purchasing.view' as any);
+
+  useEffect(() => {
+    if (!dpCollaboratorsViewWatch) {
+      form.setValue('permissions.dp.collaborators.ownProfileOnly' as any, false);
+      return;
+    }
+    if (!dpCollaboratorsOwnOnlyWatch) return;
+    form.setValue('permissions.dp.collaborators.add' as any, false);
+    form.setValue('permissions.dp.collaborators.edit' as any, false);
+    form.setValue('permissions.dp.collaborators.syncProfile' as any, false);
+    form.setValue('permissions.dp.collaborators.terminate' as any, false);
+  }, [dpCollaboratorsOwnOnlyWatch, dpCollaboratorsViewWatch, form]);
 
   return (
     <>
@@ -771,14 +784,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   </div>
                                 </div>
 
-                                {/* Colaboradores */}
+                                {/* Gestão do colaborador */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><UserCircle className="h-4 w-4" /> Colaboradores</h4>
-                                  {renderPermissionSwitch("permissions.dp.collaborators.view" as any, "Visualizar Colaboradores", "Permite ver o diretório de colaboradores do DP.", !dpViewWatch)}
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><UserCircle className="h-4 w-4" /> Gestão do colaborador</h4>
+                                  {renderPermissionSwitch("permissions.dp.collaborators.view" as any, "Visualizar Gestão do colaborador", "Permite abrir a área de Gestão do colaborador.", !dpViewWatch)}
                                   <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.dp.collaborators.ownProfileOnly" as any, "Visualização somente do titular", "Quando ativo, o usuário acessa apenas o próprio perfil na Gestão do colaborador. Não vê diretório, cards ou perfis de outras pessoas.", !dpCollaboratorsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.collaborators.add" as any, "Adicionar Colaboradores", "Permite cadastrar novos colaboradores.", !dpCollaboratorsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Editar Colaboradores", "Permite editar dados de colaboradores existentes.", !dpCollaboratorsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.dp.collaborators.terminate" as any, "Desligar Colaboradores", "Permite registrar o desligamento de um colaborador.", !dpCollaboratorsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Editar Colaboradores", "Permite editar dados de colaboradores existentes.", !dpCollaboratorsViewWatch || dpCollaboratorsOwnOnlyWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.collaborators.syncProfile" as any, "Sincronizar Perfil RH", "Permite atualizar manualmente o perfil complementar do colaborador a partir dos dados-base do DP.", !dpCollaboratorsViewWatch || dpCollaboratorsOwnOnlyWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.collaborators.terminate" as any, "Desligar Colaboradores", "Permite registrar o desligamento de um colaborador.", !dpCollaboratorsViewWatch || dpCollaboratorsOwnOnlyWatch, true)}
                                   </div>
                                 </div>
 

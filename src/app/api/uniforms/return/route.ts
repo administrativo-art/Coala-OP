@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
             apparelType: current.apparelType ?? null,
             apparelSize: current.apparelSize ?? null,
             apparelColor: current.apparelColor ?? null,
+            uniformCareInstructions: current.uniformCareInstructions ?? null,
             imageUrl: current.imageUrl ?? null,
             updatedAt: now,
           });
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
             apparelType: current.apparelType ?? null,
             apparelSize: current.apparelSize ?? null,
             apparelColor: current.apparelColor ?? null,
+            uniformCareInstructions: current.uniformCareInstructions ?? null,
             imageUrl: current.imageUrl ?? null,
             createdAt: now,
             updatedAt: now,
@@ -182,6 +184,7 @@ export async function POST(request: NextRequest) {
         apparelType: current.apparelType,
         apparelSize: current.apparelSize,
         apparelColor: current.apparelColor,
+        uniformCareInstructions: current.uniformCareInstructions,
         imageUrl: current.imageUrl,
         registeredByUserId: context.userDoc.id,
         registeredByUserName: context.userDoc.username,

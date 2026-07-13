@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 import { assertHrAccess } from "@/features/hr/lib/server-access";
+import { adminApp } from "@/lib/firebase-admin";
+import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { getDocumentTypeConfig, missingCriticalFields } from "@/lib/hr/employee-document-catalog";
 import { resolveDocumentDestination } from "@/lib/hr/employee-document-distribution";
@@ -13,6 +16,7 @@ import {
   deriveBatchStatus,
   type UploadItemStatus,
 } from "@/lib/hr/employee-document-batch";
+import { buildEmployeeProfileSuggestions } from "@/lib/hr/employee-document-profile-suggestions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,16 +40,50 @@ export async function PATCH(request: NextRequest) {
     const access = await assertHrAccess(request, "manage");
     const body = await request.json().catch(() => ({}));
     const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+    const action = typeof body.action === "string" ? body.action.trim() : "";
     const newTypeCode = typeof body.documentTypeCode === "string" ? body.documentTypeCode.trim() : "";
     const newEmployeeId = typeof body.employeeId === "string" ? body.employeeId.trim() : "";
     const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-    if (!itemId || (!newTypeCode && !newEmployeeId)) return error("Informe o item e o que corrigir (tipo e/ou colaborador).");
+    if (!itemId) return error("Item não informado.");
+    if (!action && !newTypeCode && !newEmployeeId) return error("Informe o que fazer (corrigir tipo/colaborador ou descartar/arquivar).");
 
     const itemRef = hrDbAdmin.collection(ITEMS).doc(itemId);
     const itemSnap = await itemRef.get();
     if (!itemSnap.exists) return error("Item não encontrado.", 404);
     const item = itemSnap.data() as Record<string, unknown>;
     if (["filed", "filing"].includes(String(item.status))) return error("Item já arquivado ou em arquivamento.");
+
+    // Recalcula os contadores do lote a partir do estado real dos itens.
+    const recountBatch = async () => {
+      const batchId = String(item.batchId ?? "");
+      if (!batchId) return;
+      const itemsSnap = await hrDbAdmin.collection(ITEMS).where("batchId", "==", batchId).get();
+      const counters = computeBatchCounters(itemsSnap.docs.map((d) => ({ status: d.get("status") as UploadItemStatus })));
+      await hrDbAdmin.collection(BATCHES).doc(batchId).update({ ...counters, status: deriveBatchStatus(counters), updatedAt: Timestamp.now() });
+    };
+
+    // Ação: DESCARTAR (documento errado/indesejado) — apaga o temporário.
+    if (action === "discard") {
+      const tempPath = typeof item.tempStoragePath === "string" ? item.tempStoragePath : "";
+      if (tempPath) await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(tempPath).delete({ ignoreNotFound: true });
+      const now = Timestamp.now();
+      await itemRef.update({ status: "discarded", tempStoragePath: null, discardedBy: access.decoded.uid, updatedAt: now });
+      await itemRef.collection("audit").add({ action: "ITEM_DISCARDED", actorId: access.decoded.uid, traceId: item.traceId ?? null, at: now });
+      await recountBatch();
+      return NextResponse.json({ itemId, status: "discarded" });
+    }
+
+    // Ação: ARQUIVAR MESMO ASSIM (usuário viu a duplicidade e decidiu manter).
+    if (action === "accept") {
+      if (item.employeeMatchStatus === "MISMATCH") {
+        return error("Documento é de outro colaborador — redirecione o colaborador correto antes de arquivar.");
+      }
+      const now = Timestamp.now();
+      await itemRef.update({ status: "ready", duplicateAccepted: true, acceptedBy: access.decoded.uid, updatedAt: now });
+      await itemRef.collection("audit").add({ action: "ITEM_DUPLICATE_ACCEPTED", actorId: access.decoded.uid, traceId: item.traceId ?? null, at: now });
+      await recountBatch();
+      return NextResponse.json({ itemId, status: "ready" });
+    }
 
     const fields = (item.extractedFields && typeof item.extractedFields === "object" ? item.extractedFields : {}) as Record<string, unknown>;
     const fieldConfidences = (item.fieldConfidences && typeof item.fieldConfidences === "object" ? item.fieldConfidences : {}) as Record<string, number>;
@@ -95,6 +133,9 @@ export async function PATCH(request: NextRequest) {
       documentTypeConfidence: newTypeCode ? 0.9 : (typeof item.confidence === "number" ? item.confidence : 0.9),
       confirmationThreshold: config.confirmationThreshold,
     });
+    const profileSuggestions = employeeMatchStatus !== "MISMATCH"
+      ? await buildEmployeeProfileSuggestions({ employeeId, documentTypeCode: config.code, extractedFields: fields, fieldConfidences })
+      : [];
 
     const now = Timestamp.now();
     await itemRef.update({
@@ -108,6 +149,9 @@ export async function PATCH(request: NextRequest) {
       employeeId,
       employeeMatchStatus,
       employeeMatchReason,
+      suggestedEmployeeId: null,
+      suggestedEmployeeName: null,
+      profileSuggestions,
       correctedBy: access.decoded.uid,
       updatedAt: now,
     });
@@ -142,6 +186,9 @@ export async function PATCH(request: NextRequest) {
       employeeId,
       employeeMatchStatus,
       employeeMatchReason,
+      suggestedEmployeeId: null,
+      suggestedEmployeeName: null,
+      profileSuggestions,
       decisionReason: decision.reason,
       destinationTrail: destination.pathSegments,
       displayName: destination.displayName,

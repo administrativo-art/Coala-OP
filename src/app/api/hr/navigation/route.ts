@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       sections: [
         {
           id: "employees",
-          label: "Colaboradores",
+          label: "Gestão do colaborador",
           href: "/dashboard/settings?department=pessoal&tab=users",
           enabled: access.canView,
         },

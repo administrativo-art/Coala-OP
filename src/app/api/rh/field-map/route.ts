@@ -4,7 +4,17 @@ import { Timestamp } from "firebase-admin/firestore";
 import { requireUser } from "@/lib/auth-server";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { DEFAULT_COMPLEMENTARY_FIELDS, DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
-import type { FieldMapEntry, ProfileBlockConfig } from "@/types/rh";
+import {
+  DEFAULT_PROFILE_ACCESS_MATRIX,
+  normalizeFieldVisibility,
+  normalizeProfileAccessMatrix,
+  normalizeProfileAccessPermission,
+  type FieldAccessBinding,
+  type FieldMapEntry,
+  type ProfileAccessActor,
+  type ProfileAccessMatrix,
+  type ProfileBlockConfig,
+} from "@/types/rh";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,6 +65,35 @@ function cleanSubgroup(subgroup: FieldMapEntry["subgroup"]) {
   };
 }
 
+function cleanAccessList(values: unknown) {
+  return Array.isArray(values)
+    ? values.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+}
+
+function cleanAccessBinding(binding: FieldAccessBinding | undefined) {
+  if (!binding || typeof binding !== "object") return undefined;
+
+  const roleIds = cleanAccessList(binding.roleIds);
+  const functionIds = cleanAccessList(binding.functionIds);
+  const userIds = cleanAccessList(binding.userIds);
+
+  if (roleIds.length === 0 && functionIds.length === 0 && userIds.length === 0) {
+    return undefined;
+  }
+
+  return {
+    ...(roleIds.length ? { roleIds } : {}),
+    ...(functionIds.length ? { functionIds } : {}),
+    ...(userIds.length ? { userIds } : {}),
+  };
+}
+
+function cleanAccess(access: FieldMapEntry["access"]) {
+  const allowed = cleanAccessBinding(access?.allowed);
+  return allowed ? { allowed } : undefined;
+}
+
 function cleanEntry(entry: FieldMapEntry): FieldMapEntry {
   const clean: FieldMapEntry = {
     bizneo_id: entry.bizneo_id || "coala_internal",
@@ -87,6 +126,8 @@ function cleanEntry(entry: FieldMapEntry): FieldMapEntry {
   if (subgroup) clean.subgroup = subgroup;
   const repeatable = cleanRepeatable(entry.repeatable);
   if (repeatable) clean.repeatable = repeatable;
+  const access = cleanAccess(entry.access);
+  if (access) clean.access = access;
   return clean;
 }
 
@@ -110,6 +151,35 @@ function cleanSectionOrder(sectionOrder: unknown) {
   );
 }
 
+function cleanAccessMatrix(matrix: unknown): ProfileAccessMatrix {
+  const normalized = normalizeProfileAccessMatrix(
+    matrix && typeof matrix === "object" && !Array.isArray(matrix)
+      ? matrix as ProfileAccessMatrix
+      : DEFAULT_PROFILE_ACCESS_MATRIX,
+  );
+  const actors: ProfileAccessActor[] = ["authenticated", "owner", "manager", "admin", "explicit"];
+  return {
+    version: normalized.version || DEFAULT_PROFILE_ACCESS_MATRIX.version,
+    visibility: Object.fromEntries(
+      (["public", "restricted_partial", "restricted_total", "confidential"] as const).map((visibility) => {
+        const bindings = cleanAccessBinding(normalized.visibility[visibility]?.bindings);
+        return [
+          normalizeFieldVisibility(visibility),
+          {
+            ...Object.fromEntries(
+              actors.map((actor) => [
+                actor,
+                normalizeProfileAccessPermission(normalized.visibility[visibility]?.[actor]),
+              ]),
+            ),
+            ...(bindings ? { bindings } : {}),
+          },
+        ];
+      }),
+    ) as ProfileAccessMatrix["visibility"],
+  };
+}
+
 function canConfigureRhFields(actor: Awaited<ReturnType<typeof requireUser>>) {
   return Boolean(
     actor.isDefaultAdmin ||
@@ -117,6 +187,19 @@ function canConfigureRhFields(actor: Awaited<ReturnType<typeof requireUser>>) {
       actor.permissions.dp?.collaborators?.edit === true
   );
 }
+
+const DEPENDENTS_FAMILY_SECTION = "Dependentes e salário-família";
+const DEPENDENTS_FAMILY_SECTION_MIGRATIONS: Record<string, string[]> = {
+  "employee.children_under_14": ["Dados pessoais"],
+  "employee.dependent_name": ["Dependentes"],
+  "employee.dependent_relation": ["Dependentes"],
+  "employee.dependent_cpf": ["Dependentes"],
+  "employee.dependent_rg": ["Dependentes"],
+  "employee.has_family_salary": ["Salário-família", "Salario Familia"],
+  "employee.family_salary_end_1": ["Salário-família", "Salario Familia"],
+  "employee.family_salary_birth_1": ["Salário-família", "Salario Familia"],
+  "employee.family_salary_name_1": ["Salário-família", "Salario Familia"],
+};
 
 async function loadOrCreateFieldMap(actor: Awaited<ReturnType<typeof requireUser>>) {
   const ref = hrDbAdmin.collection("schema").doc("field_map");
@@ -143,11 +226,19 @@ async function loadOrCreateFieldMap(actor: Awaited<ReturnType<typeof requireUser
           if ((!nextEntry.conditionals || nextEntry.conditionals.length === 0) && defaultEntry.conditionals?.length) {
             nextEntry.conditionals = defaultEntry.conditionals;
           }
+          if (
+            DEPENDENTS_FAMILY_SECTION_MIGRATIONS[key]?.includes(String(nextEntry.section ?? "").trim())
+          ) {
+            nextEntry.section = DEPENDENTS_FAMILY_SECTION;
+            nextEntry.order = defaultEntry.order;
+          }
           const changed =
             nextEntry.group !== currentEntry.group ||
             nextEntry.subgroup !== currentEntry.subgroup ||
             nextEntry.repeatable !== currentEntry.repeatable ||
-            nextEntry.conditionals !== currentEntry.conditionals;
+            nextEntry.conditionals !== currentEntry.conditionals ||
+            nextEntry.section !== currentEntry.section ||
+            nextEntry.order !== currentEntry.order;
           return changed ? [key, cleanEntry(nextEntry)] as const : null;
         })
         .filter((entry): entry is readonly [string, FieldMapEntry] => entry !== null)
@@ -208,6 +299,7 @@ export async function GET(request: NextRequest) {
         fields: data.fields ?? {},
         section_order: data.section_order ?? {},
         profile_blocks: data.profile_blocks ?? DEFAULT_PROFILE_BLOCKS,
+        access_matrix: cleanAccessMatrix(data.access_matrix),
       },
     });
   } catch (error) {
@@ -227,6 +319,7 @@ export async function PUT(request: NextRequest) {
     const fields = body?.fields;
     const profileBlocks = body?.profile_blocks;
     const sectionOrder = cleanSectionOrder(body?.section_order);
+    const accessMatrix = cleanAccessMatrix(body?.access_matrix);
     if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
       return NextResponse.json({ error: "fields inválido." }, { status: 400 });
     }
@@ -267,6 +360,7 @@ export async function PUT(request: NextRequest) {
         fields: nextFields,
         section_order: sectionOrder,
         profile_blocks: nextProfileBlocks,
+        access_matrix: accessMatrix,
         updated_at: Timestamp.now(),
         updated_by: actor.userDoc.id,
         ...(currentSnap.exists ? {} : { created_at: Timestamp.now() }),

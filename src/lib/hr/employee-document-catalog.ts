@@ -106,6 +106,56 @@ const ENRICHMENT: Record<string, Partial<DocumentTypeEnrichment>> = {
     downloadNameTemplate: "{employeeCode}__ASO-PERIODICO__{examDate}__v{version}",
     displayNameTemplate: "ASO periódico — {examDate}",
   },
+  ASO_RETURN: {
+    processCategory: "OCCUPATIONAL_EXAM",
+    duplicateStrategy: "WARN",
+    duplicateKeys: ["examDate"],
+    downloadNameTemplate: "{employeeCode}__ASO-RETORNO__{examDate}__v{version}",
+    displayNameTemplate: "ASO de retorno — {examDate}",
+  },
+  ASO_RISK_CHANGE: {
+    processCategory: "OCCUPATIONAL_EXAM",
+    duplicateStrategy: "WARN",
+    duplicateKeys: ["examDate"],
+    downloadNameTemplate: "{employeeCode}__ASO-MUDANCA-RISCO__{examDate}__v{version}",
+    displayNameTemplate: "ASO de mudança de risco/função — {examDate}",
+  },
+  ASO_DISMISSAL: {
+    processCategory: "OCCUPATIONAL_EXAM",
+    duplicateStrategy: "WARN",
+    duplicateKeys: ["examDate"],
+    downloadNameTemplate: "{employeeCode}__ASO-DEMISSAO__{examDate}__v{version}",
+    displayNameTemplate: "ASO demissional — {examDate}",
+  },
+  DEPENDENT_DOCUMENT: {
+    processCategory: "NONE",
+    duplicateStrategy: "WARN",
+    duplicateKeys: ["dependentName", "dependentBirthDate"],
+    downloadNameTemplate: "{employeeCode}__DEPENDENTE__{dependentName}__{dependentBirthDate}__v{version}",
+    displayNameTemplate: "Documento de dependente — {dependentName}",
+    requiredFields: ["dependentName", "dependentBirthDate"],
+  },
+  FAMILY_SALARY_TERM: {
+    processCategory: "NONE",
+    duplicateStrategy: "WARN",
+    duplicateKeys: ["issueDate"],
+    downloadNameTemplate: "{employeeCode}__SALARIO-FAMILIA-TERMO__{issueDate}__v{version}",
+    displayNameTemplate: "Termo de salário-família — {issueDate}",
+  },
+  VACCINATION_RECORD: {
+    processCategory: "NONE",
+    duplicateStrategy: "WARN",
+    duplicateKeys: ["dependentName", "dependentBirthDate", "issueDate"],
+    downloadNameTemplate: "{employeeCode}__VACINACAO__{dependentName}__{issueDate}__v{version}",
+    displayNameTemplate: "Caderneta de vacinação — {dependentName}",
+  },
+  SCHOOL_ATTENDANCE: {
+    processCategory: "NONE",
+    duplicateStrategy: "WARN",
+    duplicateKeys: ["dependentName", "dependentBirthDate", "issueDate"],
+    downloadNameTemplate: "{employeeCode}__FREQUENCIA-ESCOLAR__{dependentName}__{issueDate}__v{version}",
+    displayNameTemplate: "Frequência escolar — {dependentName}",
+  },
   MEDICAL_CERTIFICATE: {
     processCategory: "LEAVE",
     duplicateStrategy: "WARN",
@@ -156,6 +206,10 @@ export function missingCriticalFields(
 ): string[] {
   return config.requiredFields.filter((key) => {
     const value = fields[key];
-    return value == null || value === "" || (fieldConfidences[key] ?? 0) < config.confirmationThreshold;
+    if (value == null || value === "") return true;
+    if (!Object.prototype.hasOwnProperty.call(fieldConfidences, key)) return false;
+
+    const confidence = fieldConfidences[key];
+    return !Number.isFinite(confidence) || confidence < config.confirmationThreshold;
   });
 }

@@ -111,6 +111,7 @@ export type LotEntry = {
   apparelType?: string;
   apparelSize?: string;
   apparelColor?: string;
+  uniformCareInstructions?: InstructionSection[];
   imageUrl?: string;
   locationId?: string | null;
   locationName?: string | null;
@@ -321,6 +322,7 @@ export type UniformEvent = {
   apparelType?: string;
   apparelSize?: string;
   apparelColor?: string;
+  uniformCareInstructions?: InstructionSection[];
   imageUrl?: string;
   createdAt: string;
   updatedAt: string;
@@ -350,6 +352,7 @@ export type UniformAssignment = {
   apparelType?: string;
   apparelSize?: string;
   apparelColor?: string;
+  uniformCareInstructions?: InstructionSection[];
   imageUrl?: string;
   createdAt: string;
   updatedAt: string;
@@ -564,6 +567,18 @@ export type PPO = {
   assemblyVideoUrl?: string;
 };
 
+export type InstructionSection = {
+  id: string;
+  name: string;
+  etapas: {
+    id: string;
+    text: string;
+    quantity?: number;
+    unit?: string;
+    imageUrl?: string;
+  }[];
+};
+
 
 export type ProductSimulation = {
   id: string;
@@ -654,7 +669,7 @@ export type PermissionSet = {
     view: boolean;
     schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
-    collaborators: { view: boolean; add: boolean; edit: boolean; terminate: boolean; };
+    collaborators: { view: boolean; ownProfileOnly?: boolean; add: boolean; edit: boolean; terminate: boolean; syncProfile: boolean; };
     settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; };
     rh_role?: 'employee' | 'manager' | 'admin';
     rh?: {
@@ -1405,6 +1420,7 @@ export type Product = {
   apparelFit?: string;
   apparelMaterial?: string;
   apparelUsage?: string;
+  uniformCareInstructions?: InstructionSection[];
   nutritionalTableImageUrl?: string;
   compositionImageUrl?: string;
   nutritionalData?: NutritionalData;
@@ -2141,7 +2157,7 @@ export const defaultGuestPermissions: PermissionSet = {
       view: false,
       schedules: { view: false, create: false, edit: false, delete: false, export: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
-      collaborators: { view: false, add: false, edit: false, terminate: false },
+      collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
       settings: { manageUnits: false, manageShifts: false, manageCalendars: false },
       rh_role: undefined,
       rh: { collaborators: { view: false, edit: false }, can_view_salary: false },
@@ -2229,7 +2245,7 @@ export const defaultAdminPermissions: PermissionSet = {
       view: true,
       schedules: { view: true, create: true, edit: true, delete: true, export: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
-      collaborators: { view: true, add: true, edit: true, terminate: true },
+      collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
       settings: { manageUnits: true, manageShifts: true, manageCalendars: true },
       rh_role: 'admin' as const,
       rh: { collaborators: { view: true, edit: true }, can_view_salary: true },

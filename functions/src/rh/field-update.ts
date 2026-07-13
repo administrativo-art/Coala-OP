@@ -2,7 +2,7 @@
  * field-update.ts — CF onFieldUpdate
  *
  * Ponto central de escrita no módulo RH. Toda edição de campo passa por aqui.
- * Validações server-side: employee_editable, employee_visible, visibility vs rh_role.
+ * Validações server-side: matriz de acesso, visibility vs rh_role.
  * Grava field_values, audit_log, recalcula profile_completion, dispara automations.
  */
 
@@ -16,6 +16,11 @@ import {
   type AutomationTask,
   type RhAccessCache,
   type RhRole,
+  type NormalizedFieldVisibility,
+  type FieldAccessBinding,
+  type ProfileAccessActor,
+  type ProfileAccessMatrix,
+  type ProfileAccessPermission,
   calcProfileCompletion,
 } from './types.js';
 
@@ -41,22 +46,173 @@ async function getRhCache(uid: string): Promise<RhAccessCache | null> {
   return snap.exists ? (snap.data() as RhAccessCache) : null;
 }
 
-function canWriteField(entry: FieldMapEntry, role: RhRole, isOwner: boolean): boolean {
-  if (role === 'admin') return true;
-  if (role === 'manager') {
-    // manager pode editar campos operacionais (employee_editable=false) de sua equipe
-    return true;
+function normalizeAccessList(values: unknown): string[] {
+  return Array.isArray(values)
+    ? values.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+}
+
+function normalizeAccessBinding(binding?: FieldAccessBinding | null): FieldAccessBinding | undefined {
+  const roleIds = normalizeAccessList(binding?.roleIds);
+  const functionIds = normalizeAccessList(binding?.functionIds);
+  const userIds = normalizeAccessList(binding?.userIds);
+
+  if (roleIds.length === 0 && functionIds.length === 0 && userIds.length === 0) return undefined;
+
+  return {
+    ...(roleIds.length ? { roleIds } : {}),
+    ...(functionIds.length ? { functionIds } : {}),
+    ...(userIds.length ? { userIds } : {}),
+  };
+}
+
+function normalizeFieldVisibility(visibility?: string | null): NormalizedFieldVisibility {
+  if (visibility === 'sensitive') return 'restricted_total';
+  if (visibility === 'internal') return 'confidential';
+  if (
+    visibility === 'public' ||
+    visibility === 'restricted_partial' ||
+    visibility === 'restricted_total' ||
+    visibility === 'confidential'
+  ) {
+    return visibility;
   }
-  if (role === 'employee') {
-    return isOwner && entry.employee_editable && entry.employee_visible;
+  return 'confidential';
+}
+
+const DEFAULT_PROFILE_ACCESS_MATRIX: ProfileAccessMatrix = {
+  version: 'coala-rh-access-v1',
+  visibility: {
+    public: { authenticated: 'view', owner: 'view', manager: 'edit', admin: 'edit', explicit: 'view' },
+    restricted_partial: { authenticated: 'hidden', owner: 'view', manager: 'edit', admin: 'edit', explicit: 'view' },
+    restricted_total: { authenticated: 'hidden', owner: 'hidden', manager: 'edit', admin: 'edit', explicit: 'view' },
+    confidential: { authenticated: 'hidden', owner: 'hidden', manager: 'hidden', admin: 'edit', explicit: 'view' },
+  },
+};
+
+const PROFILE_ACCESS_PERMISSION_RANK: Record<ProfileAccessPermission, number> = {
+  hidden: 0,
+  view: 1,
+  edit: 2,
+};
+
+function normalizeProfileAccessPermission(value: unknown): ProfileAccessPermission {
+  if (value === 'edit' || value === 'view' || value === 'hidden') return value;
+  return 'hidden';
+}
+
+function normalizeProfileAccessMatrix(matrix?: ProfileAccessMatrix | null): ProfileAccessMatrix {
+  const source = matrix?.visibility ?? {};
+  const visibility = Object.fromEntries(
+    (['public', 'restricted_partial', 'restricted_total', 'confidential'] as NormalizedFieldVisibility[]).map((key) => {
+      const defaults = DEFAULT_PROFILE_ACCESS_MATRIX.visibility[key] ?? {};
+      const current = source[key] ?? {};
+      const bindings = normalizeAccessBinding(current.bindings);
+      return [
+        key,
+        {
+          authenticated: normalizeProfileAccessPermission(current.authenticated ?? defaults.authenticated),
+          owner: normalizeProfileAccessPermission(current.owner ?? defaults.owner),
+          manager: normalizeProfileAccessPermission(current.manager ?? defaults.manager),
+          admin: normalizeProfileAccessPermission(current.admin ?? defaults.admin),
+          explicit: normalizeProfileAccessPermission(current.explicit ?? defaults.explicit),
+          ...(bindings ? { bindings } : {}),
+        },
+      ];
+    })
+  ) as Record<NormalizedFieldVisibility, Partial<Record<ProfileAccessActor, ProfileAccessPermission>>>;
+
+  return {
+    version: matrix?.version || DEFAULT_PROFILE_ACCESS_MATRIX.version,
+    visibility,
+  };
+}
+
+function hasExplicitAccessBinding(binding: FieldAccessBinding | undefined, cache: RhAccessCache, uid: string): boolean {
+  if (!binding) return false;
+
+  const userIds = normalizeAccessList(binding.userIds);
+  const roleIds = normalizeAccessList(binding.roleIds);
+  const functionIds = normalizeAccessList(binding.functionIds);
+  const actorUserIds = [uid, cache.auth_uid, cache.user_id, cache.bizneo_employee_id]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean);
+  const actorRoleIds = [
+    ...normalizeAccessList(cache.role_ids),
+    ...normalizeAccessList(cache.job_role_ids),
+    ...(cache.job_role_id ? [cache.job_role_id] : []),
+  ];
+  const actorFunctionIds = [
+    ...normalizeAccessList(cache.function_ids),
+    ...normalizeAccessList(cache.job_function_ids),
+    ...(cache.job_function_id ? [cache.job_function_id] : []),
+  ];
+
+  return (
+    actorUserIds.some((id) => userIds.includes(id)) ||
+    actorRoleIds.some((id) => roleIds.includes(id)) ||
+    actorFunctionIds.some((id) => functionIds.includes(id))
+  );
+}
+
+function hasExplicitFieldAccess(entry: FieldMapEntry, cache: RhAccessCache, uid: string): boolean {
+  return hasExplicitAccessBinding(entry.access?.allowed, cache, uid);
+}
+
+function resolveFieldAccessPermission(
+  entry: FieldMapEntry,
+  matrix: ProfileAccessMatrix | undefined,
+  role: RhRole,
+  isOwner: boolean,
+  cache: RhAccessCache,
+  uid: string,
+): ProfileAccessPermission {
+  if (!matrix) {
+    if (entry.visibility === 'public') return role === 'admin' || role === 'manager' ? 'edit' : 'view';
+    if (hasExplicitFieldAccess(entry, cache, uid)) return 'view';
+    if (entry.visibility === 'restricted_partial') return role === 'manager' || role === 'admin' ? 'edit' : isOwner ? 'view' : 'hidden';
+    if (entry.visibility === 'restricted_total') return role === 'manager' || role === 'admin' ? 'edit' : 'hidden';
+    if (entry.visibility === 'confidential') return role === 'admin' ? 'edit' : 'hidden';
+    if (entry.visibility === 'sensitive') return role === 'manager' || role === 'admin' ? 'edit' : 'hidden';
+    if (entry.visibility === 'internal') return role === 'admin' ? 'edit' : 'hidden';
+    return 'hidden';
   }
+
+  const normalized = normalizeFieldVisibility(entry.visibility);
+  const normalizedMatrix = normalizeProfileAccessMatrix(matrix);
+  const rule = normalizedMatrix.visibility[normalized] ?? {};
+  const actors: ProfileAccessActor[] = ['authenticated'];
+  if (isOwner) actors.push('owner');
+  if (role === 'manager') actors.push('manager');
+  if (role === 'admin') actors.push('admin');
+  if (hasExplicitAccessBinding(rule.bindings, cache, uid) || hasExplicitFieldAccess(entry, cache, uid)) actors.push('explicit');
+
+  return actors.reduce<ProfileAccessPermission>((best, actor) => {
+    const permission = normalizeProfileAccessPermission(rule[actor]);
+    return PROFILE_ACCESS_PERMISSION_RANK[permission] > PROFILE_ACCESS_PERMISSION_RANK[best] ? permission : best;
+  }, 'hidden');
+}
+
+function canReadField(entry: FieldMapEntry, matrix: ProfileAccessMatrix | undefined, role: RhRole, isOwner: boolean, cache: RhAccessCache, uid: string): boolean {
+  if (matrix) return resolveFieldAccessPermission(entry, matrix, role, isOwner, cache, uid) !== 'hidden';
+  if (entry.visibility === 'public') return true;
+  if (hasExplicitFieldAccess(entry, cache, uid)) return true;
+  if (entry.visibility === 'restricted_partial') return role === 'manager' || role === 'admin' || isOwner;
+  if (entry.visibility === 'restricted_total') return role === 'manager' || role === 'admin';
+  if (entry.visibility === 'confidential') return role === 'admin';
+  if (entry.visibility === 'sensitive') return role === 'manager' || role === 'admin';
+  if (entry.visibility === 'internal') return role === 'admin';
   return false;
 }
 
-function canReadField(entry: FieldMapEntry, role: RhRole): boolean {
-  if (entry.visibility === 'public')    return true;
-  if (entry.visibility === 'sensitive') return role === 'manager' || role === 'admin';
-  if (entry.visibility === 'internal')  return role === 'admin';
+function canWriteField(entry: FieldMapEntry, matrix: ProfileAccessMatrix | undefined, role: RhRole, isOwner: boolean, cache: RhAccessCache, uid: string): boolean {
+  if (matrix) {
+    const permission = resolveFieldAccessPermission(entry, matrix, role, isOwner, cache, uid);
+    return permission === 'edit';
+  }
+  if (role === 'admin') return true;
+  if (role === 'manager') return true;
+  if (role === 'employee') return isOwner && entry.employee_editable && entry.employee_visible;
   return false;
 }
 
@@ -179,16 +335,11 @@ export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
     if (!entry) throw new HttpsError('not-found', `Campo ${field_key} não existe no field_map.`);
 
     // 4. Validações de visibilidade e edição (defense in depth)
-    if (!canReadField(entry, role)) {
+    if (!canReadField(entry, fieldMap.access_matrix, role, isOwner, cache, uid)) {
       throw new HttpsError('permission-denied', `Campo ${field_key} não visível para role ${role}.`);
     }
-    if (!canWriteField(entry, role, isOwner)) {
+    if (!canWriteField(entry, fieldMap.access_matrix, role, isOwner, cache, uid)) {
       throw new HttpsError('permission-denied', `Campo ${field_key} não editável para role ${role}.`);
-    }
-
-    // Segurança extra: employee não pode editar campos employee_visible=false
-    if (role === 'employee' && !entry.employee_visible) {
-      throw new HttpsError('permission-denied', 'Campo não visível para o colaborador.');
     }
 
     // 5. Ler valor anterior para o audit_log

@@ -126,7 +126,7 @@ async function saveEmployeeDocument(input: {
   if (dedupe.resolution === "EXACT_DUPLICATE" && dedupe.existingDocumentId) {
     await hrDbAdmin.collection(COLLECTION).doc(dedupe.existingDocumentId).collection("audit").add({
       action: "DUPLICATE_BLOCKED", actorId: access.decoded.uid,
-      actorName: access.decoded.name ?? access.decoded.email ?? "Usuário", contentHash, at: Timestamp.now(),
+      actorName: access.actorName, contentHash, at: Timestamp.now(),
     });
     return { id: dedupe.existingDocumentId, duplicate: true, existingDocumentId: dedupe.existingDocumentId };
   }
@@ -169,7 +169,7 @@ async function saveEmployeeDocument(input: {
     // Arquivo
     originalName: file.name.slice(0, 180), mimeType: file.type, size: file.size,
     storagePath, storageSubfolder,
-    uploadedBy: access.decoded.uid, uploadedByName: access.decoded.name ?? access.decoded.email ?? "Usuário",
+    uploadedBy: access.decoded.uid, uploadedByName: access.actorName,
     validatedBy: null, validatedByName: null, validatedAt: null, uploadedAt: now, updatedAt: now,
     accessCount: 0, deletedAt: null,
   };
@@ -187,6 +187,9 @@ export async function GET(request: NextRequest) {
     const access = await assertHrAccess(request, "view");
     const employeeId = request.nextUrl.searchParams.get("employeeId")?.trim();
     if (!employeeId) return error("Colaborador não informado.");
+    if (access.permissions.dp?.collaborators?.ownProfileOnly === true && employeeId !== access.userDoc.id) {
+      return error("Este perfil permite acessar apenas os próprios documentos.", 403);
+    }
     const snap = await hrDbAdmin.collection(COLLECTION).where("employeeId", "==", employeeId).get();
     // Aplica a política de sigilo por documento; o usuário só recebe o que pode ver.
     const subject = subjectFromPermissions(access.permissions, {
@@ -276,9 +279,9 @@ export async function PATCH(request: NextRequest) {
     if (!(await ref.get()).exists) return error("Documento não encontrado.", 404);
     const now = Timestamp.now();
     const update: Record<string, unknown> = { status, updatedAt: now };
-    if (status === "validated") Object.assign(update, { validatedBy: access.decoded.uid, validatedByName: access.decoded.name ?? access.decoded.email ?? "Usuário", validatedAt: now });
+    if (status === "validated") Object.assign(update, { validatedBy: access.decoded.uid, validatedByName: access.actorName, validatedAt: now });
     await ref.update(update);
-    await ref.collection("audit").add({ action: `status_${status}`, actorId: access.decoded.uid, actorName: access.decoded.name ?? access.decoded.email ?? "Usuário", at: now });
+    await ref.collection("audit").add({ action: `status_${status}`, actorId: access.decoded.uid, actorName: access.actorName, at: now });
     return NextResponse.json({ ok: true });
   } catch (cause) { return error(cause instanceof Error ? cause.message : "Falha ao atualizar documento.", 403); }
 }
@@ -293,7 +296,7 @@ export async function DELETE(request: NextRequest) {
     const storagePath = snap.get("storagePath");
     if (typeof storagePath === "string") await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).delete({ ignoreNotFound: true });
     await ref.update({ deletedAt: Timestamp.now(), deletedBy: access.decoded.uid, storagePath: FieldValue.delete(), updatedAt: Timestamp.now() });
-    await ref.collection("audit").add({ action: "DOCUMENT_DELETED", actorId: access.decoded.uid, actorName: access.decoded.name ?? access.decoded.email ?? "Usuário", at: Timestamp.now() });
+    await ref.collection("audit").add({ action: "DOCUMENT_DELETED", actorId: access.decoded.uid, actorName: access.actorName, at: Timestamp.now() });
     return NextResponse.json({ ok: true });
   } catch (cause) { return error(cause instanceof Error ? cause.message : "Falha ao excluir documento.", 403); }
 }

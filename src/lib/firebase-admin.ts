@@ -3,6 +3,29 @@ import { initializeApp, getApps, App, applicationDefault, cert, type ServiceAcco
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
+// ── Segurança de autenticação: emulador NUNCA em produção ─────────────────────
+// Quando FIREBASE_AUTH_EMULATOR_HOST está setado, o Admin SDK PARA de verificar
+// a assinatura dos tokens (aceita tokens do emulador, sem assinatura). Em
+// produção isso seria um bypass total de auth. Duas travas evitam o desastre:
+//
+// 1) Trava dura: se a variável vazar para um build de produção, aborta o boot
+//    (a app não sobe insegura).
+if (process.env.NODE_ENV === 'production' && process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+  throw new Error(
+    '[Firebase Admin] FIREBASE_AUTH_EMULATOR_HOST setado em produção — isso desabilitaria a verificação de token. Abortando por segurança.',
+  );
+}
+// 2) Conveniência local: liga o emulador de Auth automaticamente SÓ fora de
+//    produção e apenas quando o cliente também está em modo emulador. Mantém
+//    cliente e servidor sincronizados sem exportar variáveis manualmente.
+if (
+  process.env.NODE_ENV !== 'production' &&
+  process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true' &&
+  !process.env.FIREBASE_AUTH_EMULATOR_HOST
+) {
+  process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+}
+
 const projectId =
   process.env.FIREBASE_PROJECT_ID ??
   process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??

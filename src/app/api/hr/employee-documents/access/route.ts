@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       await ref.collection("audit").add({
         action: "ACCESS_DENIED",
         actorId: access.decoded.uid,
-        actorName: access.decoded.name ?? access.decoded.email ?? "Usuário",
+        actorName: access.actorName,
         policy,
         requestedAction: action === "download" ? "download" : "view",
         at: Timestamp.now(),
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     const at = Timestamp.now();
     await Promise.all([
       ref.update({ accessCount: FieldValue.increment(1), lastAccessedAt: at }),
-      ref.collection("audit").add({ action: action === "download" ? "downloaded" : "viewed", actorId: access.decoded.uid, actorName: access.decoded.name ?? access.decoded.email ?? "Usuário", at }),
+      ref.collection("audit").add({ action: action === "download" ? "downloaded" : "viewed", actorId: access.decoded.uid, actorName: access.actorName, at }),
     ]);
     return NextResponse.json({ url, expiresInSeconds: 300 });
   } catch (cause) { return NextResponse.json({ error: cause instanceof Error ? cause.message : "Acesso negado." }, { status: 403 }); }

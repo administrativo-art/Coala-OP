@@ -166,7 +166,15 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         color: SECTION_COLORS.dp,
         items: [
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
-          { label: "Colaboradores", href: "/dashboard/dp/collaborators", icon: Users, show: permissions.dp?.collaborators?.view },
+          {
+            label: "Gestão do colaborador",
+            href: permissions.dp?.collaborators?.ownProfileOnly === true && user?.id
+              ? `/dashboard/dp/collaborators/${user.id}`
+              : "/dashboard/dp/collaborators",
+            icon: Users,
+            show: permissions.dp?.collaborators?.view,
+          },
+          { label: "Documentos", href: "/dashboard/dp/documents", icon: FileText, show: permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && permissions.dp?.collaborators?.ownProfileOnly !== true) },
           { label: "Controle de uniformes", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
           { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
           {

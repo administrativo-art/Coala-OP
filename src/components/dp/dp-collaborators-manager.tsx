@@ -661,6 +661,7 @@ function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps)
     try {
       await terminateUser({
         uid: user.id,
+        inactivationType: 'contract_termination',
         terminationReason: values.terminationReason,
         terminationCause: values.terminationCause,
         terminationNotes: values.terminationNotes,

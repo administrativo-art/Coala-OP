@@ -40,6 +40,14 @@ function formatBR(iso: string | null): string | null {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
+function fileSafe(value: string | null): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase();
+}
 
 export interface ResolvedProcess {
   processCategory: ProcessCategory;
@@ -186,6 +194,8 @@ export function buildDocumentNames(input: {
     startDate: str(fields, "startDate") ?? "",
     examDate: str(fields, "examDate") ?? "",
     terminationDate: str(fields, "terminationDate") ?? "",
+    dependentName: fileSafe(str(fields, "dependentName")),
+    dependentBirthDate: str(fields, "dependentBirthDate") ?? "",
   };
   return {
     displayName: renderTemplate(config.displayNameTemplate, tokens),

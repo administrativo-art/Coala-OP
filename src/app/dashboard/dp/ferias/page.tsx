@@ -14,7 +14,9 @@ export default function DPFeriasPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Férias</h1>
-        <p className="text-muted-foreground text-sm mt-1">Gerencie e aprove as férias dos colaboradores.</p>
+        <p className="text-muted-foreground text-sm mt-1">
+          Prioridade de agendamento e período aquisitivo dos colaboradores operacionais. Clique em um card para ver o histórico e agendar.
+        </p>
       </div>
       <DPFeriasManager />
     </div>

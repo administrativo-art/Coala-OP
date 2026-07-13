@@ -70,7 +70,7 @@ const SCOPE_RESOURCES: Record<DPScope, DPResourceKey[]> = {
   settings: ['units', 'shiftDefs', 'vacations', 'calendars'],
   schedules: ['units', 'shiftDefs', 'schedules', 'calendars'],
   vacations: ['units', 'vacations'],
-  collaborators: ['shiftDefs'],
+  collaborators: ['units', 'shiftDefs', 'vacations'],
   goals: ['units', 'shiftDefs', 'schedules'],
 };
 

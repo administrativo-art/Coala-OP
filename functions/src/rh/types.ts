@@ -10,13 +10,40 @@ export type BizneoFieldId    = string;
 export type JobRoleId        = string;
 export type KioskId          = string;
 
-export type FieldVisibility = 'public' | 'sensitive' | 'internal';
+export type FieldVisibility =
+  | 'public'
+  | 'restricted_total'
+  | 'restricted_partial'
+  | 'confidential'
+  // Legado: mantido para ler field_map antigo sem quebrar funções.
+  | 'sensitive'
+  | 'internal';
 export type RhRole          = 'employee' | 'manager' | 'admin';
 export type EmployeeStatus  = 'active' | 'inactive' | 'terminated';
+export type NormalizedFieldVisibility = 'public' | 'restricted_total' | 'restricted_partial' | 'confidential';
+export type ProfileAccessActor = 'authenticated' | 'owner' | 'manager' | 'admin' | 'explicit';
+export type ProfileAccessPermission = 'hidden' | 'view' | 'edit';
+export type ProfileAccessMatrixRule = Partial<Record<ProfileAccessActor, ProfileAccessPermission>> & {
+  bindings?: FieldAccessBinding;
+};
+export type ProfileAccessMatrix = {
+  version: string;
+  visibility: Partial<Record<NormalizedFieldVisibility, ProfileAccessMatrixRule>>;
+};
 export type FieldType =
   | 'text' | 'multiline' | 'date' | 'number' | 'currency'
   | 'boolean' | 'single_select' | 'multi_select' | 'autonumber' | 'ref:jobRoles';
 export type FieldSource = 'bizneo_sync' | 'user_edit' | 'cf_automation';
+
+export type FieldAccessBinding = {
+  roleIds?: JobRoleId[];
+  functionIds?: string[];
+  userIds?: AuthUid[];
+};
+
+export type FieldAccessConfig = {
+  allowed?: FieldAccessBinding;
+};
 
 export type TriggerConfig = {
   event: 'on_set' | 'on_change' | 'on_clear';
@@ -38,6 +65,7 @@ export type FieldMapEntry = {
   required?:         boolean;
   options?:          string[];
   triggers?:         TriggerConfig[];
+  access?:           FieldAccessConfig;
   section:           string;
   label:             string;
   order:             number;
@@ -46,6 +74,7 @@ export type FieldMapEntry = {
 export type FieldMap = {
   version: string;
   fields:  Record<CoalaKey, FieldMapEntry>;
+  access_matrix?: ProfileAccessMatrix;
 };
 
 export type Employee = {
@@ -80,6 +109,13 @@ export type RhAccessCache = {
   rh_role:              RhRole;
   bizneo_employee_id?:  BizneoEmployeeId;
   unit_id?:             KioskId;
+  user_id?:             AuthUid;
+  job_role_id?:         JobRoleId;
+  job_role_ids?:        JobRoleId[];
+  role_ids?:            JobRoleId[];
+  job_function_id?:     string;
+  job_function_ids?:    string[];
+  function_ids?:        string[];
   updated_at:           Timestamp;
 };
 

@@ -45,6 +45,16 @@ describe("deriveBatchStatus", () => {
   test("tudo falhou", () => {
     assert.equal(deriveBatchStatus(computeBatchCounters(items("failed", "failed"))), "FAILED");
   });
+  test("descartado conta e não é pendente", () => {
+    const c = computeBatchCounters(items("filed", "discarded", "discarded"));
+    assert.equal(c.discardedFiles, 2);
+    assert.equal(c.pendingFiles, 0);
+    // filed + descartes, nada pronto/pendente → FILED
+    assert.equal(deriveBatchStatus(c), "FILED");
+  });
+  test("tudo descartado → CANCELLED", () => {
+    assert.equal(deriveBatchStatus(computeBatchCounters(items("discarded", "discarded"))), "CANCELLED");
+  });
 });
 
 describe("canFileItem (idempotência)", () => {

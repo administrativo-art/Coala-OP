@@ -176,7 +176,7 @@ function DocumentCollaboratorCard({
 
 export default function DPDocumentsPage() {
   const router = useRouter();
-  const { permissions, activeUsers, terminatedUsers, firebaseUser } = useAuth();
+  const { permissions, activeUsers, terminatedUsers, firebaseUser, user: currentUser } = useAuth();
   const { units } = useDPBootstrap();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"active" | "all" | "inactive">("active");
@@ -184,7 +184,8 @@ export default function DPDocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const canView = Boolean(permissions.dp?.collaborators?.view || permissions.settings?.manageUsers);
+  const ownProfileOnly = permissions.dp?.collaborators?.ownProfileOnly === true;
+  const canView = Boolean(permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && !ownProfileOnly));
   const allUsers = useMemo(() => [...activeUsers, ...terminatedUsers], [activeUsers, terminatedUsers]);
   const unitNameById = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
 
@@ -224,6 +225,11 @@ export default function DPDocumentsPage() {
     };
   }, [firebaseUser, canView]);
 
+  useEffect(() => {
+    if (!ownProfileOnly || !currentUser?.id) return;
+    router.replace(`/dashboard/dp/collaborators/${currentUser.id}/documents`);
+  }, [currentUser?.id, ownProfileOnly, router]);
+
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return allUsers.filter((user) => {
@@ -255,6 +261,9 @@ export default function DPDocumentsPage() {
   }, [summaries]);
 
   if (!canView) {
+    if (ownProfileOnly) {
+      return <p className="p-6 text-sm text-muted-foreground">Abrindo seus documentos da Gestão do colaborador...</p>;
+    }
     return <p className="p-6 text-sm text-muted-foreground">Sem permissão para acessar documentos de colaboradores.</p>;
   }
 

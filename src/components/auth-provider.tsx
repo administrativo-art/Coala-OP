@@ -44,6 +44,7 @@ export interface AuthContextType {
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   terminateUser: (payload: TerminateUserPayload) => Promise<void>;
+  reactivateUser: (userId: string) => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   recordLoginAccess: () => Promise<void>;
@@ -77,6 +78,23 @@ function applyCommercialPermissionFallbacks(permissions: PermissionSet) {
   permissions.commercial.technicalSheets.export ||= legacyCanViewSheets || legacyCanEditSheets;
 }
 
+function decodeJwtHeader(token: string): Record<string, unknown> | null {
+  try {
+    const [header] = token.split(".");
+    if (!header) return null;
+    const normalized = header.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function hasEmulatorIdToken(user: FirebaseUser) {
+  const token = await user.getIdToken(false);
+  return decodeJwtHeader(token)?.alg === "none";
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<User | null>(null);
@@ -101,6 +119,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (user) {
+        if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true") {
+          const isEmulatorToken = await hasEmulatorIdToken(user).catch(() => false);
+          if (!isEmulatorToken) {
+            await signOut(auth);
+            setAppUser(null);
+            setPermissions(defaultGuestPermissions);
+            setPermissionsReady(true);
+            setLoading(false);
+            return;
+          }
+        }
+
         const userDocRef = doc(db, 'users', user.uid);
         let userDocSnap;
         let fallbackUser: User | null = null;
@@ -165,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const canReadUsersDirectory =
       permissions.settings.manageUsers ||
-      permissions.dp?.collaborators?.view === true ||
+      (permissions.dp?.collaborators?.view === true && permissions.dp?.collaborators?.ownProfileOnly !== true) ||
       permissions.dp?.collaborators?.edit === true ||
       permissions.dp?.collaborators?.terminate === true;
 
@@ -400,6 +430,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
   }, []);
+
+  const reactivateUser = useCallback(async (userId: string) => {
+    try {
+      const reactivateUserFn = httpsCallable(functions, 'reactivateUser');
+      await reactivateUserFn({ uid: userId });
+    } catch (error) {
+      console.error("Error reactivating user:", error);
+      throw error;
+    }
+  }, []);
   
   const resetPassword = useCallback(async (email: string): Promise<boolean> => {
     try {
@@ -470,12 +510,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateUser,
     deleteUser,
     terminateUser,
+    reactivateUser,
     resetPassword,
     changePassword,
     recordLoginAccess,
   }), [
     appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading,
-    permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, resetPassword, changePassword, recordLoginAccess,
+    permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, reactivateUser, resetPassword, changePassword, recordLoginAccess,
   ]);
 
   return (

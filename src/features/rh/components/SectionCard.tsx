@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import type { FieldMapEntry, EmployeeFieldValue, RhRole } from '@/types/rh';
-import { canViewField } from '@/types/rh';
 import { FieldValue } from './FieldValue';
 
 type SectionEntry = {
   key:   string;
   entry: FieldMapEntry;
   fv?:   EmployeeFieldValue;
+  editable?: boolean;
 };
 
 type Props = {
@@ -21,7 +21,7 @@ type Props = {
 export function SectionCard({ title, fields, role, onEdit }: Props) {
   const [expanded, setExpanded] = useState(true);
 
-  const visible = fields.filter((f) => canViewField(f.entry.visibility, role));
+  const visible = fields;
   if (!visible.length) return null;
 
   return (
@@ -44,7 +44,7 @@ export function SectionCard({ title, fields, role, onEdit }: Props) {
       {expanded && (
         <div className="divide-y divide-gray-50 px-5 pb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
-            {visible.map(({ key, entry, fv }) => (
+            {visible.map(({ key, entry, fv, editable }) => (
               <div key={key} className="py-3 group">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -54,7 +54,7 @@ export function SectionCard({ title, fields, role, onEdit }: Props) {
                     <FieldValue fv={fv} type={entry.type} role={role} fieldKey={key} />
                   </div>
 
-                  {onEdit && (
+                  {onEdit && editable === true ? (
                     <button
                       type="button"
                       onClick={() => onEdit(key)}
@@ -65,7 +65,7 @@ export function SectionCard({ title, fields, role, onEdit }: Props) {
                         <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                       </svg>
                     </button>
-                  )}
+                  ) : null}
                 </div>
 
                 {entry.help_text && (

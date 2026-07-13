@@ -26,8 +26,12 @@ type State =
   | { status: 'error'; message: string }
   | { status: 'ok'; data: EmployeeProfileData };
 
+function cleanIds(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
+
 export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): State {
-  const { user } = useAuth();
+  const { firebaseUser, user } = useAuth();
   const [state, setState] = useState<State>({ status: 'idle' });
 
   useEffect(() => {
@@ -37,6 +41,21 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Sta
     async function load() {
       setState({ status: 'loading' });
       try {
+        if (firebaseUser) {
+          const token = await firebaseUser.getIdToken();
+          const response = await fetch(`/api/rh/employee-profile/${encodeURIComponent(bizneoEmployeeId)}`, {
+            cache: 'no-store',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (response.ok) {
+            if (!cancelled) {
+              setState({ status: 'ok', data: payload as EmployeeProfileData });
+            }
+            return;
+          }
+        }
+
         // Dois doc.get() paralelos — sem query (O(1))
         const [cacheSnap, fieldMapSnap] = await Promise.all([
           getDoc(doc(rhDb, 'rh_access_cache', user!.id)),
@@ -66,8 +85,23 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Sta
         // Ler apenas os documentos que as rules permitem para este papel.
         const fieldValues: Record<string, EmployeeFieldValue> = {};
         const role = cache.rh_role as RhRole;
+        const visibilityContext = {
+          isOwner: cache.bizneo_employee_id === bizneoEmployeeId || employee.auth_uid === user!.id,
+          canViewConfidential: role === 'admin',
+          userId: user!.id,
+          roleIds: cleanIds([
+            cache.job_role_id,
+            ...(cache.job_role_ids ?? []),
+            ...(cache.role_ids ?? []),
+          ]),
+          functionIds: cleanIds([
+            cache.job_function_id,
+            ...(cache.job_function_ids ?? []),
+            ...(cache.function_ids ?? []),
+          ]),
+        };
         const readableKeys = Object.entries(fieldMap.fields)
-          .filter(([, entry]) => canViewField(entry.visibility, role))
+          .filter(([, entry]) => canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix))
           .map(([key]) => key);
 
         const fvSnaps = await Promise.all(
@@ -92,7 +126,7 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Sta
 
     load();
     return () => { cancelled = true; };
-  }, [user, bizneoEmployeeId, reloadKey]);
+  }, [firebaseUser, user, bizneoEmployeeId, reloadKey]);
 
   return state;
 }
@@ -123,12 +157,13 @@ export function useRhCache(): { cache: RhAccessCache | null; loading: boolean } 
 
 // ─── useFieldMap ──────────────────────────────────────────────────────────────
 
-export function useFieldMap(): { fieldMap: FieldMap | null; loading: boolean } {
+export function useFieldMap(reloadKey = 0): { fieldMap: FieldMap | null; loading: boolean } {
   const [fieldMap, setFieldMap] = useState<FieldMap | null>(null);
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     getDoc(doc(rhDb, 'schema', 'field_map')).then((snap) => {
       if (!cancelled) {
         setFieldMap(snap.exists() ? (snap.data() as FieldMap) : null);
@@ -136,7 +171,7 @@ export function useFieldMap(): { fieldMap: FieldMap | null; loading: boolean } {
       }
     }).catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
   return { fieldMap, loading };
 }

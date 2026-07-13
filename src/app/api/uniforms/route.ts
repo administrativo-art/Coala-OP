@@ -22,6 +22,16 @@ function canAdjust(context: Awaited<ReturnType<typeof requireUser>>) {
     context.permissions.stock.inventoryControl?.editLot === true;
 }
 
+function getUniformCareInstructions(
+  primary?: Product["uniformCareInstructions"],
+  fallback?: Product["uniformCareInstructions"],
+) {
+  const hasSteps = (primary ?? []).some((section) =>
+    (section.etapas ?? []).some((step) => String(step.text ?? "").trim()),
+  );
+  return hasSteps ? primary : fallback;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const context = await requireUser(request);
@@ -80,6 +90,7 @@ export async function GET(request: NextRequest) {
         apparelType: lot.apparelType ?? product?.apparelType,
         apparelSize: lot.apparelSize ?? product?.apparelSize,
         apparelColor: lot.apparelColor ?? product?.apparelColor,
+        uniformCareInstructions: getUniformCareInstructions(lot.uniformCareInstructions, product?.uniformCareInstructions),
         imageUrl: lot.imageUrl ?? product?.imageUrl,
       };
     });
@@ -90,6 +101,7 @@ export async function GET(request: NextRequest) {
         apparelType: assignment.apparelType ?? product?.apparelType,
         apparelSize: assignment.apparelSize ?? product?.apparelSize,
         apparelColor: assignment.apparelColor ?? product?.apparelColor,
+        uniformCareInstructions: getUniformCareInstructions(assignment.uniformCareInstructions, product?.uniformCareInstructions),
         imageUrl: assignment.imageUrl ?? product?.imageUrl,
       };
     });
@@ -100,6 +112,7 @@ export async function GET(request: NextRequest) {
         apparelType: event.apparelType ?? product?.apparelType,
         apparelSize: event.apparelSize ?? product?.apparelSize,
         apparelColor: event.apparelColor ?? product?.apparelColor,
+        uniformCareInstructions: getUniformCareInstructions(event.uniformCareInstructions, product?.uniformCareInstructions),
         imageUrl: event.imageUrl ?? product?.imageUrl,
       };
     });

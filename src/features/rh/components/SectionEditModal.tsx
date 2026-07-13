@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { FieldMapEntry, EmployeeFieldValue, RhRole, BizneoEmployeeId } from '@/types/rh';
-import { canViewField } from '@/types/rh';
 import { callOnFieldUpdate } from '../lib/rh-client';
 
 type FieldInput = {
@@ -141,7 +140,7 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
     }
   }, [field, rawValue, employeeId, editKey, onSaved, onClose]);
 
-  if (!field || !canViewField(field.entry.visibility, role)) return null;
+  if (!field) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

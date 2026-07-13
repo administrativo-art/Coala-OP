@@ -21,6 +21,7 @@ import {
   deriveBatchStatus,
   type UploadItemStatus,
 } from "@/lib/hr/employee-document-batch";
+import { applyEmployeeProfileSuggestions } from "@/lib/hr/employee-document-profile-suggestions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -112,9 +113,10 @@ export async function POST(request: NextRequest) {
         const contentHash = String(item.contentHash ?? "");
         if (!tempPath) throw new Error("Arquivo temporário ausente.");
 
-        // Duplicidade contra os documentos já arquivados do colaborador.
+        // Guard server-side: duplicata exata nunca deve gerar outro documento/versão,
+        // mesmo que a prévia do cliente não tenha percebido.
         const existingSnap = await hrDbAdmin.collection(COLLECTION).where("employeeId", "==", employeeId).get();
-        const existing: ExistingDocumentRef[] = existingSnap.docs
+        const existingRefs: ExistingDocumentRef[] = existingSnap.docs
           .filter((d) => !d.get("deletedAt"))
           .map((d) => ({
             id: d.id,
@@ -124,18 +126,36 @@ export async function POST(request: NextRequest) {
             version: typeof d.get("version") === "number" ? d.get("version") : 1,
           }));
         const dedupe = resolveDuplicateAndVersion({
-          employeeId, code: config.code, strategy: config.duplicateStrategy, keys: config.duplicateKeys,
-          fields, contentHash, existing,
+          employeeId,
+          code: config.code,
+          strategy: config.duplicateStrategy,
+          keys: config.duplicateKeys,
+          fields,
+          contentHash,
+          existing: existingRefs,
         });
-
         if (dedupe.resolution === "EXACT_DUPLICATE" && dedupe.existingDocumentId) {
+          const now = Timestamp.now();
           await bucket.file(tempPath).delete({ ignoreNotFound: true });
-          await itemRef.update({ status: "duplicate", filedDocumentId: dedupe.existingDocumentId, updatedAt: Timestamp.now() });
-          await itemRef.collection("audit").add({ action: "DUPLICATE_BLOCKED", actorId: access.decoded.uid, at: Timestamp.now() });
+          await itemRef.update({
+            status: "duplicate",
+            tempStoragePath: null,
+            duplicateResolution: "EXACT_DUPLICATE",
+            duplicateOfId: dedupe.existingDocumentId,
+            filedDocumentId: dedupe.existingDocumentId,
+            updatedAt: now,
+          });
+          await itemRef.collection("audit").add({
+            action: "EXACT_DUPLICATE_BLOCKED",
+            actorId: access.decoded.uid,
+            duplicateOfId: dedupe.existingDocumentId,
+            traceId: item.traceId ?? null,
+            at: now,
+          });
           continue;
         }
 
-        // Número da versão reservado atomicamente (evita colisão concorrente).
+        // Reserva o número da versão de forma atômica (concorrência).
         const logicalKey = dedupe.logicalKey || buildLogicalKey(employeeId, config.code, config.duplicateKeys, fields);
         const version = await reserveVersion(logicalKey, documentId);
         const destination = resolveDocumentDestination({ config, employeeCode, fields, version });
@@ -147,6 +167,27 @@ export async function POST(request: NextRequest) {
         await bucket.file(tempPath).copy(bucket.file(storagePath));
 
         const now = Timestamp.now();
+        const profileSync = await applyEmployeeProfileSuggestions({
+          employeeId,
+          documentTypeCode: config.code,
+          extractedFields: fields,
+          fieldConfidences: item.fieldConfidences && typeof item.fieldConfidences === "object"
+            ? item.fieldConfidences as Record<string, number>
+            : {},
+          actorId: access.decoded.uid,
+          actorName: access.actorName,
+          documentId,
+          traceId: typeof item.traceId === "string" ? item.traceId : null,
+        });
+        const profileSuggestions = profileSync.suggestions.length > 0
+          ? profileSync.suggestions
+          : item.profileSuggestions ?? [];
+        const profileAutofill = {
+          filledFields: profileSync.filledFields,
+          divergentFields: profileSync.divergentFields,
+          matchingFields: profileSync.matchingFields,
+          profileCompletion: profileSync.profileCompletion,
+        };
         const payload = {
           employeeId, candidateId: null,
           category: config.category, documentType: config.label, documentTypeCode: config.code,
@@ -158,13 +199,15 @@ export async function POST(request: NextRequest) {
           versionResolution: version > 1 ? "NEW_VERSION" : "NEW_DOCUMENT",
           extractedFields: fields,
           fieldConfidences: item.fieldConfidences ?? {},
+          profileSuggestions,
+          profileAutofill,
           inputTokens: item.inputTokens ?? null, outputTokens: item.outputTokens ?? null,
           estimatedCostUsd: item.estimatedCostUsd ?? null,
           promptVersion: item.promptVersion ?? null, schemaVersion: item.schemaVersion ?? null,
           originalName: String(item.originalName ?? "").slice(0, 180), mimeType: String(item.mimeType ?? ""), size: Number(item.size ?? 0),
           storagePath, storageSubfolder,
           batchId, itemId: itemDoc.id, traceId: item.traceId ?? null,
-          uploadedBy: access.decoded.uid, uploadedByName: access.decoded.name ?? access.decoded.email ?? "Usuário",
+          uploadedBy: access.decoded.uid, uploadedByName: access.actorName,
           validatedBy: null, validatedByName: null, validatedAt: null, uploadedAt: now, updatedAt: now,
           accessCount: 0, deletedAt: null,
         };
@@ -175,7 +218,7 @@ export async function POST(request: NextRequest) {
           traceId: item.traceId ?? null, at: now,
         });
         await bucket.file(tempPath).delete({ ignoreNotFound: true });
-        await itemRef.update({ status: "filed", filedDocumentId: documentId, version, updatedAt: now });
+        await itemRef.update({ status: "filed", filedDocumentId: documentId, version, profileSuggestions, profileAutofill, updatedAt: now });
         filed.push({ itemId: itemDoc.id, documentId, version });
       } catch (cause) {
         await itemRef.update({ status: "failed", updatedAt: Timestamp.now(), lastError: cause instanceof Error ? cause.message.slice(0, 240) : "Falha ao arquivar." }).catch(() => {});

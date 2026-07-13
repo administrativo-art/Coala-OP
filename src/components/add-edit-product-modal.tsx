@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine, Search, Database, AlertTriangle } from 'lucide-react';
+import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine, Search, Database, AlertTriangle, ListChecks } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
@@ -61,6 +61,14 @@ const productFormSchema = z.object({
   defaultCountingUnit: z.enum(['package', 'base', 'content']).optional(),
   apparelSize: z.string().optional(),
   apparelColor: z.string().optional(),
+  uniformCareInstructions: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    etapas: z.array(z.object({
+      id: z.string(),
+      text: z.string(),
+    })),
+  })).optional(),
 
   // Conditional sections
   enableLogistics: z.boolean().optional(),
@@ -119,10 +127,50 @@ const WIZARD_STEPS = [
     { id: 1, label: 'Identificação', icon: FileText, description: 'Foto, nome, atributos principais, vínculo com o produto base e observações.' },
     { id: 2, label: 'Aliases de compra', icon: Tag, description: 'Nomes que os fornecedores usam para este item nos pedidos e notas. O sistema reconhece esses nomes automaticamente nas compras.' },
     { id: 3, label: 'Detalhes logísticos', icon: Package, description: 'O item físico que você compra. Define a conversão para a unidade do estoque.' },
-    { id: 4, label: 'Nutricional', icon: ImageIcon, description: 'Opcional — fotografe a embalagem; o assistente transcreve quando solicitado.' },
 ] as const;
 
+const UNIFORM_INSTRUCTIONS_STEP = {
+    id: 4,
+    label: 'Instruções',
+    icon: ListChecks,
+    description: 'Seções e passos para lavagem, conservação, entrega e uso do uniforme.',
+} as const;
+
+const NUTRITION_STEP = {
+    id: 5,
+    label: 'Nutricional',
+    icon: ImageIcon,
+    description: 'Opcional — fotografe a embalagem; o assistente transcreve quando solicitado.',
+} as const;
+
 const APPAREL_SIZE_OPTIONS = ['ÚNICO', 'P', 'M', 'G', 'GG'] as const;
+
+function makeInstructionId() {
+    return Math.random().toString(36).slice(2, 10);
+}
+
+function makeInstructionSection(name = 'Lavagem') {
+    return {
+        id: makeInstructionId(),
+        name,
+        etapas: [{ id: makeInstructionId(), text: '' }],
+    };
+}
+
+function normalizeUniformCareInstructions(value: ProductFormValues['uniformCareInstructions']) {
+    return (value ?? [])
+        .map((section) => ({
+            id: section.id || makeInstructionId(),
+            name: String(section.name ?? '').trim(),
+            etapas: (section.etapas ?? [])
+                .map((step) => ({
+                    id: step.id || makeInstructionId(),
+                    text: String(step.text ?? '').trim(),
+                }))
+                .filter((step) => step.text),
+        }))
+        .filter((section) => section.name || section.etapas.length > 0);
+}
 
 function normalizeApparelSizeOption(value?: string | null) {
     const text = String(value ?? '').trim();
@@ -179,11 +227,21 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             notes: '', baseProductId: '',
             operationalCategoryId: '',
             apparelSize: '', apparelColor: '',
+            uniformCareInstructions: [makeInstructionSection()],
             defaultCountingUnit: 'package',
             enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
             enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
             nutritionalTableImageUrl: '', compositionImageUrl: '',
         }
+    });
+
+    const {
+        fields: uniformInstructionFields,
+        append: appendUniformInstruction,
+        remove: removeUniformInstruction,
+    } = useFieldArray({
+        control: form.control,
+        name: 'uniformCareInstructions',
     });
 
     const groupedBaseProducts = useMemo(() => {
@@ -224,8 +282,12 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const isApparel = categoryWatch === 'Vestimenta' || selectedOperationalCategory?.destination === 'uniform';
     const showNutritionStep = selectedOperationalCategory?.slug === 'insumo' || selectedOperationalCategory?.id === 'insumo';
     const wizardSteps = useMemo(
-        () => showNutritionStep ? [...WIZARD_STEPS] : WIZARD_STEPS.filter((step) => step.id !== 4),
-        [showNutritionStep],
+        () => [
+            ...WIZARD_STEPS,
+            ...(isApparel ? [UNIFORM_INSTRUCTIONS_STEP] : []),
+            ...(showNutritionStep ? [NUTRITION_STEP] : []),
+        ],
+        [isApparel, showNutritionStep],
     );
     const currentStepMeta = wizardSteps.find((step) => step.id === currentStep) ?? wizardSteps[0];
     const currentStepPosition = Math.max(0, wizardSteps.findIndex((step) => step.id === currentStep));
@@ -307,6 +369,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     operationalCategoryId: productToEdit.operationalCategoryId || '',
                     apparelSize: normalizeApparelSizeOption(productToEdit.apparelSize),
                     apparelColor: productToEdit.apparelColor || '',
+                    uniformCareInstructions: productToEdit.uniformCareInstructions?.length
+                        ? productToEdit.uniformCareInstructions
+                        : [makeInstructionSection()],
                     defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                     // Switches
                     enableLogistics: !!productToEdit.multiplo_caixa,
@@ -329,6 +394,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     notes: '', baseProductId: '',
                     operationalCategoryId: '',
                     apparelSize: '', apparelColor: '',
+                    uniformCareInstructions: [makeInstructionSection()],
                     defaultCountingUnit: 'package',
                     enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
                     enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
@@ -469,6 +535,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const onSubmit = async (values: ProductFormValues) => {
 
 
+        const uniformCareInstructions = normalizeUniformCareInstructions(values.uniformCareInstructions);
+
         const productData: Omit<Product, 'id'> = {
             operationalCategoryId: values.operationalCategoryId,
             operationalCategoryName: activeCategories.find((category) => category.id === values.operationalCategoryId)?.name,
@@ -509,6 +577,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             defaultCountingUnit: values.defaultCountingUnit,
             apparelSize: isApparel ? values.apparelSize : undefined,
             apparelColor: isApparel ? values.apparelColor : undefined,
+            uniformCareInstructions: isApparel ? uniformCareInstructions : undefined,
 
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
@@ -572,7 +641,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     };
 
     const fieldStep: Partial<Record<keyof ProductFormValues, number>> = {
-        baseName: 1, operationalCategoryId: 1, apparelSize: 1, apparelColor: 1,
+        baseName: 1, operationalCategoryId: 1, apparelSize: 1, apparelColor: 1, uniformCareInstructions: 4,
         packageType: 3, category: 3, packageSize: 3, unit: 3, multiplo_caixa: 3, rotulo_caixa: 3, countingInstruction: 3,
     };
 
@@ -590,6 +659,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             ...(enableLogisticsWatch ? (['multiplo_caixa', 'rotulo_caixa'] as (keyof ProductFormValues)[]) : []),
             ...(enableCountingInstructionWatch ? (['countingInstruction'] as (keyof ProductFormValues)[]) : [])],
         4: [],
+        5: [],
     };
 
     const handleNext = async () => {
@@ -1232,8 +1302,70 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         </div>
                                     )}
 
-                                    {/* ===== STEP 4 — Nutricional ===== */}
-                                    {currentStep === 4 && (
+                                    {/* ===== STEP 4 — Instruções do uniforme ===== */}
+                                    {currentStep === 4 && isApparel && (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <h4 className="font-medium">Instruções do uniforme</h4>
+                                                    <p className="text-sm text-muted-foreground">Cadastre seções como lavagem, secagem, conservação ou uso.</p>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => appendUniformInstruction(makeInstructionSection('Nova seção'))}
+                                                >
+                                                    <Plus className="mr-1.5 h-4 w-4" /> Nova seção
+                                                </Button>
+                                            </div>
+
+                                            {uniformInstructionFields.length === 0 ? (
+                                                <div className="rounded-xl border border-dashed p-6 text-center">
+                                                    <p className="text-sm font-semibold text-muted-foreground">Nenhuma seção cadastrada.</p>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="mt-2"
+                                                        onClick={() => appendUniformInstruction(makeInstructionSection())}
+                                                    >
+                                                        <Plus className="mr-1.5 h-4 w-4" /> Adicionar lavagem
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    {uniformInstructionFields.map((section, sectionIndex) => (
+                                                        <div key={section.id} className="overflow-hidden rounded-xl border bg-white shadow-sm">
+                                                            <div className="flex items-center gap-3 border-b bg-gray-50 px-4 py-2">
+                                                                <span className="text-[10px] font-black uppercase text-gray-300">Seção {sectionIndex + 1}</span>
+                                                                <Input
+                                                                    {...form.register(`uniformCareInstructions.${sectionIndex}.name`)}
+                                                                    className="h-8 border-none bg-transparent p-0 text-sm font-bold text-gray-700 focus-visible:ring-0"
+                                                                    placeholder="Ex: Lavagem"
+                                                                />
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-7 w-7 text-gray-300 hover:text-red-500"
+                                                                    onClick={() => removeUniformInstruction(sectionIndex)}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </div>
+                                                            <div className="space-y-3 p-4">
+                                                                <UniformInstructionSteps control={form.control} register={form.register} sectionIndex={sectionIndex} />
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* ===== STEP 5 — Nutricional ===== */}
+                                    {currentStep === 5 && (
                                         <div className="space-y-4">
                                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                                 {/* Tabela nutricional */}
@@ -1364,5 +1496,53 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 </Dialog>
             )}
         </>
+    );
+}
+
+function UniformInstructionSteps({
+    control,
+    register,
+    sectionIndex,
+}: {
+    control: any;
+    register: any;
+    sectionIndex: number;
+}) {
+    const { fields, append, remove } = useFieldArray({
+        control,
+        name: `uniformCareInstructions.${sectionIndex}.etapas`,
+    });
+
+    return (
+        <div className="space-y-3">
+            {fields.map((field, index) => (
+                <div key={field.id} className="flex items-center gap-3">
+                    <span className="w-5 text-right text-[10px] font-black text-gray-300">{index + 1}.</span>
+                    <Input
+                        {...register(`uniformCareInstructions.${sectionIndex}.etapas.${index}.text`)}
+                        placeholder="Ex: Lavar à mão com sabão neutro..."
+                        className="h-9 flex-1 border-gray-100 bg-gray-50 text-xs transition-colors focus:bg-white"
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-gray-200 hover:text-red-500"
+                        onClick={() => remove(index)}
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                </div>
+            ))}
+            <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="ml-8 h-8 px-2 text-xs font-bold text-gray-400 hover:text-gray-600"
+                onClick={() => append({ id: makeInstructionId(), text: '' })}
+            >
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Adicionar passo
+            </Button>
+        </div>
     );
 }

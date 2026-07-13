@@ -103,7 +103,7 @@ function InactiveUserRow({
 }
 
 export function InactiveUsersScreen() {
-  const { users, permissions, updateUser } = useAuth();
+  const { users, permissions, reactivateUser } = useAuth();
   const { profiles } = useProfiles();
   const { kiosks } = useKiosks();
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -128,7 +128,7 @@ export function InactiveUsersScreen() {
     try {
       setSavingId(user.id);
       setError(null);
-      await updateUser({ ...user, isActive: true });
+      await reactivateUser(user.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao reativar o usuário.");
     } finally {

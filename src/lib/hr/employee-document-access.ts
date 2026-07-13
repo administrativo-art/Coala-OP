@@ -71,15 +71,18 @@ export interface DocumentAccessSubject {
   canViewSalary: boolean;
   collaboratorsView: boolean;
   collaboratorsEdit: boolean;
+  ownProfileOnly?: boolean;
   /** O usuário autenticado é o próprio titular do documento. */
   isOwner: boolean;
 }
 
 function isElevatedHr(s: DocumentAccessSubject) {
+  if (s.ownProfileOnly && !s.isOwner && !s.isDefaultAdmin && !s.canManageUsers) return false;
   return s.isDefaultAdmin || s.canManageUsers || s.rhRole === "admin" || s.rhRole === "manager" || s.collaboratorsEdit;
 }
 
 function isBasicHr(s: DocumentAccessSubject) {
+  if (s.ownProfileOnly && !s.isOwner && !s.isDefaultAdmin && !s.canManageUsers) return false;
   return isElevatedHr(s) || s.collaboratorsView;
 }
 
@@ -110,7 +113,7 @@ export function subjectFromPermissions(
     dp?: {
       rh_role?: "employee" | "manager" | "admin";
       rh?: { can_view_salary?: boolean };
-      collaborators?: { view?: boolean; edit?: boolean };
+      collaborators?: { view?: boolean; edit?: boolean; ownProfileOnly?: boolean };
     };
   },
   opts: { isDefaultAdmin: boolean; isOwner: boolean },
@@ -122,6 +125,7 @@ export function subjectFromPermissions(
     canViewSalary: permissions.dp?.rh?.can_view_salary === true,
     collaboratorsView: permissions.dp?.collaborators?.view === true,
     collaboratorsEdit: permissions.dp?.collaborators?.edit === true,
+    ownProfileOnly: permissions.dp?.collaborators?.ownProfileOnly === true,
     isOwner: opts.isOwner,
   };
 }

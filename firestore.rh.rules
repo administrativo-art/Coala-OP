@@ -47,14 +47,18 @@ service cloud.firestore {
     // Verifica visibilidade de um campo pelo field_map (coala-rh/schema/field_map)
     function fieldVisibility(fieldKey) {
       let fm = get(/databases/$(database)/documents/schema/field_map).data;
-      return fm.fields.get(fieldKey, {}).get('visibility', 'internal');
+      return fm.fields.get(fieldKey, {}).get('visibility', 'confidential');
     }
 
-    function canReadField(fieldKey) {
+    function canReadField(fieldKey, bizneoId) {
       let vis = fieldVisibility(fieldKey);
-      return (vis == 'public'    && isEmployee())
+      return (vis == 'public' && isEmployee())
+          || (vis == 'restricted_partial' && (isManager() || isOwner(bizneoId)))
+          || (vis == 'restricted_total' && isManager())
+          || (vis == 'confidential' && isAdmin())
+          // Legado: permissões antigas salvas no field_map antes do modelo atual.
           || (vis == 'sensitive' && isManager())
-          || (vis == 'internal'  && isAdmin());
+          || (vis == 'internal' && isAdmin());
     }
 
     // ─── rh_access_cache ────────────────────────────────────────────────────
@@ -78,7 +82,7 @@ service cloud.firestore {
       match /field_values/{fieldKey} {
         allow read:   if isAuth()
                       && canReadEmployee(bizneoId, get(/databases/$(database)/documents/employees/$(bizneoId)).data.get('unit_id', ''))
-                      && canReadField(fieldKey);
+                      && canReadField(fieldKey, bizneoId);
         allow create: if false;  // somente CF onFieldUpdate
         allow update: if false;
         allow delete: if false;

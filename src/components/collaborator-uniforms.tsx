@@ -1,8 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Loader2, RotateCcw, Shirt } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, FileText, Loader2, MapPin, PackageSearch, RotateCcw, Shirt } from "lucide-react";
 
 import {
   deliverUniform,
@@ -16,6 +17,7 @@ import {
   UniformDeliveryTermDocument,
   UniformReturnTermDocument,
 } from "@/components/pdf/UniformTermDocument";
+import { UniformInstructionsDialog, hasUniformCareInstructions } from "@/components/uniform-instructions-dialog";
 import type {
   UniformAssignment,
   UniformReturnedCondition,
@@ -117,7 +119,9 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [returnTarget, setReturnTarget] = useState<UniformAssignment | null>(null);
+  const [instructionsTarget, setInstructionsTarget] = useState<UniformAssignment | null>(null);
 
   const [deliveryLotId, setDeliveryLotId] = useState("");
   const [deliveryQuantity, setDeliveryQuantity] = useState(1);
@@ -167,9 +171,19 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
     () => availableLots.find((lot) => lot.id === deliveryLotId) ?? null,
     [availableLots, deliveryLotId],
   );
+  const stockDiagnostics = useMemo(() => {
+    const lotsWithQuantity = overview.lots.filter((lot) => Number(lot.quantity ?? 0) > 0);
+    const blockedLots = lotsWithQuantity.filter((lot) => (lot.uniformStockStatus ?? "disponivel") !== "disponivel");
+    return {
+      totalLots: overview.lots.length,
+      lotsWithQuantity: lotsWithQuantity.length,
+      blockedLots: blockedLots.length,
+    };
+  }, [overview.lots]);
 
   const canDeliver = permissions.stock.uniforms?.deliver === true;
   const canReturn = permissions.stock.uniforms?.return === true;
+  const canOpenUniformStock = permissions.stock.uniforms?.view === true;
   const collaboratorName = collaborator.username || collaborator.email || "Colaborador";
   const registeredByName = firebaseUser?.displayName || firebaseUser?.email || "Responsável/RH";
   const returnRequiresDiscard = returnedCondition === "danificado" || returnedCondition === "inutilizavel";
@@ -288,7 +302,20 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
       ) : (
         <div className="space-y-2">
           {possession.map((assignment) => (
-            <div key={assignment.id} className="rounded-2xl border border-amber-100 bg-[#fffaf0] p-3">
+            <div
+              key={assignment.id}
+              role="button"
+              tabIndex={0}
+              className="rounded-2xl border border-amber-100 bg-[#fffaf0] p-3 text-left transition hover:border-[#df2f78]/40 hover:bg-[#fff7e8]"
+              onClick={() => setInstructionsTarget(assignment)}
+              onKeyDown={(event) => {
+                if (event.currentTarget !== event.target) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setInstructionsTarget(assignment);
+                }
+              }}
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 gap-3">
                   <ItemPhoto item={assignment} />
@@ -301,6 +328,9 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                       <Badge variant="secondary">{conditionLabel(assignment.issuedCondition)}</Badge>
                       <Badge variant="outline">{assignment.quantityInPossession} em posse</Badge>
                       <Badge variant="outline">Entregue em {formatDate(assignment.deliveredAt)}</Badge>
+                      {hasUniformCareInstructions(assignment) ? (
+                        <Badge variant="outline" className="border-[#df2f78]/30 bg-white text-[#df2f78]">Instruções</Badge>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -308,7 +338,8 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       setReturnTarget(assignment);
                       setReturnQuantity(1);
                       setReturnDate(new Date().toISOString().slice(0, 10));
@@ -327,37 +358,65 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
         </div>
       )}
 
-      <div>
-        <p className="mb-2 text-xs font-black uppercase text-slate-500">Histórico</p>
-        {overview.events.length === 0 ? (
-          <p className="text-sm font-semibold text-slate-500">Nenhuma movimentação registrada.</p>
-        ) : (
-          <div className="space-y-2">
-            {overview.events.slice(0, 12).map((event) => (
-              <div key={event.id} className="rounded-xl bg-slate-50 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="flex min-w-0 gap-3">
-                    <ItemPhoto item={event} />
-                    <div>
-                      <p className="text-xs font-black">{event.productName}</p>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                        {event.eventType === "UNIFORME_ENTREGA" ? "Entrega" : "Devolução"} · {event.quantity} un · {formatDate(event.occurredAt)}
-                      </p>
-                      {uniformDetails(event) ? (
-                        <p className="mt-1 text-[11px] font-semibold text-slate-400">{uniformDetails(event)}</p>
-                      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-slate-50 p-3">
+        <div>
+          <p className="text-xs font-black uppercase text-slate-500">Histórico</p>
+          <p className="mt-1 text-sm font-semibold text-slate-600">
+            {overview.events.length === 0
+              ? "Nenhuma movimentação registrada."
+              : `${overview.events.length} movimentação${overview.events.length === 1 ? "" : "ões"} registrada${overview.events.length === 1 ? "" : "s"}.`}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
+          Ver histórico
+        </Button>
+      </div>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="flex max-h-[82vh] max-w-2xl flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Histórico de uniformes</DialogTitle>
+            <DialogDescription>
+              Entregas e devoluções registradas para {collaborator.username}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {overview.events.length === 0 ? (
+              <p className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+                Nenhuma movimentação registrada.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {overview.events.map((event) => (
+                  <div key={event.id} className="rounded-xl bg-slate-50 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="flex min-w-0 gap-3">
+                        <ItemPhoto item={event} />
+                        <div>
+                          <p className="text-xs font-black">{event.productName}</p>
+                          <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                            {event.eventType === "UNIFORME_ENTREGA" ? "Entrega" : "Devolução"} · {event.quantity} un · {formatDate(event.occurredAt)}
+                          </p>
+                          {uniformDetails(event) ? (
+                            <p className="mt-1 text-[11px] font-semibold text-slate-400">{uniformDetails(event)}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {event.issuedCondition ? <Badge variant="secondary">{conditionLabel(event.issuedCondition)}</Badge> : null}
+                        {event.returnedCondition ? <Badge variant="outline">{conditionLabel(event.returnedCondition)}</Badge> : null}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    {event.issuedCondition ? <Badge variant="secondary">{conditionLabel(event.issuedCondition)}</Badge> : null}
-                    {event.returnedCondition ? <Badge variant="outline">{conditionLabel(event.returnedCondition)}</Badge> : null}
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistoryOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={deliveryOpen}
@@ -366,69 +425,160 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
           if (!open) setDeliveryTermGenerated(false);
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Entregar uniforme</DialogTitle>
             <DialogDescription>Retira a peça do estoque de uniformes e vincula a {collaborator.username}.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Peça disponível</Label>
-              <Select
-                value={deliveryLotId}
-                onValueChange={(value) => {
-                  setDeliveryLotId(value);
-                  setDeliveryTermGenerated(false);
-                }}
-              >
-                <SelectTrigger><SelectValue placeholder="Selecione a peça..." /></SelectTrigger>
-                <SelectContent>
-                  {availableLots.map((lot) => (
-                    <SelectItem key={lot.id} value={lot.id}>
-                      {[lot.productName, uniformDetails(lot), conditionLabel(lot.condition), `${lot.quantity} un`]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Peças disponíveis</Label>
+              {availableLots.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-5">
+                  <div className="flex gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm">
+                      <PackageSearch className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-base font-black text-slate-900">Nenhuma peça disponível para entrega.</p>
+                      <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-500">
+                        Os cards aparecem aqui quando existir lote no estoque próprio de uniformes com quantidade maior que zero e status disponível.
+                      </p>
+                      <div className="mt-3 rounded-2xl bg-white px-4 py-3 text-xs font-bold text-slate-500">
+                        {stockDiagnostics.totalLots === 0 ? (
+                          <span>Nenhum lote foi encontrado no estoque de uniformes.</span>
+                        ) : stockDiagnostics.lotsWithQuantity === 0 ? (
+                          <span>Existem {stockDiagnostics.totalLots} lote(s), mas todos estão com quantidade zerada.</span>
+                        ) : stockDiagnostics.blockedLots > 0 ? (
+                          <span>
+                            Existem {stockDiagnostics.lotsWithQuantity} lote(s) com saldo, mas {stockDiagnostics.blockedLots} não estão com status disponível.
+                          </span>
+                        ) : (
+                          <span>Nenhum lote elegível foi encontrado para esta entrega.</span>
+                        )}
+                      </div>
+                      {canOpenUniformStock ? (
+                        <Button asChild variant="outline" size="sm" className="mt-4">
+                          <Link href="/dashboard/stock/uniforms">
+                            Abrir estoque de uniformes
+                            <ArrowUpRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid max-h-[360px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+                  {availableLots.map((lot) => {
+                    const selected = deliveryLotId === lot.id;
+                    const details = [
+                      lot.apparelType,
+                      lot.apparelColor,
+                      lot.apparelSize ? `Tam. ${lot.apparelSize}` : null,
+                    ].filter(Boolean);
+
+                    return (
+                      <button
+                        key={lot.id}
+                        type="button"
+                        onClick={() => {
+                          setDeliveryLotId(lot.id);
+                          setDeliveryTermGenerated(false);
+                        }}
+                        className={`rounded-2xl border p-3 text-left transition ${
+                          selected
+                            ? "border-[#df2f78] bg-[#fff0f6] shadow-sm ring-2 ring-[#df2f78]/15"
+                            : "border-slate-200 bg-white hover:border-[#df2f78]/40 hover:bg-[#fff8fb]"
+                        }`}
+                      >
+                        <div className="flex gap-3">
+                          <ItemPhoto item={lot} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="line-clamp-2 text-sm font-black text-slate-900">{lot.productName}</p>
+                              {selected ? <CheckCircle2 className="h-5 w-5 shrink-0 text-[#df2f78]" /> : null}
+                            </div>
+                            {details.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {details.map((detail) => (
+                                  <span key={detail} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">
+                                    {detail}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-xs font-semibold text-slate-400">Sem variação cadastrada.</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs font-bold text-slate-500">
+                          <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                            <span>Estoque disponível</span>
+                            <span className="font-black text-slate-900">{lot.quantity} un</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary">{conditionLabel(lot.condition)}</Badge>
+                            {lot.locationName ? (
+                              <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 font-black text-slate-500">
+                                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{lot.locationName}</span>
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Quantidade</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={deliveryQuantity}
-                  onChange={(event) => {
-                    setDeliveryQuantity(Number(event.target.value));
-                    setDeliveryTermGenerated(false);
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Data</Label>
-                <Input
-                  type="date"
-                  value={deliveryDate}
-                  onChange={(event) => {
-                    setDeliveryDate(event.target.value);
-                    setDeliveryTermGenerated(false);
-                  }}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Observação</Label>
-              <Textarea
-                value={deliveryNotes}
-                onChange={(event) => {
-                  setDeliveryNotes(event.target.value);
-                  setDeliveryTermGenerated(false);
-                }}
-              />
-            </div>
+            {availableLots.length > 0 ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Quantidade</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={selectedDeliveryLot?.quantity ?? undefined}
+                      step={1}
+                      value={deliveryQuantity}
+                      onChange={(event) => {
+                        setDeliveryQuantity(Number(event.target.value));
+                        setDeliveryTermGenerated(false);
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data</Label>
+                    <Input
+                      type="date"
+                      value={deliveryDate}
+                      onChange={(event) => {
+                        setDeliveryDate(event.target.value);
+                        setDeliveryTermGenerated(false);
+                      }}
+                    />
+                  </div>
+                </div>
+                {selectedDeliveryLot && deliveryQuantity > selectedDeliveryLot.quantity ? (
+                  <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                    A quantidade informada supera o estoque disponível desta peça.
+                  </p>
+                ) : null}
+                <div className="space-y-2">
+                  <Label>Observação</Label>
+                  <Textarea
+                    value={deliveryNotes}
+                    onChange={(event) => {
+                      setDeliveryNotes(event.target.value);
+                      setDeliveryTermGenerated(false);
+                    }}
+                  />
+                </div>
+              </>
+            ) : null}
             {selectedDeliveryLot ? (
               <div className="rounded-2xl border bg-slate-50 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -473,10 +623,22 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
             ) : null}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeliveryOpen(false)}>Cancelar</Button>
-            <Button onClick={submitDelivery} disabled={saving || !deliveryLotId || deliveryQuantity <= 0}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Confirmar entrega
+            <Button variant="outline" onClick={() => setDeliveryOpen(false)}>
+              {availableLots.length === 0 ? "Fechar" : "Cancelar"}
             </Button>
+            {availableLots.length > 0 ? (
+              <Button
+                onClick={submitDelivery}
+                disabled={
+                  saving
+                  || !deliveryLotId
+                  || deliveryQuantity <= 0
+                  || Boolean(selectedDeliveryLot && deliveryQuantity > selectedDeliveryLot.quantity)
+                }
+              >
+                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Confirmar entrega
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -639,6 +801,12 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UniformInstructionsDialog
+        item={instructionsTarget}
+        open={!!instructionsTarget}
+        onOpenChange={(open) => { if (!open) setInstructionsTarget(null); }}
+      />
     </div>
   );
 }

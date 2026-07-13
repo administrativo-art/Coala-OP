@@ -63,7 +63,9 @@ function timestampToIso(value: unknown): string | null {
 
 export async function GET(request: NextRequest) {
   try {
-    await assertHrAccess(request, "view");
+    const access = await assertHrAccess(request, "view");
+    const ownProfileOnly = access.permissions.dp?.collaborators?.ownProfileOnly === true;
+    const ownEmployeeId = access.userDoc.id;
 
     const snap = await hrDbAdmin.collection(COLLECTION).get();
     const summaries = new Map<string, EmployeeDocumentSummary>();
@@ -74,6 +76,7 @@ export async function GET(request: NextRequest) {
 
       const employeeId = typeof data.employeeId === "string" ? data.employeeId.trim() : "";
       if (!employeeId) continue;
+      if (ownProfileOnly && employeeId !== ownEmployeeId) continue;
 
       const summary = summaries.get(employeeId) ?? emptySummary(employeeId);
       const status = VALID_STATUSES.includes(data.status) ? data.status as DocumentStatus : "received";

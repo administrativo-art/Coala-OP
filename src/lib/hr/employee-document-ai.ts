@@ -36,12 +36,34 @@ const EXTRACTED_FIELD_KEYS = [
   "examDate",
   "fitnessStatus",
   "terminationDate",
+  "dependentName",
+  "dependentBirthDate",
+  "dependentCpf",
+  "dependents",
+  "vaccinationRecordDetected",
+  "schoolAttendanceDetected",
+  "responsibilityTermDetected",
   "signatureDetected",
 ] as const;
 
 const STRING_OR_NULL_SCHEMA = { type: ["string", "null"] };
 const NUMBER_OR_NULL_SCHEMA = { type: ["number", "null"] };
 const BOOLEAN_OR_NULL_SCHEMA = { type: ["boolean", "null"] };
+const DEPENDENTS_SCHEMA = {
+  type: ["array", "null"],
+  maxItems: 12,
+  items: {
+    type: "object",
+    additionalProperties: false,
+    required: ["name", "birthDate", "cpf", "relationship"],
+    properties: {
+      name: STRING_OR_NULL_SCHEMA,
+      birthDate: STRING_OR_NULL_SCHEMA,
+      cpf: STRING_OR_NULL_SCHEMA,
+      relationship: STRING_OR_NULL_SCHEMA,
+    },
+  },
+};
 
 const EXTRACTED_FIELD_SCHEMA: Record<typeof EXTRACTED_FIELD_KEYS[number], unknown> = {
   cpf: STRING_OR_NULL_SCHEMA,
@@ -70,6 +92,13 @@ const EXTRACTED_FIELD_SCHEMA: Record<typeof EXTRACTED_FIELD_KEYS[number], unknow
   examDate: STRING_OR_NULL_SCHEMA,
   fitnessStatus: STRING_OR_NULL_SCHEMA,
   terminationDate: STRING_OR_NULL_SCHEMA,
+  dependentName: STRING_OR_NULL_SCHEMA,
+  dependentBirthDate: STRING_OR_NULL_SCHEMA,
+  dependentCpf: STRING_OR_NULL_SCHEMA,
+  dependents: DEPENDENTS_SCHEMA,
+  vaccinationRecordDetected: BOOLEAN_OR_NULL_SCHEMA,
+  schoolAttendanceDetected: BOOLEAN_OR_NULL_SCHEMA,
+  responsibilityTermDetected: BOOLEAN_OR_NULL_SCHEMA,
   signatureDetected: BOOLEAN_OR_NULL_SCHEMA,
 };
 
@@ -302,6 +331,8 @@ function buildPrompt({
     "Use exclusivamente um documentTypeCode do catálogo. Se nenhum tipo for seguro, use UNKNOWN_DOCUMENT.",
     "Não invente tipos, pastas, colaboradores ou datas. Use null quando não encontrar campo.",
     "Para atestado/documento médico, não extraia diagnóstico, CID ou conteúdo clínico; extraia apenas dados operacionais mínimos.",
+    "Para ASO, extraia examDate como a data real de realização do exame, não a data de upload ou arquivamento.",
+    "Para documentos de salário-família/dependentes, extraia dependentes com nome, nascimento, CPF quando houver, e marque vacinação/frequência escolar/termo apenas quando o próprio documento comprovar isso.",
     expectedEmployeeName ? `Colaborador esperado no ponto de entrada: ${expectedEmployeeName}. Compare com o conteúdo, mas não force correspondência.` : "Não há colaborador esperado.",
     "Catálogo fechado:",
     JSON.stringify(catalogForPrompt()),
@@ -318,6 +349,12 @@ function buildPrompt({
         startDate: "AAAA-MM-DD quando aplicável",
         endDate: "AAAA-MM-DD quando aplicável",
         amountNet: "número quando aplicável",
+        dependentName: "nome do dependente quando houver",
+        dependentBirthDate: "AAAA-MM-DD quando houver",
+        dependents: [{ name: "Nome do dependente", birthDate: "AAAA-MM-DD", cpf: "CPF ou null", relationship: "Filho(a)" }],
+        vaccinationRecordDetected: false,
+        schoolAttendanceDetected: false,
+        responsibilityTermDetected: false,
         signatureDetected: true,
         "demais campos do schema": null,
       },
@@ -378,38 +415,43 @@ async function createOpenAiResponse({
   expectedEmployeeName?: string | null;
 }) {
   const model = process.env.OPENAI_DOCUMENT_MODEL || "gpt-5.6-terra";
+  const requestBody: Record<string, unknown> = {
+    model,
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_file", file_id: fileId },
+          {
+            type: "input_text",
+            text: `${buildPrompt({ expectedEmployeeName })}\n\nArquivo original: ${fileName}`,
+          },
+        ],
+      },
+    ],
+    max_output_tokens: 1800,
+    reasoning: { effort: "low" },
+    text: {
+      format: {
+        type: "json_schema",
+        name: "employee_document_analysis",
+        strict: true,
+        schema: EMPLOYEE_DOCUMENT_ANALYSIS_SCHEMA,
+      },
+    },
+  };
+
+  if (!model.toLowerCase().startsWith("gpt-5")) {
+    requestBody.temperature = 0;
+  }
+
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_file", file_id: fileId },
-            {
-              type: "input_text",
-              text: `${buildPrompt({ expectedEmployeeName })}\n\nArquivo original: ${fileName}`,
-            },
-          ],
-        },
-      ],
-      max_output_tokens: 1800,
-      reasoning: { effort: "low" },
-      temperature: 0,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "employee_document_analysis",
-          strict: true,
-          schema: EMPLOYEE_DOCUMENT_ANALYSIS_SCHEMA,
-        },
-      },
-    }),
+    body: JSON.stringify(requestBody),
   });
   const payload = await response.json() as OpenAiResponse;
   if (!response.ok) {

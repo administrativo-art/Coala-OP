@@ -72,6 +72,12 @@ describe("enforcement — aviso de férias (HR_OPERATIONAL)", () => {
   test("dp.view básico acessa", () => {
     assert.equal(canAccessDocument(doc, basicViewer).allowed, true);
   });
+  test("perfil somente titular não acessa documento operacional de terceiro", () => {
+    assert.equal(canAccessDocument(doc, { ...basicViewer, ownProfileOnly: true, isOwner: false }).allowed, false);
+  });
+  test("perfil somente titular acessa documento operacional próprio", () => {
+    assert.equal(canAccessDocument(doc, { ...basicViewer, ownProfileOnly: true, isOwner: true }).allowed, true);
+  });
 });
 
 describe("subjectFromPermissions", () => {
@@ -85,5 +91,13 @@ describe("subjectFromPermissions", () => {
     assert.equal(s.collaboratorsView, true);
     // manager já é RH elevado → acessa documento restrito
     assert.equal(canAccessDocument({ documentTypeCode: "MEDICAL_CERTIFICATE" }, s).allowed, true);
+  });
+  test("mapeia ownProfileOnly do PermissionSet", () => {
+    const s = subjectFromPermissions(
+      { settings: { manageUsers: false }, dp: { collaborators: { view: true, edit: false, ownProfileOnly: true } } },
+      { isDefaultAdmin: false, isOwner: false },
+    );
+    assert.equal(s.ownProfileOnly, true);
+    assert.equal(canAccessDocument({ documentTypeCode: "VACATION_NOTICE" }, s).allowed, false);
   });
 });

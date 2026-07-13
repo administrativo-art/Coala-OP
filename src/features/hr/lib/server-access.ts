@@ -3,9 +3,11 @@ import { type DecodedIdToken } from "firebase-admin/auth";
 
 import {
   type PermissionSet,
+  type User,
 } from "@/types";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { requireUser } from "@/lib/auth-server";
+import { getUserDisplayName } from "@/lib/user-display";
 
 function canViewHr(permissions: PermissionSet, isDefaultAdmin: boolean) {
   return (
@@ -54,6 +56,8 @@ export type HrAccess = {
   decoded: DecodedIdToken;
   isDefaultAdmin: boolean;
   profileId: string | null;
+  userDoc: User;
+  actorName: string;
   permissions: PermissionSet;
   canView: boolean;
   canManageCatalog: boolean;
@@ -75,11 +79,13 @@ export async function assertHrAccess(
     throw new Error(lookupError);
   }
 
-  const { decoded, permissions, isDefaultAdmin, profileId } = context;
+  const { decoded, permissions, isDefaultAdmin, profileId, userDoc } = context;
   const access: HrAccess = {
     decoded,
     isDefaultAdmin,
     profileId,
+    userDoc,
+    actorName: getUserDisplayName(userDoc, decoded.uid),
     permissions,
     canView: canViewHr(permissions, isDefaultAdmin),
     canManageCatalog: canManageHrCatalog(permissions, isDefaultAdmin),

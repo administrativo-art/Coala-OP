@@ -2,7 +2,7 @@ import {
   addYears, subDays, addDays, isBefore, isAfter,
   differenceInMonths, differenceInDays, startOfDay, parseISO,
 } from 'date-fns';
-import type { DPVacationRecord } from '@/types';
+import type { DPVacationRecord, DPVacationStatus } from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,14 +137,49 @@ export const RISK_PROGRESS_CLASS: Record<VacationRisk, string> = {
 };
 
 export const CYCLE_STATUS_CONFIG: Record<CycleStatus, { label: string; bg: string; text: string }> = {
-  PENDENTE:   { label: 'Pendente agendamento', bg: 'bg-blue-100 dark:bg-blue-900/30',   text: 'text-blue-700 dark:text-blue-300'   },
-  AGENDADO:   { label: 'Agendado',             bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300' },
+  PENDENTE:   { label: 'Pendente de gozo',     bg: 'bg-blue-100 dark:bg-blue-900/30',     text: 'text-blue-700 dark:text-blue-300'   },
+  AGENDADO:   { label: 'Gozo agendado',        bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300' },
   GOZADO:     { label: 'Concluído',            bg: 'bg-green-100 dark:bg-green-900/30',  text: 'text-green-700 dark:text-green-300'  },
   VENCIDO:    { label: 'Vencido',              bg: 'bg-red-100 dark:bg-red-900/30',      text: 'text-red-700 dark:text-red-300'      },
   PARCIAL:    { label: 'Parcial',              bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-300' },
-  AQUISITIVO: { label: 'Em Aquisição',         bg: 'bg-gray-100 dark:bg-gray-800',       text: 'text-gray-600 dark:text-gray-400'    },
+  AQUISITIVO: { label: 'Em aquisição',         bg: 'bg-gray-100 dark:bg-gray-800',       text: 'text-gray-600 dark:text-gray-400'    },
 };
 
 export const CONCESSIVO_SORT_PRIORITY: Record<CycleStatus, number> = {
   VENCIDO: 0, PENDENTE: 1, PARCIAL: 2, AGENDADO: 3, GOZADO: 6, AQUISITIVO: 9,
 };
+
+// ─── Raw color tokens (for conic rings / timeline bars that need real values) ──
+// Semantic Tailwind classes cover badges/borders; these are only for the few
+// spots (progress rings, absolutely-positioned timeline bars) that need a hex.
+
+export const RISK_HEX: Record<VacationRisk, { fg: string; bg: string; label: string }> = {
+  VENCIDA: { fg: '#DC2626', bg: 'rgba(239,68,68,0.13)',  label: 'Vencida' },
+  CRITICA: { fg: '#C2410C', bg: 'rgba(249,115,22,0.15)', label: 'Crítica' },
+  ATENCAO: { fg: '#A16207', bg: 'rgba(234,179,8,0.16)',  label: 'Atenção' },
+  EM_DIA:  { fg: '#15803D', bg: 'rgba(34,197,94,0.14)',  label: 'Em dia' },
+};
+
+export const VACATION_STATUS_HEX: Record<DPVacationStatus, { fg: string; bg: string; label: string }> = {
+  APPROVED: { fg: '#15803D', bg: 'rgba(34,197,94,0.14)',  label: 'Aprovada' },
+  PLANNED:  { fg: '#1D4ED8', bg: 'rgba(59,130,246,0.12)', label: 'Planejada' },
+  PENDING:  { fg: '#A16207', bg: 'rgba(234,179,8,0.16)',  label: 'Pendente' },
+  REJECTED: { fg: '#DC2626', bg: 'rgba(239,68,68,0.13)',  label: 'Rejeitada' },
+};
+
+/** Risk classification for a single cycle (not just the worst open one). */
+export function getCycleRisk(cycle: VacationCycle, today: Date = startOfDay(new Date())): VacationRisk {
+  if (cycle.status === 'VENCIDO' || isAfter(today, cycle.concessivePeriod.end)) return 'VENCIDA';
+  const monthsLeft = differenceInMonths(cycle.concessivePeriod.end, today);
+  if (monthsLeft <= 2) return 'CRITICA';
+  if (monthsLeft <= 5) return 'ATENCAO';
+  return 'EM_DIA';
+}
+
+/** How far along the concessive window a cycle is (0–100). */
+export function getCycleProgress(cycle: VacationCycle, today: Date = startOfDay(new Date())): number {
+  const total = differenceInDays(cycle.concessivePeriod.end, cycle.concessivePeriod.start);
+  if (total <= 0) return 100;
+  const elapsed = differenceInDays(today, cycle.concessivePeriod.start);
+  return Math.max(0, Math.min(100, (elapsed / total) * 100));
+}

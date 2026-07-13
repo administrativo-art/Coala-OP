@@ -26,6 +26,16 @@ function normalizeDate(value: unknown) {
   return text;
 }
 
+function getUniformCareInstructions(
+  primary?: Product["uniformCareInstructions"],
+  fallback?: Product["uniformCareInstructions"],
+) {
+  const hasSteps = (primary ?? []).some((section) =>
+    (section.etapas ?? []).some((step) => String(step.text ?? "").trim()),
+  );
+  return hasSteps ? primary : fallback;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const context = await requireUser(request);
@@ -94,6 +104,7 @@ export async function POST(request: NextRequest) {
       const apparelType = lot.apparelType ?? product.apparelType;
       const apparelSize = lot.apparelSize ?? product.apparelSize;
       const apparelColor = lot.apparelColor ?? product.apparelColor;
+      const uniformCareInstructions = getUniformCareInstructions(lot.uniformCareInstructions, product.uniformCareInstructions);
       const imageUrl = lot.imageUrl ?? product.imageUrl;
       const movement = {
         lotId,
@@ -135,6 +146,7 @@ export async function POST(request: NextRequest) {
         apparelType,
         apparelSize,
         apparelColor,
+        uniformCareInstructions,
         imageUrl,
         registeredByUserId: context.userDoc.id,
         registeredByUserName: context.userDoc.username,
@@ -160,6 +172,7 @@ export async function POST(request: NextRequest) {
         apparelType,
         apparelSize,
         apparelColor,
+        uniformCareInstructions,
         imageUrl,
         createdAt: now,
         updatedAt: now,
