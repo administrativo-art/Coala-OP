@@ -59,6 +59,7 @@ type FamilySalarySummary = {
     name: string | null;
     birthDate: string | null;
     cpf?: string | null;
+    rg?: string | null;
     relationship?: string | null;
     documents: Partial<Record<FamilyDocumentKind, {
       documentId?: string | null;
@@ -152,6 +153,20 @@ const FIELD_MAPPINGS: Mapping[] = [
     label: fieldLabel("employee.birth_date", "Data de nascimento"),
     section: fieldSection("employee.birth_date", "Dados pessoais"),
     normalize: date,
+  },
+  {
+    extractedField: "motherName",
+    fieldKey: "employee.mother_name",
+    label: fieldLabel("employee.mother_name", "Nome da mãe"),
+    section: fieldSection("employee.mother_name", "Dados pessoais"),
+    normalize: normalizedName,
+  },
+  {
+    extractedField: "fatherName",
+    fieldKey: "employee.father_name",
+    label: fieldLabel("employee.father_name", "Nome do pai"),
+    section: fieldSection("employee.father_name", "Dados pessoais"),
+    normalize: normalizedName,
   },
   {
     extractedField: "employer",
@@ -362,7 +377,7 @@ function familyDocumentKinds(documentTypeCode: string | null | undefined, extrac
   return Array.from(kinds);
 }
 
-function extractedDependents(fields: Record<string, unknown>): Array<{ name: string | null; birthDate: string | null; cpf?: string | null; relationship?: string | null }> {
+function extractedDependents(fields: Record<string, unknown>): Array<{ name: string | null; birthDate: string | null; cpf?: string | null; rg?: string | null; relationship?: string | null }> {
   const fromArray = Array.isArray(fields.dependents)
     ? fields.dependents
         .filter(isRecord)
@@ -370,6 +385,7 @@ function extractedDependents(fields: Record<string, unknown>): Array<{ name: str
           name: text(item.name),
           birthDate: dateOnly(item.birthDate),
           cpf: digits(item.cpf),
+          rg: text(item.rg),
           relationship: text(item.relationship),
         }))
     : [];
@@ -378,11 +394,12 @@ function extractedDependents(fields: Record<string, unknown>): Array<{ name: str
     name: text(fields.dependentName),
     birthDate: dateOnly(fields.dependentBirthDate),
     cpf: digits(fields.dependentCpf),
+    rg: text(fields.dependentRg),
     relationship: "Filho(a)",
   };
 
   const merged = [...fromArray];
-  if (single.name || single.birthDate || single.cpf) merged.push(single);
+  if (single.name || single.birthDate || single.cpf || single.rg) merged.push(single);
 
   const seen = new Set<string>();
   return merged.filter((dependent) => {
@@ -440,6 +457,7 @@ function buildFamilySalarySummary(input: {
       name: text(item.name),
       birthDate: dateOnly(item.birthDate),
       cpf: digits(item.cpf),
+      rg: text(item.rg),
       relationship: text(item.relationship),
       documents: isRecord(item.documents) ? item.documents as FamilySalarySummary["dependents"][number]["documents"] : {},
       entitlementEndsAt: dateOnly(item.entitlementEndsAt),
@@ -471,6 +489,7 @@ function buildFamilySalarySummary(input: {
       name: dependent.name ?? previous?.name ?? null,
       birthDate,
       cpf: dependent.cpf ?? previous?.cpf ?? null,
+      rg: dependent.rg ?? previous?.rg ?? null,
       relationship: dependent.relationship ?? previous?.relationship ?? null,
       documents,
       entitlementEndsAt: birthDate ? addMonths(birthDate, 14 * 12) : null,
@@ -491,7 +510,7 @@ function buildFamilySalarySummary(input: {
     const age = dependentAgeYears(dependent.birthDate);
     if (age == null) {
       pendingDependentsCount += 1;
-      notes.push(`${dependent.name ?? "Dependente"} precisa de data de nascimento para cálculo.`);
+      notes.push(`${dependent.name ?? "Filho"} precisa de data de nascimento para cálculo.`);
       return;
     }
     if (age < 0 || age >= 14) return;
@@ -527,7 +546,7 @@ function summaryDisplay(value: unknown, fallback: string) {
     return `${value.records.length} ASO(s) registrados`;
   }
   if (isRecord(value) && Array.isArray(value.dependents)) {
-    return `${value.dependents.length} dependente(s) registrados`;
+    return `${value.dependents.length} filho(s) registrados`;
   }
   return fallback;
 }
@@ -669,9 +688,9 @@ export async function buildEmployeeProfileSuggestions(input: {
     suggestions.push({
       fieldKey: FAMILY_SALARY_SUMMARY_FIELD,
       fieldLabel: fieldLabel(FAMILY_SALARY_SUMMARY_FIELD, "Resumo do salário-família"),
-      section: fieldSection(FAMILY_SALARY_SUMMARY_FIELD, "Dependentes e salário-família"),
+      section: fieldSection(FAMILY_SALARY_SUMMARY_FIELD, "Salário-família"),
       extractedField: "dependents",
-      extractedValue: `${nextFamily.dependents.length} dependente(s) no controle`,
+      extractedValue: `${nextFamily.dependents.length} filho(s) no controle`,
       currentValue: currentRaw ? summaryDisplay(currentRaw, "") : null,
       confidence: input.fieldConfidences?.dependents ?? 1,
       status: currentRaw ? "DIVERGENT" : "MISSING_IN_PROFILE",
@@ -872,15 +891,9 @@ export async function applyEmployeeProfileSuggestions(input: {
     const childrenLabel = under14Count === 0 ? "Nenhum" : under14Count >= 4 ? "4 ou mais" : String(under14Count);
     const familyFields: Array<{ key: string; value: unknown }> = [
       { key: "employee.children_under_14", value: childrenLabel },
+      { key: "employee.children", value: nextFamily.dependents },
       { key: "employee.has_family_salary", value: nextFamily.eligibleDependentsCount > 0 },
     ];
-    const firstEligible = nextFamily.dependents.find((dependent) => {
-      const age = dependentAgeYears(dependent.birthDate);
-      return age != null && age >= 0 && age < 14;
-    });
-    if (firstEligible?.name) familyFields.push({ key: "employee.family_salary_name_1", value: firstEligible.name });
-    if (firstEligible?.birthDate) familyFields.push({ key: "employee.family_salary_birth_1", value: firstEligible.birthDate });
-    if (firstEligible?.entitlementEndsAt) familyFields.push({ key: "employee.family_salary_end_1", value: firstEligible.entitlementEndsAt });
 
     for (const familyField of familyFields) {
       const wroteFamilyField = await writeFieldValue({
@@ -898,9 +911,9 @@ export async function applyEmployeeProfileSuggestions(input: {
     suggestions.push({
       fieldKey: FAMILY_SALARY_SUMMARY_FIELD,
       fieldLabel: fieldLabel(FAMILY_SALARY_SUMMARY_FIELD, "Resumo do salário-família"),
-      section: fieldSection(FAMILY_SALARY_SUMMARY_FIELD, "Dependentes e salário-família"),
+      section: fieldSection(FAMILY_SALARY_SUMMARY_FIELD, "Salário-família"),
       extractedField: "dependents",
-      extractedValue: `${nextFamily.dependents.length} dependente(s) no controle`,
+      extractedValue: `${nextFamily.dependents.length} filho(s) no controle`,
       currentValue: summaryDisplay(readJsonValue(currentFamily), ""),
       confidence: input.fieldConfidences?.dependents ?? 1,
       status: "FILLED_FROM_DOCUMENT",

@@ -379,8 +379,9 @@ function OperationalUnitsPanel() {
 type NestedTab = {
   value: string;
   label: string;
-  title: string;
-  description: string;
+  /** Omitido quando o próprio conteúdo já exibe o título da seção. */
+  title?: string;
+  description?: string;
   content: React.ReactNode;
   children?: NestedTab[];
 };
@@ -494,7 +495,7 @@ function DepartmentSubtabs({
         <SegmentedTabs tabs={childTabs} value={activeTab.value} onChange={setActiveLeafTab} />
       ) : null}
       <div className="min-w-0 space-y-4">
-        <SectionHeader title={activeTab.title} description={activeTab.description} />
+        {activeTab.title ? <SectionHeader title={activeTab.title} description={activeTab.description} /> : null}
         <div className="min-w-0 overflow-x-hidden">{activeTab.content}</div>
       </div>
     </div>
@@ -596,8 +597,6 @@ export default function SettingsPage() {
     {
       value: "users",
       label: "Usuários",
-      title: "Usuários",
-      description: "Gerencie usuários, perfis de acesso e dados complementares do DP.",
       content: <UserManagement />,
     },
     {
@@ -612,14 +611,7 @@ export default function SettingsPage() {
       label: "Organograma",
       title: "Organograma",
       description: "Visualização da estrutura organizacional do departamento pessoal.",
-      content: (
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Esta visualização usa cargos e vínculos dos colaboradores sem substituir o modelo atual de permissões.
-          </p>
-          <DPOrgChart />
-        </div>
-      ),
+      content: <DPOrgChart />,
     },
     {
       value: "login-access",

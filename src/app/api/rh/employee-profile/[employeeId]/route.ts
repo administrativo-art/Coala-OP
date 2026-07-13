@@ -10,6 +10,22 @@ import { canViewField } from "@/types/rh";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const RETIRED_PROFILE_FIELD_KEYS = new Set([
+  "employee.dependent_name",
+  "employee.dependent_relation",
+  "employee.dependent_cpf",
+  "employee.dependent_rg",
+  "employee.family_salary_end_1",
+  "employee.family_salary_birth_1",
+  "employee.family_salary_name_1",
+]);
+
+function withoutRetiredFields(fields: Record<string, FieldMap["fields"][string]>) {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([key]) => !RETIRED_PROFILE_FIELD_KEYS.has(key))
+  ) as FieldMap["fields"];
+}
+
 function canReadRhProfile(actor: Awaited<ReturnType<typeof requireUser>>, employeeId: string) {
   const isOwnerTarget = actor.userDoc.registrationIdBizneo === employeeId || actor.userDoc.id === employeeId;
   if (actor.permissions.dp?.collaborators?.ownProfileOnly === true) {
@@ -42,10 +58,10 @@ async function loadFieldMap(actor: Awaited<ReturnType<typeof requireUser>>): Pro
   const data = snap.data() ?? {};
   return {
     version: data.version ?? "coala-rh-v1.3",
-    fields: {
+    fields: withoutRetiredFields({
       ...DEFAULT_COMPLEMENTARY_FIELDS,
       ...(data.fields ?? {}),
-    },
+    }),
     section_order: data.section_order ?? {},
     profile_blocks: {
       ...DEFAULT_PROFILE_BLOCKS,

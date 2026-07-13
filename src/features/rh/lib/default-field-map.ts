@@ -66,11 +66,11 @@ const SHOE_OPTIONS = ["33", "34", "35", "36", "37", "38", "39", "40", "41", "42"
 const CNH_GROUP: FieldMapEntry["group"] = { id: "documents_cnh", label: "CNH", order: 60 };
 const CNH_VALIDITY_SUBGROUP: FieldMapEntry["subgroup"] = { id: "documents_cnh_validity", label: "Validade da CNH", group_id: "documents_cnh", order: 10 };
 const HAS_CNH_CONDITION: FieldMapEntry["conditionals"] = [{ kind: "show_if", field: "employee.has_cnh", operator: "eq", value: true }];
-const DEPENDENT_GROUP: FieldMapEntry["group"] = {
-  id: "dependents_record",
-  label: "Dependente",
+const CHILD_GROUP: FieldMapEntry["group"] = {
+  id: "children_records",
+  label: "Filhos",
   order: 10,
-  repeatable: { enabled: true, add_label: "Adicionar dependente", item_label: "Dependente" },
+  repeatable: { enabled: true, add_label: "Adicionar filho", item_label: "Filho" },
 };
 
 export const DEFAULT_PROFILE_BLOCKS: Record<string, ProfileBlockConfig> = {
@@ -96,7 +96,7 @@ export const DEFAULT_SYSTEM_FIELDS: Record<string, FieldMapEntry> = {
   "system.uniforms.summary": field({ label: "Uniformes", section: "Uniformes", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
   "system.vacations.summary": field({ label: "Férias", section: "Férias", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
   "system.aso.summary": field({ label: "Resumo de ASOs", section: "Controle de ASOs", type: "multiline", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 10 }),
-  "system.family_salary.summary": field({ label: "Resumo do salário-família", section: "Dependentes e salário-família", type: "multiline", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "system.family_salary.summary": field({ label: "Resumo do salário-família", section: "Salário-família", type: "multiline", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
   "system.transport_voucher.enabled": field({ label: "Vale-transporte", section: "Vale-transporte", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
   "system.behavior.operational": field({ label: "Usuário operacional", section: "Comportamento no sistema", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
   "system.behavior.goals": field({ label: "Participa de metas", section: "Comportamento no sistema", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),
@@ -115,7 +115,8 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.marital_status": field({ label: "Estado civil", section: "Dados pessoais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 90, options: ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União estável"] }),
   "employee.mother_name": field({ label: "Nome da mãe", section: "Dados pessoais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 100 }),
   "employee.father_name": field({ label: "Nome do pai", section: "Dados pessoais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 110 }),
-  "employee.children_under_14": field({ label: "Filhos menores de 14 anos", section: "Dependentes e salário-família", type: "single_select", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 10, options: ["Nenhum", "1", "2", "3", "4 ou mais"] }),
+  "employee.children_under_14": field({ label: "Quantidade de filhos menores de 14 anos", section: "Salário-família", type: "single_select", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 10, options: ["Nenhum", "1", "2", "3", "4 ou mais"] }),
+  "employee.children": field({ label: "Cadastro de filhos", section: "Salário-família", type: "multiline", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20, group: CHILD_GROUP }),
 
   "employee.cpf": field({ label: "CPF", section: "Documentos", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 10 }),
   "employee.pis": field({ label: "PIS", section: "Documentos", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),
@@ -158,11 +159,6 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.emergency_relation": field({ label: "Grau de parentesco", section: "Contatos de emergência", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: true, order: 30, options: ["Mãe/Pai", "Cônjuge", "Filho(a)", "Irmão/Irmã", "Parente", "Amigo(a)", "Outro"] }),
   "employee.emergency_medical": field({ label: "Alergias e dados médicos", section: "Contatos de emergência", type: "multiline", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 40 }),
 
-  "employee.dependent_name": field({ label: "Nome do dependente", section: "Dependentes e salário-família", type: "text", visibility: "public", employeeVisible: false, employeeEditable: false, order: 20, group: DEPENDENT_GROUP }),
-  "employee.dependent_relation": field({ label: "Grau de parentesco", section: "Dependentes e salário-família", type: "single_select", visibility: "public", employeeVisible: false, employeeEditable: false, order: 30, options: ["Filho(a)", "Enteado(a)", "Cônjuge", "Outro"], group: DEPENDENT_GROUP }),
-  "employee.dependent_cpf": field({ label: "CPF do dependente", section: "Dependentes e salário-família", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 40, group: DEPENDENT_GROUP }),
-  "employee.dependent_rg": field({ label: "RG do dependente", section: "Dependentes e salário-família", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 50, group: DEPENDENT_GROUP }),
-
   "employee.bank_name": field({ label: "Banco", section: "Dados bancários", type: "single_select", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10, options: ["Banco do Brasil", "Bradesco", "Caixa", "Itaú", "Santander", "Nubank", "Inter", "Outro"] }),
   "employee.bank_agency": field({ label: "Agência", section: "Dados bancários", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),
   "employee.bank_account": field({ label: "Conta corrente", section: "Dados bancários", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 30 }),
@@ -182,8 +178,5 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.uniform_cap_qty": field({ label: "Boné - Quantidade entregue", section: "Uniforme", type: "number", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 70 }),
   "employee.uniform_last_delivery": field({ label: "Data da última entrega", section: "Uniforme", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 80 }),
 
-  "employee.has_family_salary": field({ label: "Tem salário-família?", section: "Dependentes e salário-família", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 60 }),
-  "employee.family_salary_end_1": field({ label: "Data de encerramento do filho 1", section: "Dependentes e salário-família", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 70 }),
-  "employee.family_salary_birth_1": field({ label: "Nascimento do filho 1", section: "Dependentes e salário-família", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 80 }),
-  "employee.family_salary_name_1": field({ label: "Nome do filho 1", section: "Dependentes e salário-família", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 90 }),
+  "employee.has_family_salary": field({ label: "Tem salário-família?", section: "Salário-família", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 30 }),
 };

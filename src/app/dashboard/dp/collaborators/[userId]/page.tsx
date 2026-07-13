@@ -38,6 +38,7 @@ import { canViewField, normalizeFieldVisibility } from "@/types/rh";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CYCLE_STATUS_CONFIG, getVacationCycleHistory, type VacationCycle } from "@/lib/utils/vacation-logic";
 import { FieldValue } from "@/features/rh/components/FieldValue";
+import { callOnFieldUpdate } from "@/features/rh/lib/rh-client";
 import { DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -142,14 +143,14 @@ const RH_SECTION_LABELS: Record<string, string> = {
   "Contatos de emergência": "Contatos de emergência",
   "Inclusao & Diversidade": "Inclusão e diversidade",
   "Inclusão e diversidade": "Inclusão e diversidade",
-  "Dependentes": "Dependentes e salário-família",
-  "Dependentes e salario familia": "Dependentes e salário-família",
-  "Dependentes e salário-família": "Dependentes e salário-família",
+  "Dependentes": "Salário-família",
+  "Dependentes e salario familia": "Salário-família",
+  "Dependentes e salário-família": "Salário-família",
   "Controle de ASOs": "Controle de ASOs",
   "Dados Bancarios": "Dados bancários",
   "Dados bancários": "Dados bancários",
-  "Salario Familia": "Dependentes e salário-família",
-  "Salário-família": "Dependentes e salário-família",
+  "Salario Familia": "Salário-família",
+  "Salário-família": "Salário-família",
 };
 
 const MERGED_PERSONAL_DOCUMENTS_SECTION = "Dados pessoais";
@@ -217,7 +218,7 @@ const SYSTEM_FIELD_DEFAULTS: Record<string, FieldMapEntry> = {
   [SYSTEM_FIELD_KEYS.uniforms]: systemField("Uniformes", "Uniformes", 10, "restricted_total"),
   [SYSTEM_FIELD_KEYS.vacations]: systemField("Férias", "Férias", 10, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.asoSummary]: systemField("Resumo de ASOs", "Controle de ASOs", 10, "confidential"),
-  [SYSTEM_FIELD_KEYS.familySalarySummary]: systemField("Resumo do salário-família", "Dependentes e salário-família", 10, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.familySalarySummary]: systemField("Resumo do salário-família", "Salário-família", 10, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.transportVoucher]: systemField("Vale-transporte", "Vale-transporte", 10, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.behaviorOperational]: systemField("Usuário operacional", "Comportamento no sistema", 10, "restricted_total"),
   [SYSTEM_FIELD_KEYS.behaviorGoals]: systemField("Participa de metas", "Comportamento no sistema", 20, "restricted_total"),
@@ -232,6 +233,31 @@ const SYSTEM_NAV_LINKS = [
   { id: "system.transport_voucher", label: "Vale-transporte" },
   { id: "system.behavior", label: "Comportamento no sistema" },
 ] as const;
+
+const ASO_PROFILE_FIELD_KEYS = [
+  "employee.aso_admission_date",
+  "employee.aso_dismissal_date",
+  "employee.aso_periodic_1",
+  "employee.aso_periodic_2",
+] as const;
+
+const FAMILY_SALARY_PROFILE_FIELD_KEYS = [
+  "employee.children_under_14",
+  "employee.children",
+  "employee.dependent_name",
+  "employee.dependent_relation",
+  "employee.dependent_cpf",
+  "employee.dependent_rg",
+  "employee.has_family_salary",
+  "employee.family_salary_end_1",
+  "employee.family_salary_birth_1",
+  "employee.family_salary_name_1",
+] as const;
+
+const SYSTEM_PANEL_PROFILE_FIELD_KEYS = new Set<string>([
+  ...ASO_PROFILE_FIELD_KEYS,
+  ...FAMILY_SALARY_PROFILE_FIELD_KEYS,
+]);
 
 function systemField(label: string, section: string, order: number, visibility: FieldVisibility): FieldMapEntry {
   return {
@@ -249,6 +275,10 @@ function systemField(label: string, section: string, order: number, visibility: 
 
 function isSystemStaticField(key: string) {
   return key.startsWith("system.") || Object.prototype.hasOwnProperty.call(SYSTEM_FIELD_DEFAULTS, key);
+}
+
+function isSystemPanelProfileField(key: string) {
+  return SYSTEM_PANEL_PROFILE_FIELD_KEYS.has(key);
 }
 
 function fieldVisibilityIcon(visibility: FieldVisibility) {
@@ -764,7 +794,12 @@ type AsoControlSummary = {
   periodicityMonths?: number;
 };
 
+type AsoPanelRecord = NonNullable<AsoControlSummary["records"]>[number] & {
+  source?: "summary" | "legacy_field";
+};
+
 type FamilySalaryControlSummary = {
+  version?: number;
   dependents?: Array<{
     key?: string;
     name?: string | null;
@@ -783,6 +818,7 @@ type FamilySalaryControlSummary = {
     quotaPerDependent?: number;
   };
   notes?: string[];
+  updatedAt?: string;
 };
 
 function fieldJsonValue(fv?: EmployeeFieldValue): unknown {
@@ -796,6 +832,24 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 function profileJson<T>(fieldValues: Record<string, EmployeeFieldValue>, key: string): T | null {
   const raw = fieldJsonValue(fieldValues[key]);
   return isObjectRecord(raw) ? raw as T : null;
+}
+
+function fieldDateIso(fv?: EmployeeFieldValue) {
+  const raw = fv?.value_date ?? fv?.value_text;
+  if (!raw) return null;
+  const value = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T12:00:00` : raw;
+  const date = toDate(value);
+  return date ? format(date, "yyyy-MM-dd") : null;
+}
+
+function fieldTextLabel(fv?: EmployeeFieldValue) {
+  if (!fv) return null;
+  if (typeof fv.value_text === "string" && fv.value_text.trim()) return fv.value_text.trim();
+  if (typeof fv.value_number === "number") return String(fv.value_number);
+  if (typeof fv.value_boolean === "boolean") return fv.value_boolean ? "Sim" : "Não";
+  if (Array.isArray(fv.value_json)) return fv.value_json.filter(Boolean).join(", ") || null;
+  if (typeof fv.value_json === "string" && fv.value_json.trim()) return fv.value_json.trim();
+  return null;
 }
 
 function formatIsoDate(value?: string | null) {
@@ -822,14 +876,19 @@ function asoTypeLabel(type?: string) {
   return "ASO";
 }
 
-function asoStatus(summary: AsoControlSummary | null) {
+function asoStatus(summary: AsoControlSummary | null, hasLegacyAdmission = false) {
   if (!summary || summary.admissionMissing || summary.status === "missing_admission") {
+    if (hasLegacyAdmission) return { label: "ASO antigo a confirmar", tone: "warn" as const };
     return { label: "ASO admissional pendente", tone: "bad" as const };
   }
   if (summary.status === "overdue") return { label: "Periódico vencido", tone: "bad" as const };
   if (summary.status === "due_soon") return { label: "Periódico próximo", tone: "warn" as const };
   if (summary.status === "dismissal_recorded") return { label: "Demissional registrado", tone: "default" as const };
   return { label: "Em dia", tone: "good" as const };
+}
+
+function asoRecordKey(record: Pick<AsoPanelRecord, "type" | "examDate">) {
+  return `${record.type ?? ""}|${record.examDate ?? ""}`;
 }
 
 function dependentAge(birthDate?: string | null) {
@@ -856,6 +915,181 @@ function familyDocPresent(documents: Record<string, unknown> | undefined, label:
   return false;
 }
 
+const FAMILY_DOCUMENT_LABELS = ["certidão", "vacinação", "frequência escolar"] as const;
+
+function familyDocStatusItems(birthDate: string | null | undefined, documents: Record<string, unknown> | undefined) {
+  const required = new Set(familyRequiredDocs(birthDate));
+  return FAMILY_DOCUMENT_LABELS.map((label) => {
+    const requiredByAge = required.has(label);
+    const sent = familyDocPresent(documents, label);
+    const status = requiredByAge ? (sent ? "Enviada" : "Pendente") : "Não exigida";
+    const className = status === "Enviada"
+      ? "bg-emerald-50 text-emerald-700"
+      : status === "Pendente"
+        ? "bg-amber-50 text-amber-700"
+        : "bg-white text-[#777784] ring-1 ring-[#e8e8ec]";
+    return { label, status, className };
+  });
+}
+
+type FamilyChildRecord = NonNullable<FamilySalaryControlSummary["dependents"]>[number] & {
+  rg?: string | null;
+};
+
+type ChildDraft = {
+  key: string;
+  name: string;
+  birthDate: string;
+  cpf: string;
+  rg: string;
+  documents?: Record<string, unknown>;
+};
+
+function childRecordKey(name: string | null | undefined, birthDate: string | null | undefined, cpf: string | null | undefined, index: number) {
+  const base = [cpf, name, birthDate].map((value) => value?.trim()).filter(Boolean).join("-") || `filho-${index + 1}`;
+  return base
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizeChildRecord(value: unknown, index: number): FamilyChildRecord | null {
+  if (!isObjectRecord(value)) return null;
+  const name = typeof value.name === "string" && value.name.trim() ? value.name.trim() : null;
+  const birthDate = typeof value.birthDate === "string" && value.birthDate.trim() ? value.birthDate.slice(0, 10) : null;
+  const cpf = typeof value.cpf === "string" && value.cpf.trim() ? value.cpf.trim() : null;
+  const rg = typeof value.rg === "string" && value.rg.trim() ? value.rg.trim() : null;
+  const relationship = typeof value.relationship === "string" && value.relationship.trim() ? value.relationship.trim() : "Filho(a)";
+  const documents = isObjectRecord(value.documents) ? value.documents : {};
+  const entitlementEndsAt = typeof value.entitlementEndsAt === "string" && value.entitlementEndsAt.trim()
+    ? value.entitlementEndsAt.slice(0, 10)
+    : childEntitlementEndsAt(birthDate);
+  const key = typeof value.key === "string" && value.key.trim()
+    ? value.key.trim()
+    : childRecordKey(name, birthDate, cpf, index);
+
+  return { key, name, birthDate, cpf, rg, relationship, documents, entitlementEndsAt };
+}
+
+function childEntitlementEndsAt(birthDate?: string | null) {
+  if (!birthDate) return null;
+  const date = toDate(`${birthDate}T12:00:00`);
+  if (!date) return null;
+  date.setFullYear(date.getFullYear() + 14);
+  return format(date, "yyyy-MM-dd");
+}
+
+function childRecordsFromProfile(fieldValues: Record<string, EmployeeFieldValue>, summary: FamilySalaryControlSummary | null) {
+  const rawChildren = fieldValues["employee.children"]?.value_json;
+  const source = Array.isArray(rawChildren) ? rawChildren : summary?.dependents ?? [];
+  return source
+    .map((item, index) => normalizeChildRecord(item, index))
+    .filter((item): item is FamilyChildRecord => Boolean(item));
+}
+
+function childDraftsFromRecords(records: FamilyChildRecord[]) {
+  return records.map((record, index) => ({
+    key: record.key || childRecordKey(record.name, record.birthDate, record.cpf, index),
+    name: record.name ?? "",
+    birthDate: record.birthDate ?? "",
+    cpf: record.cpf ?? "",
+    rg: record.rg ?? "",
+    documents: record.documents,
+  }));
+}
+
+function emptyChildDraft(index: number): ChildDraft {
+  return { key: `filho_${Date.now()}_${index}`, name: "", birthDate: "", cpf: "", rg: "", documents: {} };
+}
+
+function resizeChildDrafts(current: ChildDraft[], count: number) {
+  const safeCount = Math.max(0, Math.min(12, Math.trunc(count)));
+  if (safeCount <= current.length) return current.slice(0, safeCount);
+  return [
+    ...current,
+    ...Array.from({ length: safeCount - current.length }, (_, index) => emptyChildDraft(current.length + index)),
+  ];
+}
+
+function childCountLabel(count: number) {
+  if (count <= 0) return "Nenhum";
+  if (count >= 4) return "4 ou mais";
+  return String(count);
+}
+
+function childRecordsFromDrafts(drafts: ChildDraft[]) {
+  return drafts.map((draft, index) => {
+    const name = draft.name.trim();
+    const birthDate = draft.birthDate.trim();
+    const cpf = draft.cpf.trim();
+    const rg = draft.rg.trim();
+    return {
+      key: draft.key || childRecordKey(name, birthDate, cpf, index),
+      name: name || null,
+      birthDate: birthDate || null,
+      cpf: cpf || null,
+      rg: rg || null,
+      relationship: "Filho(a)",
+      documents: draft.documents ?? {},
+      entitlementEndsAt: childEntitlementEndsAt(birthDate),
+    } satisfies FamilyChildRecord;
+  });
+}
+
+function countChildrenUnder14(records: FamilyChildRecord[]) {
+  return records.filter((record) => {
+    const age = dependentAge(record.birthDate);
+    return age == null || (age >= 0 && age < 14);
+  }).length;
+}
+
+function buildManualFamilySalarySummary(previous: FamilySalaryControlSummary | null, records: FamilyChildRecord[]): FamilySalaryControlSummary {
+  let eligibleDependentsCount = 0;
+  let pendingDependentsCount = 0;
+  const notes: string[] = [];
+
+  records.forEach((record) => {
+    const age = dependentAge(record.birthDate);
+    if (age == null) {
+      pendingDependentsCount += 1;
+      notes.push(`${record.name ?? "Filho"} precisa de data de nascimento para cálculo.`);
+      return;
+    }
+    if (age < 0 || age >= 14) return;
+    const missing = familyRequiredDocs(record.birthDate).filter((label) => !familyDocPresent(record.documents, label));
+    if (missing.length === 0) eligibleDependentsCount += 1;
+    else {
+      pendingDependentsCount += 1;
+      notes.push(`${record.name ?? "Filho"} pendente: ${missing.join(", ")}.`);
+    }
+  });
+
+  const status = eligibleDependentsCount > 0
+    ? "eligible_ready"
+    : pendingDependentsCount > 0
+      ? "pending_documents"
+      : records.length > 0
+        ? "no_eligible_dependents"
+        : "needs_review";
+
+  return {
+    version: 1,
+    dependents: records,
+    eligibleDependentsCount,
+    pendingDependentsCount,
+    status,
+    salaryLimit: previous?.salaryLimit ?? {
+      year: 2026,
+      monthlyRemunerationLimit: 1980.38,
+      quotaPerDependent: 67.54,
+    },
+    notes,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function EmployeeAsoControlPanel({
   employeeId,
   reloadKey,
@@ -878,8 +1112,22 @@ function EmployeeAsoControlPanel({
   const summary = profileState.status === "error"
     ? null
     : profileJson<AsoControlSummary>(profileState.data.fieldValues, SYSTEM_FIELD_KEYS.asoSummary);
-  const status = asoStatus(summary);
-  const records = (summary?.records ?? []).slice(0, 5);
+  const profileFieldValues: Record<string, EmployeeFieldValue> = profileState.status === "error" ? {} : profileState.data.fieldValues;
+  const summaryRecords: AsoPanelRecord[] = (summary?.records ?? []).map((record) => ({ ...record, source: "summary" }));
+  const summaryRecordKeys = new Set(summaryRecords.map(asoRecordKey));
+  const legacyRecords: AsoPanelRecord[] = [
+    { key: "employee.aso_admission_date", type: "admission" },
+    { key: "employee.aso_dismissal_date", type: "dismissal" },
+    { key: "employee.aso_periodic_1", type: "periodic" },
+    { key: "employee.aso_periodic_2", type: "periodic" },
+  ].flatMap(({ key, type }) => {
+    const examDate = fieldDateIso(profileFieldValues[key]);
+    if (!examDate) return [];
+    const record = { type, examDate, source: "legacy_field" as const };
+    return summaryRecordKeys.has(asoRecordKey(record)) ? [] : [record];
+  });
+  const status = asoStatus(summary, legacyRecords.some((record) => record.type === "admission"));
+  const records = [...summaryRecords, ...legacyRecords].slice(0, 5);
 
   return (
     <Panel title="Controle de ASOs" icon={FileText} action={action}>
@@ -911,6 +1159,9 @@ function EmployeeAsoControlPanel({
                 <div>
                   <p className="text-sm font-black text-[#24242e]">{asoTypeLabel(record.type)}</p>
                   <p className="mt-0.5 text-xs font-semibold text-[#777784]">{formatIsoDate(record.examDate)}</p>
+                  {record.source === "legacy_field" ? (
+                    <p className="mt-1 text-[11px] font-bold text-amber-700">Campo antigo/manual: confirme pelo ASO anexado.</p>
+                  ) : null}
                 </div>
                 {record.fitnessStatus ? <Chip tone="default">{record.fitnessStatus}</Chip> : null}
               </div>
@@ -928,12 +1179,19 @@ function EmployeeFamilySalaryPanel({
   employeeId,
   reloadKey,
   action,
+  canEdit,
 }: {
   employeeId: string;
   reloadKey?: number;
   action?: React.ReactNode;
+  canEdit?: boolean;
 }) {
-  const profileState = useEmployeeProfile(employeeId, reloadKey);
+  const [profileReloadKey, setProfileReloadKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [drafts, setDrafts] = useState<ChildDraft[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const profileState = useEmployeeProfile(employeeId, (reloadKey ?? 0) + profileReloadKey);
 
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
@@ -946,7 +1204,9 @@ function EmployeeFamilySalaryPanel({
   const summary = profileState.status === "error"
     ? null
     : profileJson<FamilySalaryControlSummary>(profileState.data.fieldValues, SYSTEM_FIELD_KEYS.familySalarySummary);
-  const dependents = summary?.dependents ?? [];
+  const profileFieldValues: Record<string, EmployeeFieldValue> = profileState.status === "error" ? {} : profileState.data.fieldValues;
+  const children = childRecordsFromProfile(profileFieldValues, summary);
+  const childrenUnder14 = fieldTextLabel(profileFieldValues["employee.children_under_14"]);
   const limit = summary?.salaryLimit?.monthlyRemunerationLimit ?? 1980.38;
   const quota = summary?.salaryLimit?.quotaPerDependent ?? 67.54;
   const statusTone = (summary?.eligibleDependentsCount ?? 0) > 0
@@ -958,17 +1218,67 @@ function EmployeeFamilySalaryPanel({
     ? "Possível direito"
     : (summary?.pendingDependentsCount ?? 0) > 0
       ? "Pendente documentação"
-      : "Sem dependente elegível";
+      : "Sem filho elegível";
+  const childCount = editing ? drafts.length : countChildrenUnder14(children);
+
+  const startEditing = () => {
+    setDrafts(childDraftsFromRecords(children));
+    setMessage(null);
+    setEditing(true);
+  };
+
+  const updateDraft = (index: number, patch: Partial<ChildDraft>) => {
+    setDrafts((current) => current.map((draft, draftIndex) => draftIndex === index ? { ...draft, ...patch } : draft));
+  };
+
+  const updateChildCount = (count: number) => {
+    setDrafts((current) => resizeChildDrafts(current, count));
+  };
+
+  const saveChildren = async () => {
+    if (saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const records = childRecordsFromDrafts(drafts);
+      const nextSummary = buildManualFamilySalarySummary(summary, records);
+      const under14Count = countChildrenUnder14(records);
+      const eligibleCount = nextSummary.eligibleDependentsCount ?? 0;
+      await callOnFieldUpdate({ employee_id: employeeId, field_key: "employee.children", value: records });
+      await callOnFieldUpdate({ employee_id: employeeId, field_key: "employee.children_under_14", value: childCountLabel(under14Count) });
+      await callOnFieldUpdate({ employee_id: employeeId, field_key: "employee.has_family_salary", value: eligibleCount > 0 });
+      await callOnFieldUpdate({ employee_id: employeeId, field_key: SYSTEM_FIELD_KEYS.familySalarySummary, value: nextSummary });
+      setEditing(false);
+      setProfileReloadKey((value) => value + 1);
+      setMessage("Filhos atualizados.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha ao salvar filhos.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Panel title="Salário-família" icon={IdCard} action={action}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-4">
           <div>
-            <p className="text-sm font-black text-[#1d1d26]">Controle por dependente</p>
-            <p className="mt-1 text-xs font-semibold text-[#777784]">Cota 2026: R$ {quota.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} por dependente elegível.</p>
+            <p className="text-sm font-black text-[#1d1d26]">Controle por filho</p>
+            <p className="mt-1 text-xs font-semibold text-[#777784]">Cota 2026: R$ {quota.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} por filho elegível.</p>
           </div>
-          <Chip tone={statusTone}>{statusLabel}</Chip>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Chip tone={statusTone}>{statusLabel}</Chip>
+            {canEdit && !editing ? (
+              <button
+                type="button"
+                onClick={startEditing}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Editar filhos
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <p className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-xs font-bold text-amber-800">
@@ -978,52 +1288,173 @@ function EmployeeFamilySalaryPanel({
         <div className="grid gap-2 sm:grid-cols-3">
           <MiniStat label="Elegíveis" value={String(summary?.eligibleDependentsCount ?? 0)} />
           <MiniStat label="Pendentes" value={String(summary?.pendingDependentsCount ?? 0)} />
-          <MiniStat label="Dependentes" value={String(dependents.length)} />
+          <MiniStat label="Filhos < 14" value={editing ? String(childCount) : (childrenUnder14 ?? String(childCount))} />
         </div>
 
-        {dependents.length > 0 ? (
+        {editing ? (
+          <div className="space-y-3 rounded-2xl border border-[#e8e8ec] bg-white p-4">
+            <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-end">
+              <div>
+                <label className="text-xs font-black text-[#777784]">Quantidade de filhos</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={12}
+                  value={drafts.length}
+                  onChange={(event) => updateChildCount(Number(event.target.value))}
+                  className="mt-1 h-11 w-full rounded-xl border border-[#dedfe4] bg-[#fbfbfc] px-3 text-sm font-black text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                />
+              </div>
+              <p className="text-xs font-semibold text-[#777784]">
+                A idade define os requisitos de certidão, vacinação e frequência escolar. O upload dos documentos atualiza os comprovantes do filho.
+              </p>
+            </div>
+
+            {drafts.length > 0 ? (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {drafts.map((draft, index) => {
+                  const age = dependentAge(draft.birthDate);
+                  const required = familyRequiredDocs(draft.birthDate);
+                  const documentStatuses = familyDocStatusItems(draft.birthDate, draft.documents);
+                  const entitlementEndsAt = childEntitlementEndsAt(draft.birthDate);
+                  return (
+                    <div key={draft.key} className="rounded-2xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-[#1d1d26]">Filho {index + 1}</p>
+                        <Chip tone={age != null && age >= 14 ? "default" : required.length > 0 ? "warn" : "default"}>
+                          {age == null ? "Nascimento pendente" : age >= 14 ? "Fora da idade" : `${age} ano${age === 1 ? "" : "s"}`}
+                        </Chip>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-xs font-black text-[#777784]">
+                          Nome
+                          <input
+                            value={draft.name}
+                            onChange={(event) => updateDraft(index, { name: event.target.value })}
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                          />
+                        </label>
+                        <label className="text-xs font-black text-[#777784]">
+                          Data de nascimento
+                          <input
+                            type="date"
+                            value={draft.birthDate}
+                            onChange={(event) => updateDraft(index, { birthDate: event.target.value })}
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                          />
+                        </label>
+                        <label className="text-xs font-black text-[#777784]">
+                          CPF
+                          <input
+                            value={draft.cpf}
+                            onChange={(event) => updateDraft(index, { cpf: event.target.value })}
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                          />
+                        </label>
+                        <label className="text-xs font-black text-[#777784]">
+                          RG
+                          <input
+                            value={draft.rg}
+                            onChange={(event) => updateDraft(index, { rg: event.target.value })}
+                            className="mt-1 h-10 w-full rounded-xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78] focus:ring-2 focus:ring-[#f8bfd7]"
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {entitlementEndsAt ? <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-black text-[#777784] ring-1 ring-[#e8e8ec]">Até {formatIsoDate(entitlementEndsAt)}</span> : null}
+                        {documentStatuses.map((item) => (
+                          <span
+                            key={item.label}
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-black ${item.className}`}
+                          >
+                            {item.label}: {item.status}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Sem filhos cadastrados.</p>
+            )}
+
+            {message ? (
+              <p className={`rounded-xl px-3 py-2 text-xs font-bold ${message.startsWith("Falha") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+                {message}
+              </p>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(false);
+                  setMessage(null);
+                }}
+                disabled={saving}
+                className="rounded-xl border border-[#dedfe4] bg-white px-4 py-2 text-sm font-black text-[#555563] hover:bg-[#f7f7f9] disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveChildren()}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#df2f78] px-4 py-2 text-sm font-black text-white hover:bg-[#c92768] disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Salvar filhos
+              </button>
+            </div>
+          </div>
+        ) : children.length > 0 ? (
           <div className="space-y-2">
-            {dependents.map((dependent, index) => {
+            {children.map((dependent, index) => {
               const age = dependentAge(dependent.birthDate);
               const required = familyRequiredDocs(dependent.birthDate);
               const missing = required.filter((label) => !familyDocPresent(dependent.documents, label));
+              const documentStatuses = familyDocStatusItems(dependent.birthDate, dependent.documents);
               const eligibleByAge = age != null && age >= 0 && age < 14;
               return (
                 <div key={dependent.key ?? `${dependent.name}-${index}`} className="rounded-xl border border-[#e8e8ec] bg-white p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-black text-[#24242e]">{dependent.name ?? "Dependente sem nome"}</p>
+                      <p className="text-sm font-black text-[#24242e]">{dependent.name ?? "Filho sem nome"}</p>
                       <p className="mt-0.5 text-xs font-semibold text-[#777784]">
                         {dependent.birthDate ? `${formatIsoDate(dependent.birthDate)} · ${age ?? "-"} ano${age === 1 ? "" : "s"}` : "Nascimento pendente"}
                       </p>
+                      {dependent.entitlementEndsAt ? (
+                        <p className="mt-0.5 text-[11px] font-bold text-[#777784]">Conta para salário-família até {formatIsoDate(dependent.entitlementEndsAt)}</p>
+                      ) : null}
                     </div>
                     <Chip tone={!eligibleByAge ? "default" : missing.length === 0 ? "good" : "warn"}>
                       {!eligibleByAge ? "Fora da idade" : missing.length === 0 ? "Documentação ok" : "Pendente"}
                     </Chip>
                   </div>
-                  {required.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {required.map((label) => (
-                        <span
-                          key={label}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-black ${
-                            familyDocPresent(dependent.documents, label)
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-amber-50 text-amber-700"
-                          }`}
-                        >
-                          {label}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {documentStatuses.map((item) => (
+                      <span
+                        key={item.label}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-black ${item.className}`}
+                      >
+                        {item.label}: {item.status}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Nenhum dependente identificado pelo copiloto ainda.</p>
+          <p className="rounded-2xl bg-[#f4f4f6] p-4 text-sm font-semibold text-[#777784]">Nenhum filho cadastrado para salário-família ainda.</p>
         )}
+
+        {!editing && message ? (
+          <p className={`rounded-xl px-3 py-2 text-xs font-bold ${message.startsWith("Falha") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+            {message}
+          </p>
+        ) : null}
       </div>
     </Panel>
   );
@@ -1315,6 +1746,7 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
     Record<string, EmployeeProfileFieldRow[]>
   >((acc, [key, entry]) => {
     if (isSystemStaticField(key)) return acc;
+    if (isSystemPanelProfileField(key)) return acc;
     if (isLegacyUniformField(key, entry)) return acc;
     if (!canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix) || !conditionalMatches(entry, fieldValues)) return acc;
     const section = profileDisplaySection(entry.section);
@@ -1589,7 +2021,7 @@ function EmployeeProfileHeaderSummary({
   };
   const visibleFields = Object.entries(fieldMap.fields)
     .filter(([key, entry]) => {
-      if (isSystemStaticField(key) || isLegacyUniformField(key, entry)) return false;
+      if (isSystemStaticField(key) || isSystemPanelProfileField(key) || isLegacyUniformField(key, entry)) return false;
       return canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix) && conditionalMatches(entry, fieldValues);
     });
   const filledFields = visibleFields.filter(([key]) => fieldHasValue(fieldValues[key])).length;
@@ -1882,10 +2314,11 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   };
 
   function systemFieldEntry(key: string) {
-    const fallback = SYSTEM_FIELD_DEFAULTS[key] ?? systemField(key, "Sistema", 999, "confidential");
+    const configured = profileLayout?.fields?.[key];
+    const fallback = SYSTEM_FIELD_DEFAULTS[key] ?? configured ?? systemField(key, "Sistema", 999, "confidential");
     return {
       ...fallback,
-      ...(profileLayout?.fields?.[key] ?? {}),
+      ...(configured ?? {}),
       section: fallback.section,
       order: fallback.order,
     } as FieldMapEntry;
@@ -2032,7 +2465,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     uniforms: [SYSTEM_FIELD_KEYS.uniforms],
     vacations: [SYSTEM_FIELD_KEYS.vacations],
     asoControl: [SYSTEM_FIELD_KEYS.asoSummary],
-    familySalary: [SYSTEM_FIELD_KEYS.familySalarySummary],
+    familySalary: [SYSTEM_FIELD_KEYS.familySalarySummary, "employee.children_under_14", "employee.children", "employee.has_family_salary"],
     transportVoucher: [SYSTEM_FIELD_KEYS.transportVoucher],
     behavior: [SYSTEM_FIELD_KEYS.behaviorOperational, SYSTEM_FIELD_KEYS.behaviorGoals],
   };
@@ -2281,6 +2714,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           employeeId={collaborator.registrationIdBizneo || collaborator.id}
           reloadKey={fieldMapReloadKey}
           action={systemBlockVisibilityControl(systemBlockKeys.familySalary)}
+          canEdit={canManageSystemFieldVisibility}
         />
       ),
     },

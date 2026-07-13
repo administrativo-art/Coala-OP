@@ -1435,13 +1435,13 @@ export function UserManagement({
                     <p className="text-[11px] font-black uppercase text-slate-500">{stat.label}</p>
                     <span className={`h-8 w-1 rounded-full ${stat.color}`} />
                   </div>
-                  <div className="mt-2 flex items-end justify-between gap-3">
-                    <p className="text-3xl font-black text-slate-950">{stat.value}</p>
-                    <p className="text-xs font-black text-slate-500">{stat.pct}%</p>
+                  <div className="mt-2 flex items-baseline justify-between gap-3">
+                    <p className="flex items-baseline gap-1.5 whitespace-nowrap">
+                      <span className="text-3xl font-black text-slate-950">{stat.value}</span>
+                      <span className="text-xs font-semibold text-slate-400">/ {stat.total}</span>
+                    </p>
+                    <p className="shrink-0 text-xs font-black text-slate-500">{stat.pct}%</p>
                   </div>
-                  <p className="mt-1 text-xs font-semibold text-slate-400">
-                    {clickable ? "Ver inativos →" : `/ ${stat.total}`}
-                  </p>
                 </>
               );
               const cardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
@@ -1493,9 +1493,9 @@ export function UserManagement({
                 ))}
               </SelectContent>
             </Select>
-            <div className="ml-auto flex items-center gap-2">
-              <span className="hidden text-xs font-black text-slate-500 sm:inline">{filteredUsers.length} de {users.length}</span>
-              <Button variant="ghost" className="h-10 rounded-xl" onClick={() => { setSearchTerm(''); setProfileFilter('all'); setKioskFilter('all'); }}>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <span className="hidden whitespace-nowrap text-xs font-black text-slate-500 sm:inline">{filteredUsers.length} de {users.length}</span>
+              <Button variant="ghost" className="h-10 shrink-0 whitespace-nowrap rounded-xl" onClick={() => { setSearchTerm(''); setProfileFilter('all'); setKioskFilter('all'); }}>
               <Eraser className="mr-2 h-4 w-4" /> Limpar
               </Button>
             </div>

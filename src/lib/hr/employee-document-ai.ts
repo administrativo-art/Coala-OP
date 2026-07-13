@@ -12,6 +12,8 @@ const DOCUMENT_TYPE_CODES = EMPLOYEE_DOCUMENT_TYPE_CATALOG.map((item) => item.co
 const EXTRACTED_FIELD_KEYS = [
   "cpf",
   "employeeName",
+  "motherName",
+  "fatherName",
   "registrationNumber",
   "birthDate",
   "admissionDate",
@@ -39,6 +41,7 @@ const EXTRACTED_FIELD_KEYS = [
   "dependentName",
   "dependentBirthDate",
   "dependentCpf",
+  "dependentRg",
   "dependents",
   "vaccinationRecordDetected",
   "schoolAttendanceDetected",
@@ -55,11 +58,12 @@ const DEPENDENTS_SCHEMA = {
   items: {
     type: "object",
     additionalProperties: false,
-    required: ["name", "birthDate", "cpf", "relationship"],
+    required: ["name", "birthDate", "cpf", "rg", "relationship"],
     properties: {
       name: STRING_OR_NULL_SCHEMA,
       birthDate: STRING_OR_NULL_SCHEMA,
       cpf: STRING_OR_NULL_SCHEMA,
+      rg: STRING_OR_NULL_SCHEMA,
       relationship: STRING_OR_NULL_SCHEMA,
     },
   },
@@ -68,6 +72,8 @@ const DEPENDENTS_SCHEMA = {
 const EXTRACTED_FIELD_SCHEMA: Record<typeof EXTRACTED_FIELD_KEYS[number], unknown> = {
   cpf: STRING_OR_NULL_SCHEMA,
   employeeName: STRING_OR_NULL_SCHEMA,
+  motherName: STRING_OR_NULL_SCHEMA,
+  fatherName: STRING_OR_NULL_SCHEMA,
   registrationNumber: STRING_OR_NULL_SCHEMA,
   birthDate: STRING_OR_NULL_SCHEMA,
   admissionDate: STRING_OR_NULL_SCHEMA,
@@ -95,6 +101,7 @@ const EXTRACTED_FIELD_SCHEMA: Record<typeof EXTRACTED_FIELD_KEYS[number], unknow
   dependentName: STRING_OR_NULL_SCHEMA,
   dependentBirthDate: STRING_OR_NULL_SCHEMA,
   dependentCpf: STRING_OR_NULL_SCHEMA,
+  dependentRg: STRING_OR_NULL_SCHEMA,
   dependents: DEPENDENTS_SCHEMA,
   vaccinationRecordDetected: BOOLEAN_OR_NULL_SCHEMA,
   schoolAttendanceDetected: BOOLEAN_OR_NULL_SCHEMA,
@@ -220,8 +227,8 @@ type RawAiResult = {
   warnings?: unknown;
 };
 
-const PROMPT_VERSION = "employee-document-v2";
-const SCHEMA_VERSION = "employee-document-analysis-v2";
+const PROMPT_VERSION = "employee-document-v4";
+const SCHEMA_VERSION = "employee-document-analysis-v4";
 
 function normalizeText(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -332,7 +339,9 @@ function buildPrompt({
     "Não invente tipos, pastas, colaboradores ou datas. Use null quando não encontrar campo.",
     "Para atestado/documento médico, não extraia diagnóstico, CID ou conteúdo clínico; extraia apenas dados operacionais mínimos.",
     "Para ASO, extraia examDate como a data real de realização do exame, não a data de upload ou arquivamento.",
-    "Para documentos de salário-família/dependentes, extraia dependentes com nome, nascimento, CPF quando houver, e marque vacinação/frequência escolar/termo apenas quando o próprio documento comprovar isso.",
+    "Para RG, CNH, certidões e documentos com seção de filiação, extraia motherName e fatherName exatamente como aparecem. Se houver apenas uma pessoa na filiação, preencha apenas o campo correspondente quando o rótulo indicar mãe/pai; se o rótulo não distinguir, use null.",
+    "Para salário-família, trate o cadastro como lista de filhos. Extraia cada filho com nome, nascimento, CPF e RG quando houver. Use relationship como Filho(a), salvo evidência textual diferente.",
+    "Para certidão, vacinação e frequência escolar, não calcule status final. O sistema deriva Pendente/Enviada/Não exigida pela idade e pelo tipo de documento. Você só deve marcar vaccinationRecordDetected, schoolAttendanceDetected e responsibilityTermDetected como true quando o arquivo enviado comprovar o respectivo documento.",
     expectedEmployeeName ? `Colaborador esperado no ponto de entrada: ${expectedEmployeeName}. Compare com o conteúdo, mas não force correspondência.` : "Não há colaborador esperado.",
     "Catálogo fechado:",
     JSON.stringify(catalogForPrompt()),
@@ -344,14 +353,18 @@ function buildPrompt({
       identifiedEmployee: { name: "Nome identificado ou null" },
       extractedFields: {
         cpf: "somente se visível; pode mascarar parcialmente",
+        motherName: "nome da mãe quando houver filiação visível",
+        fatherName: "nome do pai quando houver filiação visível",
         referenceMonth: "AAAA-MM quando aplicável",
         issueDate: "AAAA-MM-DD quando aplicável",
         startDate: "AAAA-MM-DD quando aplicável",
         endDate: "AAAA-MM-DD quando aplicável",
         amountNet: "número quando aplicável",
-        dependentName: "nome do dependente quando houver",
+        dependentName: "nome do filho quando houver",
         dependentBirthDate: "AAAA-MM-DD quando houver",
-        dependents: [{ name: "Nome do dependente", birthDate: "AAAA-MM-DD", cpf: "CPF ou null", relationship: "Filho(a)" }],
+        dependentCpf: "CPF do filho ou null",
+        dependentRg: "RG do filho ou null",
+        dependents: [{ name: "Nome do filho", birthDate: "AAAA-MM-DD", cpf: "CPF ou null", rg: "RG ou null", relationship: "Filho(a)" }],
         vaccinationRecordDetected: false,
         schoolAttendanceDetected: false,
         responsibilityTermDetected: false,
@@ -361,6 +374,8 @@ function buildPrompt({
       fieldConfidences: {
         cpf: 0.99,
         employeeName: 0.99,
+        motherName: 0.99,
+        fatherName: 0.99,
         referenceMonth: 0.99,
         "demais campos do schema": 0,
       },

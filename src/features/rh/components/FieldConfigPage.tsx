@@ -86,6 +86,13 @@ const VISIBILITY_DOTS: Record<NormalizedFieldVisibility, { dot: string; halo: st
   confidential: { dot: '#dc3b4b', halo: 'rgba(220,59,75,.14)' },
 };
 
+const VISIBILITY_TONES: Record<NormalizedFieldVisibility, { bg: string; fg: string; dot: string }> = {
+  public: { bg: '#eafaf2', fg: '#008963', dot: '#22a565' },
+  restricted_partial: { bg: '#eef7ff', fg: '#2563eb', dot: '#2f6fed' },
+  restricted_total: { bg: '#fff5db', fg: '#d17400', dot: '#e59015' },
+  confidential: { bg: '#ffe9ef', fg: '#d9275f', dot: '#dc3b4b' },
+};
+
 function makeKey(label: string) {
   const slug = label
     .normalize('NFD')
@@ -240,12 +247,12 @@ function SectionVisibilitySelect({
   onChange: (visibility: FieldVisibility) => void;
 }) {
   return (
-    <label className="flex h-10 items-center gap-2 rounded-xl bg-white px-3 text-xs font-black text-[#6f6f7c] ring-1 ring-[#ececf0]">
-      Visibilidade do card
+    <label className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2.5 text-[11.5px] font-extrabold text-[#6f6f7c] ring-1 ring-[#ececf0]">
+      Visibilidade
       <select
         value={visibility}
         onChange={(event) => onChange(event.target.value as FieldVisibility)}
-        className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2 text-xs font-black text-[#1d1d26] outline-none"
+        className="h-7 rounded-lg border border-[#dedfe4] bg-white px-1.5 text-[11.5px] font-extrabold text-[#1d1d26] outline-none"
         title="Altera a visibilidade de todos os campos deste card"
       >
         {mixed ? <option value={visibility}>Visibilidade mista</option> : null}
@@ -632,8 +639,8 @@ function SortableFieldRow({
         {position}
       </span>
       <div className="min-w-0">
-        <p className="truncate text-base font-black text-[#1d1d26]">{entry.label}</p>
-        <p className="truncate font-mono text-xs font-semibold text-[#9d9da9]">{id}</p>
+        <p className="truncate text-[15px] font-extrabold text-[#1d1d26]">{entry.label}</p>
+        <p className="mt-0.5 truncate font-mono text-xs font-medium text-[#a6a6b0]">{id}</p>
       </div>
       <TypeBadge type={entry.type} />
       <VisibilityBadge visibility={entry.visibility} />
@@ -684,8 +691,8 @@ function SortableProfileBlockRow({
         {position}
       </span>
       <div className="min-w-0">
-        <p className="truncate text-base font-black text-[#1d1d26]">{block.label}</p>
-        <p className="truncate font-mono text-xs font-semibold text-[#9d9da9]">{id}</p>
+        <p className="truncate text-[15px] font-extrabold text-[#1d1d26]">{block.label}</p>
+        <p className="mt-0.5 truncate font-mono text-xs font-medium text-[#a6a6b0]">{id}</p>
       </div>
       <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#fff0f6] px-2.5 py-1.5 text-xs font-black text-[#df2f78]">
         Sistema
@@ -741,30 +748,30 @@ function SortableSectionOrderFrame({
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`overflow-hidden rounded-[22px] border border-[#dedfe4] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.06)] ${isDragging ? 'opacity-60' : ''}`}
+      className={`overflow-hidden rounded-[22px] border border-[#e2e0da] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.06)] ${isDragging ? 'opacity-60' : ''}`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <button type="button" className="text-[#c2c2cc]" {...attributes} {...listeners} aria-label={`Arrastar seção ${section}`}>
-            <GripVertical className="h-5 w-5" />
+      <div className="flex items-center justify-between gap-3 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <button type="button" className="shrink-0 text-[#c2c2cc]" {...attributes} {...listeners} aria-label={`Arrastar seção ${section}`}>
+            <GripVertical className="h-[18px] w-[18px]" />
           </button>
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#f1f2f5] text-xs font-black text-[#737381]" title={`Ordem geral ${position}`}>
+          <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] bg-[#f1f2f5] text-xs font-extrabold text-[#737381]" title={`Ordem geral ${position}`}>
             {position}
           </span>
-          <button type="button" onClick={onToggle} className="rounded-lg p-1 text-[#9d9da9] hover:bg-[#f1f2f5]" aria-label={collapsed ? `Expandir ${section}` : `Recolher ${section}`}>
-            <ChevronDown className={`h-5 w-5 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+          <button type="button" onClick={onToggle} className="shrink-0 rounded-lg p-1 text-[#9d9da9] hover:bg-[#f1f2f5]" aria-label={collapsed ? `Expandir ${section}` : `Recolher ${section}`}>
+            <ChevronDown className={`h-[18px] w-[18px] transition-transform ${collapsed ? '-rotate-90' : ''}`} />
           </button>
           {tag ? (
-            <span className="rounded-md border border-[#dedfe4] bg-[#f7f7f9] px-2 py-1 text-[10px] font-black uppercase text-[#8f8f9b]">
+            <span className="shrink-0 rounded-md border border-[#e2e0da] bg-[#f7f7f9] px-2 py-[3px] text-[10px] font-extrabold uppercase tracking-[.06em] text-[#8f8f9b]">
               {tag}
             </span>
           ) : null}
-          <h2 className="truncate text-xl font-black text-[#1d1d26]">{section}</h2>
-          <span className="rounded-full bg-[#e6e6ea] px-3 py-1 text-xs font-black text-[#6f6f7c]">
+          <h2 className="truncate text-[17px] font-black text-[#1d1d26]">{section}</h2>
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-[#e6e6ea] px-2.5 py-0.5 text-[11.5px] font-extrabold text-[#6f6f7c]">
             {count} {countLabel ?? (count === 1 ? 'campo' : 'campos')}
           </span>
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
       </div>
       {!collapsed ? children : null}
     </section>
@@ -789,6 +796,25 @@ export function FieldConfigPage() {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const userOptions = useMemo(() => uniqueUserOptions(activeUsers), [activeUsers]);
+
+  const dirty = useMemo(() => {
+    if (!fieldMap) return false;
+    return (
+      JSON.stringify(fields) !== JSON.stringify(fieldMap.fields) ||
+      JSON.stringify(sectionOrder) !== JSON.stringify(fieldMap.section_order ?? {}) ||
+      JSON.stringify(profileBlocks) !== JSON.stringify(fieldMap.profile_blocks ?? {}) ||
+      JSON.stringify(accessMatrix) !== JSON.stringify(normalizeProfileAccessMatrix(fieldMap.access_matrix))
+    );
+  }, [fieldMap, fields, sectionOrder, profileBlocks, accessMatrix]);
+
+  function discard() {
+    if (!fieldMap) return;
+    setFields(fieldMap.fields);
+    setSectionOrder(fieldMap.section_order ?? {});
+    setProfileBlocks(fieldMap.profile_blocks ?? {});
+    setAccessMatrix(normalizeProfileAccessMatrix(fieldMap.access_matrix));
+    setMessage(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1250,16 +1276,16 @@ export function FieldConfigPage() {
     <div className="space-y-5 bg-[var(--bg)] px-4 py-5 text-[#1d1d26] md:px-5">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
-          <h1 className="text-3xl font-black tracking-tight text-[#181820]">Campos do Perfil</h1>
-          <p className="mt-2 max-w-3xl text-base font-medium leading-relaxed text-[#6f6f7c]">
+          <h1 className="text-[26px] font-black tracking-[-.02em] text-[#181820]">Campos do Perfil</h1>
+          <p className="mt-2 max-w-[560px] text-[14.5px] font-medium leading-[1.5] text-[#6f6f7c]">
             Crie, nomeie e organize as seções e campos exibidos no perfil dos colaboradores.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2.5">
           <Dialog>
             <DialogTrigger asChild>
-              <button type="button" className="inline-flex h-12 items-center gap-3 rounded-2xl border border-[#dedfe4] bg-white px-5 text-sm font-black text-[#4f4f5b] shadow-sm hover:bg-[#fbfbfc]">
-                <ShieldCheck className="h-5 w-5 text-[#df2f78]" />
+              <button type="button" className="inline-flex h-11 items-center gap-2 rounded-[13px] border border-[#e2e0da] bg-white px-4 text-[13.5px] font-black text-[#494952] hover:bg-[#faf9f6]">
+                <ShieldCheck className="h-4 w-4 text-[#df2f78]" />
                 Matriz de acesso
               </button>
             </DialogTrigger>
@@ -1312,46 +1338,69 @@ export function FieldConfigPage() {
               </div>
             </DialogContent>
           </Dialog>
-          <button type="button" onClick={addSection} className="inline-flex h-12 items-center gap-3 rounded-2xl border border-[#dedfe4] bg-white px-5 text-sm font-black text-[#4f4f5b] shadow-sm hover:bg-[#fbfbfc]">
-            <Plus className="h-5 w-5" />
+          <button type="button" onClick={addSection} className="inline-flex h-11 items-center gap-2 rounded-[13px] border border-[#e2e0da] bg-white px-4 text-[13.5px] font-black text-[#494952] hover:bg-[#faf9f6]">
+            <Plus className="h-4 w-4" />
             Nova seção
           </button>
-          <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex h-12 items-center gap-3 rounded-2xl bg-[#df2f78] px-5 text-sm font-black text-white shadow-sm hover:bg-[#c92368] disabled:opacity-60">
-            {saving ? <Save className="h-5 w-5 animate-pulse" /> : <Check className="h-5 w-5" />}
+          <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex h-11 items-center gap-2 rounded-[13px] bg-[#df2f78] px-5 text-[13.5px] font-black text-white shadow-[0_8px_18px_-8px_#df2f78] hover:bg-[#cc2069] disabled:opacity-60">
+            {saving ? <Save className="h-4 w-4 animate-pulse" /> : <Check className="h-4 w-4" />}
             {saving ? 'Salvando...' : 'Salvar alterações'}
           </button>
         </div>
       </div>
 
-      <div className="rounded-[22px] border border-[#dedfe4] bg-white p-5 shadow-[0_2px_10px_rgba(15,23,42,0.06)]">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#9d9da9]" />
+      <div className="rounded-[18px] border border-[#e6e4de] bg-white p-3 shadow-[0_2px_10px_rgba(15,23,42,0.05)]">
+        <div className="flex flex-wrap items-center gap-3.5">
+          <div className="relative min-w-[260px] flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-[#9d9da9]" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="h-12 w-full rounded-2xl border-0 bg-[#f7f7f9] pl-12 pr-4 text-base font-medium text-[#4f4f5b] outline-none placeholder:text-[#9d9da9]"
+              className="h-11 w-full rounded-xl border-0 bg-[#f6f5f2] pl-10 pr-4 text-sm font-medium text-[#4f4f5b] outline-none placeholder:text-[#9d9da9]"
               placeholder="Buscar campo por nome ou chave..."
             />
           </div>
-          <div className="flex max-w-full gap-2 overflow-x-auto">
-            {visibilityTabs.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setVisibilityFilter(tab.value)}
-                className={`inline-flex min-w-max items-center gap-2 rounded-xl px-5 py-3 text-sm font-black transition ${
-                  visibilityFilter === tab.value
-                    ? 'bg-slate-950 text-white'
-                    : 'bg-transparent text-[#737381] hover:bg-[#f7f7f9]'
-                }`}
-              >
-                {tab.label}
-                <span className={`rounded-full px-2.5 py-0.5 text-xs ${visibilityFilter === tab.value ? 'bg-white/15 text-white' : 'bg-[#e6e6ea] text-[#737381]'}`}>
-                  {tab.count}
-                </span>
-              </button>
-            ))}
+          <div className="flex max-w-full flex-wrap gap-1.5">
+            {visibilityTabs.map((tab) => {
+              const active = visibilityFilter === tab.value;
+              const tone = tab.value === 'all' ? null : VISIBILITY_TONES[tab.value];
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setVisibilityFilter(tab.value)}
+                  style={
+                    active && tone
+                      ? { background: tone.bg, color: tone.fg, borderColor: `${tone.fg}33` }
+                      : undefined
+                  }
+                  className={`inline-flex h-10 min-w-max items-center gap-2 rounded-xl border border-transparent px-3.5 text-[13px] font-black transition ${
+                    active && !tone
+                      ? 'bg-[#181820] text-white'
+                      : active
+                        ? ''
+                        : 'text-[#6f6f7c] hover:bg-[#f7f7f9]'
+                  }`}
+                >
+                  {tone ? (
+                    <span className="h-2 w-2 rounded-full" style={{ background: tone.dot }} />
+                  ) : null}
+                  {tab.label}
+                  <span
+                    style={active && tone ? { background: '#ffffffaa', color: tone.fg } : undefined}
+                    className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-black ${
+                      active && !tone
+                        ? 'bg-white/[.18] text-white'
+                        : active
+                          ? ''
+                          : 'bg-[#eceae4] text-[#8a8a94]'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1383,7 +1432,7 @@ export function FieldConfigPage() {
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleProfileBlockDragEnd}>
                     <SortableContext items={displayedProfileBlocks.map(([key]) => key)} strategy={verticalListSortingStrategy}>
                       <div className="overflow-x-auto border-t border-[#ececf0]">
-                        <div className="grid min-w-[760px] gap-3 bg-[#fbfbfc] px-5 py-3 text-xs font-black uppercase tracking-wide text-[#9d9da9]" style={{ gridTemplateColumns: ORDER_GRID_TEMPLATE }}>
+                        <div className="grid min-w-[760px] gap-3 bg-[#fbfbfc] px-5 py-3 text-[10.5px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]" style={{ gridTemplateColumns: ORDER_GRID_TEMPLATE }}>
                           <span />
                           <span>Ordem</span>
                           <span>Bloco</span>
@@ -1424,20 +1473,20 @@ export function FieldConfigPage() {
                       mixed={sectionVisibility.mixed}
                       onChange={(visibility) => updateSectionFieldsVisibility(section, visibility)}
                     />
-                    <button type="button" onClick={() => addGroup(section)} className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-3 text-sm font-black text-[#6f6f7c] hover:bg-[#f7f7f9]">
-                      <Plus className="h-4 w-4" />
+                    <button type="button" onClick={() => addGroup(section)} className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2.5 text-[12.5px] font-extrabold text-[#6f6f7c] hover:bg-[#f7f7f9]">
+                      <Plus className="h-[15px] w-[15px]" />
                       Grupo
                     </button>
-                    <button type="button" onClick={() => renameSection(section)} className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-3 text-sm font-black text-[#6f6f7c] hover:bg-[#f7f7f9]">
-                      <Pencil className="h-4 w-4" />
+                    <button type="button" onClick={() => renameSection(section)} className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2.5 text-[12.5px] font-extrabold text-[#6f6f7c] hover:bg-[#f7f7f9]">
+                      <Pencil className="h-[15px] w-[15px]" />
                       Renomear
                     </button>
-                    <button type="button" onClick={() => addField(section)} className="inline-flex h-10 min-w-44 items-center justify-center gap-2 rounded-xl bg-[#fff0f6] px-4 text-sm font-black text-[#df2f78] hover:bg-[#fde5f0]">
-                      <Plus className="h-4 w-4" />
+                    <button type="button" onClick={() => addField(section)} className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] bg-[#fff0f6] px-3.5 text-[12.5px] font-extrabold text-[#df2f78] hover:bg-[#fde5f0]">
+                      <Plus className="h-[15px] w-[15px]" />
                       Adicionar campo
                     </button>
-                    <button type="button" className="grid h-10 w-10 place-items-center rounded-xl text-[#9d9da9] hover:bg-[#f7f7f9]" aria-label={`Mais ações de ${section}`}>
-                      <MoreHorizontal className="h-5 w-5" />
+                    <button type="button" className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[#9d9da9] hover:bg-[#f7f7f9]" aria-label={`Mais ações de ${section}`}>
+                      <MoreHorizontal className="h-[18px] w-[18px]" />
                     </button>
                   </>
                 )}
@@ -1447,7 +1496,7 @@ export function FieldConfigPage() {
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => handleDragEnd(section, event)}>
                   <SortableContext items={items.map(([key]) => key)} strategy={verticalListSortingStrategy}>
                     <div className="overflow-x-auto border-t border-[#ececf0]">
-                      <div className="grid min-w-[1080px] gap-4 bg-[#fbfbfc] px-5 py-3 text-xs font-black uppercase tracking-wide text-[#9d9da9]" style={{ gridTemplateColumns: FIELD_GRID_TEMPLATE }}>
+                      <div className="grid min-w-[1080px] gap-4 bg-[#fbfbfc] px-5 py-3 text-[10.5px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]" style={{ gridTemplateColumns: FIELD_GRID_TEMPLATE }}>
                         <span />
                         <span>Ordem</span>
                         <span>Campo</span>
@@ -1536,6 +1585,36 @@ export function FieldConfigPage() {
           })}
         </SortableContext>
       </DndContext>
+
+      {dirty ? (
+        <div className="pointer-events-none sticky bottom-[18px] z-20 mt-[22px] flex justify-center">
+          <div className="pointer-events-auto flex flex-wrap items-center gap-4 rounded-2xl bg-[#181820] py-[11px] pl-5 pr-3 text-white shadow-[0_18px_40px_-12px_rgba(20,22,28,.55)]">
+            <span className="inline-flex items-center gap-2.5 text-[13.5px] font-bold">
+              <span className="h-2 w-2 rounded-full bg-[#f7b500] shadow-[0_0_0_4px_rgba(247,181,0,.2)]" />
+              Você tem alterações não salvas
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={discard}
+                disabled={saving}
+                className="h-[38px] rounded-xl bg-white/[.12] px-[15px] text-[13px] font-bold text-[#e7e7ea] transition hover:bg-white/20 disabled:opacity-60"
+              >
+                Descartar
+              </button>
+              <button
+                type="button"
+                onClick={() => void save()}
+                disabled={saving}
+                className="inline-flex h-[38px] items-center gap-[7px] rounded-xl bg-[#df2f78] px-[18px] text-[13px] font-black text-white transition hover:bg-[#ea3d85] disabled:opacity-60"
+              >
+                {saving ? <Save className="h-[15px] w-[15px] animate-pulse" /> : <Check className="h-[15px] w-[15px]" />}
+                {saving ? 'Salvando...' : 'Salvar alterações'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editing && editingKey ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">

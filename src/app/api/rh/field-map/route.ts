@@ -188,9 +188,10 @@ function canConfigureRhFields(actor: Awaited<ReturnType<typeof requireUser>>) {
   );
 }
 
-const DEPENDENTS_FAMILY_SECTION = "Dependentes e salário-família";
+const DEPENDENTS_FAMILY_SECTION = "Salário-família";
 const DEPENDENTS_FAMILY_SECTION_MIGRATIONS: Record<string, string[]> = {
   "employee.children_under_14": ["Dados pessoais"],
+  "employee.children": ["Dependentes", "Dependentes e salário-família", "Salário-família", "Salario Familia"],
   "employee.dependent_name": ["Dependentes"],
   "employee.dependent_relation": ["Dependentes"],
   "employee.dependent_cpf": ["Dependentes"],
@@ -200,16 +201,32 @@ const DEPENDENTS_FAMILY_SECTION_MIGRATIONS: Record<string, string[]> = {
   "employee.family_salary_birth_1": ["Salário-família", "Salario Familia"],
   "employee.family_salary_name_1": ["Salário-família", "Salario Familia"],
 };
+const RETIRED_FIELD_KEYS = new Set([
+  "employee.dependent_name",
+  "employee.dependent_relation",
+  "employee.dependent_cpf",
+  "employee.dependent_rg",
+  "employee.family_salary_end_1",
+  "employee.family_salary_birth_1",
+  "employee.family_salary_name_1",
+]);
+
+function withoutRetiredFields(fields: Record<string, FieldMapEntry>) {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([key]) => !RETIRED_FIELD_KEYS.has(key))
+  ) as Record<string, FieldMapEntry>;
+}
 
 async function loadOrCreateFieldMap(actor: Awaited<ReturnType<typeof requireUser>>) {
   const ref = hrDbAdmin.collection("schema").doc("field_map");
   const snap = await ref.get();
   if (snap.exists) {
     const current = snap.data() ?? {};
-    const currentFields =
+    const currentFields = withoutRetiredFields(
       current.fields && typeof current.fields === "object"
         ? current.fields as Record<string, FieldMapEntry>
-        : {};
+        : {}
+    );
     const currentBlocks =
       current.profile_blocks && typeof current.profile_blocks === "object"
         ? current.profile_blocks as Record<string, ProfileBlockConfig>
@@ -296,7 +313,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       fieldMap: {
         version: data.version ?? "coala-rh-v1.3",
-        fields: data.fields ?? {},
+        fields: withoutRetiredFields((data.fields ?? {}) as Record<string, FieldMapEntry>),
         section_order: data.section_order ?? {},
         profile_blocks: data.profile_blocks ?? DEFAULT_PROFILE_BLOCKS,
         access_matrix: cleanAccessMatrix(data.access_matrix),
@@ -328,7 +345,7 @@ export async function PUT(request: NextRequest) {
     const currentSnap = await ref.get();
     const currentFields = (currentSnap.data()?.fields ?? {}) as Record<string, FieldMapEntry>;
     const nextFields = Object.fromEntries(
-      Object.entries(fields as Record<string, FieldMapEntry>).map(([key, entry]) => [key, cleanEntry(entry)])
+      Object.entries(withoutRetiredFields(fields as Record<string, FieldMapEntry>)).map(([key, entry]) => [key, cleanEntry(entry)])
     ) as Record<string, FieldMapEntry>;
     const currentBlocks = (currentSnap.data()?.profile_blocks ?? DEFAULT_PROFILE_BLOCKS) as Record<string, ProfileBlockConfig>;
     const nextProfileBlocks = profileBlocks && typeof profileBlocks === "object" && !Array.isArray(profileBlocks)

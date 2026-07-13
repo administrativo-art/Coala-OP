@@ -225,6 +225,7 @@ function buildFieldValue(
   const base = { field_key: coalaKey, updated_at: Timestamp.now(), updated_by: uid };
 
   if (rawValue == null) return base as EmployeeFieldValue;
+  if (typeof rawValue === 'object') return { ...base, value_json: rawValue };
 
   if (type === 'date') {
     const d = new Date(String(rawValue));
