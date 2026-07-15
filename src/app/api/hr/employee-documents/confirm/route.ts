@@ -188,11 +188,13 @@ export async function POST(request: NextRequest) {
           matchingFields: profileSync.matchingFields,
           profileCompletion: profileSync.profileCompletion,
         };
+        const autoValidated = item.decisionAction === "READY_TO_FILE" && item.decisionReason === "VALIDATED";
         const payload = {
           employeeId, candidateId: null,
           category: config.category, documentType: config.label, documentTypeCode: config.code,
           accessLevel: config.defaultAccessLevel, accessPolicyId: config.accessPolicyId,
-          status: "received",
+          status: autoValidated ? "validated" : "received",
+          validationSource: autoValidated ? "document_analysis" : null,
           folderCode: destination.folderCode, caseId: destination.caseId, subcaseId: destination.subcaseId,
           destinationTrail: destination.pathSegments, displayName: destination.displayName, storedName: destination.downloadName,
           contentHash, hashAlgorithm: "sha256", logicalKey, version,
@@ -208,15 +210,33 @@ export async function POST(request: NextRequest) {
           storagePath, storageSubfolder,
           batchId, itemId: itemDoc.id, traceId: item.traceId ?? null,
           uploadedBy: access.decoded.uid, uploadedByName: access.actorName,
-          validatedBy: null, validatedByName: null, validatedAt: null, uploadedAt: now, updatedAt: now,
+          validatedBy: autoValidated ? "system:document-analysis" : null,
+          validatedByName: autoValidated ? "Copiloto RH" : null,
+          validatedAt: autoValidated ? now : null,
+          uploadedAt: now, updatedAt: now,
           accessCount: 0, deletedAt: null,
         };
         await hrDbAdmin.collection(COLLECTION).doc(documentId).set(payload);
         await hrDbAdmin.collection(COLLECTION).doc(documentId).collection("audit").add({
           action: "DOCUMENT_FILED", actorId: access.decoded.uid, actorName: payload.uploadedByName,
           documentTypeCode: config.code, version, accessPolicyId: config.accessPolicyId, batchId,
+          resultingStatus: payload.status, autoValidated,
           traceId: item.traceId ?? null, at: now,
         });
+        if (autoValidated) {
+          await hrDbAdmin.collection(COLLECTION).doc(documentId).collection("audit").add({
+            action: "DOCUMENT_AUTO_VALIDATED",
+            actorId: "system:document-analysis",
+            actorName: "Copiloto RH",
+            decisionAction: item.decisionAction,
+            decisionReason: item.decisionReason,
+            confidence: item.confidence ?? null,
+            analysisModel: item.analysisModel ?? null,
+            promptVersion: item.promptVersion ?? null,
+            traceId: item.traceId ?? null,
+            at: now,
+          });
+        }
         await bucket.file(tempPath).delete({ ignoreNotFound: true });
         await itemRef.update({ status: "filed", filedDocumentId: documentId, version, profileSuggestions, profileAutofill, updatedAt: now });
         filed.push({ itemId: itemDoc.id, documentId, version });
