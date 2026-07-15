@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Brain,
   CheckCircle2,
+  ChevronDown,
   Download,
   Eye,
   FileText,
@@ -258,6 +259,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   const [message, setMessage] = useState("");
   const [employeeCorrections, setEmployeeCorrections] = useState<Record<string, EmployeeCorrection>>({});
   const [resumableBatches, setResumableBatches] = useState<ResumableBatch[]>([]);
+  const [expandedVerificationId, setExpandedVerificationId] = useState<string | null>(null);
 
   useEffect(() => () => {
     if (preview?.url.startsWith("blob:")) URL.revokeObjectURL(preview.url);
@@ -997,35 +999,85 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
               <div className="p-12 text-center text-sm text-slate-500"><FileText className="mx-auto mb-2 h-8 w-8" />Nenhum documento nesta pasta.</div>
             ) : (
               <div className="divide-y">
-                {visible.map((item) => (
-                  <div key={item.id} className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="min-w-0">
-                      <p className="font-black text-slate-900">{item.documentType}</p>
-                      <p className="truncate text-xs text-slate-500">{item.originalName} · {formatBytes(item.size)} · enviado por {uploaderName(item)}</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{STATUS[item.status] ?? item.status}</span>
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{ACCESS[item.accessLevel] ?? item.accessLevel}</span>
-                        {item.profileSuggestions?.length ? (
-                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
-                            {item.profileSuggestions.length} verificação(ões) de cadastro
-                          </span>
-                        ) : null}
+                {visible.map((item) => {
+                  const suggestions = item.profileSuggestions ?? [];
+                  const divergentCount = suggestions.filter((suggestion) => suggestion.status === "DIVERGENT").length;
+                  const pendingCount = suggestions.filter((suggestion) => suggestion.status === "MISSING_IN_PROFILE").length;
+                  const filledCount = suggestions.filter((suggestion) => suggestion.status === "FILLED_FROM_DOCUMENT").length;
+                  const isExpanded = expandedVerificationId === item.id;
+                  return (
+                    <div key={item.id} className="p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-black text-slate-900">{item.documentType}</p>
+                          <p className="truncate text-xs text-slate-500">{item.originalName} · {formatBytes(item.size)} · enviado por {uploaderName(item)}</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{STATUS[item.status] ?? item.status}</span>
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{ACCESS[item.accessLevel] ?? item.accessLevel}</span>
+                            {suggestions.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedVerificationId(isExpanded ? null : item.id)}
+                                aria-expanded={isExpanded}
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-bold ${divergentCount > 0 || pendingCount > 0 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}
+                              >
+                                {divergentCount > 0
+                                  ? `${divergentCount} divergência${divergentCount === 1 ? "" : "s"} no cadastro`
+                                  : pendingCount > 0
+                                    ? `${pendingCount} campo${pendingCount === 1 ? "" : "s"} aguardando preenchimento`
+                                    : filledCount === suggestions.length
+                                      ? `${filledCount} campo${filledCount === 1 ? "" : "s"} preenchido${filledCount === 1 ? "" : "s"} pelo documento`
+                                      : `${suggestions.length} campo${suggestions.length === 1 ? "" : "s"} conferido${suggestions.length === 1 ? "" : "s"}`}
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button onClick={() => void previewDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Pré-visualizar"><Eye className="h-4 w-4" /></button>
+                          <button onClick={() => void downloadDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Baixar"><Download className="h-4 w-4" /></button>
+                          {canManage ? (
+                            <>
+                              <select value={item.status} onChange={(event) => void setStatus(item, event.target.value)} disabled={busy} className="h-9 rounded-lg border px-2 text-xs font-bold">
+                                {EMPLOYEE_DOCUMENT_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}
+                              </select>
+                              <button onClick={() => void remove(item)} className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600" title="Excluir"><Trash2 className="h-4 w-4" /></button>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button onClick={() => void previewDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Pré-visualizar"><Eye className="h-4 w-4" /></button>
-                      <button onClick={() => void downloadDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Baixar"><Download className="h-4 w-4" /></button>
-                      {canManage ? (
-                        <>
-                          <select value={item.status} onChange={(event) => void setStatus(item, event.target.value)} disabled={busy} className="h-9 rounded-lg border px-2 text-xs font-bold">
-                            {EMPLOYEE_DOCUMENT_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}
-                          </select>
-                          <button onClick={() => void remove(item)} className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600" title="Excluir"><Trash2 className="h-4 w-4" /></button>
-                        </>
+
+                      {isExpanded ? (
+                        <div className="mt-4 border-t pt-4">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {suggestions.map((suggestion) => (
+                              <div key={`${item.id}-${suggestion.fieldKey}`} className="rounded-xl border bg-slate-50 p-3 text-xs">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="font-black text-slate-900">{suggestion.fieldLabel}</p>
+                                  <span className={`rounded-full px-2 py-1 font-black ${profileSuggestionStatusClass(suggestion.status)}`}>
+                                    {profileSuggestionStatusLabel(suggestion.status)}
+                                  </span>
+                                </div>
+                                <p className="mt-1 font-semibold text-slate-500">{suggestion.section}</p>
+                                <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                                  <div>
+                                    <dt className="font-bold text-slate-400">No documento</dt>
+                                    <dd className="mt-0.5 break-words font-bold text-slate-700">{suggestion.extractedValue || "Não identificado"}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="font-bold text-slate-400">No cadastro</dt>
+                                    <dd className="mt-0.5 break-words font-bold text-slate-700">{suggestion.currentValue || "Vazio"}</dd>
+                                  </div>
+                                </dl>
+                                <p className="mt-3 font-bold text-slate-400">Confiança da extração: {(suggestion.confidence * 100).toFixed(0)}%</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       ) : null}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
@@ -1114,7 +1166,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
               <div className="min-w-0">
                 <p className="truncate text-base font-black text-slate-900">{preview.title}</p>
-                <p className="text-xs font-bold text-slate-500">Pré-visualização somente leitura · link temporário</p>
+                <p className="text-xs font-bold text-slate-500">Pré-visualização somente leitura · acesso autenticado</p>
               </div>
               <button type="button" onClick={() => setPreview(null)} className="grid h-9 w-9 place-items-center rounded-xl border text-slate-500 hover:bg-slate-50">
                 <X className="h-4 w-4" />
