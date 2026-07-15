@@ -1,11 +1,9 @@
 "use client";
 
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { format, eachDayOfInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  ArrowLeft,
   CalendarRange,
   ChevronDown,
   ChevronUp,
@@ -25,6 +23,7 @@ import { EmployeeDailyModal } from '@/components/goals-tracking-dashboard';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/navigation/back-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { type GoalPeriodDoc, type EmployeeGoal } from '@/types';
@@ -441,9 +440,7 @@ export default function GoalsHistoryPage() {
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/dashboard/goals/analysis"><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Link>
-            </Button>
+            <BackButton fallbackHref="/dashboard/goals/analysis" label="Voltar" variant="ghost" size="sm" />
             <div>
               <h1 className="text-3xl font-bold">Histórico de Metas</h1>
               <p className="text-sm text-muted-foreground">Períodos organizados por mês, com detalhes de turnos e colaboradores.</p>

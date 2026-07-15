@@ -5,7 +5,6 @@ import Link from "next/link";
 import { format, differenceInDays, differenceInMonths, differenceInYears } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  ArrowLeft,
   ChevronRight,
   Clock,
   Eye,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { BackButton } from "@/components/navigation/back-button";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useProfiles } from "@/hooks/use-profiles";
 import { createAuditLog } from "@/features/audit/client";
@@ -2495,9 +2495,14 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         />
 
         <div className="flex items-center gap-3">
-          <Link href="/dashboard/dp/collaborators" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:text-[#df2f78]">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+          <BackButton
+            fallbackHref="/dashboard/dp/collaborators"
+            ariaLabel="Voltar à página anterior"
+            iconOnly
+            variant="ghost"
+            className="h-10 w-10 rounded-2xl bg-white p-0 text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
+            iconClassName="h-5 w-5"
+          />
           <span className="text-sm font-black text-[#8f8f9b]">Departamento pessoal</span>
           <ChevronRight className="h-4 w-4 text-[#b5b5bf]" />
           <h1 className="min-w-0 truncate text-lg font-black leading-tight text-[#181820]">

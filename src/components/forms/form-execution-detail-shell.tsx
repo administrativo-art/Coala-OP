@@ -44,6 +44,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/navigation/back-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -922,9 +923,7 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
           <span className="font-medium text-foreground">{execution.template_name}</span>
         </nav>
         <div className="flex-1" />
-        <Button type="button" variant="outline" size="sm" asChild>
-          <Link href="/dashboard/forms">Voltar à lista</Link>
-        </Button>
+        <BackButton fallbackHref="/dashboard/forms" label="Voltar à lista" size="sm" />
         {execution.status === "pending" ? (
           <Button onClick={() => void runAction("claim")} disabled={submitting !== null} size="sm">
             {submitting === "claim" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}

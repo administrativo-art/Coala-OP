@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -55,7 +54,8 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ArrowLeft, Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
+import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { useToast } from '@/hooks/use-toast';
 import type { DPShiftDefinition } from '@/types';
@@ -491,7 +491,6 @@ interface DPScheduleEditorProps {
 }
 
 export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
-  const router = useRouter();
   const { activeUsers, permissions, updateUser } = useAuth();
   const { kiosks } = useKiosks();
   const {
@@ -1083,9 +1082,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard/dp/schedules')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+        <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-semibold truncate">{schedule.name}</h1>
           <p className="text-sm text-muted-foreground">

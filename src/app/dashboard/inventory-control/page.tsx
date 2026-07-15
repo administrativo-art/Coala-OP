@@ -5,12 +5,13 @@ import { Suspense, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ExpiryControl } from '@/components/expiry-control';
-import { ArrowLeft, MinusCircle, History, Truck, Scale, Ticket } from 'lucide-react';
+import { MinusCircle, History, Truck, Scale, Ticket } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MovementHistoryModal } from '@/components/movement-history-modal';
 import { FinancialPeriodAnalysisModal } from '@/components/financial-period-analysis-modal';
 import { LabelSettingsModal } from '@/components/label-settings';
 import { RadialMenu } from '@/components/radial-menu';
+import { BackButton } from '@/components/navigation/back-button';
 
 function InventoryControlContent() {
     const router = useRouter();
@@ -50,13 +51,7 @@ function InventoryControlContent() {
         <>
             <div className="space-y-4">
                 <div className="mb-4">
-                    <Button 
-                        onClick={() => router.push('/dashboard/stock')}
-                        variant="outline"
-                    >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Voltar para gestão de estoque
-                    </Button>
+                    <BackButton fallbackHref="/dashboard/stock" label="Voltar para gestão de estoque" />
                 </div>
                 <div className="space-y-1 mb-6">
                     <h1 className="text-3xl font-bold">Controle de Estoque</h1>

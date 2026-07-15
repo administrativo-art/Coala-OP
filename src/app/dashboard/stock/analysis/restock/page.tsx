@@ -1,18 +1,16 @@
 "use client";
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { useSearchParams } from 'next/navigation';
 import { RestockAnalysis } from '@/components/restock-analysis';
-import { ArrowLeft } from 'lucide-react';
 import { Suspense, useState } from 'react';
 import type { RepositionRequest } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from "@/hooks/use-auth";
 import { PermissionGuard } from "@/components/permission-guard";
+import { BackButton } from '@/components/navigation/back-button';
 
 function RestockAnalysisContent() {
-    const router = useRouter();
     const searchParams = useSearchParams();
     const kioskId = searchParams.get('kioskId');
     const { kiosks } = useKiosks();
@@ -33,14 +31,12 @@ function RestockAnalysisContent() {
 
     return (
         <div className="mx-auto w-full max-w-[1700px] space-y-5 pb-24">
-            <Button
-                onClick={() => router.push('/dashboard/stock/analysis')}
+            <BackButton
+                fallbackHref="/dashboard/stock/analysis"
+                label="Voltar para reposição"
                 variant="ghost"
                 className="h-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-            >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Voltar para reposição
-            </Button>
+            />
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-3">

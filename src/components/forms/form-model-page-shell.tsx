@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   CheckSquare,
   ClipboardCheck,
   ClipboardList,
@@ -27,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { BackButton } from "@/components/navigation/back-button";
 
 const DEFAULT_FORM_MODELS = [
   {
@@ -415,12 +415,7 @@ export function FormModelPageShell({
     <div className="space-y-5">
       <div className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-3">
-          <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit">
-            <Link href="/dashboard/forms?tab=models">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Modelos
-            </Link>
-          </Button>
+          <BackButton fallbackHref="/dashboard/forms?tab=models" label="Modelos" variant="ghost" size="sm" className="-ml-2 w-fit" />
           <div className="flex items-start gap-3">
             <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg", visual.className)}>
               <Icon className="h-5 w-5" />

@@ -181,7 +181,7 @@ function DocumentCollaboratorCard({
         <div className="flex flex-wrap gap-2">
           <SummaryPill
             icon={pendingReview > 0 ? AlertTriangle : Clock3}
-            label="em análise"
+            label={pendingReview === 1 ? "documento em análise" : "documentos em análise"}
             value={pendingReview}
             tone={pendingReview > 0 ? "amber" : "slate"}
           />

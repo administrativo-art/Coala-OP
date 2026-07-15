@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState, type DragEvent } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
   ChevronDown,
   ClipboardList,
   FileQuestion,
@@ -60,6 +58,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { BackButton } from "@/components/navigation/back-button";
 
 const OCCURRENCE_LABELS: Record<string, string> = {
   manual: "Manual",
@@ -1104,12 +1103,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
     <div className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
-          <Link href="/dashboard/forms">
-            <Button variant="ghost" className="w-fit px-0 text-muted-foreground">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar para formulários
-            </Button>
-          </Link>
+          <BackButton fallbackHref="/dashboard/forms" label="Voltar para formulários" variant="ghost" className="w-fit px-0 text-muted-foreground" />
           <div className="flex items-start gap-3">
             <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white">
               <ClipboardList className="h-5 w-5" />

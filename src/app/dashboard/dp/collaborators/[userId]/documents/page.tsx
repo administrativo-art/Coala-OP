@@ -1,10 +1,8 @@
 "use client";
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowLeft,
   Brain,
   CheckCircle2,
   Download,
@@ -22,6 +20,7 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { BackButton } from "@/components/navigation/back-button";
 import {
   EMPLOYEE_DOCUMENT_ACCESS_LEVELS,
   EMPLOYEE_DOCUMENT_CATEGORIES,
@@ -260,6 +259,10 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   const [employeeCorrections, setEmployeeCorrections] = useState<Record<string, EmployeeCorrection>>({});
   const [resumableBatches, setResumableBatches] = useState<ResumableBatch[]>([]);
 
+  useEffect(() => () => {
+    if (preview?.url.startsWith("blob:")) URL.revokeObjectURL(preview.url);
+  }, [preview]);
+
   const request = useCallback(async (url: string, init?: RequestInit) => {
     if (!firebaseUser) throw new Error("Sessão não encontrada.");
     const token = await firebaseUser.getIdToken();
@@ -267,6 +270,21 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Não foi possível concluir a operação.");
     return data;
+  }, [firebaseUser]);
+
+  const requestDocument = useCallback(async (id: string, action: "view" | "download") => {
+    if (!firebaseUser) throw new Error("Sessão não encontrada.");
+    const token = await firebaseUser.getIdToken();
+    const response = await fetch("/api/hr/employee-documents/access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id, action }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error || "Não foi possível abrir o documento.");
+    }
+    return response.blob();
   }, [firebaseUser]);
 
   const load = useCallback(async () => {
@@ -610,12 +628,9 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
   async function previewDocument(item: DocumentRow) {
     try {
-      const data = await request("/api/hr/employee-documents/access", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id, action: "view" }),
-      });
-      setPreview({ url: data.url, title: item.documentType || item.originalName, mimeType: item.mimeType });
+      const blob = await requestDocument(item.id, "view");
+      const url = URL.createObjectURL(blob);
+      setPreview({ url, title: item.documentType || item.originalName, mimeType: item.mimeType || blob.type });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao abrir.");
     }
@@ -623,12 +638,13 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
   async function downloadDocument(item: DocumentRow) {
     try {
-      const data = await request("/api/hr/employee-documents/access", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id, action: "download" }),
-      });
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      const blob = await requestDocument(item.id, "download");
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = item.originalName || "documento";
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao baixar.");
     }
@@ -677,9 +693,14 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     <div className="mx-auto w-full max-w-[calc(100vw-4rem)] space-y-5 p-4 md:p-8">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <Link href={`/dashboard/dp/collaborators/${userId}`} className="grid h-10 w-10 place-items-center rounded-xl border bg-white">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+          <BackButton
+            fallbackHref={`/dashboard/dp/collaborators/${userId}`}
+            ariaLabel="Voltar à página anterior"
+            iconOnly
+            variant="outline"
+            className="h-10 w-10 rounded-xl bg-white p-0"
+            iconClassName="h-4 w-4"
+          />
           <div className="flex min-w-0 items-center gap-3">
             <Avatar className="h-12 w-12 shrink-0 rounded-2xl">
               <AvatarImage src={employee?.avatarUrl || undefined} alt={employee?.username ?? "Colaborador"} className="rounded-2xl object-cover" />
@@ -708,10 +729,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
         ) : null}
       </div>
 
-      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
-        <ShieldCheck className="mr-2 inline h-4 w-4" />
-        Arquivos privados. A análise usa IA no backend, links temporários e trilha de auditoria.
-      </div>
+      {process.env.NODE_ENV !== "production" ? (
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <ShieldCheck className="mr-2 inline h-4 w-4" />
+          Arquivos privados. Visualização autenticada pelo backend e trilha de auditoria.
+        </div>
+      ) : null}
 
       {canManage && resumableBatches.length > 0 && !analysis ? (
         <section className="border-y bg-white py-4">

@@ -1,15 +1,14 @@
 "use client";
 
 import { RepositionHistory, RepositionManagement } from '@/components/reposition-management';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { useReposition } from '@/hooks/use-reposition';
-import { ArrowLeft, Inbox } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Inbox } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { BackButton } from '@/components/navigation/back-button';
 
 export default function RepositionPage() {
-    const router = useRouter();
     const searchParams = useSearchParams();
     const returnTo = searchParams.get('returnTo') || undefined;
     const { permissions } = useAuth();
@@ -46,15 +45,21 @@ export default function RepositionPage() {
 
     return (
         <div className="mx-auto w-full max-w-[1600px] space-y-5 pb-10">
-            <Button
-                type="button"
-                variant="ghost"
-                className="h-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                onClick={() => router.push(returnTo || '/dashboard/stock/analysis')}
-            >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                {returnTo ? 'Voltar' : 'Voltar para reposição'}
-            </Button>
+            {returnTo ? (
+                <BackButton
+                    fallbackHref={returnTo}
+                    label="Voltar"
+                    variant="ghost"
+                    className="h-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                />
+            ) : (
+                <BackButton
+                    fallbackHref="/dashboard/stock/analysis"
+                    label="Voltar para reposição"
+                    variant="ghost"
+                    className="h-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                />
+            )}
 
             <div>
                 <h1 className="text-2xl font-bold tracking-tight">Gerenciamento da reposição</h1>

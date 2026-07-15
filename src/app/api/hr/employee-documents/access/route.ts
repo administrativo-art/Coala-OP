@@ -39,12 +39,37 @@ export async function POST(request: NextRequest) {
 
     const path = snap.get("storagePath");
     if (typeof path !== "string") return NextResponse.json({ error: "Arquivo indisponível." }, { status: 404 });
-    const [url] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(path).getSignedUrl({ action: "read", expires: Date.now() + 5 * 60 * 1000 });
+    let contents: Buffer;
+    try {
+      [contents] = await getStorage(adminApp)
+        .bucket(firebaseClientConfig.storageBucket)
+        .file(path)
+        .download();
+    } catch (cause) {
+      console.error("[employee-documents/access] Falha ao ler arquivo privado.", cause);
+      return NextResponse.json(
+        { error: "Não foi possível abrir o arquivo agora. Tente novamente em instantes." },
+        { status: 503 },
+      );
+    }
     const at = Timestamp.now();
     await Promise.all([
       ref.update({ accessCount: FieldValue.increment(1), lastAccessedAt: at }),
       ref.collection("audit").add({ action: action === "download" ? "downloaded" : "viewed", actorId: access.decoded.uid, actorName: access.actorName, at }),
     ]);
-    return NextResponse.json({ url, expiresInSeconds: 300 });
-  } catch (cause) { return NextResponse.json({ error: cause instanceof Error ? cause.message : "Acesso negado." }, { status: 403 }); }
+    const originalName = String(snap.get("originalName") || "documento");
+    const safeName = originalName.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
+    const disposition = action === "download" ? "attachment" : "inline";
+    return new NextResponse(new Uint8Array(contents), {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": `${disposition}; filename="${safeName}"`,
+        "Content-Type": String(snap.get("mimeType") || "application/octet-stream"),
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (cause) {
+    console.error("[employee-documents/access] Acesso negado.", cause);
+    return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+  }
 }

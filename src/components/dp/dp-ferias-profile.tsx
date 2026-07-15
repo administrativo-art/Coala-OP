@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -60,9 +59,10 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import {
-  ArrowLeft, CalendarDays, CheckCircle, MoreHorizontal,
+  CalendarDays, CheckCircle, MoreHorizontal,
   Pencil, Plus, Trash2, XCircle,
 } from 'lucide-react';
+import { BackButton } from '@/components/navigation/back-button';
 import { useToast } from '@/hooks/use-toast';
 
 import {
@@ -491,7 +491,6 @@ interface DPFeriasProfileProps {
 }
 
 export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
-  const router = useRouter();
   const { users, permissions } = useAuth();
   const { updateVacation, deleteVacation } = useDP();
   const { vacations, vacationsLoading, vacationsError } = useDPBootstrap();
@@ -551,9 +550,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
         <p className="text-sm">Colaborador não encontrado.</p>
-        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/dp/ferias')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />Voltar
-        </Button>
+        <BackButton fallbackHref="/dashboard/dp/ferias" label="Voltar" variant="ghost" size="sm" />
       </div>
     );
   }
@@ -570,9 +567,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
         <p className="text-sm text-destructive">Erro ao carregar férias: {vacationsError}</p>
-        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/dp/ferias')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />Voltar
-        </Button>
+        <BackButton fallbackHref="/dashboard/dp/ferias" label="Voltar" variant="ghost" size="sm" />
       </div>
     );
   }
@@ -581,9 +576,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard/dp/ferias')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+        <BackButton fallbackHref="/dashboard/dp/ferias" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <Avatar className="h-10 w-10 shrink-0">
             <AvatarImage src={user.avatarUrl} />
