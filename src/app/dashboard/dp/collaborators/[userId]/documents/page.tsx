@@ -1001,9 +1001,11 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
               <div className="divide-y">
                 {visible.map((item) => {
                   const suggestions = item.profileSuggestions ?? [];
-                  const divergentCount = suggestions.filter((suggestion) => suggestion.status === "DIVERGENT").length;
-                  const pendingCount = suggestions.filter((suggestion) => suggestion.status === "MISSING_IN_PROFILE").length;
-                  const filledCount = suggestions.filter((suggestion) => suggestion.status === "FILLED_FROM_DOCUMENT").length;
+                  const pendingSuggestions = suggestions.filter((suggestion) =>
+                    suggestion.status === "DIVERGENT" || suggestion.status === "MISSING_IN_PROFILE"
+                  );
+                  const divergentCount = pendingSuggestions.filter((suggestion) => suggestion.status === "DIVERGENT").length;
+                  const pendingCount = pendingSuggestions.length - divergentCount;
                   const isExpanded = expandedVerificationId === item.id;
                   return (
                     <div key={item.id} className="p-4">
@@ -1014,7 +1016,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                           <div className="mt-2 flex flex-wrap gap-2">
                             <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{STATUS[item.status] ?? item.status}</span>
                             <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{ACCESS[item.accessLevel] ?? item.accessLevel}</span>
-                            {suggestions.length > 0 ? (
+                            {pendingSuggestions.length > 0 ? (
                               <button
                                 type="button"
                                 onClick={() => setExpandedVerificationId(isExpanded ? null : item.id)}
@@ -1023,11 +1025,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                               >
                                 {divergentCount > 0
                                   ? `${divergentCount} divergência${divergentCount === 1 ? "" : "s"} no cadastro`
-                                  : pendingCount > 0
-                                    ? `${pendingCount} campo${pendingCount === 1 ? "" : "s"} aguardando preenchimento`
-                                    : filledCount === suggestions.length
-                                      ? `${filledCount} campo${filledCount === 1 ? "" : "s"} preenchido${filledCount === 1 ? "" : "s"} pelo documento`
-                                      : `${suggestions.length} campo${suggestions.length === 1 ? "" : "s"} conferido${suggestions.length === 1 ? "" : "s"}`}
+                                  : `${pendingCount} campo${pendingCount === 1 ? "" : "s"} aguardando preenchimento`}
                                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                               </button>
                             ) : null}
@@ -1050,7 +1048,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                       {isExpanded ? (
                         <div className="mt-4 border-t pt-4">
                           <div className="grid gap-3 md:grid-cols-2">
-                            {suggestions.map((suggestion) => (
+                            {pendingSuggestions.map((suggestion) => (
                               <div key={`${item.id}-${suggestion.fieldKey}`} className="rounded-xl border bg-slate-50 p-3 text-xs">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <p className="font-black text-slate-900">{suggestion.fieldLabel}</p>

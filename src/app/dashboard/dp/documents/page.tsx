@@ -161,7 +161,7 @@ function DocumentCollaboratorCard({
       onClick={onOpen}
       className="group overflow-hidden rounded-3xl border border-[#dedfe4] bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#df2f78]/40 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[#ececf0] bg-[#fbfbfc] p-4">
+      <div className={`flex items-start justify-between gap-3 bg-[#fbfbfc] p-4 ${pendingReview > 0 ? "border-b border-[#ececf0]" : ""}`}>
         <div className="flex min-w-0 items-start gap-3">
           <AvatarMark user={user} />
           <div className="min-w-0">
@@ -177,16 +177,16 @@ function DocumentCollaboratorCard({
         </Badge>
       </div>
 
-      <div className="space-y-4 p-4">
-        <div className="flex flex-wrap gap-2">
+      {pendingReview > 0 ? (
+        <div className="flex flex-wrap gap-2 p-4">
           <SummaryPill
-            icon={pendingReview > 0 ? AlertTriangle : Clock3}
+            icon={AlertTriangle}
             label={pendingReview === 1 ? "documento em análise" : "documentos em análise"}
             value={pendingReview}
-            tone={pendingReview > 0 ? "amber" : "slate"}
+            tone="amber"
           />
         </div>
-      </div>
+      ) : null}
     </button>
   );
 }
