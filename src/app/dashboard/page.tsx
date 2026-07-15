@@ -239,6 +239,10 @@ function ManagementDashboard() {
   const [salesModalOpen, setSalesModalOpen] = useState(false)
   const [paymentsModalOpen, setPaymentsModalOpen] = useState(false)
   const [vacationsModalOpen, setVacationsModalOpen] = useState(false)
+  const userNameById = useMemo(
+    () => new Map(users.map((item) => [item.id, item.username])),
+    [users]
+  )
 
   useEffect(() => {
     if (!canViewManagementDashboard && canViewCollaboratorDashboard) {
@@ -431,15 +435,20 @@ function ManagementDashboard() {
     () =>
       schedules
         .filter((schedule) => schedule.month === today.getMonth() + 1 && schedule.year === today.getFullYear())
-        .sort((a, b) => (b.shiftCount || 0) - (a.shiftCount || 0))
-        .slice(0, 2),
-    [schedules, today]
+        .sort((a, b) => {
+          const left = units.find((unit) => unit.id === a.unitId)?.name ?? a.name ?? a.id
+          const right = units.find((unit) => unit.id === b.unitId)?.name ?? b.name ?? b.id
+          return left.localeCompare(right)
+        }),
+    [schedules, today, units]
   )
 
   useEffect(() => {
     const firstUnitId = currentSchedules[0]?.unitId ?? currentSchedules[0]?.id ?? ""
-    if (firstUnitId && !selectedScheduleUnitId) setSelectedScheduleUnitId(firstUnitId)
-    if (firstUnitId && !monthlyScheduleUnitId) setMonthlyScheduleUnitId(firstUnitId)
+    const hasSelectedWeekly = currentSchedules.some((schedule) => (schedule.unitId ?? schedule.id) === selectedScheduleUnitId)
+    const hasSelectedMonthly = currentSchedules.some((schedule) => (schedule.unitId ?? schedule.id) === monthlyScheduleUnitId)
+    if (firstUnitId && (!selectedScheduleUnitId || !hasSelectedWeekly)) setSelectedScheduleUnitId(firstUnitId)
+    if (firstUnitId && (!monthlyScheduleUnitId || !hasSelectedMonthly)) setMonthlyScheduleUnitId(firstUnitId)
   }, [currentSchedules, monthlyScheduleUnitId, selectedScheduleUnitId])
 
   const selectedWeeklySchedule = useMemo(
@@ -847,38 +856,41 @@ function ManagementDashboard() {
               <EmptyState>Nenhuma ausência de férias prevista no mês corrente.</EmptyState>
             ) : (
               <div className="space-y-3">
-                {upcomingVacations.map(({ vacation, start }, index) => (
-                  <div key={vacation.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-white p-4 text-sm shadow-sm">
-                    <div className="flex min-w-0 items-center gap-4">
-                      <div
+                {upcomingVacations.map(({ vacation, start }, index) => {
+                  const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
+                  return (
+                    <div key={vacation.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-white p-4 text-sm shadow-sm">
+                      <div className="flex min-w-0 items-center gap-4">
+                        <div
+                          className={cn(
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black text-white",
+                            index % 3 === 0 && "bg-sky-500",
+                            index % 3 === 1 && "bg-violet-600",
+                            index % 3 === 2 && "bg-pink-500"
+                          )}
+                        >
+                          {getInitials(employeeName)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-base font-black text-zinc-800">{employeeName}</p>
+                          <p className="text-sm font-semibold text-zinc-400">
+                            {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
+                          </p>
+                        </div>
+                      </div>
+                      <span
                         className={cn(
-                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black text-white",
-                          index % 3 === 0 && "bg-sky-500",
-                          index % 3 === 1 && "bg-violet-600",
-                          index % 3 === 2 && "bg-pink-500"
+                          "rounded-lg border px-3 py-1 text-sm font-bold",
+                          vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
+                          vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
+                          vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
                         )}
                       >
-                        {getInitials(vacation.userId)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-base font-black text-zinc-800">{vacation.userId}</p>
-                        <p className="text-sm font-semibold text-zinc-400">
-                          {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
-                        </p>
-                      </div>
+                        {getVacationStatusLabel(vacation.status)}
+                      </span>
                     </div>
-                    <span
-                      className={cn(
-                        "rounded-lg border px-3 py-1 text-sm font-bold",
-                        vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
-                        vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
-                        vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
-                      )}
-                    >
-                      {getVacationStatusLabel(vacation.status)}
-                    </span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             <button type="button" className="inline-flex items-center gap-8 px-5 text-sm font-bold text-pink-500" onClick={() => setVacationsModalOpen(true)}>
@@ -1093,39 +1105,42 @@ function ManagementDashboard() {
               <EmptyState>Nenhuma ausência encontrada para o filtro.</EmptyState>
             ) : (
               <div className="space-y-3">
-                {filteredVacations.map(({ vacation, start }, index) => (
-                  <div key={vacation.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
-                    <div
-                      className={cn(
-                        "flex h-12 w-12 items-center justify-center rounded-full text-sm font-black text-white",
-                        index % 5 === 0 && "bg-sky-500",
-                        index % 5 === 1 && "bg-violet-600",
-                        index % 5 === 2 && "bg-pink-500",
-                        index % 5 === 3 && "bg-orange-500",
-                        index % 5 === 4 && "bg-lime-600"
-                      )}
-                    >
-                      {getInitials(vacation.userId)}
+                {filteredVacations.map(({ vacation, start }, index) => {
+                  const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
+                  return (
+                    <div key={vacation.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
+                      <div
+                        className={cn(
+                          "flex h-12 w-12 items-center justify-center rounded-full text-sm font-black text-white",
+                          index % 5 === 0 && "bg-sky-500",
+                          index % 5 === 1 && "bg-violet-600",
+                          index % 5 === 2 && "bg-pink-500",
+                          index % 5 === 3 && "bg-orange-500",
+                          index % 5 === 4 && "bg-lime-600"
+                        )}
+                      >
+                        {getInitials(employeeName)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-black text-zinc-800">{employeeName}</p>
+                        <p className="text-sm font-semibold text-zinc-400">
+                          {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
+                        </p>
+                      </div>
+                      <p className="hidden text-sm font-semibold text-zinc-400 sm:block">{vacation.days} dia(s)</p>
+                      <span
+                        className={cn(
+                          "rounded-lg border px-3 py-1 text-sm font-bold",
+                          vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
+                          vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
+                          vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
+                        )}
+                      >
+                        {getVacationStatusLabel(vacation.status)}
+                      </span>
                     </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-black text-zinc-800">{vacation.userId}</p>
-                      <p className="text-sm font-semibold text-zinc-400">
-                        {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
-                      </p>
-                    </div>
-                    <p className="hidden text-sm font-semibold text-zinc-400 sm:block">{vacation.days} dia(s)</p>
-                    <span
-                      className={cn(
-                        "rounded-lg border px-3 py-1 text-sm font-bold",
-                        vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
-                        vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
-                        vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
-                      )}
-                    >
-                      {getVacationStatusLabel(vacation.status)}
-                    </span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

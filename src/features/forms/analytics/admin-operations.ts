@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 import {
   Timestamp as AdminTimestamp,
   type Firestore,
@@ -189,6 +191,20 @@ export function parseWorkspaceIds(value: string | null | undefined) {
     .filter(Boolean);
 }
 
+/**
+ * Compara segredos em tempo constante. `!==` vaza, pelo tempo de resposta,
+ * quantos caracteres iniciais bateram — o que permite recuperar o segredo byte a byte.
+ */
+function secretMatches(provided: string, expected: string) {
+  const providedBytes = Buffer.from(provided, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  // timingSafeEqual exige buffers do mesmo tamanho; comparar o tamanho antes
+  // reintroduziria o vazamento, então normalizamos por hash.
+  const providedHash = createHash("sha256").update(providedBytes).digest();
+  const expectedHash = createHash("sha256").update(expectedBytes).digest();
+  return timingSafeEqual(providedHash, expectedHash);
+}
+
 export function assertCronSecret(request: Request) {
   const expected =
     process.env.CRON_SECRET ??
@@ -199,12 +215,26 @@ export function assertCronSecret(request: Request) {
   }
 
   const url = new URL(request.url);
-  const provided =
+  const fromHeader =
     request.headers.get("x-cron-secret") ??
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    url.searchParams.get("secret");
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const fromQuery = url.searchParams.get("secret");
 
-  if (provided !== expected) {
+  // DEPRECADO: o segredo na query string vaza em logs de acesso, histórico e Referer.
+  // Aceito por compatibilidade com o Cloud Scheduler até que ele passe a enviar o header.
+  // Ao zerar este alerta nos logs, remover o fallback e passar a exigir header.
+  if (!fromHeader && fromQuery) {
+    console.warn(
+      "[SEGURANÇA] assertCronSecret: segredo recebido via query string (?secret=), " +
+        "que é registrado em logs. Configure o agendador para enviar o header " +
+        "'x-cron-secret'. Este fallback será removido.",
+      { path: url.pathname }
+    );
+  }
+
+  const provided = fromHeader ?? fromQuery;
+
+  if (!provided || !secretMatches(provided, expected)) {
     const error = new Error("Não autorizado.");
     (error as Error & { status?: number }).status = 401;
     throw error;

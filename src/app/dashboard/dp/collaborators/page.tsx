@@ -29,6 +29,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { UserManagement } from '@/components/user-management';
+import { formatPersonName } from '@/lib/person-name';
 
 const COLLABORATOR_GRID = 'minmax(220px,2fr) 1.3fr 1fr 1fr 110px 110px 90px';
 
@@ -47,14 +48,15 @@ function fmtDate(value: any) {
 }
 
 function AvatarMark({ user, size = 44 }: { user: User; size?: number }) {
+  const displayName = formatPersonName(user.username) || user.username;
   return (
     <Avatar className="shrink-0 rounded-xl" style={{ width: size, height: size }}>
-      <AvatarImage src={user.avatarUrl || undefined} alt={user.username} className="rounded-xl object-cover" />
+      <AvatarImage src={user.avatarUrl || undefined} alt={displayName} className="rounded-xl object-cover" />
       <AvatarFallback
         className="rounded-xl bg-[#8a8a94] font-extrabold tracking-[.02em] text-white"
         style={{ backgroundColor: user.color || '#8a8a94', fontSize: size < 40 ? 12 : 14 }}
       >
-        {initials(user.username)}
+        {initials(displayName)}
       </AvatarFallback>
     </Avatar>
   );
@@ -69,6 +71,51 @@ function StatusPill({ active }: { active: boolean }) {
     >
       {active ? 'Ativo' : 'Desligado'}
     </span>
+  );
+}
+
+function CollaboratorInfoTile({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  tone: 'slate' | 'green' | 'blue';
+}) {
+  const toneClass = {
+    slate: {
+      shell: 'bg-[#f7f8fa]',
+      icon: 'bg-white text-[#7b8291]',
+      value: 'text-[#1d1d26]',
+      label: 'text-[#777784]',
+    },
+    green: {
+      shell: 'bg-[#eafaf2]',
+      icon: 'bg-white text-[#008963]',
+      value: 'text-[#006f50]',
+      label: 'text-[#008963]',
+    },
+    blue: {
+      shell: 'bg-[#eef8fd]',
+      icon: 'bg-white text-[#0876aa]',
+      value: 'text-[#075f8a]',
+      label: 'text-[#0876aa]',
+    },
+  }[tone];
+
+  return (
+    <div className={`min-w-0 rounded-2xl p-3 text-center ${toneClass.shell}`}>
+      <span className={`mx-auto grid h-7 w-7 place-items-center rounded-xl shadow-sm ${toneClass.icon}`}>
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <p title={value} className={`mt-2 truncate text-[12px] font-black leading-tight ${toneClass.value}`}>
+        {value}
+      </p>
+      <p className={`mt-1 text-[10px] font-black uppercase tracking-[.04em] ${toneClass.label}`}>{label}</p>
+    </div>
   );
 }
 
@@ -107,38 +154,54 @@ function CollaboratorCard({
   onOpen: () => void;
 }) {
   const isActive = user.isActive !== false;
+  const displayName = formatPersonName(user.username) || user.username;
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group overflow-hidden rounded-[18px] border border-[#e6e4de] bg-white text-left shadow-[0_2px_10px_rgba(15,23,42,.05)] transition hover:-translate-y-0.5 hover:border-[#d7d5cd] hover:shadow-[0_12px_24px_-12px_rgba(15,23,42,.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]"
+      className="group overflow-hidden rounded-3xl border border-[#f1c7da] bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#df2f78]/45 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]"
     >
-      <div className="flex items-center justify-between border-b border-[#f1f0ec] bg-[#faf9f6] px-3.5 py-3">
-        <span className="rounded-[7px] border border-[#e2e0da] bg-white px-[7px] py-0.5 font-mono text-[11px] font-semibold text-[#8a8a94]">
-          {user.registrationIdBizneo || user.registrationIdPdv || 'Cadastro'}
-        </span>
-        <StatusPill active={isActive} />
-      </div>
-      <div className="p-4">
-        <div className="flex items-center gap-3">
-          <AvatarMark user={user} />
-          <div className="min-w-0">
-            <p className="truncate text-[14.5px] font-extrabold text-[#1d1d26]">{user.username}</p>
-            <p className="truncate text-[12.5px] font-medium text-[#8a8a94]">{user.jobRoleName || '-'}</p>
+      <div className="flex items-start justify-between gap-3 p-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <AvatarMark user={user} size={48} />
+          <div className="min-w-0 pt-0.5">
+            <p className="truncate text-[14.5px] font-black leading-tight text-[#1d1d26]">{displayName}</p>
+            <p className="mt-0.5 truncate text-[12.5px] font-bold text-[#777784]">{user.jobRoleName || 'Sem cargo'}</p>
+            <p className="mt-0.5 truncate text-[12px] font-medium text-[#8f8f9b]">
+              {unitNames.length ? unitNames.join(', ') : 'Sem unidade'}
+            </p>
           </div>
         </div>
-        <div className="mt-3.5 flex flex-col gap-[7px] text-[12.5px] font-medium text-[#8a8a94]">
-          {user.email ? (
-            <span className="flex items-center gap-2 truncate"><Mail className="h-[13px] w-[13px] shrink-0 text-[#b4b4bd]" />{user.email}</span>
-          ) : null}
-          <span className="flex items-center gap-2 truncate"><MapPin className="h-[13px] w-[13px] shrink-0 text-[#b4b4bd]" />{unitNames.length ? unitNames.join(', ') : 'Sem unidade'}</span>
-          <span className="flex items-center gap-2 truncate"><Calendar className="h-[13px] w-[13px] shrink-0 text-[#b4b4bd]" />{shiftName || 'Sem turno padrão'}</span>
+        <StatusPill active={isActive} />
+      </div>
+
+      <div className="space-y-4 px-4 pb-4">
+        <div className="grid grid-cols-3 gap-2">
+          <CollaboratorInfoTile
+            icon={Mail}
+            label="E-mail"
+            value={user.email || 'Sem e-mail'}
+            tone="slate"
+          />
+          <CollaboratorInfoTile
+            icon={MapPin}
+            label={unitNames.length === 1 ? 'Unidade' : 'Unidades'}
+            value={unitNames.length ? unitNames.join(', ') : 'Sem unidade'}
+            tone="green"
+          />
+          <CollaboratorInfoTile
+            icon={Calendar}
+            label="Turno"
+            value={shiftName || 'Sem turno'}
+            tone="blue"
+          />
         </div>
-        <div className="mt-3.5 flex items-center justify-between border-t border-[#f1f0ec] pt-3">
-          <span className="text-xs font-medium text-[#a6a6b0]">desde {fmtDate(user.admissionDate)}</span>
-          <span className="inline-flex items-center gap-1.5 text-[12.5px] font-extrabold text-[#df2f78]">
-            Abrir <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+
+        <div className="flex items-center justify-between border-t border-[#ececf0] pt-3 text-xs font-bold">
+          <span className="text-[#777784]">desde {fmtDate(user.admissionDate)}</span>
+          <span className="inline-flex items-center gap-1 text-[#df2f78] group-hover:underline">
+            Abrir perfil <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
           </span>
         </div>
       </div>
@@ -214,14 +277,10 @@ export default function DPCollaboratorsPage() {
           <div className="min-w-0">
             <p className="text-[11.5px] font-extrabold uppercase tracking-[.12em] text-[#df2f78]">Departamento pessoal</p>
             <h1 className="mt-1 text-[30px] font-black tracking-[-.02em] text-[#181820]">Colaboradores</h1>
-            <p className="mt-1.5 max-w-[560px] text-[14.5px] font-medium leading-[1.5] text-[#6f6f7c]">
-              Perfis, vínculos, escalas e histórico operacional da equipe.
-            </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <HeaderMetric label="ativos" value={activeUsers.length} tone="active" />
-          <HeaderMetric label={terminatedUsers.length === 1 ? 'desligado' : 'desligados'} value={terminatedUsers.length} tone="muted" />
           {permissions.settings.manageUsers ? (
             <Button
               type="button"
@@ -298,7 +357,7 @@ export default function DPCollaboratorsPage() {
 
       {shiftDefsLoading && shiftDefinitions.length === 0 ? (
         viewMode === 'cards' ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[...Array(8)].map((_, index) => <Skeleton key={index} className="h-56 w-full" />)}
           </div>
         ) : (
@@ -312,7 +371,7 @@ export default function DPCollaboratorsPage() {
           Nenhum colaborador encontrado.
         </div>
       ) : viewMode === 'cards' ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((user) => {
             const unitNames = (user.unitIds ?? []).map((id) => unitNameById.get(id) ?? id);
             const shiftName = user.shiftDefinitionId ? shiftNameById.get(user.shiftDefinitionId) ?? null : null;
@@ -364,7 +423,7 @@ export default function DPCollaboratorsPage() {
                     <div className="flex min-w-0 items-center gap-3">
                       <AvatarMark user={user} size={36} />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-extrabold text-[#1d1d26]">{user.username}</p>
+                        <p className="truncate text-sm font-extrabold text-[#1d1d26]">{formatPersonName(user.username) || user.username}</p>
                         <p className="truncate text-xs font-medium text-[#a6a6b0]">{user.email || '—'}</p>
                       </div>
                     </div>

@@ -167,17 +167,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         items: [
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
           {
-            label: "Gestão do colaborador",
-            href: permissions.dp?.collaborators?.ownProfileOnly === true && user?.id
-              ? `/dashboard/dp/collaborators/${user.id}`
-              : "/dashboard/dp/collaborators",
-            icon: Users,
-            show: permissions.dp?.collaborators?.view,
-          },
-          { label: "Documentos", href: "/dashboard/dp/documents", icon: FileText, show: permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && permissions.dp?.collaborators?.ownProfileOnly !== true) },
-          { label: "Controle de uniformes", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
-          { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
-          {
             label: "Recrutamento", href: "__group:recruitment", icon: Users, show: permissions.dp?.view,
             children: [
               { label: "Gestão da vaga", href: "/dashboard/hr/recruitment", icon: LayoutGrid, show: permissions.dp?.view },
@@ -185,8 +174,21 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Banco de talentos", href: "/dashboard/hr/recruitment/talents", icon: Users, show: permissions.dp?.view },
             ],
           },
-          { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
-          { label: "Férias da equipe", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
+          {
+            label: "Gestão do colaborador",
+            href: permissions.dp?.collaborators?.ownProfileOnly === true && user?.id
+              ? `/dashboard/dp/collaborators/${user.id}`
+              : "/dashboard/dp/collaborators",
+            icon: Users,
+            show: permissions.dp?.collaborators?.view,
+            children: [
+              { label: "Documentos", href: "/dashboard/dp/documents", icon: FileText, show: permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && permissions.dp?.collaborators?.ownProfileOnly !== true) },
+              { label: "Controle de uniformes", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
+              { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
+              { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
+            ],
+          },
+          { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
         ],
       },
       {
@@ -472,6 +474,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                         const hasChildren = !!item.children?.length;
                         const groupOpen = openGroups.has(item.href);
                         const childActive = item.children?.some(isItemActive) ?? false;
+                        const parentActive = active || childActive;
+                        const isVirtualGroup = item.href.startsWith("__group:");
 
                         const dot = (on: boolean) => (
                           <span
@@ -483,26 +487,47 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                         if (hasChildren) {
                           return (
                             <div key={item.href}>
-                              <button
-                                type="button"
-                                onClick={() => toggleGroup(item.href)}
+                              <div
                                 className={cn(
                                   "relative flex min-h-9 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
-                                  childActive && "font-semibold text-slate-950 hover:text-slate-950"
+                                  parentActive && "font-semibold text-slate-950 hover:text-slate-950"
                                 )}
                               >
-                                {childActive && (
+                                {parentActive && (
                                   <span
                                     className="absolute -left-[21px] top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-full"
                                     style={{ background: section.color.text }}
                                   />
                                 )}
-                                {dot(childActive)}
-                                <span className="flex-1 truncate text-left">{item.label}</span>
-                                <ChevronDown
-                                  className={cn("h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200", groupOpen && "rotate-180")}
-                                />
-                              </button>
+                                {dot(parentActive)}
+                                {isVirtualGroup ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroup(item.href)}
+                                    className="min-w-0 flex-1 truncate text-left"
+                                  >
+                                    {item.label}
+                                  </button>
+                                ) : (
+                                  <Link
+                                    href={item.href}
+                                    onClick={() => onOpenChange(false)}
+                                    className="min-w-0 flex-1 truncate text-left"
+                                  >
+                                    {item.label}
+                                  </Link>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGroup(item.href)}
+                                  className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-stone-100 hover:text-slate-600"
+                                  aria-label={groupOpen ? `Recolher ${item.label}` : `Expandir ${item.label}`}
+                                >
+                                  <ChevronDown
+                                    className={cn("h-4 w-4 transition-transform duration-200", groupOpen && "rotate-180")}
+                                  />
+                                </button>
+                              </div>
 
                               {groupOpen && (
                                 <div className="ml-[7px] mt-0.5 space-y-0.5 border-l border-stone-200 py-0.5 pl-[19px]">

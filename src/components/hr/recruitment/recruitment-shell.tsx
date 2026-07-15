@@ -23,7 +23,10 @@ import type {
   JobOpening,
   JobOpeningStatus,
   OnboardingDocument,
+  OnboardingFinalizationSettings,
   OnboardingProcess,
+  OnboardingStage,
+  OnboardingStageId,
   RecruitmentCompositionPreset,
   RecruitmentCriterionCategory,
   RecruitmentQuestionCondition,
@@ -57,12 +60,18 @@ import {
   RECRUITMENT_PIPELINE_STATUSES,
 } from '@/lib/recruitment-pipeline';
 import {
+  DEFAULT_ONBOARDING_DOCUMENTS,
+  normalizeOnboardingStages,
+} from '@/lib/recruitment-onboarding';
+import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
+import { formatPersonName } from '@/lib/person-name';
+import {
   UserPlus, Search, Filter, MoreHorizontal, Mail, Phone,
   FileText, Calendar, Star, Clock, CheckCircle2, XCircle,
   ArrowRight, Kanban, List, Loader2, X, Trash2, AlertTriangle,
   Briefcase, ChevronDown, ChevronRight, ExternalLink, Paperclip,
   Globe, PauseCircle, Archive, Plus, Pencil, SlidersHorizontal,
-  FolderOpen,
+  FolderOpen, Copy, ArrowLeft, MapPin, Sparkles, Users, RotateCw,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1268,12 +1277,13 @@ function RecruitmentFormSectionTabs({
   active,
   onChange,
 }: {
-  active: 'talent' | 'models';
-  onChange: (value: 'talent' | 'models') => void;
+  active: 'talent' | 'models' | 'integration';
+  onChange: (value: 'talent' | 'models' | 'integration') => void;
 }) {
   const tabs = [
     { value: 'talent', label: 'Banco de talentos' },
     { value: 'models', label: 'Modelos de formulários' },
+    { value: 'integration', label: 'Modelos de integração' },
   ] as const;
 
   return (
@@ -4880,6 +4890,284 @@ type QuestionModelOption = {
   searchText: string;
 };
 
+function buildRoleFunctionModelOptions(roles: JobRole[], functions: JobFunction[]): QuestionModelOption[] {
+  const activeFunctions = functions.filter(item => item.isActive !== false);
+  const rolesWithFunctions = new Set<string>();
+  activeFunctions.forEach(item => {
+    (item.compatibleRoleIds ?? []).forEach(roleId => rolesWithFunctions.add(roleId));
+  });
+
+  const roleOptions = roles
+    .filter(role => role.isActive !== false && !rolesWithFunctions.has(role.id))
+    .map((role): QuestionModelOption => {
+      const subtitle = role.departmentName?.trim() || 'Cargo sem função vinculada';
+      return {
+        key: `role:${role.id}`,
+        kind: 'role',
+        item: role,
+        label: role.name,
+        subtitle,
+        searchText: `${role.name} ${role.publicTitle ?? ''} ${subtitle}`.toLowerCase(),
+      };
+    });
+
+  const functionOptions = activeFunctions.map((item): QuestionModelOption => {
+    const roleNames = (item.compatibleRoleIds ?? [])
+      .map(roleId => roles.find(role => role.id === roleId)?.name)
+      .filter((name): name is string => !!name);
+    const subtitle = [
+      item.departmentName?.trim() || 'Função',
+      roleNames.length ? `Cargo: ${roleNames.join(', ')}` : '',
+    ].filter(Boolean).join(' · ');
+    return {
+      key: `function:${item.id}`,
+      kind: 'function',
+      item,
+      label: item.name,
+      subtitle,
+      searchText: `${item.name} ${item.publicTitle ?? ''} ${subtitle}`.toLowerCase(),
+    };
+  });
+
+  return [...roleOptions, ...functionOptions].sort((a, b) => {
+    const departmentCompare = a.subtitle.localeCompare(b.subtitle, 'pt-BR');
+    if (departmentCompare !== 0) return departmentCompare;
+    if (a.kind !== b.kind) return a.kind === 'function' ? -1 : 1;
+    return a.label.localeCompare(b.label, 'pt-BR');
+  });
+}
+
+function IntegrationModelSettingsEditor({ roles, functions, getToken, canManage, onSaved }: {
+  roles: JobRole[];
+  functions: JobFunction[];
+  getToken: () => Promise<string>;
+  canManage: boolean;
+  onSaved: () => void;
+}) {
+  const [selectedKey, setSelectedKey] = useState('');
+  const [query, setQuery] = useState('');
+  const [stages, setStages] = useState<OnboardingStage[]>(() => normalizeOnboardingStages(null));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  const modelOptions = useMemo(
+    () => buildRoleFunctionModelOptions(roles, functions),
+    [roles, functions]
+  );
+  const selectedOption = useMemo(
+    () => modelOptions.find(option => option.key === selectedKey) ?? modelOptions[0] ?? null,
+    [modelOptions, selectedKey]
+  );
+  const selected = selectedOption?.item ?? null;
+  const filteredOptions = query.trim()
+    ? modelOptions.filter(option => option.searchText.includes(query.trim().toLowerCase()))
+    : modelOptions;
+  const configuredCount = modelOptions.filter(option =>
+    (option.item.onboardingStages?.length ?? 0) > 0
+  ).length;
+
+  useEffect(() => {
+    if (modelOptions.length === 0) {
+      setSelectedKey('');
+      return;
+    }
+    if (!selectedKey || !modelOptions.some(option => option.key === selectedKey)) {
+      setSelectedKey(modelOptions[0].key);
+    }
+  }, [modelOptions, selectedKey]);
+
+  useEffect(() => {
+    setStages(normalizeOnboardingStages(selected?.onboardingStages));
+    setError(null);
+    setSavedAt(null);
+  }, [selected?.id, selected?.onboardingStages]);
+
+  function updateStage(stageId: OnboardingStageId, patch: Partial<OnboardingStage>) {
+    setStages(current => current.map(stage => stage.id === stageId ? { ...stage, ...patch } : stage));
+  }
+
+  async function saveIntegrationModel() {
+    if (!selected || !selectedOption) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const endpoint = selectedOption.kind === 'role'
+        ? `/api/hr/roles/${selected.id}`
+        : `/api/hr/functions/${selected.id}`;
+      await apiFetch(endpoint, getToken, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          onboardingStages: stages.map((stage, index) => ({ ...stage, order: index })),
+        }),
+      });
+      setSavedAt(new Date().toISOString());
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar modelo de integração.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (modelOptions.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed bg-white py-14 text-center text-sm text-slate-500">
+        Nenhum cargo ou função disponível para configurar integração.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid min-w-0 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <aside className="min-w-0 rounded-xl border bg-white">
+        <div className="border-b px-4 py-3">
+          <p className="text-sm font-semibold text-slate-950">Modelos de integração</p>
+          <p className="mt-1 text-xs text-slate-500">{configuredCount}/{modelOptions.length} configurados</p>
+          <div className="relative mt-3">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Buscar cargo ou função..."
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-slate-400"
+            />
+          </div>
+        </div>
+        <div className="max-h-[560px] overflow-y-auto p-2">
+          {filteredOptions.map(option => {
+            const selectedItem = option.key === selectedOption?.key;
+            const stageCount = normalizeOnboardingStages(option.item.onboardingStages).length;
+            const hasCustomModel = (option.item.onboardingStages?.length ?? 0) > 0;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setSelectedKey(option.key)}
+                className={`flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-left transition ${
+                  selectedItem ? 'bg-slate-950 text-white' : 'hover:bg-slate-50'
+                }`}
+              >
+                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold ${
+                  selectedItem ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {candidateInitials(option.label)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{option.label}</span>
+                  <span className={`mt-0.5 block truncate text-xs ${selectedItem ? 'text-white/65' : 'text-slate-500'}`}>
+                    {option.subtitle}
+                  </span>
+                </span>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
+                  selectedItem
+                    ? 'bg-white/15 text-white'
+                    : hasCustomModel
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {stageCount}
+                </span>
+              </button>
+            );
+          })}
+          {filteredOptions.length === 0 ? (
+            <p className="px-3 py-8 text-center text-sm text-slate-500">Nenhum modelo encontrado.</p>
+          ) : null}
+        </div>
+      </aside>
+
+      <section className="min-w-0 space-y-4">
+        <div className="rounded-xl border bg-white p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                {selectedOption?.kind === 'role' ? 'Cargo' : 'Função'}
+              </p>
+              <h2 className="mt-1 text-xl font-bold text-slate-950">{selected?.name ?? 'Modelo de integração'}</h2>
+              <p className="mt-1 text-sm text-slate-500">{selectedOption?.subtitle}</p>
+            </div>
+            {canManage ? (
+              <button
+                type="button"
+                onClick={saveIntegrationModel}
+                disabled={saving || !selected}
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Salvar modelo
+              </button>
+            ) : null}
+          </div>
+          {error ? <div className="mt-4"><ErrorLine msg={error} /></div> : null}
+          {savedAt ? (
+            <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+              Modelo salvo em {new Date(savedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="rounded-xl border bg-white p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">Etapas da integração</p>
+                <p className="mt-1 text-xs text-slate-500">Sequência aplicada ao iniciar integração por este modelo.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
+                {pluralizePt(stages.length, 'etapa', 'etapas')}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {stages.map((stage, index) => (
+                <div key={stage.id} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[2rem_minmax(0,1fr)_140px] md:items-center">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {ONBOARDING_STAGE_DETAILS[stage.id].owner}
+                    </p>
+                    <input
+                      value={stage.label}
+                      onChange={event => updateStage(stage.id, { label: event.target.value })}
+                      disabled={!canManage}
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400 disabled:opacity-60"
+                    />
+                  </div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Prazo
+                    <input
+                      type="number"
+                      min="0"
+                      value={stage.dueDays ?? ''}
+                      onChange={event => updateStage(stage.id, { dueDays: event.target.value === '' ? null : Number(event.target.value) })}
+                      disabled={!canManage}
+                      className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400 disabled:opacity-60"
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <aside className="rounded-xl border bg-white p-5">
+            <p className="text-sm font-semibold text-slate-950">Documentos universais</p>
+            <div className="mt-4 space-y-2">
+              {DEFAULT_ONBOARDING_DOCUMENTS.map(document => (
+                <div key={document.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-sm font-semibold text-slate-800">{document.label}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{document.required !== false ? 'Obrigatório' : 'Opcional'}</p>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function hasModelText(value?: string | null) {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -5800,7 +6088,13 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
   functions: JobFunction[];
   onModelsUpdated: () => void;
 }) {
-  const [formSection, setFormSection] = useState<'talent' | 'models'>('talent');
+  const [formSection, setFormSection] = useState<'talent' | 'models' | 'integration'>(() => {
+    if (typeof window === 'undefined') return 'talent';
+    const requested = new URLSearchParams(window.location.search).get('section');
+    return requested === 'integration' || requested === 'models' || requested === 'talent'
+      ? requested
+      : 'talent';
+  });
   const [talentStep, setTalentStep] = useState<TalentPoolEditorStep>('general');
   const [form, setForm] = useState<RecruitmentFormConfig>(DEFAULT_TALENT_POOL_FORM);
   const [questionDraft, setQuestionDraft] = useState(EMPTY_QUESTION_DRAFT);
@@ -5980,6 +6274,21 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
       <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
         {formTabs}
         <RecruitmentQuestionModelEditor
+          roles={roles}
+          functions={functions}
+          getToken={getToken}
+          canManage={canManage}
+          onSaved={onModelsUpdated}
+        />
+      </div>
+    );
+  }
+
+  if (formSection === 'integration') {
+    return (
+      <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
+        {formTabs}
+        <IntegrationModelSettingsEditor
           roles={roles}
           functions={functions}
           getToken={getToken}
@@ -6337,23 +6646,545 @@ const ONBOARDING_STATUS_LABELS: Record<OnboardingProcess['status'], string> = {
 
 const ONBOARDING_DOCUMENT_STATUS_LABELS: Record<OnboardingDocument['status'], string> = {
   pending: 'Pendente',
-  received: 'Recebido',
-  approved: 'Aprovado',
-  rejected: 'Recusado',
+  received: 'Enviado',
+  ai_approved: 'Aprovado pelo copiloto',
+  review_required: 'Revisão do gestor',
+  approved: 'Aprovado pelo RH',
+  rejected: 'Reprovado',
 };
 
-function OnboardingView({ processes, getToken, canManage, onRefresh }: {
+const ONBOARDING_STAGE_DETAILS: Record<OnboardingStageId, { owner: string; focus: string }> = {
+  documents: {
+    owner: 'Candidato + RH',
+    focus: 'Dados do candidato e anexos obrigatórios',
+  },
+  document_review: {
+    owner: 'RH',
+    focus: 'Copiloto, conferência e aprovação da coleta',
+  },
+  signature_preparation: {
+    owner: 'RH',
+    focus: 'Geração e revisão dos documentos para assinatura',
+  },
+  signature: {
+    owner: 'Candidato + RH',
+    focus: 'Assinatura autenticada dos documentos',
+  },
+  formalization_validation: {
+    owner: 'RH',
+    focus: 'Validação final, VT, operação, metas e acesso',
+  },
+  integration: {
+    owner: 'RH + Liderança',
+    focus: 'Integração à rotina da empresa',
+  },
+  probation: {
+    owner: 'Liderança',
+    focus: 'Acompanhamento de experiência',
+  },
+  done: {
+    owner: 'RH',
+    focus: 'Integração finalizada',
+  },
+};
+
+// Panel type rendered for each stage in the drill-in detail view.
+const ONBOARDING_STAGE_KIND: Record<
+  OnboardingStageId,
+  'coleta' | 'revisao' | 'generico' | 'assinatura' | 'validacao' | 'integracao' | 'experiencia'
+> = {
+  documents: 'coleta',
+  document_review: 'revisao',
+  signature_preparation: 'generico',
+  signature: 'assinatura',
+  formalization_validation: 'validacao',
+  integration: 'integracao',
+  probation: 'experiencia',
+  done: 'generico',
+};
+
+// Stable per-candidate accent colors used on the grid cards and detail avatar.
+const ONBOARDING_CARD_COLORS = ['#df2f78', '#7c3aed', '#2563eb', '#008f83', '#d17400', '#c026d3'];
+
+function formatOnboardingDate(value?: string | null) {
+  if (!value) return 'Não informado';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Não informado';
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function readOnboardingAnswer(answers: Record<string, unknown> | undefined, key: string) {
+  const value = answers?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : 'Aguardando';
+}
+
+function readOnboardingChoice(answers: Record<string, unknown> | undefined, key: string, labels: Record<string, string>) {
+  const value = answers?.[key];
+  return typeof value === 'string' && labels[value] ? labels[value] : 'Aguardando';
+}
+
+function readOnboardingChildren(answers: Record<string, unknown> | undefined) {
+  const children = Array.isArray(answers?.children) ? answers.children : [];
+  if (children.length === 0) return 'Nenhum';
+  return children
+    .map((entry, index) => {
+      const data = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry as Record<string, unknown> : {};
+      const birthDate = typeof data.birthDate === 'string' && data.birthDate ? formatOnboardingDate(data.birthDate) : 'sem data';
+      return `Filho ${index + 1}: ${birthDate}`;
+    })
+    .join('\n');
+}
+
+function onboardingAnswerYes(answers: Record<string, unknown> | undefined, key: string) {
+  return answers?.[key] === 'yes';
+}
+
+function getFinalizationDraft(process: OnboardingProcess | null): OnboardingFinalizationSettings {
+  if (!process) {
+    return {
+      operational: false,
+      participatesInGoals: false,
+      loginRestrictionEnabled: false,
+      needsTransportVoucher: false,
+      transportVoucherValue: null,
+      shiftDefinitionId: '',
+    };
+  }
+  const settings = process.finalizationSettings ?? {};
+  return {
+    operational: settings.operational ?? false,
+    participatesInGoals: settings.participatesInGoals ?? false,
+    loginRestrictionEnabled: settings.loginRestrictionEnabled ?? false,
+    needsTransportVoucher: settings.needsTransportVoucher ?? onboardingAnswerYes(process.publicFormAnswers, 'wantsTransportVoucher'),
+    transportVoucherValue: settings.transportVoucherValue ?? null,
+    shiftDefinitionId: settings.shiftDefinitionId ?? process.shiftDefinitionId ?? '',
+  };
+}
+
+function candidateInitials(name?: string | null) {
+  return (name ?? 'IN')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase() || 'IN';
+}
+
+function OnboardingFinalizationControls({
+  value,
+  onChange,
+  shiftDefinitions,
+  unitId,
+  disabled = false,
+  compact = false,
+}: {
+  value: OnboardingFinalizationSettings;
+  onChange: React.Dispatch<React.SetStateAction<OnboardingFinalizationSettings>>;
+  shiftDefinitions: DPShiftDefinition[];
+  unitId?: string | null;
+  disabled?: boolean;
+  compact?: boolean;
+}) {
+  const availableShiftDefinitions = useMemo(() => {
+    const active = [...shiftDefinitions];
+    if (!unitId) return active.sort((a, b) => a.name.localeCompare(b.name));
+    return active
+      .filter(definition => shiftDefinitionMatchesUnit(definition, unitId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [shiftDefinitions, unitId]);
+
+  useEffect(() => {
+    if (value.shiftDefinitionId && !availableShiftDefinitions.some(item => item.id === value.shiftDefinitionId)) {
+      onChange(current => ({ ...current, shiftDefinitionId: null }));
+    }
+  }, [availableShiftDefinitions, onChange, value.shiftDefinitionId]);
+
+  function patch(next: Partial<OnboardingFinalizationSettings>) {
+    onChange(current => ({ ...current, ...next }));
+  }
+
+  function handleOperationalChange(next: boolean) {
+    patch({
+      operational: next,
+      ...(next ? { loginRestrictionEnabled: true } : {}),
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className={compact ? "grid gap-3 sm:grid-cols-2" : "space-y-3"}>
+        {[
+          ['operational', 'Operacional', 'Entra em escala e rotinas operacionais.'],
+          ['participatesInGoals', 'Participa de metas', 'Pode entrar nos acompanhamentos de metas.'],
+          ['loginRestrictionEnabled', 'Login por escala', 'Acesso passa a respeitar a escala montada.'],
+          ['needsTransportVoucher', 'Vale-transporte', 'Usa valor diario por dia trabalhado.'],
+        ].map(([key, label, helper]) => (
+          <label key={key} className="flex min-h-[76px] cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <input
+              type="checkbox"
+              checked={Boolean(value[key as keyof OnboardingFinalizationSettings])}
+              onChange={event => {
+                if (key === 'operational') {
+                  handleOperationalChange(event.target.checked);
+                  return;
+                }
+                patch({
+                  [key]: event.target.checked,
+                  ...(key === 'needsTransportVoucher' && !event.target.checked ? { transportVoucherValue: null } : {}),
+                });
+              }}
+              disabled={disabled}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-pink-600"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-slate-900">{label}</span>
+              <span className="mt-0.5 block text-xs leading-snug text-slate-500">{helper}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <div className={compact && value.needsTransportVoucher ? "grid gap-3 sm:grid-cols-2" : "space-y-3"}>
+        {value.needsTransportVoucher ? (
+          <label className="block text-sm font-semibold text-slate-700">
+            Valor diário do VT
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={value.transportVoucherValue ?? ''}
+              onChange={event => {
+                const numericValue = event.target.value ? Math.max(0, Number(event.target.value)) : null;
+                patch({ transportVoucherValue: numericValue });
+              }}
+              disabled={disabled}
+              inputMode="decimal"
+              className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
+              placeholder="0,00"
+            />
+          </label>
+        ) : null}
+
+        <label className="block text-sm font-semibold text-slate-700">
+          Turno previsto
+          <select
+            value={value.shiftDefinitionId ?? ''}
+            onChange={event => patch({ shiftDefinitionId: event.target.value || null })}
+            disabled={disabled}
+            className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
+          >
+            <option value="">Sem turno definido</option>
+            {availableShiftDefinitions.map(definition => (
+              <option key={definition.id} value={definition.id}>
+                {definition.name} ({definition.startTime}-{definition.endTime})
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function StartOnboardingModal({
+  roles,
+  jobFunctions,
+  units,
+  shiftDefinitions,
+  getToken,
+  onClose,
+  onCreated,
+}: {
+  roles: JobRole[];
+  jobFunctions: JobFunction[];
+  units: DPUnit[];
+  shiftDefinitions: DPShiftDefinition[];
+  getToken: () => Promise<string>;
+  onClose: () => void;
+  onCreated: (process: OnboardingProcess) => void;
+}) {
+  const [candidateName, setCandidateName] = useState('');
+  const [candidateEmail, setCandidateEmail] = useState('');
+  const [jobRoleId, setJobRoleId] = useState('');
+  const [functionId, setFunctionId] = useState('');
+  const [unitId, setUnitId] = useState('');
+  const [expectedAdmissionDate, setExpectedAdmissionDate] = useState('');
+  const [finalizationSettings, setFinalizationSettings] = useState<OnboardingFinalizationSettings>(() => getFinalizationDraft(null));
+  const [generateSignatureDocuments, setGenerateSignatureDocuments] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const activeRoles = useMemo(
+    () => roles.filter(role => role.isActive !== false).sort((a, b) => a.name.localeCompare(b.name)),
+    [roles]
+  );
+  const availableFunctions = useMemo(() => {
+    const active = jobFunctions.filter(item => item.isActive !== false);
+    if (!jobRoleId) return active.sort((a, b) => a.name.localeCompare(b.name));
+    return active
+      .filter(item => {
+        const compatible = item.compatibleRoleIds ?? [];
+        return compatible.length === 0 || compatible.includes(jobRoleId);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [jobFunctions, jobRoleId]);
+  const activeUnits = useMemo(
+    () => [...units].sort((a, b) => a.name.localeCompare(b.name)),
+    [units]
+  );
+
+  useEffect(() => {
+    if (functionId && !availableFunctions.some(item => item.id === functionId)) {
+      setFunctionId('');
+    }
+  }, [availableFunctions, functionId]);
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const normalizedCandidateName = formatPersonName(candidateName);
+    const normalizedCandidateEmail = candidateEmail.trim().toLowerCase();
+    setCandidateName(normalizedCandidateName);
+    setCandidateEmail(normalizedCandidateEmail);
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await apiFetch('/api/hr/onboarding', getToken, {
+        method: 'POST',
+        body: JSON.stringify({
+          candidateName: normalizedCandidateName,
+          candidateEmail: normalizedCandidateEmail,
+          jobRoleId,
+          functionId,
+          unitId: unitId || null,
+          shiftDefinitionId: finalizationSettings.shiftDefinitionId || null,
+          expectedAdmissionDate: expectedAdmissionDate || null,
+          operational: finalizationSettings.operational ?? false,
+          participatesInGoals: finalizationSettings.participatesInGoals ?? false,
+          loginRestrictionEnabled: finalizationSettings.loginRestrictionEnabled ?? false,
+          needsTransportVoucher: finalizationSettings.needsTransportVoucher ?? false,
+          transportVoucherValue: finalizationSettings.needsTransportVoucher ? finalizationSettings.transportVoucherValue ?? null : null,
+          generateSignatureDocuments,
+        }),
+      });
+      if (!result?.process) throw new Error('Integração criada, mas a resposta veio incompleta.');
+      onCreated(result.process as OnboardingProcess);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao iniciar integração.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider text-pink-600">Integração avulsa</p>
+            <h2 className="mt-1 text-xl font-black text-slate-950">Nova integração</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Inicie a formalização sem depender do funil de recrutamento.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Fechar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto px-5 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.95fr)] lg:px-6">
+            <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="block text-sm font-semibold text-slate-700">
+              Nome da pessoa
+              <input
+                value={candidateName}
+                onChange={event => setCandidateName(event.target.value)}
+                onBlur={event => setCandidateName(formatPersonName(event.target.value))}
+                required
+                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                placeholder="Nome completo"
+              />
+              <span className="mt-1.5 block text-xs font-medium leading-snug text-slate-500">
+                Use nome completo com iniciais maiúsculas. Ex.: Maria Joana Barbosa Pereira.
+              </span>
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              E-mail para envio
+              <input
+                type="email"
+                value={candidateEmail}
+                onChange={event => setCandidateEmail(event.target.value)}
+                onBlur={event => setCandidateEmail(event.target.value.trim().toLowerCase())}
+                required
+                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                placeholder="nome@email.com"
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="block text-sm font-semibold text-slate-700">
+              Cargo
+              <select
+                value={jobRoleId}
+                onChange={event => setJobRoleId(event.target.value)}
+                required
+                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="">Selecione o cargo</option>
+                {activeRoles.map(role => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              Função
+              <select
+                value={functionId}
+                onChange={event => setFunctionId(event.target.value)}
+                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="">Selecione a função</option>
+                {availableFunctions.map(item => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <label className="block text-sm font-semibold text-slate-700">
+            Unidade
+            <select
+              value={unitId}
+              onChange={event => setUnitId(event.target.value)}
+              className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">Sem unidade definida</option>
+              {activeUnits.map(unit => (
+                <option key={unit.id} value={unit.id}>{unit.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <label className="block text-sm font-semibold text-slate-700">
+              Data prevista de admissão
+              <input
+                type="date"
+                value={expectedAdmissionDate}
+                onChange={event => setExpectedAdmissionDate(event.target.value)}
+                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={generateSignatureDocuments}
+                  onChange={event => setGenerateSignatureDocuments(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-pink-600"
+                />
+                <span>
+                  <span className="block text-sm font-bold text-slate-900">Gerar documentos</span>
+                  <span className="block text-xs text-slate-500">Inclui etapas de geração e assinatura.</span>
+                </span>
+              </label>
+          </div>
+
+            </div>
+
+            <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Comportamento no sistema</p>
+            <OnboardingFinalizationControls
+              value={finalizationSettings}
+              onChange={setFinalizationSettings}
+              shiftDefinitions={shiftDefinitions}
+              unitId={unitId}
+              compact
+            />
+          </div>
+
+          <div className="flex items-start gap-2.5 rounded-xl border border-pink-200 bg-pink-50 px-3.5 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-pink-600" />
+            <span className="text-xs font-semibold leading-snug text-pink-700">
+              O modelo de etapas e documentos é aplicado automaticamente a partir do cargo e função selecionados.
+            </span>
+          </div>
+
+          {error ? <ErrorLine msg={error} /> : null}
+
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:justify-end lg:px-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-600 hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-pink-600 px-5 text-sm font-bold text-white shadow-lg shadow-pink-600/25 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Iniciar integração
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, onRefresh }: {
   processes: OnboardingProcess[];
+  roles: JobRole[];
+  jobFunctions: JobFunction[];
+  units: DPUnit[];
+  shiftDefinitions: DPShiftDefinition[];
   getToken: () => Promise<string>;
   canManage: boolean;
   onRefresh: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [phaseFilter, setPhaseFilter] = useState<string>('all');
+  const [view, setView] = useState<'grid' | 'detail'>('grid');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [phaseId, setPhaseId] = useState<OnboardingStageId | null>(null);
+  const [showStartModal, setShowStartModal] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [finalizationDraft, setFinalizationDraft] = useState<OnboardingFinalizationSettings>(() => getFinalizationDraft(null));
 
-  const activeProcesses = processes.filter(process => process.status !== 'cancelled');
-  const filtered = activeProcesses.filter(process => {
+  const activeProcesses = useMemo(
+    () => processes.filter(process => process.status !== 'cancelled'),
+    [processes]
+  );
+  // Distinct current phases present across active processes, for the "Todas as fases" filter.
+  const phaseOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    activeProcesses.forEach(process => {
+      const stageId = process.currentStage;
+      if (!stageId) return;
+      const label = (process.stages ?? []).find(stage => stage.id === stageId)?.label ?? stageId;
+      if (!map.has(stageId)) map.set(stageId, label);
+    });
+    return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
+  }, [activeProcesses]);
+
+  const filtered = useMemo(() => activeProcesses.filter(process => {
+    if (phaseFilter !== 'all' && process.currentStage !== phaseFilter) return false;
     const text = [
       process.candidateName,
       process.candidateEmail,
@@ -6362,298 +7193,901 @@ function OnboardingView({ processes, getToken, canManage, onRefresh }: {
       process.unitName,
     ].filter(Boolean).join(' ').toLowerCase();
     return !search || text.includes(search.toLowerCase());
-  });
-  const completed = processes.filter(process => process.status === 'completed').length;
-  const pendingCodes = activeProcesses.filter(process =>
-    (process.integrationAlerts ?? []).some(alert => alert.status === 'pending')
-  ).length;
-  const docsPending = activeProcesses.reduce((sum, process) =>
-    sum + (process.documents ?? []).filter(document => document.required !== false && document.status !== 'approved').length,
-    0
+  }), [activeProcesses, search, phaseFilter]);
+  const selectedProcess = useMemo(
+    () => activeProcesses.find(process => process.id === selectedId) ?? null,
+    [activeProcesses, selectedId]
   );
+
+  // Return to the grid if the open process disappears (cancelled/completed refresh).
+  useEffect(() => {
+    if (view === 'detail' && selectedId && !activeProcesses.some(process => process.id === selectedId)) {
+      setView('grid');
+      setSelectedId(null);
+    }
+  }, [view, selectedId, activeProcesses]);
+
+  useEffect(() => {
+    setFinalizationDraft(getFinalizationDraft(selectedProcess));
+  }, [
+    selectedProcess?.id,
+    selectedProcess?.shiftDefinitionId,
+    selectedProcess?.publicFormAnswers,
+    selectedProcess?.finalizationSettings,
+  ]);
 
   async function patchProcess(processId: string, body: Record<string, unknown>) {
     setUpdating(`${processId}:${body.action ?? 'update'}`);
     setError(null);
     try {
-      await apiFetch(`/api/hr/onboarding/${processId}`, getToken, {
+      const payload = await apiFetch(`/api/hr/onboarding/${processId}`, getToken, {
         method: 'PATCH',
         body: JSON.stringify(body),
       });
       onRefresh();
+      return payload;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao atualizar integração.');
+      return null;
     } finally {
       setUpdating(null);
     }
   }
 
+  async function copyLink(copyId: string, link: string) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(link);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = link;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopiedLinkId(copyId);
+    window.setTimeout(() => {
+      setCopiedLinkId(current => current === copyId ? null : current);
+    }, 1800);
+  }
+
+  async function saveFinalization(processId: string) {
+    await patchProcess(processId, {
+      action: 'save_finalization',
+      finalizationSettings: finalizationDraft,
+    });
+  }
+
+  async function createCollaborator(processId: string) {
+    const payload = await patchProcess(processId, { action: 'create_collaborator' });
+    const link = typeof payload?.process?.firstAccessUrl === 'string' ? payload.process.firstAccessUrl : null;
+    if (link) await copyLink(`${processId}:first-access`, link);
+  }
+
+  async function createFirstAccessLink(processId: string) {
+    const payload = await patchProcess(processId, { action: 'create_first_access_link' });
+    const link = typeof payload?.process?.firstAccessUrl === 'string' ? payload.process.firstAccessUrl : null;
+    if (link) await copyLink(`${processId}:first-access`, link);
+  }
+
   function processDocProgress(process: OnboardingProcess) {
     const documents = process.documents ?? [];
-    if (documents.length === 0) return { approved: 0, total: 0, percent: 0 };
+    if (documents.length === 0) return { received: 0, approved: 0, total: 0, pending: 0, percent: 0 };
     const required = documents.filter(document => document.required !== false);
     const base = required.length > 0 ? required : documents;
+    const received = base.filter(document => ['received', 'ai_approved', 'review_required', 'approved'].includes(document.status)).length;
     const approved = base.filter(document => document.status === 'approved').length;
+    const pending = base.filter(document => document.status === 'pending' || document.status === 'rejected').length;
     return {
+      received,
       approved,
       total: base.length,
-      percent: base.length > 0 ? Math.round((approved / base.length) * 100) : 0,
+      pending,
+      percent: base.length > 0 ? Math.round((received / base.length) * 100) : 0,
     };
   }
 
-  return (
-    <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
-      <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Em integração</p>
-          <p className="text-3xl font-bold text-slate-950">{activeProcesses.filter(process => process.status !== 'completed').length}</p>
+  function stageOrderOf(process: OnboardingProcess, stageId?: OnboardingStageId | null) {
+    if (!stageId) return -1;
+    return (process.stages ?? []).find(stage => stage.id === stageId)?.order ?? -1;
+  }
+
+  function stageState(process: OnboardingProcess, stageId: OnboardingStageId): 'done' | 'active' | 'pending' {
+    if (process.status === 'completed') return 'done';
+    const currentOrder = stageOrderOf(process, process.currentStage);
+    const stageOrder = stageOrderOf(process, stageId);
+    if (currentOrder < 0 || stageOrder < 0) return stageId === process.currentStage ? 'active' : 'pending';
+    if (stageId === process.currentStage) return 'active';
+    return stageOrder < currentOrder ? 'done' : 'pending';
+  }
+
+  function openProcess(process: OnboardingProcess) {
+    setSelectedId(process.id);
+    setPhaseId(process.currentStage ?? process.stages?.[0]?.id ?? null);
+    setView('detail');
+  }
+
+  function colorForProcess(processId: string) {
+    const index = activeProcesses.findIndex(process => process.id === processId);
+    return ONBOARDING_CARD_COLORS[(index < 0 ? 0 : index) % ONBOARDING_CARD_COLORS.length];
+  }
+
+  function processLinkActive(process: OnboardingProcess) {
+    return !!process.publicToken &&
+      !process.publicTokenClosedAt &&
+      process.status !== 'cancelled' &&
+      process.status !== 'completed';
+  }
+
+  function DocumentRow({ process, document, mode }: {
+    process: OnboardingProcess;
+    document: OnboardingDocument;
+    mode: 'collect' | 'review';
+  }) {
+    const actionKey = `${process.id}:document_status`;
+    const isApproved = document.status === 'approved';
+    const statusColor = isApproved
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : document.status === 'ai_approved'
+        ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
+        : document.status === 'review_required'
+          ? 'bg-amber-50 text-amber-700 border-amber-200'
+          : document.status === 'received'
+            ? 'bg-blue-50 text-blue-700 border-blue-200'
+            : document.status === 'rejected'
+              ? 'bg-red-50 text-red-700 border-red-200'
+              : 'bg-slate-100 text-slate-400 border-slate-200';
+    const statusText = isApproved
+      ? 'text-emerald-700'
+      : document.status === 'ai_approved'
+        ? 'text-cyan-700'
+        : document.status === 'review_required'
+          ? 'text-amber-700'
+          : document.status === 'received'
+            ? 'text-blue-700'
+            : document.status === 'rejected'
+              ? 'text-red-600'
+              : 'text-slate-400';
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${statusColor}`}>
+            {isApproved ? <CheckCircle2 className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">
+              {document.label}
+              {document.required !== false && <span className="ml-0.5 text-pink-600">*</span>}
+            </p>
+            <p className={`mt-0.5 text-xs font-semibold ${statusText}`}>
+              {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
+              {document.updatedAt ? ` · ${formatOnboardingDate(document.updatedAt)}` : ''}
+            </p>
+            {document.fileUrl ? (
+              <a
+                href={document.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-500"
+              >
+                <ExternalLink className="h-3 w-3" /> Ver arquivo enviado
+              </a>
+            ) : null}
+          </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Documentos pendentes</p>
-          <p className="text-3xl font-bold text-slate-950">{docsPending}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Alertas de integração</p>
-          <p className="text-3xl font-bold text-slate-950">{pendingCodes}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Finalizados</p>
-          <p className="text-3xl font-bold text-slate-950">{completed}</p>
-        </div>
+        {canManage && (
+          <div className="flex shrink-0 gap-1.5">
+            {mode === 'collect' ? (
+              <>
+                <button
+                  type="button"
+                  disabled={updating === actionKey}
+                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'review_required' })}
+                  className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Revisão
+                </button>
+                <button
+                  type="button"
+                  disabled={updating === actionKey}
+                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
+                  className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  Aprovar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={updating === actionKey}
+                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
+                  className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  Aprovar
+                </button>
+                <button
+                  type="button"
+                  disabled={updating === actionKey}
+                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'rejected' })}
+                  className="h-8 rounded-lg bg-red-600 px-3 text-[11px] font-bold text-white hover:bg-red-500 disabled:opacity-50"
+                >
+                  Reprovar
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
+    );
+  }
 
-      <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white px-3 py-3 shadow-sm">
-        <div className="relative min-w-0 flex-1 basis-full sm:basis-80">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            placeholder="Buscar candidato, cargo ou unidade..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-          />
+  // ── Grid landing ──────────────────────────────────────────────────────────
+  if (view === 'grid' || !selectedProcess) {
+    return (
+      <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
+        <div className="flex flex-wrap items-end justify-between gap-5">
+          <div className="min-w-0">
+            <span className="text-[11px] font-black uppercase tracking-[0.09em] text-pink-600">Integração</span>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Candidatos em formalização</h1>
+            <p className="mt-2 max-w-xl text-sm font-medium text-slate-500">
+              {activeProcesses.length} pessoa{activeProcesses.length === 1 ? '' : 's'} em processo. Selecione um card para abrir a linha do tempo e conduzir cada fase da integração.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2.5">
+            {canManage && (
+              <a
+                href="/dashboard/settings?department=pessoal&tab=recruitment&section=integration"
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                <FolderOpen className="h-4 w-4 text-pink-600" />
+                Modelos de integração
+              </a>
+            )}
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => setShowStartModal(true)}
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-pink-600 px-5 text-sm font-bold text-white shadow-lg shadow-pink-600/25 hover:bg-pink-700"
+              >
+                <Plus className="h-4 w-4" />
+                Nova integração
+              </button>
+            )}
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Atualizar
-        </button>
-      </div>
 
-      {error && <ErrorLine msg={error} />}
-
-      {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-          <p className="text-sm font-medium text-slate-500">Nenhuma integração em andamento.</p>
-          <p className="mt-1 text-xs text-slate-400">Candidatos aprovados para contratação aparecem aqui.</p>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Buscar candidato, cargo ou unidade…"
+              className="h-[46px] w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-900 placeholder-slate-400 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
+            />
+          </div>
+          <div className="relative min-w-[180px]">
+            <select
+              value={phaseFilter}
+              onChange={event => setPhaseFilter(event.target.value)}
+              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
+            >
+              <option value="all">Todas as fases</option>
+              {phaseOptions.map(option => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            aria-label="Atualizar"
+            className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
+          >
+            <RotateCw className="h-4 w-4" />
+          </button>
         </div>
-      ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {filtered.map(process => {
-            const progress = processDocProgress(process);
-            const currentStage = (process.stages ?? []).find(stage => stage.id === process.currentStage);
-            const pendingAlerts = (process.integrationAlerts ?? []).filter(alert => alert.status === 'pending');
-            const canCreateCollaborator = canManage && !process.collaboratorUserId && process.status !== 'cancelled' && process.status !== 'completed';
-            const canComplete = canManage && !!process.collaboratorUserId && process.status !== 'completed' && process.status !== 'cancelled';
 
-            return (
-              <div key={process.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-100 p-5">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                          {ONBOARDING_STATUS_LABELS[process.status] ?? process.status}
-                        </span>
-                        {currentStage && (
-                          <span className="rounded-full bg-pink-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-pink-600">
-                            {currentStage.label}
-                          </span>
-                        )}
-                      </div>
-                      <h2 className="mt-3 truncate text-lg font-bold text-slate-950">{process.candidateName ?? 'Candidato sem nome'}</h2>
-                      <p className="mt-1 truncate text-sm text-slate-500">{process.candidateEmail ?? 'E-mail não informado'}</p>
-                      <p className="mt-2 text-sm font-medium text-slate-700">
-                        {process.jobRoleName ?? 'Cargo não informado'}
-                        {process.functionName ? ` | ${process.functionName}` : ''}
-                        {process.unitName ? ` · ${process.unitName}` : ''}
-                      </p>
+        {error && <ErrorLine msg={error} />}
+
+        {filtered.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
+            <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+            <p className="text-sm font-medium text-slate-500">
+              {search ? 'Nenhum candidato corresponde à busca.' : 'Nenhuma integração em andamento.'}
+            </p>
+            {!search && (
+              <p className="mt-1 text-xs text-slate-400">Use “Nova integração” para iniciar uma formalização.</p>
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
+            {filtered.map(process => {
+              const progress = processDocProgress(process);
+              const currentStage = (process.stages ?? []).find(stage => stage.id === process.currentStage);
+              const formReceived = !!process.publicFormSubmittedAt;
+              const linkActive = processLinkActive(process);
+              const color = colorForProcess(process.id);
+              return (
+                <button
+                  key={process.id}
+                  type="button"
+                  onClick={() => openProcess(process)}
+                  className="group flex w-full flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-sm font-black text-white"
+                      style={{ backgroundColor: color }}
+                    >
+                      {candidateInitials(process.candidateName)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[15px] font-black text-slate-900">{process.candidateName ?? 'Candidato sem nome'}</div>
+                      <div className="mt-0.5 truncate text-xs font-medium text-slate-500">{process.candidateEmail ?? 'E-mail não informado'}</div>
                     </div>
-                    <div className="text-left md:text-right">
-                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Documentos</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-950">{progress.approved}/{progress.total}</p>
-                      <div className="mt-2 h-2 w-36 overflow-hidden rounded-full bg-slate-100">
-                        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress.percent}%` }} />
-                      </div>
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
+                      formReceived ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    }`}>
+                      {formReceived ? 'Recebido' : 'Aguardando'}
+                    </span>
+                  </div>
+
+                  <div className="mt-3.5 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="truncate text-[13px] font-bold text-slate-700">
+                      {process.jobRoleName ?? 'Cargo não informado'}
+                      {process.functionName ? ` · ${process.functionName}` : ''}
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {process.unitName ?? 'Unidade não definida'}
                     </div>
                   </div>
 
-                  {(process.stages ?? []).length > 0 && (
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {(process.stages ?? []).map(stage => (
-                        <button
-                          key={stage.id}
-                          type="button"
-                          disabled={!canManage || updating === `${process.id}:advance_stage`}
-                          onClick={() => patchProcess(process.id, { action: 'advance_stage', currentStage: stage.id })}
-                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                            process.currentStage === stage.id
-                              ? 'border-slate-950 bg-slate-950 text-white'
-                              : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-950'
-                          } disabled:opacity-50`}
-                        >
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-pink-600" />
+                      <span className="text-xs font-bold text-slate-700">{currentStage?.label ?? 'Formalização'}</span>
+                    </span>
+                    <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">
+                      {progress.received}/{progress.total} docs
+                    </span>
+                  </div>
+
+                  <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress.percent}%` }} />
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className={`text-[11px] font-bold ${linkActive ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {linkActive
+                        ? `Link válido${process.publicFormSubmittedAt ? ' · formulário enviado' : ''}`
+                        : 'Link encerrado'}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-pink-600">
+                      Abrir<ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {showStartModal && (
+          <StartOnboardingModal
+            roles={roles}
+            jobFunctions={jobFunctions}
+            units={units}
+            shiftDefinitions={shiftDefinitions}
+            getToken={getToken}
+            onClose={() => setShowStartModal(false)}
+            onCreated={(process) => {
+              setShowStartModal(false);
+              onRefresh();
+              openProcess(process);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ── Detail (drill-in) ─────────────────────────────────────────────────────
+  const progress = processDocProgress(selectedProcess);
+  const answers = selectedProcess.publicFormAnswers;
+  const currentStageId = selectedProcess.currentStage ?? selectedProcess.stages?.[0]?.id ?? null;
+  const activePhaseId = phaseId ?? currentStageId;
+  const activeStage = (selectedProcess.stages ?? []).find(stage => stage.id === activePhaseId) ?? null;
+  const activeDetails = activePhaseId ? ONBOARDING_STAGE_DETAILS[activePhaseId] : null;
+  const activeKind = activePhaseId ? ONBOARDING_STAGE_KIND[activePhaseId] : 'generico';
+  const accent = colorForProcess(selectedProcess.id);
+
+  const linkActive = processLinkActive(selectedProcess);
+  const publicLink = linkActive && selectedProcess.publicToken
+    ? `${PUBLIC_RECRUITMENT_URL}/onboarding/${selectedProcess.publicToken}`
+    : null;
+  const pendingAlerts = (selectedProcess.integrationAlerts ?? []).filter(alert => alert.status === 'pending');
+  const finalizationSaved = !!selectedProcess.finalizationSettings;
+  const userCreated = !!selectedProcess.collaboratorUserId;
+  const readyToCreate = finalizationSaved &&
+    (selectedProcess.currentStage === 'formalization_validation' || selectedProcess.status === 'ready_to_create_user');
+  const canCreateCollaborator = canManage && !userCreated && readyToCreate &&
+    selectedProcess.status !== 'cancelled' && selectedProcess.status !== 'completed';
+  const canComplete = canManage && userCreated &&
+    selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+  const signed = selectedProcess.status === 'completed' ||
+    stageOrderOf(selectedProcess, selectedProcess.currentStage) > stageOrderOf(selectedProcess, 'signature');
+  const canAdvanceToPhase = canManage && !!activePhaseId && activePhaseId !== selectedProcess.currentStage &&
+    selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+
+  const formRows: Array<[string, string]> = [
+    ['Identificação', readOnboardingChoice(answers, 'identityDocumentType', { identity: 'RG / CIN', cnh: 'CNH' })],
+    ['Possui CNH?', readOnboardingChoice(answers, 'hasCnh', { yes: 'Sim', no: 'Não' })],
+    ['Vale-transporte', readOnboardingChoice(answers, 'wantsTransportVoucher', { yes: 'Sim', no: 'Não' })],
+    ['Banco', readOnboardingAnswer(answers, 'bankName')],
+    ['Agência', readOnboardingAnswer(answers, 'bankAgency')],
+    ['Conta', readOnboardingAnswer(answers, 'bankAccount')],
+    ['Pix', readOnboardingAnswer(answers, 'pixKey')],
+    ['Uniforme', [
+      readOnboardingAnswer(answers, 'uniformShirtSize'),
+      readOnboardingAnswer(answers, 'uniformPantsSize'),
+      readOnboardingAnswer(answers, 'uniformShoeSize'),
+    ].filter(value => value !== 'Aguardando').join(' / ') || 'Aguardando'],
+    ['Filhos', readOnboardingChildren(answers)],
+  ];
+
+  const signItems: Array<[string, boolean]> = [
+    ['Contrato de trabalho', signed],
+    ['Termo de vale-transporte', signed],
+    ['Acordo de compensação de jornada', signed],
+  ];
+
+  const okAlert = pendingAlerts.length === 0;
+
+  let genericStatus = 'Etapa concluída';
+  let genericDesc = activeDetails?.focus ?? '';
+  if (activePhaseId === 'signature_preparation') {
+    const generated = stageOrderOf(selectedProcess, selectedProcess.currentStage) > stageOrderOf(selectedProcess, 'signature_preparation');
+    genericStatus = generated ? 'Documentos gerados' : 'Aguardando geração';
+    genericDesc = 'RH gera contrato, termos e anexos a partir dos dados validados e revisa antes de enviar para assinatura.';
+  } else if (activePhaseId === 'done') {
+    genericStatus = selectedProcess.status === 'completed' ? 'Integração finalizada' : 'Ainda em andamento';
+    genericDesc = 'Colaborador ativo no sistema, com acesso liberado e integrações sincronizadas.';
+  } else if (activeKind === 'experiencia') {
+    genericStatus = selectedProcess.status === 'completed' ? 'Concluído' : 'Acompanhamento de experiência';
+    genericDesc = 'Liderança acompanha os primeiros 90 dias. Avaliações e feedbacks registrados neste período contam para a efetivação.';
+  }
+
+  return (
+    <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden" style={{ animation: 'none' }}>
+      <button
+        type="button"
+        onClick={() => setView('grid')}
+        className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[13px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar aos candidatos
+      </button>
+
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_8px_30px_-14px_rgba(15,23,42,0.2)]">
+        <div className="flex flex-wrap items-start justify-between gap-5 border-b border-slate-100 p-6">
+          <div className="min-w-0">
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[10.5px] font-black uppercase tracking-wide text-slate-600">
+                {ONBOARDING_STATUS_LABELS[selectedProcess.status] ?? selectedProcess.status}
+              </span>
+              <span className={`rounded-full px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${
+                linkActive ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'
+              }`}>
+                {linkActive ? 'Link ativo' : 'Link encerrado'}
+              </span>
+            </div>
+            <div className="mt-3.5 flex items-center gap-3">
+              <span
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-[15px] font-black text-white"
+                style={{ backgroundColor: accent }}
+              >
+                {candidateInitials(selectedProcess.candidateName)}
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-xl font-black tracking-tight text-slate-900">{selectedProcess.candidateName ?? 'Candidato sem nome'}</h2>
+                <p className="mt-0.5 text-[13.5px] font-medium text-slate-500">{selectedProcess.candidateEmail ?? 'E-mail não informado'}</p>
+              </div>
+            </div>
+            <p className="mt-3 text-[13.5px] font-bold text-slate-600">
+              {selectedProcess.jobRoleName ?? 'Cargo não informado'}
+              {selectedProcess.functionName ? ` · ${selectedProcess.functionName}` : ''}
+              {selectedProcess.unitName ? ` · ${selectedProcess.unitName}` : ''}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Recebidos</div>
+              <div className="mt-1 text-[19px] font-black text-slate-900">{progress.received}/{progress.total}</div>
+            </div>
+            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Aprovados</div>
+              <div className="mt-1 text-[19px] font-black text-emerald-600">{progress.approved}</div>
+            </div>
+            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
+              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Pendentes</div>
+              <div className="mt-1 text-[19px] font-black text-amber-600">{progress.pending}</div>
+            </div>
+          </div>
+        </div>
+
+        {error && <div className="px-6 pt-4"><ErrorLine msg={error} /></div>}
+
+        <div className="flex flex-wrap items-start gap-5 p-6">
+          {/* timeline */}
+          <aside className="min-w-[260px] flex-[1_1_290px] rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <p className="mb-3.5 text-[11px] font-black uppercase tracking-wide text-slate-500">Linha do tempo · fases</p>
+            <div className="space-y-1">
+              {(selectedProcess.stages ?? []).map((stage, index, stages) => {
+                const state = stageState(selectedProcess, stage.id);
+                const details = ONBOARDING_STAGE_DETAILS[stage.id];
+                const isActivePhase = stage.id === activePhaseId;
+                return (
+                  <button
+                    key={stage.id}
+                    type="button"
+                    onClick={() => setPhaseId(stage.id)}
+                    className={`flex w-full gap-3 rounded-xl px-2.5 py-2 text-left transition ${
+                      isActivePhase ? 'bg-white shadow-sm' : 'hover:bg-white/70'
+                    }`}
+                  >
+                    <span className="flex flex-col items-center">
+                      <span className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border text-[11px] font-black ${
+                        state === 'done'
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : state === 'active'
+                            ? 'border-pink-600 bg-pink-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-400'
+                      }`}>
+                        {state === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : index + 1}
+                      </span>
+                      {index < stages.length - 1 ? (
+                        <span className={`my-0.5 min-h-[22px] w-0.5 flex-1 ${state === 'done' ? 'bg-emerald-300' : 'bg-slate-200'}`} />
+                      ) : null}
+                    </span>
+                    <span className="min-w-0 flex-1 pb-3">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className={`text-[13px] font-black ${
+                          isActivePhase ? 'text-pink-600' : state === 'done' ? 'text-slate-700' : 'text-slate-400'
+                        }`}>
                           {stage.label}
-                          {stage.dueDays ? <span className="ml-1 text-[10px] opacity-70">{stage.dueDays}d</span> : null}
-                        </button>
-                      ))}
+                        </span>
+                        {stage.dueDays ? (
+                          <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-400">
+                            {stage.dueDays}d
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 block text-[11.5px] font-semibold text-slate-400">{details.owner}</span>
+                    </span>
+                  </button>
+                );
+              })}
+              {(selectedProcess.stages ?? []).length === 0 && (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
+                  Nenhuma etapa configurada.
+                </p>
+              )}
+            </div>
+          </aside>
+
+          {/* phase panel */}
+          <div className="min-w-[320px] flex-[100_1_380px]">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
+              <div className="min-w-0">
+                <span className="text-[11px] font-black uppercase tracking-[0.07em] text-pink-600">
+                  {activeKind === 'coleta' ? 'Formalização'
+                    : activeKind === 'revisao' ? 'Conferência'
+                    : activeKind === 'validacao' ? 'Validação final'
+                    : activeKind === 'integracao' ? 'Acessos'
+                    : activeKind === 'assinatura' ? 'Assinatura'
+                    : activeKind === 'experiencia' ? 'Experiência'
+                    : 'Etapa'}
+                </span>
+                <h3 className="mt-1 text-lg font-black tracking-tight text-slate-900">{activeStage?.label ?? 'Etapa'}</h3>
+                <p className="mt-1 max-w-[440px] text-[13px] font-medium text-slate-500">{activeDetails?.focus}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11.5px] font-bold text-slate-600">
+                  <Users className="h-3.5 w-3.5 text-slate-400" />
+                  {activeDetails?.owner}
+                </span>
+                {activeStage?.dueDays ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] font-bold text-amber-700">
+                    <Clock className="h-3.5 w-3.5" />
+                    Prazo {activeStage.dueDays} dia{activeStage.dueDays === 1 ? '' : 's'}
+                  </span>
+                ) : null}
+                {canAdvanceToPhase && (
+                  <button
+                    type="button"
+                    disabled={updating === `${selectedProcess.id}:advance_stage`}
+                    onClick={() => patchProcess(selectedProcess.id, { action: 'advance_stage', currentStage: activePhaseId })}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-pink-200 bg-pink-50 px-2.5 py-1.5 text-[11.5px] font-bold text-pink-700 hover:bg-pink-100 disabled:opacity-50"
+                  >
+                    {updating === `${selectedProcess.id}:advance_stage`
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <ArrowRight className="h-3.5 w-3.5" />}
+                    Definir como etapa atual
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* COLETA */}
+            {activeKind === 'coleta' && (
+              <div className="mt-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Dados fornecidos pelo candidato</p>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
+                    selectedProcess.publicFormSubmittedAt ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    {selectedProcess.publicFormSubmittedAt ? 'Enviado' : 'Aguardando'}
+                  </span>
+                </div>
+                <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+                  {formRows.map(([label, value]) => (
+                    <div key={label} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                      <div className="text-[10.5px] font-black uppercase tracking-wide text-slate-400">{label}</div>
+                      <div className="mt-1 whitespace-pre-wrap break-words text-[13px] font-bold text-slate-700">{value}</div>
                     </div>
+                  ))}
+                </div>
+
+                <p className="text-xs font-black uppercase tracking-wide text-slate-500">Documentação obrigatória</p>
+                <div className="space-y-2">
+                  {(selectedProcess.documents ?? []).map(document => (
+                    <DocumentRow key={document.id} process={selectedProcess} document={document} mode="collect" />
+                  ))}
+                  {(selectedProcess.documents ?? []).length === 0 && (
+                    <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
+                      Nenhum documento configurado para esta integração.
+                    </p>
                   )}
                 </div>
 
-                <div className="grid gap-4 p-5 lg:grid-cols-[1.2fr_0.8fr]">
-                  <div>
-                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Documentação</p>
-                    <div className="space-y-2">
-                      {(process.documents ?? []).map(document => {
-                        const actionKey = `${process.id}:document_status`;
-                        return (
-                          <div key={document.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900">
-                                  {document.label}
-                                  {document.required !== false && <span className="ml-1 text-pink-500">*</span>}
-                                </p>
-                                <p className="mt-0.5 text-xs text-slate-500">
-                                  {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
-                                </p>
-                                {document.fileUrl ? (
-                                  <a
-                                    href={document.fileUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500"
-                                  >
-                                    <ExternalLink className="h-3 w-3" /> Ver arquivo enviado
-                                  </a>
-                                ) : null}
-                              </div>
-                              {canManage && (
-                                <div className="flex gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={updating === actionKey}
-                                    onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'received' })}
-                                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-950 disabled:opacity-50"
-                                  >
-                                    Recebido
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={updating === actionKey}
-                                    onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
-                                    className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-                                  >
-                                    Aprovar
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {(process.documents ?? []).length === 0 && (
-                        <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
-                          Nenhum documento configurado para esta integração.
-                        </p>
-                      )}
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5">
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-black text-slate-900">Link do formulário público</div>
+                    <div className={`mt-0.5 text-xs font-bold ${linkActive ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {selectedProcess.publicFormSubmittedAt
+                        ? `Enviado em ${formatOnboardingDate(selectedProcess.publicFormSubmittedAt)}`
+                        : linkActive ? 'Aguardando envio' : 'Link encerrado'}
                     </div>
                   </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Integrações</p>
-                      <div className="space-y-2">
-                        {pendingAlerts.length > 0 ? pendingAlerts.map(alert => (
-                          <div key={alert.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                            <p className="text-sm font-bold text-amber-800">{alert.label}</p>
-                            <p className="mt-1 text-xs text-amber-700">{alert.message ?? 'Pendente de preenchimento.'}</p>
-                          </div>
-                        )) : (
-                          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                            <p className="text-sm font-bold text-emerald-800">Sem alertas pendentes</p>
-                            <p className="mt-1 text-xs text-emerald-700">Bizneo e PDV Legal podem ser conferidos no perfil do colaborador.</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Rastreio</p>
-                      <p className="mt-2 text-xs text-slate-500">ID da integração</p>
-                      <p className="truncate text-sm font-mono text-slate-700">{process.id}</p>
-                      {process.jobOpeningId && (
-                        <>
-                          <p className="mt-2 text-xs text-slate-500">Vaga de origem</p>
-                          <p className="truncate text-sm font-mono text-slate-700">{process.jobOpeningId}</p>
-                        </>
-                      )}
-                      {process.publicToken ? (
-                        <>
-                          <p className="mt-3 text-xs text-slate-500">Formulário público</p>
-                          <a
-                            href={`${PUBLIC_RECRUITMENT_URL}/onboarding/${process.publicToken}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-1 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            Abrir formulário do candidato
-                          </a>
-                          {process.publicFormSubmittedAt ? (
-                            <p className="mt-2 text-xs text-emerald-700">
-                              Enviado em {new Date(process.publicFormSubmittedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </p>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </div>
-
-                    {canManage && (
-                      <div className="flex flex-col gap-2">
-                        {canCreateCollaborator && (
-                          <button
-                            type="button"
-                            disabled={updating === `${process.id}:create_collaborator`}
-                            onClick={() => patchProcess(process.id, { action: 'create_collaborator' })}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                          >
-                            {updating === `${process.id}:create_collaborator` ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                            Criar colaborador
-                          </button>
-                        )}
-                        {canComplete && (
-                          <button
-                            type="button"
-                            disabled={updating === `${process.id}:complete`}
-                            onClick={() => patchProcess(process.id, { action: 'complete' })}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-                          >
-                            {updating === `${process.id}:complete` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                            Finalizar integração
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  {publicLink ? (
+                    <button
+                      type="button"
+                      onClick={() => copyLink(`${selectedProcess.id}:public`, publicLink)}
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-[12.5px] font-bold text-slate-600 hover:bg-slate-100"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      {copiedLinkId === `${selectedProcess.id}:public` ? 'Copiado' : 'Copiar link'}
+                    </button>
+                  ) : null}
                 </div>
               </div>
-            );
-          })}
+            )}
+
+            {/* REVISAO */}
+            {activeKind === 'revisao' && (
+              <div className="mt-4 space-y-3.5">
+                <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
+                    <Sparkles className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <div className="text-[13px] font-black text-blue-800">
+                      Copiloto conferiu {progress.received} de {progress.total} documento{progress.total === 1 ? '' : 's'}
+                    </div>
+                    <div className="mt-0.5 text-xs font-semibold text-blue-700">
+                      CPF, data de nascimento e filiação extraídos dos documentos. Confirme as divergências antes de aprovar a coleta.
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {(selectedProcess.documents ?? []).map(document => (
+                    <DocumentRow key={document.id} process={selectedProcess} document={document} mode="review" />
+                  ))}
+                  {(selectedProcess.documents ?? []).length === 0 && (
+                    <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
+                      Nenhum documento recebido para conferência.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* VALIDACAO */}
+            {activeKind === 'validacao' && (
+              <div className="mt-4 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Como o colaborador se comporta no sistema</p>
+                  {finalizationSaved ? (
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black text-emerald-700">Salvo</span>
+                  ) : (
+                    <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-black text-amber-700">Pendente</span>
+                  )}
+                </div>
+                <OnboardingFinalizationControls
+                  value={finalizationDraft}
+                  onChange={setFinalizationDraft}
+                  shiftDefinitions={shiftDefinitions}
+                  unitId={selectedProcess.unitId}
+                  disabled={!canManage || userCreated}
+                />
+                {canManage && !userCreated ? (
+                  <button
+                    type="button"
+                    disabled={updating === `${selectedProcess.id}:save_finalization`}
+                    onClick={() => saveFinalization(selectedProcess.id)}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {updating === `${selectedProcess.id}:save_finalization`
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                    Salvar validação
+                  </button>
+                ) : null}
+              </div>
+            )}
+
+            {/* INTEGRACAO */}
+            {activeKind === 'integracao' && (
+              <div className="mt-4 space-y-3">
+                <div className={`rounded-2xl border px-4 py-3.5 ${okAlert ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                  {pendingAlerts.length > 0 ? pendingAlerts.map(alert => (
+                    <div key={alert.id} className="[&:not(:first-child)]:mt-2">
+                      <p className="text-[13px] font-black text-amber-800">{alert.label}</p>
+                      <p className="mt-1 text-[11.5px] font-semibold text-amber-700">{alert.message ?? 'Pendente de preenchimento.'}</p>
+                    </div>
+                  )) : (
+                    <>
+                      <p className="text-[13px] font-black text-emerald-800">Sem alertas pendentes</p>
+                      <p className="mt-1 text-[11.5px] font-semibold text-emerald-700">Bizneo HR e PDV Legal conferidos.</p>
+                    </>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[
+                    ['Bizneo HR', 'Sincroniza dados cadastrais e ponto.'],
+                    ['PDV Legal', 'Habilita operação no ponto de venda.'],
+                  ].map(([name, desc]) => (
+                    <div key={name} className="rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <span className="text-[12.5px] font-black text-slate-900">{name}</span>
+                      </div>
+                      <div className="mt-1 text-[11.5px] font-semibold text-slate-400">{desc}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5">
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-black text-slate-900">Link de primeiro acesso</div>
+                    <div className={`mt-0.5 text-xs font-bold ${userCreated ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {userCreated ? 'Disponível' : 'Disponível após criar o colaborador'}
+                    </div>
+                  </div>
+                  {userCreated && selectedProcess.firstAccess?.status !== 'used' ? (
+                    <button
+                      type="button"
+                      disabled={updating === `${selectedProcess.id}:create_first_access_link`}
+                      onClick={() => createFirstAccessLink(selectedProcess.id)}
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-[12.5px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      {updating === `${selectedProcess.id}:create_first_access_link`
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Copy className="h-3.5 w-3.5" />}
+                      {copiedLinkId === `${selectedProcess.id}:first-access` ? 'Copiado' : 'Copiar link'}
+                    </button>
+                  ) : null}
+                </div>
+
+                {canManage && (
+                  <>
+                    {!finalizationSaved && !userCreated ? (
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-bold text-amber-800">
+                        Salve a validação final antes de criar o colaborador.
+                      </p>
+                    ) : null}
+                    {!userCreated ? (
+                      <button
+                        type="button"
+                        disabled={!canCreateCollaborator || updating === `${selectedProcess.id}:create_collaborator`}
+                        onClick={() => createCollaborator(selectedProcess.id)}
+                        className={`inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl text-[13.5px] font-bold text-white ${
+                          canCreateCollaborator
+                            ? 'bg-pink-600 shadow-lg shadow-pink-600/25 hover:bg-pink-700'
+                            : 'cursor-not-allowed bg-slate-300'
+                        }`}
+                      >
+                        {updating === `${selectedProcess.id}:create_collaborator`
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <UserPlus className="h-4 w-4" />}
+                        {canCreateCollaborator ? 'Criar colaborador e copiar link' : 'Conclua a validação para criar'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!canComplete || updating === `${selectedProcess.id}:complete`}
+                        onClick={() => patchProcess(selectedProcess.id, { action: 'complete' })}
+                        className="inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-[13.5px] font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {updating === `${selectedProcess.id}:complete`
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <CheckCircle2 className="h-4 w-4" />}
+                        {selectedProcess.status === 'completed' ? 'Integração finalizada' : 'Finalizar integração'}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ASSINATURA */}
+            {activeKind === 'assinatura' && (
+              <div className="mt-4 space-y-2">
+                {signItems.map(([label, isSigned]) => (
+                  <div key={label} className="flex items-center justify-between gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500">
+                        <FileText className="h-4 w-4" />
+                      </span>
+                      <span className="text-[13.5px] font-bold text-slate-900">{label}</span>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-black ${
+                      isSigned ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    }`}>
+                      {isSigned ? 'Assinado' : 'Aguardando'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* GENERICO / EXPERIENCIA */}
+            {(activeKind === 'generico' || activeKind === 'experiencia') && (
+              <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-5 py-[18px]">
+                <div className="flex items-center gap-2.5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                  </span>
+                  <div className="text-sm font-black text-slate-900">{genericStatus}</div>
+                </div>
+                <p className="mt-3 text-[13px] font-medium leading-relaxed text-slate-500">{genericDesc}</p>
+              </div>
+            )}
+          </div>
         </div>
+      </section>
+
+      {showStartModal && (
+        <StartOnboardingModal
+          roles={roles}
+          jobFunctions={jobFunctions}
+          units={units}
+          shiftDefinitions={shiftDefinitions}
+          getToken={getToken}
+          onClose={() => setShowStartModal(false)}
+          onCreated={(process) => {
+            setShowStartModal(false);
+            onRefresh();
+            openProcess(process);
+          }}
+        />
       )}
     </div>
   );
@@ -7485,6 +8919,10 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
       {section === 'integration' && (
         <OnboardingView
           processes={onboardingProcesses}
+          roles={roles}
+          jobFunctions={functions}
+          units={units}
+          shiftDefinitions={shiftDefinitions}
           getToken={getToken}
           canManage={canManage}
           onRefresh={loadData}

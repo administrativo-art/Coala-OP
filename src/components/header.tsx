@@ -266,7 +266,7 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Organograma", href: "/dashboard/settings?department=pessoal&tab=organogram", section: "Departamento pessoal" },
   { label: "Acesso por escala", href: "/dashboard/settings?department=pessoal&tab=login-access", section: "Departamento pessoal" },
   { label: "Campos do perfil", href: "/dashboard/settings?department=pessoal&tab=profile-fields", section: "Departamento pessoal" },
-  { label: "Formulários do recrutamento", href: "/dashboard/settings?department=pessoal&tab=recruitment", section: "Departamento pessoal" },
+  { label: "Modelos do recrutamento", href: "/dashboard/settings?department=pessoal&tab=recruitment", section: "Departamento pessoal" },
   { label: "Turnos do DP", href: "/dashboard/settings?department=pessoal&tab=shifts", section: "Departamento pessoal" },
   { label: "Calendários do DP", href: "/dashboard/settings?department=pessoal&tab=calendars", section: "Departamento pessoal" },
   { label: "Coala Signage", href: "/dashboard/signage", section: "Departamento de marketing" },

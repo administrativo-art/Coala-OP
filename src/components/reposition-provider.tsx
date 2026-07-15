@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { type RepositionActivity, type RepositionContextType } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import { warnBackgroundLoadError } from "@/lib/client-background-errors";
 import {
   cancelRepositionActivityRequest,
   createRepositionActivityRequest,
@@ -59,7 +60,7 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
           setActivities(payload.activities);
         }
       } catch (error) {
-        console.error("Error fetching reposition activities:", error);
+        warnBackgroundLoadError("reposition-activities", error);
       } finally {
         if (isMounted) {
           setLoading(false);

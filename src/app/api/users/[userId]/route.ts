@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 
@@ -26,6 +27,24 @@ const SERVER_ONLY_FIELDS = new Set([
   "updatedAt",
 ]);
 
+const COLLABORATOR_CORE_FIELDS = new Set([
+  "jobRoleId",
+  "functionId",
+  "jobFunctionIds",
+  "unitId",
+  "unitIds",
+  "assignedKioskIds",
+  "responsibleUnitIds",
+  "shiftDefinitionId",
+  "operational",
+  "operacional",
+  "participatesInGoals",
+  "loginRestrictionEnabled",
+  "needsTransportVoucher",
+  "transportVoucherValue",
+  "jobRoleProfileSyncDisabled",
+]);
+
 function cleanPayload(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(cleanPayload);
@@ -40,6 +59,25 @@ function cleanPayload(value: unknown): unknown {
   }
 
   return value;
+}
+
+function hasCollaboratorCoreFields(payload: Record<string, unknown>) {
+  return Object.keys(payload).some((field) => COLLABORATOR_CORE_FIELDS.has(field));
+}
+
+function comparable(value: unknown) {
+  if (value && typeof value === "object" && "seconds" in value && "nanoseconds" in value) {
+    return value;
+  }
+  return value ?? null;
+}
+
+function valuesDiffer(left: unknown, right: unknown) {
+  return JSON.stringify(comparable(left)) !== JSON.stringify(comparable(right));
+}
+
+function isProtectedUser(user: Record<string, unknown>) {
+  return user.username === "Tiago Brasil" || user.email === "administrativo@coalas.com";
 }
 
 export async function PATCH(
@@ -69,11 +107,15 @@ export async function PATCH(
       delete payload[field];
     }
 
+    const userRef = dbAdmin.collection("users").doc(userId);
+    const existingUserSnap = await userRef.get();
+    const existingUser = existingUserSnap.data() ?? {};
+
     const restrictedFields = Object.keys(payload).filter((field) =>
-      MANAGE_USERS_ONLY_FIELDS.has(field)
+      MANAGE_USERS_ONLY_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
     );
     const defaultAdminOnlyFields = Object.keys(payload).filter((field) =>
-      DEFAULT_ADMIN_ONLY_FIELDS.has(field)
+      DEFAULT_ADMIN_ONLY_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
     );
 
     if (defaultAdminOnlyFields.length > 0 && !actor.isDefaultAdmin) {
@@ -90,10 +132,20 @@ export async function PATCH(
       );
     }
 
+    if (hasCollaboratorCoreFields(payload)) {
+      const collaboratorCore = await resolveCollaboratorCore(payload, {
+        currentUser: existingUser,
+        protectedUser: isProtectedUser(existingUser),
+        syncProfile: true,
+      });
+      Object.assign(payload, collaboratorCore.userPatch);
+    }
+
     if (
       !actor.isDefaultAdmin &&
       typeof payload.profileId === "string" &&
-      payload.profileId.trim()
+      payload.profileId.trim() &&
+      valuesDiffer(payload.profileId.trim(), existingUser.profileId)
     ) {
       if (userId === actor.decoded.uid) {
         return NextResponse.json(
@@ -116,7 +168,7 @@ export async function PATCH(
       }
     }
 
-    await dbAdmin.collection("users").doc(userId).set(payload, { merge: true });
+    await userRef.set(payload, { merge: true });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

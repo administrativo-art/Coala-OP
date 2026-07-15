@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useEffect, useMemo, useState } from 
 import { usePathname } from "next/navigation";
 import { type RepositionRequest, type RepositionRequestContextType } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
+import { warnBackgroundLoadError } from "@/lib/client-background-errors";
 import {
   createRepositionRequest,
   fetchRepositionRequests,
@@ -43,7 +44,7 @@ export function RepositionRequestProvider({ children }: { children: React.ReactN
         const payload = await fetchRepositionRequests(currentFirebaseUser);
         if (isMounted) setRequests(payload.requests);
       } catch (error) {
-        console.error("Error fetching reposition requests:", error);
+        warnBackgroundLoadError("reposition-requests", error);
       } finally {
         if (isMounted) setLoading(false);
       }

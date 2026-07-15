@@ -20,6 +20,7 @@ const ALLOWED_MIME = new Set([
 ]);
 const UPLOAD_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const UPLOAD_LIMIT_MAX = 5;
+const ONBOARDING_UPLOAD_LIMIT_MAX = 30;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
 function jsonError(message: string, status = 400) {
@@ -35,7 +36,7 @@ function getClientKey(request: NextRequest) {
   return forwarded || request.headers.get('x-real-ip') || 'unknown';
 }
 
-function isRateLimited(key: string) {
+function isRateLimited(key: string, max = UPLOAD_LIMIT_MAX) {
   const now = Date.now();
   for (const [bucketKey, bucket] of rateBuckets.entries()) {
     if (now > bucket.resetAt) rateBuckets.delete(bucketKey);
@@ -47,7 +48,7 @@ function isRateLimited(key: string) {
     return false;
   }
   current.count += 1;
-  return current.count > UPLOAD_LIMIT_MAX;
+  return current.count > max;
 }
 
 function isInsideApplicationWindow(data: FirebaseFirestore.DocumentData, now: string) {
@@ -69,15 +70,14 @@ async function assertPublicUploadAllowed(request: NextRequest, formData: FormDat
     return jsonError('Envio de currículo temporariamente indisponível.', 503);
   }
 
-  if (isRateLimited(getClientKey(request))) {
-    return jsonError('Muitas tentativas. Tente novamente em alguns minutos.', 429);
-  }
-
   const website = trimText(formData.get('website'), 200);
   if (website) return jsonError('Envio não aceito.', 400);
 
   const onboardingToken = trimText(formData.get('onboardingToken'), 120);
   if (onboardingToken) {
+    if (isRateLimited(`onboarding:${onboardingToken}:${getClientKey(request)}`, ONBOARDING_UPLOAD_LIMIT_MAX)) {
+      return jsonError('Muitas tentativas. Tente novamente em alguns minutos.', 429);
+    }
     const onboarding = await hrDbAdmin
       .collection('onboardingProcesses')
       .where('publicToken', '==', onboardingToken)
@@ -85,10 +85,23 @@ async function assertPublicUploadAllowed(request: NextRequest, formData: FormDat
       .get();
     if (onboarding.empty) return jsonError('Onboarding não encontrado.', 404);
     const data = onboarding.docs[0].data();
-    if (data.status === 'cancelled' || data.status === 'completed') {
+    if (data.publicTokenClosedAt || data.status === 'cancelled' || data.status === 'completed') {
       return jsonError('Este onboarding não está aceitando documentos.', 403);
     }
+    const onboardingDocumentId = trimText(formData.get('onboardingDocumentId'), 120);
+    if (onboardingDocumentId) {
+      const documents = Array.isArray(data.documents) ? data.documents as Array<Record<string, unknown>> : [];
+      const existing = documents.find(document => document.id === onboardingDocumentId);
+      const existingStatus = typeof existing?.status === 'string' ? existing.status : null;
+      if (existingStatus && existingStatus !== 'pending' && existingStatus !== 'rejected') {
+        return jsonError('Documento já enviado. Ele só pode ser substituído se o RH reprovar.', 403);
+      }
+    }
     return null;
+  }
+
+  if (isRateLimited(getClientKey(request))) {
+    return jsonError('Muitas tentativas. Tente novamente em alguns minutos.', 429);
   }
 
   if (trimText(formData.get('talentPool'), 20) === 'true') {
@@ -130,6 +143,10 @@ export async function POST(request: NextRequest) {
   const token = randomUUID();
   const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(0, 80);
   const onboardingToken = trimText(formData.get('onboardingToken'), 120).replace(/[^a-zA-Z0-9_-]/g, '');
+  const onboardingDocumentId = trimText(formData.get('onboardingDocumentId'), 120).replace(/[^a-zA-Z0-9_-]/g, '');
+  if (onboardingDocumentId === 'profile_photo' && !new Set(['image/jpeg', 'image/png']).has(file.type)) {
+    return jsonError('A foto para identificação deve ser enviada em JPG ou PNG.');
+  }
   const scope = access ? 'internal' : 'public';
   const objectPath = onboardingToken
     ? `hr/onboarding/${onboardingToken}/${Date.now()}-${token}-${safeName}`
@@ -141,7 +158,11 @@ export async function POST(request: NextRequest) {
   await bucket.file(objectPath).save(buffer, {
     metadata: {
       contentType: file.type,
-      metadata: { firebaseStorageDownloadTokens: token },
+      metadata: {
+        firebaseStorageDownloadTokens: token,
+        originalName: file.name.slice(0, 180),
+        ...(onboardingDocumentId ? { onboardingDocumentId } : {}),
+      },
     },
   });
 

@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { AlertTriangle, CheckCircle2, Clock3, FolderOpen, Lock, Search, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, FolderOpen, Search, ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
@@ -12,9 +10,9 @@ import type { User } from "@/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatPersonName } from "@/lib/person-name";
 
 type EmployeeDocumentSummary = {
   employeeId: string;
@@ -53,24 +51,16 @@ function initials(name: string) {
     .join("");
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "Sem upload";
-  try {
-    return format(new Date(value), "dd 'de' MMM. yyyy", { locale: ptBR });
-  } catch {
-    return "Sem upload";
-  }
-}
-
 function AvatarMark({ user }: { user: User }) {
+  const displayName = formatPersonName(user.username) || user.username;
   return (
     <Avatar className="h-12 w-12 shrink-0 rounded-2xl">
-      <AvatarImage src={user.avatarUrl || undefined} alt={user.username} className="rounded-2xl object-cover" />
+      <AvatarImage src={user.avatarUrl || undefined} alt={displayName} className="rounded-2xl object-cover" />
       <AvatarFallback
         className="rounded-2xl bg-pink-100 text-sm font-black text-pink-700"
         style={user.color ? { backgroundColor: user.color, color: "#fff" } : undefined}
       >
-        {initials(user.username || "?")}
+        {initials(displayName || "?")}
       </AvatarFallback>
     </Avatar>
   );
@@ -103,6 +93,53 @@ function SummaryPill({
   );
 }
 
+function OverviewMetric({
+  label,
+  description,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  description: string;
+  value: number;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: "amber" | "emerald" | "rose";
+}) {
+  const toneClass = {
+    amber: {
+      shell: "border-amber-100 bg-amber-50/60",
+      icon: "bg-amber-100 text-amber-700",
+      value: "text-amber-700",
+    },
+    emerald: {
+      shell: "border-emerald-100 bg-emerald-50/60",
+      icon: "bg-emerald-100 text-emerald-700",
+      value: "text-emerald-700",
+    },
+    rose: {
+      shell: "border-rose-100 bg-rose-50/60",
+      icon: "bg-rose-100 text-rose-700",
+      value: "text-rose-700",
+    },
+  }[tone];
+
+  return (
+    <div className={`rounded-3xl border p-4 shadow-sm ${toneClass.shell}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[.1em] text-slate-500">{label}</p>
+          <p className={`mt-2 text-3xl font-black leading-none ${toneClass.value}`}>{value}</p>
+          <p className="mt-2 text-xs font-semibold leading-snug text-slate-500">{description}</p>
+        </div>
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${toneClass.icon}`}>
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function DocumentCollaboratorCard({
   user,
   summary,
@@ -115,8 +152,8 @@ function DocumentCollaboratorCard({
   onOpen: () => void;
 }) {
   const isActive = user.isActive !== false;
-  const hasIssues = summary.rejected > 0 || summary.expired > 0;
   const pendingReview = summary.pending + summary.received;
+  const displayName = formatPersonName(user.username) || user.username;
 
   return (
     <button
@@ -128,7 +165,7 @@ function DocumentCollaboratorCard({
         <div className="flex min-w-0 items-start gap-3">
           <AvatarMark user={user} />
           <div className="min-w-0">
-            <p className="truncate text-sm font-black text-[#1d1d26]">{user.username}</p>
+            <p className="truncate text-sm font-black text-[#1d1d26]">{displayName}</p>
             <p className="mt-0.5 truncate text-xs font-bold text-[#777784]">{user.jobRoleName || "Sem cargo"}</p>
             <p className="mt-0.5 truncate text-xs font-medium text-[#8f8f9b]">
               {unitNames.length ? unitNames.join(", ") : "Sem unidade"}
@@ -141,33 +178,13 @@ function DocumentCollaboratorCard({
       </div>
 
       <div className="space-y-4 p-4">
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-2xl bg-slate-50 p-3 text-center">
-            <p className="text-xl font-black text-[#1d1d26]">{summary.total}</p>
-            <p className="text-[10px] font-bold uppercase text-[#777784]">Arquivos</p>
-          </div>
-          <div className="rounded-2xl bg-emerald-50 p-3 text-center">
-            <p className="text-xl font-black text-emerald-700">{summary.validated}</p>
-            <p className="text-[10px] font-bold uppercase text-emerald-700">Validados</p>
-          </div>
-          <div className={`rounded-2xl p-3 text-center ${hasIssues ? "bg-rose-50" : "bg-slate-50"}`}>
-            <p className={`text-xl font-black ${hasIssues ? "text-rose-700" : "text-[#1d1d26]"}`}>
-              {summary.rejected + summary.expired}
-            </p>
-            <p className={`text-[10px] font-bold uppercase ${hasIssues ? "text-rose-700" : "text-[#777784]"}`}>Alertas</p>
-          </div>
-        </div>
-
         <div className="flex flex-wrap gap-2">
-          <SummaryPill icon={Clock3} label="em análise" value={pendingReview} tone={pendingReview > 0 ? "amber" : "slate"} />
-          <SummaryPill icon={CheckCircle2} label="validados" value={summary.validated} tone="green" />
-          {summary.confidential > 0 ? <SummaryPill icon={Lock} label="confidenciais" value={summary.confidential} tone="blue" /> : null}
-          {summary.expired > 0 ? <SummaryPill icon={AlertTriangle} label="vencidos" value={summary.expired} tone="red" /> : null}
-        </div>
-
-        <div className="flex items-center justify-between border-t border-[#ececf0] pt-3 text-xs font-bold">
-          <span className="text-[#777784]">Último upload: {formatDate(summary.lastUploadedAt)}</span>
-          <span className="text-[#df2f78] group-hover:underline">Abrir documentos</span>
+          <SummaryPill
+            icon={pendingReview > 0 ? AlertTriangle : Clock3}
+            label="em análise"
+            value={pendingReview}
+            tone={pendingReview > 0 ? "amber" : "slate"}
+          />
         </div>
       </div>
     </button>
@@ -186,6 +203,7 @@ export default function DPDocumentsPage() {
 
   const ownProfileOnly = permissions.dp?.collaborators?.ownProfileOnly === true;
   const canView = Boolean(permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && !ownProfileOnly));
+  const showStorageNotice = process.env.NODE_ENV !== "production";
   const allUsers = useMemo(() => [...activeUsers, ...terminatedUsers], [activeUsers, terminatedUsers]);
   const unitNameById = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
 
@@ -253,7 +271,6 @@ export default function DPDocumentsPage() {
   const totals = useMemo(() => {
     const values = Object.values(summaries);
     return {
-      documents: values.reduce((sum, summary) => sum + summary.total, 0),
       pending: values.reduce((sum, summary) => sum + summary.pending + summary.received, 0),
       validated: values.reduce((sum, summary) => sum + summary.validated, 0),
       alerts: values.reduce((sum, summary) => sum + summary.rejected + summary.expired, 0),
@@ -277,17 +294,36 @@ export default function DPDocumentsPage() {
             Acesse as pastas individuais e acompanhe pendências, validações e vencimentos.
           </p>
         </div>
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
-          <ShieldCheck className="mr-2 inline h-4 w-4" />
-          Arquivos privados com acesso via URL temporária.
-        </div>
+        {showStorageNotice ? (
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+            <ShieldCheck className="mr-2 inline h-4 w-4" />
+            Documentos privados. O acesso abre por link temporário e autorizado.
+          </div>
+        ) : null}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card><CardContent className="p-4"><p className="text-xs font-bold text-muted-foreground">Arquivos</p><p className="mt-1 text-2xl font-black">{totals.documents}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs font-bold text-muted-foreground">Em análise</p><p className="mt-1 text-2xl font-black text-amber-600">{totals.pending}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs font-bold text-muted-foreground">Validados</p><p className="mt-1 text-2xl font-black text-emerald-600">{totals.validated}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs font-bold text-muted-foreground">Alertas</p><p className="mt-1 text-2xl font-black text-rose-600">{totals.alerts}</p></CardContent></Card>
+      <div className="grid gap-3 md:grid-cols-3">
+        <OverviewMetric
+          label="Em análise"
+          description="Recebidos ou pendentes de validação."
+          value={totals.pending}
+          icon={Clock3}
+          tone="amber"
+        />
+        <OverviewMetric
+          label="Validados"
+          description="Documentos conferidos e liberados."
+          value={totals.validated}
+          icon={CheckCircle2}
+          tone="emerald"
+        />
+        <OverviewMetric
+          label="Alertas"
+          description="Rejeitados, vencidos ou exigindo ação."
+          value={totals.alerts}
+          icon={AlertTriangle}
+          tone="rose"
+        />
       </div>
 
       <div className="space-y-3 rounded-3xl border border-[#dedfe4] bg-white p-4 shadow-sm">
@@ -314,7 +350,7 @@ export default function DPDocumentsPage() {
       ) : null}
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {[...Array(6)].map((_, index) => <Skeleton key={index} className="h-72 rounded-3xl" />)}
         </div>
       ) : filteredUsers.length === 0 ? (
@@ -323,7 +359,7 @@ export default function DPDocumentsPage() {
           Nenhum colaborador encontrado para os filtros atuais.
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {filteredUsers.map((user) => {
             const summary = summaries[user.id] ? { ...summaries[user.id], employeeId: user.id } : { ...EMPTY_SUMMARY, employeeId: user.id };
             const unitNames = (user.unitIds ?? []).map((id) => unitNameById.get(id) ?? id);

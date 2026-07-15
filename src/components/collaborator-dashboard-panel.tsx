@@ -19,27 +19,21 @@ import {
   Minus,
   Plus,
 } from "lucide-react";
-import { collection, collectionGroup, getDocs, query, where } from "firebase/firestore";
 import {
   eachDayOfInterval,
-  endOfMonth,
   endOfWeek,
   format,
   isSameDay,
   isWithinInterval,
-  startOfMonth,
   startOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { fetchMyFormExecutions } from "@/features/forms/lib/client";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
 import { useReposition } from "@/hooks/use-reposition";
 import { useToast } from "@/hooks/use-toast";
-import { useGoals } from "@/contexts/goals-context";
-import { GoalsProvider } from "@/components/goals-provider";
 import { useStockAudit } from "@/hooks/use-stock-audit";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useDPStore } from "@/store/use-dp-store";
@@ -47,7 +41,6 @@ import type { DPShift, EmployeeGoal, GoalPeriodDoc, RepositionActivity, StockAud
 import type { FormExecution } from "@/types/forms";
 import {
   getEmployeeDistributionDateKeys,
-  loadGoalDistributionSnapshot,
   type GoalDistributionSnapshot,
 } from "@/lib/goals-distribution";
 import { calculateTieredGoalBonus, formatCurrencyBRL } from "@/lib/goal-methods";
@@ -117,6 +110,19 @@ function normalizeIdentity(value: string | null | undefined) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function canPreviewCollaboratorMockups(
+  user: { username?: string | null; email?: string | null },
+  firebaseUser: { displayName?: string | null; email?: string | null } | null | undefined
+) {
+  const username = normalizeIdentity(user.username ?? firebaseUser?.displayName);
+  const email = normalizeIdentity(user.email ?? firebaseUser?.email);
+  return (
+    username === normalizeIdentity("Tiago Brasil") ||
+    email === "administrativo@coalas.com" ||
+    email === "administrativo@coalashakes.com"
+  );
 }
 
 function mergeEmployeeGoals(goals: EmployeeGoal[]) {
@@ -1053,10 +1059,12 @@ function SidebarEscala({
   shifts,
   loading,
   error,
+  showMockup,
 }: {
   shifts: DPShift[];
   loading: boolean;
   error: string | null;
+  showMockup?: boolean;
 }) {
   const { shiftDefinitions } = useDPStore();
   const todayKey = dateKey(new Date());
@@ -1099,7 +1107,7 @@ function SidebarEscala({
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
           Carregando...
         </div>
-      ) : upcoming.length === 0 ? (
+      ) : upcoming.length === 0 && showMockup ? (
         <div className="space-y-2">
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2">
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-indigo-600">Mockup visual</p>
@@ -1119,6 +1127,10 @@ function SidebarEscala({
             ))}
           </div>
         </div>
+      ) : upcoming.length === 0 ? (
+        <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+          Nenhum turno futuro encontrado para este mês.
+        </p>
       ) : (
         <div className="space-y-1">
           {upcoming.map((shift) => {
@@ -1271,12 +1283,14 @@ function SidebarMetas({
   periods,
   allGoals,
   distributionSnapshot,
+  showMockup,
 }: {
   loading: boolean;
   goals: Array<EmployeeGoal & { originalGoals?: EmployeeGoal[] }>;
   periods: GoalPeriodDoc[];
   allGoals: EmployeeGoal[];
   distributionSnapshot?: GoalDistributionSnapshot | null;
+  showMockup?: boolean;
 }) {
   const { kiosks } = useKiosks();
   const kioskName = (id: string) => kiosks.find((kiosk) => kiosk.id === id)?.name ?? id;
@@ -1321,8 +1335,12 @@ function SidebarMetas({
                 <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                 Carregando...
               </div>
-            ) : rows.length === 0 ? (
+            ) : rows.length === 0 && showMockup ? (
               <MockGoalMiniCard />
+            ) : rows.length === 0 ? (
+              <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                Nenhuma meta ativa vinculada a você no momento.
+              </p>
             ) : (
               <div className="space-y-3">
                 {goalUnits.length > 1 ? (
@@ -1380,8 +1398,12 @@ function SidebarMetas({
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Carregando metas...
           </div>
-        ) : goalUnits.length === 0 ? (
+        ) : goalUnits.length === 0 && showMockup ? (
           <MockGoalDetail />
+        ) : goalUnits.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
+            Nenhuma meta ativa vinculada a você no momento.
+          </div>
         ) : goalUnits.length === 1 ? (
           <GoalProgressRow
             goal={goalUnits[0].goal}
@@ -1426,36 +1448,42 @@ function SidebarMetas({
   );
 }
 
-function SidebarComunicados() {
+function SidebarComunicados({ showMockup }: { showMockup?: boolean }) {
   return (
     <SidebarCard
       icon={<Bell className="h-4 w-4" />}
       title="Comunicados"
-      action={<span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Mockup</span>}
+      action={showMockup ? <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Mockup</span> : undefined}
     >
-      <div className="space-y-2">
-        <div className="rounded-xl border border-pink-100 bg-pink-50/70 px-3 py-2.5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-600">Operação</p>
-              <p className="mt-0.5 truncate text-xs font-black text-pink-950">Novo padrão de fechamento</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-pink-800">Conferir dinheiro líquido e anexar evidência no fim do turno.</p>
-            </div>
-            <Badge variant="outline" className="shrink-0 rounded-full border-pink-200 bg-white text-[10px] text-pink-600">
-              Hoje
-            </Badge>
-          </div>
-        </div>
-        <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-            <div className="min-w-0">
-              <p className="truncate text-xs font-bold text-zinc-900">Checklist de atendimento atualizado</p>
-              <p className="text-[11px] text-muted-foreground">Leitura rápida · 2 min</p>
+      {showMockup ? (
+        <div className="space-y-2">
+          <div className="rounded-xl border border-pink-100 bg-pink-50/70 px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-600">Operação</p>
+                <p className="mt-0.5 truncate text-xs font-black text-pink-950">Novo padrão de fechamento</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-pink-800">Conferir dinheiro líquido e anexar evidência no fim do turno.</p>
+              </div>
+              <Badge variant="outline" className="shrink-0 rounded-full border-pink-200 bg-white text-[10px] text-pink-600">
+                Hoje
+              </Badge>
             </div>
           </div>
+          <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="truncate text-xs font-bold text-zinc-900">Checklist de atendimento atualizado</p>
+                <p className="text-[11px] text-muted-foreground">Leitura rápida · 2 min</p>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+          Nenhum comunicado para exibir.
+        </p>
+      )}
     </SidebarCard>
   );
 }
@@ -1466,7 +1494,6 @@ function SidebarComunicados() {
 
 function CollaboratorDashboardPanelInner() {
   const { firebaseUser, user } = useAuth();
-  const { periods, employeeGoals, loading: goalsLoading } = useGoals();
   const { kiosks } = useKiosks();
   const { taskNotifications, pendingReceipts, completedReceipts } = useAllTasks();
   const { activities: repositionActivities, updateRepositionActivity } = useReposition();
@@ -1474,25 +1501,23 @@ function CollaboratorDashboardPanelInner() {
   const { auditSessions } = useStockAudit();
   const [confirmingReceipt, setConfirmingReceipt] = useState<{ activityId: string; description: string } | null>(null);
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
-  const { schedules, units, shiftDefinitions } = useDPStore();
+  const { units, shiftDefinitions } = useDPStore();
   const [executions, setExecutions] = useState<FormExecution[]>([]);
   const [loadingForms, setLoadingForms] = useState(true);
   const [formsError, setFormsError] = useState<string | null>(null);
-  const [shifts, setShifts] = useState<DPShift[]>([]);
-  const [loadingSchedule, setLoadingSchedule] = useState(true);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot | null>(null);
-  const [apiShifts, setApiShifts] = useState<DPShift[] | null>(null);
-  const [apiPeriods, setApiPeriods] = useState<GoalPeriodDoc[] | null>(null);
-  const [apiEmployeeGoals, setApiEmployeeGoals] = useState<EmployeeGoal[] | null>(null);
+  const [apiShifts, setApiShifts] = useState<DPShift[]>([]);
+  const [apiPeriods, setApiPeriods] = useState<GoalPeriodDoc[]>([]);
+  const [apiEmployeeGoals, setApiEmployeeGoals] = useState<EmployeeGoal[]>([]);
   const [loadingCollaboratorData, setLoadingCollaboratorData] = useState(true);
+  const [collaboratorDataError, setCollaboratorDataError] = useState<string | null>(null);
   const currentUserIds = useMemo(
     () => compactUnique([firebaseUser?.uid, user?.id, user?.registrationIdBizneo, user?.registrationIdPdv]),
     [firebaseUser?.uid, user?.id, user?.registrationIdBizneo, user?.registrationIdPdv]
   );
-  const currentUserNames = useMemo(
-    () => compactUnique([user?.username, firebaseUser?.displayName, firebaseUser?.email]).map(normalizeIdentity),
-    [firebaseUser?.displayName, firebaseUser?.email, user?.username]
+  const showMockup = useMemo(
+    () => canPreviewCollaboratorMockups(user ?? {}, firebaseUser),
+    [firebaseUser?.displayName, firebaseUser?.email, user?.email, user?.username]
   );
 
   useEffect(() => {
@@ -1503,12 +1528,15 @@ function CollaboratorDashboardPanelInner() {
         setApiShifts([]);
         setApiPeriods([]);
         setApiEmployeeGoals([]);
+        setDistributionSnapshot(null);
+        setCollaboratorDataError(null);
         setLoadingCollaboratorData(false);
         return;
       }
 
       try {
         setLoadingCollaboratorData(true);
+        setCollaboratorDataError(null);
         const token = await firebaseUser.getIdToken();
         const response = await fetch("/api/collaborator/dashboard", {
           headers: { Authorization: `Bearer ${token}` },
@@ -1525,9 +1553,11 @@ function CollaboratorDashboardPanelInner() {
       } catch (error) {
         console.warn("[CollaboratorDashboardPanel] API dashboard failed", error);
         if (!cancelled) {
-          setApiShifts(null);
-          setApiPeriods(null);
-          setApiEmployeeGoals(null);
+          setApiShifts([]);
+          setApiPeriods([]);
+          setApiEmployeeGoals([]);
+          setDistributionSnapshot(null);
+          setCollaboratorDataError(error instanceof Error ? error.message : "Falha ao carregar dados do colaborador.");
         }
       } finally {
         if (!cancelled) setLoadingCollaboratorData(false);
@@ -1569,106 +1599,14 @@ function CollaboratorDashboardPanelInner() {
     };
   }, [firebaseUser]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      if (!firebaseUser || currentUserIds.length === 0) {
-        setShifts([]);
-        setLoadingSchedule(false);
-        return;
-      }
-
-      const now = new Date();
-      const start = dateKey(startOfMonth(now));
-      const end = dateKey(endOfMonth(now));
-
-      try {
-        setLoadingSchedule(true);
-        setScheduleError(null);
-        const snaps = await Promise.all(
-          currentUserIds.map((userId) =>
-            getDocs(
-              query(
-                collectionGroup(db, "shifts"),
-                where("userId", "==", userId),
-                where("date", ">=", start),
-                where("date", "<=", end)
-              )
-            )
-          )
-        );
-        let foundShifts: DPShift[] = [];
-        if (!cancelled) {
-          const byId = new Map<string, DPShift>();
-          snaps.flatMap((snap) => snap.docs).forEach((docSnap) => {
-            byId.set(docSnap.ref.path, { id: docSnap.id, ...docSnap.data() } as DPShift);
-          });
-          foundShifts = Array.from(byId.values());
-          setShifts(foundShifts);
-        }
-
-        if (foundShifts.length === 0) {
-          const currentMonthSchedules = schedules.filter(
-            (schedule) => schedule.month === now.getMonth() + 1 && schedule.year === now.getFullYear()
-          );
-          const nested = await Promise.all(
-            currentMonthSchedules.map(async (schedule) => {
-              const snapshotMatchedUserIds = Object.entries(schedule.snapshot?.users ?? {})
-                .filter(([, snapshotUser]) => currentUserNames.includes(normalizeIdentity(snapshotUser.username)))
-                .map(([userId]) => userId);
-              const acceptedUserIds = new Set([...currentUserIds, ...snapshotMatchedUserIds]);
-              const snap = await getDocs(collection(db, "dp_schedules", schedule.id, "shifts"));
-              return snap.docs
-                .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as DPShift))
-                .filter((shift) => acceptedUserIds.has(shift.userId) && shift.date >= start && shift.date <= end);
-            })
-          );
-          if (!cancelled) setShifts(nested.flat());
-        }
-      } catch (error) {
-        try {
-          const currentMonthSchedules = schedules.filter(
-            (schedule) => schedule.month === now.getMonth() + 1 && schedule.year === now.getFullYear()
-          );
-          const nested = await Promise.all(
-            currentMonthSchedules.map(async (schedule) => {
-              const snapshotMatchedUserIds = Object.entries(schedule.snapshot?.users ?? {})
-                .filter(([, snapshotUser]) => currentUserNames.includes(normalizeIdentity(snapshotUser.username)))
-                .map(([userId]) => userId);
-              const acceptedUserIds = new Set([...currentUserIds, ...snapshotMatchedUserIds]);
-              const snap = await getDocs(collection(db, "dp_schedules", schedule.id, "shifts"));
-              return snap.docs
-                .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as DPShift))
-                .filter((shift) => acceptedUserIds.has(shift.userId) && shift.date >= start && shift.date <= end);
-            })
-          );
-          if (!cancelled) setShifts(nested.flat());
-        } catch (fallbackError) {
-          if (!cancelled) {
-            console.error("[CollaboratorDashboardPanel] failed to load user shifts", error, fallbackError);
-            setScheduleError("Falha ao carregar a escala do colaborador.");
-          }
-        }
-      } finally {
-        if (!cancelled) setLoadingSchedule(false);
-      }
-    }
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [firebaseUser, currentUserIds, currentUserNames, schedules]);
-
   const today = new Date();
   const todayKey = dateKey(today);
   const nowMinutes = today.getHours() * 60 + today.getMinutes();
   const firstName = (user?.username ?? "Colaborador").split(" ")[0];
   const dateEyebrow = format(today, "EEEE, d 'de' MMMM", { locale: ptBR }).toUpperCase();
-  const effectiveShifts = apiShifts ?? shifts;
-  const effectivePeriods = apiPeriods ?? periods;
-  const effectiveEmployeeGoals = apiEmployeeGoals ?? employeeGoals;
+  const effectiveShifts = apiShifts;
+  const effectivePeriods = apiPeriods;
+  const effectiveEmployeeGoals = apiEmployeeGoals;
 
   // Today's shift (greeting + timeline markers)
   const todayShift = useMemo(() => {
@@ -1922,35 +1860,6 @@ function CollaboratorDashboardPanelInner() {
   }, [dayExecutions, taskNotifications, pendingReceipts, completedReceipts, myOpenCountSessions, todayShift, nowMinutes]);
 
   const activePeriods = useMemo(() => effectivePeriods.filter((period) => period.status === "active"), [effectivePeriods]);
-  const kioskNameById = useMemo(
-    () => Object.fromEntries(kiosks.map((kiosk) => [kiosk.id, kiosk.name])),
-    [kiosks]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      if (apiPeriods !== null || apiEmployeeGoals !== null) return;
-      if (activePeriods.length === 0 || effectiveEmployeeGoals.length === 0) {
-        setDistributionSnapshot(null);
-        return;
-      }
-
-      try {
-        const snapshot = await loadGoalDistributionSnapshot(activePeriods, effectiveEmployeeGoals, kioskNameById);
-        if (!cancelled) setDistributionSnapshot(snapshot);
-      } catch (error) {
-        console.warn("[CollaboratorDashboardPanel] failed to load goal distribution snapshot", error);
-        if (!cancelled) setDistributionSnapshot(null);
-      }
-    }
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [activePeriods, apiEmployeeGoals, apiPeriods, effectiveEmployeeGoals, kioskNameById]);
 
   const visibleGoals = useMemo(() => {
     // Apenas a meta INDIVIDUAL do colaborador. Sem fallback para a meta do
@@ -2051,15 +1960,21 @@ function CollaboratorDashboardPanelInner() {
 
         {/* Right column — sidebar */}
         <aside className="space-y-4">
-          <SidebarEscala shifts={effectiveShifts} loading={loadingCollaboratorData && apiShifts === null ? loadingSchedule : false} error={scheduleError} />
+          <SidebarEscala
+            shifts={effectiveShifts}
+            loading={loadingCollaboratorData}
+            error={collaboratorDataError}
+            showMockup={showMockup}
+          />
           <SidebarMetas
-            loading={loadingCollaboratorData && apiEmployeeGoals === null ? goalsLoading : false}
+            loading={loadingCollaboratorData}
             goals={visibleGoals}
             periods={activePeriods}
             allGoals={effectiveEmployeeGoals}
             distributionSnapshot={distributionSnapshot}
+            showMockup={showMockup}
           />
-          <SidebarComunicados />
+          <SidebarComunicados showMockup={showMockup} />
         </aside>
       </div>
     </section>
@@ -2100,9 +2015,5 @@ function CollaboratorDashboardPanelInner() {
 }
 
 export function CollaboratorDashboardPanel() {
-  return (
-    <GoalsProvider>
-      <CollaboratorDashboardPanelInner />
-    </GoalsProvider>
-  );
+  return <CollaboratorDashboardPanelInner />;
 }

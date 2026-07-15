@@ -42,6 +42,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
+import { formatPersonName } from '@/lib/person-name';
 import {
   calculateVacationHealth,
   CYCLE_STATUS_CONFIG,
@@ -235,7 +236,7 @@ function newLocalId(prefix: string) {
 
 
 const userSchema = z.object({
-  username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
+  username: z.string().trim().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
   email: z.string().email("O e-mail é inválido."),
   password: z.string().optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
@@ -767,6 +768,7 @@ export function UserManagement({
   };
 
   const onSubmit = async (values: UserFormValues) => {
+    values = { ...values, username: formatPersonName(values.username) };
     const avatarUrl = values.avatarUrl || '';
     const admissionDate = values.admissionDate
       ? Timestamp.fromDate(new Date(values.admissionDate + 'T12:00:00'))
@@ -1037,7 +1039,21 @@ export function UserManagement({
                     <FormField control={form.control} name="username" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome</FormLabel>
-                        <FormControl><Input placeholder="ex: Maria Silva" {...field} autoComplete={createOnly ? 'off' : 'name'} /></FormControl>
+                        <FormControl>
+                          <Input
+                            placeholder="ex: Maria Silva"
+                            {...field}
+                            autoComplete={createOnly ? 'off' : 'name'}
+                            onBlur={(event) => {
+                              field.onBlur();
+                              const formatted = formatPersonName(event.target.value);
+                              if (formatted) {
+                                form.setValue('username', formatted, { shouldDirty: true, shouldValidate: true });
+                              }
+                            }}
+                          />
+                        </FormControl>
+                        <FormDescription>Use nome completo com iniciais maiúsculas. Ex.: Maria Joana Barbosa Pereira.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />

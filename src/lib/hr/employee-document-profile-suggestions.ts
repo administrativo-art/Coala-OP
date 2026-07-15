@@ -121,6 +121,33 @@ function normalizedName(value: unknown): string | null {
   return raw ? normalizePersonName(raw) : null;
 }
 
+function normalizedCnhCategory(value: unknown): string | null {
+  const raw = text(value);
+  if (!raw) return null;
+  const compact = raw.toUpperCase().replace(/[^A-E]/g, "");
+  return compact || null;
+}
+
+function normalizedMaritalStatus(value: unknown): string | null {
+  const token = normalizedToken(value);
+  if (!token) return null;
+  if (token.includes("casad")) return "casado";
+  if (token.includes("solteir")) return "solteiro";
+  if (token.includes("divorciad")) return "divorciado";
+  if (token.includes("viuv")) return "viuvo";
+  if (token.includes("uniao estavel") || token.includes("uniao")) return "uniao estavel";
+  return token;
+}
+
+function maritalStatusStorage(_rawValue: unknown, comparableValue: string) {
+  if (comparableValue === "casado") return "Casado(a)";
+  if (comparableValue === "solteiro") return "Solteiro(a)";
+  if (comparableValue === "divorciado") return "Divorciado(a)";
+  if (comparableValue === "viuvo") return "Viúvo(a)";
+  if (comparableValue === "uniao estavel") return "União estável";
+  return comparableValue;
+}
+
 function fieldLabel(fieldKey: string, fallback: string) {
   return DEFAULT_COMPLEMENTARY_FIELDS[fieldKey]?.label ?? fallback;
 }
@@ -148,11 +175,76 @@ const FIELD_MAPPINGS: Mapping[] = [
     },
   },
   {
+    extractedField: "pisPasep",
+    fieldKey: "employee.pis",
+    label: fieldLabel("employee.pis", "PIS"),
+    section: fieldSection("employee.pis", "Documentos"),
+    normalize: digits,
+  },
+  {
+    extractedField: "ctpsNumber",
+    fieldKey: "employee.ctps_number",
+    label: fieldLabel("employee.ctps_number", "CTPS - Número"),
+    section: fieldSection("employee.ctps_number", "Documentos"),
+    normalize: digits,
+  },
+  {
+    extractedField: "ctpsSeries",
+    fieldKey: "employee.ctps_series",
+    label: fieldLabel("employee.ctps_series", "CTPS - Série"),
+    section: fieldSection("employee.ctps_series", "Documentos"),
+    normalize: digits,
+  },
+  {
+    extractedField: "ctpsIssueDate",
+    fieldKey: "employee.ctps_date",
+    label: fieldLabel("employee.ctps_date", "CTPS - Data de emissão"),
+    section: fieldSection("employee.ctps_date", "Documentos"),
+    normalize: date,
+  },
+  {
+    extractedField: "cnhNumber",
+    fieldKey: "employee.cnh_number",
+    label: fieldLabel("employee.cnh_number", "Número de registro"),
+    section: fieldSection("employee.cnh_number", "Documentos"),
+    normalize: digits,
+  },
+  {
+    extractedField: "cnhCategory",
+    fieldKey: "employee.cnh_type",
+    label: fieldLabel("employee.cnh_type", "Categoria"),
+    section: fieldSection("employee.cnh_type", "Documentos"),
+    normalize: normalizedCnhCategory,
+    storageValue: (_rawValue, comparableValue) => comparableValue,
+  },
+  {
+    extractedField: "cnhExpiryDate",
+    fieldKey: "employee.cnh_expiry",
+    label: fieldLabel("employee.cnh_expiry", "Data de validade"),
+    section: fieldSection("employee.cnh_expiry", "Documentos"),
+    normalize: date,
+  },
+  {
+    extractedField: "cnhFirstLicenseDate",
+    fieldKey: "employee.cnh_first_date",
+    label: fieldLabel("employee.cnh_first_date", "1ª habilitação"),
+    section: fieldSection("employee.cnh_first_date", "Documentos"),
+    normalize: date,
+  },
+  {
     extractedField: "birthDate",
     fieldKey: "employee.birth_date",
     label: fieldLabel("employee.birth_date", "Data de nascimento"),
     section: fieldSection("employee.birth_date", "Dados pessoais"),
     normalize: date,
+  },
+  {
+    extractedField: "maritalStatus",
+    fieldKey: "employee.marital_status",
+    label: fieldLabel("employee.marital_status", "Estado civil"),
+    section: fieldSection("employee.marital_status", "Dados pessoais"),
+    normalize: normalizedMaritalStatus,
+    storageValue: maritalStatusStorage,
   },
   {
     extractedField: "motherName",

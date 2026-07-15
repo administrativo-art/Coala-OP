@@ -132,6 +132,7 @@ const onboardingStageSchema = z.object({
 const onboardingDocumentTemplateSchema = z.object({
   id: z.string().trim().min(1).max(80).optional(),
   label: z.string().trim().min(1).max(120),
+  documentTypeCode: z.string().trim().min(1).max(80).optional(),
   required: z.boolean().default(true),
   order: z.number().int().nonnegative().optional(),
 });

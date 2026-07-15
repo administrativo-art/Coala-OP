@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   EMPLOYEE_DOCUMENT_ACCESS_LEVELS,
   EMPLOYEE_DOCUMENT_CATEGORIES,
@@ -228,6 +229,16 @@ function correctionReason(document: AnalysisDocument, current: Record<string, Em
 
 function isEmailLike(value?: string | null) {
   return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "CO";
 }
 
 export default function EmployeeDocumentsPage({ params }: { params: Promise<{ userId: string }> }) {
@@ -669,9 +680,20 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
           <Link href={`/dashboard/dp/collaborators/${userId}`} className="grid h-10 w-10 place-items-center rounded-xl border bg-white">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-[#df2f78]">Painel do colaborador</p>
-            <h1 className="text-2xl font-black text-slate-900">Documentos de {employee?.username ?? "colaborador"}</h1>
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar className="h-12 w-12 shrink-0 rounded-2xl">
+              <AvatarImage src={employee?.avatarUrl || undefined} alt={employee?.username ?? "Colaborador"} className="rounded-2xl object-cover" />
+              <AvatarFallback
+                className="rounded-2xl bg-[#8a8a94] text-sm font-black text-white"
+                style={{ backgroundColor: employee?.color || "#8a8a94" }}
+              >
+                {initials(employee?.username ?? "Colaborador")}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#df2f78]">Painel do colaborador</p>
+              <h1 className="truncate text-2xl font-black text-slate-900">{employee?.username ?? "Colaborador"}</h1>
+            </div>
           </div>
         </div>
         {canManage ? (

@@ -190,11 +190,12 @@ function RecruitmentStageModelEditor({
 }
 
 const ONBOARDING_LABELS: Record<OnboardingStageId, string> = {
-  documents: "Documentos",
-  document_review: "Conferência",
-  contract: "Contrato",
-  system_access: "Usuário",
-  integration: "Integrações",
+  documents: "Coleta",
+  document_review: "Revisão",
+  signature_preparation: "Preparar assinatura",
+  signature: "Assinatura",
+  formalization_validation: "Validação",
+  integration: "Acessos",
   probation: "Experiência",
   done: "Finalizado",
 };

@@ -8,37 +8,102 @@ import type {
 export const ONBOARDING_STAGE_IDS: OnboardingStageId[] = [
   'documents',
   'document_review',
-  'contract',
-  'system_access',
+  'signature_preparation',
+  'signature',
+  'formalization_validation',
   'integration',
   'probation',
   'done',
 ];
 
 export const DEFAULT_ONBOARDING_STAGES: OnboardingStage[] = [
-  { id: 'documents', label: 'Solicitação de documentos', order: 0, required: true, dueDays: 3 },
-  { id: 'document_review', label: 'Conferência de documentos', order: 1, required: true, dueDays: 2 },
-  { id: 'contract', label: 'Contrato e assinatura', order: 2, required: true, dueDays: 2 },
-  { id: 'system_access', label: 'Criação de usuário', order: 3, required: true, dueDays: 1 },
-  { id: 'integration', label: 'Integrações e códigos', order: 4, required: true, dueDays: null },
-  { id: 'probation', label: 'Período de experiência', order: 5, required: true, dueDays: 90 },
-  { id: 'done', label: 'Finalizado', order: 6, required: true, dueDays: null },
+  { id: 'documents', label: 'Coleta de dados e documentos', order: 0, required: true, dueDays: 3 },
+  { id: 'document_review', label: 'Revisão da coleta', order: 1, required: true, dueDays: 2 },
+  { id: 'signature_preparation', label: 'Geração e revisão para assinatura', order: 2, required: true, dueDays: null },
+  { id: 'signature', label: 'Assinatura dos documentos', order: 3, required: true, dueDays: null },
+  { id: 'formalization_validation', label: 'Validação da formalização', order: 4, required: true, dueDays: null },
+  { id: 'integration', label: 'Criação de usuário e integrações', order: 5, required: true, dueDays: null },
+  { id: 'probation', label: 'Período de experiência', order: 6, required: true, dueDays: 90 },
+  { id: 'done', label: 'Finalizado', order: 7, required: true, dueDays: null },
 ];
 
 export const DEFAULT_ONBOARDING_DOCUMENTS: OnboardingDocumentTemplate[] = [
-  { id: 'cpf', label: 'CPF', required: true, order: 0 },
-  { id: 'rg', label: 'RG', required: true, order: 1 },
-  { id: 'ctps', label: 'CTPS', required: true, order: 2 },
-  { id: 'pis', label: 'PIS', required: true, order: 3 },
-  { id: 'address_proof', label: 'Comprovante de residência', required: true, order: 4 },
-  { id: 'bank_data', label: 'Dados bancários', required: true, order: 5 },
-  { id: 'aso_admission', label: 'ASO admissional', required: true, order: 6 },
+  {
+    id: 'identity_document',
+    label: 'Documento de identidade ou CNH',
+    documentTypeCode: 'PERSONAL_ID',
+    description: 'Envie RG/CIN ou CNH. O sistema extrai CPF, data de nascimento e filiação quando esses dados estiverem visíveis.',
+    required: true,
+    order: 0,
+  },
+  {
+    id: 'profile_photo',
+    label: 'Foto para identificação',
+    documentTypeCode: 'PROFILE_PHOTO',
+    description: 'Envie uma foto atual, nítida, de frente, com o rosto descoberto e fundo neutro. São aceitos JPG e PNG.',
+    required: true,
+    order: 1,
+  },
+  {
+    id: 'ctps',
+    label: 'Carteira de Trabalho (CTPS)',
+    documentTypeCode: 'WORK_CARD',
+    description: 'Se for digital, envie o comprovante/PDF gerado no app Carteira de Trabalho Digital. Se for física, envie a página da foto e o verso com os dados pessoais.',
+    required: true,
+    order: 2,
+  },
+  {
+    id: 'pis',
+    label: 'Comprovante do PIS/PASEP',
+    documentTypeCode: 'PIS_PASEP',
+    description: 'Pode ser comprovante do app Carteira de Trabalho Digital, Meu INSS/CNIS, Caixa Trabalhador ou outro documento oficial que mostre o número.',
+    required: true,
+    order: 3,
+  },
+  {
+    id: 'address_proof',
+    label: 'Comprovante de residência completo',
+    documentTypeCode: 'ADDRESS_PROOF',
+    description: 'Envie o comprovante completo, com endereço, cidade, UF e CEP visíveis.',
+    required: true,
+    order: 4,
+  },
+  {
+    id: 'civil_certificate',
+    label: 'Certidão de nascimento ou casamento',
+    documentTypeCode: 'CIVIL_CERTIFICATE',
+    description: 'Envie certidão de nascimento se for solteiro(a), ou certidão de casamento se for casado(a).',
+    required: true,
+    order: 5,
+  },
+  {
+    id: 'aso_admission',
+    label: 'ASO admissional',
+    documentTypeCode: 'ASO_ADMISSION',
+    description: 'Envie o atestado de saúde ocupacional admissional com a data de realização do exame visível.',
+    required: true,
+    order: 6,
+  },
+  {
+    id: 'cnh',
+    label: 'CNH',
+    documentTypeCode: 'PERSONAL_ID',
+    description: 'Obrigatória somente se você possui CNH e não usou a CNH como documento de identificação.',
+    required: false,
+    order: 7,
+  },
 ];
 
 function cleanLabel(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim()
     ? value.trim().slice(0, 100)
     : fallback;
+}
+
+function cleanDescription(value: unknown) {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().slice(0, 500)
+    : undefined;
 }
 
 function cleanDueDays(value: unknown) {
@@ -107,6 +172,16 @@ export function mergeOnboardingStageModels(roleStages: unknown, functionStages?:
   ));
 }
 
+export function applyOnboardingSignatureMode(stages: OnboardingStage[], generateSignatureDocuments: boolean) {
+  const filtered = generateSignatureDocuments
+    ? stages
+    : stages.filter(stage => stage.id !== 'signature_preparation' && stage.id !== 'signature');
+
+  return filtered
+    .sort((a, b) => a.order - b.order)
+    .map((stage, index) => ({ ...stage, order: index }));
+}
+
 export function normalizeOnboardingDocumentTemplates(value: unknown): OnboardingDocumentTemplate[] {
   const raw = Array.isArray(value) ? value : [];
   const seen = new Set<string>();
@@ -124,6 +199,10 @@ export function normalizeOnboardingDocumentTemplates(value: unknown): Onboarding
       return {
         id,
         label: cleanLabel(data.label, id),
+        documentTypeCode: typeof data.documentTypeCode === 'string' && data.documentTypeCode.trim()
+          ? data.documentTypeCode.trim().slice(0, 80)
+          : undefined,
+        description: cleanDescription(data.description),
         required: data.required !== false,
         order: Number.isFinite(Number(data.order)) ? Number(data.order) : index,
       };
@@ -139,20 +218,21 @@ export function mergeOnboardingDocumentModels(
   roleDocuments: unknown,
   functionDocuments?: unknown
 ) {
-  const merged = normalizeOnboardingDocumentTemplates(
-    Array.isArray(roleDocuments) && roleDocuments.length > 0
-      ? roleDocuments
-      : DEFAULT_ONBOARDING_DOCUMENTS
-  );
+  const merged = normalizeOnboardingDocumentTemplates(DEFAULT_ONBOARDING_DOCUMENTS);
+  const roleDocs = normalizeOnboardingDocumentTemplates(roleDocuments);
   const functionDocs = normalizeOnboardingDocumentTemplates(functionDocuments);
 
-  for (const doc of functionDocs) {
+  for (const doc of [...roleDocs, ...functionDocs]) {
     const existingIndex = merged.findIndex(item => item.id === doc.id);
     if (existingIndex >= 0) merged[existingIndex] = { ...merged[existingIndex], ...doc };
     else merged.push(doc);
   }
 
-  return normalizeOnboardingDocumentTemplates(merged);
+  return normalizeOnboardingDocumentTemplates(merged).map((document) =>
+    document.id === 'profile_photo'
+      ? { ...document, documentTypeCode: 'PROFILE_PHOTO', required: true }
+      : document
+  );
 }
 
 export function instantiateOnboardingDocuments(
@@ -170,5 +250,10 @@ export function instantiateOnboardingDocuments(
     approvedAt: existingById.get(template.id)?.approvedAt ?? null,
     updatedAt: existingById.get(template.id)?.updatedAt ?? null,
     note: existingById.get(template.id)?.note ?? null,
+    extractedFields: existingById.get(template.id)?.extractedFields ?? {},
+    fieldConfidences: existingById.get(template.id)?.fieldConfidences ?? {},
+    promotedDocumentId: existingById.get(template.id)?.promotedDocumentId ?? null,
+    promotedAt: existingById.get(template.id)?.promotedAt ?? null,
+    promotedBy: existingById.get(template.id)?.promotedBy ?? null,
   }));
 }

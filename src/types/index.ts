@@ -1034,8 +1034,9 @@ export type RecruitmentStage = {
 export type OnboardingStageId =
   | 'documents'
   | 'document_review'
-  | 'contract'
-  | 'system_access'
+  | 'signature_preparation'
+  | 'signature'
+  | 'formalization_validation'
   | 'integration'
   | 'probation'
   | 'done';
@@ -1051,18 +1052,43 @@ export type OnboardingStage = {
 export type OnboardingDocumentTemplate = {
   id: string;
   label: string;
+  documentTypeCode?: string;
+  description?: string;
   required?: boolean;
   order?: number;
 };
 
 export type OnboardingDocument = OnboardingDocumentTemplate & {
-  status: 'pending' | 'received' | 'approved' | 'rejected';
+  status: 'pending' | 'received' | 'ai_approved' | 'review_required' | 'approved' | 'rejected';
   fileUrl?: string | null;
   filePath?: string | null;
   receivedAt?: string | null;
   approvedAt?: string | null;
   updatedAt?: string | null;
   note?: string | null;
+  extractedFields?: Record<string, unknown>;
+  fieldConfidences?: Record<string, number>;
+  promotedDocumentId?: string | null;
+  promotedAt?: string | null;
+  promotedBy?: string | null;
+};
+
+export type OnboardingFinalizationSettings = {
+  operational?: boolean;
+  participatesInGoals?: boolean;
+  loginRestrictionEnabled?: boolean;
+  needsTransportVoucher?: boolean;
+  transportVoucherValue?: number | null;
+  shiftDefinitionId?: string | null;
+};
+
+export type OnboardingFirstAccessState = {
+  status?: 'pending' | 'used' | 'revoked' | 'expired';
+  tokenId?: string | null;
+  createdAt?: string | null;
+  expiresAt?: string | null;
+  usedAt?: string | null;
+  createdBy?: string | null;
 };
 
 export type OnboardingProcess = {
@@ -1080,11 +1106,17 @@ export type OnboardingProcess = {
   unitName?: string | null;
   shiftDefinitionId?: string | null;
   shiftDefinitionName?: string | null;
+  expectedAdmissionDate?: string | null;
+  generateSignatureDocuments?: boolean;
   collaboratorUserId?: string | null;
   employeeId?: string | null;
   publicToken?: string | null;
+  publicTokenClosedAt?: string | null;
   publicFormAnswers?: Record<string, unknown>;
   publicFormSubmittedAt?: string | null;
+  publicFormLastSubmittedAt?: string | null;
+  finalizationSettings?: OnboardingFinalizationSettings;
+  firstAccess?: OnboardingFirstAccessState;
   status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'contract_pending' | 'ready_to_create_user' | 'active' | 'completed' | 'cancelled';
   currentStage?: OnboardingStageId;
   stages?: OnboardingStage[];

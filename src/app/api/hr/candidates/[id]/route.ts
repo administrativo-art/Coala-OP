@@ -5,6 +5,7 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
 import {
+  applyOnboardingSignatureMode,
   instantiateOnboardingDocuments,
   mergeOnboardingDocumentModels,
   mergeOnboardingStageModels,
@@ -225,7 +226,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const roleData = roleDoc?.data?.() ?? {};
     const functionData = functionDoc?.data?.() ?? {};
     const existingOnboarding = onboardingDoc.exists ? onboardingDoc.data() ?? {} : {};
-    const stages = mergeOnboardingStageModels(roleData.onboardingStages, functionData.onboardingStages);
+    const generateSignatureDocuments = existingOnboarding.generateSignatureDocuments === true;
+    const stages = applyOnboardingSignatureMode(
+      mergeOnboardingStageModels(roleData.onboardingStages, functionData.onboardingStages),
+      generateSignatureDocuments
+    );
     const documentTemplates = mergeOnboardingDocumentModels(roleData.onboardingDocuments, functionData.onboardingDocuments);
     const documents = instantiateOnboardingDocuments(
       documentTemplates,
@@ -245,6 +250,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       unitName: candidateUpdatePatch.unitName ?? before.unitName ?? null,
       shiftDefinitionId: candidateUpdatePatch.shiftDefinitionId ?? before.shiftDefinitionId ?? null,
       shiftDefinitionName: candidateUpdatePatch.shiftDefinitionName ?? before.shiftDefinitionName ?? null,
+      expectedAdmissionDate: existingOnboarding.expectedAdmissionDate ?? null,
+      generateSignatureDocuments,
       source: 'recruitment',
       publicToken: existingOnboarding.publicToken ?? createPublicToken(),
       status: existingOnboarding.status ?? 'collecting_documents',

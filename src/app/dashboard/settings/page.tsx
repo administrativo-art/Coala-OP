@@ -646,7 +646,7 @@ export default function SettingsPage() {
       value: "recruitment",
       label: "Recrutamento",
       title: "Recrutamento",
-      description: "Gerencie formulários públicos e modelos de questionário por cargo e função.",
+      description: "Gerencie formulários públicos, modelos de questionário e modelos de integração por cargo e função.",
       content: <RecruitmentFormsSettingsPanel />,
     },
     {
@@ -759,7 +759,7 @@ export default function SettingsPage() {
       value: "recruitment",
       label: "Recrutamento",
       title: "Recrutamento",
-      description: "Gerencie formulários públicos e modelos de questionário por cargo e função.",
+      description: "Gerencie formulários públicos, modelos de questionário e modelos de integração por cargo e função.",
       content: null,
       children: pickPersonalTabs(["recruitment"]),
     },

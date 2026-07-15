@@ -40,6 +40,48 @@ import { CYCLE_STATUS_CONFIG, getVacationCycleHistory, type VacationCycle } from
 import { FieldValue } from "@/features/rh/components/FieldValue";
 import { callOnFieldUpdate } from "@/features/rh/lib/rh-client";
 import { DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
+import {
+  SYSTEM_BLOCK_KEYS,
+  SYSTEM_FIELD_DEFAULTS,
+  SYSTEM_FIELD_KEYS,
+  SYSTEM_NAV_LINKS,
+  defaultFieldLgpd,
+  isSystemPanelProfileField,
+  isSystemStaticField,
+  systemField,
+} from "@/features/hr/lib/collaborator-system-fields";
+import {
+  type AsoControlSummary,
+  type AsoPanelRecord,
+  asoRecordKey,
+  asoStatus,
+  asoTypeLabel,
+} from "@/features/hr/lib/aso-control";
+import {
+  type ChildDraft,
+  type FamilyDocumentStatus,
+  type FamilySalaryControlSummary,
+  buildFamilySalarySummary,
+  childCountLabel,
+  childDraftsFromRecords,
+  childEntitlementEndsAt,
+  childRecordsFromDrafts,
+  childRecordsFromSource,
+  countChildrenUnder14,
+  dependentAge,
+  familyDocPresent,
+  familyDocStatusItems,
+  familyRequiredDocs,
+  resizeChildDrafts,
+} from "@/features/hr/lib/family-salary";
+import {
+  type TransportVoucherStatus,
+  defaultTransportVoucherReason,
+  formatTransportVoucherAction,
+  getTransportVoucherStatus,
+  resolveTransportVoucherChange,
+  transportVoucherStatusLabel,
+} from "@/features/hr/lib/transport-voucher";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -86,34 +128,12 @@ const VACATION_STATUS: Record<string, { label: string; className: string }> = {
   PLANNED: { label: "Planejado", className: "bg-sky-100 text-sky-800" },
 };
 
-type TransportVoucherStatus = "none" | "active" | "suspended";
-type TransportVoucherHistoryEntry = NonNullable<User["transportVoucherHistory"]>[number];
 type TerminationPayload = {
   terminationReason: TerminationReason;
   terminationCause?: string;
   terminationNotes?: string;
   terminationDate: string;
 };
-
-function getTransportVoucherStatus(needsTransportVoucher: boolean | undefined, history?: User["transportVoucherHistory"]): TransportVoucherStatus {
-  if (needsTransportVoucher) return "active";
-  return history && history.length > 0 ? "suspended" : "none";
-}
-
-function transportVoucherStatusLabel(status: TransportVoucherStatus) {
-  if (status === "active") return "Ativo";
-  if (status === "suspended") return "Suspenso";
-  return "Não configurado";
-}
-
-function formatTransportVoucherAction(entry: TransportVoucherHistoryEntry) {
-  if (entry.toStatus === "suspended") return "Suspenso";
-  return entry.fromStatus === "suspended" ? "Reativado" : "Solicitado";
-}
-
-function newLocalId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 const RH_SECTION_LABELS: Record<string, string> = {
   identity: "Identificação",
@@ -186,122 +206,12 @@ const FIELD_LABEL_FIXES: Record<string, string> = {
   "É PCD?": "É PCD?",
 };
 
-const SYSTEM_FIELD_KEYS = {
-  registrationBizneo: "system.documents.registration_bizneo",
-  registrationPdv: "system.documents.registration_pdv",
-  accessProfile: "system.documents.access_profile",
-  jobRole: "system.role.job_role",
-  operational: "system.role.operational",
-  goals: "system.role.goals",
-  functions: "system.role.functions",
-  shift: "system.schedule.shift",
-  units: "system.schedule.units",
-  uniforms: "system.uniforms.summary",
-  vacations: "system.vacations.summary",
-  asoSummary: "system.aso.summary",
-  familySalarySummary: "system.family_salary.summary",
-  transportVoucher: "system.transport_voucher.enabled",
-  behaviorOperational: "system.behavior.operational",
-  behaviorGoals: "system.behavior.goals",
-} as const;
-
-const SYSTEM_FIELD_DEFAULTS: Record<string, FieldMapEntry> = {
-  [SYSTEM_FIELD_KEYS.registrationBizneo]: systemField("Matrícula Bizneo", "Dados contratuais", 60, "restricted_total"),
-  [SYSTEM_FIELD_KEYS.registrationPdv]: systemField("Matrícula PDV", "Dados contratuais", 70, "restricted_total"),
-  [SYSTEM_FIELD_KEYS.accessProfile]: systemField("Perfil de acesso", "Dados contratuais", 110, "restricted_total"),
-  [SYSTEM_FIELD_KEYS.jobRole]: systemField("Cargo", "Dados contratuais", 30, "public"),
-  [SYSTEM_FIELD_KEYS.operational]: systemField("Operacional", "Dados contratuais", 80, "public"),
-  [SYSTEM_FIELD_KEYS.goals]: systemField("Metas", "Dados contratuais", 90, "public"),
-  [SYSTEM_FIELD_KEYS.functions]: systemField("Funções", "Dados contratuais", 100, "public"),
-  [SYSTEM_FIELD_KEYS.shift]: systemField("Escala", "Escala e unidades", 10, "public"),
-  [SYSTEM_FIELD_KEYS.units]: systemField("Unidades", "Escala e unidades", 20, "public"),
-  [SYSTEM_FIELD_KEYS.uniforms]: systemField("Uniformes", "Uniformes", 10, "restricted_total"),
-  [SYSTEM_FIELD_KEYS.vacations]: systemField("Férias", "Férias", 10, "restricted_partial"),
-  [SYSTEM_FIELD_KEYS.asoSummary]: systemField("Resumo de ASOs", "Controle de ASOs", 10, "confidential"),
-  [SYSTEM_FIELD_KEYS.familySalarySummary]: systemField("Resumo do salário-família", "Salário-família", 10, "restricted_partial"),
-  [SYSTEM_FIELD_KEYS.transportVoucher]: systemField("Vale-transporte", "Vale-transporte", 10, "restricted_partial"),
-  [SYSTEM_FIELD_KEYS.behaviorOperational]: systemField("Usuário operacional", "Comportamento no sistema", 10, "restricted_total"),
-  [SYSTEM_FIELD_KEYS.behaviorGoals]: systemField("Participa de metas", "Comportamento no sistema", 20, "restricted_total"),
-};
-
-const SYSTEM_NAV_LINKS = [
-  { id: "system.schedule_units", label: "Escala e unidades" },
-  { id: "system.uniforms", label: "Uniformes" },
-  { id: "system.vacations", label: "Férias" },
-  { id: "system.aso_control", label: "Controle de ASOs" },
-  { id: "system.family_salary", label: "Salário-família" },
-  { id: "system.transport_voucher", label: "Vale-transporte" },
-  { id: "system.behavior", label: "Comportamento no sistema" },
-] as const;
-
-const ASO_PROFILE_FIELD_KEYS = [
-  "employee.aso_admission_date",
-  "employee.aso_dismissal_date",
-  "employee.aso_periodic_1",
-  "employee.aso_periodic_2",
-] as const;
-
-const FAMILY_SALARY_PROFILE_FIELD_KEYS = [
-  "employee.children_under_14",
-  "employee.children",
-  "employee.dependent_name",
-  "employee.dependent_relation",
-  "employee.dependent_cpf",
-  "employee.dependent_rg",
-  "employee.has_family_salary",
-  "employee.family_salary_end_1",
-  "employee.family_salary_birth_1",
-  "employee.family_salary_name_1",
-] as const;
-
-const SYSTEM_PANEL_PROFILE_FIELD_KEYS = new Set<string>([
-  ...ASO_PROFILE_FIELD_KEYS,
-  ...FAMILY_SALARY_PROFILE_FIELD_KEYS,
-]);
-
-function systemField(label: string, section: string, order: number, visibility: FieldVisibility): FieldMapEntry {
-  return {
-    bizneo_id: "coala_internal",
-    label,
-    section,
-    type: "text",
-    visibility,
-    employee_visible: false,
-    employee_editable: false,
-    order,
-    lgpd: defaultFieldLgpd(section, visibility),
-  };
-}
-
-function isSystemStaticField(key: string) {
-  return key.startsWith("system.") || Object.prototype.hasOwnProperty.call(SYSTEM_FIELD_DEFAULTS, key);
-}
-
-function isSystemPanelProfileField(key: string) {
-  return SYSTEM_PANEL_PROFILE_FIELD_KEYS.has(key);
-}
-
 function fieldVisibilityIcon(visibility: FieldVisibility) {
   const normalized = normalizeFieldVisibility(visibility);
   if (normalized === "public") return Globe2;
   if (normalized === "restricted_partial") return Eye;
   if (normalized === "restricted_total") return Lock;
   return EyeOff;
-}
-
-function defaultFieldLgpd(section: string, visibility: FieldVisibility): NonNullable<FieldMapEntry["lgpd"]> {
-  const sensitiveSection = /banc|aso|saúde|saude|divers|depend|sal[aá]rio/i.test(section);
-  const normalized = normalizeFieldVisibility(visibility);
-  return {
-    category: normalized === "confidential" || sensitiveSection
-      ? "sensitive"
-      : normalized === "restricted_total" || normalized === "restricted_partial"
-        ? "confidential"
-        : "personal",
-    legal_basis: "legal_obligation",
-    retention: normalized === "public" ? "termination_plus_2y" : "employment_plus_5y",
-    requires_consent: false,
-  };
 }
 
 function toDate(value: unknown): Date | null {
@@ -780,47 +690,6 @@ function VacationCycleOverview({
   );
 }
 
-type AsoControlSummary = {
-  records?: Array<{
-    type?: string;
-    examDate?: string;
-    fitnessStatus?: string | null;
-    documentTypeCode?: string | null;
-  }>;
-  admissionMissing?: boolean;
-  lastValidExamDate?: string | null;
-  nextPeriodicDue?: string | null;
-  status?: string;
-  periodicityMonths?: number;
-};
-
-type AsoPanelRecord = NonNullable<AsoControlSummary["records"]>[number] & {
-  source?: "summary" | "legacy_field";
-};
-
-type FamilySalaryControlSummary = {
-  version?: number;
-  dependents?: Array<{
-    key?: string;
-    name?: string | null;
-    birthDate?: string | null;
-    cpf?: string | null;
-    relationship?: string | null;
-    documents?: Record<string, unknown>;
-    entitlementEndsAt?: string | null;
-  }>;
-  eligibleDependentsCount?: number;
-  pendingDependentsCount?: number;
-  status?: string;
-  salaryLimit?: {
-    year?: number;
-    monthlyRemunerationLimit?: number;
-    quotaPerDependent?: number;
-  };
-  notes?: string[];
-  updatedAt?: string;
-};
-
 function fieldJsonValue(fv?: EmployeeFieldValue): unknown {
   return fv?.value_json;
 }
@@ -867,227 +736,16 @@ function dateDistanceLabel(value?: string | null) {
   return `em ${diff}d`;
 }
 
-function asoTypeLabel(type?: string) {
-  if (type === "admission") return "Admissional";
-  if (type === "periodic") return "Periódico";
-  if (type === "return") return "Retorno";
-  if (type === "risk_change") return "Mudança de risco/função";
-  if (type === "dismissal") return "Demissional";
-  return "ASO";
-}
-
-function asoStatus(summary: AsoControlSummary | null, hasLegacyAdmission = false) {
-  if (!summary || summary.admissionMissing || summary.status === "missing_admission") {
-    if (hasLegacyAdmission) return { label: "ASO antigo a confirmar", tone: "warn" as const };
-    return { label: "ASO admissional pendente", tone: "bad" as const };
-  }
-  if (summary.status === "overdue") return { label: "Periódico vencido", tone: "bad" as const };
-  if (summary.status === "due_soon") return { label: "Periódico próximo", tone: "warn" as const };
-  if (summary.status === "dismissal_recorded") return { label: "Demissional registrado", tone: "default" as const };
-  return { label: "Em dia", tone: "good" as const };
-}
-
-function asoRecordKey(record: Pick<AsoPanelRecord, "type" | "examDate">) {
-  return `${record.type ?? ""}|${record.examDate ?? ""}`;
-}
-
-function dependentAge(birthDate?: string | null) {
-  if (!birthDate) return null;
-  const birth = toDate(`${birthDate}T12:00:00`);
-  if (!birth) return null;
-  return differenceInYears(new Date(), birth);
-}
-
-function familyRequiredDocs(birthDate?: string | null) {
-  const age = dependentAge(birthDate);
-  if (age == null) return ["certidão"];
-  if (age < 0 || age >= 14) return [];
-  if (age < 4) return ["certidão", "vacinação"];
-  if (age < 7) return ["certidão", "vacinação", "frequência escolar"];
-  return ["certidão", "frequência escolar"];
-}
-
-function familyDocPresent(documents: Record<string, unknown> | undefined, label: string) {
-  if (!documents) return false;
-  if (label === "certidão") return Boolean(documents.birth_certificate);
-  if (label === "vacinação") return Boolean(documents.vaccination);
-  if (label === "frequência escolar") return Boolean(documents.school_attendance);
-  return false;
-}
-
-const FAMILY_DOCUMENT_LABELS = ["certidão", "vacinação", "frequência escolar"] as const;
-
-function familyDocStatusItems(birthDate: string | null | undefined, documents: Record<string, unknown> | undefined) {
-  const required = new Set(familyRequiredDocs(birthDate));
-  return FAMILY_DOCUMENT_LABELS.map((label) => {
-    const requiredByAge = required.has(label);
-    const sent = familyDocPresent(documents, label);
-    const status = requiredByAge ? (sent ? "Enviada" : "Pendente") : "Não exigida";
-    const className = status === "Enviada"
-      ? "bg-emerald-50 text-emerald-700"
-      : status === "Pendente"
-        ? "bg-amber-50 text-amber-700"
-        : "bg-white text-[#777784] ring-1 ring-[#e8e8ec]";
-    return { label, status, className };
-  });
-}
-
-type FamilyChildRecord = NonNullable<FamilySalaryControlSummary["dependents"]>[number] & {
-  rg?: string | null;
-};
-
-type ChildDraft = {
-  key: string;
-  name: string;
-  birthDate: string;
-  cpf: string;
-  rg: string;
-  documents?: Record<string, unknown>;
-};
-
-function childRecordKey(name: string | null | undefined, birthDate: string | null | undefined, cpf: string | null | undefined, index: number) {
-  const base = [cpf, name, birthDate].map((value) => value?.trim()).filter(Boolean).join("-") || `filho-${index + 1}`;
-  return base
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function normalizeChildRecord(value: unknown, index: number): FamilyChildRecord | null {
-  if (!isObjectRecord(value)) return null;
-  const name = typeof value.name === "string" && value.name.trim() ? value.name.trim() : null;
-  const birthDate = typeof value.birthDate === "string" && value.birthDate.trim() ? value.birthDate.slice(0, 10) : null;
-  const cpf = typeof value.cpf === "string" && value.cpf.trim() ? value.cpf.trim() : null;
-  const rg = typeof value.rg === "string" && value.rg.trim() ? value.rg.trim() : null;
-  const relationship = typeof value.relationship === "string" && value.relationship.trim() ? value.relationship.trim() : "Filho(a)";
-  const documents = isObjectRecord(value.documents) ? value.documents : {};
-  const entitlementEndsAt = typeof value.entitlementEndsAt === "string" && value.entitlementEndsAt.trim()
-    ? value.entitlementEndsAt.slice(0, 10)
-    : childEntitlementEndsAt(birthDate);
-  const key = typeof value.key === "string" && value.key.trim()
-    ? value.key.trim()
-    : childRecordKey(name, birthDate, cpf, index);
-
-  return { key, name, birthDate, cpf, rg, relationship, documents, entitlementEndsAt };
-}
-
-function childEntitlementEndsAt(birthDate?: string | null) {
-  if (!birthDate) return null;
-  const date = toDate(`${birthDate}T12:00:00`);
-  if (!date) return null;
-  date.setFullYear(date.getFullYear() + 14);
-  return format(date, "yyyy-MM-dd");
-}
-
 function childRecordsFromProfile(fieldValues: Record<string, EmployeeFieldValue>, summary: FamilySalaryControlSummary | null) {
   const rawChildren = fieldValues["employee.children"]?.value_json;
   const source = Array.isArray(rawChildren) ? rawChildren : summary?.dependents ?? [];
-  return source
-    .map((item, index) => normalizeChildRecord(item, index))
-    .filter((item): item is FamilyChildRecord => Boolean(item));
+  return childRecordsFromSource(source);
 }
 
-function childDraftsFromRecords(records: FamilyChildRecord[]) {
-  return records.map((record, index) => ({
-    key: record.key || childRecordKey(record.name, record.birthDate, record.cpf, index),
-    name: record.name ?? "",
-    birthDate: record.birthDate ?? "",
-    cpf: record.cpf ?? "",
-    rg: record.rg ?? "",
-    documents: record.documents,
-  }));
-}
-
-function emptyChildDraft(index: number): ChildDraft {
-  return { key: `filho_${Date.now()}_${index}`, name: "", birthDate: "", cpf: "", rg: "", documents: {} };
-}
-
-function resizeChildDrafts(current: ChildDraft[], count: number) {
-  const safeCount = Math.max(0, Math.min(12, Math.trunc(count)));
-  if (safeCount <= current.length) return current.slice(0, safeCount);
-  return [
-    ...current,
-    ...Array.from({ length: safeCount - current.length }, (_, index) => emptyChildDraft(current.length + index)),
-  ];
-}
-
-function childCountLabel(count: number) {
-  if (count <= 0) return "Nenhum";
-  if (count >= 4) return "4 ou mais";
-  return String(count);
-}
-
-function childRecordsFromDrafts(drafts: ChildDraft[]) {
-  return drafts.map((draft, index) => {
-    const name = draft.name.trim();
-    const birthDate = draft.birthDate.trim();
-    const cpf = draft.cpf.trim();
-    const rg = draft.rg.trim();
-    return {
-      key: draft.key || childRecordKey(name, birthDate, cpf, index),
-      name: name || null,
-      birthDate: birthDate || null,
-      cpf: cpf || null,
-      rg: rg || null,
-      relationship: "Filho(a)",
-      documents: draft.documents ?? {},
-      entitlementEndsAt: childEntitlementEndsAt(birthDate),
-    } satisfies FamilyChildRecord;
-  });
-}
-
-function countChildrenUnder14(records: FamilyChildRecord[]) {
-  return records.filter((record) => {
-    const age = dependentAge(record.birthDate);
-    return age == null || (age >= 0 && age < 14);
-  }).length;
-}
-
-function buildManualFamilySalarySummary(previous: FamilySalaryControlSummary | null, records: FamilyChildRecord[]): FamilySalaryControlSummary {
-  let eligibleDependentsCount = 0;
-  let pendingDependentsCount = 0;
-  const notes: string[] = [];
-
-  records.forEach((record) => {
-    const age = dependentAge(record.birthDate);
-    if (age == null) {
-      pendingDependentsCount += 1;
-      notes.push(`${record.name ?? "Filho"} precisa de data de nascimento para cálculo.`);
-      return;
-    }
-    if (age < 0 || age >= 14) return;
-    const missing = familyRequiredDocs(record.birthDate).filter((label) => !familyDocPresent(record.documents, label));
-    if (missing.length === 0) eligibleDependentsCount += 1;
-    else {
-      pendingDependentsCount += 1;
-      notes.push(`${record.name ?? "Filho"} pendente: ${missing.join(", ")}.`);
-    }
-  });
-
-  const status = eligibleDependentsCount > 0
-    ? "eligible_ready"
-    : pendingDependentsCount > 0
-      ? "pending_documents"
-      : records.length > 0
-        ? "no_eligible_dependents"
-        : "needs_review";
-
-  return {
-    version: 1,
-    dependents: records,
-    eligibleDependentsCount,
-    pendingDependentsCount,
-    status,
-    salaryLimit: previous?.salaryLimit ?? {
-      year: 2026,
-      monthlyRemunerationLimit: 1980.38,
-      quotaPerDependent: 67.54,
-    },
-    notes,
-    updatedAt: new Date().toISOString(),
-  };
+function familyDocumentStatusClassName(status: FamilyDocumentStatus) {
+  if (status === "Enviada") return "bg-emerald-50 text-emerald-700";
+  if (status === "Pendente") return "bg-amber-50 text-amber-700";
+  return "bg-white text-[#777784] ring-1 ring-[#e8e8ec]";
 }
 
 function EmployeeAsoControlPanel({
@@ -1241,7 +899,7 @@ function EmployeeFamilySalaryPanel({
     setMessage(null);
     try {
       const records = childRecordsFromDrafts(drafts);
-      const nextSummary = buildManualFamilySalarySummary(summary, records);
+      const nextSummary = buildFamilySalarySummary(summary, records);
       const under14Count = countChildrenUnder14(records);
       const eligibleCount = nextSummary.eligibleDependentsCount ?? 0;
       await callOnFieldUpdate({ employee_id: employeeId, field_key: "employee.children", value: records });
@@ -1365,7 +1023,7 @@ function EmployeeFamilySalaryPanel({
                         {documentStatuses.map((item) => (
                           <span
                             key={item.label}
-                            className={`rounded-full px-2.5 py-1 text-[11px] font-black ${item.className}`}
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-black ${familyDocumentStatusClassName(item.status)}`}
                           >
                             {item.label}: {item.status}
                           </span>
@@ -1436,7 +1094,7 @@ function EmployeeFamilySalaryPanel({
                     {documentStatuses.map((item) => (
                       <span
                         key={item.label}
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-black ${item.className}`}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-black ${familyDocumentStatusClassName(item.status)}`}
                       >
                         {item.label}: {item.status}
                       </span>
@@ -2389,7 +2047,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     );
   }
 
-  async function updateSystemBlockVisibility(keys: string[], visibility: FieldVisibility) {
+  async function updateSystemBlockVisibility(keys: readonly string[], visibility: FieldVisibility) {
     if (!firebaseUser || !profileLayout || systemVisibilitySavingKey || keys.length === 0) return;
     const savingKey = `block:${keys.join("|")}`;
     setSystemVisibilitySavingKey(savingKey);
@@ -2440,7 +2098,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     }
   }
 
-  function systemBlockVisibilityControl(keys: string[]) {
+  function systemBlockVisibilityControl(keys: readonly string[]) {
     if (!canManageSystemFieldVisibility) return null;
     const entries = keys.map((key) => systemFieldEntry(key));
     const summary = getVisibilitySummary(entries);
@@ -2456,19 +2114,11 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     );
   }
 
-  function canShowSystemBlock(keys: string[]) {
+  function canShowSystemBlock(keys: readonly string[]) {
     return keys.some((key) => canShowSystemField(key));
   }
 
-  const systemBlockKeys = {
-    schedule: [SYSTEM_FIELD_KEYS.shift, SYSTEM_FIELD_KEYS.units],
-    uniforms: [SYSTEM_FIELD_KEYS.uniforms],
-    vacations: [SYSTEM_FIELD_KEYS.vacations],
-    asoControl: [SYSTEM_FIELD_KEYS.asoSummary],
-    familySalary: [SYSTEM_FIELD_KEYS.familySalarySummary, "employee.children_under_14", "employee.children", "employee.has_family_salary"],
-    transportVoucher: [SYSTEM_FIELD_KEYS.transportVoucher],
-    behavior: [SYSTEM_FIELD_KEYS.behaviorOperational, SYSTEM_FIELD_KEYS.behaviorGoals],
-  };
+  const systemBlockKeys = SYSTEM_BLOCK_KEYS;
   const transportVoucherHistory = collaborator.transportVoucherHistory ?? [];
   const transportVoucherStatus = getTransportVoucherStatus(collaborator.needsTransportVoucher, transportVoucherHistory);
   const canManageTransportVoucher = Boolean(
@@ -2522,13 +2172,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     setTransportVoucherStatusDraft(nextStatus);
     setTransportVoucherValueDraft(collaborator.transportVoucherValue ?? "");
     setTransportVoucherEffectiveDate(format(new Date(), "yyyy-MM-dd"));
-    setTransportVoucherReason(
-      transportVoucherStatus === "none"
-        ? "Configuração inicial do vale-transporte."
-        : nextStatus === "active"
-          ? "Atualização do vale-transporte."
-          : "Suspensão do vale-transporte."
-    );
+    setTransportVoucherReason(defaultTransportVoucherReason(transportVoucherStatus, nextStatus));
     setTransportVoucherMessage(null);
     setTransportVoucherEditorOpen(true);
   }
@@ -2537,36 +2181,30 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     if (!canManageTransportVoucher || transportVoucherSaving) return;
     const fromStatus = transportVoucherStatus;
     const toStatus = transportVoucherStatusDraft;
-    const parsedValue = transportVoucherValueDraft === "" ? undefined : transportVoucherValueDraft;
-    if (parsedValue != null && (!Number.isFinite(parsedValue) || parsedValue < 0)) {
-      setTransportVoucherMessage("Informe um valor de vale-transporte válido.");
+    let change: ReturnType<typeof resolveTransportVoucherChange>;
+    try {
+      change = resolveTransportVoucherChange({
+        fromStatus,
+        toStatus,
+        currentValue: collaborator.transportVoucherValue,
+        draftValue: transportVoucherValueDraft,
+        effectiveDate: transportVoucherEffectiveDate || format(new Date(), "yyyy-MM-dd"),
+        reason: transportVoucherReason,
+        changedBy: currentUser ? { userId: currentUser.id, username: currentUser.username } : undefined,
+      });
+    } catch (error) {
+      setTransportVoucherMessage(error instanceof Error ? error.message : "Informe um valor de vale-transporte válido.");
       return;
     }
-
-    const nextNeedsTransportVoucher = toStatus === "active";
-    const changedStatus = fromStatus !== toStatus;
-    const changedValue = (collaborator.transportVoucherValue ?? undefined) !== parsedValue;
-    const historyEntry: TransportVoucherHistoryEntry | null = changedStatus || changedValue || transportVoucherReason.trim()
-      ? {
-          id: newLocalId("vt"),
-          fromStatus,
-          toStatus,
-          effectiveDate: transportVoucherEffectiveDate || format(new Date(), "yyyy-MM-dd"),
-          reason: transportVoucherReason.trim() || (toStatus === "active" ? "Adesão ao vale-transporte." : "Suspensão do vale-transporte."),
-          value: toStatus === "active" ? parsedValue : undefined,
-          changedAt: new Date().toISOString(),
-          changedBy: currentUser ? { userId: currentUser.id, username: currentUser.username } : undefined,
-        }
-      : null;
 
     setTransportVoucherSaving(true);
     setTransportVoucherMessage(null);
     try {
       const nextUser: User = {
         ...collaborator,
-        needsTransportVoucher: nextNeedsTransportVoucher,
-        transportVoucherValue: nextNeedsTransportVoucher ? parsedValue : undefined,
-        transportVoucherHistory: historyEntry ? [...transportVoucherHistory, historyEntry] : transportVoucherHistory,
+        needsTransportVoucher: change.nextNeedsTransportVoucher,
+        transportVoucherValue: change.nextTransportVoucherValue,
+        transportVoucherHistory: change.historyEntry ? [...transportVoucherHistory, change.historyEntry] : transportVoucherHistory,
       };
       await updateUser(nextUser);
       if (firebaseUser) {
