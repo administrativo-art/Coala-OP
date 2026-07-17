@@ -7833,9 +7833,57 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   ];
 
   const okAlert = pendingAlerts.length === 0;
+  const selectedProcessId = selectedProcess.id;
   const reviewDocuments = selectedProcess.documents ?? [];
   const documentsWithExtraction = reviewDocuments.filter(hasDocumentExtraction).length;
   const auditableDocuments = reviewDocuments.filter(hasAuditableDocumentFile).length;
+  const bulkApprovalDocuments = reviewDocuments.filter(document =>
+    hasAuditableDocumentFile(document) &&
+    document.status !== 'approved' &&
+    document.status !== 'rejected'
+  );
+  const bulkApprovalActionKey = `${selectedProcessId}:document_status_bulk`;
+  const canBulkApproveDocuments = canActOnCurrentPhase && bulkApprovalDocuments.length > 0;
+
+  async function approveReviewDocumentsInBulk() {
+    if (!canBulkApproveDocuments) return;
+    const documentCount = bulkApprovalDocuments.length;
+    const countLabel = `${documentCount} documento${documentCount === 1 ? '' : 's'}`;
+    const confirmed = window.confirm(`Aprovar ${countLabel} em lote? Confirme apenas se você já abriu e verificou os arquivos.`);
+    if (!confirmed) return;
+
+    await patchProcess(selectedProcessId, {
+      action: 'document_status_bulk',
+      documentIds: bulkApprovalDocuments.map(document => document.id),
+      status: 'approved',
+    });
+  }
+
+  function renderBulkApproveDocumentsButton() {
+    if (!canManage || reviewDocuments.length === 0) return null;
+    const isLoading = updating === bulkApprovalActionKey;
+    return (
+      <button
+        type="button"
+        disabled={isLoading || !canBulkApproveDocuments}
+        onClick={() => void approveReviewDocumentsInBulk()}
+        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        title={!canActOnCurrentPhase
+          ? 'A aprovação em lote só fica ativa na fase atual de Coleta e conferência.'
+          : bulkApprovalDocuments.length === 0
+            ? 'Não há documentos enviados pendentes para aprovar.'
+            : undefined}
+      >
+        {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+        Aprovar em lote
+        {bulkApprovalDocuments.length > 0 ? (
+          <span className="ml-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] leading-none">
+            {bulkApprovalDocuments.length}
+          </span>
+        ) : null}
+      </button>
+    );
+  }
 
   let genericStatus = 'Etapa concluída';
   let genericDesc = activeDetails?.focus ?? '';
@@ -8039,34 +8087,40 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 <div className="space-y-3">
                   <p className="text-xs font-black uppercase tracking-wide text-slate-500">Documentação e conferência</p>
                   {documentsWithExtraction > 0 ? (
-                    <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
-                        <Sparkles className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <div className="text-[13px] font-black text-blue-800">
-                          Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}
-                        </div>
-                        <div className="mt-0.5 text-xs font-semibold text-blue-700">
-                          Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.
+                    <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
+                          <Sparkles className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-black text-blue-800">
+                            Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}
+                          </div>
+                          <div className="mt-0.5 text-xs font-semibold text-blue-700">
+                            Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.
+                          </div>
                         </div>
                       </div>
+                      {renderBulkApproveDocumentsButton()}
                     </div>
                   ) : (
-                    <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500">
-                        <FileText className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <div className="text-[13px] font-black text-slate-800">
-                          Conferência manual de documentos
-                        </div>
-                        <div className="mt-0.5 text-xs font-semibold text-slate-500">
-                          {auditableDocuments > 0
-                            ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.`
-                            : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}
+                    <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500">
+                          <FileText className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-black text-slate-800">
+                            Conferência manual de documentos
+                          </div>
+                          <div className="mt-0.5 text-xs font-semibold text-slate-500">
+                            {auditableDocuments > 0
+                              ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.`
+                              : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}
+                          </div>
                         </div>
                       </div>
+                      {renderBulkApproveDocumentsButton()}
                     </div>
                   )}
                 </div>
@@ -8126,34 +8180,40 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {activeKind === 'revisao' && (
               <div className="mt-4 space-y-3.5">
                 {documentsWithExtraction > 0 ? (
-                  <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
-                      <Sparkles className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <div className="text-[13px] font-black text-blue-800">
-                        Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}
-                      </div>
-                      <div className="mt-0.5 text-xs font-semibold text-blue-700">
-                        Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.
+                  <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
+                        <Sparkles className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-black text-blue-800">
+                          Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}
+                        </div>
+                        <div className="mt-0.5 text-xs font-semibold text-blue-700">
+                          Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.
+                        </div>
                       </div>
                     </div>
+                    {renderBulkApproveDocumentsButton()}
                   </div>
                 ) : (
-                  <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500">
-                      <FileText className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <div className="text-[13px] font-black text-slate-800">
-                        Conferência manual de documentos
-                      </div>
-                      <div className="mt-0.5 text-xs font-semibold text-slate-500">
-                        {auditableDocuments > 0
-                          ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.`
-                          : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}
+                  <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500">
+                        <FileText className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-black text-slate-800">
+                          Conferência manual de documentos
+                        </div>
+                        <div className="mt-0.5 text-xs font-semibold text-slate-500">
+                          {auditableDocuments > 0
+                            ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.`
+                            : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}
+                        </div>
                       </div>
                     </div>
+                    {renderBulkApproveDocumentsButton()}
                   </div>
                 )}
                 <div className="space-y-2">

@@ -32,6 +32,17 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function asStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  value.forEach((entry) => {
+    if (typeof entry !== 'string') return;
+    const normalized = entry.trim();
+    if (normalized) seen.add(normalized);
+  });
+  return Array.from(seen);
+}
+
 function answerString(answers: Record<string, unknown>, key: string) {
   return asString(answers[key]) ?? '';
 }
@@ -149,6 +160,31 @@ function mergeDocumentStatus(
 ) {
   return documents.map((document) => {
     if (document.id !== documentId) return document;
+    return {
+      ...document,
+      status,
+      note,
+      updatedAt: now,
+      receivedAt: isDocumentReceivedStatus(status)
+        ? document.receivedAt ?? now
+        : status === 'pending'
+          ? null
+          : document.receivedAt ?? null,
+      approvedAt: status === 'approved' ? now : null,
+    };
+  });
+}
+
+function mergeDocumentStatuses(
+  documents: OnboardingDocument[],
+  documentIds: string[],
+  status: OnboardingDocument['status'],
+  note: string | null,
+  now: string
+) {
+  const targetIds = new Set(documentIds);
+  return documents.map((document) => {
+    if (!targetIds.has(document.id)) return document;
     return {
       ...document,
       status,
@@ -363,6 +399,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const now = new Date().toISOString();
   const update: Record<string, unknown> = { updatedAt: now };
   let responseFirstAccessUrl: string | null = null;
+  let changedDocumentsCount: number | null = null;
 
   if (action === 'document_status') {
     const documentId = asString(body.documentId);
@@ -382,6 +419,31 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       }
     }
     update.documents = mergeDocumentStatus(documents, documentId, status, asString(body.note), now);
+    changedDocumentsCount = 1;
+  } else if (action === 'document_status_bulk') {
+    const documentIds = asStringArray(body.documentIds);
+    const status = asString(body.status) as OnboardingDocument['status'] | null;
+    if (documentIds.length === 0 || status !== 'approved') {
+      return jsonError('Documentos ou status inválido.');
+    }
+    if (!isDocumentCollectionReviewStage(process.currentStage)) {
+      return jsonError('A conferência documental só pode ser feita na etapa Formalização · Coleta e conferência.', 400);
+    }
+
+    const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
+    const documentsById = new Map(documents.map(document => [document.id, document]));
+    const missingDocumentId = documentIds.find(documentId => !documentsById.has(documentId));
+    if (missingDocumentId) return jsonError('Documento não encontrado.', 404);
+
+    const invalidDocument = documentIds
+      .map(documentId => documentsById.get(documentId))
+      .find(document => !document || !hasAuditableDocumentFile(document));
+    if (invalidDocument) {
+      return jsonError('Não é possível aprovar em lote documentos sem arquivo anexado para auditoria.', 400);
+    }
+
+    update.documents = mergeDocumentStatuses(documents, documentIds, status, asString(body.note), now);
+    changedDocumentsCount = documentIds.length;
   } else if (action === 'advance_stage') {
     const currentStage = asString(body.currentStage) as OnboardingStageId | null;
     if (!currentStage) return jsonError('Etapa inválida.');
@@ -514,6 +576,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       target_id: id,
       target_name: process.candidateName ?? id,
       changed_fields: Object.keys(update),
+      ...(changedDocumentsCount !== null ? { changed_documents: changedDocumentsCount } : {}),
     },
     ttl_days: 365,
   });
