@@ -136,6 +136,10 @@ function hasAuditableDocumentFile(document: OnboardingDocument) {
   return typeof document.fileUrl === 'string' && document.fileUrl.trim().length > 0;
 }
 
+function isDocumentCollectionReviewStage(stage: unknown) {
+  return stage === 'documents' || stage === 'document_review';
+}
+
 function mergeDocumentStatus(
   documents: OnboardingDocument[],
   documentId: string,
@@ -370,8 +374,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const document = documents.find(item => item.id === documentId);
     if (!document) return jsonError('Documento não encontrado.', 404);
     if (['approved', 'rejected', 'review_required'].includes(status)) {
-      if (process.currentStage !== 'document_review') {
-        return jsonError('A conferência documental só pode ser feita na etapa Formalização · Conferência.', 400);
+      if (!isDocumentCollectionReviewStage(process.currentStage)) {
+        return jsonError('A conferência documental só pode ser feita na etapa Formalização · Coleta e conferência.', 400);
       }
       if (!hasAuditableDocumentFile(document)) {
         return jsonError('Não é possível conferir um documento sem arquivo anexado para auditoria.', 400);

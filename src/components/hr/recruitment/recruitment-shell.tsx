@@ -6661,11 +6661,11 @@ const ONBOARDING_DOCUMENT_STATUS_LABELS: Record<OnboardingDocument['status'], st
 const ONBOARDING_STAGE_DETAILS: Record<OnboardingStageId, { owner: string; focus: string }> = {
   documents: {
     owner: 'Candidato + RH',
-    focus: 'Dados do candidato e anexos obrigatórios',
+    focus: 'Dados, anexos obrigatórios e conferência documental na mesma etapa',
   },
   document_review: {
     owner: 'RH',
-    focus: 'Copiloto, conferência e aprovação da coleta',
+    focus: 'Etapa legada consolidada em Coleta e conferência',
   },
   signature_preparation: {
     owner: 'RH',
@@ -6699,7 +6699,7 @@ const ONBOARDING_STAGE_KIND: Record<
   'coleta' | 'revisao' | 'generico' | 'assinatura' | 'validacao' | 'integracao' | 'experiencia'
 > = {
   documents: 'coleta',
-  document_review: 'revisao',
+  document_review: 'coleta',
   signature_preparation: 'generico',
   signature: 'assinatura',
   formalization_validation: 'validacao',
@@ -6716,6 +6716,57 @@ function formatOnboardingDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Não informado';
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function isDocumentCollectionReviewStage(stageId?: OnboardingStageId | null) {
+  return stageId === 'documents' || stageId === 'document_review';
+}
+
+function canonicalOnboardingStageId(stageId?: OnboardingStageId | null): OnboardingStageId | null {
+  if (!stageId) return null;
+  return isDocumentCollectionReviewStage(stageId) ? 'documents' : stageId;
+}
+
+function collectionReviewStageLabel(stages: OnboardingStage[]) {
+  const legacyLabels = stages
+    .filter(stage => isDocumentCollectionReviewStage(stage.id))
+    .map(stage => stage.label.toLowerCase());
+  const hasFormalizationPrefix = legacyLabels.some(label => label.includes('formalização'));
+  return hasFormalizationPrefix ? 'Formalização - Coleta e conferência' : 'Coleta e conferência';
+}
+
+function collectionReviewDueDays(documentsStage?: OnboardingStage, reviewStage?: OnboardingStage) {
+  if (typeof documentsStage?.dueDays === 'number' && typeof reviewStage?.dueDays === 'number') {
+    return documentsStage.dueDays + reviewStage.dueDays;
+  }
+  return documentsStage?.dueDays ?? reviewStage?.dueDays ?? null;
+}
+
+function visibleOnboardingStages(process: OnboardingProcess) {
+  const stages = [...(process.stages ?? [])].sort((a, b) => a.order - b.order);
+  const documentsStage = stages.find(stage => stage.id === 'documents');
+  const reviewStage = stages.find(stage => stage.id === 'document_review');
+  if (!documentsStage && !reviewStage) {
+    return stages.map((stage, index) => ({ ...stage, order: index }));
+  }
+
+  const collectionStage: OnboardingStage = {
+    ...(documentsStage ?? reviewStage!),
+    id: 'documents',
+    label: collectionReviewStageLabel(stages),
+    order: Math.min(documentsStage?.order ?? reviewStage?.order ?? 0, reviewStage?.order ?? documentsStage?.order ?? 0),
+    dueDays: collectionReviewDueDays(documentsStage, reviewStage),
+    required: documentsStage?.required ?? reviewStage?.required ?? true,
+  };
+
+  const withoutLegacyReview = stages.filter(stage => stage.id !== 'document_review');
+  const withCollection = documentsStage
+    ? withoutLegacyReview.map(stage => stage.id === 'documents' ? collectionStage : stage)
+    : [collectionStage, ...withoutLegacyReview];
+
+  return withCollection
+    .sort((a, b) => a.order - b.order)
+    .map((stage, index) => ({ ...stage, order: index }));
 }
 
 function formatOnboardingLinkRemaining(process: OnboardingProcess, now: number) {
@@ -7230,16 +7281,16 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const phaseOptions = useMemo(() => {
     const map = new Map<string, string>();
     activeProcesses.forEach(process => {
-      const stageId = process.currentStage;
+      const stageId = canonicalOnboardingStageId(process.currentStage);
       if (!stageId) return;
-      const label = (process.stages ?? []).find(stage => stage.id === stageId)?.label ?? stageId;
+      const label = visibleOnboardingStages(process).find(stage => stage.id === stageId)?.label ?? stageId;
       if (!map.has(stageId)) map.set(stageId, label);
     });
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
   }, [activeProcesses]);
 
   const filtered = useMemo(() => activeProcesses.filter(process => {
-    if (phaseFilter !== 'all' && process.currentStage !== phaseFilter) return false;
+    if (phaseFilter !== 'all' && canonicalOnboardingStageId(process.currentStage) !== phaseFilter) return false;
     const text = [
       process.candidateName,
       process.candidateEmail,
@@ -7346,22 +7397,25 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }
 
   function stageOrderOf(process: OnboardingProcess, stageId?: OnboardingStageId | null) {
-    if (!stageId) return -1;
-    return (process.stages ?? []).find(stage => stage.id === stageId)?.order ?? -1;
+    const canonicalStageId = canonicalOnboardingStageId(stageId);
+    if (!canonicalStageId) return -1;
+    return visibleOnboardingStages(process).find(stage => stage.id === canonicalStageId)?.order ?? -1;
   }
 
   function stageState(process: OnboardingProcess, stageId: OnboardingStageId): 'done' | 'active' | 'pending' {
     if (process.status === 'completed') return 'done';
-    const currentOrder = stageOrderOf(process, process.currentStage);
-    const stageOrder = stageOrderOf(process, stageId);
-    if (currentOrder < 0 || stageOrder < 0) return stageId === process.currentStage ? 'active' : 'pending';
-    if (stageId === process.currentStage) return 'active';
+    const currentStageId = canonicalOnboardingStageId(process.currentStage);
+    const normalizedStageId = canonicalOnboardingStageId(stageId);
+    const currentOrder = stageOrderOf(process, currentStageId);
+    const stageOrder = stageOrderOf(process, normalizedStageId);
+    if (currentOrder < 0 || stageOrder < 0) return normalizedStageId === currentStageId ? 'active' : 'pending';
+    if (normalizedStageId === currentStageId) return 'active';
     return stageOrder < currentOrder ? 'done' : 'pending';
   }
 
   function openProcess(process: OnboardingProcess) {
     setSelectedId(process.id);
-    setPhaseId(process.currentStage ?? process.stages?.[0]?.id ?? null);
+    setPhaseId(canonicalOnboardingStageId(process.currentStage ?? process.stages?.[0]?.id ?? null));
     setView('detail');
   }
 
@@ -7503,7 +7557,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus}
                   onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
                   className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
-                  title={!hasFile ? 'Envie ou abra um arquivo antes de aprovar.' : !canChangeDocumentStatus ? 'A aprovação só fica ativa na fase atual de Conferência.' : undefined}
+                  title={!hasFile ? 'Envie ou abra um arquivo antes de aprovar.' : !canChangeDocumentStatus ? 'A aprovação só fica ativa na fase atual de Coleta e conferência.' : undefined}
                 >
                   Aprovar
                 </button>
@@ -7512,7 +7566,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus}
                   onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'rejected' })}
                   className="h-8 rounded-lg bg-red-600 px-3 text-[11px] font-bold text-white hover:bg-red-500 disabled:opacity-50"
-                  title={!hasFile ? 'Não há arquivo anexado para reprovar.' : !canChangeDocumentStatus ? 'A reprovação só fica ativa na fase atual de Conferência.' : undefined}
+                  title={!hasFile ? 'Não há arquivo anexado para reprovar.' : !canChangeDocumentStatus ? 'A reprovação só fica ativa na fase atual de Coleta e conferência.' : undefined}
                 >
                   Reprovar
                 </button>
@@ -7609,7 +7663,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
             {filtered.map(process => {
               const progress = processDocProgress(process);
-              const currentStage = (process.stages ?? []).find(stage => stage.id === process.currentStage);
+              const currentStageId = canonicalOnboardingStageId(process.currentStage);
+              const currentStage = visibleOnboardingStages(process).find(stage => stage.id === currentStageId);
               const formReceived = !!process.publicFormSubmittedAt;
               const linkActive = processLinkActive(process);
               const color = colorForProcess(process.id);
@@ -7727,9 +7782,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   // ── Detail (drill-in) ─────────────────────────────────────────────────────
   const progress = processDocProgress(selectedProcess);
   const answers = selectedProcess.publicFormAnswers;
-  const currentStageId = selectedProcess.currentStage ?? selectedProcess.stages?.[0]?.id ?? null;
-  const activePhaseId = phaseId ?? currentStageId;
-  const activeStage = (selectedProcess.stages ?? []).find(stage => stage.id === activePhaseId) ?? null;
+  const visibleStages = visibleOnboardingStages(selectedProcess);
+  const currentStageId = canonicalOnboardingStageId(selectedProcess.currentStage ?? visibleStages[0]?.id ?? null);
+  const activePhaseId = canonicalOnboardingStageId(phaseId ?? currentStageId);
+  const activeStage = visibleStages.find(stage => stage.id === activePhaseId) ?? null;
   const activeDetails = activePhaseId ? ONBOARDING_STAGE_DETAILS[activePhaseId] : null;
   const activeKind = activePhaseId ? ONBOARDING_STAGE_KIND[activePhaseId] : 'generico';
   const accent = colorForProcess(selectedProcess.id);
@@ -7749,7 +7805,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const currentStageOrder = stageOrderOf(selectedProcess, selectedProcess.currentStage);
   const activeStageOrder = stageOrderOf(selectedProcess, activePhaseId);
-  const isCurrentPhase = !!activePhaseId && activePhaseId === selectedProcess.currentStage;
+  const isCurrentPhase = !!activePhaseId && activePhaseId === currentStageId;
   const isFuturePhase = activeStageOrder > currentStageOrder;
   const isPastPhase = activeStageOrder >= 0 && currentStageOrder >= 0 && activeStageOrder < currentStageOrder;
   const canActOnCurrentPhase = canManage && isCurrentPhase &&
@@ -7860,7 +7916,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
           <aside className="min-w-[260px] flex-[1_1_290px] rounded-2xl border border-slate-100 bg-slate-50 p-4">
             <p className="mb-3.5 text-[11px] font-black uppercase tracking-wide text-slate-500">Linha do tempo · fases</p>
             <div className="space-y-1">
-              {(selectedProcess.stages ?? []).map((stage, index, stages) => {
+              {visibleStages.map((stage, index, stages) => {
                 const state = stageState(selectedProcess, stage.id);
                 const details = ONBOARDING_STAGE_DETAILS[stage.id];
                 const isActivePhase = stage.id === activePhaseId;
@@ -7905,7 +7961,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   </button>
                 );
               })}
-              {(selectedProcess.stages ?? []).length === 0 && (
+              {visibleStages.length === 0 && (
                 <p className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
                   Nenhuma etapa configurada.
                 </p>
@@ -7980,10 +8036,43 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   ))}
                 </div>
 
-                <p className="text-xs font-black uppercase tracking-wide text-slate-500">Documentação obrigatória</p>
+                <div className="space-y-3">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Documentação e conferência</p>
+                  {documentsWithExtraction > 0 ? (
+                    <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
+                        <Sparkles className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <div className="text-[13px] font-black text-blue-800">
+                          Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}
+                        </div>
+                        <div className="mt-0.5 text-xs font-semibold text-blue-700">
+                          Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500">
+                        <FileText className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <div className="text-[13px] font-black text-slate-800">
+                          Conferência manual de documentos
+                        </div>
+                        <div className="mt-0.5 text-xs font-semibold text-slate-500">
+                          {auditableDocuments > 0
+                            ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.`
+                            : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {(selectedProcess.documents ?? []).map(document => (
-                    <DocumentRow key={document.id} process={selectedProcess} document={document} mode="collect" />
+                    <DocumentRow key={document.id} process={selectedProcess} document={document} mode="review" />
                   ))}
                   {(selectedProcess.documents ?? []).length === 0 && (
                     <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">

@@ -17,14 +17,13 @@ export const ONBOARDING_STAGE_IDS: OnboardingStageId[] = [
 ];
 
 export const DEFAULT_ONBOARDING_STAGES: OnboardingStage[] = [
-  { id: 'documents', label: 'Coleta de dados e documentos', order: 0, required: true, dueDays: 3 },
-  { id: 'document_review', label: 'Revisão da coleta', order: 1, required: true, dueDays: 2 },
-  { id: 'signature_preparation', label: 'Geração e revisão para assinatura', order: 2, required: true, dueDays: null },
-  { id: 'signature', label: 'Assinatura dos documentos', order: 3, required: true, dueDays: null },
-  { id: 'formalization_validation', label: 'Validação da formalização', order: 4, required: true, dueDays: null },
-  { id: 'integration', label: 'Criação de usuário e integrações', order: 5, required: true, dueDays: null },
-  { id: 'probation', label: 'Período de experiência', order: 6, required: true, dueDays: 90 },
-  { id: 'done', label: 'Finalizado', order: 7, required: true, dueDays: null },
+  { id: 'documents', label: 'Coleta e conferência', order: 0, required: true, dueDays: 5 },
+  { id: 'signature_preparation', label: 'Geração e revisão para assinatura', order: 1, required: true, dueDays: null },
+  { id: 'signature', label: 'Assinatura dos documentos', order: 2, required: true, dueDays: null },
+  { id: 'formalization_validation', label: 'Validação da formalização', order: 3, required: true, dueDays: null },
+  { id: 'integration', label: 'Criação de usuário e integrações', order: 4, required: true, dueDays: null },
+  { id: 'probation', label: 'Período de experiência', order: 5, required: true, dueDays: 90 },
+  { id: 'done', label: 'Finalizado', order: 6, required: true, dueDays: null },
 ];
 
 export const DEFAULT_ONBOARDING_DOCUMENTS: OnboardingDocumentTemplate[] = [
@@ -148,10 +147,12 @@ export function normalizeOnboardingStages(value: unknown): OnboardingStage[] {
     .filter((stage): stage is OnboardingStage => stage !== null);
 
   return ONBOARDING_STAGE_IDS.map((id) => {
+    if (id === 'document_review') return null;
     const fallback = defaultsById.get(id)!;
     const existing = normalized.find(stage => stage.id === id);
     return existing ? { ...fallback, ...existing } : fallback;
   })
+    .filter((stage): stage is OnboardingStage => stage !== null)
     .sort((a, b) => a.order - b.order)
     .map((stage, index) => ({ ...stage, order: index }));
 }

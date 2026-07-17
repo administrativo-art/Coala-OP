@@ -524,7 +524,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     };
   });
   const allRequiredDocumentsSubmitted = requiredDocumentsSubmitted(nextDocuments);
-  const shouldMoveToReview = data.currentStage === 'documents' || !data.currentStage;
+  const shouldMarkCollectionForReview =
+    data.currentStage === 'documents' ||
+    data.currentStage === 'document_review' ||
+    !data.currentStage;
   const submittedAt = new Date(now);
   const protocol = createSubmissionProtocol(submittedAt);
   const sessionId = trimText(input.sessionId, 120) || randomBytes(12).toString('hex');
@@ -576,10 +579,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     publicFormSubmittedAt: now,
     publicFormLastSubmittedAt: now,
     publicPrivacyAcceptance,
-    currentStage: shouldMoveToReview
-      ? 'document_review'
+    currentStage: shouldMarkCollectionForReview
+      ? 'documents'
       : data.currentStage ?? 'documents',
-    status: shouldMoveToReview && (data.status === 'collecting_documents' || data.status === 'pending_setup')
+    status: shouldMarkCollectionForReview && (
+      data.status === 'collecting_documents' ||
+      data.status === 'pending_setup' ||
+      data.status === 'reviewing_documents'
+    )
       ? 'reviewing_documents'
       : data.status === 'pending_setup'
         ? 'collecting_documents'
@@ -610,7 +617,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     allergyAcknowledged: true,
     submittedDocumentIds: Object.keys(rawDocuments),
     allRequiredDocumentsSubmitted,
-    movedToReview: shouldMoveToReview,
+    movedToCollectionReview: shouldMarkCollectionForReview,
     formalization_id: doc.id,
     candidate_id: data.candidateId ?? null,
     invitation_id: data.invitationId ?? null,
