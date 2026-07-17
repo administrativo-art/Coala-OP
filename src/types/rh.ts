@@ -119,6 +119,12 @@ export type ProfileAccessMatrix = {
   visibility: Partial<Record<NormalizedFieldVisibility, ProfileAccessMatrixRule>>;
 };
 
+export type DocumentVisibilityConfig = {
+  version: string;
+  categories?: Record<string, NormalizedFieldVisibility>;
+  document_types?: Record<string, NormalizedFieldVisibility>;
+};
+
 export const DEFAULT_PROFILE_ACCESS_MATRIX: ProfileAccessMatrix = {
   version: 'coala-rh-access-v1',
   visibility: {
@@ -165,7 +171,7 @@ export type FieldMapEntry = {
   options?:          string[];
   lgpd?: {
     category: 'personal' | 'sensitive' | 'confidential';
-    legal_basis: 'legal_obligation' | 'contract' | 'legitimate_interest' | 'consent';
+    legal_basis: 'legal_obligation' | 'contract' | 'legitimate_interest' | 'consent' | 'life_protection' | 'health_guardianship';
     retention: 'employment_plus_5y' | 'termination_plus_90d' | 'termination_plus_2y' | 'manual_review';
     requires_consent?: boolean;
   };
@@ -187,6 +193,7 @@ export type FieldMap = {
   section_order?: Record<string, number>;
   profile_blocks?: Record<string, ProfileBlockConfig>;
   access_matrix?: ProfileAccessMatrix;
+  document_visibility?: DocumentVisibilityConfig;
 };
 
 // ─── Employee ───────────────────────────────────────────────────────────────

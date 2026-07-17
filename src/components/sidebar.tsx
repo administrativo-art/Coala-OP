@@ -350,27 +350,27 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         onMouseEnter={() => setHoverExpanded(true)}
         onMouseLeave={() => setHoverExpanded(false)}
         className={cn(
-          "fixed left-4 top-4 bottom-4 z-50 flex flex-col overflow-hidden border bg-white shadow-[0_18px_45px_rgba(15,23,42,0.12)] transition-all duration-300",
+          "fixed bottom-1.5 left-1.5 top-1.5 z-50 flex flex-col overflow-hidden border bg-white shadow-[0_14px_36px_rgba(15,23,42,0.10)] transition-all duration-300",
           open
             ? "translate-x-0 pointer-events-auto"
             : "-translate-x-[130%] pointer-events-none lg:translate-x-0 lg:pointer-events-auto"
         )}
-        style={{ width: expanded ? 336 : 84, borderRadius: 28 }}
+        style={{ width: expanded ? 216 : 46, borderRadius: 12 }}
       >
         {/* Logo area */}
-        <div className={cn("relative flex-shrink-0", expanded ? "px-6 pb-5 pt-6" : "px-3 pb-5 pt-7")}>
+        <div className={cn("relative flex-shrink-0", expanded ? "px-3 pb-2 pt-3" : "px-1.5 pb-2 pt-4")}>
           {expanded ? (
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-2xl bg-white">
+              <div className="grid h-7 w-7 place-items-center overflow-hidden rounded-lg bg-white">
                 <img src={brand.logo} alt={brand.name} className="max-h-8 max-w-8 object-contain" />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-xl font-semibold tracking-normal text-slate-900">Coala Shakes</p>
+                <p className="truncate text-sm font-semibold tracking-normal text-slate-900">Coala Shakes</p>
               </div>
             </div>
           ) : (
-            <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-2xl bg-white" title={brand.name}>
-              <img src={brand.logo} alt={brand.name} className="max-h-9 max-w-9 object-contain" />
+            <div className="mx-auto grid h-8 w-8 place-items-center overflow-hidden rounded-md bg-white" title={brand.name}>
+              <img src={brand.logo} alt={brand.name} className="max-h-6 max-w-6 object-contain" />
             </div>
           )}
           <button
@@ -382,10 +382,10 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           </button>
         </div>
 
-        {expanded ? null : <div className="mx-4 h-px bg-slate-200" />}
+        {expanded ? null : <div className="mx-2 h-px bg-slate-200" />}
 
-        <div className={cn("flex-shrink-0", expanded ? "px-4 pb-2" : "px-3 pb-2 pt-4")}>
-          <div className="space-y-2">
+        <div className={cn("flex-shrink-0", expanded ? "px-2 pb-1" : "px-1.5 pb-1 pt-2")}>
+          <div className="space-y-1">
             {permissions.dashboard?.view ? (
               <Link
                 href="/dashboard"
@@ -393,15 +393,15 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 className={cn(
                   "flex items-center transition-colors",
                   expanded
-                    ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
-                    : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
+                    ? "h-9 gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 hover:bg-stone-50"
+                    : "mx-auto h-8 w-8 justify-center rounded-md text-slate-800 hover:bg-stone-50",
                   pathname === "/dashboard"
                     ? "border border-stone-200 bg-stone-50 text-slate-950"
                     : ""
                 )}
                 title="Painel da gestão"
               >
-                <LayoutDashboard className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+                <LayoutDashboard className="h-4 w-4 flex-shrink-0 stroke-[2.2]" />
                 {expanded ? <span>Painel da gestão</span> : null}
               </Link>
             ) : null}
@@ -413,15 +413,15 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 className={cn(
                   "flex items-center transition-colors",
                   expanded
-                    ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
-                    : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
+                    ? "h-9 gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 hover:bg-stone-50"
+                    : "mx-auto h-8 w-8 justify-center rounded-md text-slate-800 hover:bg-stone-50",
                   pathname === "/dashboard/collaborator"
                     ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
                     : ""
                 )}
                 title="Painel do colaborador"
               >
-                <ClipboardCheck className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+                <ClipboardCheck className="h-4 w-4 flex-shrink-0 stroke-[2.2]" />
                 {expanded ? <span>Painel do colaborador</span> : null}
               </Link>
             ) : null}
@@ -429,7 +429,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         </div>
 
         {/* Accordion nav */}
-        <nav className={cn("flex-1 overflow-y-auto", expanded ? "px-4 py-1" : "px-3 py-1")}>
+        <nav className={cn("flex-1 overflow-y-auto", expanded ? "px-2 py-1" : "px-1.5 py-1")}>
           {expanded ? (
             navSections.map(section => {
               const isOpen = openSections.has(section.key);
@@ -441,7 +441,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 <div
                   key={section.key}
                   className={cn(
-                    "mb-2 rounded-2xl border border-transparent transition-colors",
+                    "mb-1 rounded-xl border border-transparent transition-colors",
                     (isOpen || hasActive) && "border-stone-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
                   )}
                 >
@@ -449,11 +449,11 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                     type="button"
                     onClick={() => toggleSection(section.key)}
                     className={cn(
-                      "flex h-12 w-full items-center gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 transition-colors hover:bg-stone-50",
+                      "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 transition-colors hover:bg-stone-50",
                       (isOpen || hasActive) && "text-slate-950 hover:bg-transparent"
                     )}
                   >
-                    <SectionIcon className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+                    <SectionIcon className="h-4.5 w-4.5 flex-shrink-0 stroke-[2.2]" />
                     <span className="flex-1 text-left">{section.label}</span>
                     {sectionBadgeCount > 0 ? (
                       <span className="grid min-w-[26px] place-items-center rounded-full bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">
@@ -461,13 +461,13 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                       </span>
                     ) : (
                       <ChevronDown
-                        className={cn("h-5 w-5 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")}
+                        className={cn("h-4 w-4 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")}
                       />
                     )}
                   </button>
 
                   {isOpen && (
-                    <div className="mb-3 ml-7 mt-0.5 space-y-0.5 border-l border-stone-200 py-1 pl-5">
+                    <div className="mb-1.5 ml-4 mt-0.5 space-y-0 border-l border-stone-200 py-0.5 pl-2.5">
                       {section.items.map(item => {
                         const active = isItemActive(item);
                         const count = item.badge?.count ?? 0;
@@ -489,7 +489,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                             <div key={item.href}>
                               <div
                                 className={cn(
-                                  "relative flex min-h-9 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                  "relative flex min-h-7 w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                                   parentActive && "font-semibold text-slate-950 hover:text-slate-950"
                                 )}
                               >
@@ -544,7 +544,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                                             type="button"
                                             onClick={() => toggleGroup(child.href)}
                                             className={cn(
-                                              "relative flex min-h-8 w-full items-center gap-2.5 rounded-xl px-3 py-1.5 text-[14px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                              "relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                                               (cActive || cChildActive) && "font-semibold text-slate-950 hover:text-slate-950"
                                             )}
                                           >
@@ -574,7 +574,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                                                     href={grandchild.href}
                                                     onClick={() => onOpenChange(false)}
                                                     className={cn(
-                                                      "relative flex min-h-7 items-center gap-2 rounded-xl px-3 py-1 text-[13px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                                      "relative flex min-h-6 items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                                                       gActive && "font-semibold text-slate-950 hover:text-slate-950"
                                                     )}
                                                   >
@@ -604,7 +604,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                                         href={child.href}
                                         onClick={() => onOpenChange(false)}
                                         className={cn(
-                                          "relative flex min-h-8 items-center gap-2.5 rounded-xl px-3 py-1.5 text-[14px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                          "relative flex min-h-6 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                                           cActive && "font-semibold text-slate-950 hover:text-slate-950"
                                         )}
                                       >
@@ -634,7 +634,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                             href={item.href}
                             onClick={() => onOpenChange(false)}
                             className={cn(
-                              "relative flex min-h-9 items-center gap-3 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                              "relative flex min-h-7 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                               active && "font-semibold text-slate-950 hover:text-slate-950"
                             )}
                           >
@@ -660,7 +660,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               );
             })
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {navSections.map((section) => {
                 const Icon = section.icon;
                 const active = section.items.some(isItemOrChildActive);
@@ -679,12 +679,12 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                       setHoverExpanded(true);
                     }}
                     className={cn(
-                      "relative mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800 transition-colors hover:bg-stone-50",
+                      "relative mx-auto flex h-8 w-8 items-center justify-center rounded-md text-slate-800 transition-colors hover:bg-stone-50",
                       active && "border border-stone-200 bg-stone-50 text-slate-950"
                     )}
                     title={section.label}
                   >
-                    <Icon className="h-6 w-6 stroke-[2.2]" />
+                    <Icon className="h-4 w-4 stroke-[2.2]" />
                     {badgeCount > 0 && (
                       <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
                     )}
@@ -695,13 +695,13 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           )}
         </nav>
 
-        <div className={cn("mx-4 h-px bg-slate-200", expanded ? "mb-4" : "mb-3")} />
+        <div className={cn("h-px bg-slate-200", expanded ? "mx-3 mb-2" : "mx-2 mb-2")} />
 
         {/* Footer */}
-        <div className={cn("flex-shrink-0 pb-5", expanded ? "px-5" : "px-3")}>
+        <div className={cn("flex-shrink-0 pb-2", expanded ? "px-2.5" : "px-1.5")}>
           <div className={cn("flex items-center", expanded ? "gap-2.5" : "justify-center")}>
             <div
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
               style={{ background: "linear-gradient(135deg, #f43f5e, #14b8a6)" }}
             >
               {userInitial}

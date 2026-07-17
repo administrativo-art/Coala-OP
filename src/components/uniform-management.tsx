@@ -607,8 +607,8 @@ export function UniformManagement() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="personal-uniform-density space-y-3">
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Disponíveis"
           value={stats.available}
@@ -642,12 +642,12 @@ export function UniformManagement() {
       {sizeSummary.length > 0 ? (
         <section className="space-y-3">
           <h2 className="px-1 text-sm font-black text-[#4c4c57]">Resumo por tamanho</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {sizeSummary.map((row) => (
-              <div key={row.size} className="rounded-2xl border border-[#dfdfe7] bg-white px-5 py-4">
+              <div key={row.size} className="rounded-lg border border-[#dfdfe7] bg-white px-3 py-2.5">
                 <p className="text-xs font-black uppercase text-[#8f8f9b]">Tamanho</p>
-                <p className="mt-1 text-xl font-black text-[#171820]">{row.size}</p>
-                <p className="mt-2 text-sm font-semibold text-[#8f8f9b]">
+                <p className="mt-0.5 text-base font-black text-[#171820]">{row.size}</p>
+                <p className="mt-1 text-xs font-semibold text-[#8f8f9b]">
                   {formatQuantity(row.available)} disponível(is) · {formatQuantity(row.inPossession)} em posse
                 </p>
               </div>
@@ -656,43 +656,43 @@ export function UniformManagement() {
         </section>
       ) : null}
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as UniformTab)} className="space-y-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <TabsList className="h-auto w-fit rounded-2xl bg-white/70 p-1.5 shadow-sm">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as UniformTab)} className="space-y-3">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+          <TabsList className="h-auto w-fit rounded-lg bg-white/70 p-1 shadow-sm">
             <TabsTrigger
               value="stock"
-              className="h-11 rounded-xl px-5 text-sm font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
             >
               Estoque
             </TabsTrigger>
             <TabsTrigger
               value="possession"
-              className="h-11 rounded-xl px-5 text-sm font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
             >
               Em posse
             </TabsTrigger>
             <TabsTrigger
               value="history"
-              className="h-11 rounded-xl px-5 text-sm font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              className="h-8 rounded-md px-3 text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-sm"
             >
               Histórico
             </TabsTrigger>
           </TabsList>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:justify-end">
-            <div className="relative min-w-0 sm:w-[460px]">
+            <div className="relative min-w-0 sm:w-[360px]">
               <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#9c9ca8]" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar peça ou colaborador..."
-                className="h-12 w-full rounded-2xl border border-[#dfdfe7] bg-white pl-12 pr-4 text-base font-semibold text-[#1c1c25] outline-none transition focus:border-[#e8327c] focus:ring-4 focus:ring-[#e8327c]/10"
+                className="h-8 w-full rounded-lg border border-[#dfdfe7] bg-white pl-9 pr-3 text-xs font-semibold text-[#1c1c25] outline-none transition focus:border-[#e8327c] focus:ring-2 focus:ring-[#e8327c]/10"
               />
             </div>
             <Button
               type="button"
               variant="outline"
-              className="h-12 rounded-2xl border-[#dfdfe7] bg-white px-5 text-sm font-black text-[#555563] hover:bg-[#f7f7f9]"
+              className="h-8 rounded-lg border-[#dfdfe7] bg-white px-3 text-xs font-black text-[#555563] hover:bg-[#f7f7f9]"
               onClick={() => setShowFilters((current) => !current)}
             >
               <SlidersHorizontal className="mr-2 h-5 w-5" />
@@ -703,11 +703,11 @@ export function UniformManagement() {
         </div>
 
         {showFilters ? (
-          <div className="grid gap-3 rounded-[24px] border border-[#dfdfe7] bg-white p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <div className="grid gap-2 rounded-lg border border-[#dfdfe7] bg-white p-2.5 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
             <div className="space-y-2">
               <Label>Condição</Label>
               <Select value={conditionFilter} onValueChange={(value) => setConditionFilter(value as ConditionFilter)}>
-                <SelectTrigger className="h-12 rounded-xl">
+                <SelectTrigger className="h-8 rounded-lg text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -720,7 +720,7 @@ export function UniformManagement() {
             <div className="space-y-2">
               <Label>Status do estoque</Label>
               <Select value={stockStatusFilter} onValueChange={(value) => setStockStatusFilter(value as StockStatusFilter)}>
-                <SelectTrigger className="h-12 rounded-xl">
+                <SelectTrigger className="h-8 rounded-lg text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -733,7 +733,7 @@ export function UniformManagement() {
             <Button
               type="button"
               variant="ghost"
-              className="h-12 rounded-xl px-5 font-black text-[#8f8f9b]"
+              className="h-8 rounded-lg px-3 text-xs font-black text-[#8f8f9b]"
               onClick={() => {
                 setConditionFilter("all");
                 setStockStatusFilter("all");

@@ -50,6 +50,8 @@ const LEGAL_BASIS_LABELS = {
   contract: 'Contrato',
   legitimate_interest: 'Interesse legítimo',
   consent: 'Consentimento',
+  life_protection: 'Proteção da vida',
+  health_guardianship: 'Tutela da saúde',
 } as const;
 
 const RETENTION_LABELS = {
@@ -553,13 +555,13 @@ function AccessMatrixPanel({
                             {bindingCount(visibility) > 0 ? `${bindingCount(visibility)} vínculo${bindingCount(visibility) === 1 ? '' : 's'}` : 'Vincular'}
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent align="end" className="w-[340px] max-h-[420px] overflow-y-auto rounded-2xl p-4">
-                          <p className="text-sm font-black text-[#1d1d26]">Vínculos da exceção</p>
-                          <p className="mt-1 text-xs font-semibold leading-relaxed text-[#8f8f9b]">
+                        <PopoverContent align="end" className="max-h-[360px] w-[300px] overflow-y-auto rounded-lg p-3">
+                          <p className="text-xs font-black text-[#1d1d26]">Vínculos da exceção</p>
+                          <p className="mt-1 text-[10px] font-semibold leading-4 text-[#8f8f9b]">
                             Pessoas destes cargos, funções ou usuários recebem a permissão de Exceção em{' '}
                             {VISIBILITY_LABELS[visibility]}.
                           </p>
-                          <div className="mt-3 space-y-3">
+                          <div className="mt-2 space-y-2">
                             <AccessOptionPicker
                               label="Cargos"
                               helper="Inclui todas as pessoas vinculadas a estes cargos."
@@ -1273,29 +1275,29 @@ export function FieldConfigPage() {
   });
 
   return (
-    <div className="space-y-5 bg-[var(--bg)] px-4 py-5 text-[#1d1d26] md:px-5">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+    <div className="personal-field-config-density space-y-3 bg-[var(--bg)] px-3 py-3 text-[#1d1d26] md:px-4">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
-          <h1 className="text-[26px] font-black tracking-[-.02em] text-[#181820]">Campos do Perfil</h1>
-          <p className="mt-2 max-w-[560px] text-[14.5px] font-medium leading-[1.5] text-[#6f6f7c]">
+          <h1 className="text-xl font-black tracking-[-.02em] text-[#181820]">Campos do Perfil</h1>
+          <p className="mt-1 max-w-[560px] text-xs font-medium leading-5 text-[#6f6f7c]">
             Crie, nomeie e organize as seções e campos exibidos no perfil dos colaboradores.
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
           <Dialog>
             <DialogTrigger asChild>
-              <button type="button" className="inline-flex h-11 items-center gap-2 rounded-[13px] border border-[#e2e0da] bg-white px-4 text-[13.5px] font-black text-[#494952] hover:bg-[#faf9f6]">
+              <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e2e0da] bg-white px-3 text-xs font-black text-[#494952] hover:bg-[#faf9f6]">
                 <ShieldCheck className="h-4 w-4 text-[#df2f78]" />
                 Matriz de acesso
               </button>
             </DialogTrigger>
-            <DialogContent className="max-h-[85vh] overflow-y-auto rounded-[20px] p-0 sm:max-w-[min(900px,calc(100vw-3rem))]" overlayClassName="bg-black/45">
-              <DialogHeader className="space-y-0 px-8 pb-5 pt-7 text-left">
+            <DialogContent className="max-h-[82vh] overflow-y-auto rounded-xl p-0 sm:max-w-[min(760px,calc(100vw-1rem))]" overlayClassName="bg-black/45">
+              <DialogHeader className="space-y-0 px-4 pb-3 pt-4 text-left">
                 <p className="text-[11.5px] font-bold uppercase tracking-[.12em] text-[#df2f78]">Matriz de acesso</p>
-                <DialogTitle className="mt-2 text-2xl font-bold leading-tight tracking-[-.02em] text-[#191c22]">
+                <DialogTitle className="mt-1 text-base font-bold leading-tight tracking-[-.02em] text-[#191c22]">
                   Regra padrão por visibilidade
                 </DialogTitle>
-                <DialogDescription className="mt-2 max-w-[640px] text-sm leading-relaxed text-[#6a707a]">
+                <DialogDescription className="mt-1 max-w-[640px] text-xs leading-5 text-[#6a707a]">
                   O que cada perfil pode fazer em campos e cards. Vínculos de cargo, função e pessoa ficam na coluna Exceção.
                 </DialogDescription>
                 <div className="!mt-3.5 inline-flex w-fit items-center gap-[7px] rounded-full border border-[#df2f78]/[.16] bg-[#df2f78]/[.07] py-1.5 pl-2.5 pr-3 text-[12.5px] font-semibold text-[#df2f78]">
@@ -1304,7 +1306,7 @@ export function FieldConfigPage() {
                 </div>
               </DialogHeader>
 
-              <div className="px-8">
+              <div className="px-4">
                 <AccessMatrixPanel
                   matrix={accessMatrix}
                   onChange={setAccessMatrix}
@@ -1315,7 +1317,7 @@ export function FieldConfigPage() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-4 px-8 pb-7 pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-4 pt-3">
                 <PermissionLegend />
                 <div className="flex items-center gap-2.5">
                   <DialogClose asChild>
@@ -1338,11 +1340,11 @@ export function FieldConfigPage() {
               </div>
             </DialogContent>
           </Dialog>
-          <button type="button" onClick={addSection} className="inline-flex h-11 items-center gap-2 rounded-[13px] border border-[#e2e0da] bg-white px-4 text-[13.5px] font-black text-[#494952] hover:bg-[#faf9f6]">
+          <button type="button" onClick={addSection} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#e2e0da] bg-white px-3 text-xs font-black text-[#494952] hover:bg-[#faf9f6]">
             <Plus className="h-4 w-4" />
             Nova seção
           </button>
-          <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex h-11 items-center gap-2 rounded-[13px] bg-[#df2f78] px-5 text-[13.5px] font-black text-white shadow-[0_8px_18px_-8px_#df2f78] hover:bg-[#cc2069] disabled:opacity-60">
+          <button type="button" onClick={() => void save()} disabled={saving} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#df2f78] px-3 text-xs font-black text-white shadow-[0_8px_18px_-8px_#df2f78] hover:bg-[#cc2069] disabled:opacity-60">
             {saving ? <Save className="h-4 w-4 animate-pulse" /> : <Check className="h-4 w-4" />}
             {saving ? 'Salvando...' : 'Salvar alterações'}
           </button>
@@ -1618,13 +1620,13 @@ export function FieldConfigPage() {
 
       {editing && editingKey ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[22px] bg-white p-5 shadow-xl">
+          <div className="max-h-[84vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-3 shadow-xl">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-black text-[#1d1d26]">Editar campo</h2>
+                <h2 className="text-base font-black text-[#1d1d26]">Editar campo</h2>
                 <p className="mt-1 font-mono text-sm font-semibold text-[#9d9da9]">{editingKey}</p>
               </div>
-              <button type="button" onClick={() => setEditingKey(null)} className="rounded-2xl bg-[#f1f2f5] px-4 py-3 text-sm font-black text-[#6f6f7c]">Fechar</button>
+              <button type="button" onClick={() => setEditingKey(null)} className="h-8 rounded-lg bg-[#f1f2f5] px-3 text-xs font-black text-[#6f6f7c]">Fechar</button>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-2 text-xs font-black uppercase text-[#9d9da9]">

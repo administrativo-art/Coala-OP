@@ -140,6 +140,277 @@
   75% { transform: translateX(-2px); }
 }
 
+/* Densidade operacional compartilhada por toda a árvore de Pessoal. */
+.personal-section-density {
+  gap: 0.625rem !important;
+  padding: 0.75rem !important;
+  overflow-x: clip;
+}
+
+.personal-section-density > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.personal-section-density h1 {
+  font-size: 1.25rem !important;
+  line-height: 1.5rem !important;
+}
+
+.personal-section-density h2 {
+  font-size: 1rem !important;
+  line-height: 1.25rem !important;
+}
+
+.personal-section-density h3 {
+  font-size: 0.875rem !important;
+  line-height: 1.125rem !important;
+}
+
+.personal-section-density :where(.text-4xl, .text-3xl) {
+  font-size: 1.5rem !important;
+  line-height: 1.75rem !important;
+}
+
+.personal-section-density :where(.text-2xl) {
+  font-size: 1.125rem !important;
+  line-height: 1.375rem !important;
+}
+
+.personal-section-density :where(.text-xl) {
+  font-size: 1rem !important;
+  line-height: 1.25rem !important;
+}
+
+.personal-section-density :where(.text-lg) {
+  font-size: 0.9375rem !important;
+  line-height: 1.25rem !important;
+}
+
+.personal-section-density :where(.text-base) {
+  font-size: 0.8125rem !important;
+  line-height: 1.125rem !important;
+}
+
+.personal-section-density :where(.text-sm) {
+  font-size: 0.75rem !important;
+  line-height: 1rem !important;
+}
+
+.personal-section-density :where(.rounded-3xl) {
+  border-radius: 0.75rem !important;
+}
+
+.personal-section-density :where(.rounded-2xl) {
+  border-radius: 0.625rem !important;
+}
+
+.personal-section-density :where(.p-8, .p-7, .p-6) {
+  padding: 1rem !important;
+}
+
+.personal-section-density :where(.p-5, .p-4) {
+  padding: 0.75rem !important;
+}
+
+.personal-section-density :where(.px-8, .px-7, .px-6) {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+.personal-section-density :where(.py-8, .py-7, .py-6) {
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
+}
+
+.personal-section-density :where(.gap-8, .gap-7, .gap-6) {
+  gap: 1rem !important;
+}
+
+.personal-section-density :where(.gap-5, .gap-4) {
+  gap: 0.75rem !important;
+}
+
+.personal-section-density :where(.space-y-8, .space-y-7, .space-y-6) > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1rem !important;
+}
+
+.personal-section-density :where(.space-y-5, .space-y-4) > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.75rem !important;
+}
+
+.personal-section-density :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), select) {
+  min-height: 2rem;
+}
+
+.personal-section-density :where(th, td) {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+@media (max-width: 767px) {
+  .personal-section-density {
+    padding: 0.625rem !important;
+  }
+}
+
+/* Portais Radix ficam fora do main; esta classe mantém dialogs e popovers na mesma escala. */
+.personal-density-active [role='dialog'] {
+  border-radius: 0.75rem !important;
+  max-height: 84vh;
+}
+
+.personal-density-active [role='dialog'] :where(h1, h2, [data-dialog-title]) {
+  font-size: 1rem !important;
+  line-height: 1.25rem !important;
+}
+
+.personal-density-active [role='dialog'] :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), select, textarea) {
+  font-size: 0.75rem !important;
+}
+
+.personal-density-active [role='dialog'] :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), select, button:not([aria-label='Close'])) {
+  min-height: 2rem !important;
+}
+
+.personal-density-active [data-radix-popper-content-wrapper] :where([role='menu'], [role='listbox'], [data-radix-select-content], [data-radix-popover-content]) {
+  max-width: min(22rem, calc(100vw - 1rem));
+  font-size: 0.75rem !important;
+}
+
+.personal-density-active [data-radix-popper-content-wrapper] > div {
+  border-radius: 0.5rem !important;
+  font-size: 0.75rem !important;
+}
+
+.personal-density-active [role='tooltip'] {
+  max-width: 18rem;
+  padding: 0.375rem 0.5rem !important;
+  border-radius: 0.375rem !important;
+  font-size: 0.6875rem !important;
+  line-height: 0.875rem !important;
+}
+
+.personal-density-active [data-radix-popper-content-wrapper] :where([role='menuitem'], [role='option']) {
+  min-height: 1.75rem !important;
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+  font-size: 0.75rem !important;
+}
+
+.personal-create-user-form :where(label) {
+  font-size: 0.6875rem !important;
+  line-height: 0.875rem !important;
+}
+
+.personal-create-user-form .personal-create-user-card {
+  border-radius: 0.5rem !important;
+}
+
+.personal-create-user-form :where(.text-sm) {
+  font-size: 0.6875rem !important;
+  line-height: 0.875rem !important;
+}
+
+.personal-create-user-form :where(.p-3, .p-2\.5) {
+  padding: 0.5rem !important;
+}
+
+.personal-create-user-form :where(.gap-3, .gap-2\.5) {
+  gap: 0.5rem !important;
+}
+
+.personal-field-config-density :where(.rounded-2xl, .rounded-3xl) {
+  border-radius: 0.625rem !important;
+}
+
+.personal-field-config-density :where(.p-6, .p-5, .p-4) {
+  padding: 0.75rem !important;
+}
+
+.personal-field-config-density :where(.gap-6, .gap-5, .gap-4) {
+  gap: 0.75rem !important;
+}
+
+.personal-field-config-density :where(input:not([type='checkbox']):not([type='radio']), select, button) {
+  min-height: 2rem;
+  font-size: 0.75rem !important;
+}
+
+.personal-create-user-form :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), button[role='combobox']) {
+  height: 2rem !important;
+  min-height: 2rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.75rem !important;
+}
+
+.personal-create-user-form [id$='-form-item-description'],
+.personal-create-user-form [id$='-form-item-message'] {
+  margin-top: 0.25rem !important;
+  font-size: 0.625rem !important;
+  line-height: 0.875rem !important;
+}
+
+.personal-create-user-form .space-y-2 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.375rem !important;
+}
+
+.personal-uniform-density table :where(th, td) {
+  padding: 0.5rem 0.75rem !important;
+}
+
+.personal-uniform-density table tr.h-24 {
+  height: 3.5rem !important;
+}
+
+.personal-uniform-density table :where(.text-xl, .text-lg, .text-base) {
+  font-size: 0.75rem !important;
+  line-height: 1rem !important;
+}
+
+.personal-uniform-density table :where(.h-12, .w-12) {
+  height: 2rem !important;
+  width: 2rem !important;
+  border-radius: 0.5rem !important;
+}
+
+.personal-recruitment-density :where(.rounded-2xl, .rounded-3xl, [class*='rounded-[']) {
+  border-radius: 0.625rem !important;
+}
+
+.personal-recruitment-density :where(.p-5, .p-4) {
+  padding: 0.75rem !important;
+}
+
+.personal-recruitment-density :where(.px-5, .px-4) {
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+}
+
+.personal-recruitment-density :where(.py-5, .py-4, .py-3) {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+
+.personal-recruitment-density :where(.gap-5, .gap-4) {
+  gap: 0.75rem !important;
+}
+
+.personal-recruitment-density :where(.text-3xl, .text-2xl) {
+  font-size: 1.125rem !important;
+  line-height: 1.375rem !important;
+}
+
+.personal-recruitment-density :where(.text-xl, .text-lg) {
+  font-size: 0.875rem !important;
+  line-height: 1.125rem !important;
+}
+
+.personal-recruitment-density :where(input, select, button[role='combobox']) {
+  min-height: 2rem !important;
+  font-size: 0.75rem !important;
+}
+
 @media print {
   .no-print {
     display: none !important;

@@ -1062,6 +1062,7 @@ export type OnboardingDocument = OnboardingDocumentTemplate & {
   status: 'pending' | 'received' | 'ai_approved' | 'review_required' | 'approved' | 'rejected';
   fileUrl?: string | null;
   filePath?: string | null;
+  fileHashSha256?: string | null;
   receivedAt?: string | null;
   approvedAt?: string | null;
   updatedAt?: string | null;
@@ -1091,6 +1092,36 @@ export type OnboardingFirstAccessState = {
   createdBy?: string | null;
 };
 
+export type OnboardingPrivacyAcceptance = {
+  noticeVersion: string;
+  noticeHash: string;
+  noticeTitle: string;
+  noticeSummary?: string;
+  noticeText: string;
+  acknowledgementText: string;
+  confirmationNote?: string;
+  acknowledged: true;
+  firstAcceptedAt: string;
+  lastConfirmedAt: string;
+  privacyNoticeSnapshotId?: string | null;
+  allergyNoticeVersion?: string | null;
+  allergyNoticeHash?: string | null;
+  allergyNoticeSnapshotId?: string | null;
+  allergyNoticeTitle?: string | null;
+  allergyNoticeContext?: string | null;
+  allergyAcknowledgementText?: string | null;
+  allergyConfirmationNote?: string | null;
+  allergyAcknowledged?: boolean;
+  allergyAcknowledgedAt?: string | null;
+  // Campos legados mantidos apenas para leitura de formalizações anteriores.
+  sensitiveDataConsentText?: string | null;
+  sensitiveDataTitle?: string | null;
+  sensitiveDataContext?: string | null;
+  sensitiveDataConsentAccepted?: boolean;
+  sensitiveDataConsentAcceptedAt?: string | null;
+  lastProtocol: string;
+};
+
 export type OnboardingProcess = {
   id: string;
   candidateId: string;
@@ -1112,9 +1143,14 @@ export type OnboardingProcess = {
   employeeId?: string | null;
   publicToken?: string | null;
   publicTokenClosedAt?: string | null;
+  publicTokenExpiresAt?: string | null;
+  publicTokenExtensionUsed?: boolean;
+  publicTokenExtendedAt?: string | null;
+  publicTokenExtendedBy?: string | null;
   publicFormAnswers?: Record<string, unknown>;
   publicFormSubmittedAt?: string | null;
   publicFormLastSubmittedAt?: string | null;
+  publicPrivacyAcceptance?: OnboardingPrivacyAcceptance | null;
   finalizationSettings?: OnboardingFinalizationSettings;
   firstAccess?: OnboardingFirstAccessState;
   status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'contract_pending' | 'ready_to_create_user' | 'active' | 'completed' | 'cancelled';

@@ -69,7 +69,8 @@ export function resolveDocumentProcess(processCategory: ProcessCategory, fields:
     case "VACATION_INSTALLMENT": {
       const startYear = yearOf(str(fields, "acquisitionPeriodStart"));
       const endYear = yearOf(str(fields, "acquisitionPeriodEnd"));
-      const acquisitionPeriod = startYear && endYear ? `${startYear}-${endYear}` : startYear ?? "sem-periodo";
+      if (!startYear) return empty;
+      const acquisitionPeriod = startYear && endYear ? `${startYear}-${endYear}` : startYear;
       const installment = numLike(fields, "installmentNumber") ?? 1;
       const installmentLabel = pad2(installment);
       return {
@@ -83,7 +84,7 @@ export function resolveDocumentProcess(processCategory: ProcessCategory, fields:
     }
     case "MONTHLY_REFERENCE": {
       const referenceMonth = str(fields, "referenceMonth");
-      if (!referenceMonth || !/^\d{4}-\d{2}$/.test(referenceMonth)) return { ...empty, referenceLabel: "Sem competência", pathSegments: ["Sem competência"] };
+      if (!referenceMonth || !/^\d{4}-\d{2}$/.test(referenceMonth)) return empty;
       const [y, m] = referenceMonth.split("-");
       const monthLabel = MONTHS_PT[Number(m) - 1] ?? m;
       return {
@@ -112,12 +113,12 @@ export function resolveDocumentProcess(processCategory: ProcessCategory, fields:
       const endDate = str(fields, "endDate");
       const startLabel = formatBR(startDate);
       const endLabel = formatBR(endDate);
-      const seg = startLabel ? `Afastamento ${startLabel}${endLabel ? ` a ${endLabel}` : ""}` : "Afastamento";
+      const seg = startLabel ? `Afastamento ${startLabel}${endLabel ? ` a ${endLabel}` : ""}` : null;
       return {
         processCategory,
         caseId: startDate ? `leave-${startDate}` : null,
         subcaseId: null,
-        pathSegments: [seg],
+        pathSegments: seg ? [seg] : [],
         tokens: { startDate: startDate ?? "" },
         referenceLabel: startLabel ?? "Afastamento",
       };

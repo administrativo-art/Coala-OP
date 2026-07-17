@@ -6,6 +6,7 @@ import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { logAction } from '@/lib/log-action';
+import { createOnboardingPublicLinkWindow } from '@/lib/hr/onboarding-public-link';
 import {
   applyOnboardingSignatureMode,
   instantiateOnboardingDocuments,
@@ -127,7 +128,8 @@ export async function POST(request: NextRequest) {
     return jsonError('A função selecionada não está vinculada ao cargo escolhido.', 400);
   }
 
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
   const onboardingRef = hrDbAdmin.collection('onboardingProcesses').doc();
   const stages = applyOnboardingSignatureMode(
     mergeOnboardingStageModels(roleData.onboardingStages, functionData.onboardingStages),
@@ -162,6 +164,7 @@ export async function POST(request: NextRequest) {
     },
     source: 'manual',
     publicToken: createPublicToken(),
+    ...createOnboardingPublicLinkWindow(nowDate),
     status: 'collecting_documents',
     currentStage: 'documents',
     stages,

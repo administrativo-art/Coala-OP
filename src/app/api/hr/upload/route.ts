@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { getStorage } from 'firebase-admin/storage';
 import { adminApp } from '@/lib/firebase-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
+import { onboardingPublicLinkExpired } from '@/lib/hr/onboarding-public-link';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,8 +14,6 @@ export const dynamic = 'force-dynamic';
 const HR_RESUME_MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME = new Set([
   'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'image/jpeg',
   'image/png',
 ]);
@@ -29,6 +28,20 @@ function jsonError(message: string, status = 400) {
 
 function trimText(value: unknown, maxLength: number) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+function hasExpectedFileSignature(buffer: Buffer, mimeType: string) {
+  if (mimeType === 'application/pdf') return buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+  if (mimeType === 'image/jpeg') return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (mimeType === 'image/png') {
+    const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    return buffer.length >= signature.length && signature.every((byte, index) => buffer[index] === byte);
+  }
+  return false;
+}
+
+function looksEncryptedPdf(buffer: Buffer) {
+  return buffer.includes(Buffer.from('/Encrypt', 'ascii'));
 }
 
 function getClientKey(request: NextRequest) {
@@ -88,6 +101,9 @@ async function assertPublicUploadAllowed(request: NextRequest, formData: FormDat
     if (data.publicTokenClosedAt || data.status === 'cancelled' || data.status === 'completed') {
       return jsonError('Este onboarding não está aceitando documentos.', 403);
     }
+    if (onboardingPublicLinkExpired(data)) {
+      return jsonError('Este link expirou. Solicite ao RH a prorrogação do prazo.', 410);
+    }
     const onboardingDocumentId = trimText(formData.get('onboardingDocumentId'), 120);
     if (onboardingDocumentId) {
       const documents = Array.isArray(data.documents) ? data.documents as Array<Record<string, unknown>> : [];
@@ -138,7 +154,7 @@ export async function POST(request: NextRequest) {
 
   if (!(file instanceof File)) return jsonError('Arquivo ausente.');
   if (file.size > HR_RESUME_MAX_BYTES) return jsonError('Arquivo acima do limite de 10 MB.');
-  if (!ALLOWED_MIME.has(file.type)) return jsonError('Somente PDF, DOC, DOCX, JPG e PNG são aceitos.');
+  if (!ALLOWED_MIME.has(file.type)) return jsonError('Somente PDF, JPG e PNG são aceitos.');
 
   const token = randomUUID();
   const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_').slice(0, 80);
@@ -155,6 +171,13 @@ export async function POST(request: NextRequest) {
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const buffer = Buffer.from(await file.arrayBuffer());
 
+  if (!hasExpectedFileSignature(buffer, file.type)) {
+    return jsonError('O conteúdo do arquivo não corresponde a um PDF, JPG ou PNG válido.');
+  }
+  if (file.type === 'application/pdf' && looksEncryptedPdf(buffer)) {
+    return jsonError('PDF protegido por senha não é aceito. Envie uma cópia sem proteção.');
+  }
+
   await bucket.file(objectPath).save(buffer, {
     metadata: {
       contentType: file.type,
@@ -167,5 +190,9 @@ export async function POST(request: NextRequest) {
   });
 
   const url = `https://firebasestorage.googleapis.com/v0/b/${firebaseClientConfig.storageBucket}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-  return NextResponse.json({ url, path: objectPath }, { status: 201 });
+  return NextResponse.json({
+    url,
+    path: objectPath,
+    sha256: createHash('sha256').update(buffer).digest('hex'),
+  }, { status: 201 });
 }

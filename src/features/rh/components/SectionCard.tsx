@@ -29,7 +29,7 @@ export function SectionCard({ title, fields, role, onEdit }: Props) {
       <button
         type="button"
         onClick={() => setExpanded((p) => !p)}
-        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors"
+        className="flex w-full items-center justify-between px-3 py-2 hover:bg-gray-50 transition-colors"
       >
         <span className="text-sm font-semibold text-gray-800">{title}</span>
         <svg
@@ -42,8 +42,8 @@ export function SectionCard({ title, fields, role, onEdit }: Props) {
       </button>
 
       {expanded && (
-        <div className="divide-y divide-gray-50 px-5 pb-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+        <div className="divide-y divide-gray-50 px-3 pb-2.5">
+          <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2 xl:grid-cols-3">
             {visible.map(({ key, entry, fv, editable }) => (
               <div key={key} className="py-3 group">
                 <div className="flex items-start justify-between gap-2">

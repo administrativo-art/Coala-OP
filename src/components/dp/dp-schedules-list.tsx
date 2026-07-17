@@ -690,7 +690,7 @@ export function DPSchedulesList() {
 
   if (schedulesError && schedules.length === 0) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2.5 text-xs">
         <p className="font-medium text-destructive">Falha ao carregar o módulo de Escalas.</p>
         <p className="mt-1 text-muted-foreground">{schedulesError}</p>
       </div>
@@ -700,14 +700,14 @@ export function DPSchedulesList() {
   return (
     <div className="space-y-8">
       {ancillaryErrors.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
           <p className="font-medium">Alguns dados auxiliares de Escalas não carregaram.</p>
           <p className="mt-1 text-amber-800/80">{ancillaryErrors[0]}</p>
         </div>
       )}
       {schedules.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
-          <CalendarDays className="h-12 w-12 opacity-30" />
+          <CalendarDays className="h-8 w-8 opacity-30" />
           <p className="text-sm">Nenhuma escala cadastrada.</p>
           {canCreate && (
             <Button onClick={() => openCreate()} className="mt-2" disabled={!createDependenciesReady}>
@@ -747,7 +747,7 @@ export function DPSchedulesList() {
                     {items.map(s => (
                       <div
                         key={s.id}
-                        className="flex items-center gap-4 px-4 py-3.5 cursor-pointer hover:bg-muted/40 transition-colors group"
+                        className="group flex cursor-pointer items-center gap-2.5 px-3 py-2 transition-colors hover:bg-muted/40"
                         onClick={() => router.push(`/dashboard/dp/schedules/${s.id}`)}
                         onMouseEnter={() => setHoveredId(s.id)}
                         onMouseLeave={() => setHoveredId(null)}
@@ -789,7 +789,7 @@ export function DPSchedulesList() {
           <Button
             onClick={() => setExportBizneoOpen(true)}
             variant="outline"
-            className="rounded-full shadow-lg h-10 px-4 gap-2 bg-background"
+            className="h-8 gap-1.5 rounded-lg bg-background px-3 text-xs shadow-md"
             disabled={!exportDependenciesReady}
           >
             <Download className="h-4 w-4" />
@@ -799,7 +799,7 @@ export function DPSchedulesList() {
         {canCreate && schedules.length > 0 && (
           <Button
             onClick={() => openCreate()}
-            className="rounded-full shadow-lg h-12 px-5 gap-2"
+            className="h-9 gap-1.5 rounded-lg px-3 text-xs shadow-md"
             size="lg"
             disabled={!createDependenciesReady}
           >

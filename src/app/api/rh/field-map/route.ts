@@ -202,6 +202,7 @@ const DEPENDENTS_FAMILY_SECTION_MIGRATIONS: Record<string, string[]> = {
   "employee.family_salary_name_1": ["Salário-família", "Salario Familia"],
 };
 const RETIRED_FIELD_KEYS = new Set([
+  "employee.emergency_medical",
   "employee.dependent_name",
   "employee.dependent_relation",
   "employee.dependent_cpf",

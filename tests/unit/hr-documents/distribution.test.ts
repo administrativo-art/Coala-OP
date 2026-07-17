@@ -8,6 +8,7 @@ import {
   buildLogicalKey,
   resolveDuplicateAndVersion,
 } from "../../../src/lib/hr/employee-document-distribution";
+import { resolveEmployeeDocumentFolderPath } from "../../../src/lib/hr/employee-document-options";
 
 describe("resolveDocumentProcess", () => {
   test("férias: período aquisitivo + parcela", () => {
@@ -30,6 +31,80 @@ describe("resolveDocumentProcess", () => {
   test("afastamento: intervalo de datas", () => {
     const p = resolveDocumentProcess("LEAVE", { startDate: "2026-07-10", endDate: "2026-07-12" });
     assert.deepEqual(p.pathSegments, ["Afastamento 10/07/2026 a 12/07/2026"]);
+  });
+
+  test("não cria processo artificial sem metadado confiável", () => {
+    assert.deepEqual(resolveDocumentProcess("MONTHLY_REFERENCE", {}).pathSegments, []);
+    assert.deepEqual(resolveDocumentProcess("VACATION_INSTALLMENT", {}).pathSegments, []);
+    assert.deepEqual(resolveDocumentProcess("LEAVE", {}).pathSegments, []);
+  });
+});
+
+describe("taxonomia híbrida de pastas", () => {
+  test("identificação usa agrupamento fixo por natureza", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "personal",
+      documentTypeCode: "ADDRESS_PROOF",
+      documentTypeLabel: "Comprovante de residência",
+      destinationTrail: ["Identificação", "Comprovante de residência"],
+    }), ["Documentos pessoais"]);
+  });
+
+  test("CTPS e PIS ficam em documentos pessoais", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "personal",
+      documentTypeCode: "WORK_CARD",
+      documentTypeLabel: "Carteira de trabalho",
+    }), ["Documentos pessoais"]);
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "personal",
+      documentTypeCode: "PIS_PASEP",
+      documentTypeLabel: "PIS/PASEP",
+    }), ["Documentos pessoais"]);
+  });
+
+  test("contratos ficam diretamente na pasta Contrato de Admissão", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "admission",
+      documentTypeCode: "PROBATION_CONTRACT",
+      documentTypeLabel: "Contrato de experiência",
+    }), ["Contrato"]);
+  });
+
+  test("recibos e pagamentos de férias compartilham a mesma pasta", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "vacations",
+      documentTypeCode: "VACATION_RECEIPT",
+      documentTypeLabel: "Recibo de férias",
+    }), ["Recibos e pagamentos"]);
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "vacations",
+      documentTypeCode: "VACATION_PAYMENT",
+      documentTypeLabel: "Pagamento de férias",
+    }), ["Recibos e pagamentos"]);
+  });
+
+  test("escala e hora extra legadas são consolidadas no espelho de ponto", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({ category: "work_schedule", documentTypeLabel: "Escala de trabalho" }), ["Espelhos de ponto"]);
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({ category: "work_schedule", documentTypeLabel: "Horas extras" }), ["Espelhos de ponto"]);
+  });
+
+  test("remuneração organiza processo antes da natureza", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "remuneration",
+      documentTypeCode: "PAYSLIP",
+      documentTypeLabel: "Contracheque",
+      destinationTrail: ["Remuneração", "2026", "Julho", "Contracheque"],
+    }), ["2026", "Julho", "Contracheques"]);
+  });
+
+  test("férias preserva período e parcela antes do tipo", () => {
+    assert.deepEqual(resolveEmployeeDocumentFolderPath({
+      category: "vacations",
+      documentTypeCode: "VACATION_NOTICE",
+      documentTypeLabel: "Aviso de férias",
+      destinationTrail: ["Férias", "Período aquisitivo 2025-2026", "Parcela 01", "Aviso de férias"],
+    }), ["Período aquisitivo 2025-2026", "Parcela 01", "Avisos"]);
   });
 });
 

@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
+import { createOnboardingPublicLinkWindow } from '@/lib/hr/onboarding-public-link';
 import {
   applyOnboardingSignatureMode,
   instantiateOnboardingDocuments,
@@ -226,6 +227,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const roleData = roleDoc?.data?.() ?? {};
     const functionData = functionDoc?.data?.() ?? {};
     const existingOnboarding = onboardingDoc.exists ? onboardingDoc.data() ?? {} : {};
+    const publicLinkWindow = existingOnboarding.publicTokenExpiresAt
+      ? {}
+      : createOnboardingPublicLinkWindow(new Date(
+          typeof existingOnboarding.createdAt === 'string' ? existingOnboarding.createdAt : now
+        ));
     const generateSignatureDocuments = existingOnboarding.generateSignatureDocuments === true;
     const stages = applyOnboardingSignatureMode(
       mergeOnboardingStageModels(roleData.onboardingStages, functionData.onboardingStages),
@@ -254,6 +260,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       generateSignatureDocuments,
       source: 'recruitment',
       publicToken: existingOnboarding.publicToken ?? createPublicToken(),
+      ...publicLinkWindow,
       status: existingOnboarding.status ?? 'collecting_documents',
       currentStage: existingOnboarding.currentStage ?? 'documents',
       stages,

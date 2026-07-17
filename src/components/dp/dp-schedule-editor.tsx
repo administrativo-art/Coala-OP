@@ -1159,10 +1159,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                 <span>Pessoas</span>
                 <ChevronRight className="h-3 w-3 ml-auto" />
               </div>
-              <p className="text-2xl font-bold">{uniqueCollaborators}</p>
+              <p className="text-lg font-bold">{uniqueCollaborators}</p>
             </div>
           </PopoverTrigger>
-          <PopoverContent className="w-64 p-3" align="start">
+          <PopoverContent className="w-56 p-2" align="start">
             <p className="text-xs font-medium text-muted-foreground mb-2">Por colaborador</p>
             {pessoasBreakdown.length === 0 ? (
               <p className="text-xs text-muted-foreground">Nenhum colaborador na escala.</p>
@@ -1183,14 +1183,14 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
             <AlertTriangle className="h-3.5 w-3.5" />
             <span>Conflito{conflictCount !== 1 ? 's' : ''}</span>
           </div>
-          <p className={`text-2xl font-bold ${conflictCount > 0 ? 'text-destructive' : ''}`}>{conflictCount}</p>
+          <p className={`text-lg font-bold ${conflictCount > 0 ? 'text-destructive' : ''}`}>{conflictCount}</p>
         </div>
         <div className="rounded-xl border bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
             <Filter className="h-3.5 w-3.5" />
             <span>Turnos</span>
           </div>
-          <p className="text-2xl font-bold">{workShifts.length}</p>
+          <p className="text-lg font-bold">{workShifts.length}</p>
         </div>
         <Popover>
           <PopoverTrigger asChild>
@@ -1200,12 +1200,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                 <span>Vale Transporte</span>
                 <ChevronRight className="h-3 w-3 ml-auto" />
               </div>
-              <p className="text-2xl font-bold">
+              <p className="text-lg font-bold">
                 {vtStats.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </p>
             </div>
           </PopoverTrigger>
-          <PopoverContent className="w-72 p-3" align="end">
+          <PopoverContent className="w-60 p-2" align="end">
             <p className="text-xs font-medium text-muted-foreground mb-2">Por colaborador</p>
             {vtStats.breakdown.length === 0 ? (
               <p className="text-xs text-muted-foreground">Nenhum colaborador com VT.</p>

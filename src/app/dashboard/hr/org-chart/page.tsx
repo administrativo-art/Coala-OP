@@ -984,7 +984,7 @@ function DraggableDroppableCard({
     <div
       ref={(el) => { setDragRef(el); setDropRef(el); }}
       style={style}
-      className={`relative w-80 overflow-hidden rounded-[2rem] border bg-white text-slate-950 shadow-[0_18px_45px_rgba(15,23,42,0.14)] transition-shadow duration-200 group/card ${
+      className={`group/card relative w-64 overflow-hidden rounded-xl border bg-white text-slate-950 shadow-md transition-shadow duration-200 ${
         isDropTarget
           ? "border-pink-500 ring-4 ring-pink-500/15"
           : "border-slate-200 hover:border-pink-300"
@@ -1469,26 +1469,26 @@ export default function OrgChartPage() {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="flex h-full flex-col gap-4 bg-[#eef5f2] p-6 text-slate-950">
+      <div className="personal-org-density flex h-full flex-col gap-2.5 bg-[#eef5f2] p-3 text-slate-950">
         {/* Header */}
         <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.28em] text-pink-500">Corporativo</p>
-              <h1 className="mt-0.5 text-3xl font-black uppercase leading-none tracking-tight text-slate-800">Organograma</h1>
+              <h1 className="mt-0.5 text-xl font-black uppercase leading-none tracking-tight text-slate-800">Organograma</h1>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleExpandAll}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
+                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
               >
                 Expandir todos
               </button>
               <button
                 type="button"
                 onClick={handleCollapseAll}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
+                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
               >
                 Recolher todos
               </button>
@@ -1507,7 +1507,7 @@ export default function OrgChartPage() {
                 placeholder="Buscar cargo ou colaborador..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-64 rounded-full border border-slate-200 bg-white py-2 pl-10 pr-4 text-slate-800 shadow-sm placeholder-slate-400 transition-all focus:border-pink-300 focus:outline-none focus:ring-4 focus:ring-pink-100"
+                className="h-8 w-56 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 shadow-sm placeholder-slate-400 transition-all focus:border-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-100"
               />
               {search && (
                 <button
@@ -1519,10 +1519,10 @@ export default function OrgChartPage() {
               )}
             </div>
 
-            <div className="flex items-center rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+            <div className="flex h-8 items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
               <button
                 onClick={() => setZoom((z) => Math.min(z + 0.15, 2))}
-                className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-md p-1.5 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
                 title="Zoom in"
               >
                 <ZoomIn className="h-4 w-4" />
@@ -1532,7 +1532,7 @@ export default function OrgChartPage() {
               </span>
               <button
                 onClick={() => setZoom((z) => Math.max(z - 0.15, 0.4))}
-                className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-md p-1.5 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
                 title="Zoom out"
               >
                 <ZoomOut className="h-4 w-4" />
@@ -1540,7 +1540,7 @@ export default function OrgChartPage() {
               <div className="mx-1 my-1 w-px bg-slate-200" />
               <button
                 onClick={resetView}
-                className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-md p-1.5 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
                 title="Centralizar"
               >
                 <Maximize className="h-4 w-4" />
@@ -1548,7 +1548,7 @@ export default function OrgChartPage() {
             </div>
 
             {canDrag && (
-              <div className="flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-3 py-2 text-xs font-bold text-pink-600">
+              <div className="flex h-8 items-center gap-1 rounded-lg border border-pink-200 bg-pink-50 px-2.5 text-[11px] font-bold text-pink-600">
                 <GripVertical className="h-3 w-3" />
                 <span>Arrastar para reorganizar</span>
               </div>
@@ -1558,7 +1558,7 @@ export default function OrgChartPage() {
 
         {/* Chart canvas */}
         <div
-          className="flex-1 cursor-grab overflow-hidden rounded-[2rem] border border-white bg-white/55 p-8 shadow-inner active:cursor-grabbing"
+          className="flex-1 cursor-grab overflow-hidden rounded-xl border border-white bg-white/55 p-4 shadow-inner active:cursor-grabbing"
           onPointerDown={handlePanPointerDown}
           onPointerMove={handlePanPointerMove}
           onPointerUp={handlePanPointerEnd}

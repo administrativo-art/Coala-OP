@@ -375,17 +375,17 @@ function Panel({ title, icon: Icon, children, className = "", action }: {
   action?: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-[22px] border border-[#dedfe4] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.06)] ${className}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e8e8ec] px-5 py-4">
+    <section className={`rounded-xl border border-[#dedfe4] bg-white shadow-sm ${className}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e8e8ec] px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#fff0f6] text-[#df2f78]">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#fff0f6] text-[#df2f78]">
             <Icon className="h-5 w-5" />
           </span>
-          <h2 className="min-w-0 text-lg font-black leading-tight text-[#1d1d26]">{title}</h2>
+          <h2 className="min-w-0 text-sm font-black leading-tight text-[#1d1d26]">{title}</h2>
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-3">{children}</div>
     </section>
   );
 }
@@ -397,7 +397,7 @@ function Chip({ children, tone = "default" }: { children: React.ReactNode; tone?
     warn: "bg-[#fff3c4] text-[#a35a00]",
     bad: "bg-[#ffe9ef] text-[#d9275f]",
   };
-  return <span className={`rounded-full px-4 py-1.5 text-sm font-black ${tones[tone]}`}>{children}</span>;
+  return <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${tones[tone]}`}>{children}</span>;
 }
 
 function FieldVisibilityButton({
@@ -427,19 +427,19 @@ function FieldVisibilityButton({
           {saving ? "Salvando..." : FIELD_VISIBILITY_LABELS[normalizedVisibility]}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 rounded-2xl p-3">
-        <div className="mb-3 flex items-start gap-3 rounded-xl bg-slate-50 p-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-slate-500 ring-1 ring-slate-200">
+      <PopoverContent align="end" className="w-72 rounded-lg p-2">
+        <div className="mb-2 flex items-start gap-2 rounded-md bg-slate-50 p-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white text-slate-500 ring-1 ring-slate-200">
             <Eye className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-sm font-black text-slate-950">Visibilidade do campo</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">
+            <p className="text-xs font-black text-slate-950">Visibilidade do campo</p>
+            <p className="mt-0.5 text-[10px] font-semibold leading-4 text-slate-500">
               Essa alteração vale para este campo em todos os colaboradores.
             </p>
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           {FIELD_VISIBILITIES.map((visibility) => {
             const OptionIcon = fieldVisibilityIcon(visibility);
             const selected = normalizedVisibility === visibility;
@@ -449,7 +449,7 @@ function FieldVisibilityButton({
                 type="button"
                 disabled={disabled || saving || selected}
                 onClick={() => onChange(visibility)}
-                className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+                className={`flex w-full items-start gap-2 rounded-md border p-2 text-left transition ${
                   selected
                     ? FIELD_VISIBILITY_TONE[visibility]
                     : "border-slate-100 bg-white text-slate-700 hover:bg-slate-50"
@@ -457,8 +457,8 @@ function FieldVisibilityButton({
               >
                 <OptionIcon className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  <span className="block text-sm font-black">{FIELD_VISIBILITY_LABELS[visibility]}</span>
-                  <span className="mt-0.5 block text-xs font-semibold opacity-75">{FIELD_VISIBILITY_HELP[visibility]}</span>
+                  <span className="block text-xs font-black">{FIELD_VISIBILITY_LABELS[visibility]}</span>
+                  <span className="mt-0.5 block text-[10px] font-semibold leading-4 opacity-75">{FIELD_VISIBILITY_HELP[visibility]}</span>
                 </span>
               </button>
             );
@@ -509,19 +509,19 @@ function CardVisibilityButton({
           {saving ? "Salvando..." : mixed ? "Visibilidade mista" : FIELD_VISIBILITY_LABELS[normalizedVisibility]}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 rounded-2xl p-3">
-        <div className="mb-3 flex items-start gap-3 rounded-xl bg-slate-50 p-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-slate-500 ring-1 ring-slate-200">
+      <PopoverContent align="end" className="w-72 rounded-lg p-2">
+        <div className="mb-2 flex items-start gap-2 rounded-md bg-slate-50 p-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white text-slate-500 ring-1 ring-slate-200">
             <Eye className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-sm font-black text-slate-950">Visibilidade do card</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">
+            <p className="text-xs font-black text-slate-950">Visibilidade do card</p>
+            <p className="mt-0.5 text-[10px] font-semibold leading-4 text-slate-500">
               Aplica a mesma visibilidade a todos os campos deste card.
             </p>
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           {FIELD_VISIBILITIES.map((option) => {
             const OptionIcon = fieldVisibilityIcon(option);
             const selected = !mixed && normalizedVisibility === option;
@@ -531,7 +531,7 @@ function CardVisibilityButton({
                 type="button"
                 disabled={disabled || saving || selected}
                 onClick={() => onChange(option)}
-                className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+                className={`flex w-full items-start gap-2 rounded-md border p-2 text-left transition ${
                   selected
                     ? FIELD_VISIBILITY_TONE[option]
                     : "border-slate-100 bg-white text-slate-700 hover:bg-slate-50"
@@ -539,8 +539,8 @@ function CardVisibilityButton({
               >
                 <OptionIcon className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  <span className="block text-sm font-black">{FIELD_VISIBILITY_LABELS[option]}</span>
-                  <span className="mt-0.5 block text-xs font-semibold opacity-75">{FIELD_VISIBILITY_HELP[option]}</span>
+                  <span className="block text-xs font-black">{FIELD_VISIBILITY_LABELS[option]}</span>
+                  <span className="mt-0.5 block text-[10px] font-semibold leading-4 opacity-75">{FIELD_VISIBILITY_HELP[option]}</span>
                 </span>
               </button>
             );
@@ -1160,7 +1160,7 @@ function MonthSchedulePopover({ shiftDef }: {
           Ver mês
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 rounded-2xl p-4">
+      <PopoverContent align="end" className="w-80 rounded-lg p-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-black text-slate-950">Escala do mês</p>
@@ -1171,14 +1171,14 @@ function MonthSchedulePopover({ shiftDef }: {
           </span>
         </div>
 
-        <div className="mt-4 rounded-xl bg-slate-50 p-3">
+        <div className="mt-2 rounded-md bg-slate-50 p-2">
           <p className="text-xs font-black text-slate-950">{shiftDef.name}</p>
           <p className="mt-1 text-[11px] font-semibold text-slate-500">
             {shiftDef.startTime ?? "--:--"} - {shiftDef.endTime ?? "--:--"}
           </p>
         </div>
 
-        <div className="mt-3 space-y-2">
+        <div className="mt-2 space-y-1">
           {summary.weeks.map((weekDays, index) => (
             <div key={index} className="grid grid-cols-[64px_1fr] gap-2 text-xs">
               <span className="py-1 font-black text-slate-400">Semana {index + 1}</span>
@@ -1218,7 +1218,7 @@ function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
           12 meses
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[420px] rounded-2xl p-4">
+      <PopoverContent align="end" className="w-[340px] rounded-lg p-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-black text-slate-950">Resumo de metas</p>
@@ -1229,13 +1229,13 @@ function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
           </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
           <MiniStat label="Mês atual" value={participates ? "92%" : "-"} />
           <MiniStat label="Média 12m" value="-" />
           <MiniStat label="Meses batidos" value="-" />
         </div>
 
-        <div className="mt-4 space-y-1.5">
+        <div className="mt-2 space-y-1">
           {months.map((month) => (
             <div key={month} className="grid grid-cols-[56px_1fr_32px] items-center gap-2 text-xs">
               <span className="font-black capitalize text-slate-500">{month}</span>
@@ -1245,7 +1245,7 @@ function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
           ))}
         </div>
 
-        <p className="mt-4 rounded-xl bg-slate-50 p-3 text-[11px] font-semibold text-slate-500">
+        <p className="mt-2 rounded-md bg-slate-50 p-2 text-[10px] font-semibold leading-4 text-slate-500">
           O histórico consolidado depende dos fechamentos mensais de metas do colaborador.
         </p>
       </PopoverContent>
@@ -1521,14 +1521,14 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
         </p>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[190px_minmax(0,1fr)]">
+      <div className="grid gap-2.5 lg:grid-cols-[160px_minmax(0,1fr)]">
         <aside className="space-y-1 lg:sticky lg:top-[236px] lg:self-start">
           {orderedSections.map((section) => (
             <button
               key={section}
               type="button"
               onClick={() => document.getElementById(profileSectionDomId(section))?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm font-black text-[#737381] transition hover:bg-white hover:text-[#bd185c]"
+              className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-[#737381] transition hover:bg-white hover:text-[#bd185c]"
             >
               <span className="truncate">{sectionDisplayLabel(section)}</span>
             </button>
@@ -1538,7 +1538,7 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
               key={link.id}
               type="button"
               onClick={() => document.getElementById(profileSectionDomId(link.id))?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm font-black text-[#737381] transition hover:bg-white hover:text-[#bd185c]"
+              className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-[#737381] transition hover:bg-white hover:text-[#bd185c]"
             >
               <span className="truncate">{link.label}</span>
             </button>
@@ -1550,13 +1550,13 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
             const sectionFields = sections[section] ?? [];
             const sectionVisibility = getVisibilitySummary(sectionFields.map(({ entry }) => entry));
             return (
-              <section id={profileSectionDomId(section)} key={section} className="scroll-mt-[236px] rounded-[18px] border border-[#dedfe4] bg-white shadow-[0_2px_10px_rgba(15,23,42,0.06)]">
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e8e8ec] px-4 py-3">
+              <section id={profileSectionDomId(section)} key={section} className="scroll-mt-[180px] rounded-xl border border-[#dedfe4] bg-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e8e8ec] px-3 py-2">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff0f6] text-[#df2f78]">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#fff0f6] text-[#df2f78]">
                       <IdCard className="h-4 w-4" />
                     </span>
-                    <h3 className="text-base font-black text-[#1d1d26]">{sectionDisplayLabel(section)}</h3>
+                    <h3 className="text-xs font-black text-[#1d1d26]">{sectionDisplayLabel(section)}</h3>
                   </div>
                   {canManageFieldVisibility ? (
                     <CardVisibilityButton
@@ -1568,16 +1568,16 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
                     />
                   ) : null}
                 </div>
-                <div className="grid gap-3 p-4 md:grid-cols-2">
+                <div className="grid gap-2 p-2.5 md:grid-cols-2 xl:grid-cols-3">
                   {sectionFields.map(({ key, entry, fv, staticValue, staticHasValue, readOnly }) => {
                     const hasValue = staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv);
                     const readOnlyFromOrgChart = readOnly || key === "employee.job_role_id";
                     return (
                       <div key={key} className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-black text-[#9d9da9]">{fieldDisplayLabel(entry.label)}</p>
-                            <div className="mt-1.5 text-sm font-black text-[#24242e]">
+                            <p className="truncate text-[10px] font-black text-[#9d9da9]">{fieldDisplayLabel(entry.label)}</p>
+                            <div className="mt-1 text-xs font-black text-[#24242e]">
                               {staticValue !== undefined ? (
                                 staticValue
                               ) : hasValue ? (
@@ -1773,7 +1773,7 @@ function TerminationDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !saving && onOpenChange(nextOpen)}>
-      <DialogContent className="rounded-3xl sm:max-w-xl">
+      <DialogContent className="rounded-xl p-4 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Registrar rescisão</DialogTitle>
           <DialogDescription>
@@ -1782,14 +1782,14 @@ function TerminationDialog({
         </DialogHeader>
 
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2.5 sm:grid-cols-2">
             <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
               Data da demissão
               <input
                 type="date"
                 value={terminationDate}
                 onChange={(event) => setTerminationDate(event.target.value)}
-                className="mt-1 h-11 w-full rounded-2xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
               />
             </label>
             <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
@@ -1801,7 +1801,7 @@ function TerminationDialog({
                   setTerminationReason(nextReason);
                   if (!requiresTerminationSubtype(nextReason)) setTerminationCause("");
                 }}
-                className="mt-1 h-11 w-full rounded-2xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
               >
                 <option value="">Selecione</option>
                 {TERMINATION_REASONS.map((reason) => (
@@ -1817,7 +1817,7 @@ function TerminationDialog({
               <select
                 value={terminationCause}
                 onChange={(event) => setTerminationCause(event.target.value)}
-                className="mt-1 h-11 w-full rounded-2xl border border-[#dedfe4] bg-white px-3 text-sm font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+                className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
               >
                 <option value="">Selecione</option>
                 {JUST_CAUSE_TYPES.map((cause) => (
@@ -1833,7 +1833,7 @@ function TerminationDialog({
               value={terminationNotes}
               onChange={(event) => setTerminationNotes(event.target.value)}
               placeholder="Opcional"
-              className="mt-1 min-h-24 rounded-2xl border-[#dedfe4] text-sm font-semibold"
+              className="mt-1 min-h-16 rounded-lg border-[#dedfe4] text-xs font-semibold"
             />
           </label>
 
@@ -2484,8 +2484,8 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   }
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] bg-[var(--bg)] px-4 py-5 text-[#1d1d26] md:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-[1440px] space-y-4">
+    <div className="min-h-[calc(100vh-6rem)] bg-[var(--bg)] p-2 text-[#1d1d26] md:p-3">
+      <div className="mx-auto w-full max-w-[1600px] space-y-2.5">
         <TerminationDialog
           user={collaborator}
           open={terminationDialogOpen}
@@ -2494,31 +2494,31 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           onConfirm={confirmTermination}
         />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <BackButton
             fallbackHref="/dashboard/dp/collaborators"
             ariaLabel="Voltar à página anterior"
             iconOnly
             variant="ghost"
-            className="h-10 w-10 rounded-2xl bg-white p-0 text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
+            className="h-8 w-8 rounded-lg bg-white p-0 text-[#777784] shadow-sm ring-1 ring-[#dedfe4] hover:bg-white hover:text-[#df2f78]"
             iconClassName="h-5 w-5"
           />
-          <span className="text-sm font-black text-[#8f8f9b]">Departamento pessoal</span>
+          <span className="text-xs font-black text-[#8f8f9b]">Departamento pessoal</span>
           <ChevronRight className="h-4 w-4 text-[#b5b5bf]" />
           <h1 className="min-w-0 truncate text-lg font-black leading-tight text-[#181820]">
             Painel de {displayName(user.username)}
           </h1>
         </div>
 
-        <section className="sticky top-[88px] z-10 rounded-[18px] border border-[#dedfe4] bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur lg:top-[104px]">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
+        <section className="sticky top-[72px] z-10 rounded-xl border border-[#dedfe4] bg-white/95 p-3 shadow-md backdrop-blur lg:top-[76px]">
+        <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
               {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt={user.username} className="h-16 w-16 rounded-[16px] object-cover ring-4 ring-white" />
+                <img src={user.avatarUrl} alt={user.username} className="h-11 w-11 rounded-lg object-cover ring-2 ring-white" />
               ) : (
                 <div
-                  className={`flex h-16 w-16 items-center justify-center rounded-[16px] text-xl font-black text-white ring-4 ring-white ${avatarColor(user.username)}`}
+                  className={`flex h-11 w-11 items-center justify-center rounded-lg text-sm font-black text-white ring-2 ring-white ${avatarColor(user.username)}`}
                   style={user.color ? { backgroundColor: user.color } : undefined}
                 >
                   {userInitials}
@@ -2527,19 +2527,19 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             </div>
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="min-w-0 break-words text-xl font-black leading-tight text-[#181820]">{user.username}</h2>
+                <h2 className="min-w-0 break-words text-base font-black leading-tight text-[#181820]">{user.username}</h2>
                 <span
-                  className="inline-flex max-w-full items-center rounded-full bg-[#eafaf2] px-3 py-1 text-xs font-black text-[#008963] sm:max-w-[260px]"
+                  className="inline-flex max-w-full items-center rounded-full bg-[#eafaf2] px-2 py-0.5 text-[10px] font-black text-[#008963] sm:max-w-[220px]"
                   title={roleFunctionLabel}
                 >
                   <span className="truncate">{roleFunctionLabel}</span>
                 </span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-[#f3f3f5] px-3 py-1 text-xs font-black text-[#6f6f7c]">
-                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: user.color || "#e92828" }} />
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3f3f5] px-2 py-0.5 text-[10px] font-black text-[#6f6f7c]">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: user.color || "#e92828" }} />
                   Cor na escala
                 </span>
               </div>
-              <div className="mt-4 grid gap-x-8 gap-y-3 text-xs font-black text-[#24242e] md:grid-cols-4">
+              <div className="mt-2 grid gap-x-5 gap-y-1.5 text-[10px] font-black text-[#24242e] md:grid-cols-4">
                 <span>
                   <span className="block text-xs uppercase text-[#9d9da9]">E-mail</span>
                   <span className="mt-1 block max-w-[180px] truncate">{user.email}</span>
@@ -2572,17 +2572,17 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="grid h-11 w-11 place-items-center rounded-xl border border-[#dedfe4] bg-white text-[#777784] shadow-sm hover:text-[#df2f78]"
+                    className="grid h-8 w-8 place-items-center rounded-lg border border-[#dedfe4] bg-white text-[#777784] shadow-sm hover:text-[#df2f78]"
                     title="Ações do colaborador"
                   >
                     <Menu className="h-5 w-5" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-72 rounded-2xl p-2">
+                <PopoverContent align="end" className="w-60 rounded-lg p-1.5">
                   <div className="space-y-1">
                     <Link
                       href="/dashboard/settings?department=pessoal&tab=users"
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
                     >
                       <Pencil className="h-4 w-4 text-[#df2f78]" />
                       Editar dados
@@ -2590,7 +2590,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     {canManageSystemFieldVisibility ? (
                       <Link
                         href="/dashboard/settings?department=pessoal&tab=profile-fields"
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
                       >
                         <Settings className="h-4 w-4 text-[#df2f78]" />
                         Editar campos
@@ -2598,7 +2598,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     ) : null}
                     <Link
                       href={`/dashboard/dp/collaborators/${user.id}/documents`}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-black text-slate-700 hover:bg-slate-50"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
                     >
                       <FileText className="h-4 w-4 text-[#df2f78]" />
                       Documentos do colaborador
@@ -2607,7 +2607,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                       <button
                         type="button"
                         onClick={() => setTerminationDialogOpen(true)}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-black text-rose-700 hover:bg-rose-50"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-rose-700 hover:bg-rose-50"
                       >
                         <UserX className="h-4 w-4 text-rose-600" />
                         Rescisão
@@ -2623,7 +2623,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
         <EmployeeProfileFields user={user} profileName={profile?.name} reloadKey={fieldMapReloadKey} />
 
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           {systemVisibilityMessage ? (
             <p className={`rounded-xl px-3 py-2 text-xs font-bold ${
               systemVisibilityMessage.startsWith("Falha")
@@ -2633,29 +2633,29 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               {systemVisibilityMessage}
             </p>
           ) : null}
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.35fr)]">
-            <div className="space-y-4">
+          <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.35fr)]">
+            <div className="space-y-2.5">
               {renderSystemBlock("system.schedule_units")}
               {renderSystemBlock("system.behavior")}
             </div>
             {renderSystemBlock("system.vacations")}
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-2.5 xl:grid-cols-2">
             {renderSystemBlock("system.aso_control")}
             {renderSystemBlock("system.family_salary")}
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-2.5 xl:grid-cols-2">
             {renderSystemBlock("system.uniforms")}
             {renderSystemBlock("system.transport_voucher")}
           </div>
         </div>
         {transportVoucherEditorOpen ? (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 py-8">
-            <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-3">
+            <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xl font-black text-[#1d1d26]">Editar vale-transporte</p>
-                  <p className="mt-1 text-sm font-semibold text-[#777784]">{user.username}</p>
+                  <p className="text-base font-black text-[#1d1d26]">Editar vale-transporte</p>
+                  <p className="mt-0.5 text-xs font-semibold text-[#777784]">{user.username}</p>
                 </div>
                 <button
                   type="button"
@@ -2666,13 +2666,13 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </button>
               </div>
 
-              <div className="mt-5 grid gap-4">
-                <label className="grid gap-2 text-sm font-black text-[#1d1d26]">
+              <div className="mt-3 grid gap-2.5">
+                <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
                   Situação
                   <select
                     value={transportVoucherStatusDraft}
                     onChange={(event) => setTransportVoucherStatusDraft(event.target.value as "active" | "suspended")}
-                    className="h-12 rounded-2xl border border-[#dedfe4] bg-white px-4 text-sm font-bold outline-none focus:border-[#ec2f78]"
+                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#ec2f78]"
                   >
                     <option value="active">Ativo</option>
                     <option value="suspended">Suspenso</option>
@@ -2680,33 +2680,33 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </label>
 
                 {transportVoucherStatusDraft === "active" ? (
-                  <label className="grid gap-2 text-sm font-black text-[#1d1d26]">
+                  <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
                     Valor por dia
                     <CurrencyInput
                       value={transportVoucherValueDraft}
                       onChange={setTransportVoucherValueDraft}
-                      className="h-12 rounded-2xl border-[#dedfe4] bg-white pl-10 text-sm font-bold outline-none focus:border-[#ec2f78] focus-visible:ring-0 focus-visible:ring-offset-0"
+                      className="h-8 rounded-lg border-[#dedfe4] bg-white pl-8 text-xs font-bold outline-none focus:border-[#ec2f78] focus-visible:ring-0 focus-visible:ring-offset-0"
                       placeholder="0,00"
                     />
                   </label>
                 ) : null}
 
-                <label className="grid gap-2 text-sm font-black text-[#1d1d26]">
+                <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
                   Data da alteração
                   <input
                     type="date"
                     value={transportVoucherEffectiveDate}
                     onChange={(event) => setTransportVoucherEffectiveDate(event.target.value)}
-                    className="h-12 rounded-2xl border border-[#dedfe4] bg-white px-4 text-sm font-bold outline-none focus:border-[#ec2f78]"
+                    className="h-8 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#ec2f78]"
                   />
                 </label>
 
-                <label className="grid gap-2 text-sm font-black text-[#1d1d26]">
+                <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
                   Motivo
                   <textarea
                     value={transportVoucherReason}
                     onChange={(event) => setTransportVoucherReason(event.target.value)}
-                    className="min-h-24 rounded-2xl border border-[#dedfe4] bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-[#ec2f78]"
+                    className="min-h-16 rounded-lg border border-[#dedfe4] bg-white px-2.5 py-2 text-xs font-semibold outline-none focus:border-[#ec2f78]"
                     placeholder="Descreva o motivo da alteração."
                   />
                 </label>
@@ -2720,7 +2720,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 <button
                   type="button"
                   onClick={() => setTransportVoucherEditorOpen(false)}
-                  className="rounded-2xl border border-[#dedfe4] bg-white px-5 py-3 text-sm font-black text-[#4f4f5b] hover:bg-slate-50"
+                  className="h-8 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-black text-[#4f4f5b] hover:bg-slate-50"
                 >
                   Cancelar
                 </button>
@@ -2728,7 +2728,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   type="button"
                   disabled={transportVoucherSaving}
                   onClick={() => void saveTransportVoucher()}
-                  className="rounded-2xl bg-[#ec2f78] px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-[#d92b6e] disabled:opacity-60"
+                  className="h-8 rounded-lg bg-[#ec2f78] px-3 text-xs font-black text-white shadow-sm hover:bg-[#d92b6e] disabled:opacity-60"
                 >
                   {transportVoucherSaving ? "Salvando..." : "Salvar alteração"}
                 </button>
@@ -2738,12 +2738,12 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         ) : null}
 
         {transportVoucherHistoryOpen ? (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 py-8">
-            <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-3">
+            <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-2xl">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xl font-black text-[#1d1d26]">Histórico do vale-transporte</p>
-                  <p className="mt-1 text-sm font-semibold text-[#777784]">{user.username}</p>
+                  <p className="text-base font-black text-[#1d1d26]">Histórico do vale-transporte</p>
+                  <p className="mt-0.5 text-xs font-semibold text-[#777784]">{user.username}</p>
                 </div>
                 <button
                   type="button"
@@ -2754,9 +2754,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </button>
               </div>
 
-              <div className="mt-5 max-h-[60vh] space-y-3 overflow-auto pr-1">
+              <div className="mt-3 max-h-[55vh] space-y-2 overflow-auto pr-1">
                 {transportVoucherHistory.length > 0 ? [...transportVoucherHistory].reverse().map((entry) => (
-                  <div key={entry.id} className="rounded-2xl border border-[#ececf0] bg-[#fbfbfc] p-4">
+                  <div key={entry.id} className="rounded-lg border border-[#ececf0] bg-[#fbfbfc] p-2.5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-black text-[#1d1d26]">{formatTransportVoucherAction(entry)}</p>

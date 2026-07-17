@@ -15,6 +15,7 @@ type FieldConfig = {
   group?: FieldMapEntry["group"];
   subgroup?: FieldMapEntry["subgroup"];
   repeatable?: FieldMapEntry["repeatable"];
+  lgpd?: Partial<NonNullable<FieldMapEntry["lgpd"]>>;
 };
 
 function field(config: FieldConfig): FieldMapEntry {
@@ -24,6 +25,7 @@ function field(config: FieldConfig): FieldMapEntry {
   const isSensitiveCategory =
     sectionKey.includes("diversidade") ||
     sectionKey.includes("aso") ||
+    sectionKey.includes("saude") ||
     sectionKey.includes("bancarios") ||
     sectionKey.includes("familia");
   const entry: FieldMapEntry = {
@@ -44,10 +46,11 @@ function field(config: FieldConfig): FieldMapEntry {
       legal_basis: sectionKey.includes("diversidade") ? "consent" : "legal_obligation",
       retention: sectionKey.includes("bancarios")
         ? "termination_plus_90d"
-        : sectionKey.includes("diversidade") || sectionKey.includes("aso")
+        : sectionKey.includes("diversidade") || sectionKey.includes("aso") || sectionKey.includes("saude")
           ? "termination_plus_2y"
           : "employment_plus_5y",
       requires_consent: sectionKey.includes("diversidade"),
+      ...config.lgpd,
     },
   };
   if (config.required !== undefined) entry.required = config.required;
@@ -66,6 +69,8 @@ const SHOE_OPTIONS = ["33", "34", "35", "36", "37", "38", "39", "40", "41", "42"
 const CNH_GROUP: FieldMapEntry["group"] = { id: "documents_cnh", label: "CNH", order: 60 };
 const CNH_VALIDITY_SUBGROUP: FieldMapEntry["subgroup"] = { id: "documents_cnh_validity", label: "Validade da CNH", group_id: "documents_cnh", order: 10 };
 const HAS_CNH_CONDITION: FieldMapEntry["conditionals"] = [{ kind: "show_if", field: "employee.has_cnh", operator: "eq", value: true }];
+const HAS_FOOD_RESTRICTION_CONDITION: FieldMapEntry["conditionals"] = [{ kind: "show_if", field: "employee.has_food_restriction", operator: "eq", value: true }];
+const NEEDS_WORKPLACE_ADAPTATION_CONDITION: FieldMapEntry["conditionals"] = [{ kind: "show_if", field: "employee.needs_workplace_adaptation", operator: "eq", value: true }];
 const CHILD_GROUP: FieldMapEntry["group"] = {
   id: "children_records",
   label: "Filhos",
@@ -143,7 +148,7 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.has_health_plan": field({ label: "Convênio médico?", section: "Benefícios", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 60 }),
   "employee.has_dental_plan": field({ label: "Convênio odontológico?", section: "Benefícios", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 70 }),
 
-  "employee.education_level": field({ label: "Grau de instrução", section: "Formação acadêmica", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 10, options: ["Fundamental incompleto", "Fundamental completo", "Médio incompleto", "Médio completo", "Superior incompleto", "Superior completo", "Pós-graduação", "Mestrado", "Doutorado"] }),
+  "employee.education_level": field({ label: "Grau de instrução", section: "Formação acadêmica", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 10, options: ["Fundamental incompleto", "Fundamental completo", "Médio incompleto", "Médio completo", "Superior incompleto", "Superior completo"] }),
   "employee.education_course": field({ label: "Curso", section: "Formação acadêmica", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 20 }),
   "employee.education_institution": field({ label: "Instituição", section: "Formação acadêmica", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 30 }),
   "employee.education_end_date": field({ label: "Data de conclusão", section: "Formação acadêmica", type: "date", visibility: "public", employeeVisible: true, employeeEditable: false, order: 40 }),
@@ -157,7 +162,12 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.emergency_name": field({ label: "Nome", section: "Contatos de emergência", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 10 }),
   "employee.emergency_phone": field({ label: "Celular (com DDD)", section: "Contatos de emergência", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 20 }),
   "employee.emergency_relation": field({ label: "Grau de parentesco", section: "Contatos de emergência", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: true, order: 30, options: ["Mãe/Pai", "Cônjuge", "Filho(a)", "Irmão/Irmã", "Parente", "Amigo(a)", "Outro"] }),
-  "employee.emergency_medical": field({ label: "Alergias e dados médicos", section: "Contatos de emergência", type: "multiline", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 40 }),
+  "employee.has_food_restriction": field({ label: "Possui restrição alimentar relevante à atividade?", section: "Saúde e segurança", type: "boolean", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 10, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
+  "employee.food_restrictions": field({ label: "Ingredientes relacionados à restrição", section: "Saúde e segurança", type: "multi_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 20, options: ["Leite e derivados", "Trigo ou glúten", "Ovos", "Soja", "Amendoim", "Castanhas ou outras oleaginosas", "Corantes ou aromatizantes", "Outro ingrediente"], conditionals: HAS_FOOD_RESTRICTION_CONDITION, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
+  "employee.food_restriction_other": field({ label: "Outro ingrediente", section: "Saúde e segurança", type: "text", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 30, conditionals: HAS_FOOD_RESTRICTION_CONDITION, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
+  "employee.food_restriction_activity_effects": field({ label: "Impacto da restrição na atividade", section: "Saúde e segurança", type: "multi_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 40, options: ["Apenas a ingestão ou degustação", "O contato ou a manipulação", "Ambos", "Preciso de avaliação pelo serviço de saúde ocupacional"], conditionals: HAS_FOOD_RESTRICTION_CONDITION, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
+  "employee.needs_workplace_adaptation": field({ label: "Necessita de adaptação funcional?", section: "Saúde e segurança", type: "boolean", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 50, lgpd: { legal_basis: "legal_obligation", requires_consent: false } }),
+  "employee.workplace_adaptation_notes": field({ label: "Orientação funcional de SST", section: "Saúde e segurança", type: "multiline", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 60, conditionals: NEEDS_WORKPLACE_ADAPTATION_CONDITION, lgpd: { legal_basis: "legal_obligation", requires_consent: false } }),
 
   "employee.bank_name": field({ label: "Banco", section: "Dados bancários", type: "single_select", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10, options: ["Banco do Brasil", "Bradesco", "Caixa", "Itaú", "Santander", "Nubank", "Inter", "Outro"] }),
   "employee.bank_agency": field({ label: "Agência", section: "Dados bancários", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),

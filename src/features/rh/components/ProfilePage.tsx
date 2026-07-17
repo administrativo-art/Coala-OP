@@ -80,7 +80,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
 
   if (profileState.status === 'loading' || profileState.status === 'idle') {
     return (
-      <div className="flex gap-6">
+      <div className="flex gap-3">
         <div className="hidden lg:block w-52 shrink-0 space-y-2 pt-1">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
         </div>
@@ -155,16 +155,16 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
   };
 
   return (
-    <div className="flex gap-6 min-h-0">
+    <div className="flex min-h-0 gap-2">
       {/* Scroll-spy sidebar */}
       {tab === 'perfil' && (
-        <nav className="hidden lg:flex flex-col gap-1 w-52 shrink-0 pt-1 sticky top-24 self-start max-h-[calc(100vh-8rem)] overflow-y-auto">
+        <nav className="sticky top-20 hidden max-h-[calc(100vh-6rem)] w-36 shrink-0 flex-col gap-0.5 self-start overflow-y-auto pt-1 lg:flex">
           {orderedSections.map((sec) => (
             <button
               key={sec}
               type="button"
               onClick={() => scrollTo(sec)}
-              className={`text-left text-sm px-3 py-1.5 rounded-lg transition-colors truncate ${
+              className={`truncate rounded-md px-2 py-1 text-left text-[11px] transition-colors ${
                 activeSection === sec
                   ? 'bg-violet-50 text-violet-700 font-medium'
                   : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
@@ -177,7 +177,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
       )}
 
       {/* Main content */}
-      <div className="flex-1 min-w-0 space-y-4">
+      <div className="min-w-0 flex-1 space-y-2.5">
         <EmployeeHeader employee={employee} cache={cache} />
 
         {/* Tab bar */}
@@ -187,7 +187,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`relative px-4 py-2 text-sm font-medium transition-colors ${
+              className={`relative px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 tab === t.id
                   ? 'text-violet-700'
                   : 'text-gray-500 hover:text-gray-800'
@@ -246,7 +246,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
       </div>
 
       {/* Right panel — completion */}
-      <div className="hidden xl:block w-64 shrink-0 sticky top-24 self-start">
+      <div className="sticky top-24 hidden w-52 shrink-0 self-start xl:block">
         <ProfileCompletion
           pct={employee.profile_completion}
           fieldMap={fieldMap}

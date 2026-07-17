@@ -10,6 +10,7 @@ import { createFirstAccessLink } from '@/lib/first-access-links';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { logAction } from '@/lib/log-action';
 import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-documents';
+import { extendOnboardingPublicLink, onboardingPublicLinkExtensionUsed } from '@/lib/hr/onboarding-public-link';
 import type { OnboardingDocument, OnboardingProcess, OnboardingStageId } from '@/types';
 
 export const runtime = 'nodejs';
@@ -106,9 +107,9 @@ function childrenFromAnswers(answers: Record<string, unknown>) {
       const birthDate = answerString(data, 'birthDate').slice(0, 10);
       return {
         key: `filho_${index + 1}`,
-        name: null,
+        name: answerString(data, 'name') || null,
         birthDate: /^\d{4}-\d{2}-\d{2}$/.test(birthDate) ? birthDate : null,
-        cpf: null,
+        cpf: answerString(data, 'cpf') || null,
         rg: null,
         relationship: 'Filho(a)',
         documents: {},
@@ -178,7 +179,8 @@ async function createCollaboratorFromOnboarding(params: {
   actorEmail: string | null;
   baseUrl: string;
 }) {
-  const name = asString(params.process.candidateName) ?? 'Novo colaborador';
+  const publicAnswers = asRecord(params.process.publicFormAnswers);
+  const name = answerString(publicAnswers, 'fullName') || asString(params.process.candidateName) || 'Novo colaborador';
   const email = normalizeEmail(params.process.candidateEmail);
   if (!email) throw new Error('Candidato sem e-mail para criação do usuário.');
 
@@ -196,7 +198,6 @@ async function createCollaboratorFromOnboarding(params: {
   const now = new Date().toISOString();
   const admissionTimestamp = timestampFromDateString(params.process.expectedAdmissionDate);
   const unitId = asString(params.process.unitId);
-  const publicAnswers = asRecord(params.process.publicFormAnswers);
   const finalization = asRecord(params.process.finalizationSettings);
   const childRecords = childrenFromAnswers(publicAnswers);
   const childrenUnder14 = childRecords.filter((child) => {
@@ -205,6 +206,7 @@ async function createCollaboratorFromOnboarding(params: {
   }).length;
   const hasCnh = answerBoolean(publicAnswers, 'hasCnh');
   const wantsTransportVoucher = answerBoolean(publicAnswers, 'wantsTransportVoucher');
+  const hasFoodRestriction = answerBoolean(publicAnswers, 'hasFoodRestriction');
   const operational = asBoolean(finalization.operational) ?? false;
   const participatesInGoals = asBoolean(finalization.participatesInGoals) ?? false;
   const loginRestrictionEnabled = asBoolean(finalization.loginRestrictionEnabled) ?? false;
@@ -267,6 +269,7 @@ async function createCollaboratorFromOnboarding(params: {
   };
 
   const textAnswers: Array<[string, string]> = [
+    ['employee.cpf', answerString(publicAnswers, 'cpf')],
     ['employee.bank_name', answerString(publicAnswers, 'bankName')],
     ['employee.bank_agency', answerString(publicAnswers, 'bankAgency')],
     ['employee.bank_account', answerString(publicAnswers, 'bankAccount')],
@@ -274,11 +277,30 @@ async function createCollaboratorFromOnboarding(params: {
     ['employee.uniform_shirt_size', answerString(publicAnswers, 'uniformShirtSize')],
     ['employee.uniform_pants_size', answerString(publicAnswers, 'uniformPantsSize')],
     ['employee.uniform_shoe_size', answerString(publicAnswers, 'uniformShoeSize')],
+    ['employee.emergency_name', answerString(publicAnswers, 'emergencyName')],
+    ['employee.emergency_phone', answerString(publicAnswers, 'emergencyPhone')],
+    ['employee.emergency_relation', answerString(publicAnswers, 'emergencyRelation')],
+    ['employee.education_level', answerString(publicAnswers, 'educationLevel')],
+    ['employee.education_course', answerString(publicAnswers, 'educationCourse')],
+    ['employee.education_institution', answerString(publicAnswers, 'educationInstitution')],
   ];
   for (const [fieldKey, value] of textAnswers) {
     if (value) values[fieldKey] = { value_text: value };
   }
   if (hasCnh !== null) values['employee.has_cnh'] = { value_boolean: hasCnh };
+  if (hasFoodRestriction !== null) values['employee.has_food_restriction'] = { value_boolean: hasFoodRestriction };
+  const educationEndDate = answerString(publicAnswers, 'educationEndDate');
+  if (educationEndDate) values['employee.education_end_date'] = { value_date: timestampFromDateString(educationEndDate) };
+  const foodRestrictions = Array.isArray(publicAnswers.foodRestrictions)
+    ? publicAnswers.foodRestrictions.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+  if (foodRestrictions.length > 0) values['employee.food_restrictions'] = { value_json: foodRestrictions };
+  const foodRestrictionOther = answerString(publicAnswers, 'foodRestrictionOther');
+  if (foodRestrictionOther) values['employee.food_restriction_other'] = { value_text: foodRestrictionOther };
+  const foodRestrictionActivityEffects = Array.isArray(publicAnswers.foodRestrictionActivityEffects)
+    ? publicAnswers.foodRestrictionActivityEffects.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+  if (foodRestrictionActivityEffects.length > 0) values['employee.food_restriction_activity_effects'] = { value_json: foodRestrictionActivityEffects };
   values['employee.has_vt'] = { value_boolean: needsTransportVoucher };
   if (childRecords.length > 0) {
     values['employee.children'] = { value_json: childRecords };
@@ -365,6 +387,19 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       transportVoucherValue: needsTransportVoucher ? asNumber(finalization.transportVoucherValue) ?? null : null,
       shiftDefinitionId,
     };
+  } else if (action === 'extend_public_link') {
+    if (!process.publicToken || process.publicTokenClosedAt || process.status === 'cancelled' || process.status === 'completed') {
+      return jsonError('Este link não pode mais ser prorrogado.', 400);
+    }
+    if (onboardingPublicLinkExtensionUsed(process)) {
+      return jsonError('A prorrogação única de 24 horas já foi utilizada.', 400);
+    }
+    const nextExpiry = extendOnboardingPublicLink(process, new Date(now));
+    if (!nextExpiry) return jsonError('A prorrogação única de 24 horas já foi utilizada.', 400);
+    update.publicTokenExpiresAt = nextExpiry;
+    update.publicTokenExtensionUsed = true;
+    update.publicTokenExtendedAt = now;
+    update.publicTokenExtendedBy = access.decoded.uid;
   } else if (action === 'create_collaborator') {
     if (process.currentStage !== 'formalization_validation' && process.status !== 'ready_to_create_user') {
       return jsonError('Valide a formalização antes de criar o colaborador.', 400);

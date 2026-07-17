@@ -578,7 +578,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
       <div className="flex items-center gap-3">
         <BackButton fallbackHref="/dashboard/dp/ferias" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Avatar className="h-10 w-10 shrink-0">
+          <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage src={user.avatarUrl} />
             <AvatarFallback>{initials(user.username)}</AvatarFallback>
           </Avatar>
@@ -599,12 +599,12 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
 
         {/* Left: Health Summary */}
         <div className="lg:col-span-1 space-y-4">
           <Card>
-            <CardContent className="p-5 space-y-4">
+            <CardContent className="space-y-2.5 p-3">
               {health.status === 'INVALIDO' && (
                 <p className="text-sm text-muted-foreground">
                   Data de admissão não cadastrada. Configure o perfil do colaborador.
@@ -670,7 +670,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
           {/* Summary stats */}
           <Card>
-            <CardContent className="p-4 space-y-2">
+            <CardContent className="space-y-1.5 p-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Resumo</p>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total de ciclos</span>

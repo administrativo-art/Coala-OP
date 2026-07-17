@@ -13,7 +13,8 @@ import {
   MAX_EMPLOYEE_DOCUMENT_BYTES,
   fileExtension,
 } from "@/lib/hr/employee-document-planning";
-import { canAccessDocument, subjectFromPermissions } from "@/lib/hr/employee-document-access";
+import { canAccessDocument, resolveDocumentVisibility } from "@/lib/hr/employee-document-access";
+import { buildEmployeeDocumentAccessSubject, loadEmployeeDocumentAccessSettings } from "@/features/hr/lib/employee-document-access-server";
 import { getDocumentTypeConfig } from "@/lib/hr/employee-document-catalog";
 import {
   resolveDocumentDestination,
@@ -192,17 +193,23 @@ export async function GET(request: NextRequest) {
     }
     const snap = await hrDbAdmin.collection(COLLECTION).where("employeeId", "==", employeeId).get();
     // Aplica a política de sigilo por documento; o usuário só recebe o que pode ver.
-    const subject = subjectFromPermissions(access.permissions, {
-      isDefaultAdmin: access.isDefaultAdmin,
-      isOwner: employeeId === access.decoded.uid,
-    });
+    const accessSettings = await loadEmployeeDocumentAccessSettings(access);
+    const subject = buildEmployeeDocumentAccessSubject(access, accessSettings, employeeId);
     const documents = snap.docs
       .filter((doc) => !doc.get("deletedAt"))
       .filter((doc) => canAccessDocument(
-        { documentTypeCode: doc.get("documentTypeCode"), accessLevel: doc.get("accessLevel") },
+        { documentTypeCode: doc.get("documentTypeCode"), category: doc.get("category"), accessLevel: doc.get("accessLevel") },
         subject,
+        accessSettings.visibilityConfig,
       ).allowed)
-      .map((doc) => ({ id: doc.id, ...serializedObject(doc.data()) }))
+      .map((doc) => ({
+        id: doc.id,
+        ...serializedObject(doc.data()),
+        resolvedVisibility: resolveDocumentVisibility(
+          { documentTypeCode: doc.get("documentTypeCode"), category: doc.get("category") },
+          accessSettings.visibilityConfig,
+        ),
+      }))
       .sort((a: any, b: any) => String(b.uploadedAt).localeCompare(String(a.uploadedAt)));
     return NextResponse.json({ documents });
   } catch (cause) {

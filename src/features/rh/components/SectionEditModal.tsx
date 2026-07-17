@@ -143,11 +143,11 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
   if (!field) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div className="relative w-full max-w-sm rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
           <h2 className="text-sm font-semibold text-gray-900">Editar campo</h2>
           <button
             type="button"
@@ -160,7 +160,7 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-3">
+        <div className="max-h-[65vh] space-y-2 overflow-auto px-3 py-2.5">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">
               {field.entry.label}
@@ -177,11 +177,11 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
           )}
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100">
+        <div className="flex justify-end gap-2 border-t border-gray-100 px-3 py-2.5">
           <button
             type="button"
             onClick={onClose}
-            className="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            className="h-8 rounded-lg px-3 text-xs text-gray-600 transition-colors hover:bg-gray-100"
           >
             Cancelar
           </button>
@@ -189,7 +189,7 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="text-sm px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 transition-colors font-medium"
+            className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
           >
             {saving ? 'Salvando…' : 'Salvar'}
           </button>

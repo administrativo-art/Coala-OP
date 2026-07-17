@@ -266,7 +266,7 @@ export function DPFeriasManager() {
   return (
     <div className="space-y-8">
       {warningError && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2.5 text-xs">
           <p className="font-medium text-destructive">Falha ao carregar férias.</p>
           <p className="mt-1 text-muted-foreground">{warningError}</p>
         </div>
@@ -298,7 +298,7 @@ export function DPFeriasManager() {
           </Select>
           <button
             onClick={() => setMonthModal(true)}
-            className="rounded-[10px] border bg-muted px-4 py-2.5 text-[13.5px] font-semibold hover:bg-muted/70"
+            className="rounded-lg border bg-muted px-3 py-2 text-xs font-semibold hover:bg-muted/70"
           >
             Férias do mês
           </button>
@@ -313,7 +313,7 @@ export function DPFeriasManager() {
             <button
               key={chip.key}
               onClick={() => setRiskFilter(chip.key)}
-              className={`rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors ${
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                 active
                   ? 'border border-primary bg-primary text-primary-foreground'
                   : 'border border-border bg-card text-muted-foreground hover:bg-muted'
@@ -387,7 +387,7 @@ export function DPFeriasManager() {
 
       {/* Férias do mês modal */}
       <Dialog open={monthModal} onOpenChange={setMonthModal}>
-        <DialogContent className="max-w-[480px]">
+        <DialogContent className="max-w-[420px] p-4">
           <DialogHeader>
             <span className="mb-1 inline-flex w-fit rounded-full bg-primary/10 px-3 py-1 text-[11.5px] font-bold text-primary">
               Calendário de ausências

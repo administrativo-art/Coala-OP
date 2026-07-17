@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { GlassSidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
@@ -94,12 +94,23 @@ export default function DashboardLayout({
   const { taskNotifications } = useAllTasks();
   const { toast } = useToast();
   const router = useRouter();
+  const pathname = usePathname();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isPublicRecruitmentHost, setIsPublicRecruitmentHost] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loginAccessState, setLoginAccessState] = useState<HrLoginAccessPayload | null>(null);
   const [submittingJustification, setSubmittingJustification] = useState(false);
+  const personalSection = pathname === '/dashboard/dp'
+    || pathname.startsWith('/dashboard/dp/')
+    || pathname.startsWith('/dashboard/hr/recruitment')
+    || pathname === '/dashboard/hr/org-chart'
+    || pathname.startsWith('/dashboard/stock/uniforms');
+
+  useEffect(() => {
+    document.body.classList.toggle('personal-density-active', personalSection);
+    return () => document.body.classList.remove('personal-density-active');
+  }, [personalSection]);
 
   useEffect(() => {
     if (isRecruitmentHost(window.location.hostname)) {
@@ -239,9 +250,12 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen w-full flex-col bg-[var(--bg)]">
       <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
-      <div className="flex flex-col flex-1 lg:pl-[112px]">
+      <div className="min-w-0 flex flex-1 flex-col lg:pl-[56px]">
         <Header tasks={taskNotifications} onMenuClick={() => setIsSidebarOpen(true)} />
-        <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+        <main
+          className={`min-w-0 flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 ${personalSection ? 'personal-section-density' : ''}`}
+          data-section={personalSection ? 'personal' : undefined}
+        >
           {loginAccessState && shouldSurfaceLoginAccessNotice(loginAccessState) && (
             <Alert variant={loginAccessState.evaluation.status === 'blocked' ? 'destructive' : 'default'}>
               {loginAccessState.evaluation.status === 'blocked' ? (

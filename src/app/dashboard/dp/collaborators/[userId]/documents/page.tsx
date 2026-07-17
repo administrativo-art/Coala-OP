@@ -1,18 +1,23 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   Brain,
+  Check,
   CheckCircle2,
   ChevronDown,
+  Clock,
   Download,
   Eye,
   FileText,
   Folder,
   FolderTree,
+  History,
   Loader2,
   RefreshCw,
+  Settings2,
   ShieldCheck,
   Trash2,
   Upload,
@@ -23,25 +28,61 @@ import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BackButton } from "@/components/navigation/back-button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   EMPLOYEE_DOCUMENT_ACCESS_LEVELS,
   EMPLOYEE_DOCUMENT_CATEGORIES,
+  EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES,
   EMPLOYEE_DOCUMENT_STATUSES,
   EMPLOYEE_DOCUMENT_TYPE_CATALOG,
+  employeeDocumentProcessPosition,
+  getEmployeeDocumentSubfolders,
+  resolveEmployeeDocumentFolderPath,
+  normalizeEmployeeDocumentCategory,
   type EmployeeDocumentCategoryId,
 } from "@/lib/hr/employee-document-options";
+import type { DocumentVisibilityConfig, NormalizedFieldVisibility } from "@/types/rh";
 
 const STATUS: Record<string, string> = Object.fromEntries(EMPLOYEE_DOCUMENT_STATUSES.map((status) => [status.id, status.label]));
 const ACCESS: Record<string, string> = Object.fromEntries(EMPLOYEE_DOCUMENT_ACCESS_LEVELS.map((level) => [level.id, level.label]));
+const VISIBILITY_LABEL: Record<string, string> = {
+  public: "Sem restrição",
+  restricted_partial: "Restrito parcial",
+  restricted_total: "Restrito total",
+  confidential: "Confidencial",
+};
+const VISIBILITY_OPTIONS: Array<{ id: NormalizedFieldVisibility; label: string; dot: string }> = [
+  { id: "public", label: "Sem restrição", dot: "bg-emerald-500" },
+  { id: "restricted_partial", label: "Restrito parcial", dot: "bg-sky-500" },
+  { id: "restricted_total", label: "Restrito total", dot: "bg-amber-500" },
+  { id: "confidential", label: "Confidencial", dot: "bg-rose-500" },
+];
+const STATUS_PRESENTATION: Record<string, { description: string; dot: string; text: string }> = {
+  pending: { description: "Ainda não recebido", dot: "bg-slate-400", text: "text-slate-700" },
+  received: { description: "Aguardando validação", dot: "bg-sky-500", text: "text-sky-700" },
+  validated: { description: "Conferido e liberado", dot: "bg-emerald-500", text: "text-emerald-700" },
+  rejected: { description: "Novo envio necessário", dot: "bg-rose-500", text: "text-rose-700" },
+};
 
 type DocumentRow = {
   id: string;
   category: string;
   documentType: string;
+  documentTypeCode?: string;
   status: string;
   accessLevel: string;
+  version?: number | null;
+  resolvedVisibility?: "public" | "restricted_partial" | "restricted_total" | "confidential";
   originalName: string;
   mimeType?: string;
   destinationTrail?: string[];
+  caseId?: string | null;
+  subcaseId?: string | null;
+  logicalKey?: string | null;
   profileSuggestions?: ProfileSuggestion[];
   uploadedAt: string;
   uploadedBy?: string;
@@ -55,6 +96,92 @@ type UploadFileItem = {
   id: string;
   file: File;
 };
+
+type DocumentFolderNode = {
+  label: string;
+  path: string[];
+  children: DocumentFolderNode[];
+};
+
+function buildDocumentFolderTree(category: EmployeeDocumentCategoryId, documents: DocumentRow[]): DocumentFolderNode[] {
+  const roots: DocumentFolderNode[] = [];
+  const addPath = (segments: string[]) => {
+    let level = roots;
+    const path: string[] = [];
+    for (const label of segments) {
+      path.push(label);
+      let node = level.find((entry) => entry.label === label);
+      if (!node) {
+        node = { label, path: [...path], children: [] };
+        level.push(node);
+      }
+      level = node.children;
+    }
+  };
+
+  const resolvedPaths = documents.map((document) => resolveEmployeeDocumentFolderPath({
+    category,
+    documentTypeCode: document.documentTypeCode,
+    documentTypeLabel: document.documentType,
+    destinationTrail: document.destinationTrail,
+  })).filter((path) => path.length > 0);
+  const processPosition = employeeDocumentProcessPosition(category);
+  if (processPosition !== "before" || resolvedPaths.length === 0) {
+    for (const definition of getEmployeeDocumentSubfolders(category)) addPath([definition.label]);
+  }
+  for (const path of resolvedPaths) addPath(path);
+  return roots;
+}
+
+function pathStartsWith(path: readonly string[], prefix: readonly string[]) {
+  return prefix.every((segment, index) => path[index] === segment);
+}
+
+function InlineVisibilityMenu({
+  value,
+  inherited,
+  disabled,
+  onChange,
+}: {
+  value: NormalizedFieldVisibility;
+  inherited?: boolean;
+  disabled?: boolean;
+  onChange: (value: NormalizedFieldVisibility | "inherit") => void;
+}) {
+  const current = VISIBILITY_OPTIONS.find((option) => option.id === value) ?? VISIBILITY_OPTIONS[2];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={(event) => event.stopPropagation()}
+          className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-white px-2 text-[10px] font-black text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+          aria-label={`Definir visibilidade. Atual: ${current.label}`}
+        >
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${current.dot}`} />
+          <span className="truncate">{inherited ? `Herdado: ${current.label}` : current.label}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56 rounded-xl p-1.5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+        {inherited !== undefined ? (
+          <DropdownMenuItem onSelect={() => onChange("inherit")} className="cursor-pointer rounded-lg px-3 py-2.5">
+            <span className="min-w-0 flex-1"><span className="block text-sm font-black">Herdar da pasta</span><span className="block text-[11px] font-semibold text-slate-500">Acompanha o padrão da pasta</span></span>
+            {inherited ? <Check className="h-4 w-4 text-emerald-600" /> : null}
+          </DropdownMenuItem>
+        ) : null}
+        {VISIBILITY_OPTIONS.map((option) => (
+          <DropdownMenuItem key={option.id} onSelect={() => onChange(option.id)} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
+            <span className={`h-2.5 w-2.5 rounded-full ${option.dot}`} />
+            <span className="flex-1 text-sm font-black text-slate-700">{option.label}</span>
+            {!inherited && value === option.id ? <Check className="h-4 w-4 text-emerald-600" /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 type AnalysisDocument = {
   clientFileId: string;
@@ -250,6 +377,10 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   const canAccessThisProfile = !ownProfileOnly || currentUser?.id === userId;
   const [items, setItems] = useState<DocumentRow[]>([]);
   const [category, setCategory] = useState<EmployeeDocumentCategoryId>("personal");
+  const [expandedCategory, setExpandedCategory] = useState<EmployeeDocumentCategoryId | null>("personal");
+  const [activeFolderPath, setActiveFolderPath] = useState<string[]>([]);
+  const [expandedFolderPaths, setExpandedFolderPaths] = useState<Record<string, boolean>>({});
+  const [openVersions, setOpenVersions] = useState<Record<string, boolean>>({});
   const [uploadFiles, setUploadFiles] = useState<UploadFileItem[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -260,6 +391,8 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   const [employeeCorrections, setEmployeeCorrections] = useState<Record<string, EmployeeCorrection>>({});
   const [resumableBatches, setResumableBatches] = useState<ResumableBatch[]>([]);
   const [expandedVerificationId, setExpandedVerificationId] = useState<string | null>(null);
+  const [documentVisibility, setDocumentVisibility] = useState<DocumentVisibilityConfig | null>(null);
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
 
   useEffect(() => () => {
     if (preview?.url.startsWith("blob:")) URL.revokeObjectURL(preview.url);
@@ -302,8 +435,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
       const data = await request(`/api/hr/employee-documents?employeeId=${encodeURIComponent(userId)}`);
       setItems(data.documents ?? []);
       if (canManage) {
-        const batches = await request(`/api/hr/employee-documents/batches?employeeId=${encodeURIComponent(userId)}`);
+        const [batches, visibility] = await Promise.all([
+          request(`/api/hr/employee-documents/batches?employeeId=${encodeURIComponent(userId)}`),
+          request("/api/hr/employee-documents/visibility"),
+        ]);
         setResumableBatches(batches.batches ?? []);
+        setDocumentVisibility(visibility.documentVisibility ?? null);
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao carregar.");
@@ -314,11 +451,80 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
   useEffect(() => { void load(); }, [load]);
 
-  const visible = useMemo(() => items.filter((item) => item.category === category && !item.deletedAt), [items, category]);
-  const openFolderTrail = useMemo(() => {
-    const trail = visible.find((item) => Array.isArray(item.destinationTrail) && item.destinationTrail.length > 0)?.destinationTrail;
-    return trail?.length ? trail : ["Documentos do colaborador", categoryLabel(category)];
-  }, [category, visible]);
+  async function updateVisibility(next: DocumentVisibilityConfig) {
+    setVisibilitySaving(true);
+    setMessage("");
+    try {
+      const result = await request("/api/hr/employee-documents/visibility", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      setDocumentVisibility(result.documentVisibility ?? next);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha ao salvar visibilidade.");
+    } finally {
+      setVisibilitySaving(false);
+    }
+  }
+
+  function updateDocumentVisibility(documentTypeCode: string, visibility: NormalizedFieldVisibility | "inherit") {
+    if (!documentVisibility) return;
+    const documentTypes = { ...documentVisibility.document_types };
+    if (visibility === "inherit") delete documentTypes[documentTypeCode];
+    else documentTypes[documentTypeCode] = visibility;
+    void updateVisibility({ ...documentVisibility, document_types: documentTypes });
+  }
+
+  const categoryItems = useMemo(
+    () => items.filter((item) => normalizeEmployeeDocumentCategory(item.category as EmployeeDocumentCategoryId) === category && !item.deletedAt),
+    [items, category],
+  );
+  const folderTree = useMemo(() => buildDocumentFolderTree(category, categoryItems), [category, categoryItems]);
+  const visible = useMemo(() => {
+    if (activeFolderPath.length === 0) return categoryItems;
+    return categoryItems.filter((item) => pathStartsWith(resolveEmployeeDocumentFolderPath({
+      category,
+      documentTypeCode: item.documentTypeCode,
+      documentTypeLabel: item.documentType,
+      destinationTrail: item.destinationTrail,
+    }), activeFolderPath));
+  }, [activeFolderPath, category, categoryItems]);
+  // Agrupa documentos do mesmo tipo: o de maior versão é o atual; os demais viram histórico expansível.
+  const documentGroups = useMemo(() => {
+    const map = new Map<string, DocumentRow[]>();
+    for (const item of visible) {
+      const folderPath = resolveEmployeeDocumentFolderPath({
+        category,
+        documentTypeCode: item.documentTypeCode,
+        documentTypeLabel: item.documentType,
+        destinationTrail: item.destinationTrail,
+      });
+      const folderKey = folderPath.join("/") || category;
+      const key = item.logicalKey || `${folderKey}:${item.documentTypeCode || item.documentType || item.id}`;
+      const list = map.get(key);
+      if (list) list.push(item);
+      else map.set(key, [item]);
+    }
+    return Array.from(map.entries()).map(([groupKey, list]) => {
+      const sorted = [...list].sort((a, b) => {
+        const va = typeof a.version === "number" ? a.version : 1;
+        const vb = typeof b.version === "number" ? b.version : 1;
+        if (vb !== va) return vb - va;
+        return String(b.uploadedAt).localeCompare(String(a.uploadedAt));
+      });
+      const [current, ...older] = sorted;
+      const folderPath = resolveEmployeeDocumentFolderPath({
+        category,
+        documentTypeCode: current.documentTypeCode,
+        documentTypeLabel: current.documentType,
+        destinationTrail: current.destinationTrail,
+      });
+      return { key: groupKey, folderKey: folderPath.join("/") || category, folderPath, current, older };
+    }).sort((a, b) => a.folderKey.localeCompare(b.folderKey, "pt-BR") || a.current.documentType.localeCompare(b.current.documentType, "pt-BR"));
+  }, [visible, category]);
+  const openFolderTrail = ["Documentos do colaborador", categoryLabel(category), ...activeFolderPath];
   const selectedFileCount = uploadFiles.length;
   const selectedTotalBytes = uploadFiles.reduce((total, item) => total + item.file.size, 0);
 
@@ -337,6 +543,14 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
   function selectCategory(nextCategory: EmployeeDocumentCategoryId) {
     setCategory(nextCategory);
+    setExpandedCategory(nextCategory);
+    setActiveFolderPath([]);
+    setMessage("");
+  }
+
+  function selectFolder(path: string[]) {
+    setActiveFolderPath(path);
+    setExpandedFolderPaths((current) => ({ ...current, [path.join("/")]: true }));
     setMessage("");
   }
 
@@ -668,6 +882,26 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     }
   }
 
+  async function bulkSetStatus(status: string) {
+    const targets = documentGroups.map((group) => group.current).filter((item) => item.status === "received");
+    if (targets.length === 0) return;
+    setBusy(true);
+    try {
+      for (const item of targets) {
+        await request("/api/hr/employee-documents", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: item.id, status }),
+        });
+      }
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha ao atualizar em lote.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(item: DocumentRow) {
     if (!confirm(`Excluir definitivamente o arquivo “${item.originalName}”?`)) return;
     setBusy(true);
@@ -681,6 +915,44 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     }
   }
 
+  function renderFolderNodes(nodes: DocumentFolderNode[], depth = 0): ReactNode {
+    return nodes.map((node) => {
+      const key = node.path.join("/");
+      const active = key === activeFolderPath.join("/");
+      const hasChildren = node.children.length > 0;
+      const expanded = hasChildren && (expandedFolderPaths[key] ?? depth === 0);
+      return (
+        <div key={key}>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => selectFolder(node.path)}
+              className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-[5px] text-left text-[11px] font-bold transition-colors ${active ? "bg-pink-50 text-[#c81f69]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}
+            >
+              <Folder className={`h-3.5 w-3.5 shrink-0 ${active ? "" : "text-slate-300"}`} />
+              <span className="min-w-0 flex-1">{node.label}</span>
+            </button>
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={() => setExpandedFolderPaths((current) => ({ ...current, [key]: !expanded }))}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-50"
+                aria-label={expanded ? `Recolher ${node.label}` : `Expandir ${node.label}`}
+              >
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+              </button>
+            ) : null}
+          </div>
+          {expanded ? (
+            <div className="ml-3.5 border-l border-slate-100 pl-1.5">
+              {renderFolderNodes(node.children, depth + 1)}
+            </div>
+          ) : null}
+        </div>
+      );
+    });
+  }
+
   if (!canAccessThisProfile) {
     return (
       <div className="mx-auto w-full max-w-[calc(100vw-4rem)] p-4 md:p-8">
@@ -692,7 +964,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
   }
 
   return (
-    <div className="mx-auto w-full max-w-[calc(100vw-4rem)] space-y-5 p-4 md:p-8">
+    <div className="min-w-0 space-y-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <BackButton
@@ -700,11 +972,11 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             ariaLabel="Voltar à página anterior"
             iconOnly
             variant="outline"
-            className="h-10 w-10 rounded-xl bg-white p-0"
+            className="h-9 w-9 rounded-lg bg-white p-0"
             iconClassName="h-4 w-4"
           />
-          <div className="flex min-w-0 items-center gap-3">
-            <Avatar className="h-12 w-12 shrink-0 rounded-2xl">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Avatar className="h-9 w-9 shrink-0 rounded-lg">
               <AvatarImage src={employee?.avatarUrl || undefined} alt={employee?.username ?? "Colaborador"} className="rounded-2xl object-cover" />
               <AvatarFallback
                 className="rounded-2xl bg-[#8a8a94] text-sm font-black text-white"
@@ -714,58 +986,95 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wider text-[#df2f78]">Painel do colaborador</p>
-              <h1 className="truncate text-2xl font-black text-slate-900">{employee?.username ?? "Colaborador"}</h1>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#df2f78]">Painel do colaborador</p>
+              <h1 className="truncate text-lg font-black text-slate-900">{employee?.username ?? "Colaborador"}</h1>
             </div>
           </div>
         </div>
         {canManage ? (
-          <button
-            type="button"
-            onClick={() => setUploadModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#df2f78] px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-[#c81f69]"
-          >
-            <Upload className="h-4 w-4" />
-            Anexar documentos
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/dashboard/dp/documents?configureVisibility=1"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border bg-white px-3 text-xs font-black text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              <Settings2 className="h-4 w-4" />
+              Visibilidade
+            </Link>
+            <button
+              type="button"
+              onClick={() => setUploadModalOpen(true)}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#df2f78] px-4 text-xs font-black text-white shadow-sm hover:bg-[#c81f69]"
+            >
+              <Upload className="h-4 w-4" />
+              Anexar documentos
+            </button>
+          </div>
         ) : null}
       </div>
 
       {process.env.NODE_ENV !== "production" ? (
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
-          <ShieldCheck className="mr-2 inline h-4 w-4" />
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          <ShieldCheck className="mr-1.5 inline h-3.5 w-3.5" />
           Arquivos privados. Visualização autenticada pelo backend e trilha de auditoria.
         </div>
       ) : null}
 
       {canManage && resumableBatches.length > 0 && !analysis ? (
-        <section className="border-y bg-white py-4">
-          <p className="text-sm font-black text-slate-800">Revisões pendentes</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+        <section className="flex w-fit max-w-full flex-wrap items-center gap-2 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-xs text-amber-900">
+          <span className="inline-flex items-center gap-1.5 font-black">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {resumableBatches.length === 1 ? "1 revisão pendente" : `${resumableBatches.length} revisões pendentes`}
+          </span>
+          <span className="h-4 w-px bg-amber-200" aria-hidden="true" />
+          <div className="flex flex-wrap gap-1.5">
             {resumableBatches.map((batch) => (
-              <button key={batch.id} type="button" onClick={() => resumeBatch(batch)} className="rounded-lg border bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-100">
-                Retomar lote com {batch.items.length} arquivo(s)
+              <button key={batch.id} type="button" onClick={() => resumeBatch(batch)} className="rounded-lg border border-amber-200 bg-white px-2.5 py-1 font-black text-amber-800 hover:bg-amber-100/70">
+                Revisar {batch.items.length} {batch.items.length === 1 ? "arquivo" : "arquivos"}
               </button>
             ))}
           </div>
         </section>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="rounded-3xl border bg-white p-2 shadow-sm">
-          {EMPLOYEE_DOCUMENT_CATEGORIES.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => selectCategory(id)}
-              className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left text-sm font-black ${category === id ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}
-            >
-              <span className="flex items-center gap-2"><Folder className="h-4 w-4" />{label}</span>
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs">{items.filter((item) => item.category === id && !item.deletedAt).length}</span>
-            </button>
-          ))}
+      <div className="grid items-start gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-sm lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
+          {EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES.map(({ id, label }) => {
+            const catActive = category === id;
+            const expanded = catActive && expandedCategory === id && folderTree.length > 0;
+            return (
+              <div key={id}>
+                <div className={`flex items-center gap-1 rounded-lg ${catActive ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}>
+                  <button
+                    type="button"
+                    onClick={() => selectCategory(id)}
+                    aria-current={catActive ? "page" : undefined}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-xs font-black"
+                  >
+                    <Folder className={`h-4 w-4 shrink-0 ${catActive ? "" : "text-slate-400"}`} />
+                    <span className="min-w-0 flex-1">{label}</span>
+                  </button>
+                  {catActive && folderTree.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedCategory((current) => current === id ? null : id)}
+                      className="mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white/70"
+                      aria-label={expanded ? `Recolher ${label}` : `Expandir ${label}`}
+                    >
+                      <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                    </button>
+                  ) : null}
+                </div>
+                {expanded ? (
+                  <div className="ml-4 border-l border-slate-100 py-1 pl-1.5">
+                    {renderFolderNodes(folderTree)}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </aside>
 
-        <main className="space-y-5">
+        <main className="min-w-0 space-y-3">
           {analysis ? (
             <section className="rounded-3xl border border-sky-100 bg-sky-50/60 p-4 shadow-sm">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -981,9 +1290,9 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
           {message ? <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{message}</p> : null}
 
-          <section className="overflow-hidden rounded-3xl border bg-white shadow-sm">
-            <div className="border-b px-5 py-4">
-              <div className="mb-2 flex flex-wrap items-center gap-1 text-xs font-black uppercase tracking-wide text-slate-400">
+          <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
+            <div className="border-b px-4 py-3">
+              <div className="mb-1 flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
                 {openFolderTrail.map((segment, index) => (
                   <span key={`${segment}-${index}`} className="inline-flex items-center gap-1">
                     <span className={index === openFolderTrail.length - 1 ? "text-[#df2f78]" : ""}>{segment}</span>
@@ -991,15 +1300,60 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                   </span>
                 ))}
               </div>
-              <h2 className="font-black">{categoryLabel(category)}</h2>
+              <h2 className="text-sm font-black">{activeFolderPath.at(-1) ?? categoryLabel(category)}</h2>
             </div>
+            {canManage && !loading ? (() => {
+              const pending = documentGroups.map((group) => group.current).filter((item) => item.status === "received");
+              if (pending.length === 0) return null;
+              return (
+                <div className="m-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+                  <span className="inline-flex items-center gap-2 text-sm font-black text-sky-800">
+                    <Clock className="h-4 w-4" />
+                    {pending.length} documento{pending.length === 1 ? "" : "s"} aguardando validação
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void bulkSetStatus("validated")}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      <Check className="h-4 w-4" /> Validar todos
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void bulkSetStatus("rejected")}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3.5 text-sm font-black text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                    >
+                      Recusar todos
+                    </button>
+                  </div>
+                </div>
+              );
+            })() : null}
             {loading ? (
               <div className="grid place-items-center p-12"><Loader2 className="h-6 w-6 animate-spin text-[#df2f78]" /></div>
             ) : visible.length === 0 ? (
-              <div className="p-12 text-center text-sm text-slate-500"><FileText className="mx-auto mb-2 h-8 w-8" />Nenhum documento nesta pasta.</div>
+              <div className="px-6 py-8 text-center">
+                <FileText className="mx-auto mb-1.5 h-6 w-6 text-slate-300" />
+                <p className="text-xs font-bold text-slate-500">Nenhum documento nesta pasta.</p>
+                {canManage ? (
+                  <button
+                    type="button"
+                    onClick={() => setUploadModalOpen(true)}
+                    className="mx-auto mt-2.5 inline-flex h-8 items-center gap-2 rounded-lg border border-pink-200 bg-pink-50 px-3 text-xs font-black text-[#c81f69] hover:bg-pink-100"
+                  >
+                    <Upload className="h-4 w-4" /> Anexar documento
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <div className="divide-y">
-                {visible.map((item) => {
+                {documentGroups.map((group, groupIndex) => {
+                  const item = group.current;
+                  const olderVersions = group.older;
+                  const versionsOpen = !!openVersions[group.key];
                   const suggestions = item.profileSuggestions ?? [];
                   const pendingSuggestions = suggestions.filter((suggestion) =>
                     suggestion.status === "DIVERGENT" || suggestion.status === "MISSING_IN_PROFILE"
@@ -1007,15 +1361,62 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                   const divergentCount = pendingSuggestions.filter((suggestion) => suggestion.status === "DIVERGENT").length;
                   const pendingCount = pendingSuggestions.length - divergentCount;
                   const isExpanded = expandedVerificationId === item.id;
+                  const startsFolder = group.folderPath.length > 0
+                    && (groupIndex === 0 || documentGroups[groupIndex - 1]?.folderKey !== group.folderKey);
                   return (
-                    <div key={item.id} className="p-4">
+                    <div key={group.key} className="p-4">
+                      {startsFolder ? (
+                        <div className="-mx-4 -mt-4 mb-4 flex items-center gap-2 border-b bg-slate-50/70 px-4 py-3 text-sm font-black text-slate-700">
+                          <Folder className="h-4 w-4 text-slate-400" />
+                          <span>{group.folderPath.join(" › ")}</span>
+                        </div>
+                      ) : null}
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="min-w-0">
                           <p className="font-black text-slate-900">{item.documentType}</p>
-                          <p className="truncate text-xs text-slate-500">{item.originalName} · {formatBytes(item.size)} · enviado por {uploaderName(item)}</p>
+                          <p className="truncate text-xs text-slate-500">
+                            {formatBytes(item.size)} · enviado por {uploaderName(item)}
+                            {typeof item.version === "number" ? ` · v${item.version}` : ""}
+                          </p>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{STATUS[item.status] ?? item.status}</span>
-                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{ACCESS[item.accessLevel] ?? item.accessLevel}</span>
+                            {canManage && documentVisibility && item.documentTypeCode ? (
+                              <InlineVisibilityMenu
+                                value={item.resolvedVisibility ?? documentVisibility.categories?.[item.category] ?? "restricted_total"}
+                                inherited={!documentVisibility.document_types?.[item.documentTypeCode]}
+                                disabled={visibilitySaving}
+                                onChange={(value) => updateDocumentVisibility(item.documentTypeCode!, value)}
+                              />
+                            ) : (
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
+                                {VISIBILITY_LABEL[item.resolvedVisibility ?? ""] ?? ACCESS[item.accessLevel] ?? item.accessLevel}
+                              </span>
+                            )}
+                            {(() => {
+                              const folderVis = documentVisibility?.categories?.[item.category] ?? "restricted_total";
+                              const docVis = item.resolvedVisibility ?? folderVis;
+                              if (docVis === folderVis) return null;
+                              const moreOpen = (docVis === "public" || docVis === "restricted_partial")
+                                && (folderVis === "restricted_total" || folderVis === "confidential");
+                              return (
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-black ${moreOpen ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700"}`}>
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Exceção: {VISIBILITY_LABEL[docVis]}
+                                </span>
+                              );
+                            })()}
+                            {olderVersions.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => setOpenVersions((current) => ({ ...current, [group.key]: !current[group.key] }))}
+                                aria-expanded={versionsOpen}
+                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-black text-slate-600 hover:bg-slate-50"
+                              >
+                                <History className="h-3 w-3" />
+                                {olderVersions.length + 1} versões
+                                <ChevronDown className={`h-3 w-3 transition-transform ${versionsOpen ? "rotate-180" : ""}`} />
+                              </button>
+                            ) : null}
                             {pendingSuggestions.length > 0 ? (
                               <button
                                 type="button"
@@ -1036,9 +1437,44 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                           <button onClick={() => void downloadDocument(item)} className="grid h-9 w-9 place-items-center rounded-lg border" title="Baixar"><Download className="h-4 w-4" /></button>
                           {canManage ? (
                             <>
-                              <select value={item.status} onChange={(event) => void setStatus(item, event.target.value)} disabled={busy} className="h-9 rounded-lg border px-2 text-xs font-bold">
-                                {EMPLOYEE_DOCUMENT_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}
-                              </select>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    className={`inline-flex h-9 min-w-[126px] items-center justify-between gap-2 rounded-lg border bg-white px-3 text-xs font-black shadow-sm hover:bg-slate-50 disabled:opacity-50 ${STATUS_PRESENTATION[item.status]?.text ?? "text-slate-700"}`}
+                                    aria-label={`Alterar status. Atual: ${STATUS[item.status] ?? item.status}`}
+                                  >
+                                    <span className="inline-flex items-center gap-2">
+                                      <span className={`h-2 w-2 rounded-full ${STATUS_PRESENTATION[item.status]?.dot ?? "bg-slate-400"}`} />
+                                      {STATUS[item.status] ?? item.status}
+                                    </span>
+                                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-60 rounded-xl p-1.5 shadow-xl">
+                                  {EMPLOYEE_DOCUMENT_STATUSES.map((status) => {
+                                    const presentation = STATUS_PRESENTATION[status.id];
+                                    const selected = item.status === status.id;
+                                    return (
+                                      <DropdownMenuItem
+                                        key={status.id}
+                                        onSelect={() => {
+                                          if (!selected) void setStatus(item, status.id);
+                                        }}
+                                        className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5"
+                                      >
+                                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${presentation.dot}`} />
+                                        <span className="min-w-0 flex-1">
+                                          <span className={`block text-sm font-black ${presentation.text}`}>{status.label}</span>
+                                          <span className="block text-[11px] font-semibold text-slate-500">{presentation.description}</span>
+                                        </span>
+                                        {selected ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> : null}
+                                      </DropdownMenuItem>
+                                    );
+                                  })}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                               <button onClick={() => void remove(item)} className="grid h-9 w-9 place-items-center rounded-lg border text-rose-600" title="Excluir"><Trash2 className="h-4 w-4" /></button>
                             </>
                           ) : null}
@@ -1073,6 +1509,28 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                           </div>
                         </div>
                       ) : null}
+
+                      {versionsOpen && olderVersions.length > 0 ? (
+                        <div className="mt-4 flex flex-col gap-2 border-t border-dashed pt-3">
+                          {olderVersions.map((old) => (
+                            <div key={old.id} className="flex items-center justify-between gap-3 rounded-xl border bg-slate-50 px-3 py-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="rounded-md border bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-slate-600">
+                                  v{typeof old.version === "number" ? old.version : 1}
+                                </span>
+                                <span className="truncate text-xs font-semibold text-slate-500">
+                                  enviado por {uploaderName(old)}
+                                  {old.uploadedAt ? ` · ${new Date(old.uploadedAt).toLocaleDateString("pt-BR")}` : ""}
+                                </span>
+                              </div>
+                              <div className="flex shrink-0 gap-1.5">
+                                <button type="button" onClick={() => void previewDocument(old)} className="grid h-8 w-8 place-items-center rounded-lg border" title="Pré-visualizar"><Eye className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => void downloadDocument(old)} className="grid h-8 w-8 place-items-center rounded-lg border" title="Baixar"><Download className="h-3.5 w-3.5" /></button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -1084,12 +1542,12 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
       {uploadModalOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4">
-          <section className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-3xl border bg-white p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b pb-4">
+          <section className="max-h-[86vh] w-full max-w-2xl overflow-auto rounded-xl border bg-white p-3.5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b pb-2.5">
               <div>
                 <div className="flex items-center gap-2">
-                  <Brain className="h-5 w-5 text-[#df2f78]" />
-                  <h2 className="text-xl font-black text-slate-900">Anexar documentos</h2>
+                  <Brain className="h-4 w-4 text-[#df2f78]" />
+                  <h2 className="text-base font-black text-slate-900">Anexar documentos</h2>
                 </div>
                 <p className="mt-1 text-sm font-semibold text-slate-500">
                   Selecione os arquivos. A classificação, pasta, acesso e nome serão definidos pela análise.
@@ -1106,9 +1564,9 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                 event.preventDefault();
                 addFiles(event.dataTransfer.files);
               }}
-              className="mt-4 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-6 py-10 text-center hover:border-[#df2f78]/50 hover:bg-pink-50/60"
+              className="mt-3 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center hover:border-[#df2f78]/50 hover:bg-pink-50/60"
             >
-              <Upload className="h-8 w-8 text-[#df2f78]" />
+              <Upload className="h-6 w-6 text-[#df2f78]" />
               <div>
                 <p className="text-base font-black text-slate-900">Arraste documentos para cá ou clique para selecionar</p>
                 <p className="mt-1 text-sm font-semibold text-slate-500">PDF, DOC, DOCX, JPG ou PNG · até 15 MB por arquivo</p>
@@ -1126,7 +1584,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             </label>
 
             {uploadFiles.length > 0 ? (
-              <div className="mt-4 rounded-3xl border bg-white p-4">
+              <div className="mt-3 rounded-xl border bg-white p-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <p className="text-sm font-black text-slate-800">{uploadFiles.length} arquivo(s) selecionado(s) · {formatBytes(selectedTotalBytes)}</p>
                   <button type="button" onClick={clearFiles} className="text-xs font-black text-rose-600">Limpar seleção</button>
@@ -1160,7 +1618,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
       {preview ? (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 p-4">
-          <section className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border bg-white shadow-2xl">
+          <section className="flex h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
             <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
               <div className="min-w-0">
                 <p className="truncate text-base font-black text-slate-900">{preview.title}</p>

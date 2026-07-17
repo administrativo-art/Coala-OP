@@ -107,14 +107,14 @@ function CollaboratorInfoTile({
   }[tone];
 
   return (
-    <div className={`min-w-0 rounded-2xl p-3 text-center ${toneClass.shell}`}>
-      <span className={`mx-auto grid h-7 w-7 place-items-center rounded-xl shadow-sm ${toneClass.icon}`}>
-        <Icon className="h-3.5 w-3.5" />
+    <div className={`flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 ${toneClass.shell}`}>
+      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md shadow-sm ${toneClass.icon}`}>
+        <Icon className="h-3 w-3" />
       </span>
-      <p title={value} className={`mt-2 truncate text-[12px] font-black leading-tight ${toneClass.value}`}>
-        {value}
-      </p>
-      <p className={`mt-1 text-[10px] font-black uppercase tracking-[.04em] ${toneClass.label}`}>{label}</p>
+      <div className="min-w-0">
+        <p title={value} className={`truncate text-[10px] font-black leading-tight ${toneClass.value}`}>{value}</p>
+        <p className={`text-[8px] font-black uppercase tracking-[.04em] ${toneClass.label}`}>{label}</p>
+      </div>
     </div>
   );
 }
@@ -130,13 +130,13 @@ function HeaderMetric({
 }) {
   return (
     <span
-      className={`inline-flex h-11 items-center gap-1.5 rounded-[13px] border px-3.5 text-[13.5px] font-bold ${
+      className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-bold ${
         tone === 'active'
           ? 'border-[#c7ecd8] bg-[#eafaf2] text-[#008963]'
           : 'border-[#e2e0da] bg-white text-[#8a8a94]'
       }`}
     >
-      <strong className={`text-base font-black ${tone === 'active' ? '' : 'text-[#494952]'}`}>{value}</strong>
+      <strong className={`text-xs font-black ${tone === 'active' ? '' : 'text-[#494952]'}`}>{value}</strong>
       {label}
     </span>
   );
@@ -160,15 +160,15 @@ function CollaboratorCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group overflow-hidden rounded-3xl border border-[#f1c7da] bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#df2f78]/45 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]"
+      className="group overflow-hidden rounded-xl border border-[#f1c7da] bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#df2f78]/45 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#df2f78]"
     >
-      <div className="flex items-start justify-between gap-3 p-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <AvatarMark user={user} size={48} />
-          <div className="min-w-0 pt-0.5">
-            <p className="truncate text-[14.5px] font-black leading-tight text-[#1d1d26]">{displayName}</p>
-            <p className="mt-0.5 truncate text-[12.5px] font-bold text-[#777784]">{user.jobRoleName || 'Sem cargo'}</p>
-            <p className="mt-0.5 truncate text-[12px] font-medium text-[#8f8f9b]">
+      <div className="flex items-start justify-between gap-2 p-2.5">
+        <div className="flex min-w-0 items-start gap-2">
+          <AvatarMark user={user} size={38} />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-black leading-tight text-[#1d1d26]">{displayName}</p>
+            <p className="truncate text-[10px] font-bold text-[#777784]">{user.jobRoleName || 'Sem cargo'}</p>
+            <p className="truncate text-[9px] font-medium text-[#8f8f9b]">
               {unitNames.length ? unitNames.join(', ') : 'Sem unidade'}
             </p>
           </div>
@@ -176,8 +176,8 @@ function CollaboratorCard({
         <StatusPill active={isActive} />
       </div>
 
-      <div className="space-y-4 px-4 pb-4">
-        <div className="grid grid-cols-3 gap-2">
+      <div className="space-y-2 px-2.5 pb-2.5">
+        <div className="grid grid-cols-3 gap-1.5">
           <CollaboratorInfoTile
             icon={Mail}
             label="E-mail"
@@ -198,7 +198,7 @@ function CollaboratorCard({
           />
         </div>
 
-        <div className="flex items-center justify-between border-t border-[#ececf0] pt-3 text-xs font-bold">
+        <div className="flex items-center justify-between border-t border-[#ececf0] pt-1.5 text-[9px] font-bold">
           <span className="text-[#777784]">desde {fmtDate(user.admissionDate)}</span>
           <span className="inline-flex items-center gap-1 text-[#df2f78] group-hover:underline">
             Abrir perfil <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
@@ -268,15 +268,15 @@ export default function DPCollaboratorsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="flex flex-wrap items-start justify-between gap-5">
-        <div className="flex min-w-0 items-start gap-4">
-          <div className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-[15px] bg-[#fde5f0] text-[#df2f78]">
-            <Users className="h-6 w-6" />
+    <div className="space-y-3">
+      <section className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#fde5f0] text-[#df2f78]">
+            <Users className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11.5px] font-extrabold uppercase tracking-[.12em] text-[#df2f78]">Departamento pessoal</p>
-            <h1 className="mt-1 text-[30px] font-black tracking-[-.02em] text-[#181820]">Colaboradores</h1>
+            <p className="text-[9px] font-extrabold uppercase tracking-[.12em] text-[#df2f78]">Departamento pessoal</p>
+            <h1 className="text-lg font-black tracking-[-.02em] text-[#181820]">Colaboradores</h1>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -285,7 +285,7 @@ export default function DPCollaboratorsPage() {
             <Button
               type="button"
               onClick={() => setNewUserOpen(true)}
-              className="h-11 rounded-[13px] bg-[#df2f78] px-5 text-[13.5px] font-extrabold text-white shadow-[0_8px_18px_-8px_#df2f78] hover:bg-[#cc2069]"
+              className="h-8 rounded-lg bg-[#df2f78] px-3 text-[11px] font-extrabold text-white shadow-[0_6px_14px_-8px_#df2f78] hover:bg-[#cc2069]"
             >
               <UserPlus className="mr-2 h-[17px] w-[17px]" />
               Novo usuário
@@ -294,23 +294,23 @@ export default function DPCollaboratorsPage() {
         </div>
       </section>
 
-      <div className="rounded-[20px] border border-[#e2e0da] bg-white p-[18px] shadow-[0_2px_10px_rgba(15,23,42,.06)]">
+      <div className="rounded-xl border border-[#e2e0da] bg-white p-2.5 shadow-[0_2px_8px_rgba(15,23,42,.05)]">
         <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[.08em] text-[#9d9da9]">
           <SlidersHorizontal className="h-[15px] w-[15px]" />
           Filtros e visualização
         </div>
-        <div className="mt-3.5 grid gap-2.5 lg:grid-cols-[minmax(240px,1fr)_150px_180px_180px_auto] lg:items-center">
+        <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_120px_150px_150px_auto] lg:items-center">
           <div className="relative min-w-60 flex-1">
             <Search className="absolute left-3.5 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-[#9d9da9]" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar por nome, e-mail, cargo, matrícula…"
-              className="h-11 rounded-xl border-0 bg-[#f6f5f2] pl-11 text-sm font-medium placeholder:text-[#9d9da9]"
+              className="h-8 rounded-md border-0 bg-[#f6f5f2] pl-9 text-xs font-medium placeholder:text-[#9d9da9]"
             />
           </div>
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
-            <SelectTrigger className="h-11 w-full rounded-xl border-[#e2e0da] bg-white text-[13.5px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value="active">Ativos</SelectItem>
@@ -318,14 +318,14 @@ export default function DPCollaboratorsPage() {
             </SelectContent>
           </Select>
           <Select value={unitFilter} onValueChange={setUnitFilter}>
-            <SelectTrigger className="h-11 w-full rounded-xl border-[#e2e0da] bg-white text-[13.5px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as unidades</SelectItem>
               {units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="h-11 w-full rounded-xl border-[#e2e0da] bg-white text-[13.5px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as funções</SelectItem>
               {roleOptions.map((role) => <SelectItem key={role} value={role}>{role}</SelectItem>)}
@@ -335,19 +335,19 @@ export default function DPCollaboratorsPage() {
             type="single"
             value={viewMode}
             onValueChange={(value) => value && setViewMode(value as 'table' | 'cards')}
-            className="h-11 justify-start gap-[3px] rounded-xl bg-[#eceae4] p-1"
+            className="h-8 justify-start gap-0.5 rounded-md bg-[#eceae4] p-0.5"
           >
             <ToggleGroupItem
               value="cards"
               aria-label="Cards"
-              className="h-9 w-9 rounded-[9px] text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-[0_1px_4px_rgba(20,22,28,.12)]"
+              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-sm"
             >
               <Grid2X2 className="h-[17px] w-[17px]" />
             </ToggleGroupItem>
             <ToggleGroupItem
               value="table"
               aria-label="Tabela"
-              className="h-9 w-9 rounded-[9px] text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-[0_1px_4px_rgba(20,22,28,.12)]"
+              className="h-7 w-7 rounded-md text-[#8a8a94] data-[state=on]:bg-white data-[state=on]:text-[#df2f78] data-[state=on]:shadow-sm"
             >
               <List className="h-[17px] w-[17px]" />
             </ToggleGroupItem>
@@ -357,8 +357,8 @@ export default function DPCollaboratorsPage() {
 
       {shiftDefsLoading && shiftDefinitions.length === 0 ? (
         viewMode === 'cards' ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[...Array(8)].map((_, index) => <Skeleton key={index} className="h-56 w-full" />)}
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {[...Array(8)].map((_, index) => <Skeleton key={index} className="h-28 w-full" />)}
           </div>
         ) : (
           <div className="rounded-md border bg-card p-3">
@@ -366,12 +366,12 @@ export default function DPCollaboratorsPage() {
           </div>
         )
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border bg-white py-16 text-center text-muted-foreground shadow-sm">
+        <div className="rounded-xl border bg-white py-10 text-center text-sm text-muted-foreground shadow-sm">
           <Briefcase className="mx-auto mb-2 h-8 w-8" />
           Nenhum colaborador encontrado.
         </div>
       ) : viewMode === 'cards' ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {filtered.map((user) => {
             const unitNames = (user.unitIds ?? []).map((id) => unitNameById.get(id) ?? id);
             const shiftName = user.shiftDefinitionId ? shiftNameById.get(user.shiftDefinitionId) ?? null : null;
@@ -457,19 +457,19 @@ export default function DPCollaboratorsPage() {
         </div>
       )}
       <Dialog open={newUserOpen} onOpenChange={setNewUserOpen}>
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] overflow-y-auto rounded-[22px] p-0 sm:max-w-[min(980px,calc(100vw-2rem))]">
-          <DialogHeader className="space-y-0 border-b border-[#f0efeb] px-7 pb-5 pt-6 text-left">
-            <p className="flex items-center gap-2 text-[11.5px] font-extrabold uppercase tracking-[.1em] text-[#df2f78]">
+        <DialogContent className="max-h-[84vh] w-[calc(100vw-1rem)] overflow-y-auto rounded-lg p-0 sm:max-w-[min(720px,calc(100vw-1rem))]">
+          <DialogHeader className="space-y-0 border-b border-[#f0efeb] px-3.5 pb-2.5 pt-3 text-left">
+            <p className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[.1em] text-[#df2f78]">
               Gestão do colaborador
               <span className="text-[#e2b8cd]">›</span>
               <span className="text-[#c9a6b8]">Novo usuário</span>
             </p>
-            <DialogTitle className="mt-2 text-[23px] font-black tracking-[-.02em] text-[#181820]">Novo usuário</DialogTitle>
-            <DialogDescription className="mt-1.5 max-w-[640px] text-[13.5px] font-medium leading-[1.5] text-[#6f6f7c]">
+            <DialogTitle className="mt-1 text-base font-black tracking-[-.02em] text-[#181820]">Novo usuário</DialogTitle>
+            <DialogDescription className="mt-1 max-w-[640px] text-[11px] font-medium leading-[1.4] text-[#6f6f7c]">
               Cadastre o acesso e o vínculo inicial do colaborador. Vale-transporte é tratado no perfil do colaborador.
             </DialogDescription>
           </DialogHeader>
-          <div className="px-7 py-6">
+          <div className="px-3.5 py-2.5">
             {newUserOpen ? (
               <UserManagement
                 createOnly

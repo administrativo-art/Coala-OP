@@ -66,6 +66,11 @@ import {
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { formatPersonName } from '@/lib/person-name';
 import {
+  onboardingPublicLinkExpiresAt,
+  onboardingPublicLinkExpired,
+  onboardingPublicLinkExtensionUsed,
+} from '@/lib/hr/onboarding-public-link';
+import {
   UserPlus, Search, Filter, MoreHorizontal, Mail, Phone,
   FileText, Calendar, Star, Clock, CheckCircle2, XCircle,
   ArrowRight, Kanban, List, Loader2, X, Trash2, AlertTriangle,
@@ -2221,14 +2226,14 @@ function NewCandidateModal({ roles, openings, getToken, onClose, onCreated }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-slate-800">
+      <div className="relative z-10 w-full max-w-md rounded-xl border border-slate-800 bg-slate-950 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-800 p-4">
           <h2 className="text-lg font-bold text-white">Novo Candidato</h2>
           <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3 p-4">
           {activeOpenings.length > 0 && (
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Vaga (opcional)</label>
@@ -2239,7 +2244,7 @@ function NewCandidateModal({ roles, openings, getToken, onClose, onCreated }: {
               </select>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Nome *</label>
               <input type="text" value={form.name} onChange={set('name')} required
@@ -2506,7 +2511,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md h-full bg-slate-950 border-l border-slate-800 flex flex-col shadow-2xl overflow-hidden">
-        <div className="flex items-start justify-between p-6 border-b border-slate-800 gap-4">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-800 p-4">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">
               {role?.name ?? candidate.jobRoleName ?? '—'}
@@ -2520,7 +2525,7 @@ function CandidateDetailPanel({ candidate, roles, openings, getToken, canManage,
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {canManage && (
             <div className="rounded-2xl border border-slate-800 bg-slate-900/55 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -3166,7 +3171,7 @@ function DeleteConfirmModal({ candidate, getToken, onClose, onDeleted }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-sm bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
+      <div className="relative z-10 w-full max-w-xs space-y-3 rounded-xl border border-slate-800 bg-slate-950 p-4 shadow-2xl">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-red-500/10 rounded-xl">
             <Trash2 className="h-5 w-5 text-red-400" />
@@ -3539,15 +3544,15 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-slate-800 flex-shrink-0">
+      <div className="relative z-10 flex max-h-[82vh] w-full max-w-lg flex-col rounded-xl border border-slate-800 bg-slate-950 shadow-2xl">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-800 p-4">
           <h2 className="text-lg font-bold text-white">{isEdit ? 'Editar vaga' : 'Criar vaga'}</h2>
           <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-slate-800">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <form id={formId} onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
-          <div className="grid grid-cols-2 gap-4">
+        <form id={formId} onSubmit={handleSubmit} className="flex-1 space-y-3 overflow-y-auto p-4">
+          <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-400 mb-1.5">Título da vaga *</label>
               <input type="text" value={form.title} onChange={set('title')} required
@@ -4225,7 +4230,7 @@ function OpeningModal({ opening, roles, functions, units, shiftDefinitions, getT
           </div>
           {error && <ErrorLine msg={error} />}
         </form>
-        <div className="flex justify-end gap-3 p-6 border-t border-slate-800 flex-shrink-0">
+        <div className="flex flex-shrink-0 justify-end gap-2 border-t border-slate-800 p-4">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white rounded-xl hover:bg-slate-800">
             Cancelar
           </button>
@@ -4548,7 +4553,7 @@ function OpeningsView({ openings, roles, functions, units, shiftDefinitions, can
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
-          <div className="relative z-10 w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-2xl">
+          <div className="relative z-10 w-full max-w-xs space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-2xl">
             <h3 className="font-bold text-slate-950">Excluir vaga?</h3>
             <p className="text-sm text-slate-500">"{deleteTarget.title}" será removida permanentemente.</p>
             <div className="flex gap-2">
@@ -4764,7 +4769,7 @@ function TalentsView({ candidates, roles, openings, getToken, canManage, onOpen,
       {reactivationTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setReactivationTarget(null)} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl">
+          <div className="relative z-10 w-full max-w-sm rounded-xl border border-slate-800 bg-slate-950 p-4 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Banco de talentos</p>
@@ -6008,8 +6013,8 @@ function RecruitmentQuestionModelEditor({ roles, functions, getToken, canManage,
 
       {showModelsModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="max-h-[82vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+          <div className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
               <div>
                 <h3 className="text-base font-bold text-slate-950">Modelos cadastrados</h3>
                 <p className="mt-1 text-sm text-slate-500">
@@ -6713,6 +6718,17 @@ function formatOnboardingDate(value?: string | null) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function formatOnboardingLinkRemaining(process: OnboardingProcess, now: number) {
+  const expiresAt = onboardingPublicLinkExpiresAt(process);
+  if (!expiresAt) return 'Prazo indisponível';
+  const remaining = expiresAt.getTime() - now;
+  if (remaining <= 0) return 'Prazo expirado';
+  const totalMinutes = Math.ceil(remaining / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${String(minutes).padStart(2, '0')}min restantes`;
+}
+
 function readOnboardingAnswer(answers: Record<string, unknown> | undefined, key: string) {
   const value = answers?.[key];
   return typeof value === 'string' && value.trim() ? value.trim() : 'Aguardando';
@@ -6721,6 +6737,13 @@ function readOnboardingAnswer(answers: Record<string, unknown> | undefined, key:
 function readOnboardingChoice(answers: Record<string, unknown> | undefined, key: string, labels: Record<string, string>) {
   const value = answers?.[key];
   return typeof value === 'string' && labels[value] ? labels[value] : 'Aguardando';
+}
+
+function readOnboardingList(answers: Record<string, unknown> | undefined, key: string) {
+  const value = answers?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).join(', ') || 'Aguardando'
+    : 'Aguardando';
 }
 
 function readOnboardingChildren(answers: Record<string, unknown> | undefined) {
@@ -6786,6 +6809,11 @@ function OnboardingFinalizationControls({
   disabled?: boolean;
   compact?: boolean;
 }) {
+  const [transportVoucherDraft, setTransportVoucherDraft] = useState(() =>
+    value.transportVoucherValue == null
+      ? ''
+      : value.transportVoucherValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+  );
   const availableShiftDefinitions = useMemo(() => {
     const active = [...shiftDefinitions];
     if (!unitId) return active.sort((a, b) => a.name.localeCompare(b.name));
@@ -6793,6 +6821,12 @@ function OnboardingFinalizationControls({
       .filter(definition => shiftDefinitionMatchesUnit(definition, unitId))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [shiftDefinitions, unitId]);
+
+  useEffect(() => {
+    if (value.transportVoucherValue == null) {
+      setTransportVoucherDraft('');
+    }
+  }, [value.needsTransportVoucher, value.transportVoucherValue]);
 
   useEffect(() => {
     if (value.shiftDefinitionId && !availableShiftDefinitions.some(item => item.id === value.shiftDefinitionId)) {
@@ -6850,18 +6884,33 @@ function OnboardingFinalizationControls({
           <label className="block text-sm font-semibold text-slate-700">
             Valor diário do VT
             <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={value.transportVoucherValue ?? ''}
+              type="text"
+              value={transportVoucherDraft}
               onChange={event => {
-                const numericValue = event.target.value ? Math.max(0, Number(event.target.value)) : null;
+                const draft = event.target.value;
+                setTransportVoucherDraft(draft);
+                const normalized = draft
+                  .replace(/[^\d,.]/g, '')
+                  .replace(/\./g, '')
+                  .replace(',', '.');
+                const parsed = normalized ? Number(normalized) : Number.NaN;
+                const numericValue = Number.isFinite(parsed) ? Math.max(0, parsed) : null;
                 patch({ transportVoucherValue: numericValue });
+              }}
+              onBlur={() => {
+                if (value.transportVoucherValue == null) {
+                  setTransportVoucherDraft('');
+                  return;
+                }
+                setTransportVoucherDraft(value.transportVoucherValue.toLocaleString('pt-BR', {
+                  style: 'currency',
+                  currency: 'BRL',
+                }));
               }}
               disabled={disabled}
               inputMode="decimal"
               className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
-              placeholder="0,00"
+              placeholder="R$ 0,00"
             />
           </label>
         ) : null}
@@ -6978,12 +7027,12 @@ function StartOnboardingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+      <div className="flex max-h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-pink-600">Integração avulsa</p>
-            <h2 className="mt-1 text-xl font-black text-slate-950">Nova integração</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="mt-1 text-base font-black text-slate-950">Nova integração</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
               Inicie a formalização sem depender do funil de recrutamento.
             </p>
           </div>
@@ -6998,9 +7047,9 @@ function StartOnboardingModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto px-5 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.95fr)] lg:px-6">
-            <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 lg:grid-cols-2">
+            <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-sm font-semibold text-slate-700">
               Nome da pessoa
               <input
@@ -7008,7 +7057,7 @@ function StartOnboardingModal({
                 onChange={event => setCandidateName(event.target.value)}
                 onBlur={event => setCandidateName(formatPersonName(event.target.value))}
                 required
-                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                 placeholder="Nome completo"
               />
               <span className="mt-1.5 block text-xs font-medium leading-snug text-slate-500">
@@ -7023,20 +7072,20 @@ function StartOnboardingModal({
                 onChange={event => setCandidateEmail(event.target.value)}
                 onBlur={event => setCandidateEmail(event.target.value.trim().toLowerCase())}
                 required
-                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                 placeholder="nome@email.com"
               />
             </label>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-sm font-semibold text-slate-700">
               Cargo
               <select
                 value={jobRoleId}
                 onChange={event => setJobRoleId(event.target.value)}
                 required
-                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               >
                 <option value="">Selecione o cargo</option>
                 {activeRoles.map(role => (
@@ -7049,7 +7098,7 @@ function StartOnboardingModal({
               <select
                 value={functionId}
                 onChange={event => setFunctionId(event.target.value)}
-                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               >
                 <option value="">Selecione a função</option>
                 {availableFunctions.map(item => (
@@ -7064,7 +7113,7 @@ function StartOnboardingModal({
             <select
               value={unitId}
               onChange={event => setUnitId(event.target.value)}
-              className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             >
               <option value="">Sem unidade definida</option>
               {activeUnits.map(unit => (
@@ -7073,14 +7122,14 @@ function StartOnboardingModal({
             </select>
           </label>
 
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-sm font-semibold text-slate-700">
               Data prevista de admissão
               <input
                 type="date"
                 value={expectedAdmissionDate}
                 onChange={event => setExpectedAdmissionDate(event.target.value)}
-                className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               />
             </label>
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
@@ -7099,8 +7148,8 @@ function StartOnboardingModal({
 
             </div>
 
-            <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="space-y-3">
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
             <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Comportamento no sistema</p>
             <OnboardingFinalizationControls
               value={finalizationSettings}
@@ -7114,7 +7163,7 @@ function StartOnboardingModal({
           <div className="flex items-start gap-2.5 rounded-xl border border-pink-200 bg-pink-50 px-3.5 py-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-pink-600" />
             <span className="text-xs font-semibold leading-snug text-pink-700">
-              O modelo de etapas e documentos é aplicado automaticamente a partir do cargo e função selecionados.
+              O modelo de etapas e documentos é aplicado automaticamente a partir do cargo e função. O link do candidato será válido por 72 horas e poderá receber uma única prorrogação de 24 horas pelo RH.
             </span>
           </div>
 
@@ -7123,18 +7172,18 @@ function StartOnboardingModal({
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:justify-end lg:px-6">
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-600 hover:bg-slate-50"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-600 hover:bg-slate-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-pink-600 px-5 text-sm font-bold text-white shadow-lg shadow-pink-600/25 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Iniciar integração
@@ -7165,7 +7214,13 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [linkClock, setLinkClock] = useState(() => Date.now());
   const [finalizationDraft, setFinalizationDraft] = useState<OnboardingFinalizationSettings>(() => getFinalizationDraft(null));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setLinkClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const activeProcesses = useMemo(
     () => processes.filter(process => process.status !== 'cancelled'),
@@ -7319,7 +7374,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     return !!process.publicToken &&
       !process.publicTokenClosedAt &&
       process.status !== 'cancelled' &&
-      process.status !== 'completed';
+      process.status !== 'completed' &&
+      !onboardingPublicLinkExpired(process, new Date(linkClock));
   }
 
   function DocumentRow({ process, document, mode }: {
@@ -7432,8 +7488,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div className="min-w-0">
             <span className="text-[11px] font-black uppercase tracking-[0.09em] text-pink-600">Integração</span>
-            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Candidatos em formalização</h1>
-            <p className="mt-2 max-w-xl text-sm font-medium text-slate-500">
+            <h1 className="mt-0.5 text-lg font-black tracking-tight text-slate-900">Candidatos em formalização</h1>
+            <p className="mt-1 max-w-xl text-xs font-medium text-slate-500">
               {activeProcesses.length} pessoa{activeProcesses.length === 1 ? '' : 's'} em processo. Selecione um card para abrir a linha do tempo e conduzir cada fase da integração.
             </p>
           </div>
@@ -7441,7 +7497,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {canManage && (
               <a
                 href="/dashboard/settings?department=pessoal&tab=recruitment&section=integration"
-                className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 <FolderOpen className="h-4 w-4 text-pink-600" />
                 Modelos de integração
@@ -7451,7 +7507,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               <button
                 type="button"
                 onClick={() => setShowStartModal(true)}
-                className="inline-flex h-11 items-center gap-2 rounded-xl bg-pink-600 px-5 text-sm font-bold text-white shadow-lg shadow-pink-600/25 hover:bg-pink-700"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700"
               >
                 <Plus className="h-4 w-4" />
                 Nova integração
@@ -7515,10 +7571,17 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               const linkActive = processLinkActive(process);
               const color = colorForProcess(process.id);
               return (
-                <button
+                <article
                   key={process.id}
-                  type="button"
                   onClick={() => openProcess(process)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openProcess(process);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
                   className="group flex w-full flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md"
                 >
                   <div className="flex items-center gap-3">
@@ -7564,17 +7627,36 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress.percent}%` }} />
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className={`text-[11px] font-bold ${linkActive ? 'text-blue-600' : 'text-slate-400'}`}>
-                      {linkActive
-                        ? `Link válido${process.publicFormSubmittedAt ? ' · formulário enviado' : ''}`
-                        : 'Link encerrado'}
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-pink-600">
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    {linkActive && process.publicToken ? (
+                      <button
+                        type="button"
+                        onClick={event => {
+                          event.stopPropagation();
+                          void copyLink(`${process.id}:card-public`, `${PUBLIC_RECRUITMENT_URL}/onboarding/${process.publicToken}`);
+                        }}
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+                      >
+                        <Copy className="h-3 w-3" />
+                        {copiedLinkId === `${process.id}:card-public` ? 'Copiado' : 'Copiar link'}
+                      </button>
+                    ) : (
+                      <span className="text-[11px] font-bold text-slate-400">
+                        {process.publicToken && !process.publicTokenClosedAt ? 'Prazo expirado' : 'Link encerrado'}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={event => {
+                        event.stopPropagation();
+                        openProcess(process);
+                      }}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-pink-600"
+                    >
                       Abrir<ArrowRight className="h-3.5 w-3.5" />
-                    </span>
+                    </button>
                   </div>
-                </button>
+                </article>
               );
             })}
           </div>
@@ -7641,6 +7723,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       readOnboardingAnswer(answers, 'uniformShoeSize'),
     ].filter(value => value !== 'Aguardando').join(' / ') || 'Aguardando'],
     ['Filhos', readOnboardingChildren(answers)],
+    ['Alergia/intolerância alimentar', readOnboardingChoice(answers, 'hasFoodRestriction', { yes: 'Sim', no: 'Não' })],
+    ['Alergias/intolerâncias', readOnboardingList(answers, 'foodRestrictions')],
+    ['Cuidados alimentares', readOnboardingAnswer(answers, 'foodRestrictionCare')],
+    ['Adaptação ou restrição', readOnboardingChoice(answers, 'needsWorkplaceAdaptation', { yes: 'Sim', no: 'Não' })],
+    ['Cuidados no trabalho', readOnboardingAnswer(answers, 'workplaceAdaptationNotes')],
   ];
 
   const signItems: Array<[string, boolean]> = [
@@ -7686,7 +7773,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               <span className={`rounded-full px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${
                 linkActive ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'
               }`}>
-                {linkActive ? 'Link ativo' : 'Link encerrado'}
+                {linkActive ? formatOnboardingLinkRemaining(selectedProcess, linkClock) : 'Prazo expirado'}
               </span>
             </div>
             <div className="mt-3.5 flex items-center gap-3">
@@ -7862,21 +7949,39 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-black text-slate-900">Link do formulário público</div>
                     <div className={`mt-0.5 text-xs font-bold ${linkActive ? 'text-blue-600' : 'text-slate-400'}`}>
-                      {selectedProcess.publicFormSubmittedAt
-                        ? `Enviado em ${formatOnboardingDate(selectedProcess.publicFormSubmittedAt)}`
-                        : linkActive ? 'Aguardando envio' : 'Link encerrado'}
+                      {linkActive
+                        ? `${formatOnboardingLinkRemaining(selectedProcess, linkClock)} · validade inicial de 72h`
+                        : selectedProcess.publicTokenClosedAt ? 'Link encerrado' : 'Prazo expirado'}
+                    </div>
+                    <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                      {onboardingPublicLinkExtensionUsed(selectedProcess)
+                        ? 'A prorrogação única de 24h já foi utilizada.'
+                        : 'O RH pode conceder uma única prorrogação de 24h. Dados e documentos são preservados.'}
                     </div>
                   </div>
-                  {publicLink ? (
-                    <button
-                      type="button"
-                      onClick={() => copyLink(`${selectedProcess.id}:public`, publicLink)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-[12.5px] font-bold text-slate-600 hover:bg-slate-100"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      {copiedLinkId === `${selectedProcess.id}:public` ? 'Copiado' : 'Copiar link'}
-                    </button>
-                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    {publicLink ? (
+                      <button
+                        type="button"
+                        onClick={() => copyLink(`${selectedProcess.id}:public`, publicLink)}
+                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-[12.5px] font-bold text-slate-600 hover:bg-slate-100"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        {copiedLinkId === `${selectedProcess.id}:public` ? 'Copiado' : 'Copiar link'}
+                      </button>
+                    ) : null}
+                    {canManage && selectedProcess.publicToken && !selectedProcess.publicTokenClosedAt && !onboardingPublicLinkExtensionUsed(selectedProcess) ? (
+                      <button
+                        type="button"
+                        disabled={updating === `${selectedProcess.id}:extend_public_link`}
+                        onClick={() => patchProcess(selectedProcess.id, { action: 'extend_public_link' })}
+                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 text-[12.5px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                      >
+                        {updating === `${selectedProcess.id}:extend_public_link` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+                        Prorrogar 24h
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             )}
@@ -8451,29 +8556,24 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] w-full min-w-0 max-w-full flex-col space-y-5 overflow-x-hidden rounded-[28px] border border-white/70 bg-white/85 p-4 text-slate-900 shadow-sm backdrop-blur md:p-5">
+    <div className="personal-recruitment-density flex min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-full flex-col space-y-3 overflow-x-hidden rounded-xl border border-white/70 bg-white/85 p-3 text-slate-900 shadow-sm backdrop-blur">
 
       {/* ─── Header ─── */}
-      <div className="flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-slate-400">{sectionMeta.eyebrow}</p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-950">{sectionMeta.title}</h1>
-          <p className="text-slate-500 mt-1 text-sm">
+          <h1 className="text-lg font-bold tracking-tight text-slate-950">{sectionMeta.title}</h1>
+          <p className="mt-0.5 text-xs text-slate-500">
             {sectionMeta.description}
           </p>
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <a href={PUBLIC_RECRUITMENT_URL} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 transition-all hover:border-slate-300 hover:bg-white hover:text-slate-950">
-            <Globe className="h-3.5 w-3.5" />
-            Página pública
-          </a>
           {section === 'jobs' && viewMode !== 'openings' && selectedOpening && (
             <button
               type="button"
               onClick={() => { setViewMode('openings'); setFilterOpening(''); }}
-              className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-slate-950 px-3 text-xs font-medium text-white shadow-sm hover:bg-slate-800"
             >
               <Briefcase className="h-4 w-4" />
               Voltar para vagas

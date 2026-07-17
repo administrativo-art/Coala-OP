@@ -1,21 +1,207 @@
 export const EMPLOYEE_DOCUMENT_CATEGORIES = [
-  { id: "personal", label: "Cadastro e identificação" },
-  { id: "admission", label: "Admissão e registro" },
-  { id: "contracts", label: "Contratos e alterações" },
-  { id: "work_schedule", label: "Jornada, ponto e escalas" },
+  { id: "personal", label: "Identificação" },
+  { id: "admission", label: "Admissão" },
+  { id: "contracts", label: "Contratos" },
+  { id: "work_schedule", label: "Jornada e ponto" },
   { id: "remuneration", label: "Remuneração" },
   { id: "benefits", label: "Benefícios" },
-  { id: "occupational_health", label: "Saúde e segurança ocupacional" },
+  { id: "occupational_health", label: "Saúde ocupacional" },
   { id: "vacations", label: "Férias" },
-  { id: "leaves", label: "Afastamentos e licenças" },
-  { id: "uniforms", label: "Uniformes, equipamentos e responsabilidades" },
-  { id: "training", label: "Treinamentos, avaliações e comunicações" },
-  { id: "warnings", label: "Medidas disciplinares" },
+  { id: "leaves", label: "Afastamentos" },
+  { id: "uniforms", label: "Uniformes e EPIs" },
+  { id: "training", label: "Treinamentos" },
+  { id: "warnings", label: "Disciplina" },
   { id: "termination", label: "Desligamento" },
-  { id: "pending_classification", label: "Pendentes de classificação" },
+  { id: "pending_classification", label: "A classificar" },
 ] as const;
 
 export type EmployeeDocumentCategoryId = (typeof EMPLOYEE_DOCUMENT_CATEGORIES)[number]["id"];
+
+// `contracts` permanece aceito para documentos legados, mas a navegação e os
+// novos arquivamentos o consolidam em Admissão > Contrato.
+export const EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES = EMPLOYEE_DOCUMENT_CATEGORIES.filter(
+  (category) => category.id !== "contracts",
+);
+
+export function normalizeEmployeeDocumentCategory(category: EmployeeDocumentCategoryId): EmployeeDocumentCategoryId {
+  return category === "contracts" ? "admission" : category;
+}
+
+// Taxonomia fixa por natureza. Processos como competência, férias e afastamentos
+// são acrescentados pelo backend a partir dos metadados extraídos do documento.
+export type EmployeeDocumentSubfolder = {
+  id: string;
+  label: string;
+  typeCodes: readonly string[];
+  typeLabels?: readonly string[];
+};
+
+export const EMPLOYEE_DOCUMENT_SUBFOLDERS: Partial<Record<EmployeeDocumentCategoryId, readonly EmployeeDocumentSubfolder[]>> = {
+  personal: [
+    { id: "personal_docs", label: "Documentos pessoais", typeCodes: ["PERSONAL_ID", "PROFILE_PHOTO", "ADDRESS_PROOF", "CIVIL_CERTIFICATE", "WORK_CARD", "PIS_PASEP"], typeLabels: ["CPF", "CNH", "Título de eleitor", "Carteira de trabalho", "PIS/PASEP", "Outro documento pessoal"] },
+    { id: "bank_data", label: "Dados bancários", typeCodes: ["BANK_ACCOUNT_PROOF"] },
+    { id: "dependents", label: "Dependentes", typeCodes: ["DEPENDENT_DOCUMENT"] },
+  ],
+  admission: [
+    { id: "registration", label: "Cadastro e registro", typeCodes: ["EMPLOYEE_REGISTRATION"], typeLabels: ["Ficha cadastral", "Ficha de registro"] },
+    { id: "contract", label: "Contrato", typeCodes: ["EMPLOYMENT_CONTRACT", "PROBATION_CONTRACT", "PROBATION_EXTENSION"], typeLabels: ["Contrato de trabalho", "Contrato de experiência", "Prorrogação de contrato", "Aditivo contratual", "Termo de confidencialidade", "Outro contrato"] },
+    { id: "declarations", label: "Declarações", typeCodes: [], typeLabels: ["Declaração de dependentes"] },
+    { id: "terms", label: "Termos e consentimentos", typeCodes: [], typeLabels: ["Termo de ciência/LGPD", "Outro documento de admissão"] },
+  ],
+  contracts: [
+    { id: "contract", label: "Contrato", typeCodes: ["EMPLOYMENT_CONTRACT"] },
+    { id: "probation", label: "Experiência e prorrogações", typeCodes: ["PROBATION_CONTRACT", "PROBATION_EXTENSION"] },
+    { id: "contract_terms", label: "Aditivos e termos", typeCodes: [], typeLabels: ["Aditivo contratual", "Termo de confidencialidade", "Outro contrato"] },
+  ],
+  work_schedule: [
+    { id: "time_records", label: "Espelhos de ponto", typeCodes: [], typeLabels: ["Espelho de ponto", "Escala de trabalho", "Horas extras"] },
+    { id: "time_adjustments", label: "Ajustes de ponto", typeCodes: [], typeLabels: ["Ajuste de ponto"] },
+    { id: "time_bank", label: "Banco de horas", typeCodes: [], typeLabels: ["Banco de horas"] },
+    { id: "other_schedule", label: "Outros documentos de jornada", typeCodes: [], typeLabels: ["Outro documento de jornada"] },
+  ],
+  remuneration: [
+    { id: "payslips", label: "Contracheques", typeCodes: ["PAYSLIP"], typeLabels: ["Comissão/bonificação"] },
+    { id: "payments", label: "Pagamentos e recibos", typeCodes: [], typeLabels: ["Comprovante de pagamento", "Recibo", "Adiantamento", "Informe de rendimentos"] },
+    { id: "other_remuneration", label: "Outros documentos de remuneração", typeCodes: [], typeLabels: ["Outro documento de remuneração"] },
+  ],
+  benefits: [
+    { id: "transport", label: "Vale-transporte", typeCodes: ["TRANSPORT_REQUEST"], typeLabels: ["Termo de opção de vale-transporte", "Declaração de trajeto", "Recibo de cartão", "Suspensão/cancelamento de vale-transporte"] },
+    { id: "food", label: "Alimentação", typeCodes: [] },
+    { id: "health_plan", label: "Saúde e odontológico", typeCodes: [], typeLabels: ["Plano de saúde"] },
+    { id: "life_insurance", label: "Seguro de vida", typeCodes: [], typeLabels: ["Seguro de vida"] },
+    { id: "family_salary", label: "Salário-família", typeCodes: ["FAMILY_SALARY_TERM", "VACCINATION_RECORD", "SCHOOL_ATTENDANCE"], typeLabels: ["Salário-família"] },
+    { id: "other_benefits", label: "Outros benefícios", typeCodes: [], typeLabels: ["Termo de benefícios", "Declaração de benefício", "Outro documento de benefício"] },
+  ],
+  occupational_health: [
+    { id: "asos", label: "ASOs", typeCodes: ["ASO_ADMISSION", "ASO_PERIODIC", "ASO_RETURN", "ASO_RISK_CHANGE", "ASO_DISMISSAL"] },
+    { id: "complementary_exams", label: "Exames complementares", typeCodes: [], typeLabels: ["Exames complementares"] },
+    { id: "other_occupational", label: "Outros documentos ocupacionais", typeCodes: [], typeLabels: ["Outro documento ocupacional"] },
+  ],
+  vacations: [
+    { id: "vacation_notice", label: "Avisos", typeCodes: ["VACATION_NOTICE"], typeLabels: ["Solicitação de férias"] },
+    { id: "vacation_receipt_payment", label: "Recibos e pagamentos", typeCodes: ["VACATION_RECEIPT", "VACATION_PAYMENT"] },
+    { id: "vacation_changes", label: "Alterações", typeCodes: [], typeLabels: ["Abono pecuniário", "Alteração/cancelamento de férias", "Outro documento de férias"] },
+  ],
+  leaves: [
+    { id: "medical", label: "Atestados", typeCodes: ["MEDICAL_CERTIFICATE"] },
+    { id: "attendance", label: "Declarações", typeCodes: [], typeLabels: ["Declaração de comparecimento"] },
+    { id: "licenses", label: "Licenças", typeCodes: [], typeLabels: ["Licença maternidade", "Licença paternidade"] },
+    { id: "social_security", label: "Previdenciário", typeCodes: [], typeLabels: ["Afastamento previdenciário"] },
+    { id: "return_to_work", label: "Retorno ao trabalho", typeCodes: [], typeLabels: ["Documento de retorno ao trabalho", "Outro documento de afastamento"] },
+  ],
+  uniforms: [
+    { id: "deliveries", label: "Entregas", typeCodes: ["UNIFORM_DELIVERY"], typeLabels: ["Termo de entrega de equipamento"] },
+    { id: "exchanges", label: "Trocas", typeCodes: [], typeLabels: ["Controle de troca"] },
+    { id: "returns", label: "Devoluções", typeCodes: [], typeLabels: ["Termo de devolução de uniforme", "Termo de devolução de equipamento"] },
+    { id: "responsibility_terms", label: "Termos de responsabilidade", typeCodes: [], typeLabels: ["Termo de responsabilidade"] },
+    { id: "damage", label: "Danos e ocorrências", typeCodes: [], typeLabels: ["Registro de dano ou avaria", "Outro documento de uniforme"] },
+  ],
+  training: [
+    { id: "training_certificates", label: "Treinamentos e certificados", typeCodes: [], typeLabels: ["Certificado de treinamento"] },
+    { id: "reviews_feedback", label: "Avaliações e feedbacks", typeCodes: [], typeLabels: ["Avaliação", "Feedback formal"] },
+    { id: "communications", label: "Comunicados e políticas", typeCodes: [], typeLabels: ["Comunicado", "Ciência de política", "Registro de reunião"] },
+    { id: "development", label: "Desenvolvimento", typeCodes: [], typeLabels: ["Plano de desenvolvimento", "Outro documento de treinamento"] },
+  ],
+  warnings: [
+    { id: "warnings", label: "Advertências", typeCodes: ["DISCIPLINARY_WARNING"] },
+    { id: "suspensions", label: "Suspensões", typeCodes: [], typeLabels: ["Suspensão disciplinar"] },
+    { id: "employee_statement", label: "Manifestação do colaborador", typeCodes: [], typeLabels: ["Manifestação do colaborador"] },
+    { id: "investigation", label: "Apuração e relatórios", typeCodes: [], typeLabels: ["Relatório de ocorrência", "Apuração interna", "Outro documento disciplinar"] },
+  ],
+  termination: [
+    { id: "request_notice", label: "Pedido ou aviso", typeCodes: ["RESIGNATION_REQUEST", "TERMINATION_NOTICE"] },
+    { id: "termination_terms", label: "Rescisão", typeCodes: ["TERMINATION_TERM"] },
+    { id: "termination_payments", label: "Pagamentos", typeCodes: ["TERMINATION_PAYMENT"], typeLabels: ["Quitação/recibo"] },
+    { id: "fgts_unemployment", label: "FGTS e seguro-desemprego", typeCodes: [], typeLabels: ["GRRF/FGTS", "Seguro-desemprego"] },
+    { id: "dismissal_aso", label: "ASO demissional", typeCodes: ["ASO_DISMISSAL"] },
+    { id: "asset_return", label: "Devolução de bens", typeCodes: [], typeLabels: ["Termo de devolução de bens", "Outro documento de desligamento"] },
+  ],
+};
+
+export function getEmployeeDocumentSubfolders(category: EmployeeDocumentCategoryId): readonly EmployeeDocumentSubfolder[] {
+  return EMPLOYEE_DOCUMENT_SUBFOLDERS[category] ?? [];
+}
+
+const FALLBACK_SUBFOLDER: Partial<Record<EmployeeDocumentCategoryId, string>> = {
+  personal: "personal_docs",
+  admission: "terms",
+  contracts: "contract_terms",
+  work_schedule: "other_schedule",
+  remuneration: "other_remuneration",
+  benefits: "other_benefits",
+  occupational_health: "other_occupational",
+  vacations: "vacation_changes",
+  leaves: "return_to_work",
+  uniforms: "damage",
+  training: "development",
+  warnings: "investigation",
+  termination: "asset_return",
+};
+
+export function resolveEmployeeDocumentSubfolder(
+  category: EmployeeDocumentCategoryId,
+  documentTypeCode?: string | null,
+  documentTypeLabel?: string | null,
+): string | null {
+  const subs = EMPLOYEE_DOCUMENT_SUBFOLDERS[category];
+  if (!subs || subs.length === 0) return null;
+  if (documentTypeCode) {
+    const match = subs.find((sub) => sub.typeCodes.includes(documentTypeCode));
+    if (match) return match.id;
+  }
+  if (documentTypeLabel) {
+    const normalized = documentTypeLabel.trim().toLocaleLowerCase("pt-BR");
+    const match = subs.find((sub) => sub.typeLabels?.some((label) => label.toLocaleLowerCase("pt-BR") === normalized));
+    if (match) return match.id;
+  }
+  return FALLBACK_SUBFOLDER[category] ?? subs[0]?.id ?? null;
+}
+
+const PROCESS_POSITION: Partial<Record<EmployeeDocumentCategoryId, "before" | "after" | "ignore">> = {
+  admission: "ignore",
+  contracts: "before",
+  work_schedule: "after",
+  remuneration: "before",
+  occupational_health: "after",
+  vacations: "before",
+  leaves: "before",
+  warnings: "before",
+  termination: "before",
+};
+
+export function employeeDocumentProcessPosition(category: EmployeeDocumentCategoryId): "before" | "after" | "ignore" {
+  return PROCESS_POSITION[category] ?? "ignore";
+}
+
+function reliableProcessSegments(destinationTrail?: readonly string[] | null): string[] {
+  if (!destinationTrail || destinationTrail.length < 3) return [];
+  return destinationTrail.slice(1, -1).filter((segment) => {
+    const normalized = segment.trim().toLocaleLowerCase("pt-BR");
+    return normalized.length > 0
+      && !normalized.startsWith("sem ")
+      && normalized !== "afastamento"
+      && normalized !== "admissão"
+      && normalized !== "exame";
+  });
+}
+
+/** Caminho exibido dentro de uma categoria: processo confiável + natureza fixa. */
+export function resolveEmployeeDocumentFolderPath(input: {
+  category: EmployeeDocumentCategoryId;
+  documentTypeCode?: string | null;
+  documentTypeLabel?: string | null;
+  destinationTrail?: readonly string[] | null;
+}): string[] {
+  if (input.category === "pending_classification") return [];
+  const definitions = getEmployeeDocumentSubfolders(input.category);
+  const subfolderId = resolveEmployeeDocumentSubfolder(input.category, input.documentTypeCode, input.documentTypeLabel);
+  const fixedLabel = definitions.find((definition) => definition.id === subfolderId)?.label;
+  const process = reliableProcessSegments(input.destinationTrail);
+  const position = PROCESS_POSITION[input.category] ?? "ignore";
+  if (position === "before") return [...process, ...(fixedLabel ? [fixedLabel] : [])];
+  if (position === "after") return [...(fixedLabel ? [fixedLabel] : []), ...process];
+  return fixedLabel ? [fixedLabel] : [];
+}
 export type EmployeeDocumentAccessLevelId = (typeof EMPLOYEE_DOCUMENT_ACCESS_LEVELS)[number]["id"];
 
 export const EMPLOYEE_DOCUMENT_TYPES_BY_CATEGORY: Record<EmployeeDocumentCategoryId, readonly string[]> = {
@@ -29,13 +215,18 @@ export const EMPLOYEE_DOCUMENT_TYPES_BY_CATEGORY: Record<EmployeeDocumentCategor
     "Dados bancários",
     "Documento de dependente",
     "Foto 3x4",
+    "Carteira de trabalho",
+    "PIS/PASEP",
     "Outro documento pessoal",
   ],
   admission: [
     "Ficha cadastral",
     "Ficha de registro",
-    "Carteira de trabalho",
-    "PIS/PASEP",
+    "Contrato de experiência",
+    "Contrato de trabalho",
+    "Prorrogação de contrato",
+    "Aditivo contratual",
+    "Termo de confidencialidade",
     "Declaração de dependentes",
     "Termo de ciência/LGPD",
     "Outro documento de admissão",
@@ -50,10 +241,8 @@ export const EMPLOYEE_DOCUMENT_TYPES_BY_CATEGORY: Record<EmployeeDocumentCategor
   ],
   work_schedule: [
     "Espelho de ponto",
-    "Escala de trabalho",
     "Ajuste de ponto",
     "Banco de horas",
-    "Horas extras",
     "Outro documento de jornada",
   ],
   remuneration: [
@@ -61,7 +250,6 @@ export const EMPLOYEE_DOCUMENT_TYPES_BY_CATEGORY: Record<EmployeeDocumentCategor
     "Comprovante de pagamento",
     "Recibo",
     "Adiantamento",
-    "Comissão/bonificação",
     "Informe de rendimentos",
     "Outro documento de remuneração",
   ],
@@ -236,8 +424,8 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
   {
     code: "WORK_CARD",
     label: "Carteira de trabalho",
-    category: "admission",
-    folderCode: "ADMISSION_REGISTRATION",
+    category: "personal",
+    folderCode: "REGISTRATION_IDENTIFICATION",
     defaultAccessLevel: "restricted",
     aliases: ["ctps", "carteira de trabalho", "carteira de trabalho digital"],
     classificationHints: ["Comprovante da CTPS digital ou páginas da carteira física com foto, dados pessoais, número, série ou CPF."],
@@ -245,8 +433,8 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
   {
     code: "PIS_PASEP",
     label: "PIS/PASEP",
-    category: "admission",
-    folderCode: "ADMISSION_REGISTRATION",
+    category: "personal",
+    folderCode: "REGISTRATION_IDENTIFICATION",
     defaultAccessLevel: "restricted",
     aliases: ["pis", "pasep", "nis", "nit", "número do pis", "numero do pis"],
     classificationHints: ["Comprovante oficial que informa PIS, PASEP, NIS ou NIT do trabalhador."],
@@ -254,8 +442,8 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
   {
     code: "EMPLOYMENT_CONTRACT",
     label: "Contrato de trabalho",
-    category: "contracts",
-    folderCode: "CONTRACTS_CHANGES",
+    category: "admission",
+    folderCode: "ADMISSION_REGISTRATION",
     defaultAccessLevel: "restricted",
     aliases: ["contrato inicial", "contrato empregado"],
     classificationHints: ["Contrato laboral sem foco exclusivo em experiência."],
@@ -263,8 +451,8 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
   {
     code: "PROBATION_CONTRACT",
     label: "Contrato de experiência",
-    category: "contracts",
-    folderCode: "CONTRACTS_CHANGES",
+    category: "admission",
+    folderCode: "ADMISSION_REGISTRATION",
     defaultAccessLevel: "restricted",
     aliases: ["experiência", "contrato experimental"],
     classificationHints: ["Contrato com prazo de experiência."],
@@ -272,8 +460,8 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
   {
     code: "PROBATION_EXTENSION",
     label: "Prorrogação de contrato",
-    category: "contracts",
-    folderCode: "CONTRACTS_CHANGES",
+    category: "admission",
+    folderCode: "ADMISSION_REGISTRATION",
     defaultAccessLevel: "restricted",
     aliases: ["prorrogação experiência", "aditivo de experiência"],
     classificationHints: ["Prorroga contrato de experiência."],

@@ -4,9 +4,11 @@ import assert from "node:assert/strict";
 import {
   resolveDocumentAccessPolicy,
   canAccessDocument,
+  resolveDocumentVisibility,
   subjectFromPermissions,
   type DocumentAccessSubject,
 } from "../../../src/lib/hr/employee-document-access";
+import { DEFAULT_PROFILE_ACCESS_MATRIX } from "../../../src/types/rh";
 
 // Sujeitos de referência.
 const basicViewer: DocumentAccessSubject = {
@@ -99,5 +101,49 @@ describe("subjectFromPermissions", () => {
     );
     assert.equal(s.ownProfileOnly, true);
     assert.equal(canAccessDocument({ documentTypeCode: "VACATION_NOTICE" }, s).allowed, false);
+  });
+});
+
+describe("matriz compartilhada de documentos", () => {
+  const matrixViewer: DocumentAccessSubject = {
+    ...basicViewer,
+    profileRole: "employee",
+    accessMatrix: DEFAULT_PROFILE_ACCESS_MATRIX,
+    visibilityContext: { userId: "viewer", roleIds: [], functionIds: [] },
+  };
+
+  test("tipo herda a visibilidade configurada na pasta", () => {
+    const config = { version: "test", categories: { vacations: "restricted_partial" as const }, document_types: {} };
+    assert.equal(resolveDocumentVisibility({ category: "vacations", documentTypeCode: "VACATION_NOTICE" }, config), "restricted_partial");
+    assert.equal(canAccessDocument({ category: "vacations", documentTypeCode: "VACATION_NOTICE" }, matrixViewer, config).allowed, false);
+    assert.equal(canAccessDocument({ category: "vacations", documentTypeCode: "VACATION_NOTICE" }, { ...matrixViewer, isOwner: true }, config).allowed, true);
+  });
+
+  test("tipo documental sobrescreve o padrão da pasta", () => {
+    const config = {
+      version: "test",
+      categories: { personal: "restricted_total" as const },
+      document_types: { ADDRESS_PROOF: "public" as const },
+    };
+    assert.equal(resolveDocumentVisibility({ category: "personal", documentTypeCode: "ADDRESS_PROOF" }, config), "public");
+    assert.equal(canAccessDocument({ category: "personal", documentTypeCode: "ADDRESS_PROOF" }, matrixViewer, config).allowed, true);
+  });
+
+  test("cargo, função ou pessoa vinculados na matriz liberam documento restrito", () => {
+    const matrix = structuredClone(DEFAULT_PROFILE_ACCESS_MATRIX);
+    matrix.visibility.restricted_total = {
+      ...matrix.visibility.restricted_total,
+      explicit: "view",
+      bindings: { roleIds: ["rh-analyst"], functionIds: ["dp-reviewer"], userIds: ["direct-user"] },
+    };
+    const config = { version: "test", categories: { personal: "restricted_total" as const }, document_types: {} };
+    const allowed = (visibilityContext: NonNullable<DocumentAccessSubject["visibilityContext"]>) => canAccessDocument(
+      { category: "personal", documentTypeCode: "PERSONAL_ID" },
+      { ...matrixViewer, accessMatrix: matrix, visibilityContext },
+      config,
+    ).allowed;
+    assert.equal(allowed({ userId: "viewer", roleIds: ["rh-analyst"], functionIds: [] }), true);
+    assert.equal(allowed({ userId: "viewer", roleIds: [], functionIds: ["dp-reviewer"] }), true);
+    assert.equal(allowed({ userId: "direct-user", roleIds: [], functionIds: [] }), true);
   });
 });

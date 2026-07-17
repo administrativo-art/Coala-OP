@@ -20,7 +20,7 @@ export function EmployeeHeader({ employee, cache, jobTitle, kioskName }: Props) 
     .toUpperCase();
 
   return (
-    <div className="flex items-start gap-5 pb-6 border-b border-gray-100">
+    <div className="flex items-start gap-3 border-b border-gray-100 pb-3">
       <div className="relative shrink-0">
         {employee.photo_url ? (
           <div className="w-20 h-20 rounded-full overflow-hidden ring-2 ring-white shadow-md">

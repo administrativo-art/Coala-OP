@@ -956,7 +956,7 @@ export function UserManagement({
     <>
       {showForm ? (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} autoComplete={createOnly ? 'off' : 'on'} className={createOnly ? "space-y-4" : "space-y-5"}>
+          <form onSubmit={form.handleSubmit(onSubmit)} autoComplete={createOnly ? 'off' : 'on'} className={createOnly ? "personal-create-user-form space-y-2" : "space-y-5"}>
             {/* ── Back nav ── */}
             {!createOnly ? (
               <div className="flex items-center gap-3 mb-2">
@@ -977,8 +977,8 @@ export function UserManagement({
             ) : null}
 
             {/* ── Cartão 1: Departamento Pessoal + identidade ── */}
-            <Card className={createOnly ? "shadow-none" : undefined} style={{ padding: createOnly ? '1rem' : '1.25rem 1.5rem' }}>
-              <div className={createOnly ? "grid gap-4" : "flex gap-5 items-start"}>
+            <Card className={createOnly ? "personal-create-user-card shadow-none" : undefined} style={{ padding: createOnly ? '0.625rem' : '1.25rem 1.5rem' }}>
+              <div className={createOnly ? "grid gap-2" : "flex gap-5 items-start"}>
                 {/* Avatar + botões */}
                 {!createOnly ? (
                 <div className="flex flex-col items-center gap-2 shrink-0">
@@ -1035,7 +1035,7 @@ export function UserManagement({
                     )}
                   </div>
                   ) : null}
-                  <div className={createOnly ? "grid grid-cols-1 gap-3 lg:grid-cols-3" : "grid grid-cols-1 md:grid-cols-2 gap-3"}>
+                  <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 md:grid-cols-2 gap-3"}>
                     <FormField control={form.control} name="username" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome</FormLabel>
@@ -1085,10 +1085,10 @@ export function UserManagement({
                   </div>
                 </div>
               </div>
-              <div className="mt-5 space-y-4 border-t pt-5">
+              <div className={createOnly ? "mt-2 space-y-2 border-t pt-2" : "mt-5 space-y-4 border-t pt-5"}>
                 {permissions.dp?.view && (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
                       <FormField control={form.control} name="jobRoleId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Cargo</FormLabel>
@@ -1171,7 +1171,7 @@ export function UserManagement({
                         <FormMessage />
                       </FormItem>
                     )} />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
                       <FormField control={form.control} name="profileId" render={() => (
                         <FormItem>
                           <FormLabel>Perfil de permissão</FormLabel>
@@ -1246,7 +1246,7 @@ export function UserManagement({
                         </div>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 gap-4 lg:grid-cols-3"}>
                       <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Turno padrão</FormLabel>
@@ -1306,11 +1306,11 @@ export function UserManagement({
             </Card>
 
             {/* ── Cartão 2: Comportamento no sistema ── */}
-            <Card className="max-w-5xl" style={{ padding: '1rem' }}>
-              <p className="text-sm font-semibold mb-3">Comportamento no sistema</p>
+            <Card className={createOnly ? "personal-create-user-card max-w-5xl" : "max-w-5xl"} style={{ padding: createOnly ? '0.625rem' : '1rem' }}>
+              <p className="mb-1.5 text-[11px] font-semibold">Comportamento no sistema</p>
               <div className="grid gap-2 md:grid-cols-3">
                 <FormField control={form.control} name="operacional" render={({ field }) => (
-                  <FormItem className="flex min-h-[82px] flex-row items-center justify-between gap-3 rounded-lg border p-3">
+                  <FormItem className="flex min-h-[46px] flex-row items-center justify-between gap-2 rounded-md border p-2">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5">
                         <FormLabel className="text-sm font-medium">Operacional</FormLabel>
@@ -1324,7 +1324,7 @@ export function UserManagement({
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="participatesInGoals" render={({ field }) => (
-                  <FormItem className="flex min-h-[82px] flex-row items-center justify-between gap-3 rounded-lg border p-3">
+                  <FormItem className="flex min-h-[46px] flex-row items-center justify-between gap-2 rounded-md border p-2">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5">
                         <FormLabel className="text-sm font-medium">Metas</FormLabel>
@@ -1414,9 +1414,9 @@ export function UserManagement({
             </Card>
 
             {/* ── Footer ── */}
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-              <Button type="submit" disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}>
+            <div className="flex justify-end gap-2 pt-0.5">
+              <Button type="button" variant="outline" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} onClick={closeForm}>Cancelar</Button>
+              <Button type="submit" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}>
                 {editingUser ? 'Salvar alterações' : 'Criar usuário'}
               </Button>
             </div>

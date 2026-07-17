@@ -5,7 +5,8 @@ import { assertHrAccess } from "@/features/hr/lib/server-access";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
-import { canAccessDocument, subjectFromPermissions } from "@/lib/hr/employee-document-access";
+import { canAccessDocument } from "@/lib/hr/employee-document-access";
+import { buildEmployeeDocumentAccessSubject, loadEmployeeDocumentAccessSettings } from "@/features/hr/lib/employee-document-access-server";
 
 export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
@@ -17,13 +18,12 @@ export async function POST(request: NextRequest) {
     if (!snap.exists || snap.get("deletedAt")) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
 
     // Enforce a política de sigilo do documento no backend (nunca no cliente).
-    const subject = subjectFromPermissions(access.permissions, {
-      isDefaultAdmin: access.isDefaultAdmin,
-      isOwner: snap.get("employeeId") === access.decoded.uid,
-    });
+    const accessSettings = await loadEmployeeDocumentAccessSettings(access);
+    const subject = buildEmployeeDocumentAccessSubject(access, accessSettings, String(snap.get("employeeId") ?? ""));
     const { allowed, policy } = canAccessDocument(
-      { documentTypeCode: snap.get("documentTypeCode"), accessLevel: snap.get("accessLevel") },
+      { documentTypeCode: snap.get("documentTypeCode"), category: snap.get("category"), accessLevel: snap.get("accessLevel") },
       subject,
+      accessSettings.visibilityConfig,
     );
     if (!allowed) {
       await ref.collection("audit").add({
