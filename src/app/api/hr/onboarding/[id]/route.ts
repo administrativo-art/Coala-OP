@@ -132,6 +132,10 @@ function isDocumentReceivedStatus(status: OnboardingDocument['status']) {
   return status === 'received' || status === 'ai_approved' || status === 'review_required' || status === 'approved';
 }
 
+function hasAuditableDocumentFile(document: OnboardingDocument) {
+  return typeof document.fileUrl === 'string' && document.fileUrl.trim().length > 0;
+}
+
 function mergeDocumentStatus(
   documents: OnboardingDocument[],
   documentId: string,
@@ -148,7 +152,9 @@ function mergeDocumentStatus(
       updatedAt: now,
       receivedAt: isDocumentReceivedStatus(status)
         ? document.receivedAt ?? now
-        : document.receivedAt ?? null,
+        : status === 'pending'
+          ? null
+          : document.receivedAt ?? null,
       approvedAt: status === 'approved' ? now : null,
     };
   });
@@ -361,6 +367,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return jsonError('Documento ou status inválido.');
     }
     const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
+    const document = documents.find(item => item.id === documentId);
+    if (!document) return jsonError('Documento não encontrado.', 404);
+    if (['approved', 'rejected', 'review_required'].includes(status)) {
+      if (process.currentStage !== 'document_review') {
+        return jsonError('A conferência documental só pode ser feita na etapa Formalização · Conferência.', 400);
+      }
+      if (!hasAuditableDocumentFile(document)) {
+        return jsonError('Não é possível conferir um documento sem arquivo anexado para auditoria.', 400);
+      }
+    }
     update.documents = mergeDocumentStatus(documents, documentId, status, asString(body.note), now);
   } else if (action === 'advance_stage') {
     const currentStage = asString(body.currentStage) as OnboardingStageId | null;
@@ -368,6 +384,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.currentStage = currentStage;
     update.status = nextStatusForStage(currentStage);
   } else if (action === 'save_finalization') {
+    if (process.currentStage !== 'formalization_validation') {
+      return jsonError('As configurações finais só podem ser salvas na etapa Formalização · Finalização.', 400);
+    }
     const finalization = asRecord(body.finalizationSettings);
     const needsTransportVoucher = asBoolean(finalization.needsTransportVoucher) ?? false;
     const shiftDefinitionId = asString(finalization.shiftDefinitionId);

@@ -524,6 +524,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     };
   });
   const allRequiredDocumentsSubmitted = requiredDocumentsSubmitted(nextDocuments);
+  const shouldMoveToReview = data.currentStage === 'documents' || !data.currentStage;
   const submittedAt = new Date(now);
   const protocol = createSubmissionProtocol(submittedAt);
   const sessionId = trimText(input.sessionId, 120) || randomBytes(12).toString('hex');
@@ -575,10 +576,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     publicFormSubmittedAt: now,
     publicFormLastSubmittedAt: now,
     publicPrivacyAcceptance,
-    currentStage: allRequiredDocumentsSubmitted && (data.currentStage === 'documents' || !data.currentStage)
+    currentStage: shouldMoveToReview
       ? 'document_review'
       : data.currentStage ?? 'documents',
-    status: allRequiredDocumentsSubmitted && (data.status === 'collecting_documents' || data.status === 'pending_setup')
+    status: shouldMoveToReview && (data.status === 'collecting_documents' || data.status === 'pending_setup')
       ? 'reviewing_documents'
       : data.status === 'pending_setup'
         ? 'collecting_documents'
@@ -608,6 +609,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     allergyConfirmationNote: notice.allergyConfirmationNote,
     allergyAcknowledged: true,
     submittedDocumentIds: Object.keys(rawDocuments),
+    allRequiredDocumentsSubmitted,
+    movedToReview: shouldMoveToReview,
     formalization_id: doc.id,
     candidate_id: data.candidateId ?? null,
     invitation_id: data.invitationId ?? null,

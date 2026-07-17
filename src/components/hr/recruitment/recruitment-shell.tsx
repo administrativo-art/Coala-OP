@@ -6677,7 +6677,7 @@ const ONBOARDING_STAGE_DETAILS: Record<OnboardingStageId, { owner: string; focus
   },
   formalization_validation: {
     owner: 'RH',
-    focus: 'Validação final, VT, operação, metas e acesso',
+    focus: 'Configurações finais antes dos acessos e do treinamento',
   },
   integration: {
     owner: 'RH + Liderança',
@@ -7378,6 +7378,31 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       !onboardingPublicLinkExpired(process, new Date(linkClock));
   }
 
+  function hasAuditableDocumentFile(document: OnboardingDocument) {
+    return typeof document.fileUrl === 'string' && document.fileUrl.trim().length > 0;
+  }
+
+  function hasMeaningfulExtractionRecord(value: unknown) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    return Object.values(value as Record<string, unknown>).some(entry => {
+      if (entry === null || entry === undefined) return false;
+      if (typeof entry === 'string') return entry.trim().length > 0;
+      if (Array.isArray(entry)) return entry.length > 0;
+      if (typeof entry === 'object') return Object.keys(entry as Record<string, unknown>).length > 0;
+      return true;
+    });
+  }
+
+  function hasDocumentExtraction(document: OnboardingDocument) {
+    const legacy = document as OnboardingDocument & {
+      extractedData?: unknown;
+      aiExtractedData?: unknown;
+    };
+    return hasMeaningfulExtractionRecord(document.extractedFields) ||
+      hasMeaningfulExtractionRecord(legacy.extractedData) ||
+      hasMeaningfulExtractionRecord(legacy.aiExtractedData);
+  }
+
   function DocumentRow({ process, document, mode }: {
     process: OnboardingProcess;
     document: OnboardingDocument;
@@ -7385,6 +7410,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }) {
     const actionKey = `${process.id}:document_status`;
     const isApproved = document.status === 'approved';
+    const hasFile = hasAuditableDocumentFile(document);
+    const canChangeDocumentStatus = canActOnCurrentPhase && mode === 'review';
     const statusColor = isApproved
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
       : document.status === 'ai_approved'
@@ -7431,45 +7458,61 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               >
                 <ExternalLink className="h-3 w-3" /> Ver arquivo enviado
               </a>
-            ) : null}
+            ) : (
+              <p className="mt-1 text-xs font-semibold text-slate-400">Nenhum arquivo enviado</p>
+            )}
           </div>
         </div>
         {canManage && (
           <div className="flex shrink-0 gap-1.5">
             {mode === 'collect' ? (
-              <>
-                <button
-                  type="button"
-                  disabled={updating === actionKey}
-                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'review_required' })}
-                  className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              document.fileUrl ? (
+                <a
+                  href={document.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
                 >
-                  Revisão
-                </button>
-                <button
-                  type="button"
-                  disabled={updating === actionKey}
-                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
-                  className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
-                >
-                  Aprovar
-                </button>
-              </>
+                  <ExternalLink className="h-3 w-3" />
+                  Abrir documento
+                </a>
+              ) : (
+                <span className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-400">
+                  Aguardando envio
+                </span>
+              )
             ) : (
               <>
+                {document.fileUrl ? (
+                  <a
+                    href={document.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Abrir documento
+                  </a>
+                ) : (
+                  <span className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-400">
+                    Sem arquivo
+                  </span>
+                )}
                 <button
                   type="button"
-                  disabled={updating === actionKey}
+                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus}
                   onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
                   className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+                  title={!hasFile ? 'Envie ou abra um arquivo antes de aprovar.' : !canChangeDocumentStatus ? 'A aprovação só fica ativa na fase atual de Conferência.' : undefined}
                 >
                   Aprovar
                 </button>
                 <button
                   type="button"
-                  disabled={updating === actionKey}
+                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus}
                   onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'rejected' })}
                   className="h-8 rounded-lg bg-red-600 px-3 text-[11px] font-bold text-white hover:bg-red-500 disabled:opacity-50"
+                  title={!hasFile ? 'Não há arquivo anexado para reprovar.' : !canChangeDocumentStatus ? 'A reprovação só fica ativa na fase atual de Conferência.' : undefined}
                 >
                   Reprovar
                 </button>
@@ -7704,9 +7747,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     selectedProcess.status !== 'cancelled' && selectedProcess.status !== 'completed';
   const canComplete = canManage && userCreated &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
-  const signed = selectedProcess.status === 'completed' ||
-    stageOrderOf(selectedProcess, selectedProcess.currentStage) > stageOrderOf(selectedProcess, 'signature');
-  const canAdvanceToPhase = canManage && !!activePhaseId && activePhaseId !== selectedProcess.currentStage &&
+  const currentStageOrder = stageOrderOf(selectedProcess, selectedProcess.currentStage);
+  const activeStageOrder = stageOrderOf(selectedProcess, activePhaseId);
+  const isCurrentPhase = !!activePhaseId && activePhaseId === selectedProcess.currentStage;
+  const isFuturePhase = activeStageOrder > currentStageOrder;
+  const isPastPhase = activeStageOrder >= 0 && currentStageOrder >= 0 && activeStageOrder < currentStageOrder;
+  const canActOnCurrentPhase = canManage && isCurrentPhase &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
 
   const formRows: Array<[string, string]> = [
@@ -7730,13 +7776,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     ['Cuidados no trabalho', readOnboardingAnswer(answers, 'workplaceAdaptationNotes')],
   ];
 
-  const signItems: Array<[string, boolean]> = [
-    ['Contrato de trabalho', signed],
-    ['Termo de vale-transporte', signed],
-    ['Acordo de compensação de jornada', signed],
-  ];
-
   const okAlert = pendingAlerts.length === 0;
+  const reviewDocuments = selectedProcess.documents ?? [];
+  const documentsWithExtraction = reviewDocuments.filter(hasDocumentExtraction).length;
+  const auditableDocuments = reviewDocuments.filter(hasAuditableDocumentFile).length;
 
   let genericStatus = 'Etapa concluída';
   let genericDesc = activeDetails?.focus ?? '';
@@ -7877,7 +7920,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 <span className="text-[11px] font-black uppercase tracking-[0.07em] text-pink-600">
                   {activeKind === 'coleta' ? 'Formalização'
                     : activeKind === 'revisao' ? 'Conferência'
-                    : activeKind === 'validacao' ? 'Validação final'
+                    : activeKind === 'validacao' ? 'Finalização da formalização'
                     : activeKind === 'integracao' ? 'Acessos'
                     : activeKind === 'assinatura' ? 'Assinatura'
                     : activeKind === 'experiencia' ? 'Experiência'
@@ -7897,21 +7940,25 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     Prazo {activeStage.dueDays} dia{activeStage.dueDays === 1 ? '' : 's'}
                   </span>
                 ) : null}
-                {canAdvanceToPhase && (
-                  <button
-                    type="button"
-                    disabled={updating === `${selectedProcess.id}:advance_stage`}
-                    onClick={() => patchProcess(selectedProcess.id, { action: 'advance_stage', currentStage: activePhaseId })}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-pink-200 bg-pink-50 px-2.5 py-1.5 text-[11.5px] font-bold text-pink-700 hover:bg-pink-100 disabled:opacity-50"
-                  >
-                    {updating === `${selectedProcess.id}:advance_stage`
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <ArrowRight className="h-3.5 w-3.5" />}
-                    Definir como etapa atual
-                  </button>
-                )}
+                <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-bold ${
+                  isCurrentPhase
+                    ? 'border-pink-200 bg-pink-50 text-pink-700'
+                    : isFuturePhase
+                      ? 'border-slate-200 bg-slate-50 text-slate-500'
+                      : isPastPhase
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-500'
+                }`}>
+                  {isCurrentPhase ? 'Etapa atual' : isFuturePhase ? 'Etapa futura' : isPastPhase ? 'Etapa concluída' : 'Etapa'}
+                </span>
               </div>
             </div>
+
+            {isFuturePhase ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+                Esta etapa ainda não está liberada. Conclua os requisitos das etapas anteriores para habilitar ações aqui.
+              </div>
+            ) : null}
 
             {/* COLETA */}
             {activeKind === 'coleta' && (
@@ -7989,24 +8036,42 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {/* REVISAO */}
             {activeKind === 'revisao' && (
               <div className="mt-4 space-y-3.5">
-                <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
-                    <Sparkles className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <div className="text-[13px] font-black text-blue-800">
-                      Copiloto conferiu {progress.received} de {progress.total} documento{progress.total === 1 ? '' : 's'}
-                    </div>
-                    <div className="mt-0.5 text-xs font-semibold text-blue-700">
-                      CPF, data de nascimento e filiação extraídos dos documentos. Confirme as divergências antes de aprovar a coleta.
+                {documentsWithExtraction > 0 ? (
+                  <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
+                      <Sparkles className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <div className="text-[13px] font-black text-blue-800">
+                        Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}
+                      </div>
+                      <div className="mt-0.5 text-xs font-semibold text-blue-700">
+                        Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500">
+                      <FileText className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <div className="text-[13px] font-black text-slate-800">
+                        Conferência manual de documentos
+                      </div>
+                      <div className="mt-0.5 text-xs font-semibold text-slate-500">
+                        {auditableDocuments > 0
+                          ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.`
+                          : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-2">
-                  {(selectedProcess.documents ?? []).map(document => (
+                  {reviewDocuments.map(document => (
                     <DocumentRow key={document.id} process={selectedProcess} document={document} mode="review" />
                   ))}
-                  {(selectedProcess.documents ?? []).length === 0 && (
+                  {reviewDocuments.length === 0 && (
                     <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
                       Nenhum documento recebido para conferência.
                     </p>
@@ -8019,7 +8084,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {activeKind === 'validacao' && (
               <div className="mt-4 space-y-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Como o colaborador se comporta no sistema</p>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-slate-500">Configurações finais do colaborador</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      Salva VT, turno, operação, metas e regra de acesso. Isso não finaliza a integração.
+                    </p>
+                  </div>
                   {finalizationSaved ? (
                     <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black text-emerald-700">Salvo</span>
                   ) : (
@@ -8031,19 +8101,20 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   onChange={setFinalizationDraft}
                   shiftDefinitions={shiftDefinitions}
                   unitId={selectedProcess.unitId}
-                  disabled={!canManage || userCreated}
+                  disabled={!canActOnCurrentPhase || userCreated}
                 />
                 {canManage && !userCreated ? (
                   <button
                     type="button"
-                    disabled={updating === `${selectedProcess.id}:save_finalization`}
+                    disabled={!canActOnCurrentPhase || updating === `${selectedProcess.id}:save_finalization`}
                     onClick={() => saveFinalization(selectedProcess.id)}
                     className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    title={!canActOnCurrentPhase ? 'Esta etapa só pode ser salva quando for a fase atual.' : undefined}
                   >
                     {updating === `${selectedProcess.id}:save_finalization`
                       ? <Loader2 className="h-4 w-4 animate-spin" />
                       : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-                    Salvar validação
+                    Salvar configurações finais
                   </button>
                 ) : null}
               </div>
@@ -8105,7 +8176,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <>
                     {!finalizationSaved && !userCreated ? (
                       <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-bold text-amber-800">
-                        Salve a validação final antes de criar o colaborador.
+                        Salve as configurações finais antes de criar o colaborador.
                       </p>
                     ) : null}
                     {!userCreated ? (
@@ -8122,7 +8193,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         {updating === `${selectedProcess.id}:create_collaborator`
                           ? <Loader2 className="h-4 w-4 animate-spin" />
                           : <UserPlus className="h-4 w-4" />}
-                        {canCreateCollaborator ? 'Criar colaborador e copiar link' : 'Conclua a validação para criar'}
+                        {canCreateCollaborator ? 'Criar colaborador e copiar link' : 'Conclua as configurações finais para criar'}
                       </button>
                     ) : (
                       <button
@@ -8145,21 +8216,19 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {/* ASSINATURA */}
             {activeKind === 'assinatura' && (
               <div className="mt-4 space-y-2">
-                {signItems.map(([label, isSigned]) => (
-                  <div key={label} className="flex items-center justify-between gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3">
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500">
-                        <FileText className="h-4 w-4" />
-                      </span>
-                      <span className="text-[13.5px] font-bold text-slate-900">{label}</span>
-                    </div>
-                    <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-black ${
-                      isSigned ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      {isSigned ? 'Assinado' : 'Aguardando'}
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500">
+                      <FileText className="h-4 w-4" />
                     </span>
+                    <div>
+                      <p className="text-sm font-black text-slate-800">Nenhum documento de assinatura foi gerado para este processo.</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        Contrato, termo de vale-transporte, acordo de compensação e outros itens só devem aparecer quando houver modelo/geração/solicitação real vinculada ao processo.
+                      </p>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
             )}
 
