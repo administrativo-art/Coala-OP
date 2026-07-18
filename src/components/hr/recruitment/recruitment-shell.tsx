@@ -7464,6 +7464,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }) {
     const actionKey = `${process.id}:document_status`;
     const isApproved = document.status === 'approved';
+    const isRejected = document.status === 'rejected';
     const hasFile = hasAuditableDocumentFile(document);
     const canChangeDocumentStatus = canActOnCurrentPhase && mode === 'review';
     const statusColor = isApproved
@@ -7492,7 +7493,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${statusColor}`}>
-            {isApproved ? <CheckCircle2 className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+            {isApproved
+              ? <CheckCircle2 className="h-4 w-4" />
+              : isRejected
+                ? <XCircle className="h-4 w-4" />
+                : <FileText className="h-4 w-4" />}
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-slate-900">
@@ -7554,21 +7559,27 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 )}
                 <button
                   type="button"
-                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus}
+                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus || isApproved}
                   onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
-                  className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
-                  title={!hasFile ? 'Envie ou abra um arquivo antes de aprovar.' : !canChangeDocumentStatus ? 'A aprovação só fica ativa na fase atual de Coleta e conferência.' : undefined}
+                  className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-[11px] font-bold ${isApproved
+                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50'}`}
+                  title={isApproved ? 'Documento já aprovado.' : !hasFile ? 'Envie ou abra um arquivo antes de aprovar.' : !canChangeDocumentStatus ? 'A aprovação só fica ativa na fase atual de Coleta e conferência.' : undefined}
                 >
-                  Aprovar
+                  {isApproved ? <CheckCircle2 className="h-3 w-3" /> : null}
+                  {isApproved ? 'Aprovado' : 'Aprovar'}
                 </button>
                 <button
                   type="button"
-                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus}
+                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus || isRejected}
                   onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'rejected' })}
-                  className="h-8 rounded-lg bg-red-600 px-3 text-[11px] font-bold text-white hover:bg-red-500 disabled:opacity-50"
-                  title={!hasFile ? 'Não há arquivo anexado para reprovar.' : !canChangeDocumentStatus ? 'A reprovação só fica ativa na fase atual de Coleta e conferência.' : undefined}
+                  className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-[11px] font-bold ${isRejected
+                    ? 'border border-red-200 bg-red-50 text-red-700'
+                    : 'bg-red-600 text-white hover:bg-red-500 disabled:opacity-50'}`}
+                  title={isRejected ? 'Documento já reprovado.' : !hasFile ? 'Não há arquivo anexado para reprovar.' : !canChangeDocumentStatus ? 'A reprovação só fica ativa na fase atual de Coleta e conferência.' : undefined}
                 >
-                  Reprovar
+                  {isRejected ? <XCircle className="h-3 w-3" /> : null}
+                  {isRejected ? 'Reprovado' : 'Reprovar'}
                 </button>
               </>
             )}
