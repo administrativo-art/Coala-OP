@@ -7842,6 +7842,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     document.status !== 'approved' &&
     document.status !== 'rejected'
   );
+  const approvedAuditableDocuments = reviewDocuments.filter(document =>
+    hasAuditableDocumentFile(document) && document.status === 'approved'
+  ).length;
+  const allAuditableDocumentsApproved = auditableDocuments > 0 && approvedAuditableDocuments === auditableDocuments;
   const bulkApprovalActionKey = `${selectedProcessId}:document_status_bulk`;
   const canBulkApproveDocuments = canActOnCurrentPhase && bulkApprovalDocuments.length > 0;
 
@@ -7861,6 +7865,21 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
   function renderBulkApproveDocumentsButton() {
     if (!canManage || reviewDocuments.length === 0) return null;
+    if (bulkApprovalDocuments.length === 0) {
+      if (!allAuditableDocumentsApproved) return null;
+      return (
+        <div
+          aria-live="polite"
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Todos aprovados
+          <span className="ml-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] leading-none">
+            {approvedAuditableDocuments}
+          </span>
+        </div>
+      );
+    }
     const isLoading = updating === bulkApprovalActionKey;
     return (
       <button
