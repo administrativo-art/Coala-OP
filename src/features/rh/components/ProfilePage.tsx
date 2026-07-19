@@ -9,6 +9,7 @@ import { SectionCard } from './SectionCard';
 import { AuditLogTab } from './AuditLogTab';
 import { SectionEditModal } from './SectionEditModal';
 import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
+import { EmployeeProbationCard } from './EmployeeProbationCard';
 import { canEditField } from '@/types/rh';
 import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
@@ -115,6 +116,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
     cache,
     consentimento_imagem_voz,
     ciencia_privacidade_onboarding,
+    periodo_experiencia,
   } = profileState.data;
   const role = cache.rh_role as RhRole;
   const visibilityContext: FieldVisibilityContext = {
@@ -246,9 +248,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
 
         {/* Tab: Contratos */}
         {tab === 'contratos' && (
-          <div className="flex items-center justify-center py-20 text-gray-400">
-            <p className="text-sm">Contratos — em breve.</p>
-          </div>
+          <EmployeeProbationCard probation={periodo_experiencia} />
         )}
 
         {/* Tab: Remunerações */}

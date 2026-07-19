@@ -8,6 +8,7 @@ import { SectionCard } from './SectionCard';
 import { SectionEditModal } from './SectionEditModal';
 import { getStatusBadge } from '../lib/field-format';
 import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
+import { EmployeeProbationCard } from './EmployeeProbationCard';
 import { canEditField, canViewField } from '@/types/rh';
 import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
@@ -73,6 +74,7 @@ export function MyProfilePage() {
     fieldMap,
     consentimento_imagem_voz,
     ciencia_privacidade_onboarding,
+    periodo_experiencia,
   } = profileState.data;
   const { label: statusLabel, color: statusColor } = getStatusBadge(employee.status);
   const initials = employee.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
@@ -148,6 +150,8 @@ export function MyProfilePage() {
         privacyAcknowledgement={ciencia_privacidade_onboarding}
         canRevoke
       />
+
+      <EmployeeProbationCard probation={periodo_experiencia} />
 
       {/* Editable sections */}
       {EMPLOYEE_VISIBLE_SECTIONS.filter((s) => sections[s]?.length).map((sec) => (

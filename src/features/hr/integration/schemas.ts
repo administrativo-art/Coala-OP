@@ -310,7 +310,7 @@ export const probationConfigSchema = z.object({
   secondPeriodDays: z.number().int().min(0).max(89).default(DEFAULT_PROBATION_CONFIG.secondPeriodDays),
   evaluationWindowDays: z.number().int().min(1).max(90).default(DEFAULT_PROBATION_CONFIG.evaluationWindowDays),
   alertsBeforeDays: z.array(z.number().int().min(0).max(90)).max(20).default([10, 5, 1]),
-  extensionTermRequired: z.boolean().default(true),
+  extensionTermRequired: z.boolean().default(false),
   extensionDocumentTemplateId: z.string().trim().max(180).optional(),
   evaluator: integrationAssigneeSchema.default({ strategy: "direct_manager", fallback: "hr_pool" }),
   effectivenessRule: z.enum(["manual", "approved_evaluations", "automatic_at_end"]).default("manual"),

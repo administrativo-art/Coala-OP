@@ -6,6 +6,7 @@ import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { DEFAULT_COMPLEMENTARY_FIELDS, DEFAULT_PROFILE_BLOCKS } from "@/features/rh/lib/default-field-map";
 import type { Employee, EmployeeFieldValue, FieldMap, RhAccessCache, RhRole } from "@/types/rh";
 import { canViewField } from "@/types/rh";
+import { refreshProbationProcess, type ProbationProcessState } from "@/features/hr/integration/probation-process";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,26 +99,31 @@ export async function GET(
     const employee = employeeSnap.data() as Employee;
     let imageVoiceConsent = employee.consentimento_imagem_voz ?? null;
     let privacyAcknowledgement = employee.ciencia_privacidade_onboarding ?? null;
-    if (!imageVoiceConsent || !privacyAcknowledgement) {
-      let onboardingSnap = await hrDbAdmin
+    let onboardingSnap = await hrDbAdmin
+      .collection("onboardingProcesses")
+      .where("employeeId", "==", normalizedEmployeeId)
+      .limit(1)
+      .get();
+    const employeeEmail = typeof employee.email === "string" ? employee.email.trim().toLowerCase() : "";
+    if (onboardingSnap.empty && employeeEmail) {
+      onboardingSnap = await hrDbAdmin
         .collection("onboardingProcesses")
-        .where("employeeId", "==", normalizedEmployeeId)
+        .where("candidateEmail", "==", employeeEmail)
         .limit(1)
         .get();
-      const employeeEmail = typeof employee.email === "string" ? employee.email.trim().toLowerCase() : "";
-      if (onboardingSnap.empty && employeeEmail) {
-        onboardingSnap = await hrDbAdmin
-          .collection("onboardingProcesses")
-          .where("candidateEmail", "==", employeeEmail)
-          .limit(1)
-          .get();
-      }
-      const onboarding = onboardingSnap.empty ? null : onboardingSnap.docs[0].data();
-      imageVoiceConsent ??= onboarding?.consentimento_imagem_voz ?? null;
-      privacyAcknowledgement ??= onboarding?.publicPrivacyAcceptance
-        ? { ...onboarding.publicPrivacyAcceptance, onboarding_id: onboardingSnap.docs[0].id }
-        : null;
     }
+    const onboarding = onboardingSnap.empty ? null : onboardingSnap.docs[0].data();
+    const onboardingId = onboardingSnap.empty ? null : onboardingSnap.docs[0].id;
+    imageVoiceConsent ??= onboarding?.consentimento_imagem_voz ?? null;
+    privacyAcknowledgement ??= onboarding?.publicPrivacyAcceptance
+      ? { ...onboarding.publicPrivacyAcceptance, onboarding_id: onboardingId }
+      : null;
+    const probation = onboarding?.probationV2
+      ? refreshProbationProcess(
+          onboarding.probationV2 as ProbationProcessState,
+          new Date().toISOString().slice(0, 10),
+        )
+      : null;
     const role = inferRole(actor, employee);
     const cache: RhAccessCache = {
       auth_uid: actor.userDoc.id,
@@ -156,6 +162,7 @@ export async function GET(
         cache,
         consentimento_imagem_voz: imageVoiceConsent,
         ciencia_privacidade_onboarding: privacyAcknowledgement,
+        periodo_experiencia: probation,
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );

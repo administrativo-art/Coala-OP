@@ -14,6 +14,7 @@ import type {
   OnboardingPrivacyAcknowledgementRecord,
 } from '@/types/rh';
 import { canViewField } from '@/types/rh';
+import type { ProbationProcessState } from '@/features/hr/integration/probation-process';
 
 export type EmployeeProfileData = {
   employee:    Employee;
@@ -22,6 +23,7 @@ export type EmployeeProfileData = {
   cache:       RhAccessCache;
   consentimento_imagem_voz: ImageVoiceConsentRecord | null;
   ciencia_privacidade_onboarding: OnboardingPrivacyAcknowledgementRecord | null;
+  periodo_experiencia: ProbationProcessState | null;
 };
 
 type State =
@@ -127,6 +129,7 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Sta
               cache,
               consentimento_imagem_voz: employee.consentimento_imagem_voz ?? null,
               ciencia_privacidade_onboarding: employee.ciencia_privacidade_onboarding ?? null,
+              periodo_experiencia: null,
             },
           });
         }

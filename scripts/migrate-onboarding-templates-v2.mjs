@@ -25,7 +25,7 @@ function blocks(stageList, documents) {
 function content(role, fn) {
   const stageList = stages(fn?.onboardingStages?.length ? fn.onboardingStages : role.onboardingStages);
   const documents = fn?.onboardingDocuments?.length ? fn.onboardingDocuments : role.onboardingDocuments;
-  return { stages: stageList, blocks: blocks(stageList, documents), rules: [], probation: { firstPeriodDays: 45, secondPeriodDays: 45, evaluationWindowDays: 10, alertsBeforeDays: [10, 5, 1], extensionTermRequired: true, evaluator: { strategy: "direct_manager", fallback: "hr_pool" }, effectivenessRule: "manual" }, completionRules: [] };
+  return { stages: stageList, blocks: blocks(stageList, documents), rules: [], probation: { firstPeriodDays: 45, secondPeriodDays: 45, evaluationWindowDays: 10, alertsBeforeDays: [10, 5, 1], extensionTermRequired: false, evaluator: { strategy: "direct_manager", fallback: "hr_pool" }, effectivenessRule: "manual" }, completionRules: [] };
 }
 
 const [rolesSnapshot, functionsSnapshot, existingSnapshot] = await Promise.all([db.collection("jobRoles").get(), db.collection("jobFunctions").get(), db.collection("onboardingTemplates").get()]);

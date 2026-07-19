@@ -504,6 +504,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
     event.preventDefault();
     if (!data) return;
     setError(null);
+    setSubmitted(false);
     if (!data.privacyNotice || !privacyAcknowledged) {
       setError("Leia e confirme o Aviso de Privacidade para enviar o onboarding.");
       return;
@@ -1212,13 +1213,33 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
             </p>
           )}
 
+          {submitted && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"
+            >
+              <CheckCircle2 className="mr-2 inline h-4 w-4" />
+              Onboarding enviado com sucesso. Sua resposta foi registrada.
+              {data.publicPrivacyAcceptance?.lastProtocol ? (
+                <span className="ml-1 whitespace-nowrap">Protocolo: {data.publicPrivacyAcceptance.lastProtocol}.</span>
+              ) : null}
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={submitting || linkExpired || !privacyAcknowledged || !allergyAcknowledged}
             className="btn mt-7 inline-flex h-[52px] w-full items-center justify-center gap-2 bg-[#EE6FA8] text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {submitting ? "Enviando..." : linkExpired ? "Prazo encerrado" : "Enviar onboarding"}
+            {submitting
+              ? "Enviando..."
+              : linkExpired
+                ? "Prazo encerrado"
+                : submitted
+                  ? "Enviar novamente"
+                  : "Enviar onboarding"}
           </button>
         </form>
       </main>

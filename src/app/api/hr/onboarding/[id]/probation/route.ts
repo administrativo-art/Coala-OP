@@ -28,8 +28,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (action === "set_admission_date") current = createProbationProcess(text(body.admissionDate), current?.config, now);
     else if (!current) return error("Experiência não configurada.", 409);
     else if (action === "evaluate") current = completeProbationEvaluation(current, { evaluationId: body.evaluationId === "second" ? "second" : "first", result: body.result === "rejected" ? "rejected" : body.result === "review" ? "review" : "approved", notes: text(body.notes) ?? undefined, actorId: access.decoded.uid, now });
-    else if (action === "term_generated") current = { ...current, extensionTerm: { ...current.extensionTerm, generatedDocumentId: text(body.generatedDocumentId) }, updatedAt: now };
-    else if (action === "term_signed") current = { ...current, extensionTerm: { ...current.extensionTerm, signedAt: now }, updatedAt: now };
     else if (action === "decide") current = decideProbation(current, { result: body.result === "terminated" ? "terminated" : "effective", notes: text(body.notes) ?? undefined, actorId: access.decoded.uid, now });
     else return error("Ação inválida.");
   } catch (cause) { return error(cause instanceof Error ? cause.message : "Falha ao atualizar experiência."); }

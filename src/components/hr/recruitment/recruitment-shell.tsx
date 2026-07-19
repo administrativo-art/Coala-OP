@@ -8479,9 +8479,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
         {error && <div className="px-6 pt-4"><ErrorLine msg={error} /></div>}
 
-        {selectedProcess.integrationV2 ? <IntegrationV2Runner process={selectedProcess} getToken={getToken} canManage={canManage} onRefresh={onRefresh} /> : null}
-        {selectedProcess.probationV2 ? <ProbationV2Panel process={selectedProcess} getToken={getToken} canManage={canManage} onRefresh={onRefresh} /> : null}
-
         <div className="flex flex-wrap items-start gap-5 p-6">
           {/* timeline */}
           <aside className="min-w-[260px] flex-[1_1_290px] rounded-2xl border border-slate-100 bg-slate-50 p-4">

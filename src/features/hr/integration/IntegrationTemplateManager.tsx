@@ -241,7 +241,7 @@ export function IntegrationTemplateManager({ roles, functions, getToken, canMana
   const selectedBlock = draft?.blocks.find((block) => block.id === selectedBlockId) ?? null;
   const probationConfig = draft?.probation ?? {
     firstPeriodDays: 45, secondPeriodDays: 45, evaluationWindowDays: 10,
-    alertsBeforeDays: [10, 5, 1], extensionTermRequired: true,
+    alertsBeforeDays: [10, 5, 1], extensionTermRequired: false,
     evaluator: { strategy: "direct_manager" as const, fallback: "hr_pool" as const },
     effectivenessRule: "manual" as const,
   };
@@ -585,10 +585,8 @@ export function IntegrationTemplateManager({ roles, functions, getToken, canMana
                     <label className="text-xs font-bold text-slate-500">Alertas antes do fim de cada período<input value={probationConfig.alertsBeforeDays.join(', ')} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, alertsBeforeDays: event.target.value.split(',').map(Number).filter(Number.isFinite) } })} placeholder="10, 5, 1" className="mt-1 h-10 w-full rounded-lg border px-3 text-sm" /></label>
                     <label className="text-xs font-bold text-slate-500">Responsável pela avaliação<select value={probationConfig.evaluator.strategy} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, evaluator: { ...probationConfig.evaluator, strategy: event.target.value as typeof probationConfig.evaluator.strategy } } })} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"><option value="direct_manager">Gestor direto</option><option value="unit_manager">Gestor da unidade</option><option value="hr_pool">Equipe de RH</option><option value="specific_user">Usuário específico</option><option value="selected_during_execution">Escolher na execução</option></select></label>
                     <label className="text-xs font-bold text-slate-500">Regra de efetivação<select value={probationConfig.effectivenessRule} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, effectivenessRule: event.target.value as typeof probationConfig.effectivenessRule } })} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"><option value="manual">Decisão manual do RH</option><option value="approved_evaluations">Efetivar com avaliações aprovadas</option><option value="automatic_at_end">Efetivar ao fim do período</option></select></label>
-                    <label className="text-xs font-bold text-slate-500">Modelo do termo de prorrogação<input value={probationConfig.extensionDocumentTemplateId ?? ''} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, extensionDocumentTemplateId: event.target.value || undefined } })} placeholder="ID do modelo documental" className="mt-1 h-10 w-full rounded-lg border px-3 text-sm" /></label>
                   </div>
-                  <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={probationConfig.extensionTermRequired} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, extensionTermRequired: event.target.checked } })} />Termo de prorrogação obrigatório quando houver segundo período</label>
-                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Total: {probationConfig.firstPeriodDays + probationConfig.secondPeriodDays} dias · avaliações nos últimos {probationConfig.evaluationWindowDays} dias de cada período.</p>
+                  <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">Total: {probationConfig.firstPeriodDays + probationConfig.secondPeriodDays} dias · a passagem para o segundo período é automática, sem geração de termo manual · avaliações nos últimos {probationConfig.evaluationWindowDays} dias de cada período.</p>
                 </div>
               ) : null}
 
