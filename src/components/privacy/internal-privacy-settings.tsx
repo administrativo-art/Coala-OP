@@ -123,7 +123,7 @@ export function InternalPrivacySettings() {
             <p className="text-xs font-black uppercase text-pink-500">LGPD interna</p>
             <h2 className="mt-2 text-2xl font-black text-slate-950">Aviso interno de privacidade</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              O Coala OP e um sistema interno da empresa para gestao operacional, administrativa,
+              O Coala One e um sistema interno da empresa para gestao operacional, administrativa,
               financeira, de RH/DP e recrutamento. Os dados pessoais sao tratados pela empresa para
               executar atividades internas, cumprir obrigacoes legais, organizar a operacao e proteger
               o ambiente corporativo.

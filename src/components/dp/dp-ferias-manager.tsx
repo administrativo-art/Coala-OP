@@ -6,6 +6,7 @@ import { ptBR } from 'date-fns/locale';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
+import { activeOperationalUnits } from '@/lib/dp-units';
 import type { User } from '@/types';
 
 import {
@@ -170,6 +171,7 @@ export function DPFeriasManager() {
   const [monthModal, setMonthModal] = useState(false);
 
   const canRegister = permissions.dp?.vacation?.request ?? false;
+  const activeUnits = useMemo(() => activeOperationalUnits(units), [units]);
 
   const operationalUsers = useMemo(() => {
     const ops = activeUsers.filter(u => u.operacional === true);
@@ -291,7 +293,7 @@ export function DPFeriasManager() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todas as unidades</SelectItem>
-              {units.map(u => (
+              {activeUnits.map(u => (
                 <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
               ))}
             </SelectContent>

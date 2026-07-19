@@ -35,10 +35,12 @@ export async function GET(request: NextRequest) {
         id: doc.id,
         ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),
       })),
-      units: unitsSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),
-      })),
+      units: unitsSnap.docs
+        .filter((doc) => doc.data().isArchived !== true)
+        .map((doc) => ({
+          id: doc.id,
+          ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),
+        })),
       shiftDefinitions: shiftsSnap.docs.map((doc) => ({
         id: doc.id,
         ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),

@@ -41,6 +41,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
+import { activeOperationalUnits } from "@/lib/dp-units";
 import { useToast } from "@/hooks/use-toast";
 import {
   createAnalyticsTaxonomyEntry,
@@ -723,7 +724,7 @@ export function FormsAnalyticsTaxonomyManager() {
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
-                        {units.map((unit) => (
+                        {activeOperationalUnits(units).map((unit) => (
                           <SelectItem key={unit.id} value={unit.id}>
                             {unit.name}
                           </SelectItem>

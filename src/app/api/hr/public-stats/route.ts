@@ -8,7 +8,7 @@ const FALLBACK_PUBLIC_UNITS = [
   'Tirirical',
   'João Paulo',
   'Tirimai',
-  'Administrativo/CTA',
+  'Centro de distribuição - Matriz',
 ];
 
 /**
@@ -18,7 +18,8 @@ const FALLBACK_PUBLIC_UNITS = [
  * Sem autenticação: expõe apenas contagens e nomes de unidades.
  */
 function isActiveRecord(data: FirebaseFirestore.DocumentData) {
-  return data.active !== false &&
+  return data.isArchived !== true &&
+    data.active !== false &&
     data.isActive !== false &&
     data.status !== 'inactive' &&
     data.status !== 'inativo' &&

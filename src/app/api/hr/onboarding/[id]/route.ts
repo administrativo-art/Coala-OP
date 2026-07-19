@@ -3,13 +3,19 @@ import { randomBytes } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
 
 import { resolveCollaboratorCore } from '@/features/hr/lib/collaborator-core.server';
+import { integrationTemplateVersionSchema, type IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import { assertHrAccess, serializeHrValue } from '@/features/hr/lib/server-access';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { authAdmin, dbAdmin } from '@/lib/firebase-admin';
 import { createFirstAccessLink } from '@/lib/first-access-links';
+import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { findBizneoUser } from '@/lib/integrations/bizneo-admin';
+import { getAccessToken as getPdvAccessToken } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
+import { requiredOnboardingIntegrationsResolved } from '@/lib/hr/onboarding-integrations';
 import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-documents';
+import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
 import { extendOnboardingPublicLink, onboardingPublicLinkExtensionUsed } from '@/lib/hr/onboarding-public-link';
 import type { OnboardingDocument, OnboardingProcess, OnboardingStageId } from '@/types';
 
@@ -30,6 +36,75 @@ function normalizeEmail(value: unknown) {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  value.forEach((entry) => {
+    if (typeof entry !== 'string') return;
+    const normalized = entry.trim();
+    if (normalized) seen.add(normalized);
+  });
+  return Array.from(seen);
+}
+
+type IntegrationAlert = NonNullable<OnboardingProcess['integrationAlerts']>[number];
+
+async function verifyAccessIntegrations(params: {
+  process: Record<string, unknown>;
+  collaboratorUserId: string;
+  now: string;
+}): Promise<IntegrationAlert[]> {
+  const userRef = dbAdmin.collection('users').doc(params.collaboratorUserId);
+  const candidateId = asString(params.process.candidateId);
+  const candidateRef = candidateId ? hrDbAdmin.collection('candidates').doc(candidateId) : null;
+  const [userDoc, candidateDoc] = await Promise.all([
+    userRef.get(),
+    candidateRef ? candidateRef.get() : Promise.resolve(null),
+  ]);
+  if (!userDoc.exists) throw new Error('Cadastro interno do colaborador não encontrado.');
+
+  const user = userDoc.data() ?? {};
+  const candidate = candidateDoc?.data() ?? {};
+  const email = normalizeEmail(user.email ?? params.process.candidateEmail);
+  const knownBizneoId = asString(user.registrationIdBizneo) ?? asString(candidate.registrationIdBizneo);
+  const knownPdvId = asString(user.registrationIdPdv) ?? asString(candidate.registrationIdPdv);
+  const existingAlerts = Array.isArray(params.process.integrationAlerts)
+    ? params.process.integrationAlerts.map(entry => asRecord(entry))
+    : [];
+
+  let bizneoAlert: IntegrationAlert;
+  try {
+    const bizneoUser = await findBizneoUser({ email, id: knownBizneoId });
+    if (bizneoUser) {
+      const registrationIdBizneo = String(bizneoUser.id);
+      await userRef.set({ registrationIdBizneo, updatedAt: params.now }, { merge: true });
+      bizneoAlert = { id: 'bizneo_id', label: 'Bizneo HR', status: 'resolved', message: `Cadastro localizado e vinculado pelo e-mail (ID ${registrationIdBizneo}).`, checkedAt: params.now, externalId: registrationIdBizneo, source: 'bizneo_api' };
+    } else {
+      bizneoAlert = { id: 'bizneo_id', label: 'Bizneo HR', status: 'pending', message: 'Colaborador não localizado no Bizneo. Cadastre-o e verifique novamente.', checkedAt: params.now, source: 'bizneo_api' };
+    }
+  } catch (cause) {
+    bizneoAlert = { id: 'bizneo_id', label: 'Bizneo HR', status: 'pending', message: cause instanceof Error ? `Não foi possível consultar o Bizneo: ${cause.message}` : 'Não foi possível consultar o Bizneo.', checkedAt: params.now, source: 'bizneo_api' };
+  }
+
+  let pdvAlert: IntegrationAlert;
+  try {
+    await getPdvAccessToken();
+    if (knownPdvId) {
+      await userRef.set({ registrationIdPdv: knownPdvId, updatedAt: params.now }, { merge: true });
+      pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'resolved', message: `API acessível e código operacional vinculado (ID ${knownPdvId}).`, checkedAt: params.now, externalId: knownPdvId, source: 'pdv_api_and_local_link' };
+    } else {
+      pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: 'PDV acessível, mas nenhum código operacional está vinculado ao colaborador.', checkedAt: params.now, source: 'pdv_api_and_local_link' };
+    }
+  } catch (cause) {
+    pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: cause instanceof Error ? `Não foi possível autenticar no PDV Legal: ${cause.message}` : 'Não foi possível autenticar no PDV Legal.', checkedAt: params.now, source: 'pdv_api_and_local_link' };
+  }
+
+  const requiredIds = new Set(['bizneo_id', 'pdv_id']);
+  return [bizneoAlert, pdvAlert, ...existingAlerts
+    .filter(alert => !requiredIds.has(asString(alert.id) ?? ''))
+    .map(alert => alert as IntegrationAlert)];
 }
 
 function answerString(answers: Record<string, unknown>, key: string) {
@@ -132,6 +207,10 @@ function isDocumentReceivedStatus(status: OnboardingDocument['status']) {
   return status === 'received' || status === 'ai_approved' || status === 'review_required' || status === 'approved';
 }
 
+function hasAuditableDocumentFile(document: OnboardingDocument) {
+  return typeof document.fileUrl === 'string' && document.fileUrl.trim().length > 0;
+}
+
 function mergeDocumentStatus(
   documents: OnboardingDocument[],
   documentId: string,
@@ -148,7 +227,34 @@ function mergeDocumentStatus(
       updatedAt: now,
       receivedAt: isDocumentReceivedStatus(status)
         ? document.receivedAt ?? now
-        : document.receivedAt ?? null,
+        : status === 'pending'
+          ? null
+          : document.receivedAt ?? null,
+      approvedAt: status === 'approved' ? now : null,
+    };
+  });
+}
+
+function mergeDocumentStatuses(
+  documents: OnboardingDocument[],
+  documentIds: string[],
+  status: OnboardingDocument['status'],
+  note: string | null,
+  now: string
+) {
+  const targetIds = new Set(documentIds);
+  return documents.map((document) => {
+    if (!targetIds.has(document.id)) return document;
+    return {
+      ...document,
+      status,
+      note,
+      updatedAt: now,
+      receivedAt: isDocumentReceivedStatus(status)
+        ? document.receivedAt ?? now
+        : status === 'pending'
+          ? null
+          : document.receivedAt ?? null,
       approvedAt: status === 'approved' ? now : null,
     };
   });
@@ -224,7 +330,23 @@ async function createCollaboratorFromOnboarding(params: {
     needsTransportVoucher,
     transportVoucherValue,
   }, { syncProfile: true });
-  const profileId = collaboratorCore.effectiveProfileId ?? '';
+  if (!collaboratorCore.role?.defaultProfileId) {
+    throw new Error('Todo cargo ativo deve possuir um perfil de acesso padrão antes da criação do colaborador.');
+  }
+  const profileId = collaboratorCore.effectiveProfileId;
+  if (!profileId) {
+    throw new Error('O cargo selecionado não possui perfil de acesso padrão. Configure o cargo antes de criar o colaborador.');
+  }
+  const [roleProfileDoc, profileDoc] = await Promise.all([
+    dbAdmin.collection('profiles').doc(collaboratorCore.role.defaultProfileId).get(),
+    dbAdmin.collection('profiles').doc(profileId).get(),
+  ]);
+  if (!roleProfileDoc.exists) {
+    throw new Error('O perfil de acesso padrão configurado no cargo não existe.');
+  }
+  if (!profileDoc.exists) {
+    throw new Error('O perfil de acesso configurado no cargo ou função não existe.');
+  }
 
   await dbAdmin.collection('users').doc(authUser.uid).set({
     username: name,
@@ -243,6 +365,10 @@ async function createCollaboratorFromOnboarding(params: {
 
   const employeeId = authUser.uid;
   const employeeRef = hrDbAdmin.collection('employees').doc(employeeId);
+  const onboardingImageVoiceConsent = asRecord(params.process.consentimento_imagem_voz);
+  const hasExplicitImageVoiceDecision = typeof onboardingImageVoiceConsent.autorizado === 'boolean';
+  const onboardingPrivacyAcknowledgement = asRecord(params.process.publicPrivacyAcceptance);
+  const hasPrivacyAcknowledgement = onboardingPrivacyAcknowledgement.acknowledged === true;
   await employeeRef.set({
     bizneo_employee_id: employeeId,
     auth_uid: authUser.uid,
@@ -257,7 +383,34 @@ async function createCollaboratorFromOnboarding(params: {
     synced_at: admissionTimestamp,
     created_at: admissionTimestamp,
     updated_at: admissionTimestamp,
+    ...(hasExplicitImageVoiceDecision
+      ? { consentimento_imagem_voz: onboardingImageVoiceConsent }
+      : {}),
+    ...(hasPrivacyAcknowledgement
+      ? {
+          ciencia_privacidade_onboarding: {
+            ...onboardingPrivacyAcknowledgement,
+            onboarding_id: params.processId,
+          },
+        }
+      : {}),
   }, { merge: true });
+
+  if (hasExplicitImageVoiceDecision) {
+    const eventId = asString(onboardingImageVoiceConsent.protocolo) ?? `onboarding_${params.processId}`;
+    const eventRef = employeeRef.collection('consentimentos_imagem_voz_historico').doc(eventId);
+    const existingEvent = await eventRef.get();
+    if (!existingEvent.exists) {
+      await eventRef.create({
+        ...onboardingImageVoiceConsent,
+        evento: onboardingImageVoiceConsent.autorizado === true
+          ? 'autorizacao_concedida'
+          : 'autorizacao_nao_concedida',
+        migrated_to_employee_at: now,
+        employee_id: employeeId,
+      });
+    }
+  }
 
   const batch = hrDbAdmin.batch();
   const fieldValuesRef = employeeRef.collection('field_values');
@@ -326,6 +479,10 @@ async function createCollaboratorFromOnboarding(params: {
     actorId: params.actorId,
     actorName: params.actorName,
   });
+  const promotedSignedDocumentIds = await promoteSignedOnboardingDocuments({
+    onboardingId: params.processId,
+    employeeId,
+  });
 
   const firstAccessLink = await createFirstAccessLink({
     userId: authUser.uid,
@@ -335,7 +492,7 @@ async function createCollaboratorFromOnboarding(params: {
     createdByEmail: params.actorEmail,
   });
 
-  return { userId: authUser.uid, employeeId, firstAccessLink, promotedDocuments };
+  return { userId: authUser.uid, employeeId, firstAccessLink, promotedDocuments, promotedSignedDocumentIds };
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -351,8 +508,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const process = snap.data() ?? {};
   const now = new Date().toISOString();
+  let firstAccessEmail: {
+    url: string;
+    expiresAt: string;
+    template: IntegrationTemplateVersion;
+    force?: boolean;
+  } | null = null;
   const update: Record<string, unknown> = { updatedAt: now };
   let responseFirstAccessUrl: string | null = null;
+  let changedDocumentsCount: number | null = null;
 
   if (action === 'document_status') {
     const documentId = asString(body.documentId);
@@ -361,13 +525,76 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return jsonError('Documento ou status inválido.');
     }
     const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
+    const document = documents.find(item => item.id === documentId);
+    if (!document) return jsonError('Documento não encontrado.', 404);
+    if (['approved', 'rejected', 'review_required'].includes(status)) {
+      if (process.currentStage !== 'document_review') {
+        return jsonError('A conferência documental só pode ser feita na etapa Formalização · Conferência.', 400);
+      }
+      if (!hasAuditableDocumentFile(document)) {
+        return jsonError('Não é possível conferir um documento sem arquivo anexado para auditoria.', 400);
+      }
+    }
     update.documents = mergeDocumentStatus(documents, documentId, status, asString(body.note), now);
+    changedDocumentsCount = 1;
+  } else if (action === 'document_status_bulk') {
+    const documentIds = asStringArray(body.documentIds);
+    const status = asString(body.status) as OnboardingDocument['status'] | null;
+    if (documentIds.length === 0 || status !== 'approved') {
+      return jsonError('Documentos ou status inválido.');
+    }
+    if (process.currentStage !== 'document_review') {
+      return jsonError('A conferência documental só pode ser feita na etapa Formalização · Conferência.', 400);
+    }
+
+    const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
+    const documentsById = new Map(documents.map(document => [document.id, document]));
+    const missingDocumentId = documentIds.find(documentId => !documentsById.has(documentId));
+    if (missingDocumentId) return jsonError('Documento não encontrado.', 404);
+
+    const invalidDocument = documentIds
+      .map(documentId => documentsById.get(documentId))
+      .find(document => !document || !hasAuditableDocumentFile(document));
+    if (invalidDocument) {
+      return jsonError('Não é possível aprovar em lote documentos sem arquivo anexado para auditoria.', 400);
+    }
+
+    update.documents = mergeDocumentStatuses(documents, documentIds, status, asString(body.note), now);
+    changedDocumentsCount = documentIds.length;
   } else if (action === 'advance_stage') {
     const currentStage = asString(body.currentStage) as OnboardingStageId | null;
     if (!currentStage) return jsonError('Etapa inválida.');
+    if (
+      (process.currentStage === 'signature_preparation' || process.currentStage === 'signature') &&
+      currentStage !== process.currentStage
+    ) {
+      const signatureWorkflow = await listSignatureWorkflow(id);
+      const selected = signatureWorkflow.documents.filter(document => document.selected === true);
+      const completed = new Set(['signed', 'signed_archived_pending_employee', 'archived']);
+      if (!selected.length || selected.some(document => !completed.has(String(document.status)))) {
+        return jsonError('A etapa só avança quando todos os documentos selecionados estiverem assinados e arquivados.', 409);
+      }
+    }
+    if (process.currentStage === 'formalization_validation' && currentStage !== 'formalization_validation') {
+      const accessProvisioning = asRecord(process.accessProvisioning);
+      const accessEmail = asRecord(accessProvisioning.email);
+      const firstAccess = asRecord(process.firstAccess);
+      const accessReady = Boolean(asString(process.collaboratorUserId)) &&
+        accessEmail.status === 'delivered' &&
+        firstAccess.status === 'used';
+      if (!accessReady) {
+        return jsonError('A formalização só avança após criar o cadastro, confirmar a entrega do e-mail e cadastrar a senha.', 409);
+      }
+    }
+    if (process.currentStage === 'integration' && currentStage !== 'integration' && !requiredOnboardingIntegrationsResolved(process.integrationAlerts)) {
+      return jsonError('Confirme a sincronização do Bizneo e do PDV Legal antes de avançar.', 409);
+    }
     update.currentStage = currentStage;
     update.status = nextStatusForStage(currentStage);
   } else if (action === 'save_finalization') {
+    if (process.currentStage !== 'formalization_validation') {
+      return jsonError('As configurações finais só podem ser salvas na etapa Formalização · Finalização.', 400);
+    }
     const finalization = asRecord(body.finalizationSettings);
     const needsTransportVoucher = asBoolean(finalization.needsTransportVoucher) ?? false;
     const shiftDefinitionId = asString(finalization.shiftDefinitionId);
@@ -407,6 +634,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!asRecord(process.finalizationSettings) || Object.keys(asRecord(process.finalizationSettings)).length === 0) {
       return jsonError('Salve a validação final antes de criar o colaborador.', 400);
     }
+    if (asString(process.collaboratorUserId)) {
+      return jsonError('O cadastro deste colaborador já foi criado.', 409);
+    }
+    const accessRecipient = normalizeEmail(process.candidateEmail);
+    if (!accessRecipient || !accessRecipient.includes('@')) {
+      return jsonError('Corrija o e-mail pessoal da colaboradora antes de criar e enviar o acesso.', 400);
+    }
     const created = await createCollaboratorFromOnboarding({
       processId: id,
       process,
@@ -423,18 +657,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       promotedCount: created.promotedDocuments.promotedCount,
       duplicateCount: created.promotedDocuments.duplicateCount,
       employeeDocumentIds: created.promotedDocuments.promotedDocumentIds,
+      signedEmployeeDocumentIds: created.promotedSignedDocumentIds,
       completedAt: now,
       completedBy: access.decoded.uid,
     };
-    update.status = 'active';
-    update.currentStage = 'integration';
+    update.status = 'awaiting_first_access';
+    update.currentStage = 'formalization_validation';
     update.publicToken = null;
     update.publicTokenClosedAt = now;
-    const alerts = Array.isArray(process.integrationAlerts) ? process.integrationAlerts as Array<Record<string, unknown>> : [];
-    update.integrationAlerts = alerts.map(alert => ({
-      ...alert,
-      status: alert.id === 'bizneo_id' || alert.id === 'pdv_id' ? alert.status ?? 'pending' : alert.status,
-    }));
+    update.integrationAlerts = await verifyAccessIntegrations({ process, collaboratorUserId: created.userId, now });
     update.firstAccess = {
       status: 'pending',
       tokenId: created.firstAccessLink.tokenId,
@@ -443,7 +674,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       usedAt: null,
       createdBy: access.decoded.uid,
     };
+    update.accessProvisioning = {
+      status: 'awaiting_delivery',
+      userCreatedAt: now,
+      completedAt: null,
+      email: {
+        status: 'pending',
+        recipient: accessRecipient,
+        providerId: null,
+        lastError: null,
+      },
+    };
     responseFirstAccessUrl = created.firstAccessLink.url;
+    const integrationSnapshot = integrationTemplateVersionSchema.safeParse(
+      asRecord(asRecord(process.integrationV2).snapshot)
+    );
+    if (integrationSnapshot.success) {
+      firstAccessEmail = {
+        url: created.firstAccessLink.url,
+        expiresAt: created.firstAccessLink.expiresAt,
+        template: integrationSnapshot.data,
+      };
+    } else {
+      update.communicationWarning = 'O modelo de integração não possui snapshot válido para enviar o primeiro acesso.';
+    }
   } else if (action === 'create_first_access_link') {
     const collaboratorUserId = asString(process.collaboratorUserId);
     if (!collaboratorUserId) return jsonError('Crie o colaborador antes de gerar o link de primeiro acesso.');
@@ -451,6 +705,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const userData = userDoc.data() ?? {};
     if (!userDoc.exists || asString(userData.source) !== 'recruitment_onboarding' || asString(userData.onboardingId) !== id) {
       return jsonError('Este colaborador não foi criado por esta formalização.', 403);
+    }
+    if (asRecord(process.firstAccess).status === 'used') {
+      return jsonError('A senha já foi cadastrada. Não é necessário reenviar o primeiro acesso.', 409);
     }
     const firstAccessLink = await createFirstAccessLink({
       userId: collaboratorUserId,
@@ -468,8 +725,29 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       createdBy: access.decoded.uid,
     };
     responseFirstAccessUrl = firstAccessLink.url;
+    const integrationSnapshot = integrationTemplateVersionSchema.safeParse(
+      asRecord(asRecord(process.integrationV2).snapshot)
+    );
+    if (!integrationSnapshot.success) {
+      return jsonError('O modelo da integração não permite reenviar o e-mail de primeiro acesso.', 409);
+    }
+    firstAccessEmail = {
+      url: firstAccessLink.url,
+      expiresAt: firstAccessLink.expiresAt,
+      template: integrationSnapshot.data,
+      force: true,
+    };
+  } else if (action === 'verify_integrations') {
+    const collaboratorUserId = asString(process.collaboratorUserId);
+    if (!collaboratorUserId) return jsonError('Crie o colaborador antes de verificar os acessos.');
+    if (process.currentStage !== 'integration') return jsonError('Os acessos só podem ser verificados na etapa de integração.', 409);
+    update.integrationAlerts = await verifyAccessIntegrations({ process, collaboratorUserId, now });
   } else if (action === 'complete') {
     if (!process.collaboratorUserId) return jsonError('Crie o colaborador antes de finalizar o onboarding.');
+    if (process.currentStage !== 'integration') return jsonError('A integração não está na etapa de acessos.', 409);
+    if (!requiredOnboardingIntegrationsResolved(process.integrationAlerts)) {
+      return jsonError('Confirme a sincronização do Bizneo e do PDV Legal antes de finalizar.', 409);
+    }
     update.status = 'completed';
     update.currentStage = 'done';
     update.completedAt = now;
@@ -491,9 +769,31 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       target_id: id,
       target_name: process.candidateName ?? id,
       changed_fields: Object.keys(update),
+      ...(changedDocumentsCount !== null ? { changed_documents: changedDocumentsCount } : {}),
     },
     ttl_days: 365,
   });
+
+  if (firstAccessEmail) {
+    await sendTrackedIntegrationCommunication({
+      onboardingId: id,
+      event: 'first_access',
+      template: firstAccessEmail.template,
+      recipient: normalizeEmail(process.candidateEmail),
+      actionUrl: firstAccessEmail.url,
+      expiresAt: firstAccessEmail.expiresAt,
+      variables: {
+        'employee.name': asString(process.candidateName),
+        'employee.personal_email': normalizeEmail(process.candidateEmail),
+        'system.role.job_role': asString(process.jobRoleName),
+        'system.role.functions': asString(process.functionName),
+        'system.schedule.units': asString(process.unitName),
+        'system.schedule.shift': asString(process.shiftDefinitionName),
+        'integration.expected_admission_date': asString(process.expectedAdmissionDate),
+      },
+      force: firstAccessEmail.force,
+    });
+  }
 
   const saved = await ref.get();
   return NextResponse.json({

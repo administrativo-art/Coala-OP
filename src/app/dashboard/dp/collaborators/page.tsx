@@ -20,6 +20,7 @@ import {
 
 import { useAuth } from '@/hooks/use-auth';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
+import { activeOperationalUnits } from '@/lib/dp-units';
 import type { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -230,6 +231,7 @@ export default function DPCollaboratorsPage() {
   }, [allUsers]);
 
   const unitNameById = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
+  const activeUnits = useMemo(() => activeOperationalUnits(units), [units]);
   const shiftNameById = useMemo(() => new Map(shiftDefinitions.map((shift) => [shift.id, shift.name])), [shiftDefinitions]);
 
   const filtered = useMemo(() => {
@@ -321,7 +323,7 @@ export default function DPCollaboratorsPage() {
             <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as unidades</SelectItem>
-              {units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
+              {activeUnits.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={roleFilter} onValueChange={setRoleFilter}>

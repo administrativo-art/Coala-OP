@@ -7,6 +7,11 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { logAction } from '@/lib/log-action';
 import { createOnboardingPublicLinkWindow } from '@/lib/hr/onboarding-public-link';
+import { createIntegrationExecution } from '@/features/hr/integration/process';
+import { createProbationProcess } from '@/features/hr/integration/probation-process';
+import { blankIntegrationTemplateContent, getIntegrationTemplate, getIntegrationTemplateVersion } from '@/features/hr/integration/server';
+import type { IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
+import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import {
   applyOnboardingSignatureMode,
   instantiateOnboardingDocuments,
@@ -90,11 +95,15 @@ export async function POST(request: NextRequest) {
   const needsTransportVoucher = asBoolean(input.needsTransportVoucher);
   const transportVoucherValue = needsTransportVoucher ? asNumber(input.transportVoucherValue) : null;
   const generateSignatureDocuments = asBoolean(input.generateSignatureDocuments);
+  const integrationMode = input.integrationMode === 'import' ? 'import' : 'blank';
+  const integrationTemplateId = asString(input.integrationTemplateId);
+  const requestedTemplateVersion = asNumber(input.integrationTemplateVersion);
 
   if (!candidateName) return jsonError('Informe o nome da pessoa em integração.');
   if (!candidateEmail || !candidateEmail.includes('@')) return jsonError('Informe um e-mail válido.');
   if (!jobRoleId) return jsonError('Selecione o cargo da integração.');
   if (!functionId) return jsonError('Selecione a função da integração.');
+  if (integrationMode === 'import' && !integrationTemplateId) return jsonError('Selecione o modelo que será importado.');
   if (needsTransportVoucher && (transportVoucherValue === null || transportVoucherValue < 0)) {
     return jsonError('Informe o valor diário do vale-transporte.');
   }
@@ -109,6 +118,9 @@ export async function POST(request: NextRequest) {
   if (!roleDoc.exists) return jsonError('Cargo não encontrado.', 404);
   if (!functionDoc.exists) return jsonError('Função não encontrada.', 404);
   if (unitId && !unitDoc?.exists) return jsonError('Unidade não encontrada.', 404);
+  if (unitDoc?.exists && unitDoc.data()?.isArchived === true) {
+    return jsonError('Unidade indisponível para novos processos.', 400);
+  }
   if (shiftDefinitionId && !shiftDefinitionDoc?.exists) return jsonError('Turno não encontrado.', 404);
   if (
     unitDoc?.exists &&
@@ -120,6 +132,24 @@ export async function POST(request: NextRequest) {
 
   const roleData = roleDoc.data() ?? {};
   const functionData = functionDoc.data() ?? {};
+  const roleDefaultProfileId = asString(roleData.defaultProfileId);
+  if (roleData.isActive !== false && !roleDefaultProfileId) {
+    return jsonError('O cargo selecionado não possui um perfil de acesso padrão. Configure o cargo antes de iniciar a integração.', 400);
+  }
+  const effectiveProfileId = asString(functionData.defaultProfileId) ?? roleDefaultProfileId;
+  if (!effectiveProfileId) {
+    return jsonError('Não foi possível determinar o perfil de acesso desta integração.', 400);
+  }
+  const [roleProfileDoc, effectiveProfileDoc] = await Promise.all([
+    roleDefaultProfileId ? dbAdmin.collection('profiles').doc(roleDefaultProfileId).get() : Promise.resolve(null),
+    dbAdmin.collection('profiles').doc(effectiveProfileId).get(),
+  ]);
+  if (!roleProfileDoc?.exists) {
+    return jsonError('O perfil de acesso padrão configurado no cargo não existe.', 400);
+  }
+  if (!effectiveProfileDoc.exists) {
+    return jsonError('O perfil de acesso configurado no cargo ou função não existe.', 400);
+  }
   const compatibleRoleIds = Array.isArray(functionData.compatibleRoleIds)
     ? functionData.compatibleRoleIds.filter((value): value is string => typeof value === 'string')
     : [];
@@ -130,7 +160,36 @@ export async function POST(request: NextRequest) {
 
   const nowDate = new Date();
   const now = nowDate.toISOString();
+  const publicToken = createPublicToken();
+  const publicLinkWindow = createOnboardingPublicLinkWindow(nowDate);
   const onboardingRef = hrDbAdmin.collection('onboardingProcesses').doc();
+  let integrationSnapshot: IntegrationTemplateVersion;
+  if (integrationMode === 'import' && integrationTemplateId) {
+    const template = await getIntegrationTemplate(integrationTemplateId);
+    if (!template) return jsonError('Modelo de integração não encontrado.', 404);
+    if (template.metadata.status !== 'published' || template.metadata.currentVersion < 1) return jsonError('O modelo selecionado não possui versão publicada.');
+    if (template.metadata.roleId !== jobRoleId) return jsonError('O modelo selecionado pertence a outro cargo.');
+    if (template.metadata.functionId && template.metadata.functionId !== functionId) return jsonError('O modelo selecionado pertence a outra função.');
+    const version = requestedTemplateVersion && requestedTemplateVersion > 0 ? requestedTemplateVersion : template.metadata.currentVersion;
+    const published = await getIntegrationTemplateVersion(integrationTemplateId, version);
+    if (!published) return jsonError('Versão publicada do modelo não encontrada.', 404);
+    integrationSnapshot = published;
+  } else {
+    integrationSnapshot = {
+      schemaVersion: 'coala-integration-v1',
+      templateId: `instance_${onboardingRef.id}`,
+      version: 1,
+      name: `Integração de ${candidateName}`,
+      roleId: jobRoleId,
+      functionId,
+      createdAt: now,
+      createdBy: access.decoded.uid,
+      publishedAt: null,
+      ...blankIntegrationTemplateContent(),
+    };
+  }
+  const integrationV2 = createIntegrationExecution({ mode: integrationMode, snapshot: integrationSnapshot, now });
+  const probationV2 = createProbationProcess(expectedAdmissionDate, integrationSnapshot.probation, now);
   const stages = applyOnboardingSignatureMode(
     mergeOnboardingStageModels(roleData.onboardingStages, functionData.onboardingStages),
     generateSignatureDocuments
@@ -163,8 +222,10 @@ export async function POST(request: NextRequest) {
       shiftDefinitionId: shiftDefinitionDoc?.exists ? shiftDefinitionDoc.id : null,
     },
     source: 'manual',
-    publicToken: createPublicToken(),
-    ...createOnboardingPublicLinkWindow(nowDate),
+    integrationV2,
+    probationV2,
+    publicToken,
+    ...publicLinkWindow,
     status: 'collecting_documents',
     currentStage: 'documents',
     stages,
@@ -190,6 +251,24 @@ export async function POST(request: NextRequest) {
       function_id: functionDoc.id,
     },
     ttl_days: 365,
+  });
+
+  await sendTrackedIntegrationCommunication({
+    onboardingId: onboardingRef.id,
+    event: 'formalization_started',
+    template: integrationSnapshot,
+    recipient: candidateEmail,
+    actionUrl: `https://vagas.coalashakes.com/onboarding/${encodeURIComponent(publicToken)}`,
+    expiresAt: publicLinkWindow.publicTokenExpiresAt,
+    variables: {
+      'employee.name': candidateName,
+      'employee.personal_email': candidateEmail,
+      'system.role.job_role': asString(roleData.name) ?? asString(roleData.publicTitle),
+      'system.role.functions': asString(functionData.name) ?? asString(functionData.publicTitle),
+      'system.schedule.units': unitDoc?.exists ? asString(unitDoc.data()?.name) : null,
+      'system.schedule.shift': shiftDefinitionDoc?.exists ? asString(shiftDefinitionDoc.data()?.name) : null,
+      'integration.expected_admission_date': expectedAdmissionDate,
+    },
   });
 
   const saved = await onboardingRef.get();

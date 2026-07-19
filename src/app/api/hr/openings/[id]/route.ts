@@ -99,6 +99,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.unitName = null;
     if (unitId) {
       const unitDoc = await dbAdmin.collection('dp_units').doc(unitId).get();
+      if (!unitDoc.exists || unitDoc.data()?.isArchived === true) {
+        return jsonError('Unidade indisponível para novas vagas.');
+      }
       update.unitName = unitDoc.data()?.name ?? null;
     }
   }

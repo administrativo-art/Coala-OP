@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { dbAdmin } from "@/lib/firebase-admin";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import {
   cleanDocument,
   jsonError,
+  optionalBoolean,
   optionalNumber,
   optionalString,
   readJsonObject,
@@ -27,9 +29,18 @@ export async function POST(request: NextRequest) {
     const body = await readJsonObject(request);
     const now = new Date();
     const ref = dbAdmin.collection("dp_units").doc();
+    const rawCnpj = optionalString(body.cnpj);
+    const cnpj = rawCnpj ? CnpjValidator.validate(rawCnpj) : null;
+    if (cnpj && !cnpj.valid) throw new Error(cnpj.message);
 
     const payload = cleanDocument({
       name: requiredString(body, "name", "Nome da unidade"),
+      isArchived: optionalBoolean(body.isArchived),
+      mergedIntoUnitId: optionalString(body.mergedIntoUnitId),
+      mergedIntoUnitName: optionalString(body.mergedIntoUnitName),
+      cnpj: cnpj?.clean,
+      address: optionalString(body.address),
+      unitType: optionalString(body.unitType),
       organizationId: optionalString(body.organizationId),
       groupId: optionalString(body.groupId),
       externalSource: normalizeExternalSource(body.externalSource),

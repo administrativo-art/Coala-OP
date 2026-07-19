@@ -7,6 +7,7 @@ import {
   readJsonObject,
   requireOperationalUnitManager,
   requiredString,
+  setOptionalBooleanPatch,
   setOptionalStringPatch,
 } from "@/app/api/dp/_unit-structure";
 
@@ -28,6 +29,7 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
       update.name = requiredString(body, "name", "Nome da organização");
     }
     setOptionalStringPatch(update, body, "description");
+    setOptionalBooleanPatch(update, body, "isArchived");
     applyResponsibilityPatch(update, body);
 
     await dbAdmin.collection("dp_unitOrganizations").doc(organizationId).update(update);

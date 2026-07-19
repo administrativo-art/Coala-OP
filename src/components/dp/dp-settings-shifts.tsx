@@ -11,6 +11,7 @@ import {
   getShiftDefinitionUnitIds,
   getShiftDefinitionUnitNames,
 } from '@/lib/dp-shift-definitions';
+import { activeOperationalUnits } from '@/lib/dp-units';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -258,7 +259,7 @@ function ShiftDefDialog({ def, open, onOpenChange, units }: {
                 <FormLabel>Unidades vinculadas (opcional)</FormLabel>
                 <FormControl>
                   <MultiSelect
-                    options={units.map(unit => ({ value: unit.id, label: unit.name }))}
+                    options={activeOperationalUnits(units).map(unit => ({ value: unit.id, label: unit.name }))}
                     selected={field.value ?? []}
                     onChange={field.onChange}
                     placeholder="Selecione uma ou mais unidades"

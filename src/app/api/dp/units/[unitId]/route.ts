@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { dbAdmin } from "@/lib/firebase-admin";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import {
   jsonError,
   readJsonObject,
   requireOperationalUnitManager,
   requiredString,
+  setOptionalBooleanPatch,
   setOptionalNumberPatch,
   setOptionalStringPatch,
 } from "@/app/api/dp/_unit-structure";
@@ -34,6 +36,21 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
     if (Object.prototype.hasOwnProperty.call(body, "name")) {
       update.name = requiredString(body, "name", "Nome da unidade");
     }
+    if (Object.prototype.hasOwnProperty.call(body, "cnpj")) {
+      const rawCnpj = typeof body.cnpj === "string" ? body.cnpj.trim() : "";
+      if (!rawCnpj) {
+        setOptionalStringPatch(update, body, "cnpj");
+      } else {
+        const cnpj = CnpjValidator.validate(rawCnpj);
+        if (!cnpj.valid) throw new Error(cnpj.message);
+        update.cnpj = cnpj.clean;
+      }
+    }
+    setOptionalStringPatch(update, body, "address");
+    setOptionalStringPatch(update, body, "unitType");
+    setOptionalBooleanPatch(update, body, "isArchived");
+    setOptionalStringPatch(update, body, "mergedIntoUnitId");
+    setOptionalStringPatch(update, body, "mergedIntoUnitName");
     setOptionalStringPatch(update, body, "organizationId");
     setOptionalStringPatch(update, body, "groupId");
     setOptionalStringPatch(update, body, "externalId");
@@ -58,6 +75,19 @@ export async function DELETE(request: NextRequest, contextArg: RouteContext) {
   try {
     await requireOperationalUnitManager(request);
     const { unitId } = await contextArg.params;
+
+    const referenceQueries = await Promise.all([
+      dbAdmin.collection("users").where("unitIds", "array-contains", unitId).limit(1).get(),
+      dbAdmin.collection("users").where("responsibleUnitIds", "array-contains", unitId).limit(1).get(),
+      dbAdmin.collection("users").where("assignedKioskIds", "array-contains", unitId).limit(1).get(),
+      dbAdmin.collection("dp_shiftDefinitions").where("unitIds", "array-contains", unitId).limit(1).get(),
+      dbAdmin.collection("dp_shiftDefinitions").where("unitId", "==", unitId).limit(1).get(),
+      dbAdmin.collection("dp_schedules").where("unitId", "==", unitId).limit(1).get(),
+    ]);
+
+    if (referenceQueries.some((snapshot) => !snapshot.empty)) {
+      throw new Error("A unidade possui vínculos e não pode ser excluída. Arquive ou migre os vínculos primeiro.");
+    }
 
     await dbAdmin.collection("dp_units").doc(unitId).delete();
 

@@ -8,6 +8,7 @@ import type {
   DPUnit, DPUnitGroup, DPUnitOrganization, DPShiftDefinition,
   DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
 } from '@/types';
+import { canonicalOperationalUnitId } from '@/lib/dp-units';
 
 export type DPResourceKey = 'units' | 'shiftDefs' | 'schedules' | 'vacations' | 'calendars';
 export type DPResourceSource = 'idle' | 'snapshot' | 'fallback' | 'error';
@@ -228,7 +229,7 @@ async function authorizedDpJson<T = Record<string, unknown>>(path: string, metho
   return response.json().catch(() => ({})) as Promise<T>;
 }
 
-export const useDPStore = create<DPStoreState>((set) => ({
+export const useDPStore = create<DPStoreState>((set, get) => ({
   ...initialState,
 
   // Setters
@@ -355,13 +356,37 @@ export const useDPStore = create<DPStoreState>((set) => ({
     await deleteDoc(doc(db, 'dp_shiftDefinitions', defId));
   },
   addSchedule: async (data) => {
+    const state = get();
+    const unit = data.unitId ? state.units.find((candidate) => candidate.id === data.unitId) : undefined;
+    if (!unit || unit.isArchived === true) {
+      throw new Error('Selecione uma unidade ativa para criar a escala.');
+    }
+    const canonicalUnitId = canonicalOperationalUnitId(unit.id, state.units);
+    const duplicate = state.schedules.some((schedule) =>
+      Number(schedule.year) === Number(data.year) &&
+      Number(schedule.month) === Number(data.month) &&
+      (!schedule.unitId || canonicalOperationalUnitId(schedule.unitId, state.units) === canonicalUnitId)
+    );
+    if (duplicate) {
+      throw new Error('Já existe uma escala para esta unidade ou para uma unidade incorporada neste período.');
+    }
     const ref = await addDoc(collection(db, 'dp_schedules'), stripUndefinedForCreate({ ...data, shiftCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);
     return ref.id;
   },
   updateSchedule: async ({ id, ...data }) => {
+    const existing = get().schedules.find((schedule) => schedule.id === id);
+    const existingUnit = existing?.unitId ? get().units.find((unit) => unit.id === existing.unitId) : undefined;
+    if (existingUnit?.isArchived === true) {
+      throw new Error('Escalas históricas de unidades incorporadas são somente para leitura.');
+    }
     await updateDoc(doc(db, 'dp_schedules', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
   },
   deleteSchedule: async (scheduleId) => {
+    const existing = get().schedules.find((schedule) => schedule.id === scheduleId);
+    const existingUnit = existing?.unitId ? get().units.find((unit) => unit.id === existing.unitId) : undefined;
+    if (existingUnit?.isArchived === true) {
+      throw new Error('Escalas históricas de unidades incorporadas não podem ser excluídas.');
+    }
     const shiftsSnap = await getDocs(collection(db, 'dp_schedules', scheduleId, 'shifts'));
     const batch = writeBatch(db);
     shiftsSnap.docs.forEach(d => batch.delete(d.ref));

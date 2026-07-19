@@ -81,6 +81,33 @@ export async function fetchBizneoUsers(): Promise<BizneoUser[]> {
   );
 }
 
+export async function findBizneoUser(params: { email?: string | null; id?: string | null }): Promise<BizneoUser | null> {
+  const token = getToken();
+  const normalizedEmail = params.email?.trim().toLowerCase() ?? '';
+  const normalizedId = params.id?.trim() ?? '';
+  let page = 1;
+
+  while (true) {
+    const res = await fetch(`${BASE_URL}/users?token=${token}&page_size=100&page=${page}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Bizneo users fetch falhou: ${res.status}`);
+    const data = await res.json();
+    const users: BizneoUser[] = data.users ?? data;
+    if (!Array.isArray(users) || users.length === 0) return null;
+
+    const match = users.find(user => normalizedEmail
+      ? user.email?.trim().toLowerCase() === normalizedEmail
+      : normalizedId && String(user.id) === normalizedId
+    );
+    if (match) return match;
+
+    const pagination = data.pagination;
+    if (!pagination || page >= pagination.total_pages) return null;
+    page++;
+  }
+}
+
 // ─── Sync user IDs by email ───────────────────────────────────────────────────
 
 export type SyncUsersResult = {

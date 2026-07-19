@@ -872,22 +872,74 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
 
   if (resource === 'orders' && id && child === 'cancel') {
-    await dbAdmin.collection('purchase_orders').doc(id).update({ status: 'cancelled', cancelledAt: now, updatedAt: now });
+    const orderRef = dbAdmin.collection('purchase_orders').doc(id);
+    const [orderSnap, receiptsSnap, purchaseFinancialsSnap, expensesSnap] = await Promise.all([
+      orderRef.get(),
+      dbAdmin.collection('purchase_receipts').where('purchaseOrderId', '==', id).get(),
+      dbAdmin.collection('purchase_financials').where('purchaseOrderId', '==', id).get(),
+      financialDbAdmin.collection('expenses').where('purchaseOrderId', '==', id).get(),
+    ]);
 
-    // Try to cancel the financial expense as well
-    const financialSnap = await financialDbAdmin
-      .collection('expenses')
-      .where('purchaseOrderId', '==', id)
-      .limit(1)
-      .get();
-    
-    if (!financialSnap.empty) {
-      await financialSnap.docs[0].ref.update({
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+
+    const hasStockEntry =
+      Boolean(orderSnap.data()?.receivedAt) ||
+      receiptsSnap.docs.some((receipt) => receipt.data().status === 'stocked');
+    if (hasStockEntry) {
+      return jsonError(
+        'A compra já gerou entrada no estoque. Reverta a movimentação antes de cancelar o pedido.',
+        409,
+      );
+    }
+
+    const cancellationNote = `Cancelado junto com o pedido de compra em ${new Date().toLocaleDateString('pt-BR')}.`;
+    const purchasingBatch = dbAdmin.batch();
+    purchasingBatch.update(orderRef, {
+      status: 'cancelled',
+      cancelledAt: now,
+      cancelledBy: decoded.uid,
+      updatedAt: now,
+    });
+
+    for (const receiptDoc of receiptsSnap.docs) {
+      purchasingBatch.update(receiptDoc.ref, {
         status: 'cancelled',
-        updatedAt: Timestamp.now(),
-        notes: `Cancelado junto com o pedido de compra em ${new Date().toLocaleDateString('pt-BR')}.`,
+        cancelledAt: now,
+        cancelledBy: decoded.uid,
+        updatedAt: now,
+      });
+      const receiptItemsSnap = await receiptDoc.ref.collection('items').get();
+      receiptItemsSnap.forEach((itemDoc) => {
+        purchasingBatch.update(itemDoc.ref, {
+          status: 'cancelled',
+          cancelledAt: now,
+          updatedAt: now,
+        });
       });
     }
+
+    purchaseFinancialsSnap.forEach((financialDoc) => {
+      purchasingBatch.update(financialDoc.ref, {
+        status: 'cancelled',
+        cancelledAt: now,
+        cancelledBy: decoded.uid,
+        updatedAt: now,
+      });
+    });
+    await purchasingBatch.commit();
+
+    const financialBatch = financialDbAdmin.batch();
+    expensesSnap.forEach((expenseDoc) => {
+      const previousNotes = expenseDoc.data().notes;
+      financialBatch.update(expenseDoc.ref, {
+        status: 'cancelled',
+        cancelledAt: now,
+        cancelledBy: decoded.uid,
+        updatedAt: now,
+        notes: previousNotes ? `${previousNotes}\n\n${cancellationNote}` : cancellationNote,
+      });
+    });
+    await financialBatch.commit();
 
     return NextResponse.json({ ok: true });
   }

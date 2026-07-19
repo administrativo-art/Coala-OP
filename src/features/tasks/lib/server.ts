@@ -744,6 +744,7 @@ export async function createManualTask(params: {
     visibilityScope?: Task["visibilityScope"];
     originLink?: string;
     origin?: Extract<TaskOrigin, { kind: "manual" | "legacy" }>;
+    idempotencyKey?: string;
   };
 }) {
   const projectId =
@@ -759,7 +760,14 @@ export async function createManualTask(params: {
   const now = new Date().toISOString();
   const history = [buildHistoryItem(params.context, "created", "Tarefa criada manualmente.")];
 
-  const taskRef = dbAdmin.collection("tasks").doc();
+  const taskRef =
+    typeof params.input.idempotencyKey === "string" && params.input.idempotencyKey.trim()
+      ? dbAdmin.collection("tasks").doc(params.input.idempotencyKey.trim())
+      : dbAdmin.collection("tasks").doc();
+  if (params.input.idempotencyKey) {
+    const existing = await taskRef.get();
+    if (existing.exists) return adaptTaskDoc(existing.id, existing.data() ?? {});
+  }
   const payload = {
     workspace_id: params.context.workspace_id,
     project_id: projectId,

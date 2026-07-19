@@ -31,6 +31,7 @@ import {
 } from "@/components/forms/analytics-config-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
+import { activeOperationalUnits } from "@/lib/dp-units";
 import {
   fetchFormTemplate,
   fetchFormTemplateApplication,
@@ -2176,7 +2177,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                       unit_ids:
                         current.unit_ids.length === units.length
                           ? []
-                          : units.map((unit) => unit.id),
+                          : activeOperationalUnits(units).map((unit) => unit.id),
                     }))
                   }
                 >
@@ -2187,7 +2188,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                 {units.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhuma unidade carregada.</p>
                 ) : (
-                  units.map((unit) => (
+                  activeOperationalUnits(units).map((unit) => (
                     <label key={unit.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
                       <Checkbox
                         checked={applicationForm.unit_ids.includes(unit.id)}

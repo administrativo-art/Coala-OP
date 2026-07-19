@@ -8,6 +8,11 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '@/hooks/use-auth';
 import { fetchHrBootstrap } from '@/features/hr/lib/client';
+import { IntegrationSubfieldEditor, IntegrationTemplateManager } from '@/features/hr/integration/IntegrationTemplateManager';
+import type { IntegrationTemplateMetadataClient } from '@/features/hr/integration/client';
+import { simulateIntegrationTemplate } from '@/features/hr/integration/engine';
+import { IntegrationRulesPanel } from '@/features/hr/integration/IntegrationRulePanels';
+import type { IntegrationBlock, IntegrationRule, IntegrationStage, IntegrationSubfield, IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import type {
   Candidate,
   CandidateDecisionAction,
@@ -77,6 +82,7 @@ import {
   Briefcase, ChevronDown, ChevronRight, ExternalLink, Paperclip,
   Globe, PauseCircle, Archive, Plus, Pencil, SlidersHorizontal,
   FolderOpen, Copy, ArrowLeft, MapPin, Sparkles, Users, RotateCw,
+  Download, Send, Eye,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -6293,7 +6299,7 @@ export function RecruitmentFormsView({ getToken, canManage, roles, functions, on
     return (
       <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
         {formTabs}
-        <IntegrationModelSettingsEditor
+        <IntegrationTemplateManager
           roles={roles}
           functions={functions}
           getToken={getToken}
@@ -6644,6 +6650,7 @@ const ONBOARDING_STATUS_LABELS: Record<OnboardingProcess['status'], string> = {
   reviewing_documents: 'Conferindo documentos',
   contract_pending: 'Contrato pendente',
   ready_to_create_user: 'Criar colaborador',
+  awaiting_first_access: 'Aguardando primeiro acesso',
   active: 'Em andamento',
   completed: 'Finalizado',
   cancelled: 'Cancelado',
@@ -6677,7 +6684,7 @@ const ONBOARDING_STAGE_DETAILS: Record<OnboardingStageId, { owner: string; focus
   },
   formalization_validation: {
     owner: 'RH',
-    focus: 'Validação final, VT, operação, metas e acesso',
+    focus: 'Configurações finais antes dos acessos e do treinamento',
   },
   integration: {
     owner: 'RH + Liderança',
@@ -6700,7 +6707,7 @@ const ONBOARDING_STAGE_KIND: Record<
 > = {
   documents: 'coleta',
   document_review: 'revisao',
-  signature_preparation: 'generico',
+  signature_preparation: 'assinatura',
   signature: 'assinatura',
   formalization_validation: 'validacao',
   integration: 'integracao',
@@ -6710,6 +6717,60 @@ const ONBOARDING_STAGE_KIND: Record<
 
 // Stable per-candidate accent colors used on the grid cards and detail avatar.
 const ONBOARDING_CARD_COLORS = ['#df2f78', '#7c3aed', '#2563eb', '#008f83', '#d17400', '#c026d3'];
+
+type SignatureTemplateOption = {
+  id: string;
+  name: string;
+  category: string;
+  version: number;
+  documentTypeCode?: string;
+  variables?: string[];
+};
+
+type SignatureWorkflowDocument = {
+  id: string;
+  onboardingId: string;
+  templateId: string;
+  templateName: string;
+  documentName?: string;
+  selected?: boolean;
+  status: string;
+  reviewStatus?: string;
+  generatedDocumentId?: string;
+  missingRequired?: string[];
+  lastError?: string | null;
+  emailStatus?: string;
+  emailSentAt?: string | null;
+  emailDeliveredAt?: string | null;
+  viewedAt?: string | null;
+  signedAt?: string | null;
+  archivedAt?: string | null;
+  employeeDocumentId?: string | null;
+  sandbox?: boolean;
+};
+
+type SignatureWorkflowPayload = {
+  templates: SignatureTemplateOption[];
+  documents: SignatureWorkflowDocument[];
+};
+
+const SIGNATURE_WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  selected: 'Selecionado',
+  generation_failed: 'Falha na geração',
+  generation_blocked: 'Dados obrigatórios pendentes',
+  review_pending: 'Aguardando revisão do RH',
+  ready_to_send: 'Revisado e pronto para envio',
+  sending: 'Enviando',
+  sent: 'Enviado',
+  viewed: 'Aberto pelo titular',
+  partially_signed: 'Assinado pelo titular',
+  signed: 'Assinado, arquivando',
+  signed_archived_pending_employee: 'Assinado e arquivado no processo',
+  archived: 'Assinado e arquivado no colaborador',
+  rejected: 'Assinatura recusada',
+  delivery_failed: 'Falha na entrega',
+  send_failed: 'Falha no envio',
+};
 
 function formatOnboardingDate(value?: string | null) {
   if (!value) return 'Não informado';
@@ -6953,6 +7014,10 @@ function StartOnboardingModal({
   onClose: () => void;
   onCreated: (process: OnboardingProcess) => void;
 }) {
+  const [integrationMode, setIntegrationMode] = useState<'import' | 'blank' | null>(null);
+  const [integrationTemplateId, setIntegrationTemplateId] = useState('');
+  const [compatibleTemplates, setCompatibleTemplates] = useState<IntegrationTemplateMetadataClient[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [candidateName, setCandidateName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
   const [jobRoleId, setJobRoleId] = useState('');
@@ -6989,6 +7054,26 @@ function StartOnboardingModal({
     }
   }, [availableFunctions, functionId]);
 
+  useEffect(() => {
+    if (integrationMode !== 'import' || !jobRoleId || !functionId) {
+      setCompatibleTemplates([]);
+      setIntegrationTemplateId('');
+      return;
+    }
+    let active = true;
+    setLoadingTemplates(true);
+    void apiFetch(`/api/hr/integration-templates?roleId=${encodeURIComponent(jobRoleId)}&functionId=${encodeURIComponent(functionId)}&compatibleOnly=true`, getToken)
+      .then(payload => {
+        if (!active) return;
+        const templates = Array.isArray(payload?.templates) ? payload.templates as IntegrationTemplateMetadataClient[] : [];
+        setCompatibleTemplates(templates);
+        setIntegrationTemplateId(current => templates.some(item => item.id === current) ? current : templates[0]?.id ?? '');
+      })
+      .catch(caught => active && setError(caught instanceof Error ? caught.message : 'Falha ao carregar modelos.'))
+      .finally(() => active && setLoadingTemplates(false));
+    return () => { active = false; };
+  }, [functionId, getToken, integrationMode, jobRoleId]);
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const normalizedCandidateName = formatPersonName(candidateName);
@@ -7014,6 +7099,8 @@ function StartOnboardingModal({
           needsTransportVoucher: finalizationSettings.needsTransportVoucher ?? false,
           transportVoucherValue: finalizationSettings.needsTransportVoucher ? finalizationSettings.transportVoucherValue ?? null : null,
           generateSignatureDocuments,
+          integrationMode,
+          integrationTemplateId: integrationMode === 'import' ? integrationTemplateId : null,
         }),
       });
       if (!result?.process) throw new Error('Integração criada, mas a resposta veio incompleta.');
@@ -7046,9 +7133,26 @@ function StartOnboardingModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        {!integrationMode ? (
+          <div className="grid gap-4 p-5 md:grid-cols-2">
+            <button type="button" onClick={() => setIntegrationMode('import')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-pink-300 hover:bg-pink-50/40">
+              <FolderOpen className="h-7 w-7 text-pink-600" />
+              <span className="mt-3 block text-base font-black text-slate-950">Importar modelo</span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500">Use a versão publicada compatível com o cargo e a função. O processo manterá um snapshot imutável.</span>
+            </button>
+            <button type="button" onClick={() => setIntegrationMode('blank')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-indigo-300 hover:bg-indigo-50/40">
+              <Plus className="h-7 w-7 text-indigo-600" />
+              <span className="mt-3 block text-base font-black text-slate-950">Nova integração</span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500">Comece do zero somente para esta situação. Nenhum modelo existente será alterado.</span>
+            </button>
+          </div>
+        ) : <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 lg:grid-cols-2">
             <div className="space-y-3">
+          <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+            <span className="text-xs font-bold text-slate-700">{integrationMode === 'import' ? 'Importando um modelo publicado' : 'Integração avulsa, criada do zero'}</span>
+            <button type="button" onClick={() => setIntegrationMode(null)} className="text-xs font-black text-pink-600">Trocar</button>
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-sm font-semibold text-slate-700">
               Nome da pessoa
@@ -7149,6 +7253,16 @@ function StartOnboardingModal({
             </div>
 
             <div className="space-y-3">
+          {integrationMode === 'import' ? (
+            <label className="block rounded-lg border border-pink-100 bg-pink-50/50 p-3 text-sm font-semibold text-slate-700">
+              Modelo de integração
+              <select value={integrationTemplateId} onChange={event => setIntegrationTemplateId(event.target.value)} required disabled={!jobRoleId || !functionId || loadingTemplates} className="mt-1.5 h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900">
+                <option value="">{loadingTemplates ? 'Carregando modelos...' : jobRoleId && functionId ? 'Selecione um modelo' : 'Selecione cargo e função primeiro'}</option>
+                {compatibleTemplates.map(template => <option key={template.id} value={template.id}>{template.name} · v{template.currentVersion}{template.isDefault ? ' · padrão' : ''}</option>)}
+              </select>
+              {!loadingTemplates && jobRoleId && functionId && compatibleTemplates.length === 0 ? <span className="mt-1 block text-xs text-amber-700">Não há modelo publicado compatível. Volte e escolha “Nova integração” ou publique um modelo.</span> : null}
+            </label>
+          ) : null}
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
             <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Comportamento no sistema</p>
             <OnboardingFinalizationControls
@@ -7182,17 +7296,299 @@ function StartOnboardingModal({
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || (integrationMode === 'import' && !integrationTemplateId)}
               className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Iniciar integração
             </button>
           </div>
-        </form>
+        </form>}
       </div>
     </div>
   );
+}
+
+type InstanceEditorTab = 'stages' | 'rules';
+
+const INSTANCE_BLOCK_TYPES: Array<{ type: IntegrationBlock['type']; label: string }> = [
+  { type: 'heading', label: 'Título' },
+  { type: 'rich_text', label: 'Texto de orientação' },
+  { type: 'text', label: 'Texto curto' },
+  { type: 'textarea', label: 'Texto longo' },
+  { type: 'number', label: 'Número' },
+  { type: 'currency', label: 'Moeda' },
+  { type: 'date', label: 'Data' },
+  { type: 'yes_no', label: 'Sim/Não' },
+  { type: 'single_select', label: 'Escolha única' },
+  { type: 'multi_select', label: 'Múltipla escolha' },
+  { type: 'confirmation', label: 'Confirmação' },
+  { type: 'signature', label: 'Assinatura' },
+  { type: 'repeatable_group', label: 'Grupo repetível' },
+  { type: 'repeatable_table', label: 'Tabela repetível' },
+  { type: 'subform', label: 'Subformulário' },
+  { type: 'upload', label: 'Upload' },
+  { type: 'task', label: 'Tarefa' },
+  { type: 'approval', label: 'Aprovação' },
+  { type: 'evaluation', label: 'Avaliação' },
+  { type: 'decision', label: 'Decisão' },
+  { type: 'document_generation', label: 'Gerar documento' },
+  { type: 'notification', label: 'Notificação' },
+  { type: 'probation', label: 'Período de experiência' },
+];
+
+function instanceLocalId(prefix: string) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeInstanceBlock(stageId: string, order: number, type: IntegrationBlock['type']): IntegrationBlock {
+  return {
+    id: instanceLocalId('block'),
+    stageId,
+    order,
+    type,
+    label: INSTANCE_BLOCK_TYPES.find(item => item.type === type)?.label ?? 'Novo bloco',
+    required: false,
+    readOnly: false,
+    active: true,
+    writePolicy: 'process_only',
+    hiddenAnswerPolicy: 'exclude',
+    ...(type === 'repeatable_group' || type === 'repeatable_table' || type === 'subform' ? { fields: [] } : {}),
+    config: {},
+  };
+}
+
+function IntegrationInstanceEditor({
+  draft,
+  disabled,
+  saving,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  draft: IntegrationTemplateVersion;
+  disabled: boolean;
+  saving: boolean;
+  onChange: (draft: IntegrationTemplateVersion) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [tab, setTab] = useState<InstanceEditorTab>('stages');
+  const [selectedStageId, setSelectedStageId] = useState(draft.stages[0]?.id ?? '');
+  const [selectedBlockId, setSelectedBlockId] = useState('');
+  const selectedStage = draft.stages.find(stage => stage.id === selectedStageId) ?? draft.stages[0] ?? null;
+  const stageBlocks = draft.blocks.filter(block => block.stageId === selectedStage?.id).sort((a, b) => a.order - b.order);
+  const selectedBlock = draft.blocks.find(block => block.id === selectedBlockId) ?? null;
+
+  function patchDraft(patch: Partial<IntegrationTemplateVersion>) { onChange({ ...draft, ...patch }); }
+  function patchStage(stageId: string, patch: Partial<IntegrationStage>) { patchDraft({ stages: draft.stages.map(stage => stage.id === stageId ? { ...stage, ...patch } : stage) }); }
+  function addStage() {
+    const stage: IntegrationStage = { id: instanceLocalId('stage'), label: 'Nova etapa', order: draft.stages.length, required: true, skippable: false, dueDays: null, dueDateSource: 'stage_entry' };
+    patchDraft({ stages: [...draft.stages, stage] });
+    setSelectedStageId(stage.id);
+    setSelectedBlockId('');
+  }
+  function removeStage(stageId: string) {
+    if (draft.stages.length <= 1) return;
+    const stages = draft.stages.filter(stage => stage.id !== stageId).map((stage, order) => ({ ...stage, order }));
+    patchDraft({ stages, blocks: draft.blocks.filter(block => block.stageId !== stageId) });
+    setSelectedStageId(stages[0]?.id ?? '');
+    setSelectedBlockId('');
+  }
+  function patchBlock(blockId: string, patch: Partial<IntegrationBlock>) { patchDraft({ blocks: draft.blocks.map(block => block.id === blockId ? { ...block, ...patch } : block) }); }
+  function addBlock(type: IntegrationBlock['type']) {
+    if (!selectedStage) return;
+    const block = makeInstanceBlock(selectedStage.id, stageBlocks.length, type);
+    patchDraft({ blocks: [...draft.blocks, block] });
+    setSelectedBlockId(block.id);
+  }
+  function removeBlock(blockId: string) {
+    patchDraft({ blocks: draft.blocks.filter(block => block.id !== blockId) });
+    setSelectedBlockId('');
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b px-5 py-4"><div><h3 className="text-lg font-black">Editar integração avulsa</h3><p className="text-xs text-slate-500">{draft.name}</p></div><button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg border"><X className="h-4 w-4" /></button></div>
+        <div className="flex gap-2 border-b px-5 py-2"><button type="button" onClick={() => setTab('stages')} className={`h-9 rounded-lg px-3 text-xs font-black ${tab === 'stages' ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600'}`}>Etapas e blocos</button><button type="button" onClick={() => setTab('rules')} className={`h-9 rounded-lg px-3 text-xs font-black ${tab === 'rules' ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600'}`}>Regras</button></div>
+        <div className="min-h-0 flex-1 overflow-auto p-5">
+          {tab === 'stages' ? <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_320px]">
+            <aside className="rounded-xl border bg-white p-3"><div className="mb-2 flex items-center justify-between"><p className="text-xs font-bold uppercase text-slate-400">Etapas</p>{!disabled ? <button type="button" onClick={addStage} className="grid h-8 w-8 place-items-center rounded-lg border"><Plus className="h-4 w-4" /></button> : null}</div>{draft.stages.map(stage => <button key={stage.id} type="button" onClick={() => { setSelectedStageId(stage.id); setSelectedBlockId(''); }} className={`mb-1 w-full rounded-lg px-3 py-2 text-left text-sm font-semibold ${selectedStage?.id === stage.id ? 'bg-slate-950 text-white' : 'hover:bg-slate-50'}`}>{stage.label}</button>)}</aside>
+            <div className="space-y-4 rounded-xl border bg-white p-4">{selectedStage ? <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]"><label className="text-xs font-bold text-slate-500">Nome da etapa<input disabled={disabled} value={selectedStage.label} onChange={event => patchStage(selectedStage.id, { label: event.target.value })} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm text-slate-900" /></label>{!disabled ? <button type="button" disabled={draft.stages.length <= 1} onClick={() => removeStage(selectedStage.id)} className="mt-5 h-10 rounded-lg border px-3 text-xs font-black text-rose-600 disabled:opacity-40">Remover</button> : null}<label className="text-xs font-bold text-slate-500 md:col-span-2">Descrição<textarea disabled={disabled} value={selectedStage.description ?? ''} onChange={event => patchStage(selectedStage.id, { description: event.target.value })} className="mt-1 min-h-20 w-full rounded-lg border p-3 text-sm text-slate-900" /></label></div> : null}<div className="flex items-center justify-between"><p className="text-sm font-black">Blocos</p>{!disabled ? <select defaultValue="" onChange={event => { if (event.target.value) addBlock(event.target.value as IntegrationBlock['type']); event.target.value = ''; }} className="h-9 rounded-lg border px-2 text-xs font-bold"><option value="">+ Adicionar bloco</option>{INSTANCE_BLOCK_TYPES.map(item => <option key={item.type} value={item.type}>{item.label}</option>)}</select> : null}</div><div className="space-y-2">{stageBlocks.map(block => <button key={block.id} type="button" onClick={() => setSelectedBlockId(block.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${selectedBlockId === block.id ? 'border-pink-300 bg-pink-50' : 'bg-slate-50'}`}><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{block.label}</span><span className="text-xs text-slate-500">{INSTANCE_BLOCK_TYPES.find(item => item.type === block.type)?.label ?? block.type}</span></span>{block.required ? <span className="text-[10px] font-bold text-rose-600">Obrigatório</span> : null}</button>)}</div></div>
+            <aside className="rounded-xl border bg-white p-4">{selectedBlock ? <div className="space-y-3"><div className="flex items-center justify-between"><p className="font-black">Configurar bloco</p>{!disabled ? <button type="button" onClick={() => removeBlock(selectedBlock.id)} className="text-rose-500"><Trash2 className="h-4 w-4" /></button> : null}</div><label className="block text-xs font-bold text-slate-500">Tipo<select disabled={disabled} value={selectedBlock.type} onChange={event => patchBlock(selectedBlock.id, { type: event.target.value as IntegrationBlock['type'], fields: ['repeatable_group', 'repeatable_table', 'subform'].includes(event.target.value) ? selectedBlock.fields ?? [] : undefined })} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm text-slate-900">{INSTANCE_BLOCK_TYPES.map(item => <option key={item.type} value={item.type}>{item.label}</option>)}</select></label><label className="block text-xs font-bold text-slate-500">Nome<input disabled={disabled} value={selectedBlock.label} onChange={event => patchBlock(selectedBlock.id, { label: event.target.value })} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm text-slate-900" /></label><label className="block text-xs font-bold text-slate-500">Descrição<textarea disabled={disabled} value={selectedBlock.description ?? ''} onChange={event => patchBlock(selectedBlock.id, { description: event.target.value })} className="mt-1 min-h-20 w-full rounded-lg border p-3 text-sm text-slate-900" /></label><label className="block text-xs font-bold text-slate-500">Variável de destino<input disabled={disabled} value={selectedBlock.variableKey ?? ''} onChange={event => patchBlock(selectedBlock.id, { variableKey: event.target.value || undefined })} placeholder="employee.name" className="mt-1 h-10 w-full rounded-lg border px-3 text-sm text-slate-900" /></label><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={selectedBlock.required} disabled={disabled} onChange={event => patchBlock(selectedBlock.id, { required: event.target.checked })} /> Obrigatório</label><label className="block text-xs font-bold text-slate-500">Gravação<select disabled={disabled} value={selectedBlock.writePolicy} onChange={event => patchBlock(selectedBlock.id, { writePolicy: event.target.value as IntegrationBlock['writePolicy'] })} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm text-slate-900"><option value="process_only">Somente no processo</option><option value="direct">Atualização direta</option><option value="confirm">Pedir confirmação</option><option value="approval">Exigir aprovação</option></select></label>{selectedBlock.type === 'upload' ? <input disabled={disabled} value={String(selectedBlock.config.accept ?? '')} onChange={event => patchBlock(selectedBlock.id, { config: { ...selectedBlock.config, accept: event.target.value } })} placeholder=".pdf,.docx,.jpg" className="h-9 w-full rounded-lg border px-2 text-xs" /> : null}{selectedBlock.type === 'document_generation' ? <label className="block rounded-lg bg-violet-50 p-3 text-xs font-bold text-violet-800">ID do modelo documental<input disabled={disabled} value={String(selectedBlock.config.templateId ?? '')} onChange={event => patchBlock(selectedBlock.id, { config: { ...selectedBlock.config, templateId: event.target.value } })} className="mt-1 h-9 w-full rounded-lg border bg-white px-2 text-xs text-slate-900" /></label> : null}{['repeatable_group', 'repeatable_table', 'subform'].includes(selectedBlock.type) ? <IntegrationSubfieldEditor fields={selectedBlock.fields ?? []} disabled={disabled} onChange={fields => patchBlock(selectedBlock.id, { fields })} /> : null}</div> : <p className="text-sm text-slate-500">Selecione um bloco para editar.</p>}</aside>
+          </div> : <IntegrationRulesPanel draft={draft} disabled={disabled} onChange={(rules: IntegrationRule[]) => patchDraft({ rules })} />}
+        </div>
+        <div className="flex justify-end gap-2 border-t px-5 py-3"><button type="button" onClick={onClose} className="h-9 rounded-lg border px-3 text-sm font-bold">Cancelar</button><button type="button" onClick={onSave} disabled={disabled || saving} className="inline-flex h-9 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-bold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}Salvar avulso</button></div>
+      </div>
+    </div>
+  );
+}
+
+function IntegrationV2Runner({ process, getToken, canManage, onRefresh }: { process: OnboardingProcess; getToken: () => Promise<string>; canManage: boolean; onRefresh: () => void }) {
+  const execution = process.integrationV2;
+  const [answers, setAnswers] = useState<Record<string, unknown>>(() => execution?.answers ?? {});
+  const [uploads, setUploads] = useState<Record<string, unknown>>(() => execution?.uploads ?? {});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [instanceDraft, setInstanceDraft] = useState<IntegrationTemplateVersion | null>(null);
+  useEffect(() => { setAnswers(execution?.answers ?? {}); setUploads(execution?.uploads ?? {}); }, [execution?.answers, execution?.uploads]);
+  const simulation = useMemo(() => execution ? simulateIntegrationTemplate(execution.snapshot, { answers, uploads }) : null, [answers, execution, uploads]);
+  if (!execution || !simulation) return null;
+  const activeExecution = execution;
+  const stage = activeExecution.snapshot.stages.find(item => item.id === activeExecution.currentStageId) ?? null;
+  const blocks = activeExecution.snapshot.blocks.filter(block => block.stageId === stage?.id && simulation.visibleBlockIds.includes(block.id)).sort((a, b) => a.order - b.order);
+
+  async function persist(action: 'save' | 'advance', nextUploads = uploads) {
+    setBusy(action); setError(null);
+    try {
+      await apiFetch(`/api/hr/onboarding/${process.id}/integration`, getToken, { method: 'PATCH', body: JSON.stringify({ action, answers, uploads: nextUploads }) });
+      onRefresh();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao atualizar o fluxo.'); }
+    finally { setBusy(null); }
+  }
+
+  async function upload(blockId: string, file: File) {
+    setBusy(`upload:${blockId}`); setError(null);
+    try {
+      const token = await getToken();
+      const formData = new FormData(); formData.set('file', file);
+      const response = await fetch('/api/hr/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Falha no upload.');
+      const nextUploads = { ...uploads, [blockId]: { status: 'uploaded', url: payload.url, path: payload.path, name: file.name, sha256: payload.sha256 } };
+      setUploads(nextUploads);
+      await persist('save', nextUploads);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha no upload.'); }
+    finally { setBusy(null); }
+  }
+
+  async function generateDocument(block: IntegrationBlock) {
+    const templateId = typeof block.config.templateId === 'string' ? block.config.templateId : '';
+    if (!templateId) { setError('Configure o modelo documental deste bloco antes de gerar.'); return; }
+    setBusy(`document:${block.id}`); setError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch('/api/documents/generate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ templateId, onboardingId: process.id }) });
+      if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.error || 'Falha ao gerar documento.'); }
+      const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'documento.docx'; anchor.click(); URL.revokeObjectURL(url);
+      setAnswers(current => ({ ...current, [block.id]: response.headers.get('X-Generated-Document-Id') ?? true }));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao gerar documento.'); }
+    finally { setBusy(null); }
+  }
+
+  async function configure(content: Pick<IntegrationTemplateVersion, 'stages' | 'blocks'> & Partial<Pick<IntegrationTemplateVersion, 'rules' | 'probation' | 'completionRules'>>) {
+    setBusy('configure'); setError(null);
+    try {
+      await apiFetch(`/api/hr/onboarding/${process.id}/integration`, getToken, { method: 'PATCH', body: JSON.stringify({ action: 'configure', content: { stages: content.stages, blocks: content.blocks, rules: content.rules ?? activeExecution.snapshot.rules, probation: content.probation ?? activeExecution.snapshot.probation, completionRules: content.completionRules ?? activeExecution.snapshot.completionRules } }) });
+      onRefresh();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao configurar o fluxo avulso.'); }
+    finally { setBusy(null); }
+  }
+
+  function openInstanceEditor() {
+    setInstanceDraft(structuredClone(activeExecution.snapshot));
+  }
+
+  async function saveInstanceEditor() {
+    if (!instanceDraft) return;
+    await configure({
+      stages: instanceDraft.stages,
+      blocks: instanceDraft.blocks,
+      rules: instanceDraft.rules,
+      probation: instanceDraft.probation,
+      completionRules: instanceDraft.completionRules,
+    });
+    setInstanceDraft(null);
+  }
+
+  function recordValue(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  }
+
+  async function uploadNested(scopeKey: string, file: File, onChange: (value: unknown) => void) {
+    setBusy(`upload:${scopeKey}`); setError(null);
+    try {
+      const token = await getToken();
+      const formData = new FormData(); formData.set('file', file);
+      const response = await fetch('/api/hr/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Falha no upload.');
+      onChange({ status: 'uploaded', url: payload.url, path: payload.path, name: file.name, sha256: payload.sha256 });
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha no upload.'); }
+    finally { setBusy(null); }
+  }
+
+  function renderNestedFields(fields: IntegrationSubfield[] | undefined, value: unknown, onChange: (value: Record<string, unknown>) => void, scopeKey: string) {
+    const data = recordValue(value);
+    if (!fields?.length) return <p className="rounded-lg border border-dashed bg-slate-50 p-3 text-xs text-slate-400">Nenhum campo interno configurado.</p>;
+    return <div className="grid gap-2 md:grid-cols-2">{fields.map(nested => <label key={nested.id} className="block rounded-lg border bg-slate-50 p-2 text-xs font-bold text-slate-600"><span className="mb-1 block">{nested.label}{nested.required ? <b className="text-rose-500"> *</b> : null}</span>{renderNestedInput(nested, data[nested.id], nextValue => onChange({ ...data, [nested.id]: nextValue }), `${scopeKey}:${nested.id}`)}{nested.helpText ? <span className="mt-1 block font-medium text-slate-400">{nested.helpText}</span> : null}</label>)}</div>;
+  }
+
+  function renderRepeatable(label: string, fields: IntegrationSubfield[] | undefined, value: unknown, onChange: (value: Record<string, unknown>[]) => void, scopeKey: string, table = false) {
+    const rows = Array.isArray(value) ? value.filter(item => item && typeof item === 'object' && !Array.isArray(item)) as Record<string, unknown>[] : [];
+    const addRow = () => onChange([...rows, {}]);
+    const patchRow = (index: number, row: Record<string, unknown>) => onChange(rows.map((item, itemIndex) => itemIndex === index ? row : item));
+    const removeRow = (index: number) => onChange(rows.filter((_, itemIndex) => itemIndex !== index));
+    if (table && fields?.length) {
+      return <div className="space-y-2 overflow-x-auto"><table className="min-w-full border-separate border-spacing-0 text-xs"><thead><tr>{fields.map(item => <th key={item.id} className="border-b bg-slate-50 px-2 py-1 text-left font-black text-slate-500">{item.label}</th>)}<th className="w-8 border-b bg-slate-50" /></tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{fields.map(nested => <td key={nested.id} className="min-w-40 border-b px-2 py-2 align-top">{renderNestedInput(nested, row[nested.id], nextValue => patchRow(index, { ...row, [nested.id]: nextValue }), `${scopeKey}:${index}:${nested.id}`)}</td>)}<td className="border-b px-1 py-2 align-top">{canManage ? <button type="button" onClick={() => removeRow(index)} className="grid h-8 w-8 place-items-center text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button> : null}</td></tr>)}</tbody></table>{canManage ? <button type="button" onClick={addRow} className="h-8 rounded-lg border bg-white px-3 text-xs font-black text-indigo-700">+ Linha</button> : null}</div>;
+    }
+    return <div className="space-y-2">{rows.map((row, index) => <div key={index} className="rounded-lg border bg-slate-50 p-3"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-black text-slate-500">{label} #{index + 1}</span>{canManage ? <button type="button" onClick={() => removeRow(index)} className="text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button> : null}</div>{renderNestedFields(fields, row, nextRow => patchRow(index, nextRow), `${scopeKey}:${index}`)}</div>)}{canManage ? <button type="button" onClick={addRow} className="h-8 rounded-lg border bg-white px-3 text-xs font-black text-indigo-700">+ Item</button> : null}</div>;
+  }
+
+  function renderNestedInput(field: IntegrationSubfield, value: unknown, onChange: (value: unknown) => void, scopeKey: string): React.ReactNode {
+    const base = 'h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-900';
+    if (field.type === 'subform') return renderNestedFields(field.fields, value, onChange as (value: Record<string, unknown>) => void, scopeKey);
+    if (field.type === 'repeatable_group' || field.type === 'repeatable_table') return renderRepeatable(field.label, field.fields, value, onChange as (value: Record<string, unknown>[]) => void, scopeKey, field.type === 'repeatable_table');
+    if (field.type === 'upload') {
+      const uploaded = recordValue(value);
+      return <div className="flex flex-wrap items-center gap-2"><input type="file" disabled={!canManage || busy === `upload:${scopeKey}`} accept={String(field.config.accept ?? '.pdf,.jpg,.jpeg,.png')} onChange={event => { const file = event.target.files?.[0]; if (file) void uploadNested(scopeKey, file, onChange); }} className="min-w-0 flex-1 text-xs" />{typeof uploaded.url === 'string' ? <a href={uploaded.url} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-600">{String(uploaded.name ?? 'Ver arquivo')}</a> : null}</div>;
+    }
+    if (field.type === 'yes_no' || field.type === 'confirmation') return <select disabled={!canManage || field.readOnly} value={value === true ? 'true' : value === false ? 'false' : ''} onChange={event => onChange(event.target.value === 'true')} className={base}><option value="">Selecione</option><option value="true">Sim</option><option value="false">Não</option></select>;
+    if (field.type === 'single_select' || field.type === 'multi_select') return <select disabled={!canManage || field.readOnly} multiple={field.type === 'multi_select'} value={field.type === 'multi_select' ? (Array.isArray(value) ? value.map(String) : []) : String(value ?? '')} onChange={event => onChange(field.type === 'multi_select' ? Array.from(event.target.selectedOptions).map(option => option.value) : event.target.value)} className={base}><option value="">Selecione</option>{field.options?.filter(option => option.active !== false).map(option => <option key={option.id} value={String(option.value)}>{option.label}</option>)}</select>;
+    if (field.type === 'textarea' || field.type === 'address') return <textarea disabled={!canManage || field.readOnly} value={String(value ?? '')} onChange={event => onChange(event.target.value)} className="min-h-20 w-full rounded-lg border bg-white p-2 text-xs text-slate-900" />;
+    const inputType = ['date', 'time', 'datetime'].includes(field.type) ? (field.type === 'datetime' ? 'datetime-local' : field.type) : ['number', 'currency', 'percentage'].includes(field.type) ? 'number' : field.type === 'email' ? 'email' : 'text';
+    return <input disabled={!canManage || field.readOnly} type={inputType} value={String(value ?? '')} onChange={event => onChange(inputType === 'number' ? (event.target.value === '' ? '' : Number(event.target.value)) : event.target.value)} placeholder={field.placeholder} className={base} />;
+  }
+
+  function field(block: IntegrationBlock) {
+    const value = answers[block.id];
+    const base = 'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900';
+    if (block.type === 'heading' || block.type === 'rich_text' || block.type === 'notice') return <p className={block.type === 'heading' ? 'text-base font-black' : 'text-sm text-slate-600'}>{block.description ?? block.label}</p>;
+    if (block.type === 'repeatable_group' || block.type === 'repeatable_table') return renderRepeatable(block.label, block.fields, value, nextValue => setAnswers(current => ({ ...current, [block.id]: nextValue })), block.id, block.type === 'repeatable_table');
+    if (block.type === 'subform') return renderNestedFields(block.fields, value, nextValue => setAnswers(current => ({ ...current, [block.id]: nextValue })), block.id);
+    if (block.type === 'upload') {
+      const uploaded = uploads[block.id] as { url?: string; name?: string } | undefined;
+      return <div className="flex flex-wrap items-center gap-2"><input type="file" disabled={!canManage || busy === `upload:${block.id}`} accept={String(block.config.accept ?? '.pdf,.jpg,.jpeg,.png')} onChange={event => { const file = event.target.files?.[0]; if (file) void upload(block.id, file); }} className="min-w-0 flex-1 text-xs" />{uploaded?.url ? <a href={uploaded.url} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-600">{uploaded.name ?? 'Ver arquivo'}</a> : null}</div>;
+    }
+    if (block.type === 'document_generation') return <button type="button" disabled={!canManage || busy === `document:${block.id}`} onClick={() => void generateDocument(block)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-violet-600 px-3 text-xs font-black text-white disabled:opacity-50">{busy === `document:${block.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}Gerar Word</button>;
+    if (block.type === 'yes_no' || block.type === 'confirmation') return <select disabled={!canManage} value={String(value ?? '')} onChange={event => setAnswers(current => ({ ...current, [block.id]: event.target.value === 'true' }))} className={base}><option value="">Selecione</option><option value="true">Sim</option><option value="false">Não</option></select>;
+    if (block.type === 'single_select' || block.type === 'multi_select') return <select disabled={!canManage} multiple={block.type === 'multi_select'} value={block.type === 'multi_select' ? (Array.isArray(value) ? value.map(String) : []) : String(value ?? '')} onChange={event => setAnswers(current => ({ ...current, [block.id]: block.type === 'multi_select' ? Array.from(event.target.selectedOptions).map(option => option.value) : event.target.value }))} className={base}><option value="">Selecione</option>{block.options?.filter(option => option.active !== false).map(option => <option key={option.id} value={String(option.value)}>{option.label}</option>)}</select>;
+    if (block.type === 'textarea') return <textarea disabled={!canManage} value={String(value ?? '')} onChange={event => setAnswers(current => ({ ...current, [block.id]: event.target.value }))} className="min-h-24 w-full rounded-lg border p-3 text-sm" />;
+    const inputType = ['date', 'time', 'datetime'].includes(block.type) ? (block.type === 'datetime' ? 'datetime-local' : block.type) : ['number', 'currency', 'percentage', 'numeric_scale'].includes(block.type) ? 'number' : block.type === 'email' ? 'email' : 'text';
+    return <input disabled={!canManage || block.readOnly} type={inputType} value={String(value ?? '')} onChange={event => setAnswers(current => ({ ...current, [block.id]: inputType === 'number' ? (event.target.value === '' ? '' : Number(event.target.value)) : event.target.value }))} placeholder={block.placeholder} className={base} />;
+  }
+
+  return <section className="mx-6 mt-5 rounded-2xl border-2 border-indigo-100 bg-indigo-50/30 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Fluxo configurável · {execution.mode === 'import' ? `snapshot v${execution.templateVersion}` : 'avulso'}</p><h3 className="mt-1 text-base font-black text-slate-950">{stage?.label ?? 'Fluxo concluído'}</h3><p className="text-xs text-slate-500">{execution.snapshot.name}</p></div><div className="flex flex-wrap gap-2">{canManage && execution.mode === 'blank' ? <button type="button" disabled={!!busy} onClick={openInstanceEditor} className="inline-flex h-9 items-center gap-1 rounded-lg border border-indigo-200 bg-white px-3 text-xs font-black text-indigo-700"><Pencil className="h-3.5 w-3.5" />Editar avulso</button> : null}{canManage ? <button type="button" disabled={!!busy} onClick={() => void persist('save')} className="h-9 rounded-lg border bg-white px-3 text-xs font-black">Salvar respostas</button> : null}{canManage && stage ? <button type="button" disabled={!!busy} onClick={() => void persist('advance')} className="inline-flex h-9 items-center gap-1 rounded-lg bg-indigo-600 px-3 text-xs font-black text-white">Avançar <ArrowRight className="h-3.5 w-3.5" /></button> : null}</div></div>{error ? <div className="mt-3"><ErrorLine msg={error} /></div> : null}<div className="mt-4 grid gap-3 md:grid-cols-2">{blocks.map(block => <div key={block.id} className="relative rounded-xl border bg-white p-3 text-xs font-bold text-slate-700"><span className="mb-1.5 block pr-6">{block.label}{simulation.requiredBlockIds.includes(block.id) ? <b className="text-rose-500"> *</b> : null}</span>{field(block)}{block.helpText ? <span className="mt-1 block font-medium text-slate-400">{block.helpText}</span> : null}</div>)}{stage && !blocks.length ? <p className="col-span-full text-sm text-slate-500">Esta etapa não possui campos visíveis.</p> : null}</div>{instanceDraft ? <IntegrationInstanceEditor draft={instanceDraft} disabled={!canManage} saving={busy === 'configure'} onChange={setInstanceDraft} onClose={() => setInstanceDraft(null)} onSave={() => void saveInstanceEditor()} /> : null}</section>;
+}
+
+function ProbationV2Panel({ process, getToken, canManage, onRefresh }: { process: OnboardingProcess; getToken: () => Promise<string>; canManage: boolean; onRefresh: () => void }) {
+  const [state, setState] = useState(process.probationV2 ?? null);
+  const [busy, setBusy] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!process.probationV2) return;
+    void apiFetch(`/api/hr/onboarding/${process.id}/probation`, getToken).then(payload => setState(payload.probation)).catch(() => undefined);
+  }, [getToken, process.id, process.probationV2]);
+  if (!state) return null;
+  const activeState = state;
+  async function patch(action: string, body: Record<string, unknown> = {}) { setBusy(action); setError(null); try { const payload = await apiFetch(`/api/hr/onboarding/${process.id}/probation`, getToken, { method: 'PATCH', body: JSON.stringify({ action, ...body }) }); setState(payload.probation); onRefresh(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao atualizar experiência.'); } finally { setBusy(null); } }
+  async function generateExtensionTerm() {
+    const templateId = activeState.config.extensionDocumentTemplateId; if (!templateId) { setError('Configure o modelo do termo de prorrogação.'); return; }
+    setBusy('term'); setError(null);
+    try { const token = await getToken(); const response = await fetch('/api/documents/generate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ templateId, onboardingId: process.id }) }); if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.error || 'Falha ao gerar termo.'); } const id = response.headers.get('X-Generated-Document-Id'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'termo-prorrogacao.docx'; anchor.click(); URL.revokeObjectURL(url); await patch('term_generated', { generatedDocumentId: id }); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao gerar termo.'); } finally { setBusy(null); }
+  }
+  return <section className="mx-6 mt-5 rounded-2xl border border-amber-200 bg-amber-50/40 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Experiência</p><h3 className="mt-1 text-base font-black text-slate-950">{state.status === 'awaiting_admission' ? 'Aguardando data de admissão' : `${state.schedule?.totalDays ?? 0} dias programados`}</h3><p className="text-xs text-slate-500">{state.schedule ? `${state.schedule.admissionDate} até ${state.schedule.finalEndDate}` : 'Informe a admissão para calcular todas as etapas.'}</p></div>{canManage && state.status === 'awaiting_admission' ? <input type="date" onChange={event => { if (event.target.value) void patch('set_admission_date', { admissionDate: event.target.value }); }} className="h-9 rounded-lg border bg-white px-3 text-xs" /> : null}</div>{error ? <div className="mt-3"><ErrorLine msg={error} /></div> : null}{state.schedule ? <div className="mt-4 grid gap-3 md:grid-cols-2">{state.evaluations.map(evaluation => <div key={evaluation.id} className="rounded-xl border bg-white p-3"><div className="flex items-center justify-between gap-2"><p className="text-sm font-black">{evaluation.label}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${evaluation.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : evaluation.status === 'available' ? 'bg-blue-50 text-blue-700' : evaluation.status === 'overdue' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>{evaluation.status}</span></div><p className="mt-1 text-xs text-slate-500">Janela: {evaluation.windowStartDate} a {evaluation.windowEndDate}</p>{evaluation.result ? <p className="mt-2 text-xs font-bold">Resultado: {evaluation.result}</p> : null}{canManage && ['available','overdue'].includes(evaluation.status) ? <div className="mt-3 flex gap-2"><button type="button" disabled={!!busy} onClick={() => void patch('evaluate', { evaluationId: evaluation.id, result: 'approved', notes: window.prompt('Observações da avaliação:') ?? '' })} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar</button><button type="button" disabled={!!busy} onClick={() => void patch('evaluate', { evaluationId: evaluation.id, result: 'rejected', notes: window.prompt('Motivo:') ?? '' })} className="h-8 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Reprovar</button></div> : null}</div>)}</div> : null}{state.extensionTerm.required ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-3"><div><p className="text-sm font-black">Termo de prorrogação obrigatório</p><p className="text-xs text-slate-500">{state.extensionTerm.signedAt ? 'Assinado' : state.extensionTerm.generatedDocumentId ? 'Gerado, aguardando assinatura' : 'Pendente de geração'}</p></div>{canManage ? <div className="flex gap-2">{!state.extensionTerm.generatedDocumentId ? <button type="button" disabled={!!busy} onClick={() => void generateExtensionTerm()} className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-black text-white">Gerar termo</button> : null}{state.extensionTerm.generatedDocumentId && !state.extensionTerm.signedAt ? <button type="button" disabled={!!busy} onClick={() => void patch('term_signed')} className="h-8 rounded-lg bg-slate-950 px-3 text-xs font-black text-white">Marcar assinado</button> : null}</div> : null}</div> : null}{canManage && state.status === 'decision_pending' ? <div className="mt-3 flex gap-2"><button type="button" disabled={!!busy} onClick={() => void patch('decide', { result: 'effective', notes: window.prompt('Observações da efetivação:') ?? '' })} className="h-9 rounded-lg bg-emerald-600 px-4 text-xs font-black text-white">Efetivar</button><button type="button" disabled={!!busy} onClick={() => void patch('decide', { result: 'terminated', notes: window.prompt('Observações do desligamento:') ?? '' })} className="h-9 rounded-lg bg-rose-600 px-4 text-xs font-black text-white">Não efetivar</button></div> : null}</section>;
 }
 
 function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, onRefresh }: {
@@ -7216,6 +7612,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [linkClock, setLinkClock] = useState(() => Date.now());
   const [finalizationDraft, setFinalizationDraft] = useState<OnboardingFinalizationSettings>(() => getFinalizationDraft(null));
+  const [signatureWorkflow, setSignatureWorkflow] = useState<SignatureWorkflowPayload | null>(null);
+  const [selectedSignatureTemplateIds, setSelectedSignatureTemplateIds] = useState<string[]>([]);
+  const [signatureBusy, setSignatureBusy] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setLinkClock(Date.now()), 30_000);
@@ -7254,6 +7653,50 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     [activeProcesses, selectedId]
   );
 
+  const loadSignatureWorkflow = useCallback(async () => {
+    if (!selectedProcess?.id) {
+      setSignatureWorkflow(null);
+      return;
+    }
+    try {
+      const payload = await apiFetch(
+        `/api/hr/onboarding/${selectedProcess.id}/signature-documents`,
+        getToken
+      ) as SignatureWorkflowPayload;
+      setSignatureWorkflow(payload);
+      setSelectedSignatureTemplateIds(
+        payload.documents.filter(document => document.selected).map(document => document.templateId)
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Falha ao carregar documentos para assinatura.');
+    }
+  }, [getToken, selectedProcess?.id]);
+
+  useEffect(() => {
+    if (view !== 'detail' || !selectedProcess?.id) return;
+    void loadSignatureWorkflow();
+  }, [loadSignatureWorkflow, selectedProcess?.id, view]);
+
+  useEffect(() => {
+    const pending = signatureWorkflow?.documents.some(document =>
+      document.selected && ['sent', 'viewed', 'partially_signed', 'signed'].includes(document.status)
+    );
+    if (!pending || !selectedProcess?.id) return;
+    const timer = window.setInterval(() => {
+      void loadSignatureWorkflow();
+      onRefresh();
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [loadSignatureWorkflow, onRefresh, selectedProcess?.id, signatureWorkflow?.documents]);
+
+  useEffect(() => {
+    if (!selectedProcess?.collaboratorUserId) return;
+    if (selectedProcess.accessProvisioning?.status === 'completed') return;
+    if (selectedProcess.status === 'cancelled' || selectedProcess.status === 'completed') return;
+    const timer = window.setInterval(onRefresh, 10_000);
+    return () => window.clearInterval(timer);
+  }, [onRefresh, selectedProcess?.accessProvisioning?.status, selectedProcess?.collaboratorUserId, selectedProcess?.status]);
+
   // Return to the grid if the open process disappears (cancelled/completed refresh).
   useEffect(() => {
     if (view === 'detail' && selectedId && !activeProcesses.some(process => process.id === selectedId)) {
@@ -7289,6 +7732,68 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     }
   }
 
+  async function signatureAction(action: string, body: Record<string, unknown> = {}) {
+    if (!selectedProcess) return null;
+    setSignatureBusy(action);
+    setError(null);
+    try {
+      const payload = await apiFetch(
+        `/api/hr/onboarding/${selectedProcess.id}/signature-documents`,
+        getToken,
+        { method: 'POST', body: JSON.stringify({ action, ...body }) }
+      ) as SignatureWorkflowPayload;
+      setSignatureWorkflow(payload);
+      setSelectedSignatureTemplateIds(
+        payload.documents.filter(document => document.selected).map(document => document.templateId)
+      );
+      onRefresh();
+      return payload;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Falha no fluxo de assinatura.');
+      return null;
+    } finally {
+      setSignatureBusy(null);
+    }
+  }
+
+  async function generateSelectedSignatureTemplates() {
+    if (!selectedProcess || selectedSignatureTemplateIds.length === 0) return;
+    const selected = await signatureAction('select', { templateIds: selectedSignatureTemplateIds });
+    if (!selected) return;
+    await signatureAction('generate');
+  }
+
+  async function downloadSignatureDocument(documentId: string, kind: 'generated' | 'signed') {
+    if (!selectedProcess) return;
+    setSignatureBusy(`download:${documentId}:${kind}`);
+    setError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        `/api/hr/onboarding/${selectedProcess.id}/signature-documents?documentId=${encodeURIComponent(documentId)}&download=${kind}`,
+        { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Arquivo indisponível.');
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition') ?? '';
+      const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      const fileName = encodedName ? decodeURIComponent(encodedName) : kind === 'signed' ? 'documento-assinado.pdf' : 'documento.docx';
+      const url = URL.createObjectURL(blob);
+      const anchor = window.document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Falha ao baixar documento.');
+    } finally {
+      setSignatureBusy(null);
+    }
+  }
+
   async function copyLink(copyId: string, link: string) {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(link);
@@ -7317,15 +7822,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }
 
   async function createCollaborator(processId: string) {
-    const payload = await patchProcess(processId, { action: 'create_collaborator' });
-    const link = typeof payload?.process?.firstAccessUrl === 'string' ? payload.process.firstAccessUrl : null;
-    if (link) await copyLink(`${processId}:first-access`, link);
+    await patchProcess(processId, { action: 'create_collaborator' });
   }
 
   async function createFirstAccessLink(processId: string) {
-    const payload = await patchProcess(processId, { action: 'create_first_access_link' });
-    const link = typeof payload?.process?.firstAccessUrl === 'string' ? payload.process.firstAccessUrl : null;
-    if (link) await copyLink(`${processId}:first-access`, link);
+    await patchProcess(processId, { action: 'create_first_access_link' });
   }
 
   function processDocProgress(process: OnboardingProcess) {
@@ -7378,6 +7879,31 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       !onboardingPublicLinkExpired(process, new Date(linkClock));
   }
 
+  function hasAuditableDocumentFile(document: OnboardingDocument) {
+    return typeof document.fileUrl === 'string' && document.fileUrl.trim().length > 0;
+  }
+
+  function hasMeaningfulExtractionRecord(value: unknown) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    return Object.values(value as Record<string, unknown>).some(entry => {
+      if (entry === null || entry === undefined) return false;
+      if (typeof entry === 'string') return entry.trim().length > 0;
+      if (Array.isArray(entry)) return entry.length > 0;
+      if (typeof entry === 'object') return Object.keys(entry as Record<string, unknown>).length > 0;
+      return true;
+    });
+  }
+
+  function hasDocumentExtraction(document: OnboardingDocument) {
+    const legacy = document as OnboardingDocument & {
+      extractedData?: unknown;
+      aiExtractedData?: unknown;
+    };
+    return hasMeaningfulExtractionRecord(document.extractedFields) ||
+      hasMeaningfulExtractionRecord(legacy.extractedData) ||
+      hasMeaningfulExtractionRecord(legacy.aiExtractedData);
+  }
+
   function DocumentRow({ process, document, mode }: {
     process: OnboardingProcess;
     document: OnboardingDocument;
@@ -7385,6 +7911,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }) {
     const actionKey = `${process.id}:document_status`;
     const isApproved = document.status === 'approved';
+    const isRejected = document.status === 'rejected';
+    const hasFile = hasAuditableDocumentFile(document);
+    const canChangeDocumentStatus = canActOnCurrentPhase && mode === 'review';
     const statusColor = isApproved
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
       : document.status === 'ai_approved'
@@ -7411,7 +7940,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${statusColor}`}>
-            {isApproved ? <CheckCircle2 className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+            {isApproved
+              ? <CheckCircle2 className="h-4 w-4" />
+              : isRejected
+                ? <XCircle className="h-4 w-4" />
+                : <FileText className="h-4 w-4" />}
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-slate-900">
@@ -7431,47 +7964,69 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               >
                 <ExternalLink className="h-3 w-3" /> Ver arquivo enviado
               </a>
-            ) : null}
+            ) : (
+              <p className="mt-1 text-xs font-semibold text-slate-400">Nenhum arquivo enviado</p>
+            )}
           </div>
         </div>
         {canManage && (
           <div className="flex shrink-0 gap-1.5">
             {mode === 'collect' ? (
-              <>
-                <button
-                  type="button"
-                  disabled={updating === actionKey}
-                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'review_required' })}
-                  className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              document.fileUrl ? (
+                <a
+                  href={document.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
                 >
-                  Revisão
-                </button>
-                <button
-                  type="button"
-                  disabled={updating === actionKey}
-                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
-                  className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
-                >
-                  Aprovar
-                </button>
-              </>
+                  <ExternalLink className="h-3 w-3" />
+                  Abrir documento
+                </a>
+              ) : (
+                <span className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-400">
+                  Aguardando envio
+                </span>
+              )
             ) : (
               <>
+                {document.fileUrl ? (
+                  <a
+                    href={document.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Abrir documento
+                  </a>
+                ) : (
+                  <span className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-400">
+                    Sem arquivo
+                  </span>
+                )}
                 <button
                   type="button"
-                  disabled={updating === actionKey}
+                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus || isApproved}
                   onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
-                  className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+                  className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-[11px] font-bold ${isApproved
+                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50'}`}
+                  title={isApproved ? 'Documento já aprovado.' : !hasFile ? 'Envie ou abra um arquivo antes de aprovar.' : !canChangeDocumentStatus ? 'A aprovação só fica ativa na fase atual de Conferência.' : undefined}
                 >
-                  Aprovar
+                  {isApproved ? <CheckCircle2 className="h-3 w-3" /> : null}
+                  {isApproved ? 'Aprovado' : 'Aprovar'}
                 </button>
                 <button
                   type="button"
-                  disabled={updating === actionKey}
+                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus || isRejected}
                   onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'rejected' })}
-                  className="h-8 rounded-lg bg-red-600 px-3 text-[11px] font-bold text-white hover:bg-red-500 disabled:opacity-50"
+                  className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-[11px] font-bold ${isRejected
+                    ? 'border border-red-200 bg-red-50 text-red-700'
+                    : 'bg-red-600 text-white hover:bg-red-500 disabled:opacity-50'}`}
+                  title={isRejected ? 'Documento já reprovado.' : !hasFile ? 'Não há arquivo anexado para reprovar.' : !canChangeDocumentStatus ? 'A reprovação só fica ativa na fase atual de Conferência.' : undefined}
                 >
-                  Reprovar
+                  {isRejected ? <XCircle className="h-3 w-3" /> : null}
+                  {isRejected ? 'Reprovado' : 'Reprovar'}
                 </button>
               </>
             )}
@@ -7695,19 +8250,67 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const publicLink = linkActive && selectedProcess.publicToken
     ? `${PUBLIC_RECRUITMENT_URL}/onboarding/${selectedProcess.publicToken}`
     : null;
-  const pendingAlerts = (selectedProcess.integrationAlerts ?? []).filter(alert => alert.status === 'pending');
+  const integrationAlerts = selectedProcess.integrationAlerts ?? [];
+  const bizneoAlert = integrationAlerts.find(alert => alert.id === 'bizneo_id');
+  const pdvAlert = integrationAlerts.find(alert => alert.id === 'pdv_id');
+  const integrationsResolved = bizneoAlert?.status === 'resolved' && pdvAlert?.status === 'resolved';
   const finalizationSaved = !!selectedProcess.finalizationSettings;
   const userCreated = !!selectedProcess.collaboratorUserId;
   const readyToCreate = finalizationSaved &&
     (selectedProcess.currentStage === 'formalization_validation' || selectedProcess.status === 'ready_to_create_user');
   const canCreateCollaborator = canManage && !userCreated && readyToCreate &&
     selectedProcess.status !== 'cancelled' && selectedProcess.status !== 'completed';
-  const canComplete = canManage && userCreated &&
+  const canComplete = canManage && userCreated && integrationsResolved &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
-  const signed = selectedProcess.status === 'completed' ||
-    stageOrderOf(selectedProcess, selectedProcess.currentStage) > stageOrderOf(selectedProcess, 'signature');
-  const canAdvanceToPhase = canManage && !!activePhaseId && activePhaseId !== selectedProcess.currentStage &&
+  const deliveryStatus = selectedProcess.accessProvisioning?.email?.status ?? 'not_sent';
+  const emailDelivered = deliveryStatus === 'delivered';
+  const emailDeliveryFailed = ['bounced', 'failed', 'complained'].includes(deliveryStatus);
+  const passwordCreated = selectedProcess.firstAccess?.status === 'used';
+  const firstAccessExpired = !!selectedProcess.firstAccess?.expiresAt &&
+    new Date(selectedProcess.firstAccess.expiresAt).getTime() <= linkClock;
+  const formalizationAccessCompleted = selectedProcess.accessProvisioning?.status === 'completed';
+  const accessIndicators = [
+    {
+      label: 'Cadastro criado',
+      detail: userCreated ? 'Usuária e permissões configuradas' : 'Aguardando envio do cadastro',
+      state: userCreated ? 'done' : 'pending',
+    },
+    {
+      label: 'E-mail entregue',
+      detail: emailDelivered
+        ? 'Confirmado pelo servidor de e-mail'
+        : emailDeliveryFailed
+          ? selectedProcess.accessProvisioning?.email?.lastError ?? 'A entrega falhou'
+          : deliveryStatus === 'delayed'
+            ? 'Entrega temporariamente atrasada'
+            : userCreated
+              ? 'Aguardando confirmação do Resend'
+              : 'Ainda não enviado',
+      state: emailDelivered ? 'done' : emailDeliveryFailed ? 'failed' : 'pending',
+    },
+    {
+      label: 'Senha cadastrada',
+      detail: passwordCreated
+        ? 'Primeiro acesso confirmado'
+        : firstAccessExpired
+          ? 'O link de primeiro acesso venceu'
+          : userCreated
+            ? 'Aguardando a colaboradora'
+            : 'Disponível após criar o cadastro',
+      state: passwordCreated ? 'done' : firstAccessExpired ? 'failed' : 'pending',
+    },
+  ] as const;
+  const currentStageOrder = stageOrderOf(selectedProcess, selectedProcess.currentStage);
+  const activeStageOrder = stageOrderOf(selectedProcess, activePhaseId);
+  const isCurrentPhase = !!activePhaseId && activePhaseId === selectedProcess.currentStage;
+  const isFuturePhase = activeStageOrder > currentStageOrder;
+  const isPastPhase = activeStageOrder >= 0 && currentStageOrder >= 0 && activeStageOrder < currentStageOrder;
+  const canActOnCurrentPhase = canManage && isCurrentPhase &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+  const selectedSignatureDocuments = (signatureWorkflow?.documents ?? []).filter(document => document.selected);
+  const signatureDocumentsReadyToSend = selectedSignatureDocuments.filter(document => document.status === 'ready_to_send');
+  const signatureSelectionEditable = canActOnCurrentPhase && activePhaseId === 'signature_preparation' &&
+    !selectedSignatureDocuments.some(document => ['sent', 'viewed', 'partially_signed', 'signed', 'archived'].includes(document.status));
 
   const formRows: Array<[string, string]> = [
     ['Identificação', readOnboardingChoice(answers, 'identityDocumentType', { identity: 'RG / CIN', cnh: 'CNH' })],
@@ -7730,13 +8333,77 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     ['Cuidados no trabalho', readOnboardingAnswer(answers, 'workplaceAdaptationNotes')],
   ];
 
-  const signItems: Array<[string, boolean]> = [
-    ['Contrato de trabalho', signed],
-    ['Termo de vale-transporte', signed],
-    ['Acordo de compensação de jornada', signed],
-  ];
+  const okAlert = integrationsResolved;
+  const selectedProcessId = selectedProcess.id;
+  const reviewDocuments = selectedProcess.documents ?? [];
+  const documentsWithExtraction = reviewDocuments.filter(hasDocumentExtraction).length;
+  const auditableDocuments = reviewDocuments.filter(hasAuditableDocumentFile).length;
+  const bulkApprovalDocuments = reviewDocuments.filter(document =>
+    hasAuditableDocumentFile(document) &&
+    document.status !== 'approved' &&
+    document.status !== 'rejected'
+  );
+  const approvedAuditableDocuments = reviewDocuments.filter(document =>
+    hasAuditableDocumentFile(document) && document.status === 'approved'
+  ).length;
+  const allAuditableDocumentsApproved = auditableDocuments > 0 && approvedAuditableDocuments === auditableDocuments;
+  const bulkApprovalActionKey = `${selectedProcessId}:document_status_bulk`;
+  const canBulkApproveDocuments = canActOnCurrentPhase && bulkApprovalDocuments.length > 0;
 
-  const okAlert = pendingAlerts.length === 0;
+  async function approveReviewDocumentsInBulk() {
+    if (!canBulkApproveDocuments) return;
+    const documentCount = bulkApprovalDocuments.length;
+    const countLabel = `${documentCount} documento${documentCount === 1 ? '' : 's'}`;
+    const confirmed = window.confirm(`Aprovar ${countLabel} em lote? Confirme apenas se você já abriu e verificou os arquivos.`);
+    if (!confirmed) return;
+
+    await patchProcess(selectedProcessId, {
+      action: 'document_status_bulk',
+      documentIds: bulkApprovalDocuments.map(document => document.id),
+      status: 'approved',
+    });
+  }
+
+  function renderBulkApproveDocumentsButton() {
+    if (!canManage || reviewDocuments.length === 0) return null;
+    if (bulkApprovalDocuments.length === 0) {
+      if (!allAuditableDocumentsApproved) return null;
+      return (
+        <div
+          aria-live="polite"
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Todos aprovados
+          <span className="ml-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] leading-none">
+            {approvedAuditableDocuments}
+          </span>
+        </div>
+      );
+    }
+    const isLoading = updating === bulkApprovalActionKey;
+    return (
+      <button
+        type="button"
+        disabled={isLoading || !canBulkApproveDocuments}
+        onClick={() => void approveReviewDocumentsInBulk()}
+        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        title={!canActOnCurrentPhase
+          ? 'A aprovação em lote só fica ativa na fase atual de Conferência.'
+          : bulkApprovalDocuments.length === 0
+            ? 'Não há documentos enviados pendentes para aprovar.'
+            : undefined}
+      >
+        {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+        Aprovar em lote
+        {bulkApprovalDocuments.length > 0 ? (
+          <span className="ml-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] leading-none">
+            {bulkApprovalDocuments.length}
+          </span>
+        ) : null}
+      </button>
+    );
+  }
 
   let genericStatus = 'Etapa concluída';
   let genericDesc = activeDetails?.focus ?? '';
@@ -7812,6 +8479,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
         {error && <div className="px-6 pt-4"><ErrorLine msg={error} /></div>}
 
+        {selectedProcess.integrationV2 ? <IntegrationV2Runner process={selectedProcess} getToken={getToken} canManage={canManage} onRefresh={onRefresh} /> : null}
+        {selectedProcess.probationV2 ? <ProbationV2Panel process={selectedProcess} getToken={getToken} canManage={canManage} onRefresh={onRefresh} /> : null}
+
         <div className="flex flex-wrap items-start gap-5 p-6">
           {/* timeline */}
           <aside className="min-w-[260px] flex-[1_1_290px] rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -7877,7 +8547,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 <span className="text-[11px] font-black uppercase tracking-[0.07em] text-pink-600">
                   {activeKind === 'coleta' ? 'Formalização'
                     : activeKind === 'revisao' ? 'Conferência'
-                    : activeKind === 'validacao' ? 'Validação final'
+                    : activeKind === 'validacao' ? 'Finalização da formalização'
                     : activeKind === 'integracao' ? 'Acessos'
                     : activeKind === 'assinatura' ? 'Assinatura'
                     : activeKind === 'experiencia' ? 'Experiência'
@@ -7897,21 +8567,25 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     Prazo {activeStage.dueDays} dia{activeStage.dueDays === 1 ? '' : 's'}
                   </span>
                 ) : null}
-                {canAdvanceToPhase && (
-                  <button
-                    type="button"
-                    disabled={updating === `${selectedProcess.id}:advance_stage`}
-                    onClick={() => patchProcess(selectedProcess.id, { action: 'advance_stage', currentStage: activePhaseId })}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-pink-200 bg-pink-50 px-2.5 py-1.5 text-[11.5px] font-bold text-pink-700 hover:bg-pink-100 disabled:opacity-50"
-                  >
-                    {updating === `${selectedProcess.id}:advance_stage`
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <ArrowRight className="h-3.5 w-3.5" />}
-                    Definir como etapa atual
-                  </button>
-                )}
+                <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-bold ${
+                  isCurrentPhase
+                    ? 'border-pink-200 bg-pink-50 text-pink-700'
+                    : isFuturePhase
+                      ? 'border-slate-200 bg-slate-50 text-slate-500'
+                      : isPastPhase
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-500'
+                }`}>
+                  {isCurrentPhase ? 'Etapa atual' : isFuturePhase ? 'Etapa futura' : isPastPhase ? 'Etapa concluída' : 'Etapa'}
+                </span>
               </div>
             </div>
+
+            {isFuturePhase ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+                Esta etapa ainda não está liberada. Conclua os requisitos das etapas anteriores para habilitar ações aqui.
+              </div>
+            ) : null}
 
             {/* COLETA */}
             {activeKind === 'coleta' && (
@@ -7989,24 +8663,48 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {/* REVISAO */}
             {activeKind === 'revisao' && (
               <div className="mt-4 space-y-3.5">
-                <div className="flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
-                    <Sparkles className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <div className="text-[13px] font-black text-blue-800">
-                      Copiloto conferiu {progress.received} de {progress.total} documento{progress.total === 1 ? '' : 's'}
+                {documentsWithExtraction > 0 ? (
+                  <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white">
+                        <Sparkles className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-black text-blue-800">
+                          Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}
+                        </div>
+                        <div className="mt-0.5 text-xs font-semibold text-blue-700">
+                          Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.
+                        </div>
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-xs font-semibold text-blue-700">
-                      CPF, data de nascimento e filiação extraídos dos documentos. Confirme as divergências antes de aprovar a coleta.
-                    </div>
+                    {renderBulkApproveDocumentsButton()}
                   </div>
-                </div>
+                ) : (
+                  <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500">
+                        <FileText className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-black text-slate-800">
+                          Conferência manual de documentos
+                        </div>
+                        <div className="mt-0.5 text-xs font-semibold text-slate-500">
+                          {auditableDocuments > 0
+                            ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.`
+                            : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}
+                        </div>
+                      </div>
+                    </div>
+                    {renderBulkApproveDocumentsButton()}
+                  </div>
+                )}
                 <div className="space-y-2">
-                  {(selectedProcess.documents ?? []).map(document => (
+                  {reviewDocuments.map(document => (
                     <DocumentRow key={document.id} process={selectedProcess} document={document} mode="review" />
                   ))}
-                  {(selectedProcess.documents ?? []).length === 0 && (
+                  {reviewDocuments.length === 0 && (
                     <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
                       Nenhum documento recebido para conferência.
                     </p>
@@ -8019,7 +8717,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {activeKind === 'validacao' && (
               <div className="mt-4 space-y-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Como o colaborador se comporta no sistema</p>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-slate-500">Configurações finais do colaborador</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      Salva VT, turno, operação, metas e regra de acesso. Isso não finaliza a integração.
+                    </p>
+                  </div>
                   {finalizationSaved ? (
                     <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black text-emerald-700">Salvo</span>
                   ) : (
@@ -8031,21 +8734,94 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   onChange={setFinalizationDraft}
                   shiftDefinitions={shiftDefinitions}
                   unitId={selectedProcess.unitId}
-                  disabled={!canManage || userCreated}
+                  disabled={!canActOnCurrentPhase || userCreated}
                 />
                 {canManage && !userCreated ? (
                   <button
                     type="button"
-                    disabled={updating === `${selectedProcess.id}:save_finalization`}
+                    disabled={!canActOnCurrentPhase || updating === `${selectedProcess.id}:save_finalization`}
                     onClick={() => saveFinalization(selectedProcess.id)}
                     className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    title={!canActOnCurrentPhase ? 'Esta etapa só pode ser salva quando for a fase atual.' : undefined}
                   >
                     {updating === `${selectedProcess.id}:save_finalization`
                       ? <Loader2 className="h-4 w-4 animate-spin" />
                       : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-                    Salvar validação
+                    Salvar configurações finais
                   </button>
                 ) : null}
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-700">Liberação de acesso</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        A formalização avança automaticamente quando o e-mail for entregue e a senha for cadastrada.
+                      </p>
+                    </div>
+                    {formalizationAccessCompleted ? (
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">Concluído</span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 grid gap-2 md:grid-cols-3">
+                    {accessIndicators.map(indicator => (
+                      <div key={indicator.label} className="rounded-xl border border-white bg-white px-3 py-3 shadow-sm">
+                        <div className="flex items-center gap-2">
+                          {indicator.state === 'done' ? (
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                          ) : indicator.state === 'failed' ? (
+                            <XCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                          ) : (
+                            <Clock className="h-4 w-4 shrink-0 text-amber-500" />
+                          )}
+                          <span className="text-[12px] font-black text-slate-900">{indicator.label}</span>
+                        </div>
+                        <p className={`mt-1.5 text-[10.5px] font-semibold ${indicator.state === 'failed' ? 'text-rose-600' : 'text-slate-500'}`}>
+                          {indicator.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedProcess.candidateEmail ? (
+                    <p className="mt-3 text-[11px] font-semibold text-slate-500">
+                      Destinatário: <span className="font-black text-slate-700">{selectedProcess.candidateEmail}</span>
+                    </p>
+                  ) : null}
+
+                  {canManage && !userCreated ? (
+                    <button
+                      type="button"
+                      disabled={!canCreateCollaborator || updating === `${selectedProcess.id}:create_collaborator`}
+                      onClick={() => createCollaborator(selectedProcess.id)}
+                      className={`mt-3 inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl text-[13.5px] font-bold text-white ${
+                        canCreateCollaborator
+                          ? 'bg-pink-600 shadow-lg shadow-pink-600/25 hover:bg-pink-700'
+                          : 'cursor-not-allowed bg-slate-300'
+                      }`}
+                    >
+                      {updating === `${selectedProcess.id}:create_collaborator`
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <UserPlus className="h-4 w-4" />}
+                      {canCreateCollaborator ? 'Criar cadastro e enviar acesso' : 'Salve as configurações para enviar'}
+                    </button>
+                  ) : null}
+
+                  {canManage && userCreated && !passwordCreated && !formalizationAccessCompleted ? (
+                    <button
+                      type="button"
+                      disabled={updating === `${selectedProcess.id}:create_first_access_link`}
+                      onClick={() => createFirstAccessLink(selectedProcess.id)}
+                      className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[12.5px] font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      {updating === `${selectedProcess.id}:create_first_access_link`
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <RotateCw className="h-4 w-4" />}
+                      {firstAccessExpired || emailDeliveryFailed ? 'Gerar novo link e reenviar acesso' : 'Reenviar e-mail de acesso'}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             )}
 
@@ -8053,37 +8829,56 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {activeKind === 'integracao' && (
               <div className="mt-4 space-y-3">
                 <div className={`rounded-2xl border px-4 py-3.5 ${okAlert ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-                  {pendingAlerts.length > 0 ? pendingAlerts.map(alert => (
+                  {!okAlert ? ([bizneoAlert, pdvAlert].filter(Boolean) as NonNullable<typeof bizneoAlert>[]).map(alert => (
                     <div key={alert.id} className="[&:not(:first-child)]:mt-2">
-                      <p className="text-[13px] font-black text-amber-800">{alert.label}</p>
-                      <p className="mt-1 text-[11.5px] font-semibold text-amber-700">{alert.message ?? 'Pendente de preenchimento.'}</p>
+                      <p className={`text-[13px] font-black ${alert.status === 'resolved' ? 'text-emerald-800' : 'text-amber-800'}`}>{alert.label}</p>
+                      <p className={`mt-1 text-[11.5px] font-semibold ${alert.status === 'resolved' ? 'text-emerald-700' : 'text-amber-700'}`}>{alert.message ?? 'Verificação pendente.'}</p>
                     </div>
                   )) : (
                     <>
-                      <p className="text-[13px] font-black text-emerald-800">Sem alertas pendentes</p>
-                      <p className="mt-1 text-[11.5px] font-semibold text-emerald-700">Bizneo HR e PDV Legal conferidos.</p>
+                      <p className="text-[13px] font-black text-emerald-800">Acessos sincronizados</p>
+                      <p className="mt-1 text-[11.5px] font-semibold text-emerald-700">Bizneo HR e PDV Legal foram confirmados.</p>
                     </>
                   )}
+                  {!bizneoAlert || !pdvAlert ? (
+                    <div className="[&:not(:first-child)]:mt-2">
+                      <p className="text-[13px] font-black text-amber-800">Verificação necessária</p>
+                      <p className="mt-1 text-[11.5px] font-semibold text-amber-700">Procure os cadastros antes de avançar.</p>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    ['Bizneo HR', 'Sincroniza dados cadastrais e ponto.'],
-                    ['PDV Legal', 'Habilita operação no ponto de venda.'],
-                  ].map(([name, desc]) => (
-                    <div key={name} className="rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3">
+                    { name: 'Bizneo HR', desc: 'Sincroniza dados cadastrais e ponto.', alert: bizneoAlert },
+                    { name: 'PDV Legal', desc: 'Habilita operação no ponto de venda.', alert: pdvAlert },
+                  ].map(({ name, desc, alert }) => {
+                    const resolved = alert?.status === 'resolved';
+                    return (
+                    <div key={name} className={`rounded-xl border px-3.5 py-3 ${resolved ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
                       <div className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <span className={`h-2 w-2 rounded-full ${resolved ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                         <span className="text-[12.5px] font-black text-slate-900">{name}</span>
                       </div>
-                      <div className="mt-1 text-[11.5px] font-semibold text-slate-400">{desc}</div>
+                      <div className="mt-1 text-[11.5px] font-semibold text-slate-500">{resolved ? 'Sincronizado' : alert ? 'Pendente' : 'Não verificado'} · {desc}</div>
                     </div>
-                  ))}
+                  )})}
                 </div>
+                {userCreated && canManage ? (
+                  <button
+                    type="button"
+                    disabled={!canActOnCurrentPhase || updating === `${selectedProcess.id}:verify_integrations`}
+                    onClick={() => patchProcess(selectedProcess.id, { action: 'verify_integrations' })}
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[12.5px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RotateCw className={`h-3.5 w-3.5 ${updating === `${selectedProcess.id}:verify_integrations` ? 'animate-spin' : ''}`} />
+                    {updating === `${selectedProcess.id}:verify_integrations` ? 'Procurando cadastros...' : 'Procurar cadastros novamente'}
+                  </button>
+                ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5">
                   <div className="min-w-0">
-                    <div className="text-[12.5px] font-black text-slate-900">Link de primeiro acesso</div>
-                    <div className={`mt-0.5 text-xs font-bold ${userCreated ? 'text-blue-600' : 'text-slate-400'}`}>
-                      {userCreated ? 'Disponível' : 'Disponível após criar o colaborador'}
+                    <div className="text-[12.5px] font-black text-slate-900">Acesso ao Coala One</div>
+                    <div className={`mt-0.5 text-xs font-bold ${passwordCreated ? 'text-emerald-600' : userCreated ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {passwordCreated ? 'Senha cadastrada' : userCreated ? 'Aguardando primeiro acesso' : 'Cadastro ainda não criado'}
                     </div>
                   </div>
                   {userCreated && selectedProcess.firstAccess?.status !== 'used' ? (
@@ -8095,8 +8890,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     >
                       {updating === `${selectedProcess.id}:create_first_access_link`
                         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <Copy className="h-3.5 w-3.5" />}
-                      {copiedLinkId === `${selectedProcess.id}:first-access` ? 'Copiado' : 'Copiar link'}
+                        : <RotateCw className="h-3.5 w-3.5" />}
+                      Reenviar acesso
                     </button>
                   ) : null}
                 </div>
@@ -8109,21 +8904,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       </p>
                     ) : null}
                     {!userCreated ? (
-                      <button
-                        type="button"
-                        disabled={!canCreateCollaborator || updating === `${selectedProcess.id}:create_collaborator`}
-                        onClick={() => createCollaborator(selectedProcess.id)}
-                        className={`inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl text-[13.5px] font-bold text-white ${
-                          canCreateCollaborator
-                            ? 'bg-pink-600 shadow-lg shadow-pink-600/25 hover:bg-pink-700'
-                            : 'cursor-not-allowed bg-slate-300'
-                        }`}
-                      >
-                        {updating === `${selectedProcess.id}:create_collaborator`
-                          ? <Loader2 className="h-4 w-4 animate-spin" />
-                          : <UserPlus className="h-4 w-4" />}
-                        {canCreateCollaborator ? 'Criar colaborador e copiar link' : 'Conclua a validação para criar'}
-                      </button>
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-bold text-amber-800">
+                        Retorne à etapa Formalização · Finalização para criar o cadastro e enviar o acesso.
+                      </p>
                     ) : (
                       <button
                         type="button"
@@ -8134,7 +8917,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         {updating === `${selectedProcess.id}:complete`
                           ? <Loader2 className="h-4 w-4 animate-spin" />
                           : <CheckCircle2 className="h-4 w-4" />}
-                        {selectedProcess.status === 'completed' ? 'Integração finalizada' : 'Finalizar integração'}
+                        {selectedProcess.status === 'completed'
+                          ? 'Integração finalizada'
+                          : integrationsResolved
+                            ? 'Finalizar integração'
+                            : 'Sincronize Bizneo e PDV para avançar'}
                       </button>
                     )}
                   </>
@@ -8144,22 +8931,156 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
             {/* ASSINATURA */}
             {activeKind === 'assinatura' && (
-              <div className="mt-4 space-y-2">
-                {signItems.map(([label, isSigned]) => (
-                  <div key={label} className="flex items-center justify-between gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3">
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500">
-                        <FileText className="h-4 w-4" />
+              <div className="mt-4 space-y-4">
+                {activePhaseId === 'signature_preparation' ? (
+                  <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wide text-violet-800">1. Selecione os modelos</p>
+                        <p className="mt-1 text-xs font-semibold text-violet-700">Escolha os documentos que serão gerados para este titular.</p>
+                      </div>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700">
+                        {selectedSignatureTemplateIds.length} selecionado{selectedSignatureTemplateIds.length === 1 ? '' : 's'}
                       </span>
-                      <span className="text-[13.5px] font-bold text-slate-900">{label}</span>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-[10.5px] font-black ${
-                      isSigned ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      {isSigned ? 'Assinado' : 'Aguardando'}
-                    </span>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {(signatureWorkflow?.templates ?? []).map(template => {
+                        const checked = selectedSignatureTemplateIds.includes(template.id);
+                        return (
+                          <label key={template.id} className={`flex items-start gap-2.5 rounded-xl border p-3 ${checked ? 'border-violet-300 bg-white' : 'border-slate-200 bg-white/60'}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={!signatureSelectionEditable || !!signatureBusy}
+                              onChange={event => setSelectedSignatureTemplateIds(current =>
+                                event.target.checked
+                                  ? Array.from(new Set([...current, template.id]))
+                                  : current.filter(id => id !== template.id)
+                              )}
+                              className="mt-0.5"
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate text-[12.5px] font-black text-slate-900">{template.name}</span>
+                              <span className="mt-0.5 block text-[10.5px] font-semibold text-slate-500">{template.category} · versão {template.version}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {(signatureWorkflow?.templates ?? []).length === 0 ? (
+                        <p className="col-span-full rounded-xl border border-dashed bg-white p-4 text-xs font-semibold text-slate-500">
+                          Nenhum modelo DOCX publicado. Cadastre em Documentos → Modelos.
+                        </p>
+                      ) : null}
+                    </div>
+                    {canManage ? (
+                      <button
+                        type="button"
+                        disabled={!signatureSelectionEditable || selectedSignatureTemplateIds.length === 0 || !!signatureBusy}
+                        onClick={() => void generateSelectedSignatureTemplates()}
+                        className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-xs font-black text-white hover:bg-violet-600 disabled:opacity-50"
+                      >
+                        {signatureBusy === 'select' || signatureBusy === 'generate' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                        Gerar documentos selecionados
+                      </button>
+                    ) : null}
                   </div>
-                ))}
+                ) : null}
+
+                {selectedSignatureDocuments.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wide text-slate-600">
+                          {activePhaseId === 'signature_preparation' ? '2. Revisão do RH' : 'Acompanhamento da assinatura'}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">
+                          {activePhaseId === 'signature_preparation'
+                            ? 'Baixe e confira cada Word antes de liberar o envio.'
+                            : 'Os indicadores são atualizados automaticamente pelo Autentique.'}
+                        </p>
+                      </div>
+                      <button type="button" onClick={() => void loadSignatureWorkflow()} className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-500" title="Atualizar">
+                        <RotateCw className={`h-3.5 w-3.5 ${signatureBusy === 'refresh' ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                    {selectedSignatureDocuments.map(document => {
+                      const generated = !!document.generatedDocumentId;
+                      const sent = ['sent', 'viewed', 'partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status);
+                      const viewed = ['viewed', 'partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status) || !!document.viewedAt;
+                      const signed = ['partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status) || !!document.signedAt;
+                      const archived = ['signed_archived_pending_employee', 'archived'].includes(document.status) || !!document.archivedAt;
+                      const failed = ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(document.status);
+                      return (
+                        <div key={document.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-[13.5px] font-black text-slate-900">{document.documentName ?? document.templateName}</p>
+                              <p className={`mt-1 text-[11px] font-bold ${failed ? 'text-rose-600' : archived ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                {SIGNATURE_WORKFLOW_STATUS_LABELS[document.status] ?? document.status}
+                              </p>
+                              {document.lastError ? <p className="mt-1 text-[10.5px] font-semibold text-rose-600">{document.lastError}</p> : null}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {generated ? (
+                                <button type="button" disabled={!!signatureBusy} onClick={() => void downloadSignatureDocument(document.id, 'generated')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[10.5px] font-black text-slate-700">
+                                  <Download className="h-3.5 w-3.5" />Word
+                                </button>
+                              ) : null}
+                              {archived ? (
+                                <button type="button" disabled={!!signatureBusy} onClick={() => void downloadSignatureDocument(document.id, 'signed')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[10.5px] font-black text-emerald-700">
+                                  <Download className="h-3.5 w-3.5" />PDF assinado
+                                </button>
+                              ) : null}
+                              {canActOnCurrentPhase && document.status === 'review_pending' ? (
+                                <button type="button" disabled={!!signatureBusy} onClick={() => void signatureAction('approve', { documentId: document.id })} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-[10.5px] font-black text-white">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />Revisado
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          {sent ? (
+                            <div className="mt-3 grid grid-cols-4 gap-1.5">
+                              {[
+                                { label: 'Enviado', done: sent, icon: Send },
+                                { label: 'Aberto', done: viewed, icon: Eye },
+                                { label: 'Assinado', done: signed, icon: CheckCircle2 },
+                                { label: 'Arquivado', done: archived, icon: Archive },
+                              ].map(indicator => (
+                                <div key={indicator.label} className={`rounded-lg border px-2 py-2 text-center ${indicator.done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
+                                  <indicator.icon className="mx-auto h-3.5 w-3.5" />
+                                  <p className="mt-1 text-[9.5px] font-black">{indicator.label}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5">
+                    <p className="text-sm font-black text-slate-800">Nenhum documento selecionado.</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Selecione os modelos na preparação para iniciar a geração.</p>
+                  </div>
+                )}
+
+                {canActOnCurrentPhase && signatureDocumentsReadyToSend.length > 0 ? (
+                  <button
+                    type="button"
+                    disabled={!!signatureBusy}
+                    onClick={() => void signatureAction('send', { documentIds: signatureDocumentsReadyToSend.map(document => document.id) })}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-pink-600 text-[12.5px] font-black text-white shadow-lg shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
+                  >
+                    {signatureBusy === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Enviar {signatureDocumentsReadyToSend.length} documento{signatureDocumentsReadyToSend.length === 1 ? '' : 's'} para assinatura
+                  </button>
+                ) : null}
+
+                {selectedSignatureDocuments.length > 0 && selectedSignatureDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status)) ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
+                    Todos os documentos foram assinados. O sistema arquivou os PDFs e liberou automaticamente a próxima fase.
+                  </div>
+                ) : null}
               </div>
             )}
 

@@ -9,7 +9,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function isActiveRecord(data: FirebaseFirestore.DocumentData) {
-  return data.active !== false &&
+  return data.isArchived !== true &&
+    data.active !== false &&
     data.isActive !== false &&
     data.status !== 'inactive' &&
     data.status !== 'inativo' &&

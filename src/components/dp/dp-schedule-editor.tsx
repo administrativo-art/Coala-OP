@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, Kiosk, User } from '@/types';
 import { cn } from '@/lib/utils';
+import { activeOperationalUnits } from '@/lib/dp-units';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -256,7 +257,7 @@ function ShiftDialog({
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl>
                     <SelectContent>
-                      {units.map(u => (
+                      {activeOperationalUnits(units).map(u => (
                         <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -595,7 +596,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     });
   }, [schedule.month, schedule.year]);
 
-  const canEdit = (permissions.dp?.schedules?.edit ?? false) && !schedule.locked;
+  const scheduleUnit = schedule.unitId ? units.find((unit) => unit.id === schedule.unitId) : undefined;
+  const isArchivedUnitSchedule = scheduleUnit?.isArchived === true;
+  const canManageSchedule = (permissions.dp?.schedules?.edit ?? false) && !isArchivedUnitSchedule;
+  const canEdit = canManageSchedule && !schedule.locked;
 
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [editShift, setEditShift] = useState<DPShift | null>(null);
@@ -1089,7 +1093,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
             {MONTHS[schedule.month - 1]} {schedule.year}
           </p>
         </div>
-        {permissions.dp?.schedules?.edit && (
+        {canManageSchedule && (
           schedule.locked ? (
             <Button size="sm" variant="outline" onClick={handleUnlock} disabled={locking} className="border-amber-500/50 text-amber-600 hover:bg-amber-50">
               <LockOpen className="mr-2 h-4 w-4" />
@@ -1126,6 +1130,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           Escala trancada — dados de colaboradores e vale-transporte estão congelados.
+        </div>
+      )}
+      {isArchivedUnitSchedule && (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          Escala histórica preservada após a incorporação desta unidade. Alterações estão bloqueadas.
         </div>
       )}
       {ancillaryBootstrapError && (

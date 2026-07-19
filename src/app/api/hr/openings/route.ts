@@ -117,6 +117,9 @@ export async function POST(request: NextRequest) {
 
     if (unitId) {
       const unitDoc = await dbAdmin.collection('dp_units').doc(unitId).get();
+      if (!unitDoc.exists || unitDoc.data()?.isArchived === true) {
+        return jsonError('Unidade indisponível para novas vagas.');
+      }
       unitName = typeof unitDoc.data()?.name === 'string' ? unitDoc.data()?.name : null;
     }
 

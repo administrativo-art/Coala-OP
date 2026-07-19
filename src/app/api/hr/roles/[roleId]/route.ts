@@ -10,6 +10,7 @@ import {
   serializeHrValue,
 } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { dbAdmin } from "@/lib/firebase-admin";
 import {
   applyRecruitmentScoring,
   getRecruitmentScoringBlockMessage,
@@ -57,6 +58,19 @@ export async function PATCH(
       createdAt: current.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+
+    if (nextData.isActive !== false && !nextData.defaultProfileId) {
+      return NextResponse.json(
+        { error: "Todo cargo ativo deve possuir um perfil de acesso padrão." },
+        { status: 400 }
+      );
+    }
+    if (typeof nextData.defaultProfileId === "string") {
+      const profile = await dbAdmin.collection("profiles").doc(nextData.defaultProfileId).get();
+      if (!profile.exists) {
+        return NextResponse.json({ error: "Perfil de acesso não encontrado." }, { status: 400 });
+      }
+    }
 
     await roleRef.set(nextData);
     const saved = await roleRef.get();

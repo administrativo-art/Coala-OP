@@ -16,7 +16,7 @@ const FALLBACK_PUBLIC_UNITS = [
   "Tirirical",
   "João Paulo",
   "Tirimai",
-  "Administrativo/CTA",
+  "Centro de distribuição - Matriz",
 ];
 
 function formatUnitName(name: string) {

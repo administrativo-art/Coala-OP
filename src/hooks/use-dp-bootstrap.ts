@@ -11,6 +11,7 @@ import type {
   DPVacationRecord,
 } from '@/types';
 import { useDP } from '@/components/dp-context';
+import { activeOperationalUnits } from '@/lib/dp-units';
 
 export type DPBootstrapPayload = {
   units: DPUnit[];
@@ -51,6 +52,11 @@ export function useDPBootstrap() {
     schedulesLoading ||
     vacationsLoading ||
     calendarsLoading;
+  const activeUnits = React.useMemo(() => activeOperationalUnits(units), [units]);
+  const activeUnitOrganizations = React.useMemo(
+    () => activeOperationalUnits(unitOrganizations),
+    [unitOrganizations]
+  );
 
   const refresh = React.useCallback(async () => {
     // Kept for backwards compatibility with older callers.
@@ -59,8 +65,10 @@ export function useDPBootstrap() {
 
   return {
     units,
+    activeUnits,
     unitGroups,
     unitOrganizations,
+    activeUnitOrganizations,
     shiftDefinitions,
     schedules,
     vacations,

@@ -21,6 +21,12 @@ import {
   ONBOARDING_PRIVACY_NOTICE_TITLE,
   ONBOARDING_PRIVACY_NOTICE_VERSION,
 } from '@/lib/hr/onboarding-privacy';
+import {
+  IMAGE_VOICE_CONSENT_EFFECTIVE_AT,
+  IMAGE_VOICE_CONSENT_SNAPSHOT_ID,
+  parseImageVoiceConsentDecision,
+  publicImageVoiceConsentTerm,
+} from '@/lib/hr/image-voice-consent';
 import type { OnboardingDocument } from '@/types';
 
 export const runtime = 'nodejs';
@@ -303,6 +309,37 @@ async function ensureAllergyNoticeSnapshot(notice: ReturnType<typeof publicPriva
   return ref.id;
 }
 
+async function ensureImageVoiceConsentSnapshot(
+  term: ReturnType<typeof publicImageVoiceConsentTerm>,
+  now: string,
+) {
+  const ref = hrDbAdmin.collection('privacy_notice_versions').doc(IMAGE_VOICE_CONSENT_SNAPSHOT_ID);
+  await hrDbAdmin.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists) {
+      if (snapshot.data()?.hash_sha256 !== term.hash) {
+        throw new Error('A versão publicada do Termo de Imagem e Voz não pode ser alterada. Publique uma nova versão.');
+      }
+      return;
+    }
+    transaction.create(ref, {
+      version: term.version,
+      title: term.title,
+      full_text: term.termText,
+      canonical_text: term.termText,
+      checkbox_text: term.checkboxText,
+      explanation: term.explanation,
+      hash_sha256: term.hash,
+      published_at: now,
+      effective_at: IMAGE_VOICE_CONSENT_EFFECTIVE_AT,
+      is_active: true,
+      created_by: 'system',
+      purpose: 'image_voice_consent',
+    });
+  });
+  return ref.id;
+}
+
 function clientEvidence(request: NextRequest) {
   return {
     clientIp: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -315,6 +352,42 @@ function clientEvidence(request: NextRequest) {
 function createSubmissionProtocol(now: Date) {
   const date = now.toISOString().slice(0, 10).replace(/-/g, '');
   return `ONB-${date}-${randomBytes(4).toString('hex').toUpperCase()}`;
+}
+
+async function syncPrivacyAndConsentToExistingEmployee(params: {
+  candidateEmail: unknown;
+  imageVoiceConsent: Record<string, unknown>;
+  privacyAcknowledgement: Record<string, unknown>;
+  protocol: string;
+  now: string;
+}) {
+  const email = trimText(params.candidateEmail, 320).toLowerCase();
+  if (!email) return null;
+  const employees = await hrDbAdmin.collection('employees').where('email', '==', email).limit(2).get();
+  if (employees.size !== 1) return null;
+
+  const employeeRef = employees.docs[0].ref;
+  const employeeId = employees.docs[0].id;
+  const eventRef = employeeRef.collection('consentimentos_imagem_voz_historico').doc(params.protocol);
+  const event = await eventRef.get();
+  const batch = hrDbAdmin.batch();
+  batch.set(employeeRef, {
+    consentimento_imagem_voz: params.imageVoiceConsent,
+    ciencia_privacidade_onboarding: params.privacyAcknowledgement,
+    updated_at: params.now,
+  }, { merge: true });
+  if (!event.exists) {
+    batch.create(eventRef, {
+      ...params.imageVoiceConsent,
+      evento: params.imageVoiceConsent.autorizado === true
+        ? 'autorizacao_concedida'
+        : 'autorizacao_nao_concedida',
+      employee_id: employeeId,
+      synced_from_onboarding_at: params.now,
+    });
+  }
+  await batch.commit();
+  return employeeId;
 }
 
 function hasAllergenInformation(answers: ReturnType<typeof sanitizePublicAnswers>) {
@@ -385,6 +458,7 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
     publicTokenExpiresAt: onboardingPublicLinkExpiresAt(data)?.toISOString() ?? null,
     publicTokenExtensionUsed: data.publicTokenExtensionUsed === true,
     privacyNotice: publicPrivacyNotice(),
+    imageVoiceConsentTerm: publicImageVoiceConsentTerm(),
     publicPrivacyAcceptance: data.publicPrivacyAcceptance ?? null,
   };
 }
@@ -474,6 +548,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     return jsonError('Informe o curso da formação superior.');
   }
   const notice = publicPrivacyNotice();
+  const imageVoiceDecision = parseImageVoiceConsentDecision(input.imageVoiceConsent);
+  const imageVoiceTerm = imageVoiceDecision.term;
+  if (!imageVoiceDecision.valid) {
+    return jsonError('Não foi possível registrar sua decisão sobre o uso opcional de imagem e voz. Recarregue a página e tente novamente.');
+  }
+  const imageVoiceAuthorized = imageVoiceDecision.authorized;
   const acceptanceInput = input.privacyAcceptance && typeof input.privacyAcceptance === 'object' && !Array.isArray(input.privacyAcceptance)
     ? input.privacyAcceptance as Record<string, unknown>
     : {};
@@ -524,14 +604,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     };
   });
   const allRequiredDocumentsSubmitted = requiredDocumentsSubmitted(nextDocuments);
+  const shouldMoveToReview = data.currentStage === 'documents' || !data.currentStage;
   const submittedAt = new Date(now);
   const protocol = createSubmissionProtocol(submittedAt);
   const sessionId = trimText(input.sessionId, 120) || randomBytes(12).toString('hex');
   let privacyNoticeSnapshotId: string;
   let allergyNoticeSnapshotId: string;
+  let imageVoiceConsentSnapshotId: string;
   try {
     privacyNoticeSnapshotId = await ensurePrivacyNoticeSnapshot(notice, now);
     allergyNoticeSnapshotId = await ensureAllergyNoticeSnapshot(notice, now);
+    imageVoiceConsentSnapshotId = await ensureImageVoiceConsentSnapshot(imageVoiceTerm, now);
   } catch (error) {
     console.error('[onboarding] Falha ao preservar o Aviso de Privacidade.', error);
     return jsonError('Não foi possível validar a versão do Aviso de Privacidade.', 500);
@@ -567,6 +650,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     allergyAcknowledgedAt: now,
     lastProtocol: protocol,
   };
+  const evidence = clientEvidence(request);
+  const imageVoiceConsent = {
+    autorizado: imageVoiceAuthorized,
+    respondido_em: now,
+    versao_termo: imageVoiceTerm.version,
+    ip: evidence.clientIp,
+    user_agent: evidence.userAgent,
+    hash_termo_exibido: imageVoiceTerm.hash,
+    termo_snapshot_id: imageVoiceConsentSnapshotId,
+    protocolo: protocol,
+    origem: 'onboarding_publico',
+    onboarding_id: doc.id,
+  };
 
   await doc.ref.set({
     documents: nextDocuments,
@@ -575,16 +671,37 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     publicFormSubmittedAt: now,
     publicFormLastSubmittedAt: now,
     publicPrivacyAcceptance,
-    currentStage: allRequiredDocumentsSubmitted && (data.currentStage === 'documents' || !data.currentStage)
+    consentimento_imagem_voz: imageVoiceConsent,
+    currentStage: shouldMoveToReview
       ? 'document_review'
       : data.currentStage ?? 'documents',
-    status: allRequiredDocumentsSubmitted && (data.status === 'collecting_documents' || data.status === 'pending_setup')
+    status: shouldMoveToReview && (data.status === 'collecting_documents' || data.status === 'pending_setup')
       ? 'reviewing_documents'
       : data.status === 'pending_setup'
         ? 'collecting_documents'
         : data.status,
     updatedAt: now,
   }, { merge: true });
+
+  await doc.ref.collection('consentimentos_imagem_voz_historico').doc(protocol).set({
+    ...imageVoiceConsent,
+    evento: imageVoiceAuthorized ? 'autorizacao_concedida' : 'autorizacao_nao_concedida',
+    created_at: now,
+  });
+
+  const existingEmployeeId = await syncPrivacyAndConsentToExistingEmployee({
+    candidateEmail: data.candidateEmail,
+    imageVoiceConsent,
+    privacyAcknowledgement: {
+      ...publicPrivacyAcceptance,
+      onboarding_id: doc.id,
+    },
+    protocol,
+    now,
+  }).catch(error => {
+    console.error('[onboarding] Falha ao sincronizar privacidade e consentimento com colaborador existente.', error);
+    return null;
+  });
 
   await doc.ref.collection('audit').add({
     action: 'PUBLIC_FORM_SUBMITTED',
@@ -608,6 +725,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     allergyConfirmationNote: notice.allergyConfirmationNote,
     allergyAcknowledged: true,
     submittedDocumentIds: Object.keys(rawDocuments),
+    allRequiredDocumentsSubmitted,
+    movedToReview: shouldMoveToReview,
+    existing_employee_consent_synced: Boolean(existingEmployeeId),
+    existing_employee_id: existingEmployeeId,
     formalization_id: doc.id,
     candidate_id: data.candidateId ?? null,
     invitation_id: data.invitationId ?? null,
@@ -639,6 +760,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       return /^[a-f0-9]{64}$/i.test(hash) ? [[id, hash]] : [];
     })),
     submission_protocol: protocol,
+    consentimento_imagem_voz_autorizado: imageVoiceAuthorized,
+    consentimento_imagem_voz_versao: imageVoiceTerm.version,
+    consentimento_imagem_voz_hash: imageVoiceTerm.hash,
+    consentimento_imagem_voz_snapshot_id: imageVoiceConsentSnapshotId,
+    consentimento_imagem_voz_checkbox_text: imageVoiceTerm.checkboxText,
     submitted_at: now,
     ...clientEvidence(request),
     at: now,

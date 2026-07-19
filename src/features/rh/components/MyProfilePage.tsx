@@ -7,6 +7,7 @@ import { ProfileCompletion } from './ProfileCompletion';
 import { SectionCard } from './SectionCard';
 import { SectionEditModal } from './SectionEditModal';
 import { getStatusBadge } from '../lib/field-format';
+import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
 import { canEditField, canViewField } from '@/types/rh';
 import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
@@ -66,7 +67,13 @@ export function MyProfilePage() {
     );
   }
 
-  const { employee, fieldValues, fieldMap } = profileState.data;
+  const {
+    employee,
+    fieldValues,
+    fieldMap,
+    consentimento_imagem_voz,
+    ciencia_privacidade_onboarding,
+  } = profileState.data;
   const { label: statusLabel, color: statusColor } = getStatusBadge(employee.status);
   const initials = employee.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   const ownerRole: RhRole = 'employee';
@@ -133,6 +140,13 @@ export function MyProfilePage() {
         pct={employee.profile_completion}
         fieldMap={fieldMap}
         fieldValues={fieldValues}
+      />
+
+      <ImageVoiceConsentCard
+        employeeId={employee.bizneo_employee_id}
+        initialConsent={consentimento_imagem_voz}
+        privacyAcknowledgement={ciencia_privacidade_onboarding}
+        canRevoke
       />
 
       {/* Editable sections */}

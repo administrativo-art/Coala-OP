@@ -10,12 +10,13 @@ import { db } from '@/lib/firebase';
 
 import { useDP } from '@/components/dp-context';
 import { useAuth } from '@/hooks/use-auth';
-import type { DPSchedule, DPShift, DPShiftDefinition } from '@/types';
+import type { DPSchedule, DPShift, DPShiftDefinition, DPUnit } from '@/types';
 import {
   getShiftDefinitionUnitIds,
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
 import { isWorkShift } from '@/lib/dp-shift-rules';
+import { activeOperationalUnits, canonicalOperationalUnitId } from '@/lib/dp-units';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -144,7 +145,7 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
   onOpenChange: (v: boolean) => void;
   defaultUnitId?: string;
   calendars: any[];
-  units: Array<{ id: string; name: string }>;
+  units: DPUnit[];
   schedules: DPSchedule[];
 }) {
   const { addSchedule } = useDP();
@@ -173,6 +174,7 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
 
   const watchedUnit = form.watch('unitId');
   const watchedYear = form.watch('year');
+  const selectableUnits = React.useMemo(() => activeOperationalUnits(units), [units]);
 
   // Clear calendarId when year changes (previous year's calendar would be invalid)
   React.useEffect(() => {
@@ -180,18 +182,20 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
   }, [watchedYear]);
 
   // Months already occupied for this unit+year
-  // Blocks: (a) per-unit schedules with the same unitId, (b) legacy schedules (no unitId = cover all units)
+  // Also treats archived/merged units as the same canonical unit, preventing
+  // a duplicate schedule in a month that is still covered by preserved history.
   const takenMonths = React.useMemo(() => {
     if (!watchedUnit || !watchedYear) return new Set<number>();
+    const canonicalWatchedUnit = canonicalOperationalUnitId(watchedUnit, units);
     return new Set(
       schedules
         .filter(s =>
           Number(s.year) === Number(watchedYear) &&
-          (s.unitId === watchedUnit || !s.unitId)
+          (!s.unitId || canonicalOperationalUnitId(s.unitId, units) === canonicalWatchedUnit)
         )
         .map(s => s.month)
     );
-  }, [schedules, watchedUnit, watchedYear]);
+  }, [schedules, units, watchedUnit, watchedYear]);
 
   async function onSubmit(values: ScheduleFormValues) {
     try {
@@ -222,7 +226,7 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
                 <Select value={field.value} onValueChange={field.onChange}>
                   <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma unidade..." /></SelectTrigger></FormControl>
                   <SelectContent>
-                    {units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                    {selectableUnits.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -603,6 +607,7 @@ export function DPSchedulesList() {
   const createDependenciesReady = !unitsLoading && !calendarsLoading && !unitsError && !calendarsError;
   const exportDependenciesReady = !shiftDefsLoading && !unitsLoading && !shiftDefsError && !unitsError;
   const ancillaryErrors = [unitsError, calendarsError, shiftDefsError].filter(Boolean);
+  const activeUnits = React.useMemo(() => activeOperationalUnits(units), [units]);
 
   const canCreate = permissions.dp?.schedules?.create ?? false;
   const canDelete = permissions.dp?.schedules?.delete ?? false;
@@ -661,6 +666,12 @@ export function DPSchedulesList() {
 
   async function confirmDelete() {
     if (!deleteTarget) return;
+    const targetUnit = units.find((unit) => unit.id === deleteTarget.unitId);
+    if (targetUnit?.isArchived === true) {
+      toast({ title: 'Escalas históricas de unidades incorporadas não podem ser excluídas.', variant: 'destructive' });
+      setDeleteTarget(null);
+      return;
+    }
     setDeleting(true);
     try {
       await deleteSchedule(deleteTarget.id);
@@ -724,7 +735,7 @@ export function DPSchedulesList() {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
                 {unitName}
               </p>
-              {canCreate && unitId !== '__legacy__' && (
+              {canCreate && unitId !== '__legacy__' && activeUnits.some((unit) => unit.id === unitId) && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -765,7 +776,7 @@ export function DPSchedulesList() {
                           {s.shiftCount} {s.shiftCount === 1 ? 'turno' : 'turnos'}
                         </Badge>
 
-                        {canDelete && hoveredId === s.id && (
+                        {canDelete && hoveredId === s.id && units.find((unit) => unit.id === s.unitId)?.isArchived !== true && (
                           <button
                             onClick={e => { e.stopPropagation(); setDeleteTarget(s); }}
                             className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"

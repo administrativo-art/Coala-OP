@@ -61,7 +61,8 @@ function getQuestionOptions(question: HrFormQuestion) {
 }
 
 function isActiveRecord(data: FirebaseFirestore.DocumentData) {
-  return data.active !== false &&
+  return data.isArchived !== true &&
+    data.active !== false &&
     data.isActive !== false &&
     data.status !== 'inactive' &&
     data.status !== 'inativo' &&

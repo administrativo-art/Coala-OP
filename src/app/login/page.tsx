@@ -217,7 +217,7 @@ export default function LoginPage() {
             </form>
 
             <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-              © {new Date().getFullYear()} Coala Operação. Todos os direitos reservados.
+              © {new Date().getFullYear()} Coala One. Todos os direitos reservados.
             </p>
           </div>
         </div>

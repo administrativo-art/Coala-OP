@@ -39,7 +39,7 @@ const CLR_HOLIDAY_TEXT   = '#6d28d9'; // violet-700
 const DOW_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 const COLUNAS: ColunaEscala[] = [
-  { id: 'adm',     nome: 'Adm / CTA',          iniciais: 'AD', tipo: 'ADM', cor: 'blue'  },
+  { id: 'adm',     nome: 'Matriz / CD',         iniciais: 'CD', tipo: 'ADM', cor: 'blue'  },
   { id: 'jp',      nome: 'Quisque João Paulo',  iniciais: 'JP', tipo: 'OP',  cor: 'green' },
   { id: 'tirimai', nome: 'Quisque Tirimai',     iniciais: 'TM', tipo: 'OP',  cor: 'green' },
 ];

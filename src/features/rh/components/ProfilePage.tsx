@@ -8,6 +8,7 @@ import { ProfileCompletion } from './ProfileCompletion';
 import { SectionCard } from './SectionCard';
 import { AuditLogTab } from './AuditLogTab';
 import { SectionEditModal } from './SectionEditModal';
+import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
 import { canEditField } from '@/types/rh';
 import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
@@ -107,7 +108,14 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
     );
   }
 
-  const { employee, fieldValues, fieldMap, cache } = profileState.data;
+  const {
+    employee,
+    fieldValues,
+    fieldMap,
+    cache,
+    consentimento_imagem_voz,
+    ciencia_privacidade_onboarding,
+  } = profileState.data;
   const role = cache.rh_role as RhRole;
   const visibilityContext: FieldVisibilityContext = {
     isOwner: cache.bizneo_employee_id === bizneoEmployeeId || employee.auth_uid === cache.auth_uid,
@@ -204,6 +212,12 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
         {/* Tab: Perfil */}
         {tab === 'perfil' && (
           <div className="space-y-3">
+            <ImageVoiceConsentCard
+              employeeId={employee.bizneo_employee_id}
+              initialConsent={consentimento_imagem_voz}
+              privacyAcknowledgement={ciencia_privacidade_onboarding}
+              canRevoke={visibilityContext.isOwner === true}
+            />
             {orderedSections.map((sec) => (
               <div
                 key={sec}

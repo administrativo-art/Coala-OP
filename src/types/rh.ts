@@ -211,6 +211,37 @@ export type Employee = {
   synced_at:          Timestamp;
   created_at:         Timestamp;
   expires_at?:        Timestamp;
+  consentimento_imagem_voz?: ImageVoiceConsentRecord;
+  ciencia_privacidade_onboarding?: OnboardingPrivacyAcknowledgementRecord;
+};
+
+export type ImageVoiceConsentRecord = {
+  autorizado: boolean;
+  respondido_em: string;
+  versao_termo: string;
+  ip?: string | null;
+  user_agent?: string | null;
+  hash_termo_exibido?: string | null;
+  termo_snapshot_id?: string | null;
+  protocolo?: string | null;
+  origem?: string;
+  onboarding_id?: string | null;
+};
+
+export type OnboardingPrivacyAcknowledgementRecord = {
+  acknowledged: boolean;
+  noticeVersion: string;
+  noticeHash?: string | null;
+  noticeTitle?: string | null;
+  firstAcceptedAt?: string | null;
+  lastConfirmedAt?: string | null;
+  privacyNoticeSnapshotId?: string | null;
+  allergyAcknowledged?: boolean;
+  allergyAcknowledgedAt?: string | null;
+  allergyNoticeVersion?: string | null;
+  allergyNoticeHash?: string | null;
+  allergyNoticeSnapshotId?: string | null;
+  onboarding_id?: string | null;
 };
 
 // ─── FieldValue ─────────────────────────────────────────────────────────────

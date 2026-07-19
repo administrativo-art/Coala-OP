@@ -96,6 +96,28 @@ export async function GET(
     }
 
     const employee = employeeSnap.data() as Employee;
+    let imageVoiceConsent = employee.consentimento_imagem_voz ?? null;
+    let privacyAcknowledgement = employee.ciencia_privacidade_onboarding ?? null;
+    if (!imageVoiceConsent || !privacyAcknowledgement) {
+      let onboardingSnap = await hrDbAdmin
+        .collection("onboardingProcesses")
+        .where("employeeId", "==", normalizedEmployeeId)
+        .limit(1)
+        .get();
+      const employeeEmail = typeof employee.email === "string" ? employee.email.trim().toLowerCase() : "";
+      if (onboardingSnap.empty && employeeEmail) {
+        onboardingSnap = await hrDbAdmin
+          .collection("onboardingProcesses")
+          .where("candidateEmail", "==", employeeEmail)
+          .limit(1)
+          .get();
+      }
+      const onboarding = onboardingSnap.empty ? null : onboardingSnap.docs[0].data();
+      imageVoiceConsent ??= onboarding?.consentimento_imagem_voz ?? null;
+      privacyAcknowledgement ??= onboarding?.publicPrivacyAcceptance
+        ? { ...onboarding.publicPrivacyAcceptance, onboarding_id: onboardingSnap.docs[0].id }
+        : null;
+    }
     const role = inferRole(actor, employee);
     const cache: RhAccessCache = {
       auth_uid: actor.userDoc.id,
@@ -132,6 +154,8 @@ export async function GET(
         fieldValues,
         fieldMap,
         cache,
+        consentimento_imagem_voz: imageVoiceConsent,
+        ciencia_privacidade_onboarding: privacyAcknowledgement,
       },
       { headers: { "Cache-Control": "private, no-store" } },
     );

@@ -69,6 +69,10 @@ export function optionalNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+export function optionalBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 export function cleanDocument<T extends JsonObject>(payload: T) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined)
@@ -84,6 +88,12 @@ export function setOptionalStringPatch(update: JsonObject, body: JsonObject, key
 export function setOptionalNumberPatch(update: JsonObject, body: JsonObject, key: string) {
   if (!hasOwn(body, key)) return;
   const value = optionalNumber(body[key]);
+  update[key] = value ?? FieldValue.delete();
+}
+
+export function setOptionalBooleanPatch(update: JsonObject, body: JsonObject, key: string) {
+  if (!hasOwn(body, key)) return;
+  const value = optionalBoolean(body[key]);
   update[key] = value ?? FieldValue.delete();
 }
 

@@ -21,7 +21,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useKiosks } from "@/hooks/use-kiosks";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { shiftDefinitionMatchesUnit } from "@/lib/dp-shift-definitions";
+import { activeOperationalUnits } from "@/lib/dp-units";
 import type {
   DPShiftDefinition,
   DPUnit,
@@ -108,6 +110,9 @@ type GroupForm = {
 
 type UnitForm = {
   name: string;
+  cnpj: string;
+  address: string;
+  unitType: string;
   organizationId: string;
   groupId: string;
   kioskId: string;
@@ -142,6 +147,15 @@ function normalizeName(value: string) {
     .replace(/[-–_]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function maskCnpjInput(value: string) {
+  const digits = CnpjValidator.clean(value).slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return CnpjValidator.format(digits);
 }
 
 function editDistance(a: string, b: string) {
@@ -314,16 +328,25 @@ export function DPSettingsUnits() {
   });
   const [unitForm, setUnitForm] = useState<UnitForm>({
     name: "",
+    cnpj: "",
+    address: "",
+    unitType: "",
     organizationId: "",
     groupId: "",
     kioskId: "",
     pdvFilialId: "",
     bizneoTaxonId: "",
   });
+  const unitCnpjValidation = unitForm.cnpj.trim()
+    ? CnpjValidator.validate(unitForm.cnpj)
+    : null;
 
-  const organizations = useMemo(() => sortByName(unitOrganizations), [unitOrganizations]);
+  const organizations = useMemo(
+    () => sortByName(activeOperationalUnits(unitOrganizations)),
+    [unitOrganizations]
+  );
   const groups = useMemo(() => sortByName(unitGroups), [unitGroups]);
-  const sortedUnits = useMemo(() => sortByName(units), [units]);
+  const sortedUnits = useMemo(() => sortByName(activeOperationalUnits(units)), [units]);
   const activeRoles = useMemo(() => sortByName(roles.filter((role) => role.isActive !== false)), [roles]);
   const activeFunctions = useMemo(
     () => sortByName(functions.filter((item) => item.isActive !== false)),
@@ -447,6 +470,9 @@ export function DPSettingsUnits() {
       const group = unitDialog.unit.groupId ? groupById.get(unitDialog.unit.groupId) : null;
       setUnitForm({
         name: unitDialog.unit.name,
+        cnpj: unitDialog.unit.cnpj ? CnpjValidator.format(unitDialog.unit.cnpj) : "",
+        address: unitDialog.unit.address ?? "",
+        unitType: unitDialog.unit.unitType ?? "",
         organizationId: unitDialog.unit.organizationId ?? group?.organizationId ?? "",
         groupId: unitDialog.unit.groupId ?? "",
         kioskId: "",
@@ -466,6 +492,9 @@ export function DPSettingsUnits() {
       : null;
     setUnitForm({
       name: firstCandidate?.name ?? "",
+      cnpj: "",
+      address: "",
+      unitType: "",
       organizationId: unitDialog.organizationId ?? "",
       groupId: unitDialog.groupId ?? "",
       kioskId: firstCandidate?.id ?? "",
@@ -626,6 +655,7 @@ export function DPSettingsUnits() {
   async function handleSaveUnit() {
     const name = unitForm.name.trim();
     if (!name) return;
+    if (unitCnpjValidation && !unitCnpjValidation.valid) return;
 
     const selectedGroup = unitForm.groupId ? groupById.get(unitForm.groupId) : null;
     const organizationId = selectedGroup?.organizationId ?? unitForm.organizationId;
@@ -642,6 +672,9 @@ export function DPSettingsUnits() {
         await updateUnit({
           ...unitDialog.unit,
           name,
+          cnpj: unitCnpjValidation?.clean,
+          address: unitForm.address.trim() || undefined,
+          unitType: unitForm.unitType.trim() || undefined,
           organizationId: organizationId || undefined,
           groupId: unitForm.groupId || undefined,
           pdvFilialId: unitForm.pdvFilialId.trim() || undefined,
@@ -650,6 +683,9 @@ export function DPSettingsUnits() {
       } else {
         await addUnit({
           name,
+          cnpj: unitCnpjValidation?.clean,
+          address: unitForm.address.trim() || undefined,
+          unitType: unitForm.unitType.trim() || undefined,
           organizationId: organizationId || undefined,
           groupId: unitForm.groupId || undefined,
           externalSource: unitDialog?.mode === "sync" ? "kiosk" : "manual",
@@ -999,6 +1035,8 @@ export function DPSettingsUnits() {
     // Metadados de integração viram uma linha calma separada por "·" em vez de
     // uma enxurrada de pills; só a origem fica como marcador visível.
     const metaParts = [
+      unit.dpUnit?.cnpj ? CnpjValidator.format(unit.dpUnit.cnpj) : null,
+      unit.dpUnit?.unitType || null,
       unit.pdvFilialId ? `PDV ${unit.pdvFilialId}` : null,
       typeof unit.bizneoTaxonId === "number"
         ? `Bizneo ${unit.bizneoTaxonId}`
@@ -1053,6 +1091,11 @@ export function DPSettingsUnits() {
               <span className="italic">Sem turno vinculado</span>
             )}
           </div>
+          {unit.dpUnit?.address ? (
+            <p className="mt-1 truncate text-xs text-muted-foreground" title={unit.dpUnit.address}>
+              {unit.dpUnit.address}
+            </p>
+          ) : null}
         </div>
         <div className="opacity-60 transition-opacity group-hover/unit:opacity-100">
           {renderActionsForMergedUnit(unit)}
@@ -1368,7 +1411,7 @@ export function DPSettingsUnits() {
       </Dialog>
 
       <Dialog open={!!unitDialog} onOpenChange={(open) => !open && setUnitDialog(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {unitDialog?.mode === "edit"
@@ -1380,7 +1423,7 @@ export function DPSettingsUnits() {
             <DialogDescription>
               {unitDialog?.mode === "sync"
                 ? "Selecione uma unidade operacional existente e revise o nome antes de salvar."
-                : "Defina nome, organização, grupo e integrações da unidade."}
+                : "Defina os dados cadastrais, a organização, o grupo e as integrações da unidade."}
             </DialogDescription>
           </DialogHeader>
 
@@ -1418,6 +1461,50 @@ export function DPSettingsUnits() {
                 value={unitForm.name}
                 onChange={(event) => setUnitForm((current) => ({ ...current, name: event.target.value }))}
                 placeholder="Ex.: Quiosque João Paulo"
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>CNPJ</Label>
+                <Input
+                  value={unitForm.cnpj}
+                  onChange={(event) => setUnitForm((current) => ({
+                    ...current,
+                    cnpj: maskCnpjInput(event.target.value),
+                  }))}
+                  placeholder="00.000.000/0000-00"
+                  inputMode="numeric"
+                  aria-invalid={unitCnpjValidation ? !unitCnpjValidation.valid : undefined}
+                />
+                {unitCnpjValidation && !unitCnpjValidation.valid ? (
+                  <p className="text-xs text-destructive">
+                    {unitCnpjValidation.clean.length < 14
+                      ? "Informe os 14 dígitos do CNPJ."
+                      : unitCnpjValidation.message}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo de unidade</Label>
+                <Input
+                  value={unitForm.unitType}
+                  onChange={(event) => setUnitForm((current) => ({ ...current, unitType: event.target.value }))}
+                  placeholder="Ex.: Quiosque pequeno"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Campo livre; as opções serão configuradas depois.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Endereço</Label>
+              <Textarea
+                value={unitForm.address}
+                onChange={(event) => setUnitForm((current) => ({ ...current, address: event.target.value }))}
+                placeholder="Rua, número, complemento, bairro, cidade e UF"
+                rows={2}
               />
             </div>
 
@@ -1483,6 +1570,7 @@ export function DPSettingsUnits() {
               disabled={
                 saving === "unit" ||
                 !unitForm.name.trim() ||
+                (unitCnpjValidation !== null && !unitCnpjValidation.valid) ||
                 (unitDialog?.mode === "sync" && !unitForm.kioskId)
               }
             >

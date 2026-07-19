@@ -709,12 +709,14 @@ function RoleEditModal({
               value={values.defaultProfileId}
               onChange={(event) => setValues((current) => ({ ...current, defaultProfileId: event.target.value }))}
               className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400"
+              required={values.isActive}
             >
-              <option value="">Sem perfil automático</option>
+              <option value="">Selecione um perfil</option>
               {profiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>{profile.name}</option>
               ))}
             </select>
+            <span className="text-xs text-slate-500">Obrigatório para cargos ativos. A função pode definir um perfil mais específico.</span>
           </label>
 
           <RecruitmentStageModelEditor

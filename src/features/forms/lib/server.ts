@@ -45,6 +45,7 @@ type UnitProjectSeed = {
   name: string;
   groupId?: string;
   is_active?: boolean;
+  isArchived?: boolean;
 };
 
 const UNIT_PROJECT_COLORS = [
@@ -108,6 +109,7 @@ export async function ensureUnitFormProjects(workspaceId: string) {
     ref: FirebaseFirestore.DocumentReference;
     data: Record<string, unknown>;
   }> = [];
+  const currentUnitIds = new Set(unitsSnap.docs.map((doc) => doc.id));
 
   unitsSnap.docs.forEach((doc) => {
     const data = doc.data() as Partial<UnitProjectSeed>;
@@ -118,7 +120,7 @@ export async function ensureUnitFormProjects(workspaceId: string) {
       id: doc.id,
       name,
       groupId: typeof data.groupId === "string" ? data.groupId : undefined,
-      is_active: data.is_active,
+      is_active: data.isArchived === true ? false : data.is_active,
     };
     const groupName = unit.groupId ? groupNameById.get(unit.groupId) : undefined;
     const projectName = unitProjectName(unit, groupName);
@@ -161,6 +163,19 @@ export async function ensureUnitFormProjects(workspaceId: string) {
           user_id: "system",
           username: "Sistema",
         },
+      },
+    });
+  });
+
+  projects.forEach((project) => {
+    const unitId = typeof project.data.unit_id === "string" ? project.data.unit_id : "";
+    if (project.data.source !== "unit_auto" || !unitId || currentUnitIds.has(unitId)) return;
+    writes.push({
+      ref: project.ref,
+      data: {
+        is_active: false,
+        archived_at: new Date(),
+        updated_at: new Date(),
       },
     });
   });

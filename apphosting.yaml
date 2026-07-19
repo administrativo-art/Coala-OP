@@ -27,3 +27,19 @@ env:
     value: coala
   - variable: FORMS_ANALYTICS_PERSONAL_RETENTION_DAYS
     value: "365"
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+  - variable: RESEND_WEBHOOK_SECRET
+    secret: RESEND_WEBHOOK_SECRET
+  - variable: RESEND_FORMALIZATION_FROM
+    value: "RH Coala Shakes <formalizacao@coalashakes.com>"
+  - variable: RESEND_ACCESS_FROM
+    value: "Zé da Senha | Coala One <acesso@coalashakes.com>"
+  - variable: AUTENTIQUE_API_TOKEN
+    secret: AUTENTIQUE_API_TOKEN
+  - variable: AUTENTIQUE_WEBHOOK_SECRET
+    secret: AUTENTIQUE_WEBHOOK_SECRET
+  - variable: AUTENTIQUE_SANDBOX
+    value: "true"
+  - variable: NEXT_PUBLIC_APP_URL
+    value: "https://op.coalashakes.com"

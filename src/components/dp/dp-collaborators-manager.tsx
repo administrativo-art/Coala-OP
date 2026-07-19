@@ -13,6 +13,7 @@ import { useProfiles } from '@/hooks/use-profiles';
 import { useDP } from '@/components/dp-context';
 import { useHrBootstrap } from '@/hooks/use-hr-bootstrap';
 import type { DPShiftDefinition, DPUnit, JobFunction, JobRole, User } from '@/types';
+import { activeOperationalUnits } from '@/lib/dp-units';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -227,7 +228,7 @@ function EditSheet({
   }, [functionsCatalog, selectedRoleId]);
 
   const unitOptions = useMemo(
-    () => units.map((unit) => ({ value: unit.id, label: unit.name })),
+    () => activeOperationalUnits(units).map((unit) => ({ value: unit.id, label: unit.name })),
     [units]
   );
 

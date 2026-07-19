@@ -5,7 +5,7 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
 import { collection, onSnapshot, doc, query, getDoc, getDocFromCache } from "firebase/firestore";
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
@@ -443,15 +443,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   
   const resetPassword = useCallback(async (email: string): Promise<boolean> => {
     try {
-      const actionCodeSettings =
-        typeof window !== "undefined"
-          ? {
-              url: `${window.location.origin}/login`,
-              handleCodeInApp: false,
-            }
-          : undefined;
-      await sendPasswordResetEmail(auth, email, actionCodeSettings);
-      return true;
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      return response.ok;
     } catch (error) {
       console.error("Password reset error:", error);
       return false;

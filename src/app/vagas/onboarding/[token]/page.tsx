@@ -43,6 +43,14 @@ type PublicOnboarding = {
     allergyAcknowledgementText: string;
     allergyConfirmationNote: string;
   };
+  imageVoiceConsentTerm?: {
+    version: string;
+    hash: string;
+    title: string;
+    explanation: string;
+    checkboxText: string;
+    termText: string;
+  };
   publicPrivacyAcceptance?: {
     noticeVersion?: string;
     noticeHash?: string;
@@ -308,6 +316,8 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
   const [submitted, setSubmitted] = useState(false);
   const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
   const [allergyAcknowledged, setAllergyAcknowledged] = useState(false);
+  // Consentimento facultativo: cada abertura da tela começa sem autorização.
+  const [imageVoiceAuthorized, setImageVoiceAuthorized] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -529,6 +539,11 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
             allergyAcknowledged,
             allergyNoticeVersion: data.privacyNotice.allergyNoticeVersion,
             allergyNoticeHash: data.privacyNotice.allergyNoticeHash,
+          },
+          imageVoiceConsent: {
+            authorized: imageVoiceAuthorized,
+            termVersion: data.imageVoiceConsentTerm?.version,
+            termHash: data.imageVoiceConsentTerm?.hash,
           },
           sessionId,
           website: "",
@@ -1155,6 +1170,39 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                 {data.privacyNotice.confirmationNote}
               </p>
 
+            </section>
+          ) : null}
+
+          {data.imageVoiceConsentTerm ? (
+            <section
+              aria-label="Tela de consentimento opcional para uso de imagem e voz"
+              className="mt-7 rounded-[22px] border-2 border-[#EE6FA8]/25 bg-[#EE6FA8]/[0.06] p-5"
+            >
+              <p className="text-xs font-bold uppercase tracking-wider text-[#EE6FA8]">Tela opcional</p>
+              <h3 className="mt-1 text-base font-extrabold">{data.imageVoiceConsentTerm.title}</h3>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-[#5B4C5B]">
+                {data.imageVoiceConsentTerm.explanation}
+              </p>
+              <details className="mt-4 rounded-2xl border border-[#2A1F2A]/10 bg-white/80 px-4 py-3">
+                <summary className="cursor-pointer text-xs font-extrabold">
+                  Ler o Termo de Consentimento para Uso de Imagem e Voz
+                </summary>
+                <div className="mt-3 max-h-[40vh] overflow-y-auto whitespace-pre-line pr-2 text-xs leading-relaxed text-[#5B4C5B]">
+                  {data.imageVoiceConsentTerm.termText}
+                </div>
+              </details>
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-[#2A1F2A]/10 bg-white px-4 py-4 text-sm font-semibold leading-relaxed">
+                <input
+                  type="checkbox"
+                  checked={imageVoiceAuthorized}
+                  onChange={event => setImageVoiceAuthorized(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#EE6FA8]"
+                />
+                <span>{data.imageVoiceConsentTerm.checkboxText}</span>
+              </label>
+              <p className="mt-3 text-[11px] font-semibold leading-relaxed text-[#5B4C5B]">
+                Você pode enviar o onboarding normalmente com esta opção marcada ou desmarcada.
+              </p>
             </section>
           ) : null}
 

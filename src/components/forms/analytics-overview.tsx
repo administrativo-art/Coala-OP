@@ -54,6 +54,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
+import { activeOperationalUnits } from "@/lib/dp-units";
 import { useToast } from "@/hooks/use-toast";
 import {
   cancelAnalyticsOccurrence,
@@ -386,7 +387,7 @@ export function FormsAnalyticsOverview({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
-                  {units.map((unit) => (
+                  {activeOperationalUnits(units).map((unit) => (
                     <SelectItem key={unit.id} value={unit.id}>
                       {unit.name}
                     </SelectItem>

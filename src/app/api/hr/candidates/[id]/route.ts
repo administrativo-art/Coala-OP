@@ -5,6 +5,12 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
 import { createOnboardingPublicLinkWindow } from '@/lib/hr/onboarding-public-link';
+import { dbAdmin } from '@/lib/firebase-admin';
+import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
+import { createIntegrationExecution } from '@/features/hr/integration/process';
+import { createProbationProcess } from '@/features/hr/integration/probation-process';
+import { integrationTemplateVersionSchema, type IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
+import { blankIntegrationTemplateContent, getIntegrationTemplateVersion, listIntegrationTemplates } from '@/features/hr/integration/server';
 import {
   applyOnboardingSignatureMode,
   instantiateOnboardingDocuments,
@@ -182,6 +188,25 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       : `onboarding_${id}_${latestApplicationId || 'direct'}`;
     candidateUpdatePatch.onboardingId = onboardingId;
     candidateUpdatePatch.hiredAt = before.hiredAt ?? now;
+
+    const roleId = String(candidateUpdatePatch.jobRoleId ?? before.jobRoleId ?? '');
+    const functionId = String(candidateUpdatePatch.functionId ?? before.functionId ?? '');
+    const [roleDoc, functionDoc] = await Promise.all([
+      roleId ? hrDbAdmin.collection('jobRoles').doc(roleId).get() : Promise.resolve(null),
+      functionId ? hrDbAdmin.collection('jobFunctions').doc(functionId).get() : Promise.resolve(null),
+    ]);
+    if (!roleDoc?.exists) return jsonError('Cargo não encontrado para iniciar a integração.', 400);
+    if (!functionDoc?.exists) return jsonError('Função não encontrada para iniciar a integração.', 400);
+    const roleProfileId = typeof roleDoc.get('defaultProfileId') === 'string' ? roleDoc.get('defaultProfileId').trim() : '';
+    if (!roleProfileId) return jsonError('O cargo selecionado não possui um perfil de acesso padrão.', 400);
+    const functionProfileId = typeof functionDoc.get('defaultProfileId') === 'string' ? functionDoc.get('defaultProfileId').trim() : '';
+    const [roleProfile, effectiveProfile] = await Promise.all([
+      dbAdmin.collection('profiles').doc(roleProfileId).get(),
+      dbAdmin.collection('profiles').doc(functionProfileId || roleProfileId).get(),
+    ]);
+    if (!roleProfile.exists || !effectiveProfile.exists) {
+      return jsonError('O perfil de acesso configurado no cargo ou função não existe.', 400);
+    }
   }
 
   const historyEntry = statusChanged
@@ -228,7 +253,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const functionData = functionDoc?.data?.() ?? {};
     const existingOnboarding = onboardingDoc.exists ? onboardingDoc.data() ?? {} : {};
     const publicLinkWindow = existingOnboarding.publicTokenExpiresAt
-      ? {}
+      ? null
       : createOnboardingPublicLinkWindow(new Date(
           typeof existingOnboarding.createdAt === 'string' ? existingOnboarding.createdAt : now
         ));
@@ -242,10 +267,46 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       documentTemplates,
       Array.isArray(existingOnboarding.documents) ? existingOnboarding.documents : undefined
     );
+    const roleId = String(candidateUpdatePatch.jobRoleId ?? before.jobRoleId ?? '');
+    const functionId = String(candidateUpdatePatch.functionId ?? before.functionId ?? '');
+    const existingSnapshot = integrationTemplateVersionSchema.safeParse(
+      (existingOnboarding.integrationV2 as Record<string, unknown> | undefined)?.snapshot
+    );
+    let integrationSnapshot: IntegrationTemplateVersion;
+    if (existingSnapshot.success) {
+      integrationSnapshot = existingSnapshot.data;
+    } else {
+      const compatibleTemplates = await listIntegrationTemplates({ roleId, functionId, compatibleOnly: true });
+      const selectedTemplate = compatibleTemplates.find((item) => item.isDefault) ?? compatibleTemplates[0];
+      const published = selectedTemplate
+        ? await getIntegrationTemplateVersion(selectedTemplate.id, selectedTemplate.currentVersion)
+        : null;
+      integrationSnapshot = published ?? integrationTemplateVersionSchema.parse({
+        schemaVersion: 'coala-integration-v1',
+        templateId: `instance_${onboardingId}`,
+        version: 1,
+        name: `Integração de ${String(before.name ?? candidateUpdatePatch.name ?? 'candidato')}`,
+        roleId,
+        functionId,
+        createdAt: now,
+        createdBy: access.decoded.uid,
+        publishedAt: null,
+        ...blankIntegrationTemplateContent(),
+      });
+    }
+    const integrationV2 = existingOnboarding.integrationV2 ?? createIntegrationExecution({
+      mode: integrationSnapshot.templateId.startsWith('instance_') ? 'blank' : 'import',
+      snapshot: integrationSnapshot,
+      now,
+    });
+    const probationV2 = existingOnboarding.probationV2 ?? createProbationProcess(null, integrationSnapshot.probation, now);
+    const publicToken = typeof existingOnboarding.publicToken === 'string' && existingOnboarding.publicToken
+      ? existingOnboarding.publicToken
+      : createPublicToken();
     await onboardingRef.set({
       candidateId: id,
-      candidateName: before.name ?? candidateUpdatePatch.name ?? null,
-      candidateEmail: before.email ?? candidateUpdatePatch.email ?? null,
+      candidateName: candidateUpdatePatch.name ?? before.name ?? null,
+      candidateEmail: candidateUpdatePatch.email ?? before.email ?? null,
       applicationId: latestApplicationId ?? null,
       jobOpeningId: candidateUpdatePatch.jobOpeningId ?? before.jobOpeningId ?? null,
       jobRoleId: candidateUpdatePatch.jobRoleId ?? before.jobRoleId ?? null,
@@ -259,8 +320,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       expectedAdmissionDate: existingOnboarding.expectedAdmissionDate ?? null,
       generateSignatureDocuments,
       source: 'recruitment',
-      publicToken: existingOnboarding.publicToken ?? createPublicToken(),
-      ...publicLinkWindow,
+      integrationV2,
+      probationV2,
+      publicToken,
+      ...(publicLinkWindow ?? {}),
       status: existingOnboarding.status ?? 'collecting_documents',
       currentStage: existingOnboarding.currentStage ?? 'documents',
       stages,
@@ -285,6 +348,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       createdAt: onboardingDoc.exists ? onboardingDoc.data()?.createdAt ?? now : now,
       updatedAt: now,
     }, { merge: true });
+
+    if (!onboardingDoc.exists) {
+      const expiresAt = typeof publicLinkWindow?.publicTokenExpiresAt === 'string'
+        ? publicLinkWindow.publicTokenExpiresAt
+        : typeof existingOnboarding.publicTokenExpiresAt === 'string'
+          ? existingOnboarding.publicTokenExpiresAt
+          : null;
+      await sendTrackedIntegrationCommunication({
+        onboardingId,
+        event: 'formalization_started',
+        template: integrationSnapshot,
+        recipient: String(candidateUpdatePatch.email ?? before.email ?? ''),
+        actionUrl: `https://vagas.coalashakes.com/onboarding/${encodeURIComponent(publicToken)}`,
+        expiresAt,
+        variables: {
+          'employee.name': String(candidateUpdatePatch.name ?? before.name ?? ''),
+          'employee.personal_email': String(candidateUpdatePatch.email ?? before.email ?? ''),
+          'system.role.job_role': String(candidateUpdatePatch.jobRoleName ?? before.jobRoleName ?? roleData.name ?? ''),
+          'system.role.functions': String(candidateUpdatePatch.functionName ?? before.functionName ?? functionData.name ?? ''),
+          'system.schedule.units': String(candidateUpdatePatch.unitName ?? before.unitName ?? ''),
+          'system.schedule.shift': String(candidateUpdatePatch.shiftDefinitionName ?? before.shiftDefinitionName ?? ''),
+        },
+      });
+    }
   }
 
   await logAction({

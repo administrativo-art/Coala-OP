@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { maybeAdvanceAfterFirstAccess } from "@/lib/hr/onboarding-access-provisioning";
 
 const FIRST_ACCESS_COLLECTION = "firstAccessLinks";
 const FIRST_ACCESS_TTL_DAYS = 7;
@@ -187,6 +188,10 @@ export async function consumeFirstAccessLink(token: string, password: string) {
         }, { merge: true })
       : Promise.resolve(),
   ]);
+
+  if (onboardingId) {
+    await maybeAdvanceAfterFirstAccess(onboardingId);
+  }
 
   return {
     ok: true as const,

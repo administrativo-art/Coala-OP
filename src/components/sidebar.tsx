@@ -15,7 +15,8 @@ import {
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck,
-  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt
+  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
+  Files, Building2, FileStack
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -67,6 +68,7 @@ const SECTION_COLORS: Record<string, SectionColor> = {
   com:   { text: "#7c3aed", bg: "#f5f3ff", border: "#7c3aed" }, // violet
   fin:   { text: "#059669", bg: "#f0fdf4", border: "#059669" }, // emerald
   dp:    { text: "#0284c7", bg: "#f0f9ff", border: "#0284c7" }, // sky
+  docs:  { text: "#0f766e", bg: "#f0fdfa", border: "#0f766e" }, // teal
   midia: { text: "#db2777", bg: "#fdf2f8", border: "#db2777" }, // pink
   cfg:   { text: "#64748b", bg: "#f8fafc", border: "#64748b" }, // slate
 };
@@ -182,13 +184,38 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             icon: Users,
             show: permissions.dp?.collaborators?.view,
             children: [
-              { label: "Documentos", href: "/dashboard/dp/documents", icon: FileText, show: permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && permissions.dp?.collaborators?.ownProfileOnly !== true) },
               { label: "Controle de uniformes", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
               { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
               { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
             ],
           },
           { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
+        ],
+      },
+      {
+        key: "docs",
+        label: "Documentos",
+        icon: Files,
+        color: SECTION_COLORS.docs,
+        items: [
+          {
+            label: "Documentos da empresa",
+            href: "/dashboard/documents/company",
+            icon: Building2,
+            show: permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit,
+          },
+          {
+            label: "Documentos dos colaboradores",
+            href: "/dashboard/documents/collaborators",
+            icon: Users,
+            show: permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && permissions.dp?.collaborators?.ownProfileOnly !== true),
+          },
+          {
+            label: "Modelos",
+            href: "/dashboard/documents/templates",
+            icon: FileStack,
+            show: permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit,
+          },
         ],
       },
       {

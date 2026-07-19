@@ -1092,6 +1092,22 @@ export type OnboardingFirstAccessState = {
   createdBy?: string | null;
 };
 
+export type OnboardingAccessProvisioningState = {
+  status?: 'pending' | 'awaiting_delivery' | 'awaiting_password' | 'completed' | 'failed';
+  userCreatedAt?: string | null;
+  completedAt?: string | null;
+  email?: {
+    status?: 'not_sent' | 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained';
+    providerId?: string | null;
+    recipient?: string | null;
+    acceptedAt?: string | null;
+    deliveredAt?: string | null;
+    failedAt?: string | null;
+    lastEventAt?: string | null;
+    lastError?: string | null;
+  };
+};
+
 export type OnboardingPrivacyAcceptance = {
   noticeVersion: string;
   noticeHash: string;
@@ -1153,7 +1169,8 @@ export type OnboardingProcess = {
   publicPrivacyAcceptance?: OnboardingPrivacyAcceptance | null;
   finalizationSettings?: OnboardingFinalizationSettings;
   firstAccess?: OnboardingFirstAccessState;
-  status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'contract_pending' | 'ready_to_create_user' | 'active' | 'completed' | 'cancelled';
+  accessProvisioning?: OnboardingAccessProvisioningState;
+  status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'contract_pending' | 'ready_to_create_user' | 'awaiting_first_access' | 'active' | 'completed' | 'cancelled';
   currentStage?: OnboardingStageId;
   stages?: OnboardingStage[];
   documents?: OnboardingDocument[];
@@ -1162,7 +1179,27 @@ export type OnboardingProcess = {
     label: string;
     status: 'pending' | 'resolved';
     message?: string;
+    checkedAt?: string;
+    externalId?: string;
+    source?: string;
   }>;
+  integrationV2?: {
+    mode: 'import' | 'blank';
+    templateId: string | null;
+    templateVersion: number | null;
+    snapshot: import('@/features/hr/integration/schemas').IntegrationTemplateVersion;
+    answers: Record<string, unknown>;
+    uploads: Record<string, unknown>;
+    stageStatuses: Record<string, 'pending' | 'active' | 'completed' | 'skipped'>;
+    currentStageId: string | null;
+    startedAt: string;
+    updatedAt: string;
+    assignees?: Record<string, { strategy: string; referenceId?: string; resolvedId?: string; resolvedType?: string }>;
+    actionResults?: Record<string, { status: 'completed' | 'failed'; executedAt: string; output?: Record<string, unknown>; error?: string }>;
+    optionFilters?: Record<string, unknown>;
+    completionRequestedAt?: string | null;
+  };
+  probationV2?: import('@/features/hr/integration/probation-process').ProbationProcessState;
   approvedAt?: string | null;
   approvedBy?: string | null;
   createdAt: string;
@@ -2741,6 +2778,13 @@ export interface EmployeeGoal {
 export type DPUnit = {
   id: string;
   name: string;
+  isArchived?: boolean;
+  mergedIntoUnitId?: string;
+  mergedIntoUnitName?: string;
+  archivedAt?: Timestamp;
+  cnpj?: string;
+  address?: string;
+  unitType?: string;
   organizationId?: string;
   groupId?: string;
   externalSource?: 'manual' | 'kiosk' | 'pdvlegal' | 'bizneo';
@@ -2765,6 +2809,8 @@ export type DPUnitOrganization = {
   id: string;
   name: string;
   description?: string;
+  isArchived?: boolean;
+  archivedAt?: Timestamp;
   createdAt: Timestamp;
 } & DPUnitResponsibility;
 

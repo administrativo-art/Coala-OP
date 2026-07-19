@@ -10,6 +10,8 @@ import type {
   FieldMap,
   RhAccessCache,
   RhRole,
+  ImageVoiceConsentRecord,
+  OnboardingPrivacyAcknowledgementRecord,
 } from '@/types/rh';
 import { canViewField } from '@/types/rh';
 
@@ -18,6 +20,8 @@ export type EmployeeProfileData = {
   fieldValues: Record<string, EmployeeFieldValue>;
   fieldMap:    FieldMap;
   cache:       RhAccessCache;
+  consentimento_imagem_voz: ImageVoiceConsentRecord | null;
+  ciencia_privacidade_onboarding: OnboardingPrivacyAcknowledgementRecord | null;
 };
 
 type State =
@@ -114,7 +118,17 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Sta
         });
 
         if (!cancelled) {
-          setState({ status: 'ok', data: { employee, fieldValues, fieldMap, cache } });
+          setState({
+            status: 'ok',
+            data: {
+              employee,
+              fieldValues,
+              fieldMap,
+              cache,
+              consentimento_imagem_voz: employee.consentimento_imagem_voz ?? null,
+              ciencia_privacidade_onboarding: employee.ciencia_privacidade_onboarding ?? null,
+            },
+          });
         }
       } catch (err) {
         if (!cancelled) {
