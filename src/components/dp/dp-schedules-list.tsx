@@ -617,13 +617,14 @@ export function DPSchedulesList() {
     setCreateOpen(true);
   }
 
-  // Group per-unit schedules by unitId → year; legacy (no unitId) go in '__legacy__'
+  // Group schedules by canonical unit so preserved history from incorporated
+  // units appears together with the active destination unit.
   const groupedByUnit = React.useMemo(() => {
     // unitId → year → schedules
     const byUnit = new Map<string, Map<number, DPSchedule[]>>();
 
     for (const s of schedules) {
-      const key = s.unitId ?? '__legacy__';
+      const key = canonicalOperationalUnitId(s.unitId, units) ?? '__legacy__';
       if (!byUnit.has(key)) byUnit.set(key, new Map());
       const byYear = byUnit.get(key)!;
       if (!byYear.has(s.year)) byYear.set(s.year, []);
@@ -639,7 +640,9 @@ export function DPSchedulesList() {
     const result: Array<{ unitId: string; unitName: string; byYear: [number, DPSchedule[]][] }> = [];
 
     // Per-unit sections, ordered by unit name
-    const unitOrder = units.map(u => u.id);
+    const unitOrder = units
+      .map(unit => canonicalOperationalUnitId(unit.id, units))
+      .filter((unitId): unitId is string => !!unitId);
     const seen = new Set<string>();
     for (const uid of [...unitOrder, ...[...byUnit.keys()].filter(k => k !== '__legacy__')]) {
       if (seen.has(uid) || !byUnit.has(uid)) continue;
