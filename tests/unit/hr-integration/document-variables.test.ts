@@ -10,9 +10,9 @@ import {
 } from "../../../src/features/hr/integration/document-variables";
 
 describe("catálogo de variáveis documentais", () => {
-  test("mantém exatamente as 87 variáveis do contrato v1", () => {
+  test("mantém exatamente as 97 variáveis do contrato v2", () => {
     assert.equal(DOCUMENT_VARIABLES.length, DOCUMENT_VARIABLE_COUNT);
-    assert.equal(Object.keys(DOCUMENT_VARIABLE_CATALOG).length, 87);
+    assert.equal(Object.keys(DOCUMENT_VARIABLE_CATALOG).length, 97);
     assert.ok(getDocumentVariable("employee.name"));
     assert.ok(getDocumentVariable("system.documents.email"));
   });

@@ -227,5 +227,23 @@ service cloud.firestore {
       allow create: if canImportExpenses() && request.resource.data.createdBy == request.auth.uid;
       allow update: if canImportExpenses() && resource.data.createdBy == request.auth.uid;
     }
+
+    // Dados de favorecidos contêm destino bancário criptografado e auditoria.
+    // Toda leitura e escrita ocorre nas APIs autenticadas do servidor.
+    match /supplierPaymentProfiles/{entityId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    // Solicitações bancárias, eventos e comprovantes são acessados somente por
+    // APIs de servidor para impedir criação, autorização ou baixa pelo cliente.
+    match /bankPaymentRequests/{requestId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
   }
 }

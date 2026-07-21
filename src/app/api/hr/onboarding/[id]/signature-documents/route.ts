@@ -8,7 +8,8 @@ import {
   selectSignatureTemplates,
   sendSignatureDocuments,
 } from "@/features/hr/documents/signature-workflow.server";
-import { assertHrAccess, serializeHrValue } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
+import { hasFormalizationPermission, type FormalizationAction } from "@/lib/hr-formalization-permissions";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -37,7 +38,7 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    await assertHrAccess(request, "view");
+    await assertFormalizationAccess(request, "signatures.view");
     const { id } = await context.params;
     const documentId = request.nextUrl.searchParams.get("documentId");
     const download = request.nextUrl.searchParams.get("download");
@@ -76,11 +77,16 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const access = await assertHrAccess(request, "manage");
     const { id } = await context.params;
     const body = record(await request.json().catch(() => null));
     const action = typeof body.action === "string" ? body.action : "";
-    const includeSensitive = access.isDefaultAdmin || access.permissions.settings?.manageUsers === true;
+    const requiredAction: FormalizationAction = action === "send"
+      ? "signatures.send"
+      : action === "approve" || action === "request_changes"
+        ? "documents.review"
+        : "documents.generate";
+    const access = await assertFormalizationAccess(request, requiredAction);
+    const includeSensitive = hasFormalizationPermission(access.permissions, "sensitiveData.view", access.isDefaultAdmin);
     let result;
     if (action === "select") {
       result = await selectSignatureTemplates({

@@ -4,10 +4,11 @@ import { Timestamp } from 'firebase-admin/firestore';
 
 import { resolveCollaboratorCore } from '@/features/hr/lib/collaborator-core.server';
 import { integrationTemplateVersionSchema, type IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
-import { assertHrAccess, serializeHrValue } from '@/features/hr/lib/server-access';
+import { assertFormalizationAccess, serializeHrValue } from '@/features/hr/lib/server-access';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { authAdmin, dbAdmin } from '@/lib/firebase-admin';
 import { createFirstAccessLink } from '@/lib/first-access-links';
+import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { findBizneoUser } from '@/lib/integrations/bizneo-admin';
@@ -17,6 +18,7 @@ import { requiredOnboardingIntegrationsResolved } from '@/lib/hr/onboarding-inte
 import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-documents';
 import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
 import { extendOnboardingPublicLink, onboardingPublicLinkExtensionUsed } from '@/lib/hr/onboarding-public-link';
+import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import type { OnboardingDocument, OnboardingProcess, OnboardingStageId } from '@/types';
 
 export const runtime = 'nodejs';
@@ -196,6 +198,7 @@ function childrenFromAnswers(answers: Record<string, unknown>) {
 function nextStatusForStage(stage: OnboardingStageId | undefined): OnboardingProcess['status'] {
   if (stage === 'documents') return 'collecting_documents';
   if (stage === 'document_review') return 'reviewing_documents';
+  if (stage === 'accountant') return 'accountant_pending';
   if (stage === 'signature_preparation' || stage === 'signature') return 'contract_pending';
   if (stage === 'formalization_validation') return 'ready_to_create_user';
   if (stage === 'integration' || stage === 'probation') return 'active';
@@ -352,6 +355,9 @@ async function createCollaboratorFromOnboarding(params: {
     username: name,
     email,
     profileId,
+    ...(isEmploymentRelationshipType(params.process.employmentRelationshipType)
+      ? { employmentRelationshipType: params.process.employmentRelationshipType }
+      : {}),
     ...collaboratorCore.userPatch,
     isActive: true,
     admissionDate: admissionTimestamp,
@@ -496,7 +502,7 @@ async function createCollaboratorFromOnboarding(params: {
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertHrAccess(request, 'manage').catch(() => null);
+  const access = await assertFormalizationAccess(request, 'onboarding.manage').catch(() => null);
   if (!access) return jsonError('Sem permissão para gerenciar onboarding.', 403);
 
   const { id } = await context.params;
@@ -518,7 +524,27 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   let responseFirstAccessUrl: string | null = null;
   let changedDocumentsCount: number | null = null;
 
-  if (action === 'document_status') {
+  if (action === 'set_employer_unit') {
+    const employerUnitId = asString(body.employerUnitId);
+    if (!employerUnitId) return jsonError('Selecione o CNPJ responsável pela contratação.');
+    const employerUnitDoc = await dbAdmin.collection('dp_units').doc(employerUnitId).get();
+    if (!employerUnitDoc.exists || employerUnitDoc.data()?.isArchived === true) {
+      return jsonError('O CNPJ responsável selecionado não está disponível.', 404);
+    }
+    const employerCnpj = CnpjValidator.clean(asString(employerUnitDoc.data()?.cnpj) ?? '');
+    if (!CnpjValidator.validate(employerCnpj).valid) {
+      return jsonError('A unidade responsável selecionada não possui um CNPJ válido. Corrija o cadastro da unidade.', 400);
+    }
+    update.employerUnitId = employerUnitDoc.id;
+    update.employerUnitName = asString(employerUnitDoc.data()?.name);
+    update.employerCnpj = employerCnpj;
+    update.employerAddress = asString(employerUnitDoc.data()?.address);
+    update.employerSelection = {
+      selectedAt: now,
+      selectedBy: access.decoded.uid,
+      selectedByEmail: access.decoded.email ?? null,
+    };
+  } else if (action === 'document_status') {
     const documentId = asString(body.documentId);
     const status = asString(body.status) as OnboardingDocument['status'] | null;
     if (!documentId || !status || !['pending', 'received', 'ai_approved', 'review_required', 'approved', 'rejected'].includes(status)) {
@@ -564,6 +590,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   } else if (action === 'advance_stage') {
     const currentStage = asString(body.currentStage) as OnboardingStageId | null;
     if (!currentStage) return jsonError('Etapa inválida.');
+    if (process.currentStage === 'document_review' && currentStage !== 'document_review' && currentStage !== 'accountant') {
+      return jsonError('Após a conferência documental, o processo deve passar pela etapa do contador.', 409);
+    }
+    if (process.currentStage === 'accountant' && currentStage !== 'accountant' && asString(asRecord(process.accountantWorkflow).status) !== 'completed') {
+      return jsonError('A etapa do contador só avança após a aprovação da Ficha de Registro de Empregado.', 409);
+    }
     if (
       (process.currentStage === 'signature_preparation' || process.currentStage === 'signature') &&
       currentStage !== process.currentStage

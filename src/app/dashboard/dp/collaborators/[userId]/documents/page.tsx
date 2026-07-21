@@ -45,6 +45,7 @@ import {
   normalizeEmployeeDocumentCategory,
   type EmployeeDocumentCategoryId,
 } from "@/lib/hr/employee-document-options";
+import { employeeDocumentSignatureIndicator } from "@/lib/hr/employee-document-signature";
 import type { DocumentVisibilityConfig, NormalizedFieldVisibility } from "@/types/rh";
 
 const STATUS: Record<string, string> = Object.fromEntries(EMPLOYEE_DOCUMENT_STATUSES.map((status) => [status.id, status.label]));
@@ -73,6 +74,10 @@ type DocumentRow = {
   category: string;
   documentType: string;
   documentTypeCode?: string;
+  signatureRequired?: boolean;
+  signatureStatus?: string | null;
+  signedAt?: string | null;
+  source?: string | null;
   status: string;
   accessLevel: string;
   version?: number | null;
@@ -1360,6 +1365,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                   );
                   const divergentCount = pendingSuggestions.filter((suggestion) => suggestion.status === "DIVERGENT").length;
                   const pendingCount = pendingSuggestions.length - divergentCount;
+                  const signatureIndicator = employeeDocumentSignatureIndicator(item);
                   const isExpanded = expandedVerificationId === item.id;
                   const startsFolder = group.folderPath.length > 0
                     && (groupIndex === 0 || documentGroups[groupIndex - 1]?.folderKey !== group.folderKey);
@@ -1380,6 +1386,13 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
                           </p>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{STATUS[item.status] ?? item.status}</span>
+                            {signatureIndicator ? <>
+                              <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">Exige assinatura</span>
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black ${signatureIndicator.signed ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                                {signatureIndicator.signed ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                                {signatureIndicator.statusLabel}
+                              </span>
+                            </> : null}
                             {canManage && documentVisibility && item.documentTypeCode ? (
                               <InlineVisibilityMenu
                                 value={item.resolvedVisibility ?? documentVisibility.categories?.[item.category] ?? "restricted_total"}

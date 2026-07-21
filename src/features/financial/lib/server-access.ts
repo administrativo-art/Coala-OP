@@ -163,6 +163,8 @@ export function canReadFinancialPath(
         permissions.financialFlow ||
         permissions.dre
       );
+    case "bankPaymentRequests":
+      return permissions.paymentRequests?.view === true;
     case "transactions":
       return (
         permissions.cashFlow.view ||
@@ -171,6 +173,7 @@ export function canReadFinancialPath(
         permissions.dashboard
       );
     case "users":
+    case "supplierPaymentProfiles":
       return false;
     default:
       return false;

@@ -19,7 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, Info } from 'lucide-react';
+import { Edit, Shield, ChevronsUpDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, Info, CheckCircle2, MailCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -28,7 +28,13 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuChe
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
-import { JUST_CAUSE_TYPES, TERMINATION_REASONS, requiresTerminationSubtype } from '@/lib/hr/termination-options';
+import { JUST_CAUSE_TYPES, requiresTerminationSubtype } from '@/lib/hr/termination-options';
+import {
+  EMPLOYMENT_RELATIONSHIP_TYPES,
+  employmentRelationshipLabel,
+  terminationCopyForRelationship,
+  terminationReasonsForRelationship,
+} from '@/lib/hr/employment-relationship';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
@@ -238,7 +244,6 @@ function newLocalId(prefix: string) {
 const userSchema = z.object({
   username: z.string().trim().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
   email: z.string().email("O e-mail é inválido."),
-  password: z.string().optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
   assignedKioskIds: z.array(z.string()),
   avatarUrl: z.string().optional(),
@@ -249,17 +254,15 @@ const userSchema = z.object({
   registrationIdPdv: z.string().optional(),
   jobRoleId: z.string().optional(),
   jobFunctionIds: z.array(z.string()).optional(),
+  employmentRelationshipType: z.enum(['clt', 'pj', 'internship'], {
+    required_error: 'Selecione o tipo de vínculo.',
+  }),
   responsibleUnitIds: z.array(z.string()).optional(),
   admissionDate: z.string().optional(),
   birthDate: z.string().optional(),
   shiftDefinitionId: z.string().optional(),
   needsTransportVoucher: z.boolean().optional(),
   transportVoucherValue: z.coerce.number().nonnegative().optional(),
-}).refine(data => {
-    return !data.password || data.password.length >= 6;
-}, {
-    message: "A senha deve ter pelo menos 6 caracteres.",
-    path: ["password"],
 }).refine(data => {
     // Quiosque obrigatório apenas para não-admins
     if (data.profileId === 'admin') return true;
@@ -283,6 +286,7 @@ const USER_AUDIT_FIELDS = [
   'jobRoleName',
   'jobFunctionIds',
   'jobFunctionNames',
+  'employmentRelationshipType',
   'responsibleUnitIds',
   'admissionDate',
   'birthDate',
@@ -354,7 +358,11 @@ export function UserManagement({
   const [searchTerm, setSearchTerm] = useState('');
   const [profileFilter, setProfileFilter] = useState('all');
   const [kioskFilter, setKioskFilter] = useState('all');
-  const [showPassword, setShowPassword] = useState(false);
+  const [createdUserNotice, setCreatedUserNotice] = useState<{
+    username: string;
+    email: string;
+    emailSent: boolean;
+  } | null>(null);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [pdvOperatorIds, setPdvOperatorIds] = useState<Record<string, string>>({});
@@ -365,7 +373,6 @@ export function UserManagement({
     defaultValues: {
         username: '',
         email: '',
-        password: '',
         profileId: '',
         assignedKioskIds: [],
         avatarUrl: '',
@@ -375,6 +382,7 @@ export function UserManagement({
         registrationIdPdv: '',
         jobRoleId: '',
         jobFunctionIds: [],
+        employmentRelationshipType: undefined,
         responsibleUnitIds: [],
         admissionDate: '',
         birthDate: '',
@@ -439,6 +447,10 @@ export function UserManagement({
     () => units.map((unit) => ({ value: unit.id, label: unit.name })),
     [units]
   );
+  const selectedTerminationRelationship = userToInactivate?.employmentRelationshipType;
+  const availableTerminationReasons = terminationReasonsForRelationship(selectedTerminationRelationship);
+  const terminationCopy = terminationCopyForRelationship(selectedTerminationRelationship);
+  const contractTerminationAvailable = selectedTerminationRelationship === 'clt' || selectedTerminationRelationship === 'pj';
   const selectedWorkUnits = useMemo(() => {
     const mapped = new Map<string, { id: string; name: string }>();
 
@@ -517,7 +529,6 @@ export function UserManagement({
     const clearAutofill = () => {
       form.setValue('username', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
       form.setValue('email', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
-      form.setValue('password', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
     };
 
     clearAutofill();
@@ -593,7 +604,6 @@ export function UserManagement({
     form.reset({
       username: '',
       email: '',
-      password: '',
       profileId: '',
       assignedKioskIds: [],
       avatarUrl: '',
@@ -603,6 +613,7 @@ export function UserManagement({
       registrationIdPdv: '',
       jobRoleId: '',
       jobFunctionIds: [],
+      employmentRelationshipType: undefined,
       responsibleUnitIds: [],
       admissionDate: '',
       birthDate: '',
@@ -620,7 +631,6 @@ export function UserManagement({
     form.reset({
       username: user.username,
       email: user.email,
-      password: '',
       profileId: user.profileId,
       assignedKioskIds: user.assignedKioskIds || [],
       avatarUrl: user.avatarUrl || '',
@@ -630,6 +640,7 @@ export function UserManagement({
       registrationIdPdv: user.registrationIdPdv ?? '',
       jobRoleId: user.jobRoleId ?? '',
       jobFunctionIds: user.jobFunctionIds ?? [],
+      employmentRelationshipType: user.employmentRelationshipType,
       responsibleUnitIds: user.responsibleUnitIds ?? [],
       admissionDate: timestampToDateInput(user.admissionDate),
       birthDate: timestampToDateInput(user.birthDate),
@@ -718,8 +729,25 @@ export function UserManagement({
 
   const handleInactivateConfirm = async () => {
     if (userToInactivate) {
+      if (inactivationMode === 'contract_termination' && !contractTerminationAvailable) {
+        toast({
+          title: userToInactivate.employmentRelationshipType === 'internship' ? 'Fluxo de estágio ainda não disponível.' : 'Tipo de vínculo obrigatório.',
+          description: userToInactivate.employmentRelationshipType === 'internship'
+            ? 'Nesta entrega, o desligamento específico de estágio ainda não foi habilitado.'
+            : 'Defina o tipo de vínculo no cadastro antes de registrar o encerramento.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (inactivationMode === 'contract_termination' && !terminationReason) {
-        toast({ title: 'Tipo de demissão obrigatório.', description: 'Selecione o tipo de demissão para concluir o término do contrato.', variant: 'destructive' });
+        toast({ title: `${terminationCopy.reasonLabel} obrigatório.`, description: terminationCopy.missingReason, variant: 'destructive' });
+        return;
+      }
+      if (
+        inactivationMode === 'contract_termination' &&
+        !availableTerminationReasons.some((reason) => reason === terminationReason)
+      ) {
+        toast({ title: 'Motivo incompatível com o vínculo.', description: 'Selecione uma opção válida para o tipo de vínculo cadastrado.', variant: 'destructive' });
         return;
       }
       await terminateUser({
@@ -734,11 +762,12 @@ export function UserManagement({
         email: userToInactivate.email,
         profile_id: userToInactivate.profileId,
         inactivation_type: inactivationMode,
+        employment_relationship_type: userToInactivate.employmentRelationshipType ?? null,
         termination_reason: terminationReason || null,
       });
       setUserToInactivate(null);
       toast({
-        title: inactivationMode === 'temporary' ? 'Usuário inativado temporariamente.' : 'Término do contrato registrado.',
+        title: inactivationMode === 'temporary' ? 'Usuário inativado temporariamente.' : terminationCopy.success,
         description: `${userToInactivate.username} não poderá acessar o sistema até uma reativação.`,
       });
     }
@@ -790,6 +819,7 @@ export function UserManagement({
           jobRoleName: selectedRole?.name,
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
+          employmentRelationshipType: values.employmentRelationshipType,
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitIds: selectedWorkUnitIds.length > 0 ? selectedWorkUnitIds : undefined,
           admissionDate,
@@ -799,7 +829,6 @@ export function UserManagement({
           transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
           transportVoucherHistory,
       };
-      delete (updatedData as any).password;
       const mergedUser = { ...editingUser, ...updatedData };
       const changes = userAuditDiff(editingUser, mergedUser);
       await updateUser(mergedUser);
@@ -809,10 +838,6 @@ export function UserManagement({
         changes,
       });
     } else {
-        if (!values.password) {
-             form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
-             return;
-        }
       const createResult = await addUser({
           username: values.username,
           profileId: values.profileId,
@@ -834,23 +859,30 @@ export function UserManagement({
           jobRoleName: selectedRole?.name,
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
+          employmentRelationshipType: values.employmentRelationshipType,
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitIds: selectedWorkUnitIds.length > 0 ? selectedWorkUnitIds : undefined,
           admissionDate,
           birthDate,
-      }, values.email, values.password);
+      }, values.email);
 
       if ('error' in createResult) {
         toast({ title: 'Erro ao criar usuário.', description: createResult.error, variant: 'destructive' });
         return;
       }
       const uid = createResult.uid;
-      toast({ title: 'Usuário criado com sucesso.' });
       await logUserAudit('user_created', { id: uid, username: values.username, email: values.email }, {
         email: values.email,
         profile_id: values.profileId,
         assigned_kiosk_count: values.assignedKioskIds.length,
+        first_access_email_sent: createResult.emailSent,
       });
+      setCreatedUserNotice({
+        username: values.username,
+        email: values.email,
+        emailSent: createResult.emailSent,
+      });
+      return;
     }
     closeForm();
   };
@@ -1035,7 +1067,7 @@ export function UserManagement({
                     )}
                   </div>
                   ) : null}
-                  <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 md:grid-cols-2 gap-3"}>
+                  <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 md:grid-cols-3 gap-3"}>
                     <FormField control={form.control} name="username" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome</FormLabel>
@@ -1064,24 +1096,23 @@ export function UserManagement({
                         <FormMessage />
                       </FormItem>
                     )} />
-                    {!editingUser && (
-                      <div className={createOnly ? "" : "col-span-full"}>
-                        <FormField control={form.control} name="password" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Senha</FormLabel>
-                            <div className="relative">
-                              <FormControl>
-                                <Input type={showPassword ? 'text' : 'password'} placeholder="Mínimo 6 caracteres" {...field} autoComplete="new-password" />
-                              </FormControl>
-                              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground">
-                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              </button>
-                            </div>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      </div>
-                    )}
+                    <FormField control={form.control} name="employmentRelationshipType" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de vínculo</FormLabel>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione o vínculo" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {EMPLOYMENT_RELATIONSHIP_TYPES.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">
+                          Define as regras de integração e de encerramento aplicáveis.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                   </div>
                 </div>
               </div>
@@ -1161,13 +1192,10 @@ export function UserManagement({
                             options={responsibleUnitOptions}
                             selected={field.value ?? []}
                             onChange={field.onChange}
-                            placeholder="Vazio = geral/remanescentes"
+                            placeholder="Selecione as unidades"
                             className={responsibleUnitOptions.length > 0 ? '' : 'opacity-70'}
                           />
                         </FormControl>
-                        <FormDescription className="text-xs">
-                          Use para líderes/superiores. Sem seleção, responde pelo fluxo geral ou pelas unidades remanescentes.
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -1320,7 +1348,18 @@ export function UserManagement({
                         />
                       </div>
                     </div>
-                    <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-[11px] font-bold', field.value ? 'text-pink-700' : 'text-slate-600')}>
+                        {field.value ? 'Ativo' : 'Inativo'}
+                      </span>
+                      <FormControl>
+                        <Switch
+                          checked={!!field.value}
+                          onCheckedChange={field.onChange}
+                          className="border border-slate-400 shadow-inner data-[state=unchecked]:bg-slate-300 data-[state=checked]:border-pink-600 data-[state=checked]:bg-pink-600"
+                        />
+                      </FormControl>
+                    </div>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="participatesInGoals" render={({ field }) => (
@@ -1334,7 +1373,18 @@ export function UserManagement({
                         />
                       </div>
                     </div>
-                    <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-[11px] font-bold', field.value ? 'text-pink-700' : 'text-slate-600')}>
+                        {field.value ? 'Ativo' : 'Inativo'}
+                      </span>
+                      <FormControl>
+                        <Switch
+                          checked={!!field.value}
+                          onCheckedChange={field.onChange}
+                          className="border border-slate-400 shadow-inner data-[state=unchecked]:bg-slate-300 data-[state=checked]:border-pink-600 data-[state=checked]:bg-pink-600"
+                        />
+                      </FormControl>
+                    </div>
                   </FormItem>
                 )} />
                 {showTransportVoucher ? (
@@ -1416,7 +1466,8 @@ export function UserManagement({
             {/* ── Footer ── */}
             <div className="flex justify-end gap-2 pt-0.5">
               <Button type="button" variant="outline" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} onClick={closeForm}>Cancelar</Button>
-              <Button type="submit" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}>
+              <Button type="submit" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} disabled={isUploadingPhoto || form.formState.isSubmitting || (!!editingUser && !form.formState.isDirty)}>
+                {form.formState.isSubmitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
                 {editingUser ? 'Salvar alterações' : 'Criar usuário'}
               </Button>
             </div>
@@ -1632,6 +1683,44 @@ export function UserManagement({
         onPhotoCaptured={handlePhotoCaptured}
       />
 
+      <Dialog
+        open={!!createdUserNotice}
+        onOpenChange={(open) => {
+          if (open) return;
+          setCreatedUserNotice(null);
+          closeForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-md" hideClose>
+          <DialogHeader className="items-center text-center sm:text-center">
+            <div className={cn(
+              'mb-2 grid h-14 w-14 place-items-center rounded-full',
+              createdUserNotice?.emailSent ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+            )}>
+              {createdUserNotice?.emailSent ? <MailCheck className="h-7 w-7" /> : <CheckCircle2 className="h-7 w-7" />}
+            </div>
+            <DialogTitle>Cadastro inicial criado</DialogTitle>
+            <DialogDescription className="max-w-sm leading-relaxed">
+              {createdUserNotice?.emailSent
+                ? <>O cadastro de <strong className="text-slate-800">{createdUserNotice.username}</strong> foi criado e o link para definir a senha foi enviado para <strong className="text-slate-800">{createdUserNotice.email}</strong>.</>
+                : <>O cadastro de <strong className="text-slate-800">{createdUserNotice?.username}</strong> foi criado, mas o e-mail com o link de definição de senha não pôde ser enviado. Reenvie o acesso pela ação de redefinição de senha.</>}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-center">
+            <Button
+              type="button"
+              className="min-w-32 bg-pink-600 hover:bg-pink-700"
+              onClick={() => {
+                setCreatedUserNotice(null);
+                closeForm();
+              }}
+            >
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!transportVoucherDialog} onOpenChange={(open) => { if (!open) setTransportVoucherDialog(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1708,28 +1797,35 @@ export function UserManagement({
               <button
                 type="button"
                 onClick={() => setInactivationMode('contract_termination')}
+                disabled={!contractTerminationAvailable}
                 className={cn(
-                  'rounded-lg border p-4 text-left transition-colors',
+                  'rounded-lg border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-55',
                   inactivationMode === 'contract_termination' ? 'border-pink-300 bg-pink-50' : 'border-slate-200 bg-white hover:bg-slate-50'
                 )}
               >
-                <p className="text-sm font-semibold text-slate-900">Término do contrato</p>
-                <p className="mt-1 text-xs text-slate-500">Registra data, tipo de demissão e observações.</p>
+                <p className="text-sm font-semibold text-slate-900">{terminationCopy.action}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {contractTerminationAvailable
+                    ? `Vínculo: ${employmentRelationshipLabel(selectedTerminationRelationship)}.`
+                    : selectedTerminationRelationship === 'internship'
+                      ? 'O fluxo específico de estágio será implementado posteriormente.'
+                      : 'Defina o tipo de vínculo antes de registrar o encerramento.'}
+                </p>
               </button>
             </div>
 
             {inactivationMode === 'contract_termination' && (
               <div className="grid gap-4 rounded-lg border bg-slate-50/70 p-4 sm:grid-cols-2">
                 <div>
-                  <Label>Data da demissão</Label>
+                  <Label>{terminationCopy.dateLabel}</Label>
                   <Input type="date" value={terminationDate} onChange={(event) => setTerminationDate(event.target.value)} />
                 </div>
                 <div>
-                  <Label>Tipo de demissão</Label>
+                  <Label>{terminationCopy.reasonLabel}</Label>
                   <Select value={terminationReason} onValueChange={(value) => { setTerminationReason(value); if (!requiresTerminationSubtype(value)) setTerminationCause(''); }}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      {TERMINATION_REASONS.map((reason) => (
+                      {availableTerminationReasons.map((reason) => (
                         <SelectItem key={reason} value={reason}>{reason}</SelectItem>
                       ))}
                     </SelectContent>

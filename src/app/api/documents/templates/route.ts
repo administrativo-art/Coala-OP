@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 
-import { assertHrAccess, serializeHrValue } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { dbAdmin } from "@/lib/firebase-admin";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ function serializedObject(value: unknown): Record<string, unknown> {
 
 export async function GET(request: NextRequest) {
   try {
-    await assertHrAccess(request, "manage");
+    await assertFormalizationAccess(request, "templates.view");
     const snap = await dbAdmin.collection(COLLECTION).get();
     const templates = snap.docs
       .filter((doc) => !doc.get("deletedAt"))
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "templates.manage");
     const body = await request.json();
     const name = typeof body.name === "string" ? body.name.trim().slice(0, 160) : "";
     const category = typeof body.category === "string" ? body.category.trim().slice(0, 80) : "";

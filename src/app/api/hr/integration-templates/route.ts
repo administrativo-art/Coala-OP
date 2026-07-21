@@ -6,7 +6,7 @@ import {
   listIntegrationTemplates,
   type IntegrationTemplateStatus,
 } from "@/features/hr/integration/server";
-import { assertHrAccess } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ async function validateRoleAndFunction(roleId: string, functionId?: string | nul
 
 export async function GET(request: NextRequest) {
   try {
-    await assertHrAccess(request, "view");
+    await assertFormalizationAccess(request, "view");
     const roleId = request.nextUrl.searchParams.get("roleId") || undefined;
     const functionParam = request.nextUrl.searchParams.get("functionId");
     const functionId = functionParam === null ? undefined : functionParam || null;
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "onboarding.manage");
     const input = integrationTemplateCreateSchema.parse(await request.json());
     await validateRoleAndFunction(input.roleId, input.functionId);
     const created = await createIntegrationTemplate(input, {
@@ -63,4 +63,3 @@ export async function POST(request: NextRequest) {
     return errorResponse(error, "Falha ao criar modelo de integração.");
   }
 }
-

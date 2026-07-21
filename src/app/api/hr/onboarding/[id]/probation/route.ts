@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { completeProbationEvaluation, createProbationProcess, decideProbation, refreshProbationProcess, type ProbationProcessState } from "@/features/hr/integration/probation-process";
-import { assertHrAccess, serializeHrValue } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ function error(message: string, status = 400) { return NextResponse.json({ error
 function text(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertHrAccess(request, "view").catch(() => null); if (!access) return error("Sem permissão.", 403);
+  const access = await assertFormalizationAccess(request, "view").catch(() => null); if (!access) return error("Sem permissão.", 403);
   const { id } = await context.params; const reference = hrDbAdmin.collection("onboardingProcesses").doc(id); const document = await reference.get();
   if (!document.exists) return error("Integração não encontrada.", 404);
   const current = document.get("probationV2") as ProbationProcessState | undefined; if (!current) return error("Experiência não configurada.", 409);
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertHrAccess(request, "manage").catch(() => null); if (!access) return error("Sem permissão.", 403);
+  const access = await assertFormalizationAccess(request, "onboarding.manage").catch(() => null); if (!access) return error("Sem permissão.", 403);
   const { id } = await context.params; const reference = hrDbAdmin.collection("onboardingProcesses").doc(id); const document = await reference.get();
   if (!document.exists) return error("Integração não encontrada.", 404);
   const body = await request.json().catch(() => ({})); const action = text(body.action); const now = new Date().toISOString();

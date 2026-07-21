@@ -11,6 +11,7 @@ import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
 import { ChangePasswordModal } from './change-password-modal';
 import { fetchClientBootstrap } from '@/lib/client-bootstrap';
+import { applyLegacyFormalizationFallbacks } from '@/lib/hr-formalization-permissions';
 import {
   fetchHrLoginAccess,
   type HrLoginAccessPayload,
@@ -40,7 +41,9 @@ export interface AuthContextType {
     loginAccessGate?: HrLoginAccessPayload | null;
   }>;
   logout: () => void;
-  addUser: (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => Promise<{ uid: string } | { error: string }>;
+  addUser: (userData: Omit<User, 'id' | 'email'>, email: string) => Promise<
+    { uid: string; emailSent: boolean; firstAccessExpiresAt?: string; warning?: string } | { error: string }
+  >;
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   terminateUser: (payload: TerminateUserPayload) => Promise<void>;
@@ -288,6 +291,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const finalPermissions = produce(defaultGuestPermissions, (draft: any) => {
         mergeRecursive(draft, userProfile.permissions);
         applyCommercialPermissionFallbacks(draft);
+        applyLegacyFormalizationFallbacks(draft, userProfile.permissions);
     });
 
     setPermissions(finalPermissions);
@@ -363,26 +367,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = '/login'; // reload completo mata todos os listeners
   }, []);
 
-  const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => {
+  const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string) => {
     try {
-      // Força refresh do token para garantir que os claims estão atualizados antes de chamar a cloud function
-      await auth.currentUser?.getIdToken(true);
-
-      const createUserFn = httpsCallable(functions, 'createUser');
-      
-      const result = await createUserFn({
-        email,
-        password,
-        userData,
-        username: userData.username,
-        profileId: userData.profileId,
-        assignedKioskIds: userData.assignedKioskIds,
-        avatarUrl: userData.avatarUrl || '',
-        operacional: userData.operacional || false,
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) return { error: 'Usuário não autenticado.' };
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          userData,
+          username: userData.username,
+          profileId: userData.profileId,
+        }),
       });
-
-      const { uid } = result.data as { uid: string };
-      return { uid };
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        return { error: result?.error || 'Erro ao criar usuário.' };
+      }
+      return {
+        uid: String(result.uid),
+        emailSent: result.emailSent === true,
+        firstAccessExpiresAt: typeof result.firstAccessExpiresAt === 'string' ? result.firstAccessExpiresAt : undefined,
+        warning: typeof result.warning === 'string' ? result.warning : undefined,
+      };
     } catch (error: any) {
       console.error("Error adding user:", error);
       return { error: error?.message || 'Erro ao criar usuário.' };

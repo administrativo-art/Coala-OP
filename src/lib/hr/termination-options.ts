@@ -1,12 +1,6 @@
-export const TERMINATION_REASONS = [
-  "Dispensa sem justa causa",
-  "Dispensa por justa causa",
-  "Pedido de demissão (resilição pelo empregado)",
-  "Rescisão indireta",
-  "Rescisão por culpa recíproca",
-  "Rescisão por acordo entre as partes",
-  "Extinção legal ou por motivo de ordem pública",
-] as const;
+import { CLT_TERMINATION_REASONS } from "@/lib/hr/employment-relationship";
+
+export const TERMINATION_REASONS = CLT_TERMINATION_REASONS;
 
 export const JUST_CAUSE_TYPES = [
   "Abandono de emprego",

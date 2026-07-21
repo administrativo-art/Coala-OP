@@ -17,6 +17,12 @@ export type SendEmailInput = {
   html: string;
   text?: string;
   replyTo?: string;
+  attachments?: Array<{
+    filename: string;
+    content: string;
+    contentType?: string;
+  }>;
+  tags?: Array<{ name: string; value: string }>;
 };
 
 export type SendEmailResult = {
@@ -73,6 +79,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       html: input.html,
       ...(input.text ? { text: input.text } : {}),
       ...(input.replyTo ? { reply_to: input.replyTo } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      ...(input.tags?.length ? { tags: input.tags } : {}),
     }),
     signal: AbortSignal.timeout(15_000),
   });

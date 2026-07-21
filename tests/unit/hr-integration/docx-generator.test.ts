@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import PizZip from "pizzip";
 
-import { extractDocxVariables, generateDocx, normalizeDocxTemplateXml } from "../../../src/features/hr/documents/docx-generator";
+import { extractDocxVariables, generateDocx, normalizeDocxTemplateXml, replaceDocxTextWithVariable } from "../../../src/features/hr/documents/docx-generator";
 
 function fixture() {
   const zip = new PizZip();
@@ -24,5 +24,21 @@ describe("gerador DOCX", () => {
     const output = generateDocx(input, { employee: { name: "Maria", has_vt: true, vt_daily_value: "R$ 8,40" } });
     const xml = new PizZip(output).file("word/document.xml")?.asText() ?? "";
     assert.match(xml, /Maria/); assert.match(xml, /R\$ 8,40/); assert.match(xml, /<w:b\/>/);
+  });
+  it("substitui texto fixo mesmo quando ele está dividido em runs", () => {
+    const zip = new PizZip(fixture());
+    const xml = zip.file("word/document.xml")?.asText() ?? "";
+    zip.file("word/document.xml", xml.replace("{{employee.</w:t></w:r><w:r><w:t>name}}", "CT SOR</w:t></w:r><w:r><w:t>VETES LTDA"));
+    const input = zip.generate({ type: "nodebuffer" }) as Buffer;
+    const result = replaceDocxTextWithVariable(input, "CT SORVETES LTDA", "integration.employer_name");
+    assert.equal(result.replacements, 1);
+    assert.ok(extractDocxVariables(result.buffer).includes("integration.employer_name"));
+  });
+  it("não confunde células e tabelas do Word com tags de texto", () => {
+    const xml = `<w:tbl><w:tr><w:tc><w:p><w:r><w:t>CT SORVETES LTDA</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`;
+    const normalized = normalizeDocxTemplateXml(xml);
+    assert.equal(normalized, xml);
+    assert.match(normalized, /<w:tbl>/);
+    assert.match(normalized, /<w:tc>/);
   });
 });

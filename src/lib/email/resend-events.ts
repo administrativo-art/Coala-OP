@@ -6,6 +6,8 @@ export type ResendDeliveryStatus =
   | "failed"
   | "complained";
 
+export type ResendEngagementStatus = "opened" | "clicked";
+
 export function deliveryStatusFromResendEvent(eventType: string): ResendDeliveryStatus | null {
   if (eventType === "email.sent") return "accepted";
   if (eventType === "email.delivered") return "delivered";
@@ -13,6 +15,12 @@ export function deliveryStatusFromResendEvent(eventType: string): ResendDelivery
   if (eventType === "email.bounced") return "bounced";
   if (eventType === "email.failed") return "failed";
   if (eventType === "email.complained") return "complained";
+  return null;
+}
+
+export function engagementStatusFromResendEvent(eventType: string): ResendEngagementStatus | null {
+  if (eventType === "email.opened") return "opened";
+  if (eventType === "email.clicked") return "clicked";
   return null;
 }
 

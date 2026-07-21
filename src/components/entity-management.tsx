@@ -972,6 +972,11 @@ export function EntityManagement() {
                                                         {entity.nickname}
                                                     </Badge>
                                                 ) : null}
+                                                {entity.status === 'inactive' ? (
+                                                  <Badge variant="outline" className="mt-1 rounded-md border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-medium text-amber-800">
+                                                    Inativo
+                                                  </Badge>
+                                                ) : null}
                                             </div>
                                         </div>
                                     </TableCell>
@@ -1012,9 +1017,11 @@ export function EntityManagement() {
                                               <Edit className="mr-2 h-4 w-4" /> Editar
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
-                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => handleDeleteClick(entity)}>
-                                              <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                                            </DropdownMenuItem>
+                                            {entity.status !== 'inactive' ? (
+                                              <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => handleDeleteClick(entity)}>
+                                                <Trash2 className="mr-2 h-4 w-4" /> Inativar
+                                              </DropdownMenuItem>
+                                            ) : null}
                                           </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>
@@ -1044,7 +1051,7 @@ export function EntityManagement() {
           open={!!entityToDelete}
           onOpenChange={() => setEntityToDelete(null)}
           onConfirm={handleDeleteConfirm}
-          itemName={`o cadastro de "${entityToDelete.name}"`}
+          itemName={`o cadastro de "${entityToDelete.name}" (ele será inativado e o histórico será preservado)`}
         />
       )}
     </>

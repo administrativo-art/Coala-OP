@@ -8,6 +8,7 @@ import type {
 export const ONBOARDING_STAGE_IDS: OnboardingStageId[] = [
   'documents',
   'document_review',
+  'accountant',
   'signature_preparation',
   'signature',
   'formalization_validation',
@@ -19,12 +20,13 @@ export const ONBOARDING_STAGE_IDS: OnboardingStageId[] = [
 export const DEFAULT_ONBOARDING_STAGES: OnboardingStage[] = [
   { id: 'documents', label: 'Coleta de dados e documentos', order: 0, required: true, dueDays: 3 },
   { id: 'document_review', label: 'Revisão da coleta', order: 1, required: true, dueDays: 2 },
-  { id: 'signature_preparation', label: 'Geração e revisão para assinatura', order: 2, required: true, dueDays: null },
-  { id: 'signature', label: 'Assinatura dos documentos', order: 3, required: true, dueDays: null },
-  { id: 'formalization_validation', label: 'Validação da formalização', order: 4, required: true, dueDays: null },
-  { id: 'integration', label: 'Criação de usuário e integrações', order: 5, required: true, dueDays: null },
-  { id: 'probation', label: 'Período de experiência', order: 6, required: true, dueDays: 90 },
-  { id: 'done', label: 'Finalizado', order: 7, required: true, dueDays: null },
+  { id: 'accountant', label: 'Formalização · Contador', order: 2, required: true, dueDays: 3 },
+  { id: 'signature_preparation', label: 'Geração e revisão para assinatura', order: 3, required: true, dueDays: null },
+  { id: 'signature', label: 'Assinatura dos documentos', order: 4, required: true, dueDays: null },
+  { id: 'formalization_validation', label: 'Validação da formalização', order: 5, required: true, dueDays: null },
+  { id: 'integration', label: 'Criação de usuário e integrações', order: 6, required: true, dueDays: null },
+  { id: 'probation', label: 'Período de experiência', order: 7, required: true, dueDays: 90 },
+  { id: 'done', label: 'Finalizado', order: 8, required: true, dueDays: null },
 ];
 
 export const DEFAULT_ONBOARDING_DOCUMENTS: OnboardingDocumentTemplate[] = [

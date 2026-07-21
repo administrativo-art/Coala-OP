@@ -7,6 +7,7 @@ import {
   type PermissionSet,
   type User,
 } from "@/types";
+import { applyLegacyFormalizationFallbacks } from "@/lib/hr-formalization-permissions";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/verify-auth";
 import { WORKSPACE_ID } from "@/lib/workspace";
@@ -87,6 +88,7 @@ export function buildPermissionSet(
 
   applyCommercialPermissionFallbacks(merged);
   applyFormsPermissionFallbacks(merged);
+  applyLegacyFormalizationFallbacks(merged, profilePermissions);
 
   return merged;
 }

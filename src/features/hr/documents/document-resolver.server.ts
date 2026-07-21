@@ -230,6 +230,7 @@ export async function resolveDocumentData(params: { employeeId?: string | null; 
       if (step.source === "field_value") raw = fieldRaw(fieldValues[step.path], entry);
       else if (step.source === "employee_record") raw = atPath(employee, step.path);
       else if (step.source === "user_record") raw = atPath(user, step.path);
+      else if (step.source === "onboarding") raw = atPath(onboarding, step.path);
       else if (step.source === "computed") raw = atPath(computed, step.path);
       else if (step.source === "reference" && step.referenceCollection) raw = await referenceLabels(step.referenceCollection, atPath(user, step.path) ?? atPath(employee, step.path));
       if (raw !== undefined && raw !== null && raw !== "") break;

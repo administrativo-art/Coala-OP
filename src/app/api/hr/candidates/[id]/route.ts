@@ -6,6 +6,7 @@ import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
 import { createOnboardingPublicLinkWindow } from '@/lib/hr/onboarding-public-link';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { createIntegrationExecution } from '@/features/hr/integration/process';
 import { createProbationProcess } from '@/features/hr/integration/probation-process';
@@ -183,6 +184,21 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   let onboardingId: string | null = null;
 
   if (status === 'hired') {
+    const employerUnitId = typeof candidatePatch.employerUnitId === 'string'
+      ? candidatePatch.employerUnitId.trim()
+      : '';
+    if (!employerUnitId) return jsonError('Selecione o CNPJ responsável pela contratação.', 400);
+    const employerUnitDoc = await dbAdmin.collection('dp_units').doc(employerUnitId).get();
+    if (!employerUnitDoc.exists || employerUnitDoc.data()?.isArchived === true) {
+      return jsonError('O CNPJ responsável selecionado não está disponível.', 404);
+    }
+    const employerCnpj = CnpjValidator.clean(String(employerUnitDoc.data()?.cnpj ?? ''));
+    if (!CnpjValidator.validate(employerCnpj).valid) {
+      return jsonError('A unidade responsável selecionada não possui um CNPJ válido. Corrija o cadastro da unidade.', 400);
+    }
+    candidateUpdatePatch.employerUnitId = employerUnitDoc.id;
+    candidateUpdatePatch.employerUnitName = employerUnitDoc.get('name') ?? null;
+    candidateUpdatePatch.employerCnpj = employerCnpj;
     onboardingId = typeof before.onboardingId === 'string' && before.onboardingId.trim()
       ? before.onboardingId
       : `onboarding_${id}_${latestApplicationId || 'direct'}`;
@@ -315,6 +331,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       functionName: candidateUpdatePatch.functionName ?? before.functionName ?? null,
       unitId: candidateUpdatePatch.unitId ?? before.unitId ?? null,
       unitName: candidateUpdatePatch.unitName ?? before.unitName ?? null,
+      employerUnitId: candidateUpdatePatch.employerUnitId ?? before.employerUnitId ?? null,
+      employerUnitName: candidateUpdatePatch.employerUnitName ?? before.employerUnitName ?? null,
+      employerCnpj: candidateUpdatePatch.employerCnpj ?? before.employerCnpj ?? null,
       shiftDefinitionId: candidateUpdatePatch.shiftDefinitionId ?? before.shiftDefinitionId ?? null,
       shiftDefinitionName: candidateUpdatePatch.shiftDefinitionName ?? before.shiftDefinitionName ?? null,
       expectedAdmissionDate: existingOnboarding.expectedAdmissionDate ?? null,

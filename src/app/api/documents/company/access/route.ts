@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
-import { assertHrAccess } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess } from "@/features/hr/lib/server-access";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "companyDocuments.view");
     const { id, action = "view" } = await request.json();
     const ref = dbAdmin.collection("companyDocuments").doc(String(id ?? ""));
     const snap = await ref.get();
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         at: now,
       }),
     ]);
-    const safeName = String(snap.get("originalName") || "documento")
+    const safeName = String(snap.get("standardizedName") || snap.get("originalName") || "documento")
       .replace(/[^\x20-\x7E]/g, "_")
       .replace(/["\\]/g, "_");
     return new NextResponse(new Uint8Array(contents), {

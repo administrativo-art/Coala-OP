@@ -144,6 +144,15 @@ service cloud.firestore {
       allow write:  if false;  // somente CFs
     }
 
+    // Configurações operacionais das clínicas de ASO são acessadas somente
+    // pelas APIs de formalização, que aplicam permissões e auditoria.
+    match /asoClinicConfigs/{entityId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
     // ─── sync_log ────────────────────────────────────────────────────────────
     match /sync_log/{logId} {
       allow read:   if isAdmin();

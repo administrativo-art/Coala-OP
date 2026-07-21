@@ -3,9 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
-import { assertHrAccess, serializeHrValue } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
+import { COMPANY_DOCUMENT_CATEGORIES, isCompanyDocumentCategory } from "@/lib/documents/company-document-categories";
+import { buildStandardizedFileName } from "@/lib/documents/company-document-naming";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +37,7 @@ function serializedObject(value: unknown): Record<string, unknown> {
 
 export async function GET(request: NextRequest) {
   try {
-    await assertHrAccess(request, "manage");
+    await assertFormalizationAccess(request, "companyDocuments.view");
     const snap = await dbAdmin.collection(COLLECTION).get();
     const documents = snap.docs
       .filter((doc) => !doc.get("deletedAt"))
@@ -49,7 +51,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "companyDocuments.manage");
     const form = await request.formData();
     const file = form.get("file");
     const title = cleanText(form.get("title"));
@@ -59,6 +61,9 @@ export async function POST(request: NextRequest) {
 
     if (!(file instanceof File) || !title || !category) {
       return error("Informe o título, a categoria e selecione o arquivo.");
+    }
+    if (!isCompanyDocumentCategory(category)) {
+      return error(`Categoria inválida. Use uma das opções: ${COMPANY_DOCUMENT_CATEGORIES.join(", ")}.`);
     }
     const extension = MIME_TYPES[file.type];
     if (!extension || file.size > MAX_BYTES) {
@@ -80,6 +85,7 @@ export async function POST(request: NextRequest) {
     });
 
     const now = Timestamp.now();
+    const standardizedName = buildStandardizedFileName({ category, title, uploadedAt: now.toDate(), extension });
     const payload = {
       title,
       category,
@@ -87,6 +93,7 @@ export async function POST(request: NextRequest) {
       status: "active",
       expiresAt,
       originalName: file.name.slice(0, 180),
+      standardizedName,
       mimeType: file.type,
       size: file.size,
       contentHash,
@@ -116,7 +123,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "companyDocuments.manage");
     const id = request.nextUrl.searchParams.get("id")?.trim() ?? "";
     const ref = dbAdmin.collection(COLLECTION).doc(id);
     const snap = await ref.get();

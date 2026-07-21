@@ -10,13 +10,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
+import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import {
   ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
-  Files, Building2, FileStack
+  Files, Building2, FileStack, Stethoscope
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -169,10 +170,11 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         items: [
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
           {
-            label: "Recrutamento", href: "__group:recruitment", icon: Users, show: permissions.dp?.view,
+            label: "Recrutamento", href: "__group:recruitment", icon: Users, show: permissions.dp?.view || hasFormalizationPermission(permissions, "view"),
             children: [
               { label: "Gestão da vaga", href: "/dashboard/hr/recruitment", icon: LayoutGrid, show: permissions.dp?.view },
-              { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: permissions.dp?.view },
+              { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: hasFormalizationPermission(permissions, "view") },
+              { label: "Clínicas de ASO", href: "/dashboard/hr/recruitment/integration/clinics", icon: Stethoscope, show: hasFormalizationPermission(permissions, "aso.view") },
               { label: "Banco de talentos", href: "/dashboard/hr/recruitment/talents", icon: Users, show: permissions.dp?.view },
             ],
           },
@@ -202,19 +204,19 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             label: "Documentos da empresa",
             href: "/dashboard/documents/company",
             icon: Building2,
-            show: permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit,
+            show: hasFormalizationPermission(permissions, "companyDocuments.view"),
           },
           {
             label: "Documentos dos colaboradores",
             href: "/dashboard/documents/collaborators",
             icon: Users,
-            show: permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && permissions.dp?.collaborators?.ownProfileOnly !== true),
+            show: hasFormalizationPermission(permissions, "documents.view"),
           },
           {
             label: "Modelos",
             href: "/dashboard/documents/templates",
             icon: FileStack,
-            show: permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit,
+            show: hasFormalizationPermission(permissions, "templates.view"),
           },
         ],
       },
@@ -235,6 +237,8 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         items: [
           { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
           { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
+          { label: "Favorecidos", href: "/dashboard/financial/beneficiaries", icon: Users, show: permissions.financial?.beneficiaries?.view },
+          { label: "Pagamentos bancários", href: "/dashboard/financial/payment-requests", icon: Wallet, show: permissions.financial?.paymentRequests?.view },
           { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view },
           { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", icon: DollarSign, show: permissions.financial?.financialFlow },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },

@@ -119,6 +119,26 @@ function permissionError() {
   return jsonError('Sem permissão para esta operação.', 403);
 }
 
+function normalizeEntityDocument(value: unknown) {
+  return typeof value === 'string' ? value.replace(/\D/g, '') : '';
+}
+
+async function assertUniqueEntityDocument(value: unknown, currentId?: string) {
+  const normalized = normalizeEntityDocument(value);
+  if (!normalized) return normalized;
+  if (![11, 14].includes(normalized.length)) {
+    throw new Error('CPF/CNPJ inválido.');
+  }
+  const snapshot = await dbAdmin.collection('entities').get();
+  const duplicate = snapshot.docs.find((document) => {
+    if (document.id === currentId) return false;
+    const data = document.data();
+    return normalizeEntityDocument(data.documentNormalized ?? data.document ?? data.cnpj) === normalized;
+  });
+  if (duplicate) throw new Error('Já existe uma pessoa ou empresa cadastrada com este CPF/CNPJ.');
+  return normalized;
+}
+
 export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
   const path = (await context.params).path ?? [];
   const [resource, id] = path;
@@ -169,8 +189,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   const collectionName = collectionMap[resource];
   if (!collectionName) return jsonError('Recurso não encontrado.', 404);
 
+  let normalizedEntityDocument = '';
+  if (resource === 'entities') {
+    try {
+      normalizedEntityDocument = await assertUniqueEntityDocument(body.document ?? body.cnpj);
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : 'CPF/CNPJ inválido.');
+    }
+  }
+
   const ref = await dbAdmin.collection(collectionName).add({
     ...body,
+    ...(resource === 'entities' && normalizedEntityDocument
+      ? { documentNormalized: normalizedEntityDocument }
+      : {}),
     workspaceId: WORKSPACE_ID,
     createdAt: new Date().toISOString(),
     createdBy: userContext.decoded.uid,
@@ -208,9 +240,26 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   const collectionName = collectionMap[resource];
   if (!collectionName || !id) return jsonError('Recurso ou ID inválido.', 404);
 
+  let normalizedEntityDocument = '';
+  if (resource === 'entities') {
+    try {
+      const current = await dbAdmin.collection(collectionName).doc(id).get();
+      normalizedEntityDocument = await assertUniqueEntityDocument(
+        body.document ?? body.cnpj ?? current.get('document') ?? current.get('cnpj'),
+        id,
+      );
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : 'CPF/CNPJ inválido.');
+    }
+  }
+
   const updatePayload = {
     ...body,
+    ...(resource === 'entities' && normalizedEntityDocument
+      ? { documentNormalized: normalizedEntityDocument }
+      : {}),
     updatedAt: new Date().toISOString(),
+    updatedBy: userContext.decoded.uid,
   };
 
   if (resource === 'operational-categories') {
@@ -265,7 +314,17 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       ? await dbAdmin.collection(collectionName).doc(id).get()
       : null;
 
-  await dbAdmin.collection(collectionName).doc(id).delete();
+  if (resource === 'entities') {
+    await dbAdmin.collection(collectionName).doc(id).set({
+      status: 'inactive',
+      updatedAt: new Date().toISOString(),
+      updatedBy: userContext.decoded.uid,
+      inactivatedAt: new Date().toISOString(),
+      inactivatedBy: userContext.decoded.uid,
+    }, { merge: true });
+  } else {
+    await dbAdmin.collection(collectionName).doc(id).delete();
+  }
 
   if (resource === 'stock-audit') {
     const existingData = existingSnap?.data() as Partial<StockAuditSession> | undefined;

@@ -5,7 +5,7 @@ import { evaluateIntegrationCondition, simulateIntegrationTemplate } from "@/fea
 import { executeIntegrationActions, type ExecutableIntegrationProcess } from "@/features/hr/integration/action-executor";
 import { buildIntegrationProcessContext, createIntegrationActionAdapter, syncIntegrationProfileWrites } from "@/features/hr/integration/runtime-actions.server";
 import { integrationTemplateContentSchema } from "@/features/hr/integration/schemas";
-import { assertHrAccess, serializeHrValue } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 
 export const runtime = "nodejs";
@@ -54,7 +54,7 @@ function completeIfReady(params: {
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertHrAccess(request, "view").catch(() => null);
+  const access = await assertFormalizationAccess(request, "view").catch(() => null);
   if (!access) return error("Sem permissão para acessar a integração.", 403);
   const { id } = await context.params;
   const document = await hrDbAdmin.collection("onboardingProcesses").doc(id).get();
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertHrAccess(request, "manage").catch(() => null);
+  const access = await assertFormalizationAccess(request, "onboarding.manage").catch(() => null);
   if (!access) return error("Sem permissão para atualizar a integração.", 403);
   const { id } = await context.params;
   const body = record(await request.json().catch(() => null));

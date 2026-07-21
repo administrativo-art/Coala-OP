@@ -85,7 +85,13 @@ import {
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { JUST_CAUSE_TYPES, TERMINATION_REASONS, requiresTerminationSubtype, type TerminationReason } from "@/lib/hr/termination-options";
+import { JUST_CAUSE_TYPES, requiresTerminationSubtype } from "@/lib/hr/termination-options";
+import {
+  employmentRelationshipLabel,
+  terminationCopyForRelationship,
+  terminationReasonsForRelationship,
+  type EmploymentTerminationReason,
+} from "@/lib/hr/employment-relationship";
 
 const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
 const FIELD_VISIBILITIES: NormalizedFieldVisibility[] = ["public", "restricted_partial", "restricted_total", "confidential"];
@@ -129,7 +135,7 @@ const VACATION_STATUS: Record<string, { label: string; className: string }> = {
 };
 
 type TerminationPayload = {
-  terminationReason: TerminationReason;
+  terminationReason: EmploymentTerminationReason;
   terminationCause?: string;
   terminationNotes?: string;
   terminationDate: string;
@@ -1732,11 +1738,15 @@ function TerminationDialog({
   onConfirm: (payload: TerminationPayload) => Promise<void>;
 }) {
   const [terminationDate, setTerminationDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
-  const [terminationReason, setTerminationReason] = useState<TerminationReason | "">("");
+  const [terminationReason, setTerminationReason] = useState<EmploymentTerminationReason | "">("");
   const [terminationCause, setTerminationCause] = useState("");
   const [terminationNotes, setTerminationNotes] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const needsSubtype = requiresTerminationSubtype(terminationReason);
+  const relationshipType = user.employmentRelationshipType;
+  const availableReasons = terminationReasonsForRelationship(relationshipType);
+  const copy = terminationCopyForRelationship(relationshipType);
+  const terminationAvailable = relationshipType === "clt" || relationshipType === "pj";
 
   useEffect(() => {
     if (!open) return;
@@ -1750,11 +1760,23 @@ function TerminationDialog({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!terminationDate) {
-      setMessage("Informe a data da demissão.");
+      setMessage(copy.missingDate);
+      return;
+    }
+    if (!terminationAvailable) {
+      setMessage(
+        relationshipType === "internship"
+          ? "O fluxo específico de desligamento de estágio será implementado posteriormente."
+          : "Defina o tipo de vínculo antes de registrar o encerramento."
+      );
       return;
     }
     if (!terminationReason) {
-      setMessage("Selecione o tipo de demissão.");
+      setMessage(copy.missingReason);
+      return;
+    }
+    if (!availableReasons.some((reason) => reason === terminationReason)) {
+      setMessage("O motivo selecionado não pertence ao tipo de vínculo cadastrado.");
       return;
     }
     if (needsSubtype && !terminationCause) {
@@ -1775,16 +1797,16 @@ function TerminationDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => !saving && onOpenChange(nextOpen)}>
       <DialogContent className="rounded-xl p-4 sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Registrar rescisão</DialogTitle>
+          <DialogTitle>{copy.title}</DialogTitle>
           <DialogDescription>
-            Isso inativa o acesso de {displayName(user.username)} e mantém o histórico para uma possível recontratação.
+            {copy.description} Colaborador: {displayName(user.username)}.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
           <div className="grid gap-2.5 sm:grid-cols-2">
             <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
-              Data da demissão
+              {copy.dateLabel}
               <input
                 type="date"
                 value={terminationDate}
@@ -1793,18 +1815,18 @@ function TerminationDialog({
               />
             </label>
             <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
-              Tipo de demissão
+              {copy.reasonLabel}
               <select
                 value={terminationReason}
                 onChange={(event) => {
-                  const nextReason = event.target.value as TerminationReason | "";
+                  const nextReason = event.target.value as EmploymentTerminationReason | "";
                   setTerminationReason(nextReason);
                   if (!requiresTerminationSubtype(nextReason)) setTerminationCause("");
                 }}
                 className="mt-1 h-8 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
               >
                 <option value="">Selecione</option>
-                {TERMINATION_REASONS.map((reason) => (
+                {availableReasons.map((reason) => (
                   <option key={reason} value={reason}>{reason}</option>
                 ))}
               </select>
@@ -1852,11 +1874,11 @@ function TerminationDialog({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !terminationAvailable}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#df2f78] px-4 py-2.5 text-sm font-black text-white hover:bg-[#c92768] disabled:opacity-60"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
-              {saving ? "Inativando..." : "Confirmar rescisão"}
+              {saving ? copy.saving : copy.submit}
             </button>
           </DialogFooter>
         </form>
@@ -2149,13 +2171,17 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           targetName: collaborator.username,
           metadata: {
             termination_date: payload.terminationDate,
+            employment_relationship_type: collaborator.employmentRelationshipType ?? null,
             termination_reason: payload.terminationReason,
             termination_cause: payload.terminationCause ?? null,
           },
         }).catch(() => undefined);
       }
       setTerminationDialogOpen(false);
-      toast({ title: "Rescisão registrada.", description: `${displayName(collaborator.username)} foi inativado(a).` });
+      toast({
+        title: terminationCopyForRelationship(collaborator.employmentRelationshipType).success,
+        description: `${displayName(collaborator.username)} foi inativado(a).`,
+      });
     } catch (error) {
       toast({
         title: "Erro ao registrar rescisão.",
@@ -2511,7 +2537,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         </div>
 
         <section className="sticky top-[72px] z-10 rounded-xl border border-[#dedfe4] bg-white/95 p-3 shadow-md backdrop-blur lg:top-[76px]">
-        <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_320px_40px] md:items-center">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
               {user.avatarUrl ? (
@@ -2533,6 +2559,15 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                   title={roleFunctionLabel}
                 >
                   <span className="truncate">{roleFunctionLabel}</span>
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${
+                    collaborator.employmentRelationshipType
+                      ? "bg-sky-50 text-sky-700"
+                      : "bg-amber-50 text-amber-700"
+                  }`}
+                >
+                  {employmentRelationshipLabel(collaborator.employmentRelationshipType)}
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3f3f5] px-2 py-0.5 text-[10px] font-black text-[#6f6f7c]">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: user.color || "#e92828" }} />
@@ -2559,15 +2594,14 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="space-y-2">
-              <EmployeeProfileHeaderSummary
-                userId={user.id}
-                bizneoEmployeeId={user.registrationIdBizneo}
-                reloadKey={fieldMapReloadKey}
-              />
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+          <div className="min-w-0 md:w-[320px]">
+            <EmployeeProfileHeaderSummary
+              userId={user.id}
+              bizneoEmployeeId={user.registrationIdBizneo}
+              reloadKey={fieldMapReloadKey}
+            />
+          </div>
+          <div className="flex shrink-0 items-center md:justify-end">
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -2610,13 +2644,12 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                         className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-black text-rose-700 hover:bg-rose-50"
                       >
                         <UserX className="h-4 w-4 text-rose-600" />
-                        Rescisão
+                      {terminationCopyForRelationship(collaborator.employmentRelationshipType).action}
                       </button>
                     ) : null}
                   </div>
                 </PopoverContent>
               </Popover>
-            </div>
           </div>
         </div>
       </section>

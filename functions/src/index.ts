@@ -745,6 +745,26 @@ const internalAppCors = [
   /localhost(:\d+)?$/,
 ];
 
+const CLT_TERMINATION_REASONS = new Set([
+  'Dispensa sem justa causa',
+  'Dispensa por justa causa',
+  'Pedido de demissão (resilição pelo empregado)',
+  'Rescisão indireta',
+  'Rescisão por culpa recíproca',
+  'Rescisão por acordo entre as partes',
+  'Extinção legal ou por motivo de ordem pública',
+]);
+
+const PJ_TERMINATION_REASONS = new Set([
+  'Encerramento por iniciativa da contratante',
+  'Encerramento por iniciativa do prestador',
+  'Encerramento por acordo entre as partes',
+  'Término do prazo contratual',
+  'Rescisão por descumprimento contratual',
+  'Encerramento das atividades do prestador',
+  'Força maior ou impossibilidade de execução',
+]);
+
 // --- Criar usuário (Auth + Firestore) server-side ---
 export const createUser = onCall(
   { cors: internalAppCors },
@@ -854,12 +874,42 @@ export const terminateUser = onCall(
     const { uid, inactivationType, terminationReason, terminationCause, terminationNotes, terminationDate } = request.data;
     if (!uid) throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
 
+    const targetRef = db.collection('users').doc(uid);
+    const targetSnapshot = await targetRef.get();
+    if (!targetSnapshot.exists) throw new HttpsError('not-found', 'Usuário não encontrado.');
+    const employmentRelationshipType = targetSnapshot.get('employmentRelationshipType');
+    const normalizedType = inactivationType === 'contract_termination' ? 'contract_termination' : 'temporary';
+    if (normalizedType === 'contract_termination') {
+      if (employmentRelationshipType !== 'clt' && employmentRelationshipType !== 'pj') {
+        throw new HttpsError(
+          'failed-precondition',
+          employmentRelationshipType === 'internship'
+            ? 'O fluxo específico de desligamento de estágio ainda não está disponível.'
+            : 'Defina o tipo de vínculo antes de registrar o encerramento.'
+        );
+      }
+      const allowedReasons = employmentRelationshipType === 'pj'
+        ? PJ_TERMINATION_REASONS
+        : CLT_TERMINATION_REASONS;
+      if (!terminationReason || !allowedReasons.has(terminationReason)) {
+        throw new HttpsError('invalid-argument', 'Motivo de encerramento incompatível com o tipo de vínculo.');
+      }
+      if (employmentRelationshipType !== 'clt' && terminationCause) {
+        throw new HttpsError('invalid-argument', 'Subtipo de justa causa é aplicável somente ao vínculo CLT.');
+      }
+      if (employmentRelationshipType === 'clt' && terminationReason === 'Dispensa por justa causa' && !terminationCause) {
+        throw new HttpsError('invalid-argument', 'Selecione o subtipo da justa causa.');
+      }
+      if (employmentRelationshipType === 'clt' && terminationReason !== 'Dispensa por justa causa' && terminationCause) {
+        throw new HttpsError('invalid-argument', 'O subtipo de justa causa não se aplica ao motivo selecionado.');
+      }
+    }
+
     try {
       // 1. Desativa no Firebase Auth para bloquear login sem perder o UID.
       await auth.updateUser(uid, { disabled: true });
 
       // 2. Mantém o documento no Firestore marcado como inativo.
-      const normalizedType = inactivationType === 'contract_termination' ? 'contract_termination' : 'temporary';
       const nowIso = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
         isActive: false,
@@ -872,6 +922,7 @@ export const terminateUser = onCall(
           cause: terminationCause ?? null,
           notes: terminationNotes ?? null,
           terminationDate: normalizedType === 'contract_termination' ? (terminationDate ?? nowIso) : null,
+          employmentRelationshipType: employmentRelationshipType ?? null,
         }),
       };
 
@@ -880,9 +931,10 @@ export const terminateUser = onCall(
         updatePayload.terminationReason = terminationReason ?? null;
         updatePayload.terminationCause = terminationCause ?? null;
         updatePayload.terminationNotes = terminationNotes ?? null;
+        updatePayload.terminationRelationshipType = employmentRelationshipType;
       }
 
-      await db.collection('users').doc(uid).update(updatePayload);
+      await targetRef.update(updatePayload);
 
       return { success: true };
     } catch (error: any) {
@@ -914,6 +966,7 @@ export const reactivateUser = onCall(
         terminationReason: FieldValue.delete(),
         terminationCause: FieldValue.delete(),
         terminationNotes: FieldValue.delete(),
+        terminationRelationshipType: FieldValue.delete(),
         inactivationHistory: FieldValue.arrayUnion({
           type: 'reactivation',
           at: new Date().toISOString(),

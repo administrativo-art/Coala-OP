@@ -9,6 +9,8 @@ export const FINANCIAL_COLLECTIONS = {
   transactions: "transactions",
   importAliases: "importAliases",
   importDrafts: "importDrafts",
+  supplierPaymentProfiles: "supplierPaymentProfiles",
+  bankPaymentRequests: "bankPaymentRequests",
 } as const;
 
 export type FinancialCollectionName =
@@ -24,4 +26,5 @@ export const FINANCIAL_ROUTES = {
   newExpense: "/dashboard/financial/expenses/new",
   importExpenses: "/dashboard/financial/expenses/import",
   settings: "/dashboard/financial/settings",
+  paymentRequests: "/dashboard/financial/payment-requests",
 } as const;

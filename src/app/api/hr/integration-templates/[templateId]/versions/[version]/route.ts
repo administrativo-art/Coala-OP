@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getIntegrationTemplateVersion } from "@/features/hr/integration/server";
-import { assertHrAccess } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess } from "@/features/hr/lib/server-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ templateId: string; version: string }> },
 ) {
   try {
-    await assertHrAccess(request, "view");
+    await assertFormalizationAccess(request, "view");
     const { templateId, version: rawVersion } = await params;
     const versionNumber = Number(rawVersion);
     if (!Number.isInteger(versionNumber) || versionNumber < 1) {
@@ -27,4 +27,3 @@ export async function GET(
     );
   }
 }
-

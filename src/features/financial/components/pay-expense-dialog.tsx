@@ -29,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import type { PaymentBeneficiaryReference } from "@/features/financial/beneficiaries/types";
 
 const splitSchema = z.object({
   accountId: z.string().min(1, "Selecione uma conta."),
@@ -55,6 +56,9 @@ type ExpenseRecord = {
   supplier?: string;
   accountPlanName?: string;
   resultCenter?: string;
+  generatedReceiptId?: string;
+  beneficiaryReference?: PaymentBeneficiaryReference;
+  paymentRequestId?: string;
 };
 
 export function PayExpenseDialog({
@@ -68,7 +72,7 @@ export function PayExpenseDialog({
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }) {
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const { data: accountsData } = useFinancialCollection<any>(financialCollection("bankAccounts"));
@@ -197,6 +201,30 @@ export function PayExpenseDialog({
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function requestInterPayment() {
+    const target = expense;
+    if (!target?.generatedReceiptId || !target.beneficiaryReference || !firebaseUser) return;
+    setIsSaving(true);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch('/api/financial/payment-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          sourceType: 'generated_receipt', sourceId: target.generatedReceiptId, expenseId: target.id,
+          beneficiaryReference: target.beneficiaryReference, amount: target.totalValue,
+          description: target.description,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Falha ao criar solicitação bancária.');
+      toast({ title: 'Solicitação criada para autorização do Financeiro.', description: 'A despesa permanece pendente até a confirmação do Banco Inter.' });
+      onOpenChange(false); onSuccess?.();
+    } catch (error) {
+      toast({ variant: 'destructive', title: error instanceof Error ? error.message : 'Falha ao solicitar pagamento.' });
+    } finally { setIsSaving(false); }
   }
 
   return (
@@ -509,10 +537,13 @@ export function PayExpenseDialog({
               <Button type="button" variant="outline" className="rounded-xl" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="rounded-xl" disabled={isSaving || isOver || totalPaid <= 0}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirmar pagamento
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {expense.generatedReceiptId && expense.beneficiaryReference && permissions.financial?.paymentRequests?.create ? <Button type="button" variant="secondary" className="rounded-xl" disabled={isSaving || !!expense.paymentRequestId} onClick={() => void requestInterPayment()}>{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Solicitar Pix via Banco Inter</Button> : null}
+                <Button type="submit" className="rounded-xl" disabled={isSaving || isOver || totalPaid <= 0 || !!expense.generatedReceiptId} title={expense.generatedReceiptId ? 'Recibos gerados pelo Coala são baixados somente após confirmação bancária.' : undefined}>
+                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Confirmar pagamento manual
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </Form>

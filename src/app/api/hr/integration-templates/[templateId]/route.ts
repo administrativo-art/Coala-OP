@@ -6,7 +6,7 @@ import {
   getIntegrationTemplate,
   updateIntegrationTemplate,
 } from "@/features/hr/integration/server";
-import { assertHrAccess } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess } from "@/features/hr/lib/server-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ function errorResponse(error: unknown, fallback: string, status = 400) {
 
 export async function GET(request: NextRequest, context: Context) {
   try {
-    await assertHrAccess(request, "view");
+    await assertFormalizationAccess(request, "view");
     const { templateId } = await context.params;
     const template = await getIntegrationTemplate(templateId);
     if (!template) return NextResponse.json({ error: "Modelo de integração não encontrado." }, { status: 404 });
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, context: Context) {
 
 export async function PATCH(request: NextRequest, context: Context) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "onboarding.manage");
     const { templateId } = await context.params;
     const input = integrationTemplateUpdateSchema.parse(await request.json());
     const template = await updateIntegrationTemplate(templateId, input, {
@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest, context: Context) {
 
 export async function DELETE(request: NextRequest, context: Context) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "onboarding.manage");
     const { templateId } = await context.params;
     await archiveIntegrationTemplate(templateId, {
       userId: access.decoded.uid,
@@ -57,4 +57,3 @@ export async function DELETE(request: NextRequest, context: Context) {
     return errorResponse(error, "Falha ao arquivar modelo de integração.");
   }
 }
-

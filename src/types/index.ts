@@ -684,6 +684,9 @@ export type PermissionSet = {
     financialFlow: boolean;
     dre: boolean;
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
+    beneficiaries: { view: boolean; viewMaskedPaymentData: boolean; managePaymentData: boolean; };
+    paymentRequests: { view: boolean; create: boolean; authorize: boolean; submit: boolean; refresh: boolean; viewProof: boolean; };
+    interIntegration: { manage: boolean; };
     settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; manageExpenseDescriptions: boolean; };
   };
   purchasing: {
@@ -704,6 +707,18 @@ export type PermissionSet = {
     roles: { view: boolean; manage: boolean; propagate: boolean };
     functions: { view: boolean; manage: boolean };
     navigation: { view: boolean };
+    formalization: {
+      view: boolean;
+      onboarding: { manage: boolean };
+      aso: { view: boolean; manage: boolean };
+      accountant: { view: boolean; manage: boolean };
+      documents: { view: boolean; generate: boolean; review: boolean };
+      companyDocuments: { view: boolean; manage: boolean };
+      templates: { view: boolean; manage: boolean; publish: boolean };
+      signatures: { view: boolean; send: boolean };
+      consents: { view: boolean; manage: boolean };
+      sensitiveData: { view: boolean };
+    };
   };
   recruitment: {
     view: boolean;
@@ -769,6 +784,7 @@ export type User = {
   jobRoleName?: string;
   jobFunctionIds?: string[];
   jobFunctionNames?: string[];
+  employmentRelationshipType?: 'clt' | 'pj' | 'internship';
   responsibleUnitIds?: string[];
   jobRoleProfileSyncDisabled?: boolean;
   mustChangePassword?: boolean;
@@ -804,11 +820,13 @@ export type User = {
     cause?: string | null;
     notes?: string | null;
     terminationDate?: string | null;
+    employmentRelationshipType?: 'clt' | 'pj' | 'internship' | null;
   }>;
   terminationDate?: Timestamp;
   terminationReason?: string;
   terminationCause?: string;
   terminationNotes?: string;
+  terminationRelationshipType?: 'clt' | 'pj' | 'internship';
 };
 
 export type HrQuestionType =
@@ -1034,6 +1052,7 @@ export type RecruitmentStage = {
 export type OnboardingStageId =
   | 'documents'
   | 'document_review'
+  | 'accountant'
   | 'signature_preparation'
   | 'signature'
   | 'formalization_validation'
@@ -1149,8 +1168,14 @@ export type OnboardingProcess = {
   jobRoleName?: string | null;
   functionId?: string | null;
   functionName?: string | null;
+  employmentRelationshipType?: 'clt' | 'pj' | 'internship' | null;
   unitId?: string | null;
   unitName?: string | null;
+  employerUnitId?: string | null;
+  employerUnitName?: string | null;
+  employerCnpj?: string | null;
+  employerAddress?: string | null;
+  monthlySalary?: number | null;
   shiftDefinitionId?: string | null;
   shiftDefinitionName?: string | null;
   expectedAdmissionDate?: string | null;
@@ -1167,10 +1192,117 @@ export type OnboardingProcess = {
   publicFormSubmittedAt?: string | null;
   publicFormLastSubmittedAt?: string | null;
   publicPrivacyAcceptance?: OnboardingPrivacyAcceptance | null;
+  asoWorkflow?: {
+    status?: 'pending' | 'guide_generated' | 'guide_validated' | 'email_sent' | 'clinic_response_received' | 'appointment_pending_review' | 'appointment_confirmed' | 'candidate_notified' | 'awaiting_exam' | 'aso_received' | 'aso_under_review' | 'completed';
+    latestGuideId?: string | null;
+    latestGuideHashSha256?: string | null;
+    latestGuideGeneratedAt?: string | null;
+    clinicEntityId?: string | null;
+    paymentRequestId?: string | null;
+    paymentStatus?: 'draft' | 'awaiting_financial_authorization' | 'ready_to_submit' | 'submitting' | 'awaiting_bank_approval' | 'processing' | 'paid' | 'rejected' | 'approval_expired' | 'failed' | 'cancelled' | null;
+    paymentProofStoragePath?: string | null;
+    paymentConfirmedAt?: string | null;
+    appointmentStatus?: 'not_requested' | 'awaiting_clinic' | 'confirmed';
+    appointmentAt?: string | null;
+    guideValidation?: {
+      documentId?: string | null;
+      validatedAt?: string | null;
+      validatedBy?: string | null;
+      validatedByEmail?: string | null;
+    } | null;
+    clinic?: {
+      email?: string | null;
+      name?: string | null;
+      communicationId?: string | null;
+      providerId?: string | null;
+      emailStatus?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | null;
+      sentAt?: string | null;
+      deliveredAt?: string | null;
+      openedAt?: string | null;
+      repliedAt?: string | null;
+      lastError?: string | null;
+    } | null;
+    appointment?: {
+      date?: string | null;
+      time?: string | null;
+      location?: string | null;
+      instructions?: string | null;
+      source?: 'clinic_form' | 'inbound_email' | 'manual' | null;
+      responseText?: string | null;
+      confidence?: number | null;
+      proposedAt?: string | null;
+      confirmedAt?: string | null;
+      confirmedBy?: string | null;
+    } | null;
+    candidateNotification?: {
+      providerId?: string | null;
+      emailStatus?: string | null;
+      sentAt?: string | null;
+      deliveredAt?: string | null;
+      openedAt?: string | null;
+      uploadExpiresAt?: string | null;
+    } | null;
+    asoDocument?: {
+      fileName?: string | null;
+      storagePath?: string | null;
+      hashSha256?: string | null;
+      mimeType?: string | null;
+      uploadedAt?: string | null;
+      status?: 'received' | 'approved' | 'rejected' | null;
+      reviewedAt?: string | null;
+      reviewedBy?: string | null;
+      rejectionReason?: string | null;
+    } | null;
+    updatedAt?: string | null;
+  };
+  accountantWorkflow?: {
+    status?: 'pending' | 'form_generated' | 'form_validated' | 'email_sent' | 'registry_received' | 'completed';
+    latestFormId?: string | null;
+    latestFormHashSha256?: string | null;
+    latestFormGeneratedAt?: string | null;
+    formValidation?: {
+      documentId?: string | null;
+      validatedAt?: string | null;
+      validatedBy?: string | null;
+      validatedByEmail?: string | null;
+    } | null;
+    selectedDocumentIds?: string[];
+    email?: {
+      recipient?: string | null;
+      communicationId?: string | null;
+      providerId?: string | null;
+      status?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | null;
+      sentAt?: string | null;
+      deliveredAt?: string | null;
+      openedAt?: string | null;
+      clickedAt?: string | null;
+      lastError?: string | null;
+    } | null;
+    package?: {
+      attachmentCount?: number;
+      attachmentLabels?: string[];
+      selectedDocumentIds?: string[];
+      sentAt?: string | null;
+    } | null;
+    registryDocument?: {
+      versionId?: string | null;
+      fileName?: string | null;
+      storagePath?: string | null;
+      hashSha256?: string | null;
+      mimeType?: string | null;
+      size?: number | null;
+      uploadedAt?: string | null;
+      status?: 'received' | 'approved' | 'rejected' | null;
+      reviewedAt?: string | null;
+      reviewedBy?: string | null;
+      rejectionReason?: string | null;
+    } | null;
+    updatedAt?: string | null;
+  };
   finalizationSettings?: OnboardingFinalizationSettings;
   firstAccess?: OnboardingFirstAccessState;
   accessProvisioning?: OnboardingAccessProvisioningState;
-  status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'contract_pending' | 'ready_to_create_user' | 'awaiting_first_access' | 'active' | 'completed' | 'cancelled';
+  status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'accountant_pending' | 'contract_pending' | 'ready_to_create_user' | 'awaiting_first_access' | 'active' | 'completed' | 'cancelled';
   currentStage?: OnboardingStageId;
   stages?: OnboardingStage[];
   documents?: OnboardingDocument[];
@@ -1220,6 +1352,9 @@ export type Candidate = {
   functionName?: string | null;
   unitId?: string | null;
   unitName?: string | null;
+  employerUnitId?: string | null;
+  employerUnitName?: string | null;
+  employerCnpj?: string | null;
   shiftDefinitionId?: string | null;
   shiftDefinitionName?: string | null;
   jobOpeningId?: string;
@@ -1675,6 +1810,7 @@ export type Entity = {
   fantasyName?: string;
   nickname?: string;
   document: string; // CPF ou CNPJ
+  documentNormalized?: string;
   address: {
     street: string;
     number: string;
@@ -1690,6 +1826,8 @@ export type Entity = {
   };
   responsible?: string; // Only for pessoa_juridica
   status?: 'active' | 'inactive';
+  inactivatedAt?: string;
+  inactivatedBy?: string;
   rg?: string; // Only for pessoa_fisica
   birthDate?: string; // Only for pessoa_fisica
   notes?: string;
@@ -2274,6 +2412,9 @@ export const defaultGuestPermissions: PermissionSet = {
       financialFlow: false,
       dre: false,
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
+      beneficiaries: { view: false, viewMaskedPaymentData: false, managePaymentData: false },
+      paymentRequests: { view: false, create: false, authorize: false, submit: false, refresh: false, viewProof: false },
+      interIntegration: { manage: false },
       settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false, manageExpenseDescriptions: false },
     },
     purchasing: {
@@ -2293,6 +2434,18 @@ export const defaultGuestPermissions: PermissionSet = {
       roles: { view: false, manage: false, propagate: false },
       functions: { view: false, manage: false },
       navigation: { view: false },
+      formalization: {
+        view: false,
+        onboarding: { manage: false },
+        aso: { view: false, manage: false },
+        accountant: { view: false, manage: false },
+        documents: { view: false, generate: false, review: false },
+        companyDocuments: { view: false, manage: false },
+        templates: { view: false, manage: false, publish: false },
+        signatures: { view: false, send: false },
+        consents: { view: false, manage: false },
+        sensitiveData: { view: false },
+      },
     },
     recruitment: {
       view: false,
@@ -2362,6 +2515,9 @@ export const defaultAdminPermissions: PermissionSet = {
       financialFlow: true,
       dre: true,
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
+      beneficiaries: { view: true, viewMaskedPaymentData: true, managePaymentData: true },
+      paymentRequests: { view: true, create: true, authorize: true, submit: true, refresh: true, viewProof: true },
+      interIntegration: { manage: true },
       settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true, manageExpenseDescriptions: true },
     },
     purchasing: {
@@ -2381,6 +2537,18 @@ export const defaultAdminPermissions: PermissionSet = {
       roles: { view: true, manage: true, propagate: true },
       functions: { view: true, manage: true },
       navigation: { view: true },
+      formalization: {
+        view: true,
+        onboarding: { manage: true },
+        aso: { view: true, manage: true },
+        accountant: { view: true, manage: true },
+        documents: { view: true, generate: true, review: true },
+        companyDocuments: { view: true, manage: true },
+        templates: { view: true, manage: true, publish: true },
+        signatures: { view: true, send: true },
+        consents: { view: true, manage: true },
+        sensitiveData: { view: true },
+      },
     },
     recruitment: {
       view: true,

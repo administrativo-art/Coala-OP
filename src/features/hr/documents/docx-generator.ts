@@ -12,7 +12,7 @@ function encodeXml(value: string) {
 
 /** Reúne tags partidas em vários runs do Word e converte #if/#unless para loops condicionais. */
 export function normalizeDocxTemplateXml(xml: string) {
-  const textPattern = /<w:t([^>]*)>([\s\S]*?)<\/w:t>/g;
+  const textPattern = /<w:t(?=[\s>])([^>]*)>([\s\S]*?)<\/w:t>/g;
   const nodes: Array<{ full: string; attrs: string; value: string; start: number; end: number }> = [];
   let logical = "";
   let match: RegExpExecArray | null;
@@ -70,6 +70,73 @@ function normalizedZip(input: Buffer) {
       if (xml) zip.file(name, normalizeDocxTemplateXml(xml));
     });
   return zip;
+}
+
+function replaceTextInXml(xml: string, search: string, replacement: string) {
+  const textPattern = /<w:t(?=[\s>])([^>]*)>([\s\S]*?)<\/w:t>/g;
+  const nodes: Array<{ attrs: string; value: string; start: number; end: number }> = [];
+  let logical = "";
+  let match: RegExpExecArray | null;
+  while ((match = textPattern.exec(xml))) {
+    const value = decodeXml(match[2]);
+    const start = logical.length;
+    logical += value;
+    nodes.push({ attrs: match[1], value, start, end: logical.length });
+  }
+
+  const occurrences: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  while ((cursor = logical.indexOf(search, cursor)) >= 0) {
+    occurrences.push({ start: cursor, end: cursor + search.length });
+    cursor += search.length;
+  }
+
+  occurrences.reverse().forEach((occurrence) => {
+    const first = nodes.findIndex((node) => occurrence.start >= node.start && occurrence.start < node.end);
+    const last = nodes.findIndex((node) => occurrence.end > node.start && occurrence.end <= node.end);
+    if (first < 0 || last < 0) return;
+    const startOffset = occurrence.start - nodes[first].start;
+    const endOffset = occurrence.end - nodes[last].start;
+    if (first === last) {
+      nodes[first].value = `${nodes[first].value.slice(0, startOffset)}${replacement}${nodes[first].value.slice(endOffset)}`;
+      return;
+    }
+    nodes[first].value = `${nodes[first].value.slice(0, startOffset)}${replacement}`;
+    for (let index = first + 1; index < last; index += 1) nodes[index].value = "";
+    nodes[last].value = nodes[last].value.slice(endOffset);
+  });
+
+  let index = 0;
+  const output = xml.replace(textPattern, () => {
+    const node = nodes[index++];
+    return `<w:t${node.attrs}>${encodeXml(node.value)}</w:t>`;
+  });
+  return { xml: output, replacements: occurrences.length };
+}
+
+/** Converte texto literal existente no Word em um placeholder sem exigir novo upload. */
+export function replaceDocxTextWithVariable(input: Buffer, searchText: string, variableKey: string) {
+  const search = searchText.trim();
+  const key = variableKey.trim();
+  if (!search) throw new Error("Informe o texto exato que será substituído.");
+  if (!/^[a-z][a-z0-9_.]*$/i.test(key)) throw new Error("Variável inválida.");
+
+  const zip = new PizZip(input);
+  let replacements = 0;
+  Object.keys(zip.files)
+    .filter((name) => /^word\/(document|header\d+|footer\d+)\.xml$/.test(name))
+    .forEach((name) => {
+      const xml = zip.file(name)?.asText();
+      if (!xml) return;
+      const result = replaceTextInXml(xml, search, `{{${key}}}`);
+      replacements += result.replacements;
+      zip.file(name, result.xml);
+    });
+  if (!replacements) throw new Error(`O texto “${search}” não foi encontrado no DOCX.`);
+  return {
+    buffer: zip.generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer,
+    replacements,
+  };
 }
 
 export function extractDocxVariables(input: Buffer) {

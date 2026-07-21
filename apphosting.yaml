@@ -29,6 +29,24 @@ env:
     value: "365"
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
+  - variable: PAYMENT_DATA_ENCRYPTION_KEY
+    secret: PAYMENT_DATA_ENCRYPTION_KEY
+  - variable: INTER_CLIENT_ID
+    secret: INTER_CLIENT_ID
+  - variable: INTER_CLIENT_SECRET
+    secret: INTER_CLIENT_SECRET
+  - variable: INTER_CERTIFICATE_BASE64
+    secret: INTER_CERTIFICATE_BASE64
+  - variable: INTER_PRIVATE_KEY_BASE64
+    secret: INTER_PRIVATE_KEY_BASE64
+  - variable: INTER_WEBHOOK_SECRET
+    secret: INTER_WEBHOOK_SECRET
+  - variable: INTER_RECONCILIATION_SECRET
+    secret: INTER_RECONCILIATION_SECRET
+  - variable: INTER_ACCOUNT_NUMBER
+    secret: INTER_ACCOUNT_NUMBER
+  - variable: INTER_ENVIRONMENT
+    value: "sandbox"
   - variable: RESEND_FORMALIZATION_FROM
     value: "RH Coala Shakes <formalizacao@coalashakes.com>"
   - variable: RESEND_ACCESS_FROM

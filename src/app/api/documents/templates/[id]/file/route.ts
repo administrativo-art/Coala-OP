@@ -4,8 +4,9 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { extractDocxVariables } from "@/features/hr/documents/docx-generator";
-import { assertHrAccess, serializeHrValue } from "@/features/hr/lib/server-access";
-import { isDocumentVariableKey } from "@/features/hr/integration/document-variables";
+import { DOCUMENT_VARIABLE_SCHEMA_VERSION } from "@/features/hr/integration/document-variables";
+import { normalizeFieldMapping, pendingPlaceholders } from "@/features/hr/documents/field-mapping";
+import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 
@@ -15,7 +16,7 @@ function error(message: string, status = 400) { return NextResponse.json({ error
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "templates.manage");
     const { id } = await context.params;
     const reference = dbAdmin.collection("companyDocumentTemplates").doc(id);
     const document = await reference.get();
@@ -27,13 +28,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const buffer = Buffer.from(await file.arrayBuffer());
     let variables: string[];
     try { variables = extractDocxVariables(buffer); } catch { return error("O arquivo DOCX está corrompido ou não é um modelo válido."); }
-    const unknownVariables = variables.filter((key) => !isDocumentVariableKey(key) && !["name", "cpf", "birth_date", "relation"].includes(key));
-    if (unknownVariables.length) return error(`Variáveis desconhecidas: ${unknownVariables.join(", ")}.`);
+    const fieldMapping = normalizeFieldMapping(document.get("fieldMapping"), variables);
+    const pending = pendingPlaceholders(variables, fieldMapping);
     const version = Number(document.get("version") ?? 0) + 1;
     const storagePath = `document-templates/${id}/versions/${String(version).padStart(3, "0")}/template.docx`;
     await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, { resumable: false, metadata: { contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", cacheControl: "private, no-store", metadata: { templateId: id, version: String(version) } } });
     const now = Timestamp.now();
-    const update = { status: "published", version, storagePath, originalName: file.name.slice(0, 180), size: file.size, contentHash: createHash("sha256").update(buffer).digest("hex"), variables, variableContract: "coala-documents-v1", unknownVariables: [], updatedAt: now, updatedBy: access.decoded.uid, updatedByName: access.actorName };
+    const update = { status: pending.length ? "draft" : "published", version, storagePath, originalName: file.name.slice(0, 180), size: file.size, contentHash: createHash("sha256").update(buffer).digest("hex"), variables, fieldMapping, variableContract: DOCUMENT_VARIABLE_SCHEMA_VERSION, unknownVariables: pending, updatedAt: now, updatedBy: access.decoded.uid, updatedByName: access.actorName };
     await reference.update(update);
     return NextResponse.json({ template: { id, ...(serializeHrValue({ ...document.data(), ...update }) as Record<string, unknown>) } });
   } catch (cause) { return error(cause instanceof Error ? cause.message : "Falha ao enviar modelo.", 403); }

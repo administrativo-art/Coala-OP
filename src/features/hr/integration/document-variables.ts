@@ -1,13 +1,14 @@
 import { DEFAULT_COMPLEMENTARY_FIELDS } from "@/features/rh/lib/default-field-map";
 import type { FieldMapEntry, FieldType, FieldVisibility } from "@/types/rh";
 
-export const DOCUMENT_VARIABLE_SCHEMA_VERSION = "coala-documents-v1" as const;
-export const DOCUMENT_VARIABLE_COUNT = 87 as const;
+export const DOCUMENT_VARIABLE_SCHEMA_VERSION = "coala-documents-v2" as const;
+export const DOCUMENT_VARIABLE_COUNT = 97 as const;
 
 export type DocumentVariableSource =
   | "field_value"
   | "employee_record"
   | "user_record"
+  | "onboarding"
   | "reference"
   | "computed";
 
@@ -32,6 +33,7 @@ export type DocumentVariableFormat =
   | "select_label"
   | "multi_select_labels"
   | "reference_label"
+  | "checkbox_mark"
   | "repeatable";
 
 export type DocumentVariableCatalogEntry = {
@@ -118,6 +120,159 @@ const EMPLOYEE_FALLBACKS: Record<string, DocumentVariableResolutionStep[]> = {
   "employee.children_under_14": [{ source: "computed", path: "children.under14Count" }],
 };
 
+const ONBOARDING_VARIABLES: DocumentVariableCatalogEntry[] = [
+  {
+    key: "integration.employer_name",
+    placeholder: "{{integration.employer_name}}",
+    label: "Razão social responsável pela contratação",
+    section: "Integração - contratação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "employerUnitName" }],
+  },
+  {
+    key: "integration.employer_cnpj",
+    placeholder: "{{integration.employer_cnpj}}",
+    label: "CNPJ responsável pela contratação",
+    section: "Integração - contratação",
+    fieldType: "text",
+    format: "cnpj",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "employerCnpj" }],
+  },
+  {
+    key: "integration.employer_address",
+    placeholder: "{{integration.employer_address}}",
+    label: "Endereço da empresa responsável",
+    section: "Integração - contratação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "employerAddress" }],
+  },
+  {
+    key: "integration.job_function",
+    placeholder: "{{integration.job_function}}",
+    label: "Função da integração",
+    section: "Integração - contratação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "public",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "functionName" }],
+  },
+  {
+    key: "integration.job_role",
+    placeholder: "{{integration.job_role}}",
+    label: "Cargo da integração",
+    section: "Integração - contratação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "public",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "jobRoleName" }],
+  },
+  {
+    key: "integration.monthly_salary",
+    placeholder: "{{integration.monthly_salary}}",
+    label: "Salário mensal da contratação",
+    section: "Integração - contratação",
+    fieldType: "currency",
+    format: "currency_br",
+    required: true,
+    visibility: "restricted_total",
+    sensitive: true,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "monthlySalary" }],
+  },
+  {
+    key: "integration.expected_admission_date",
+    placeholder: "{{integration.expected_admission_date}}",
+    label: "Data de admissão",
+    section: "Integração - contratação",
+    fieldType: "date",
+    format: "date_br",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "expectedAdmissionDate" }],
+  },
+  {
+    key: "integration.probation_first_end_date",
+    placeholder: "{{integration.probation_first_end_date}}",
+    label: "Término dos primeiros 45 dias",
+    section: "Integração - contrato de experiência",
+    fieldType: "date",
+    format: "date_br",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "probationV2.schedule.firstPeriod.endDate" }],
+  },
+  {
+    key: "integration.probation_final_end_date",
+    placeholder: "{{integration.probation_final_end_date}}",
+    label: "Término final do contrato de experiência",
+    section: "Integração - contrato de experiência",
+    fieldType: "date",
+    format: "date_br",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "probationV2.schedule.finalEndDate" }],
+  },
+  {
+    key: "integration.image_voice_authorized_mark",
+    placeholder: "{{integration.image_voice_authorized_mark}}",
+    label: "Marcação da autorização de imagem e voz",
+    section: "Integração - consentimentos",
+    fieldType: "boolean",
+    format: "checkbox_mark",
+    required: false,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "consentimento_imagem_voz.autorizado" }],
+  },
+];
+
 function fieldFormat(key: string, field: FieldMapEntry): DocumentVariableFormat {
   if (key === "employee.cpf") return "cpf";
   if (key === "employee.employer_cnpj") return "cnpj";
@@ -180,9 +335,12 @@ function buildCatalogEntry(key: string, field: FieldMapEntry): DocumentVariableC
 
 export const DOCUMENT_VARIABLE_CATALOG = Object.freeze(
   Object.fromEntries(
-    Object.entries(SYSTEM_FIELDS)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, field]) => [key, buildCatalogEntry(key, field)]),
+    [
+      ...Object.entries(SYSTEM_FIELDS)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, field]) => [key, buildCatalogEntry(key, field)] as const),
+      ...ONBOARDING_VARIABLES.map((entry) => [entry.key, entry] as const),
+    ],
   ) as Record<string, DocumentVariableCatalogEntry>,
 );
 
@@ -276,6 +434,8 @@ export function formatDocumentVariableValue(
     }
     case "boolean_br":
       return value === true ? "Sim" : value === false ? "Não" : "";
+    case "checkbox_mark":
+      return value === true ? "X" : "";
     case "cpf":
       return maskCpf(value);
     case "cnpj":
@@ -299,4 +459,3 @@ export function formatDocumentVariableValue(
       return typeof value === "object" ? labelValue(value) : String(value);
   }
 }
-

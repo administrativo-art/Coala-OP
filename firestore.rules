@@ -281,7 +281,8 @@ service cloud.firestore {
         && request.resource.data.name is string;
       allow update: if isAuth() && (isAdmin() || getPerms().registration.entities.edit == true)
         && request.resource.data.name is string;
-      allow delete: if isAuth() && (isAdmin() || getPerms().registration.entities.delete == true);
+      // Cadastros referenciáveis são inativados pela API; exclusão física é proibida.
+      allow delete: if false;
     }
 
     // Lotes de estoque

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { publishIntegrationTemplate } from "@/features/hr/integration/server";
-import { assertHrAccess } from "@/features/hr/lib/server-access";
+import { assertFormalizationAccess } from "@/features/hr/lib/server-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: Promise<{ templateId: string }> },
 ) {
   try {
-    const access = await assertHrAccess(request, "manage");
+    const access = await assertFormalizationAccess(request, "onboarding.manage");
     const { templateId } = await params;
     const version = await publishIntegrationTemplate(templateId, {
       userId: access.decoded.uid,
@@ -25,4 +25,3 @@ export async function POST(
     );
   }
 }
-

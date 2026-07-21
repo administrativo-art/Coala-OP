@@ -20,11 +20,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UsersRound, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { createAuditLog } from '@/features/audit/client';
+import { applyLegacyFormalizationFallbacks } from '@/lib/hr-formalization-permissions';
 
 const permissionsSchema = z.object({}).passthrough(); 
 
@@ -185,6 +186,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     const initialPermissions = JSON.parse(JSON.stringify(defaultGuestPermissions));
     mergeRecursive(initialPermissions, profile.permissions || {});
     applyCommercialPermissionFallbacks(initialPermissions);
+    applyLegacyFormalizationFallbacks(initialPermissions, profile.permissions);
 
     form.reset({
       name: profile.name,
@@ -369,6 +371,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const financialViewWatch = form.watch('permissions.financial.view' as any);
   const financialCashFlowViewWatch = form.watch('permissions.financial.cashFlow.view' as any);
   const financialExpensesViewWatch = form.watch('permissions.financial.expenses.view' as any);
+  const financialBeneficiariesViewWatch = form.watch('permissions.financial.beneficiaries.view' as any);
+  const financialPaymentRequestsViewWatch = form.watch('permissions.financial.paymentRequests.view' as any);
   const financialSettingsViewWatch = form.watch('permissions.financial.settings.view' as any);
   const dpViewWatch = form.watch('permissions.dp.view' as any);
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
@@ -376,6 +380,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const dpCollaboratorsViewWatch = form.watch('permissions.dp.collaborators.view' as any);
   const dpCollaboratorsOwnOnlyWatch = form.watch('permissions.dp.collaborators.ownProfileOnly' as any);
   const purchasingModuleViewWatch = form.watch('permissions.purchasing.view' as any);
+  const formalizationViewWatch = form.watch('permissions.hr.formalization.view' as any);
+  const formalizationCompanyDocumentsViewWatch = form.watch('permissions.hr.formalization.companyDocuments.view' as any);
+  const formalizationTemplatesViewWatch = form.watch('permissions.hr.formalization.templates.view' as any);
+  const formalizationTemplatesManageWatch = form.watch('permissions.hr.formalization.templates.manage' as any);
 
   useEffect(() => {
     if (!dpCollaboratorsViewWatch) {
@@ -388,6 +396,29 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
     form.setValue('permissions.dp.collaborators.syncProfile' as any, false);
     form.setValue('permissions.dp.collaborators.terminate' as any, false);
   }, [dpCollaboratorsOwnOnlyWatch, dpCollaboratorsViewWatch, form]);
+
+  useEffect(() => {
+    const paths = [
+      'onboarding.manage', 'aso.view', 'aso.manage', 'accountant.view', 'accountant.manage',
+      'documents.view', 'documents.generate', 'documents.review', 'companyDocuments.view',
+      'companyDocuments.manage', 'templates.view', 'templates.manage', 'templates.publish',
+      'signatures.view', 'signatures.send', 'consents.view', 'consents.manage', 'sensitiveData.view',
+    ];
+    if (!formalizationViewWatch) {
+      paths.forEach((path) => form.setValue(`permissions.hr.formalization.${path}` as any, false));
+      return;
+    }
+    [
+      'onboarding.manage', 'aso.view', 'aso.manage', 'accountant.view', 'accountant.manage',
+      'documents.view', 'documents.generate', 'documents.review', 'signatures.view',
+      'signatures.send', 'consents.view', 'sensitiveData.view',
+    ].forEach((path) => form.setValue(`permissions.hr.formalization.${path}` as any, true));
+    if (form.getValues('permissions.hr.formalization.companyDocuments.manage' as any)) form.setValue('permissions.hr.formalization.companyDocuments.view' as any, true);
+    if (form.getValues('permissions.hr.formalization.templates.publish' as any)) form.setValue('permissions.hr.formalization.templates.manage' as any, true);
+    if (form.getValues('permissions.hr.formalization.templates.manage' as any)) form.setValue('permissions.hr.formalization.templates.view' as any, true);
+    if (form.getValues('permissions.hr.formalization.signatures.send' as any)) form.setValue('permissions.hr.formalization.signatures.view' as any, true);
+    if (form.getValues('permissions.hr.formalization.consents.manage' as any)) form.setValue('permissions.hr.formalization.consents.view' as any, true);
+  }, [formalizationViewWatch, form]);
 
   return (
     <>
@@ -428,6 +459,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 'signage',
                                 'financial',
                                 'purchasing_v2',
+                                'formalization',
                                 'dp',
                                 'help',
                               ]}
@@ -717,6 +749,28 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </div>
 
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><UsersRound className="h-4 w-4" /> Favorecidos</h4>
+                                  {renderPermissionSwitch("permissions.financial.beneficiaries.view" as any, "Visualizar favorecidos", "Permite consultar colaboradores, pessoas e empresas disponíveis para pagamentos.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.beneficiaries.viewMaskedPaymentData" as any, "Visualizar dados de pagamento mascarados", "Exibe somente a chave ou conta mascarada para conferência.", !financialBeneficiariesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.beneficiaries.managePaymentData" as any, "Gerenciar dados de pagamento", "Permite cadastrar e alterar o destino de pagamento de pessoas e empresas; não autoriza pagamentos.", !financialBeneficiariesViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Pagamentos bancários</h4>
+                                  {renderPermissionSwitch("permissions.financial.paymentRequests.view" as any, "Visualizar solicitações", "Permite acompanhar pagamentos Pix e seus estados bancários.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.paymentRequests.create" as any, "Criar solicitações", "Permite gerar solicitações a partir de recibos e despesas autorizadas.", !financialPaymentRequestsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.paymentRequests.authorize" as any, "Autorizar no Financeiro", "Permite aprovar no Coala o envio de pagamentos de recibos.", !financialPaymentRequestsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.paymentRequests.submit" as any, "Enviar ao Banco Inter", "Permite submeter solicitações já autorizadas ao banco.", !financialPaymentRequestsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.paymentRequests.refresh" as any, "Atualizar situação bancária", "Permite consultar ativamente o estado no Banco Inter.", !financialPaymentRequestsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.paymentRequests.viewProof" as any, "Visualizar comprovantes", "Permite abrir comprovantes confirmados e auditáveis.", !financialPaymentRequestsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.interIntegration.manage" as any, "Gerenciar integração Inter", "Permite administrar a configuração operacional da integração; segredos permanecem no servidor.", !financialViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><AreaChart className="h-4 w-4" /> Análises</h4>
                                   {renderPermissionSwitch("permissions.financial.financialFlow" as any, "Visualizar fluxo financeiro", "Permite analisar despesas provisionadas e pagas.", !financialViewWatch)}
                                   {renderPermissionSwitch("permissions.financial.dre" as any, "Visualizar DRE", "Permite acessar o demonstrativo de resultado.", !financialViewWatch)}
@@ -750,6 +804,38 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 {renderPermissionSwitch("permissions.purchasing.cancelPurchase" as any, "Cancelar Pedidos", "Permite cancelar pedidos de compra em aberto.", !purchasingModuleViewWatch)}
                                 {renderPermissionSwitch("permissions.purchasing.manageFinancialLink" as any, "Financeiro de Compras", "Permite visualizar contas a pagar e marcar pagamentos de pedidos.", !purchasingModuleViewWatch)}
                                 {renderPermissionSwitch("permissions.purchasing.manageBaseItems" as any, "Gerenciar Insumos (Compras)", "Permite criar e editar insumos base no contexto de compras.", !purchasingModuleViewWatch)}
+                              </AccordionContent>
+                            </AccordionItem>
+
+                            {/* ── ADMISSÃO E FORMALIZAÇÃO ── */}
+                            <AccordionItem value="formalization">
+                              <AccordionTrigger className="text-lg font-semibold flex items-center justify-between py-4 border-b">
+                                <div className="flex items-center"><ShieldCheck className="mr-2 h-5 w-5" /> Admissão e formalização</div>
+                              </AccordionTrigger>
+                              <AccordionContent className="space-y-4 p-1 pt-4">
+                                {renderModuleToggle("permissions.hr.formalization.view" as any, "Acessar e conduzir a integração", "Libera o fluxo operacional completo: coleta e conferência, ASO, Contador, documentos admissionais, dados necessários e assinatura.")}
+
+                                <div className="ml-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium leading-5 text-emerald-900">
+                                  Esta permissão permite visualizar e avançar todas as etapas da integração. Não é necessário liberar ASO, Contador, documentos ou assinatura separadamente.
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md">Documentos da empresa</h4>
+                                  {renderPermissionSwitch("permissions.hr.formalization.companyDocuments.view" as any, "Visualizar documentos da empresa", "Permite consultar contrato social e documentos institucionais.", !formalizationViewWatch)}
+                                  {renderPermissionSwitch("permissions.hr.formalization.companyDocuments.manage" as any, "Administrar documentos da empresa", "Permite enviar, substituir, classificar e definir acessos.", !formalizationViewWatch || !formalizationCompanyDocumentsViewWatch, true)}
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md">Modelos</h4>
+                                  {renderPermissionSwitch("permissions.hr.formalization.templates.view" as any, "Visualizar modelos", "Permite consultar modelos e seus campos.", !formalizationViewWatch)}
+                                  {renderPermissionSwitch("permissions.hr.formalization.templates.manage" as any, "Editar modelos", "Permite enviar DOCX, marcar campos e executar testes.", !formalizationViewWatch || !formalizationTemplatesViewWatch, true)}
+                                  {renderPermissionSwitch("permissions.hr.formalization.templates.publish" as any, "Publicar modelos", "Permite finalizar uma nova versão para uso operacional.", !formalizationViewWatch || !formalizationTemplatesManageWatch, true)}
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md">Administração de consentimentos</h4>
+                                  {renderPermissionSwitch("permissions.hr.formalization.consents.manage" as any, "Administrar consentimentos", "Permite executar ações administrativas sobre revogações. A consulta durante a integração já está incluída no acesso ao fluxo.", !formalizationViewWatch)}
+                                </div>
                               </AccordionContent>
                             </AccordionItem>
 

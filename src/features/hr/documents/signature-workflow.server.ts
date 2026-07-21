@@ -433,6 +433,7 @@ async function createEmployeeSignedDocument(params: {
     accessLevel: config.defaultAccessLevel,
     accessPolicyId: config.accessPolicyId,
     status: "validated",
+    signatureRequired: true,
     signatureStatus: "signed",
     folderCode: destination.folderCode,
     caseId: destination.caseId,
