@@ -17,8 +17,34 @@ export function canonicalOperationalUnitId(
   units: ArchivableOperationalUnit[]
 ) {
   if (!unitId) return unitId;
-  const unit = units.find((candidate) => candidate.id === unitId);
-  return unit?.isArchived === true && unit.mergedIntoUnitId
-    ? unit.mergedIntoUnitId
-    : unitId;
+
+  let canonicalUnitId = unitId;
+  const visitedUnitIds = new Set<string>();
+
+  while (!visitedUnitIds.has(canonicalUnitId)) {
+    visitedUnitIds.add(canonicalUnitId);
+    const unit = units.find((candidate) => candidate.id === canonicalUnitId);
+    if (unit?.isArchived !== true || !unit.mergedIntoUnitId) break;
+    canonicalUnitId = unit.mergedIntoUnitId;
+  }
+
+  return canonicalUnitId;
+}
+
+export function operationalUnitIdsMatch(
+  firstUnitId: string | undefined,
+  secondUnitId: string | undefined,
+  units: ArchivableOperationalUnit[]
+) {
+  if (!firstUnitId || !secondUnitId) return firstUnitId === secondUnitId;
+  return canonicalOperationalUnitId(firstUnitId, units) === canonicalOperationalUnitId(secondUnitId, units);
+}
+
+export function findOperationalUnitRecord<T extends { unitId?: string }>(
+  records: readonly T[],
+  unitId: string,
+  units: ArchivableOperationalUnit[]
+) {
+  return records.find(record => record.unitId === unitId)
+    ?? records.find(record => operationalUnitIdsMatch(record.unitId, unitId, units));
 }

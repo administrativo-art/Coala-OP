@@ -15,7 +15,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, Kiosk, User } from '@/types';
 import { cn } from '@/lib/utils';
-import { activeOperationalUnits } from '@/lib/dp-units';
+import {
+  activeOperationalUnits,
+  canonicalOperationalUnitId,
+  findOperationalUnitRecord,
+  operationalUnitIdsMatch,
+} from '@/lib/dp-units';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -555,12 +560,18 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const prevSchedule = useMemo(() => {
     const candidates = schedules.filter(s => s.month === prevPeriod.month && s.year === prevPeriod.year);
     if (schedule.unitId) {
-      return candidates.find(s => s.unitId === schedule.unitId) ?? null;
+      return findOperationalUnitRecord(candidates, schedule.unitId, units) ?? null;
     }
     return candidates.find(s => !s.unitId) ?? candidates[0] ?? null;
-  }, [prevPeriod.month, prevPeriod.year, schedule.unitId, schedules]);
+  }, [prevPeriod.month, prevPeriod.year, schedule.unitId, schedules, units]);
   const prevScheduleId = prevSchedule?.id ?? null;
   const { shifts: prevShifts } = useDPShifts(prevScheduleId);
+
+  const prevScheduleSourceUnit = useMemo(() => {
+    if (!schedule.unitId || !prevSchedule?.unitId || prevSchedule.unitId === schedule.unitId) return null;
+    if (!operationalUnitIdsMatch(prevSchedule.unitId, schedule.unitId, units)) return null;
+    return units.find(unit => unit.id === prevSchedule.unitId) ?? null;
+  }, [prevSchedule?.unitId, schedule.unitId, units]);
 
   const prevSiblingIds = useMemo(() => {
     if (!schedule.unitId) return [];
@@ -569,10 +580,11 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         s.id !== prevScheduleId &&
         s.month === prevPeriod.month &&
         s.year === prevPeriod.year &&
-        !!s.unitId
+        !!s.unitId &&
+        !operationalUnitIdsMatch(s.unitId, schedule.unitId, units)
       )
       .map(s => s.id);
-  }, [prevPeriod.month, prevPeriod.year, prevScheduleId, schedule.unitId, schedules]);
+  }, [prevPeriod.month, prevPeriod.year, prevScheduleId, schedule.unitId, schedules, units]);
   const { shifts: prevSiblingShifts } = useDPSiblingShifts(prevSiblingIds);
 
   // Last 7 days of previous month for preview
@@ -775,11 +787,17 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
 
   // ── Per-unit mode: sibling schedules (same month/year, different unitId) ──
   const siblingIds = useMemo(() => {
-    if (!isPerUnit) return [];
+    if (!isPerUnit || !schedule.unitId) return [];
     return schedules
-      .filter(s => s.id !== schedule.id && s.month === schedule.month && s.year === schedule.year && s.unitId)
+      .filter(s =>
+        s.id !== schedule.id &&
+        s.month === schedule.month &&
+        s.year === schedule.year &&
+        s.unitId &&
+        !operationalUnitIdsMatch(s.unitId, schedule.unitId, units)
+      )
       .map(s => s.id);
-  }, [isPerUnit, schedules, schedule.id, schedule.month, schedule.year]);
+  }, [isPerUnit, schedules, schedule.id, schedule.month, schedule.year, schedule.unitId, units]);
 
   const { shifts: siblingShifts } = useDPSiblingShifts(siblingIds);
   const workShifts = useMemo(() => shifts.filter(isWorkShift), [shifts]);
@@ -859,12 +877,13 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const prevShiftIndexWithCount = useMemo(() => {
     const idx: Record<string, Record<string, (DPShift & { consecutiveDayCount: number })[]>> = {};
     for (const shift of prevShiftsWithConsecutive) {
+      const displayUnitId = canonicalOperationalUnitId(shift.unitId, units) ?? shift.unitId;
       if (!idx[shift.date]) idx[shift.date] = {};
-      if (!idx[shift.date][shift.unitId]) idx[shift.date][shift.unitId] = [];
-      idx[shift.date][shift.unitId].push(shift);
+      if (!idx[shift.date][displayUnitId]) idx[shift.date][displayUnitId] = [];
+      idx[shift.date][displayUnitId].push(shift);
     }
     return idx;
-  }, [prevShiftsWithConsecutive]);
+  }, [prevShiftsWithConsecutive, units]);
 
   const dayOffIndex = useMemo(() => {
     const activeUnitIds = new Set(activeUnits.map((unit) => unit.id));
@@ -1329,6 +1348,14 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                       >
                         <span className={`transition-transform ${prevExpanded ? 'rotate-90' : ''}`}>▶</span>
                         {MONTHS[(prevMonthDays[0].prevMonth) - 1]} {prevMonthDays[0].prevYear} — prévia
+                        {prevScheduleSourceUnit && (
+                          <Badge
+                            variant="outline"
+                            className="ml-auto border-blue-200 bg-blue-50 text-[9px] normal-case tracking-normal text-blue-700"
+                          >
+                            Continuidade: {prevScheduleSourceUnit.name}
+                          </Badge>
+                        )}
                       </button>
                     </td>
                   </tr>
