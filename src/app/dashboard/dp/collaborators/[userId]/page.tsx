@@ -188,12 +188,12 @@ const FIELD_LABEL_FIXES: Record<string, string> = {
   "INSTITUIÇÃO": "Instituição",
   "FORMACAO ACADEMICA": "Formação acadêmica",
   "FORMACAO ACADÊMICA": "Formação acadêmica",
-  "EXP. - 1A AVALIACAO": "Experiência - 1ª avaliação",
-  "EXP. - 1ª AVALIACAO": "Experiência - 1ª avaliação",
-  "EXP. - 1ª AVALIAÇÃO": "Experiência - 1ª avaliação",
-  "EXP. - 2A AVALIACAO": "Experiência - 2ª avaliação",
-  "EXP. - 2ª AVALIACAO": "Experiência - 2ª avaliação",
-  "EXP. - 2ª AVALIAÇÃO": "Experiência - 2ª avaliação",
+  "EXP. - 1A AVALIACAO": "Fim do 1º período de experiência",
+  "EXP. - 1ª AVALIACAO": "Fim do 1º período de experiência",
+  "EXP. - 1ª AVALIAÇÃO": "Fim do 1º período de experiência",
+  "EXP. - 2A AVALIACAO": "Fim do 2º período de experiência",
+  "EXP. - 2ª AVALIACAO": "Fim do 2º período de experiência",
+  "EXP. - 2ª AVALIAÇÃO": "Fim do 2º período de experiência",
   "CARGO / FUNCAO": "Cargo / função",
   "CARGO / FUNÇÃO": "Cargo / função",
   "RAZAO SOCIAL": "Razão social",
@@ -2615,7 +2615,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 <PopoverContent align="end" className="w-60 rounded-lg p-1.5">
                   <div className="space-y-1">
                     <Link
-                      href="/dashboard/settings?department=pessoal&tab=users"
+                      href={`/dashboard/dp/collaborators/${user.id}/edit`}
                       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
                     >
                       <Pencil className="h-4 w-4 text-[#df2f78]" />

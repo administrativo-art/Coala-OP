@@ -274,6 +274,27 @@ const FIELD_MAPPINGS: Mapping[] = [
     section: fieldSection("employee.employer_cnpj", "Dados contratuais"),
     normalize: digits,
   },
+  {
+    extractedField: "admissionDate",
+    fieldKey: "employee.admission_date",
+    label: fieldLabel("employee.admission_date", "Data de admissão"),
+    section: fieldSection("employee.admission_date", "Dados contratuais"),
+    normalize: date,
+  },
+  {
+    extractedField: "probationFirstEndDate",
+    fieldKey: "employee.probation_eval_1",
+    label: fieldLabel("employee.probation_eval_1", "Fim do 1º período de experiência"),
+    section: fieldSection("employee.probation_eval_1", "Dados contratuais"),
+    normalize: date,
+  },
+  {
+    extractedField: "probationFinalEndDate",
+    fieldKey: "employee.probation_eval_2",
+    label: fieldLabel("employee.probation_eval_2", "Fim do 2º período de experiência"),
+    section: fieldSection("employee.probation_eval_2", "Dados contratuais"),
+    normalize: date,
+  },
 ];
 
 function readFieldValue(data: Record<string, unknown>): unknown {

@@ -18,10 +18,6 @@ import { useBaseProducts } from "@/hooks/use-base-products";
 import { useEntities } from "@/hooks/use-entities";
 import { useProducts } from "@/hooks/use-products";
 
-const UserManagement = dynamic(
-  () => import("@/components/user-management").then((m) => m.UserManagement),
-  { ssr: false }
-);
 const ItemManagement = dynamic(
   () => import("@/components/item-management").then((m) => m.ItemManagement),
   { ssr: false }
@@ -595,11 +591,6 @@ export default function SettingsPage() {
 
   const personalLeafTabs: NestedTab[] = [
     {
-      value: "users",
-      label: "Usuários",
-      content: <UserManagement />,
-    },
-    {
       value: "roles",
       label: "Cargos e funções",
       title: "Cargos e funções",
@@ -671,9 +662,6 @@ export default function SettingsPage() {
       content: <DPSettingsCalendars />,
     },
   ].filter((tab) => {
-    if (tab.value === "users") {
-      return !!(permissions.settings.manageUsers || permissions.settings.manageProfiles);
-    }
     if (tab.value === "roles") {
       return !!(permissions.settings.manageUsers || permissions.dp?.collaborators?.edit);
     }
@@ -735,9 +723,9 @@ export default function SettingsPage() {
       value: "team-structure",
       label: "Equipe e organograma",
       title: "Equipe e organograma",
-      description: "Gerencie usuários, cargos, funções e a estrutura organizacional.",
+      description: "Gerencie cargos, funções e a estrutura organizacional.",
       content: null,
-      children: pickPersonalTabs(["users", "roles", "organogram"]),
+      children: pickPersonalTabs(["roles", "organogram"]),
     },
     {
       value: "collaborator-profile",
@@ -852,6 +840,12 @@ export default function SettingsPage() {
 
   const requestedDepartment = searchParams.get("department");
   const requestedTab = searchParams.get("tab");
+
+  useEffect(() => {
+    if (requestedDepartment === "pessoal" && requestedTab === "users") {
+      router.replace("/dashboard/dp/collaborators");
+    }
+  }, [requestedDepartment, requestedTab, router]);
 
   const [activeDepartment, setActiveDepartment] = useState(
     requestedDepartment && departmentTabs.some((tab) => tab.value === requestedDepartment)

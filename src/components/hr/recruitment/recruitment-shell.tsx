@@ -7725,6 +7725,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 }) {
   const [search, setSearch] = useState('');
   const [phaseFilter, setPhaseFilter] = useState<string>('all');
+  const [processStateFilter, setProcessStateFilter] = useState<'active' | 'completed'>('active');
   const [view, setView] = useState<'grid' | 'detail'>('grid');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phaseId, setPhaseId] = useState<OnboardingStageId | null>(null);
@@ -7751,9 +7752,17 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     return () => window.clearInterval(timer);
   }, []);
 
-  const activeProcesses = useMemo(
+  const nonCancelledProcesses = useMemo(
     () => processes.filter(process => process.status !== 'cancelled'),
     [processes]
+  );
+  const activeProcesses = useMemo(
+    () => nonCancelledProcesses.filter(process => (
+      processStateFilter === 'completed'
+        ? process.status === 'completed'
+        : process.status !== 'completed'
+    )),
+    [nonCancelledProcesses, processStateFilter]
   );
   // Distinct current phases present across active processes, for the "Todas as fases" filter.
   const phaseOptions = useMemo(() => {
@@ -8302,10 +8311,16 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div className="min-w-0">
-            <span className="text-[11px] font-black uppercase tracking-[0.09em] text-pink-600">Integração</span>
-            <h1 className="mt-0.5 text-lg font-black tracking-tight text-slate-900">Candidatos em formalização</h1>
+            <span className="text-[11px] font-black uppercase tracking-[0.09em] text-pink-600">
+              {processStateFilter === 'completed' ? 'Histórico' : 'Integração'}
+            </span>
+            <h1 className="mt-0.5 text-lg font-black tracking-tight text-slate-900">
+              {processStateFilter === 'completed' ? 'Integrações concluídas' : 'Candidatos em formalização'}
+            </h1>
             <p className="mt-1 max-w-xl text-xs font-medium text-slate-500">
-              {activeProcesses.length} pessoa{activeProcesses.length === 1 ? '' : 's'} em processo. Selecione um card para abrir a linha do tempo e conduzir cada fase da integração.
+              {processStateFilter === 'completed'
+                ? `${activeProcesses.length} processo${activeProcesses.length === 1 ? '' : 's'} finalizado${activeProcesses.length === 1 ? '' : 's'}. Consulte a linha do tempo e os registros de auditoria.`
+                : `${activeProcesses.length} pessoa${activeProcesses.length === 1 ? '' : 's'} em processo. Selecione um card para abrir a linha do tempo e conduzir cada fase da integração.`}
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
@@ -8342,6 +8357,20 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               className="h-[46px] w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-900 placeholder-slate-400 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
             />
           </div>
+          <div className="relative min-w-[170px]">
+            <select
+              value={processStateFilter}
+              onChange={event => {
+                setProcessStateFilter(event.target.value as 'active' | 'completed');
+                setPhaseFilter('all');
+              }}
+              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
+            >
+              <option value="active">Em andamento</option>
+              <option value="completed">Concluídas</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
           <div className="relative min-w-[180px]">
             <select
               value={phaseFilter}
@@ -8371,9 +8400,13 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
           <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
             <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
             <p className="text-sm font-medium text-slate-500">
-              {search ? 'Nenhum candidato corresponde à busca.' : 'Nenhuma integração em andamento.'}
+              {search
+                ? 'Nenhum candidato corresponde à busca.'
+                : processStateFilter === 'completed'
+                  ? 'Nenhuma integração concluída.'
+                  : 'Nenhuma integração em andamento.'}
             </p>
-            {!search && (
+            {!search && processStateFilter === 'active' && (
               <p className="mt-1 text-xs text-slate-400">Use “Nova integração” para iniciar uma formalização.</p>
             )}
           </div>
@@ -9992,8 +10025,8 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   return (
     <div className="personal-recruitment-density flex min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-full flex-col space-y-3 overflow-x-hidden rounded-xl border border-white/70 bg-white/85 p-3 text-slate-900 shadow-sm backdrop-blur">
 
-      {/* ─── Header ─── */}
-      <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
+      {/* A integração possui um cabeçalho próprio com status, busca e histórico. */}
+      {section !== 'integration' && <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-slate-400">{sectionMeta.eyebrow}</p>
           <h1 className="text-lg font-bold tracking-tight text-slate-950">{sectionMeta.title}</h1>
@@ -10014,7 +10047,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* ─── Stats row ─── */}
       {section === 'jobs' && (viewMode === 'list' || viewMode === 'kanban') && (

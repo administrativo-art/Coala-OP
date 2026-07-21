@@ -5,6 +5,7 @@ import {
   employeeDocumentTypeConfigByCode,
   type EmployeeDocumentTypeConfig,
 } from "@/lib/hr/employee-document-options";
+import { extractionGuideForPrompt } from "@/lib/hr/employee-document-extraction-guide";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_FILES_URL = "https://api.openai.com/v1/files";
@@ -26,6 +27,10 @@ const EXTRACTED_FIELD_KEYS = [
   "maritalStatus",
   "birthDate",
   "admissionDate",
+  "probationFirstEndDate",
+  "probationFinalEndDate",
+  "probationInitialDays",
+  "probationExtensionDays",
   "employer",
   "cnpj",
   "position",
@@ -56,6 +61,8 @@ const EXTRACTED_FIELD_KEYS = [
   "schoolAttendanceDetected",
   "responsibilityTermDetected",
   "signatureDetected",
+  "transportVoucherAuthorized",
+  "transportVoucherDailyValue",
 ] as const;
 
 const STRING_OR_NULL_SCHEMA = { type: ["string", "null"] };
@@ -95,6 +102,10 @@ const EXTRACTED_FIELD_SCHEMA: Record<typeof EXTRACTED_FIELD_KEYS[number], unknow
   maritalStatus: STRING_OR_NULL_SCHEMA,
   birthDate: STRING_OR_NULL_SCHEMA,
   admissionDate: STRING_OR_NULL_SCHEMA,
+  probationFirstEndDate: STRING_OR_NULL_SCHEMA,
+  probationFinalEndDate: STRING_OR_NULL_SCHEMA,
+  probationInitialDays: NUMBER_OR_NULL_SCHEMA,
+  probationExtensionDays: NUMBER_OR_NULL_SCHEMA,
   employer: STRING_OR_NULL_SCHEMA,
   cnpj: STRING_OR_NULL_SCHEMA,
   position: STRING_OR_NULL_SCHEMA,
@@ -125,6 +136,8 @@ const EXTRACTED_FIELD_SCHEMA: Record<typeof EXTRACTED_FIELD_KEYS[number], unknow
   schoolAttendanceDetected: BOOLEAN_OR_NULL_SCHEMA,
   responsibilityTermDetected: BOOLEAN_OR_NULL_SCHEMA,
   signatureDetected: BOOLEAN_OR_NULL_SCHEMA,
+  transportVoucherAuthorized: BOOLEAN_OR_NULL_SCHEMA,
+  transportVoucherDailyValue: NUMBER_OR_NULL_SCHEMA,
 };
 
 const FIELD_CONFIDENCE_SCHEMA: Record<typeof EXTRACTED_FIELD_KEYS[number], unknown> = Object.fromEntries(
@@ -245,8 +258,8 @@ type RawAiResult = {
   warnings?: unknown;
 };
 
-const PROMPT_VERSION = "employee-document-v4";
-const SCHEMA_VERSION = "employee-document-analysis-v4";
+const PROMPT_VERSION = "employee-document-v5";
+const SCHEMA_VERSION = "employee-document-analysis-v5";
 
 function normalizeText(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -363,6 +376,9 @@ function buildPrompt({
     "Para CNH, extraia cnhNumber, cnhCategory, cnhExpiryDate e cnhFirstLicenseDate quando estiverem visíveis.",
     "Para certidão de nascimento ou casamento, extraia maritalStatus quando houver evidência explícita.",
     "Para salário-família, trate o cadastro como lista de filhos. Extraia cada filho com nome, nascimento, CPF e RG quando houver. Use relationship como Filho(a), salvo evidência textual diferente.",
+    "Para contrato de experiência, leia a cláusula de prazo. Grave a data impressa depois de 'término em' em probationFirstEndDate e a data impressa depois de 'finaliza em' (ou equivalente) em probationFinalEndDate. Não recalcule datas quando elas estiverem escritas no documento.",
+    "Use o mapa de extração abaixo para localizar cada informação. O mapa orienta a busca, mas nunca substitui evidência visível no arquivo.",
+    JSON.stringify(extractionGuideForPrompt()),
     "Para certidão, vacinação e frequência escolar, não calcule status final. O sistema deriva Pendente/Enviada/Não exigida pela idade e pelo tipo de documento. Você só deve marcar vaccinationRecordDetected, schoolAttendanceDetected e responsibilityTermDetected como true quando o arquivo enviado comprovar o respectivo documento.",
     expectedEmployeeName ? `Colaborador esperado no ponto de entrada: ${expectedEmployeeName}. Compare com o conteúdo, mas não force correspondência.` : "Não há colaborador esperado.",
     "Catálogo fechado:",
@@ -386,6 +402,11 @@ function buildPrompt({
         cnhExpiryDate: "AAAA-MM-DD quando houver",
         cnhFirstLicenseDate: "AAAA-MM-DD quando houver",
         maritalStatus: "estado civil quando houver",
+        admissionDate: "AAAA-MM-DD; início/admissão quando houver",
+        probationFirstEndDate: "AAAA-MM-DD; término do primeiro período de experiência",
+        probationFinalEndDate: "AAAA-MM-DD; término após a prorrogação",
+        probationInitialDays: "quantidade de dias do primeiro período",
+        probationExtensionDays: "quantidade de dias da prorrogação",
         referenceMonth: "AAAA-MM quando aplicável",
         issueDate: "AAAA-MM-DD quando aplicável",
         startDate: "AAAA-MM-DD quando aplicável",
@@ -400,6 +421,8 @@ function buildPrompt({
         schoolAttendanceDetected: false,
         responsibilityTermDetected: false,
         signatureDetected: true,
+        transportVoucherAuthorized: true,
+        transportVoucherDailyValue: 8.4,
         "demais campos do schema": null,
       },
       fieldConfidences: {

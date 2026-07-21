@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -319,6 +319,7 @@ function userAuditDiff(before: User, after: Partial<User>) {
 
 type UserManagementProps = {
   createOnly?: boolean;
+  editUserId?: string;
   onClose?: () => void;
   contextLabel?: string;
   showTransportVoucher?: boolean;
@@ -326,11 +327,12 @@ type UserManagementProps = {
 
 export function UserManagement({
   createOnly = false,
+  editUserId,
   onClose,
-  contextLabel = 'Configurações › Usuários',
+  contextLabel = 'Gestão do colaborador',
   showTransportVoucher = false,
 }: UserManagementProps = {}) {
-  const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword } = useAuth();
+  const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword, loading: authLoading } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
   const { roles, functions, units, loading: hrLoading } = useHrBootstrap();
@@ -338,7 +340,7 @@ export function UserManagement({
   const { toast } = useToast();
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [showForm, setShowForm] = useState(createOnly);
+  const [showForm, setShowForm] = useState(createOnly || Boolean(editUserId));
   const [userToInactivate, setUserToInactivate] = useState<User | null>(null);
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [inactivationMode, setInactivationMode] = useState<InactivationMode>('temporary');
@@ -367,6 +369,7 @@ export function UserManagement({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [pdvOperatorIds, setPdvOperatorIds] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initializedEditUserIdRef = useRef<string | null>(null);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
@@ -596,7 +599,7 @@ export function UserManagement({
     setShowForm(false);
     setEditingUser(null);
     setPendingTransportVoucherHistory([]);
-    if (createOnly) onClose?.();
+    if (createOnly || editUserId) onClose?.();
   };
 
   const handleAddNew = () => {
@@ -626,7 +629,7 @@ export function UserManagement({
     setShowForm(true);
   };
 
-  const handleEdit = (user: User) => {
+  const handleEdit = useCallback((user: User) => {
     setEditingUser(user);
     form.reset({
       username: user.username,
@@ -653,7 +656,15 @@ export function UserManagement({
     setPdvOperatorIds(existing);
     setPendingTransportVoucherHistory([]);
     setShowForm(true);
-  };
+  }, [form]);
+
+  useEffect(() => {
+    if (!editUserId || initializedEditUserIdRef.current === editUserId) return;
+    const target = users.find((user) => user.id === editUserId);
+    if (!target) return;
+    initializedEditUserIdRef.current = editUserId;
+    handleEdit(target);
+  }, [editUserId, handleEdit, users]);
 
   const openTransportVoucherChangeDialog = (nextChecked: boolean) => {
     const fromStatus = getTransportVoucherStatus(form.getValues('needsTransportVoucher'), transportVoucherHistory);
@@ -935,19 +946,51 @@ export function UserManagement({
   };
 
 
-  const canManageAnyUsers = permissions.settings.manageUsers;
+  const canManageAnyUsers = Boolean(
+    permissions.settings.manageUsers || permissions.dp?.collaborators?.edit
+  );
 
+  if (authLoading) {
+    return (
+      <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Carregando cadastro do colaborador...
+      </div>
+    );
+  }
 
   if (!canManageAnyUsers) {
     return (
         <Card className="w-full max-w-2xl mx-auto">
             <CardHeader>
-                <CardTitle>Acesso negado</CardTitle>
+            <CardTitle>Acesso negado</CardTitle>
             </CardHeader>
             <CardContent>
-                <p>Você não tem permissão para gerenciar usuários.</p>
+                <p>Você não tem permissão para editar cadastros de colaboradores.</p>
             </CardContent>
         </Card>
+    );
+  }
+
+  if (editUserId && !editingUser) {
+    if (users.some((user) => user.id === editUserId)) {
+      return (
+        <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Preparando edição do colaborador...
+        </div>
+      );
+    }
+    return (
+      <Card className="w-full max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle>Colaborador não encontrado</CardTitle>
+          <CardDescription>O cadastro solicitado não está disponível ou não pertence ao seu escopo de acesso.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button type="button" variant="outline" onClick={onClose}>Voltar para o perfil</Button>
+        </CardContent>
+      </Card>
     );
   }
   

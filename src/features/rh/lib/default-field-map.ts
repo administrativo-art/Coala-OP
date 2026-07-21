@@ -137,8 +137,8 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.employer_cnpj": field({ label: "CNPJ do empregador", section: "Dados contratuais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
   "employee.employer_name": field({ label: "Razão social", section: "Dados contratuais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 20, options: ["CT Sorvetes Ltda", "Coala Shakes"] }),
   "employee.job_role_id": field({ label: "Cargo / Função", section: "Dados contratuais", type: "ref:jobRoles", visibility: "public", employeeVisible: true, employeeEditable: false, order: 30 }),
-  "employee.probation_eval_1": field({ label: "Experiência - 1ª avaliação", section: "Dados contratuais", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 40 }),
-  "employee.probation_eval_2": field({ label: "Experiência - 2ª avaliação", section: "Dados contratuais", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 50 }),
+  "employee.probation_eval_1": field({ label: "Fim do 1º período de experiência", section: "Dados contratuais", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.probation_eval_2": field({ label: "Fim do 2º período de experiência", section: "Dados contratuais", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 50 }),
 
   "employee.has_vt": field({ label: "Tem VT?", section: "Benefícios", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 10 }),
   "employee.vt_daily_value": field({ label: "Valor do VT diário", section: "Benefícios", type: "currency", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 20 }),

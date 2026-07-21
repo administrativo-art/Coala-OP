@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
 
 import { resolveCollaboratorCore } from '@/features/hr/lib/collaborator-core.server';
+import { initialTransportVoucherHistory } from '@/features/hr/lib/collaborator-data-contract';
 import { integrationTemplateVersionSchema, type IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import { assertFormalizationAccess, serializeHrValue } from '@/features/hr/lib/server-access';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
@@ -321,6 +322,12 @@ async function createCollaboratorFromOnboarding(params: {
   const loginRestrictionEnabled = asBoolean(finalization.loginRestrictionEnabled) ?? false;
   const needsTransportVoucher = asBoolean(finalization.needsTransportVoucher) ?? wantsTransportVoucher ?? false;
   const transportVoucherValue = needsTransportVoucher ? asNumber(finalization.transportVoucherValue) ?? undefined : undefined;
+  const transportVoucherHistory = initialTransportVoucherHistory({
+    active: needsTransportVoucher,
+    value: transportVoucherValue,
+    effectiveDate: asString(params.process.expectedAdmissionDate)?.slice(0, 10) ?? now.slice(0, 10),
+    actor: { userId: params.actorId, username: params.actorName },
+  });
   const shiftDefinitionId = asString(finalization.shiftDefinitionId) ?? asString(params.process.shiftDefinitionId);
   const collaboratorCore = await resolveCollaboratorCore({
     jobRoleId: params.process.jobRoleId,
@@ -359,6 +366,7 @@ async function createCollaboratorFromOnboarding(params: {
       ? { employmentRelationshipType: params.process.employmentRelationshipType }
       : {}),
     ...collaboratorCore.userPatch,
+    transportVoucherHistory,
     isActive: true,
     admissionDate: admissionTimestamp,
     mustChangePassword: true,
@@ -424,7 +432,7 @@ async function createCollaboratorFromOnboarding(params: {
     'employee.name': { value_text: name },
     'employee.personal_email': { value_text: email },
     'employee.job_role_id': { value_text: collaboratorCore.role?.name ?? asString(params.process.jobRoleName) ?? asString(params.process.jobRoleId) ?? '' },
-    'employee.aso_admission_date': { value_date: admissionTimestamp },
+    'employee.admission_date': { value_date: admissionTimestamp },
   };
 
   const textAnswers: Array<[string, string]> = [
@@ -461,6 +469,9 @@ async function createCollaboratorFromOnboarding(params: {
     : [];
   if (foodRestrictionActivityEffects.length > 0) values['employee.food_restriction_activity_effects'] = { value_json: foodRestrictionActivityEffects };
   values['employee.has_vt'] = { value_boolean: needsTransportVoucher };
+  if (needsTransportVoucher && transportVoucherValue != null) {
+    values['employee.vt_daily_value'] = { value_number: Math.round(transportVoucherValue * 100) };
+  }
   if (childRecords.length > 0) {
     values['employee.children'] = { value_json: childRecords };
     values['employee.children_under_14'] = { value_text: childCountLabel(childrenUnder14) };

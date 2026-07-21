@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
+import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 
@@ -63,6 +64,10 @@ function cleanPayload(value: unknown): unknown {
 
 function hasCollaboratorCoreFields(payload: Record<string, unknown>) {
   return Object.keys(payload).some((field) => COLLABORATOR_CORE_FIELDS.has(field));
+}
+
+function hasOwn(payload: Record<string, unknown>, field: string) {
+  return Object.prototype.hasOwnProperty.call(payload, field);
 }
 
 function comparable(value: unknown) {
@@ -169,6 +174,16 @@ export async function PATCH(
     }
 
     await userRef.set(payload, { merge: true });
+
+    if (hasOwn(payload, "needsTransportVoucher") || hasOwn(payload, "transportVoucherValue")) {
+      await syncTransportVoucherProjection({
+        userId,
+        active: payload.needsTransportVoucher === true,
+        valueReais: typeof payload.transportVoucherValue === "number" ? payload.transportVoucherValue : null,
+        actorId: actor.decoded.uid,
+        source: "collaborator_data_contract_v1",
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -127,7 +127,7 @@ async function vacationSummary(employeeId: string | null, user: RecordValue, fie
     const latestCycle = [...valid].sort((left, right) => String(right.cycleId ?? "").localeCompare(String(left.cycleId ?? "")))[0]?.cycleId;
     const cycleRecords = latestCycle ? valid.filter((record) => record.cycleId === latestCycle) : [];
     const takenDays = cycleRecords.reduce((total, record) => total + Number(record.days ?? 0), 0);
-    const admissionDate = user.admissionDate ?? fieldStoredRaw(fieldValues["employee.aso_admission_date"]);
+    const admissionDate = user.admissionDate ?? fieldStoredRaw(fieldValues["employee.admission_date"]);
     const lines: string[] = [];
     if (admissionDate) lines.push(`Admissão: ${dateBr(admissionDate)}.`);
     if (latest) {

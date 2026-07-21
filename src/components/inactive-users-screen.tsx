@@ -10,7 +10,7 @@ import type { User } from "@/types";
 import { BackButton } from "@/components/navigation/back-button";
 import { Button } from "@/components/ui/button";
 
-const USERS_TAB_HREF = "/dashboard/settings?department=pessoal&tab=users";
+const USERS_TAB_HREF = "/dashboard/dp/collaborators";
 
 function initialsOf(name: string) {
   return name
