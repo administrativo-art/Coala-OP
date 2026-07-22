@@ -3,8 +3,19 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const AUTENTIQUE_GRAPHQL_URL = "https://api.autentique.com.br/v2/graphql";
 
 export type AutentiqueSignerInput = {
-  email: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+  deliveryMethod?: "DELIVERY_METHOD_EMAIL" | "DELIVERY_METHOD_SMS" | "DELIVERY_METHOD_WHATSAPP" | "DELIVERY_METHOD_LINK";
   action?: "SIGN" | "SIGN_AS_A_WITNESS" | "APPROVE" | "RECOGNIZE";
+  cpf?: string;
+  requireSmsVerificationPhone?: string;
+  positions?: Array<{
+    x: string;
+    y: string;
+    z: number;
+    element: "SIGNATURE" | "NAME" | "INITIALS" | "DATE" | "CPF";
+  }>;
 };
 
 export type AutentiqueWebhookEvent = {

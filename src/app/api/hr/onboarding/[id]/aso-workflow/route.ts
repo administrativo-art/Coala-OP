@@ -15,6 +15,8 @@ import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { createPaymentRequest, refreshPaymentRequest, submitPaymentRequest } from '@/features/financial/payment-requests/service.server';
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
+import { getTermination, saveTermination } from '@/features/hr/termination/server';
+import { patchStep } from '@/features/hr/termination/core';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -138,7 +140,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const actor = { uid: access.decoded.uid, email: access.decoded.email ?? null, name: access.actorName };
     let payment = await createPaymentRequest({
       sourceType: 'aso', sourceId: id, beneficiaryReference: { sourceType: 'entity', sourceId: clinicEntityId },
-      amount, description: text(clinicSnapshot.get('defaultPaymentDescription'), 140) || 'Pagamento de ASO admissional',
+      amount, description: text(clinicSnapshot.get('defaultPaymentDescription'), 140) || `Pagamento de ASO ${process.asoExamType === 'dismissal' ? 'demissional' : 'admissional'}`,
     }, actor);
     if (payment.status === 'ready_to_submit' || payment.status === 'failed') payment = await submitPaymentRequest(payment.id, actor);
     const clinicName = payment.beneficiarySnapshot.name;
@@ -205,6 +207,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         { label: 'Comprovante de pagamento', fileName: proofAttachmentName },
         { label: 'Guia de solicitação do ASO', fileName: guideAttachmentName },
       ],
+      examType: process.asoExamType === 'dismissal' ? 'dismissal' : 'admission',
     });
     const communicationRef = hrDbAdmin.collection('emailCommunications').doc(communicationId);
     await communicationRef.set({
@@ -277,7 +280,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const expiresAt = new Date(new Date(appointmentAt).getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
     const uploadUrl = `${PUBLIC_URL}/aso/candidato/${uploadToken.token}`;
     const appointmentLabel = formatAsoAppointment(date, time);
-    const candidateEmailContent = candidateAsoEmailContent({ candidateName: text(process.candidateName, 240), appointmentLabel, instructions, uploadUrl });
+    const candidateEmailContent = candidateAsoEmailContent({ candidateName: text(process.candidateName, 240), appointmentLabel, instructions, uploadUrl, examType: process.asoExamType === 'dismissal' ? 'dismissal' : 'admission' });
     const communicationId = `aso_candidate_${id}_${date}_${time.replace(':', '')}`;
     const result = await sendEmail({
       from: EMAIL_SENDERS.formalization, to: recipient,
@@ -317,6 +320,21 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       processRef.set({ asoWorkflow: { ...workflow, status: decision === 'approved' ? 'completed' : 'aso_received', asoDocument: { ...aso, status: decision, reviewedAt: now, reviewedBy: access.decoded.uid, rejectionReason: decision === 'rejected' ? reason : null }, updatedAt: now }, updatedAt: now }, { merge: true }),
       addEvent(id, decision === 'approved' ? 'ASO_APPROVED' : 'ASO_REJECTED', access, { reason: reason || null }),
     ]);
+    if (process.processKind === 'termination_aso') {
+      const termination = await getTermination(id);
+      if (termination) {
+        await saveTermination({
+          ...termination,
+          asoWorkflow: { status: decision, reviewedAt: now, rejectionReason: decision === 'rejected' ? reason : null },
+          steps: patchStep(termination.steps, 'aso', {
+            status: decision === 'approved' ? 'completed' : 'blocked',
+            ...(decision === 'approved' ? { completedAt: now, completedBy: access.decoded.uid, blockedReason: null } : { blockedReason: reason }),
+          }),
+          lastActivityAt: now,
+          updatedAt: now,
+        });
+      }
+    }
     return NextResponse.json({ ok: true });
   }
 

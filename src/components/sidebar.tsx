@@ -168,7 +168,10 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         icon: Users,
         color: SECTION_COLORS.dp,
         items: [
+          { label: "Acompanhamento", href: "/dashboard/processes", icon: ListChecks, show: permissions.dp?.view },
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
+          { label: "Pedir demissão", href: "/dashboard/resignation", icon: FileText, show: user?.employmentRelationshipType === "clt" && user?.isActive !== false },
+          { label: "Desligamentos", href: "/dashboard/dp/terminations", icon: FileStack, show: permissions.dp?.view },
           {
             label: "Recrutamento", href: "__group:recruitment", icon: Users, show: permissions.dp?.view || hasFormalizationPermission(permissions, "view"),
             children: [

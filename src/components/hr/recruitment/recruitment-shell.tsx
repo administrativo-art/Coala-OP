@@ -7795,6 +7795,15 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     [activeProcesses, selectedId]
   );
 
+  useEffect(() => {
+    const requestedId = new URLSearchParams(window.location.search).get('process');
+    const requested = requestedId ? activeProcesses.find(process => process.id === requestedId) : null;
+    if (!requested || selectedId === requested.id) return;
+    setSelectedId(requested.id);
+    setPhaseId(requested.currentStage ?? requested.stages?.[0]?.id ?? null);
+    setView('detail');
+  }, [activeProcesses, selectedId]);
+
   const loadSignatureWorkflow = useCallback(async () => {
     if (!selectedProcess?.id || !canViewSignatures) {
       setSignatureWorkflow(null);

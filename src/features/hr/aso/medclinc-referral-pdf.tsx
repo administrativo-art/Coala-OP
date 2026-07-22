@@ -11,6 +11,7 @@ export type MedclincReferralPdfData = {
   observations?: string | null;
   logoDataUri?: string | null;
   letterheadLogoDataUri?: string | null;
+  examType?: 'admission' | 'dismissal';
 };
 
 const BLUE = '#1F6FB2';
@@ -143,7 +144,7 @@ function Option({ label, checked = false }: { label: string; checked?: boolean }
 
 export function MedclincReferralPdf({ data }: { data: MedclincReferralPdfData }) {
   return (
-    <Document title={`Guia ASO admissional - ${data.employeeName}`} author="Coala One">
+    <Document title={`Guia ASO ${data.examType === 'dismissal' ? 'demissional' : 'admissional'} - ${data.employeeName}`} author="Coala One">
       <Page size="LETTER" style={styles.page}>
         <View style={styles.header}>
           {data.logoDataUri ? <Image src={data.logoDataUri} style={styles.logo} /> : <View style={styles.logo} />}
@@ -183,10 +184,10 @@ export function MedclincReferralPdf({ data }: { data: MedclincReferralPdfData })
         <Section number={3} title="TIPO DE EXAME">
           <View style={[styles.box, styles.row]}>
             <View style={[styles.examTypeColumn, styles.rightBorder]}>
-              <Option label="ADMISSIONAL" checked />
+              <Option label="ADMISSIONAL" checked={data.examType !== 'dismissal'} />
               <Option label="PERIÓDICO ANUAL" />
               <Option label="PERIÓDICO SEMESTRAL" />
-              <Option label="DEMISSIONAL" />
+              <Option label="DEMISSIONAL" checked={data.examType === 'dismissal'} />
             </View>
             <View style={styles.examTypeColumn}>
               <Option label="RETORNO AO TRABALHO" />

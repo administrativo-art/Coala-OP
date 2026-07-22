@@ -7,6 +7,7 @@ import {
   verifyAutentiqueWebhookSignature,
 } from "@/lib/autentique-core";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { markTerminationDocumentSigned, markTerminationIdentitySigned } from "@/features/hr/termination/server";
 
 export const runtime = "nodejs";
 
@@ -100,6 +101,8 @@ export async function POST(request: Request) {
         { merge: true }
       );
       const workflowDocumentId = requestDoc.get("workflowDocumentId");
+      const terminationId = requestDoc.get("terminationId");
+      const purpose = requestDoc.get("purpose");
       if (typeof workflowDocumentId === "string" && workflowDocumentId) {
         const workflowStatus = event.type === "document.finished" ? "signed" : status;
         await hrDbAdmin.collection("hrSignatureDocuments").doc(workflowDocumentId).set({
@@ -123,11 +126,13 @@ export async function POST(request: Request) {
       ) {
         after(async () => {
           try {
-            await archiveAutentiqueSignedDocument({
-              signatureRequestId: requestDoc.id,
-              signedUrl: files.signed as string,
-              signedAt: event.createdAt,
-            });
+            if (typeof terminationId === "string" && purpose === "termination_request_identity") {
+              await markTerminationIdentitySigned({ terminationId, signedUrl: files.signed as string, signedAt: event.createdAt ?? new Date().toISOString() });
+            } else if (typeof terminationId === "string" && purpose === "termination_final_document" && typeof requestDoc.get("terminationDocumentId") === "string") {
+              await markTerminationDocumentSigned({ terminationId, documentId: requestDoc.get("terminationDocumentId"), signedUrl: files.signed as string, signedAt: event.createdAt ?? new Date().toISOString() });
+            } else {
+              await archiveAutentiqueSignedDocument({ signatureRequestId: requestDoc.id, signedUrl: files.signed as string, signedAt: event.createdAt });
+            }
           } catch (error) {
             console.error("[autentique-webhook] Falha ao arquivar documento assinado.", error);
             await requestDoc.ref.set({

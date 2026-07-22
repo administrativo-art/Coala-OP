@@ -43,6 +43,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const employeeName = text(answers.fullName) || text(process.candidateName);
   const employeeCpf = text(answers.cpf);
   const jobFunction = text(process.functionName) || text(process.jobRoleName);
+  const examType = process.asoExamType === 'dismissal' ? 'dismissal' : 'admission';
   const missing = [
     !employeeName ? 'nome do colaborador' : null,
     !employeeCpf ? 'CPF do colaborador' : null,
@@ -66,12 +67,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     observations: null,
     logoDataUri: `data:image/jpeg;base64,${logo.toString('base64')}`,
     letterheadLogoDataUri: `data:image/png;base64,${letterheadLogo.toString('base64')}`,
+    examType,
   }} />);
   const buffer = Buffer.from(pdf);
   const hashSha256 = createHash('sha256').update(buffer).digest('hex');
   const generatedId = randomUUID();
   const now = new Date().toISOString();
-  const fileName = `guia-aso-admissional-${safeFilePart(employeeName)}.pdf`;
+  const fileName = `guia-aso-${examType === 'dismissal' ? 'demissional' : 'admissional'}-${safeFilePart(employeeName)}.pdf`;
   const storagePath = `hr/onboarding/${id}/generated/aso-guides/${generatedId}.pdf`;
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   await bucket.file(storagePath).save(buffer, {
@@ -81,7 +83,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   const record = {
     id: generatedId,
-    kind: 'aso_admission_referral',
+    kind: examType === 'dismissal' ? 'aso_dismissal_referral' : 'aso_admission_referral',
     provider: 'MedClinic',
     templateVersion: 'medclinic-v2',
     mimeType: 'application/pdf',
@@ -94,7 +96,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     paymentMethod: 'PIX',
     sector: 'GERAL',
     serviceDateStatus: 'to_be_defined_by_clinic',
-    examType: 'admission',
+    examType,
     examProgram: 'PCMSO',
     generatedAt: now,
     generatedBy: access.decoded.uid,

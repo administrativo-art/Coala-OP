@@ -20,6 +20,7 @@ import {
   MapPin, Palmtree, DollarSign,
 } from 'lucide-react';
 import { useState } from 'react';
+import { ActiveTerminationsCard } from '@/features/hr/termination/active-terminations-card';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -595,6 +596,7 @@ export default function DPDashboardPage() {
           <p className="mt-1 text-muted-foreground">{dashboardErrors[0]}</p>
         </div>
       )}
+      <ActiveTerminationsCard />
       <div className="grid gap-5 grid-cols-1 lg:grid-cols-3 xl:grid-cols-4">
 
         {/* ── Coluna principal ── */}

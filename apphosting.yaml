@@ -53,5 +53,9 @@ env:
     value: "Zé da Senha | Coala One <acesso@coalashakes.com>"
   - variable: AUTENTIQUE_SANDBOX
     value: "true"
+  - variable: AUTENTIQUE_API_TOKEN
+    secret: AUTENTIQUE_API_TOKEN
+  - variable: AUTENTIQUE_ALLOW_PRODUCTION
+    value: "false"
   - variable: NEXT_PUBLIC_APP_URL
     value: "https://op.coalashakes.com"

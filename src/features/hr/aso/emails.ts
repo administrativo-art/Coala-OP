@@ -16,7 +16,9 @@ export function clinicAsoEmailContent(input: {
   companyAddress: string;
   companyContacts: string;
   attachments: AsoAttachmentDescription[];
+  examType?: 'admission' | 'dismissal';
 }) {
+  const examLabel = input.examType === 'dismissal' ? 'DEMISSIONAL' : 'ADMISSIONAL';
   const attachmentLines = input.attachments.map((attachment, index) => `• ${attachment.label} - anexo ${index + 1}`).join('\n');
   const message = [
     'Prezados, boa tarde.',
@@ -25,7 +27,7 @@ export function clinicAsoEmailContent(input: {
     '',
     'Exame:',
     '',
-    '• Atestado de saúde ocupacional - ASO ADMISSIONAL',
+    `• Atestado de saúde ocupacional - ASO ${examLabel}`,
     '',
     'Empresa:',
     '',
@@ -40,7 +42,7 @@ export function clinicAsoEmailContent(input: {
     attachmentLines,
   ].join('\n');
   return {
-    subject: `ASO admissional - Solicitação - ${input.candidateName}`,
+    subject: `ASO ${input.examType === 'dismissal' ? 'demissional' : 'admissional'} - Solicitação - ${input.candidateName}`,
     title: undefined,
     message,
     emphasis: 'Por gentileza, responda este e-mail com o agendamento ou informe a data e o horário pelo link abaixo.',
@@ -53,12 +55,13 @@ export function candidateAsoEmailContent(input: {
   appointmentLabel: string;
   instructions?: string | null;
   uploadUrl: string;
+  examType?: 'admission' | 'dismissal';
 }) {
   const location = MEDCLINIC_CANDIDATE_LOCATION;
   const message = [
     `Olá, ${input.candidateName}.`,
     '',
-    `Seu exame admissional foi agendado para ${input.appointmentLabel}.`,
+    `Seu exame ${input.examType === 'dismissal' ? 'demissional' : 'admissional'} foi agendado para ${input.appointmentLabel}.`,
     '',
   ].join('\n');
   const locationBlock = [
@@ -72,7 +75,7 @@ export function candidateAsoEmailContent(input: {
     'Apresente-se com antecedência e leve um documento oficial com foto, como CIN ou RG, CNH ou passaporte.',
   ].join('\n');
   return {
-    subject: 'ASO admissional - Agendamento',
+    subject: `ASO ${input.examType === 'dismissal' ? 'demissional' : 'admissional'} - Agendamento`,
     title: undefined,
     message,
     locationBlock,

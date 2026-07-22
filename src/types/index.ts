@@ -769,6 +769,9 @@ export type User = {
   id: string; // Firebase Auth UID
   username: string;
   email: string;
+  phone?: string;
+  phoneVerifiedAt?: Timestamp | string;
+  phoneVerificationSource?: 'hr' | 'onboarding' | 'user';
   profileId: string;
   assignedKioskIds: string[];
   avatarUrl?: string;
