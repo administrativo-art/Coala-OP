@@ -8,6 +8,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Clock,
   Download,
   Eye,
@@ -487,6 +488,20 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
     [items, category],
   );
   const folderTree = useMemo(() => buildDocumentFolderTree(category, categoryItems), [category, categoryItems]);
+  const rootFolderSummaries = useMemo(() => folderTree.map((folder) => {
+    const logicalDocuments = new Set<string>();
+    for (const item of categoryItems) {
+      const itemFolderPath = resolveEmployeeDocumentFolderPath({
+        category,
+        documentTypeCode: item.documentTypeCode,
+        documentTypeLabel: item.documentType,
+        destinationTrail: item.destinationTrail,
+      });
+      if (!pathStartsWith(itemFolderPath, folder.path)) continue;
+      logicalDocuments.add(item.logicalKey || `${itemFolderPath.join("/")}:${item.documentTypeCode || item.documentType || item.id}`);
+    }
+    return { ...folder, documentCount: logicalDocuments.size };
+  }), [category, categoryItems, folderTree]);
   const visible = useMemo(() => {
     if (activeFolderPath.length === 0) return categoryItems;
     return categoryItems.filter((item) => pathStartsWith(resolveEmployeeDocumentFolderPath({
@@ -1045,10 +1060,11 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
         <aside className="h-fit rounded-xl border bg-white p-1.5 shadow-sm lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto">
           {EMPLOYEE_DOCUMENT_VISIBLE_CATEGORIES.map(({ id, label }) => {
             const catActive = category === id;
+            const catSelected = catActive && activeFolderPath.length === 0;
             const expanded = catActive && expandedCategory === id && folderTree.length > 0;
             return (
               <div key={id}>
-                <div className={`flex items-center gap-1 rounded-lg ${catActive ? "bg-pink-50 text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}>
+                <div className={`flex items-center gap-1 rounded-lg ${catSelected ? "bg-pink-50 text-[#c81f69]" : catActive ? "text-[#c81f69]" : "text-slate-700 hover:bg-slate-50"}`}>
                   <button
                     type="button"
                     onClick={() => selectCategory(id)}
@@ -1339,6 +1355,28 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
             })() : null}
             {loading ? (
               <div className="grid place-items-center p-12"><Loader2 className="h-6 w-6 animate-spin text-[#df2f78]" /></div>
+            ) : activeFolderPath.length === 0 && rootFolderSummaries.length > 0 ? (
+              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                {rootFolderSummaries.map((folder) => (
+                  <button
+                    key={folder.path.join("/")}
+                    type="button"
+                    onClick={() => selectFolder(folder.path)}
+                    className="group flex min-h-24 items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-pink-200 hover:bg-pink-50/40 hover:shadow-sm"
+                  >
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-pink-50 text-[#df2f78] transition group-hover:bg-white">
+                      <Folder className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-black text-slate-800">{folder.label}</span>
+                      <span className="mt-1 block text-xs font-semibold text-slate-500">
+                        {folder.documentCount} {folder.documentCount === 1 ? "documento" : "documentos"}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[#df2f78]" />
+                  </button>
+                ))}
+              </div>
             ) : visible.length === 0 ? (
               <div className="px-6 py-8 text-center">
                 <FileText className="mx-auto mb-1.5 h-6 w-6 text-slate-300" />
