@@ -196,6 +196,17 @@ export async function provisionPdvFirstAccess(token: string, password: string) {
         pdvAccessProfileName: typeof pdv.profileName === "string" ? pdv.profileName : null,
         pdvAccessFilialId: filialId,
         pdvAccessFilialName: typeof pdv.filialName === "string" ? pdv.filialName : null,
+        pdvAccesses: [{
+          externalUserId: created.id,
+          unitId: typeof pdv.unitId === "string" ? pdv.unitId : null,
+          unitName: typeof pdv.unitName === "string" ? pdv.unitName : null,
+          filialId,
+          filialName: typeof pdv.filialName === "string" ? pdv.filialName : null,
+          profileId,
+          profileName: typeof pdv.profileName === "string" ? pdv.profileName : null,
+          status: "active",
+          updatedAt: provisionedAt,
+        }],
         updatedAt: provisionedAt,
       }, { merge: true }),
       onboardingRef.set({

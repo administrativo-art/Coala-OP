@@ -103,12 +103,31 @@ async function verifyAccessIntegrations(params: {
         filialId: asString(pdvAccess.filialId),
       });
       if (pdvUser) {
+        const currentAccesses = Array.isArray(user.pdvAccesses)
+          ? user.pdvAccesses.filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === 'object' && !Array.isArray(entry)))
+          : [];
+        const nextAccess = {
+          externalUserId: pdvUser.id,
+          unitId: asString(pdvAccess.unitId),
+          unitName: asString(pdvAccess.unitName),
+          filialId: asString(pdvAccess.filialId),
+          filialName: asString(pdvAccess.filialName),
+          profileId: asString(pdvAccess.profileId),
+          profileName: asString(pdvAccess.profileName),
+          status: 'active',
+          updatedAt: params.now,
+        };
+        const pdvAccesses = [
+          ...currentAccesses.filter(entry => asString(entry.externalUserId) !== pdvUser.id),
+          nextAccess,
+        ];
         await userRef.set({
           registrationIdPdv: pdvUser.id,
           pdvAccessProfileId: asString(pdvAccess.profileId),
           pdvAccessProfileName: asString(pdvAccess.profileName),
           pdvAccessFilialId: asString(pdvAccess.filialId),
           pdvAccessFilialName: asString(pdvAccess.filialName),
+          pdvAccesses,
           updatedAt: params.now,
         }, { merge: true });
         pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'resolved', message: `Cadastro localizado na filial vinculada (ID ${pdvUser.id}).`, checkedAt: params.now, externalId: pdvUser.id, source: 'pdv_api' };

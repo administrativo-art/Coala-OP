@@ -765,6 +765,18 @@ export type Profile = {
     permissions: Partial<PermissionSet>;
 }
 
+export type UserPdvAccess = {
+  externalUserId: string;
+  unitId?: string | null;
+  unitName?: string | null;
+  filialId: string;
+  filialName?: string | null;
+  profileId: string;
+  profileName?: string | null;
+  status: 'active' | 'inactive' | 'error';
+  updatedAt?: string | null;
+};
+
 export type User = {
   id: string; // Firebase Auth UID
   username: string;
@@ -784,6 +796,7 @@ export type User = {
   pdvAccessProfileName?: string;
   pdvAccessFilialId?: string;
   pdvAccessFilialName?: string;
+  pdvAccesses?: UserPdvAccess[];
   // Departamento Pessoal (RH)
   registrationIdBizneo?: string;   // matrícula no Bizneo HR
   registrationIdPdv?: string;      // código no PDV

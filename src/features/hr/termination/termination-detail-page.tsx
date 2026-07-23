@@ -180,7 +180,7 @@ function AccessRevocationPanel({
   const state = process.accessRevocation;
   const contractReached = Boolean(process.notice && new Date().toISOString().slice(0, 10) >= process.notice.contractEndDate);
   const rows = [
-    { target: "pdv", label: "PDV Legal", status: state?.pdv.status ?? "pending", detail: state?.pdv.error ?? "Remoção executada e confirmada pela API." },
+    { target: "pdv", label: "PDV Legal", status: state?.pdv.status ?? "pending", detail: state?.pdv.error ?? "Todos os cadastros ativos serão removidos e confirmados pela API." },
     { target: "bizneo", label: "Bizneo", status: state?.bizneo.status ?? "pending", detail: "Confirmação operacional do bloqueio no Bizneo." },
     { target: "healthPlan", label: "Odontoprev", status: state?.healthPlan.status ?? "pending", detail: "Confirmação da exclusão do benefício." },
   ] as const;
@@ -216,7 +216,7 @@ function AccessRevocationPanel({
                 variant={row.target === "pdv" ? "default" : "outline"}
                 disabled={busy || !contractReached}
                 onClick={() => {
-                  if (row.target === "pdv" && !window.confirm("Remover agora o acesso deste colaborador no PDV Legal? Esta ação será enviada à API do PDV.")) return;
+                  if (row.target === "pdv" && !window.confirm("Remover agora todos os acessos ativos deste colaborador no PDV Legal? Cada cadastro será removido individualmente pela API.")) return;
                   onAction({ action: "revoke_access", target: row.target });
                 }}
               >

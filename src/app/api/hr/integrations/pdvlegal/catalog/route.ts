@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
+import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { fetchPdvLegalFiliais, fetchPdvLegalProfiles } from '@/lib/integrations/pdv-legal-admin';
 
@@ -11,7 +11,7 @@ const CACHE_DOC = dbAdmin.collection('integrationCatalogs').doc('pdvlegal');
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
-  const access = await assertFormalizationAccess(request, 'view').catch(() => null);
+  const access = await assertHrAccess(request, 'view').catch(() => null);
   if (!access) return NextResponse.json({ error: 'Sem permissão para consultar o PDV Legal.' }, { status: 403 });
 
   const force = request.nextUrl.searchParams.get('refresh') === '1';

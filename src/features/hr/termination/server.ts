@@ -610,17 +610,51 @@ export async function revokeTerminationAccess(params: {
   const accessRevocation = structuredClone(current);
 
   if (params.target === "pdv") {
-    const externalId = asString(accessRevocation.pdv.externalId) ?? asString(user.registrationIdPdv);
-    if (!externalId) {
+    const storedAccesses = Array.isArray(user.pdvAccesses)
+      ? user.pdvAccesses.filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === "object" && !Array.isArray(entry)))
+      : [];
+    const externalIds = Array.from(new Set([
+      ...storedAccesses
+        .filter((entry) => entry.status !== "inactive")
+        .map((entry) => asString(entry.externalUserId))
+        .filter((value): value is string => Boolean(value)),
+      asString(user.registrationIdPdv),
+    ].filter((value): value is string => Boolean(value))));
+    if (externalIds.length === 0) {
       accessRevocation.pdv = { status: "not_applicable", externalId: null, completedAt: now, completedBy: params.context.userDoc.id };
     } else {
-      try {
-        await deletePdvLegalUser(externalId);
+      const removedIds: string[] = [];
+      const failures: string[] = [];
+      for (const externalId of externalIds) {
+        try {
+          await deletePdvLegalUser(externalId);
+          removedIds.push(externalId);
+        } catch (error) {
+          failures.push(`${externalId}: ${error instanceof Error ? error.message : "falha ao remover"}`);
+        }
+      }
+      const nextPdvAccesses = storedAccesses.map((entry) => removedIds.includes(asString(entry.externalUserId) ?? "")
+        ? { ...entry, status: "inactive", updatedAt: now }
+        : entry);
+      await userSnap.ref.set({
+        pdvAccesses: nextPdvAccesses,
+        ...(failures.length === 0 ? {
+          registrationIdPdv: null,
+          pdvAccessProfileId: null,
+          pdvAccessProfileName: null,
+          pdvAccessFilialId: null,
+          pdvAccessFilialName: null,
+        } : {}),
+        updatedAt: now,
+      }, { merge: true });
+      const externalId = externalIds.join(",");
+      if (failures.length === 0) {
         accessRevocation.pdv = { status: "completed", externalId, completedAt: now, completedBy: params.context.userDoc.id, error: null };
-      } catch (error) {
-        accessRevocation.pdv = { status: "failed", externalId, error: error instanceof Error ? error.message : "Falha ao remover acesso." };
+      } else {
+        const error = `Não foi possível remover todos os acessos do PDV: ${failures.join(" | ")}`;
+        accessRevocation.pdv = { status: "failed", externalId, error };
         await saveTermination({ ...process, accessRevocation, lastActivityAt: now, updatedAt: now });
-        throw error;
+        throw new Error(error);
       }
     }
   } else {

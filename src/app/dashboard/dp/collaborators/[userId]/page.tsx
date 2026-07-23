@@ -26,9 +26,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { BackButton } from "@/components/navigation/back-button";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
-import { useProfiles } from "@/hooks/use-profiles";
 import { createAuditLog } from "@/features/audit/client";
-import type { DPVacationRecord, User } from "@/types";
+import type { DPUnit, DPVacationRecord, User, UserPdvAccess } from "@/types";
 import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
 import { useEmployeeProfile, useFieldMap } from "@/features/rh/hooks/useEmployeeProfile";
 import { SectionEditModal } from "@/features/rh/components/SectionEditModal";
@@ -92,7 +91,6 @@ import {
   type EmploymentTerminationReason,
 } from "@/lib/hr/employment-relationship";
 
-const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
 const FIELD_VISIBILITIES: NormalizedFieldVisibility[] = ["public", "restricted_partial", "restricted_total", "confidential"];
 const FIELD_VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
   public: "Sem restrição",
@@ -1123,123 +1121,6 @@ function EmployeeFamilySalaryPanel({
   );
 }
 
-function getMonthlyShiftSummary(daysOfWeek: number[] = []) {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  const firstWeekday = new Date(year, month, 1).getDay();
-  const days: Array<{ day: number; label: string; weekday: string; week: number }> = [];
-
-  for (let day = 1; day <= lastDay; day += 1) {
-    const date = new Date(year, month, day);
-    if (!daysOfWeek.includes(date.getDay())) continue;
-    days.push({
-      day,
-      label: format(date, "dd/MM", { locale: ptBR }),
-      weekday: DAYS_PT[date.getDay()],
-      week: Math.ceil((day + firstWeekday) / 7),
-    });
-  }
-
-  return {
-    monthLabel: format(today, "MMMM yyyy", { locale: ptBR }),
-    days,
-    weeks: Array.from({ length: 6 }, (_, index) => days.filter((item) => item.week === index + 1)),
-  };
-}
-
-function MonthSchedulePopover({ shiftDef }: {
-  shiftDef?: { name?: string; startTime?: string; endTime?: string; daysOfWeek?: number[] } | null;
-}) {
-  if (!shiftDef) return null;
-  const summary = getMonthlyShiftSummary(shiftDef.daysOfWeek ?? []);
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50"
-        >
-          Ver mês
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 rounded-lg p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-black text-slate-950">Escala do mês</p>
-            <p className="mt-0.5 text-xs font-semibold capitalize text-slate-500">{summary.monthLabel}</p>
-          </div>
-          <span className="rounded-full bg-pink-50 px-2.5 py-1 text-xs font-black text-pink-600">
-            {summary.days.length} turno{summary.days.length === 1 ? "" : "s"}
-          </span>
-        </div>
-
-        <div className="mt-2 rounded-md bg-slate-50 p-2">
-          <p className="text-xs font-black text-slate-950">{shiftDef.name}</p>
-          <p className="mt-1 text-[11px] font-semibold text-slate-500">
-            {shiftDef.startTime ?? "--:--"} - {shiftDef.endTime ?? "--:--"}
-          </p>
-        </div>
-
-        <div className="mt-2 space-y-1">
-          {summary.weeks.map((weekDays, index) => (
-            <div key={index} className="grid grid-cols-[64px_1fr] gap-2 text-xs">
-              <span className="py-1 font-black text-slate-400">Semana {index + 1}</span>
-              {weekDays.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {weekDays.map((item) => (
-                    <span key={item.day} className="rounded-full bg-slate-950 px-2 py-1 font-black text-white">
-                      {item.weekday} {item.label}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <span className="py-1 font-semibold text-slate-400">Sem turno</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function MonthlyShiftDays({ shiftDef }: {
-  shiftDef?: { daysOfWeek?: number[] } | null;
-}) {
-  if (!shiftDef) return null;
-  const summary = getMonthlyShiftSummary(shiftDef.daysOfWeek ?? []);
-  return (
-    <div className="mt-3 border-t border-[#ececf0] pt-3">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#9d9da9]">Dias escalados no mês</p>
-          <p className="mt-0.5 text-[11px] font-bold capitalize text-[#777784]">{summary.monthLabel}</p>
-        </div>
-        <span className="rounded-full bg-pink-50 px-2.5 py-1 text-[10px] font-black text-pink-600">
-          {summary.days.length} turno{summary.days.length === 1 ? "" : "s"}
-        </span>
-      </div>
-      <div className="space-y-1.5">
-        {summary.weeks.map((weekDays, index) => weekDays.length > 0 ? (
-          <div key={index} className="grid gap-1.5 sm:grid-cols-[62px_1fr] sm:items-start">
-            <span className="pt-1 text-[10px] font-black text-slate-400">Semana {index + 1}</span>
-            <div className="flex flex-wrap gap-1">
-              {weekDays.map((item) => (
-                <span key={item.day} className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-black text-white">
-                  {item.weekday} {item.label}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null)}
-      </div>
-    </div>
-  );
-}
-
 function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
   const months = Array.from({ length: 12 }, (_, index) => {
     const date = new Date();
@@ -1301,13 +1182,35 @@ type EmployeeProfileFieldRow = {
   readOnly?: boolean;
 };
 
-function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: User; profileName?: string; reloadKey?: number }) {
+function EmployeeProfileFields({
+  user,
+  units,
+  onUpdateUser,
+  reloadKey = 0,
+}: {
+  user: User;
+  units: DPUnit[];
+  onUpdateUser: (user: User) => Promise<void>;
+  reloadKey?: number;
+}) {
   const { firebaseUser, permissions, user: currentUser } = useAuth();
   const employeeId = user.registrationIdBizneo || user.id;
   const [editKey, setEditKey] = useState<string | null>(null);
   const [profileReloadKey, setProfileReloadKey] = useState(0);
   const [visibilitySavingKey, setVisibilitySavingKey] = useState<string | null>(null);
   const [visibilityMessage, setVisibilityMessage] = useState<string | null>(null);
+  const [systemActionSaving, setSystemActionSaving] = useState<string | null>(null);
+  const [systemActionMessage, setSystemActionMessage] = useState<string | null>(null);
+  const [systemFlags, setSystemFlags] = useState({
+    operacional: user.operacional === true,
+    participatesInGoals: user.participatesInGoals === true,
+  });
+  const [pdvAccessOverride, setPdvAccessOverride] = useState<UserPdvAccess[] | null>(null);
+  const [pdvEditorAccessId, setPdvEditorAccessId] = useState<string | null>(null);
+  const [pdvUnitId, setPdvUnitId] = useState("");
+  const [pdvProfileId, setPdvProfileId] = useState("");
+  const [pdvProfiles, setPdvProfiles] = useState<Array<{ id: string; name: string }>>([]);
+  const [pdvCatalogLoading, setPdvCatalogLoading] = useState(false);
   const profileState = useEmployeeProfile(employeeId, profileReloadKey + reloadKey);
 
   if (profileState.status === "idle" || profileState.status === "loading") {
@@ -1346,6 +1249,123 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
     roleIds: currentUser?.jobRoleId ? [currentUser.jobRoleId] : [],
     functionIds: (currentUser?.jobFunctionIds ?? []).filter(Boolean),
   };
+  const legacyPdvAccess: UserPdvAccess[] = user.registrationIdPdv
+    ? [{
+        externalUserId: user.registrationIdPdv,
+        filialId: user.pdvAccessFilialId ?? "",
+        filialName: user.pdvAccessFilialName ?? null,
+        profileId: user.pdvAccessProfileId ?? "",
+        profileName: user.pdvAccessProfileName ?? null,
+        unitId: units.find((unit) => unit.pdvFilialId === user.pdvAccessFilialId)?.id ?? null,
+        unitName: units.find((unit) => unit.pdvFilialId === user.pdvAccessFilialId)?.name ?? null,
+        status: "active",
+      }]
+    : [];
+  const pdvAccesses = (pdvAccessOverride ?? (user.pdvAccesses?.length ? user.pdvAccesses : legacyPdvAccess))
+    .filter((access) => access.status === "active");
+  const pdvUnits = units.filter((unit) => !unit.isArchived && Boolean(unit.pdvFilialId));
+
+  async function updateSystemFlag(field: "operacional" | "participatesInGoals", value: boolean) {
+    if (!canManageFieldVisibility || systemActionSaving) return;
+    setSystemActionSaving(field);
+    setSystemActionMessage(null);
+    try {
+      await onUpdateUser({ ...user, [field]: value });
+      setSystemFlags((current) => ({ ...current, [field]: value }));
+      if (firebaseUser) {
+        await createAuditLog(firebaseUser, {
+          module: "dp.collaborators",
+          action: field === "operacional" ? "operational_status_updated" : "goals_participation_updated",
+          targetType: "user",
+          targetId: user.id,
+          targetName: user.username,
+          metadata: { value },
+        }).catch(() => undefined);
+      }
+      setSystemActionMessage("Configuração do Coala One atualizada.");
+    } catch (error) {
+      setSystemActionMessage(error instanceof Error ? error.message : "Falha ao atualizar a configuração.");
+    } finally {
+      setSystemActionSaving(null);
+    }
+  }
+
+  async function openPdvEditor(access: UserPdvAccess) {
+    if (!firebaseUser || !canManageFieldVisibility) return;
+    setPdvEditorAccessId(access.externalUserId);
+    setPdvUnitId(access.unitId ?? pdvUnits.find((unit) => unit.pdvFilialId === access.filialId)?.id ?? "");
+    setPdvProfileId(access.profileId);
+    setPdvCatalogLoading(true);
+    setSystemActionMessage(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch("/api/hr/integrations/pdvlegal/catalog", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Falha ao carregar perfis do PDV.");
+      setPdvProfiles(Array.isArray(payload.profiles) ? payload.profiles : []);
+    } catch (error) {
+      setSystemActionMessage(error instanceof Error ? error.message : "Falha ao carregar o catálogo do PDV.");
+    } finally {
+      setPdvCatalogLoading(false);
+    }
+  }
+
+  async function savePdvAccess() {
+    if (!firebaseUser || !pdvEditorAccessId || !pdvUnitId || !pdvProfileId || systemActionSaving) return;
+    const unit = pdvUnits.find((item) => item.id === pdvUnitId);
+    if (!unit?.pdvFilialId) {
+      setSystemActionMessage("A unidade escolhida não possui filial do PDV vinculada.");
+      return;
+    }
+    setSystemActionSaving(`pdv:${pdvEditorAccessId}`);
+    setSystemActionMessage(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/hr/collaborators/${encodeURIComponent(user.id)}/pdv-access`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessId: pdvEditorAccessId,
+          unitId: unit.id,
+          filialId: unit.pdvFilialId,
+          profileId: pdvProfileId,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Falha ao atualizar o acesso.");
+      setPdvAccessOverride(Array.isArray(payload.accesses) ? payload.accesses : []);
+      setPdvEditorAccessId(null);
+      setSystemActionMessage("Unidade e perfil atualizados no PDV Legal.");
+    } catch (error) {
+      setSystemActionMessage(error instanceof Error ? error.message : "Falha ao atualizar o acesso.");
+    } finally {
+      setSystemActionSaving(null);
+    }
+  }
+
+  async function removePdvAccess(access: UserPdvAccess) {
+    if (!firebaseUser || !canManageFieldVisibility || systemActionSaving) return;
+    if (!window.confirm(`Remover o acesso ${access.externalUserId} do PDV Legal${access.unitName ? ` na unidade ${access.unitName}` : ""}? Os outros acessos não serão afetados.`)) return;
+    setSystemActionSaving(`pdv:${access.externalUserId}`);
+    setSystemActionMessage(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/hr/collaborators/${encodeURIComponent(user.id)}/pdv-access?accessId=${encodeURIComponent(access.externalUserId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Falha ao remover o acesso.");
+      setPdvAccessOverride(Array.isArray(payload.accesses) ? payload.accesses : []);
+      setSystemActionMessage("Acesso removido do PDV Legal. Os demais cadastros foram preservados.");
+    } catch (error) {
+      setSystemActionMessage(error instanceof Error ? error.message : "Falha ao remover o acesso.");
+    } finally {
+      setSystemActionSaving(null);
+    }
+  }
 
   async function updateFieldVisibility(key: string, entry: FieldMapEntry, visibility: FieldVisibility) {
     if (!firebaseUser || visibility === entry.visibility || visibilitySavingKey) return;
@@ -1500,8 +1520,8 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
     },
     {
       key: SYSTEM_FIELD_KEYS.registrationPdv,
-      value: pdvRegistrationLabel(user),
-      hasValue: pdvRegistrationLabel(user) !== "-",
+      value: pdvAccesses.map((access) => access.externalUserId).join(", ") || pdvRegistrationLabel(user),
+      hasValue: pdvAccesses.length > 0 || pdvRegistrationLabel(user) !== "-",
     },
     {
       key: SYSTEM_FIELD_KEYS.loginCoalaOne,
@@ -1510,12 +1530,12 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
     },
     {
       key: SYSTEM_FIELD_KEYS.operational,
-      value: user.operacional ? "Sim" : "Não",
+      value: systemFlags.operacional ? "Sim" : "Não",
       hasValue: true,
     },
     {
       key: SYSTEM_FIELD_KEYS.goals,
-      value: user.participatesInGoals ? "Participa" : "Não participa",
+      value: systemFlags.participatesInGoals ? "Participa" : "Não participa",
       hasValue: true,
     },
     {
@@ -1529,8 +1549,8 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
     },
     {
       key: SYSTEM_FIELD_KEYS.accessProfile,
-      value: user.pdvAccessProfileName ?? "-",
-      hasValue: Boolean(user.pdvAccessProfileName),
+      value: Array.from(new Set(pdvAccesses.map((access) => access.profileName).filter(Boolean))).join(", ") || user.pdvAccessProfileName || "-",
+      hasValue: pdvAccesses.some((access) => Boolean(access.profileName)) || Boolean(user.pdvAccessProfileName),
     },
   ].forEach((row) => {
     if (!canShowSystemProfileField(row.key)) return;
@@ -1607,6 +1627,11 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
   function renderProfileFieldCard({ key, entry, fv, staticValue, staticHasValue, readOnly }: EmployeeProfileFieldRow) {
     const hasValue = staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv);
     const readOnlyFromOrgChart = readOnly || key === "employee.job_role_id";
+    const managedFlag = key === SYSTEM_FIELD_KEYS.operational
+      ? { field: "operacional" as const, active: systemFlags.operacional }
+      : key === SYSTEM_FIELD_KEYS.goals
+        ? { field: "participatesInGoals" as const, active: systemFlags.participatesInGoals }
+        : null;
     return (
       <div key={key} className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
         <div className="flex items-start justify-between gap-2">
@@ -1646,6 +1671,23 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
             ) : null}
           </div>
         </div>
+        {managedFlag && canManageFieldVisibility ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={managedFlag.active}
+            disabled={Boolean(systemActionSaving)}
+            onClick={() => void updateSystemFlag(managedFlag.field, !managedFlag.active)}
+            className="mt-3 flex w-full items-center justify-between gap-3 border-t border-[#ececf0] pt-3 text-left disabled:opacity-60"
+          >
+            <span className="text-[10px] font-black text-[#777784]">
+              {managedFlag.active ? "Ativo" : "Inativo"}
+            </span>
+            <span className={`h-6 w-11 rounded-full p-1 transition ${managedFlag.active ? "bg-pink-500" : "bg-slate-300"}`}>
+              <span className={`block h-4 w-4 rounded-full bg-white transition ${managedFlag.active ? "translate-x-5" : ""}`} />
+            </span>
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -1659,6 +1701,15 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
             : "bg-emerald-50 text-emerald-700"
         }`}>
           {visibilityMessage}
+        </p>
+      ) : null}
+      {systemActionMessage ? (
+        <p className={`rounded-xl px-3 py-2 text-xs font-bold ${
+          systemActionMessage.startsWith("Falha") || systemActionMessage.includes("não ")
+            ? "bg-rose-50 text-rose-700"
+            : "bg-emerald-50 text-emerald-700"
+        }`}>
+          {systemActionMessage}
         </p>
       ) : null}
 
@@ -1725,6 +1776,48 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
                           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                             {groupFields.map(renderProfileFieldCard)}
                           </div>
+                          {group.id === "pdv" ? (
+                            <div className="mt-2.5 space-y-2 border-t border-[#ececf0] pt-2.5">
+                              <div className="flex items-center justify-between gap-3 px-0.5">
+                                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#9d9da9]">Acessos por unidade</p>
+                                <span className="text-[10px] font-black text-[#777784]">{pdvAccesses.length} ativo{pdvAccesses.length === 1 ? "" : "s"}</span>
+                              </div>
+                              {pdvAccesses.length > 0 ? pdvAccesses.map((access) => (
+                                <div key={access.externalUserId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#fbfbfc] p-3 ring-1 ring-[#e8e8ec]">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-black text-[#24242e]">
+                                      {access.unitName ?? access.filialName ?? `Filial ${access.filialId || "não identificada"}`}
+                                    </p>
+                                    <p className="mt-1 text-[10px] font-bold text-[#777784]">
+                                      Usuário {access.externalUserId} · {access.profileName ?? "Perfil não identificado"}
+                                    </p>
+                                  </div>
+                                  {canManageFieldVisibility ? (
+                                    <div className="flex shrink-0 flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={Boolean(systemActionSaving)}
+                                        onClick={() => void openPdvEditor(access)}
+                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-sky-700 shadow-sm ring-1 ring-sky-100 hover:bg-sky-50 disabled:opacity-50"
+                                      >
+                                        Alterar unidade/perfil
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={Boolean(systemActionSaving)}
+                                        onClick={() => void removePdvAccess(access)}
+                                        className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-rose-700 shadow-sm ring-1 ring-rose-100 hover:bg-rose-50 disabled:opacity-50"
+                                      >
+                                        Remover acesso
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )) : (
+                                <p className="rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-500">Nenhum acesso ativo vinculado.</p>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -1750,6 +1843,76 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
           onSaved={() => setEditKey(null)}
         />
       )}
+      {pdvEditorAccessId ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-3">
+          <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-base font-black text-[#1d1d26]">Alterar acesso do PDV Legal</p>
+                <p className="mt-0.5 text-xs font-semibold text-[#777784]">Usuário PDV {pdvEditorAccessId}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPdvEditorAccessId(null)}
+                className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
+                Unidade do Coala One
+                <select
+                  value={pdvUnitId}
+                  onChange={(event) => setPdvUnitId(event.target.value)}
+                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-none focus:border-[#ec2f78]"
+                >
+                  <option value="">Selecione a unidade</option>
+                  {pdvUnits.map((unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.name} · filial PDV {unit.pdvFilialId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs font-black text-[#1d1d26]">
+                Perfil de acesso do PDV
+                <select
+                  value={pdvProfileId}
+                  disabled={pdvCatalogLoading}
+                  onChange={(event) => setPdvProfileId(event.target.value)}
+                  className="h-10 rounded-lg border border-[#dedfe4] bg-white px-3 text-xs font-bold outline-none focus:border-[#ec2f78] disabled:opacity-60"
+                >
+                  <option value="">{pdvCatalogLoading ? "Carregando perfis..." : "Selecione o perfil"}</option>
+                  {pdvProfileId && !pdvProfiles.some((profile) => profile.id === pdvProfileId) ? (
+                    <option value={pdvProfileId}>Perfil atual · ID {pdvProfileId}</option>
+                  ) : null}
+                  {pdvProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPdvEditorAccessId(null)}
+                className="h-10 rounded-lg border border-slate-200 px-4 text-xs font-black text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!pdvUnitId || !pdvProfileId || pdvCatalogLoading || Boolean(systemActionSaving)}
+                onClick={() => void savePdvAccess()}
+                className="h-10 rounded-lg bg-pink-600 px-4 text-xs font-black text-white hover:bg-pink-700 disabled:opacity-50"
+              >
+                {systemActionSaving ? "Salvando..." : "Salvar no PDV"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2004,7 +2167,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const { userId } = use(params);
   const { activeUsers, terminatedUsers, permissions, firebaseUser, user: currentUser, updateUser, terminateUser } = useAuth();
   const { toast } = useToast();
-  const { profiles } = useProfiles();
   const { shiftDefinitions, units, vacations, vacationsLoading } = useDPBootstrap();
   const [fieldMapReloadKey, setFieldMapReloadKey] = useState(0);
   const [systemVisibilitySavingKey, setSystemVisibilitySavingKey] = useState<string | null>(null);
@@ -2061,7 +2223,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
   const collaborator = user;
   const isTerminated = collaborator.isActive === false;
-  const profile = profiles.find((entry) => entry.id === collaborator.profileId);
   const shiftDef = shiftDefinitions.find((entry) => entry.id === collaborator.shiftDefinitionId);
   const userUnits = units.filter((unit) => collaborator.unitIds?.includes(unit.id));
   const userVacations = vacations
@@ -2380,23 +2541,19 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             {canShowSystemField(SYSTEM_FIELD_KEYS.shift) ? (
             <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
               {shiftDef ? (
-                <>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-black text-[#1d1d26]">{shiftDef.name}</p>
-                      <p className="mt-1 text-xs font-semibold text-[#817762]">
-                        {shiftDef.startTime} - {shiftDef.endTime}
-                        {shiftDef.breakStart && shiftDef.breakEnd ? ` | intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {visibilityControl(SYSTEM_FIELD_KEYS.shift)}
-                      <MonthSchedulePopover shiftDef={shiftDef} />
-                      <Chip tone="good">Ativa</Chip>
-                    </div>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black text-[#1d1d26]">{shiftDef.name}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#817762]">
+                      {shiftDef.startTime} - {shiftDef.endTime}
+                      {shiftDef.breakStart && shiftDef.breakEnd ? ` | intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
+                    </p>
                   </div>
-                  <MonthlyShiftDays shiftDef={shiftDef} />
-                </>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {visibilityControl(SYSTEM_FIELD_KEYS.shift)}
+                    <Chip tone="good">Ativa</Chip>
+                  </div>
+                </div>
               ) : (
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-[#777784]">Sem turno atribuído.</p>
@@ -2742,7 +2899,12 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         </div>
       </section>
 
-        <EmployeeProfileFields user={user} profileName={profile?.name} reloadKey={fieldMapReloadKey} />
+        <EmployeeProfileFields
+          user={user}
+          units={units}
+          onUpdateUser={updateUser}
+          reloadKey={fieldMapReloadKey}
+        />
 
         <div className="space-y-2.5">
           {systemVisibilityMessage ? (

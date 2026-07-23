@@ -228,6 +228,8 @@ export async function POST(request: NextRequest) {
       profileName: profile.name,
       filialId: filial.id,
       filialName: filial.name,
+      unitId: unitDoc?.id ?? unitId,
+      unitName: asString(unitDoc?.data()?.name),
       status: 'pending_password',
     };
   }
