@@ -9439,7 +9439,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
             {/* INTEGRACAO */}
             {activeKind === 'integracao' && (
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 px-4 py-3.5">
+                  <p className="text-[14px] font-black text-slate-950">Sistemas</p>
+                  <p className="mt-0.5 text-[11.5px] font-semibold text-slate-500">
+                    Cadastre, acompanhe e sincronize os acessos do novo colaborador.
+                  </p>
+                </div>
+                <div className="space-y-3 p-4">
                 <div className={`rounded-2xl border px-4 py-3.5 ${okAlert ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
                   {!okAlert ? ([bizneoAlert, pdvAlert].filter(Boolean) as NonNullable<typeof bizneoAlert>[]).map(alert => (
                     <div key={alert.id} className="[&:not(:first-child)]:mt-2">
@@ -9476,7 +9483,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   )})}
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-[12.5px] font-black text-slate-900">Cadastros complementares</p>
+                  <p className="text-[12.5px] font-black text-slate-900">Benefícios e serviços</p>
                   <p className="mt-1 text-[11.5px] font-semibold text-slate-500">
                     Marque cada cadastro quando a inclusão do colaborador estiver concluída.
                   </p>
@@ -9589,6 +9596,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     )}
                   </>
                 )}
+                </div>
               </div>
             )}
 

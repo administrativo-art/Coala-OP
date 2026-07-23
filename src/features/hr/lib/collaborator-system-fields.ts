@@ -108,7 +108,7 @@ export const SYSTEM_FIELD_DEFAULTS: Record<string, FieldMapEntry> = {
   [SYSTEM_FIELD_KEYS.loginBizneo]: systemField("Login do Bizneo", "Sistemas", 10, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.loginPdv]: systemField("Nome de usuário do PDV", "Sistemas", 40, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.loginCoalaOne]: systemField("Login do Coala One", "Sistemas", 70, "restricted_partial"),
-  [SYSTEM_FIELD_KEYS.accessProfile]: systemField("Perfil de acesso do Coala One", "Sistemas", 80, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.accessProfile]: systemField("Perfil de acesso do PDV Legal", "Sistemas", 60, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.jobRole]: systemField("Cargo", "Dados contratuais", 30, "public"),
   [SYSTEM_FIELD_KEYS.operational]: systemField("Operacional", "Sistemas", 90, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.goals]: systemField("Metas", "Sistemas", 100, "restricted_partial"),

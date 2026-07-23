@@ -780,6 +780,10 @@ export type User = {
   operacional?: boolean;
   participatesInGoals?: boolean;
   pdvOperatorIds?: { [kioskId: string]: number };
+  pdvAccessProfileId?: string;
+  pdvAccessProfileName?: string;
+  pdvAccessFilialId?: string;
+  pdvAccessFilialName?: string;
   // Departamento Pessoal (RH)
   registrationIdBizneo?: string;   // matrícula no Bizneo HR
   registrationIdPdv?: string;      // código no PDV

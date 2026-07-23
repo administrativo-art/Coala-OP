@@ -103,7 +103,14 @@ async function verifyAccessIntegrations(params: {
         filialId: asString(pdvAccess.filialId),
       });
       if (pdvUser) {
-        await userRef.set({ registrationIdPdv: pdvUser.id, updatedAt: params.now }, { merge: true });
+        await userRef.set({
+          registrationIdPdv: pdvUser.id,
+          pdvAccessProfileId: asString(pdvAccess.profileId),
+          pdvAccessProfileName: asString(pdvAccess.profileName),
+          pdvAccessFilialId: asString(pdvAccess.filialId),
+          pdvAccessFilialName: asString(pdvAccess.filialName),
+          updatedAt: params.now,
+        }, { merge: true });
         pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'resolved', message: `Cadastro localizado na filial vinculada (ID ${pdvUser.id}).`, checkedAt: params.now, externalId: pdvUser.id, source: 'pdv_api' };
       } else {
         pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: 'Colaborador não localizado no PDV Legal para a filial desta unidade.', checkedAt: params.now, source: 'pdv_api' };

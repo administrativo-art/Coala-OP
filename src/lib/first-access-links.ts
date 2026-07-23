@@ -190,7 +190,14 @@ export async function provisionPdvFirstAccess(token: string, password: string) {
     const created = await createPdvLegalUser({ name, filialId, profileId, password });
     const provisionedAt = nowIso();
     await Promise.all([
-      dbAdmin.collection("users").doc(status.userId).set({ registrationIdPdv: created.id, updatedAt: provisionedAt }, { merge: true }),
+      dbAdmin.collection("users").doc(status.userId).set({
+        registrationIdPdv: created.id,
+        pdvAccessProfileId: profileId,
+        pdvAccessProfileName: typeof pdv.profileName === "string" ? pdv.profileName : null,
+        pdvAccessFilialId: filialId,
+        pdvAccessFilialName: typeof pdv.filialName === "string" ? pdv.filialName : null,
+        updatedAt: provisionedAt,
+      }, { merge: true }),
       onboardingRef.set({
         pdvAccess: { ...pdv, status: "completed", userId: created.id, provisionedAt, lastError: null },
         updatedAt: provisionedAt,

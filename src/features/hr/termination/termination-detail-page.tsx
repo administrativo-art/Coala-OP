@@ -182,10 +182,17 @@ function AccessRevocationPanel({
   const rows = [
     { target: "pdv", label: "PDV Legal", status: state?.pdv.status ?? "pending", detail: state?.pdv.error ?? "Remoção executada e confirmada pela API." },
     { target: "bizneo", label: "Bizneo", status: state?.bizneo.status ?? "pending", detail: "Confirmação operacional do bloqueio no Bizneo." },
-    { target: "healthPlan", label: "Plano de saúde", status: state?.healthPlan.status ?? "pending", detail: "Confirmação da exclusão do benefício." },
+    { target: "healthPlan", label: "Odontoprev", status: state?.healthPlan.status ?? "pending", detail: "Confirmação da exclusão do benefício." },
   ] as const;
   return (
-    <div className="space-y-3">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-4 py-3.5">
+        <p className="font-black text-slate-950">Sistemas</p>
+        <p className="mt-1 text-xs font-semibold text-slate-500">
+          Bloqueie e confirme cada acesso do colaborador antes de concluir o desligamento.
+        </p>
+      </div>
+      <div className="space-y-3 p-4">
       {!contractReached ? (
         <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" />
@@ -224,6 +231,7 @@ function AccessRevocationPanel({
         <p className="mt-1 text-xs font-semibold text-sky-700">
           O login será bloqueado automaticamente quando o RH concluir o desligamento.
         </p>
+      </div>
       </div>
     </div>
   );

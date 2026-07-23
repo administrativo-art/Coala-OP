@@ -19,7 +19,6 @@ import {
   Pencil,
   Settings,
   Shirt,
-  TrendingUp,
   Umbrella,
   UserX,
 } from "lucide-react";
@@ -1207,6 +1206,40 @@ function MonthSchedulePopover({ shiftDef }: {
   );
 }
 
+function MonthlyShiftDays({ shiftDef }: {
+  shiftDef?: { daysOfWeek?: number[] } | null;
+}) {
+  if (!shiftDef) return null;
+  const summary = getMonthlyShiftSummary(shiftDef.daysOfWeek ?? []);
+  return (
+    <div className="mt-3 border-t border-[#ececf0] pt-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#9d9da9]">Dias escalados no mês</p>
+          <p className="mt-0.5 text-[11px] font-bold capitalize text-[#777784]">{summary.monthLabel}</p>
+        </div>
+        <span className="rounded-full bg-pink-50 px-2.5 py-1 text-[10px] font-black text-pink-600">
+          {summary.days.length} turno{summary.days.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {summary.weeks.map((weekDays, index) => weekDays.length > 0 ? (
+          <div key={index} className="grid gap-1.5 sm:grid-cols-[62px_1fr] sm:items-start">
+            <span className="pt-1 text-[10px] font-black text-slate-400">Semana {index + 1}</span>
+            <div className="flex flex-wrap gap-1">
+              {weekDays.map((item) => (
+                <span key={item.day} className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-black text-white">
+                  {item.weekday} {item.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null)}
+      </div>
+    </div>
+  );
+}
+
 function GoalsSummaryPopover({ participates }: { participates?: boolean }) {
   const months = Array.from({ length: 12 }, (_, index) => {
     const date = new Date();
@@ -1444,8 +1477,8 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
     const entry = systemEntry(key);
     return canManageFieldVisibility || canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix);
   };
-  const addContractRow = (row: EmployeeProfileFieldRow) => {
-    const section = "Dados contratuais";
+  const addSystemsRow = (row: EmployeeProfileFieldRow) => {
+    const section = "Sistemas";
     if (!sections[section]) sections[section] = [];
     sections[section].push(row);
   };
@@ -1496,12 +1529,12 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
     },
     {
       key: SYSTEM_FIELD_KEYS.accessProfile,
-      value: profileName ?? user.profileId ?? "-",
-      hasValue: Boolean(profileName ?? user.profileId),
+      value: user.pdvAccessProfileName ?? "-",
+      hasValue: Boolean(user.pdvAccessProfileName),
     },
   ].forEach((row) => {
     if (!canShowSystemProfileField(row.key)) return;
-    addContractRow({
+    addSystemsRow({
       key: row.key,
       entry: systemEntry(row.key),
       staticValue: row.value,
@@ -1541,6 +1574,81 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
   const allFields = orderedSections
     .flatMap((section) => sections[section] ?? [])
     .filter((row) => row.staticValue === undefined);
+  const systemGroups = [
+    {
+      id: "bizneo",
+      title: "Bizneo",
+      description: "Cadastro de RH, dados cadastrais e ponto.",
+      keys: [SYSTEM_FIELD_KEYS.loginBizneo, SYSTEM_FIELD_KEYS.registrationBizneo],
+    },
+    {
+      id: "pdv",
+      title: "PDV Legal",
+      description: "Acesso operacional ao caixa e às unidades vinculadas.",
+      keys: [
+        SYSTEM_FIELD_KEYS.loginPdv,
+        SYSTEM_FIELD_KEYS.registrationPdv,
+        SYSTEM_FIELD_KEYS.accessProfile,
+      ],
+    },
+    {
+      id: "coala",
+      title: "Coala One",
+      description: "Conta interna, permissões e participação operacional.",
+      keys: [
+        SYSTEM_FIELD_KEYS.loginCoalaOne,
+        SYSTEM_FIELD_KEYS.operational,
+        SYSTEM_FIELD_KEYS.goals,
+        SYSTEM_FIELD_KEYS.functions,
+      ],
+    },
+  ];
+
+  function renderProfileFieldCard({ key, entry, fv, staticValue, staticHasValue, readOnly }: EmployeeProfileFieldRow) {
+    const hasValue = staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv);
+    const readOnlyFromOrgChart = readOnly || key === "employee.job_role_id";
+    return (
+      <div key={key} className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[10px] font-black text-[#9d9da9]">{fieldDisplayLabel(entry.label)}</p>
+            <div className="mt-1 text-xs font-black text-[#24242e]">
+              {staticValue !== undefined ? (
+                staticValue
+              ) : hasValue ? (
+                <FieldValue fv={fv} type={entry.type} role={role} fieldKey={key} />
+              ) : role !== "employee" ? (
+                <button type="button" onClick={() => setEditKey(key)} className="text-[#df2f78]">
+                  + Adicionar
+                </button>
+              ) : (
+                "-"
+              )}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            {canManageFieldVisibility ? (
+              <FieldVisibilityButton
+                entry={entry}
+                saving={visibilitySavingKey === key}
+                disabled={Boolean(visibilitySavingKey && visibilitySavingKey !== key)}
+                onChange={(visibility) => void updateFieldVisibility(key, entry, visibility)}
+              />
+            ) : null}
+            {role !== "employee" && hasValue && !readOnlyFromOrgChart ? (
+              <button
+                type="button"
+                onClick={() => setEditKey(key)}
+                className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
+              >
+                Editar
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -1566,7 +1674,7 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
               <span className="truncate">{sectionDisplayLabel(section)}</span>
             </button>
           ))}
-          {SYSTEM_NAV_LINKS.map((link) => (
+          {SYSTEM_NAV_LINKS.filter((link) => link.id !== "system.behavior").map((link) => (
             <button
               key={link.id}
               type="button"
@@ -1601,53 +1709,31 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
                     />
                   ) : null}
                 </div>
-                <div className="grid gap-2 p-2.5 md:grid-cols-2 xl:grid-cols-3">
-                  {sectionFields.map(({ key, entry, fv, staticValue, staticHasValue, readOnly }) => {
-                    const hasValue = staticValue !== undefined ? Boolean(staticHasValue) : fieldHasValue(fv);
-                    const readOnlyFromOrgChart = readOnly || key === "employee.job_role_id";
-                    return (
-                      <div key={key} className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-[10px] font-black text-[#9d9da9]">{fieldDisplayLabel(entry.label)}</p>
-                            <div className="mt-1 text-xs font-black text-[#24242e]">
-                              {staticValue !== undefined ? (
-                                staticValue
-                              ) : hasValue ? (
-                                <FieldValue fv={fv} type={entry.type} role={role} fieldKey={key} />
-                              ) : role !== "employee" ? (
-                                <button type="button" onClick={() => setEditKey(key)} className="text-[#df2f78]">
-                                  + Adicionar
-                                </button>
-                              ) : (
-                                "-"
-                              )}
-                            </div>
+                {section === "Sistemas" ? (
+                  <div className="space-y-2.5 p-2.5">
+                    {systemGroups.map((group) => {
+                      const groupFields = group.keys
+                        .map((key) => sectionFields.find((field) => field.key === key))
+                        .filter((field): field is EmployeeProfileFieldRow => Boolean(field));
+                      if (groupFields.length === 0) return null;
+                      return (
+                        <div key={group.id} className="rounded-xl border border-[#e8e8ec] bg-white p-2.5">
+                          <div className="mb-2.5 px-0.5">
+                            <p className="text-xs font-black text-[#1d1d26]">{group.title}</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-[#777784]">{group.description}</p>
                           </div>
-                          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                            {canManageFieldVisibility ? (
-                              <FieldVisibilityButton
-                                entry={entry}
-                                saving={visibilitySavingKey === key}
-                                disabled={Boolean(visibilitySavingKey && visibilitySavingKey !== key)}
-                                onChange={(visibility) => void updateFieldVisibility(key, entry, visibility)}
-                              />
-                            ) : null}
-                            {role !== "employee" && hasValue && !readOnlyFromOrgChart ? (
-                              <button
-                                type="button"
-                                onClick={() => setEditKey(key)}
-                                className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-[#df2f78] shadow-sm ring-1 ring-[#f5d5e2] hover:bg-[#fff0f6]"
-                              >
-                                Editar
-                              </button>
-                            ) : null}
+                          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                            {groupFields.map(renderProfileFieldCard)}
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid gap-2 p-2.5 md:grid-cols-2 xl:grid-cols-3">
+                    {sectionFields.map(renderProfileFieldCard)}
+                  </div>
+                )}
               </section>
             );
           })}
@@ -2294,20 +2380,23 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
             {canShowSystemField(SYSTEM_FIELD_KEYS.shift) ? (
             <div className="rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
               {shiftDef ? (
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-black text-[#1d1d26]">{shiftDef.name}</p>
-                    <p className="mt-1 text-xs font-semibold text-[#817762]">
-                      {shiftDef.startTime} - {shiftDef.endTime}
-                      {shiftDef.breakStart && shiftDef.breakEnd ? ` | intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
-                    </p>
+                <>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-black text-[#1d1d26]">{shiftDef.name}</p>
+                      <p className="mt-1 text-xs font-semibold text-[#817762]">
+                        {shiftDef.startTime} - {shiftDef.endTime}
+                        {shiftDef.breakStart && shiftDef.breakEnd ? ` | intervalo ${shiftDef.breakStart} - ${shiftDef.breakEnd}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {visibilityControl(SYSTEM_FIELD_KEYS.shift)}
+                      <MonthSchedulePopover shiftDef={shiftDef} />
+                      <Chip tone="good">Ativa</Chip>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {visibilityControl(SYSTEM_FIELD_KEYS.shift)}
-                    <MonthSchedulePopover shiftDef={shiftDef} />
-                    <Chip tone="good">Ativa</Chip>
-                  </div>
-                </div>
+                  <MonthlyShiftDays shiftDef={shiftDef} />
+                </>
               ) : (
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-[#777784]">Sem turno atribuído.</p>
@@ -2496,34 +2585,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         </Panel>
       ),
     },
-    {
-      id: "system.behavior" as const,
-      className: "",
-      visible: canShowSystemBlock(systemBlockKeys.behavior),
-      content: (
-        <Panel title="Comportamento no sistema" icon={TrendingUp} className="h-full" action={systemBlockVisibilityControl(systemBlockKeys.behavior)}>
-          <div className="space-y-3">
-            {[
-              { key: SYSTEM_FIELD_KEYS.behaviorOperational, title: "Usuário operacional", desc: "Aparece nas escalas de trabalho e relatórios operacionais.", active: user.operacional },
-              { key: SYSTEM_FIELD_KEYS.behaviorGoals, title: "Participa de metas", desc: "Incluído no acompanhamento de metas do quiosque.", active: user.participatesInGoals },
-            ].filter((item) => canShowSystemField(item.key)).map(({ title, desc, active }) => (
-              <div key={String(title)} className="flex items-center justify-between gap-4 rounded-xl border border-[#e8e8ec] bg-[#fbfbfc] p-3">
-                <div>
-                  <p className="text-sm font-black text-[#1d1d26]">{String(title)}</p>
-                  <p className="mt-1 text-xs font-medium text-[#777784]">{String(desc)}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  {String(title) === "Participa de metas" ? <GoalsSummaryPopover participates={Boolean(active)} /> : null}
-                  <span className={`h-6 w-11 rounded-full p-1 ${active ? "bg-pink-500" : "bg-slate-300"}`}>
-                    <span className={`block h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : ""}`} />
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      ),
-    },
   ].sort((left, right) => blockOrder(left.id) - blockOrder(right.id));
 
   function renderSystemBlock(id: (typeof systemBlocks)[number]["id"], className = "") {
@@ -2696,7 +2757,6 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           <div className="grid gap-2.5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.35fr)]">
             <div className="space-y-2.5">
               {renderSystemBlock("system.schedule_units")}
-              {renderSystemBlock("system.behavior")}
             </div>
             {renderSystemBlock("system.vacations")}
           </div>
