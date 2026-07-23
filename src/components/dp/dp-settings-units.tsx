@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Building2,
   ChevronDown,
@@ -129,6 +129,13 @@ type MergedOperationalUnit = {
   groupId?: string;
   pdvFilialId?: string;
   bizneoTaxonId?: number;
+};
+
+type PdvLegalFilial = {
+  id: string;
+  name: string;
+  cnpj: string | null;
+  active: boolean | null;
 };
 
 const NONE = "__none__";
@@ -293,7 +300,7 @@ export function DPSettingsUnits() {
     updateUnitOrganization,
     deleteUnitOrganization,
   } = useDP();
-  const { permissions, activeUsers } = useAuth();
+  const { permissions, activeUsers, firebaseUser } = useAuth();
   const { roles, functions } = useHrBootstrap();
   const {
     units,
@@ -315,6 +322,10 @@ export function DPSettingsUnits() {
   const [unitDialog, setUnitDialog] = useState<UnitDialogState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [saving, setSaving] = useState<"organization" | "group" | "unit" | "delete" | null>(null);
+  const [pdvFiliais, setPdvFiliais] = useState<PdvLegalFilial[]>([]);
+  const [pdvFiliaisLoading, setPdvFiliaisLoading] = useState(false);
+  const [pdvFiliaisLoaded, setPdvFiliaisLoaded] = useState(false);
+  const [pdvFiliaisError, setPdvFiliaisError] = useState<string | null>(null);
 
   const [organizationForm, setOrganizationForm] = useState<OrganizationForm>({
     name: "",
@@ -505,6 +516,34 @@ export function DPSettingsUnits() {
           : "",
     });
   }, [groupById, kiosks, syncCandidates, unitDialog]);
+
+  const loadPdvFiliais = useCallback(async () => {
+    if (!firebaseUser) return;
+    setPdvFiliaisLoading(true);
+    setPdvFiliaisError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch("/api/integrations/pdvlegal/filiais", {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Falha ao consultar filiais do PDV Legal.");
+      }
+      setPdvFiliais(Array.isArray(payload?.filiais) ? payload.filiais : []);
+    } catch (error) {
+      setPdvFiliaisError(error instanceof Error ? error.message : "Falha ao consultar filiais do PDV Legal.");
+    } finally {
+      setPdvFiliaisLoaded(true);
+      setPdvFiliaisLoading(false);
+    }
+  }, [firebaseUser]);
+
+  useEffect(() => {
+    if (!unitDialog || pdvFiliaisLoaded || pdvFiliaisLoading) return;
+    void loadPdvFiliais();
+  }, [loadPdvFiliais, pdvFiliaisLoaded, pdvFiliaisLoading, unitDialog]);
 
   function unitsForGroup(groupId: string) {
     return mergedUnits.filter((unit) => unit.groupId === groupId);
@@ -1544,20 +1583,72 @@ export function DPSettingsUnits() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>ID PDV</Label>
-                <Input
-                  value={unitForm.pdvFilialId}
-                  onChange={(event) => setUnitForm((current) => ({ ...current, pdvFilialId: event.target.value }))}
-                  placeholder="Opcional"
-                />
+              <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <Label>Filial no PDV Legal</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Vínculo exclusivo com a unidade retornada pelo PDV.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void loadPdvFiliais()}
+                    disabled={pdvFiliaisLoading}
+                    aria-label="Atualizar filiais do PDV Legal"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", pdvFiliaisLoading && "animate-spin")} />
+                  </Button>
+                </div>
+                <Select
+                  value={unitForm.pdvFilialId || NONE}
+                  onValueChange={(value) => setUnitForm((current) => ({
+                    ...current,
+                    pdvFilialId: value === NONE ? "" : value,
+                  }))}
+                  disabled={pdvFiliaisLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={pdvFiliaisLoading ? "Buscando filiais..." : "Selecione a filial do PDV"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>Sem vínculo com o PDV</SelectItem>
+                    {unitForm.pdvFilialId && !pdvFiliais.some((filial) => filial.id === unitForm.pdvFilialId) ? (
+                      <SelectItem value={unitForm.pdvFilialId}>
+                        Vínculo atual não localizado · ID {unitForm.pdvFilialId}
+                      </SelectItem>
+                    ) : null}
+                    {pdvFiliais.map((filial) => (
+                      <SelectItem key={filial.id} value={filial.id}>
+                        {filial.name} · {filial.cnpj ?? "CNPJ não informado"} · ID {filial.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {pdvFiliaisError ? (
+                  <p className="text-xs font-medium text-destructive">{pdvFiliaisError}</p>
+                ) : unitForm.pdvFilialId ? (
+                  <p className="text-xs font-semibold text-sky-800">
+                    {pdvFiliais.find((filial) => filial.id === unitForm.pdvFilialId)
+                      ? "Filial validada na API do PDV Legal."
+                      : "Este ID ainda não foi validado na consulta atual."}
+                  </p>
+                ) : null}
               </div>
-              <div className="space-y-2">
-                <Label>ID Bizneo</Label>
+              <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4">
+                <div>
+                  <Label>ID da unidade no Bizneo</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Taxon do Bizneo. Este vínculo é independente do PDV Legal.
+                  </p>
+                </div>
                 <Input
                   value={unitForm.bizneoTaxonId}
                   onChange={(event) => setUnitForm((current) => ({ ...current, bizneoTaxonId: event.target.value }))}
-                  placeholder="Opcional"
+                  placeholder="ID/taxon do Bizneo"
+                  inputMode="numeric"
                 />
               </div>
             </div>

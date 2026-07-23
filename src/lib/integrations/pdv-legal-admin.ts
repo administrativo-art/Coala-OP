@@ -43,6 +43,66 @@ export type SyncDiagnostics = {
   unmappedSkus: { sku: string; name: string; count: number }[];
 };
 
+export type PdvLegalFilial = {
+  id: string;
+  name: string;
+  cnpj: string | null;
+  active: boolean | null;
+};
+
+function normalizePdvFilial(value: unknown): PdvLegalFilial | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const rawId = row.codigo ?? row.Codigo ?? row.id ?? row.Id;
+  const rawName = row.nome ?? row.Nome ?? row.razaoSocial ?? row.RazaoSocial;
+  if ((typeof rawId !== 'string' && typeof rawId !== 'number') || typeof rawName !== 'string') {
+    return null;
+  }
+  const id = String(rawId).trim();
+  const name = rawName.trim();
+  if (!id || !name) return null;
+  const rawCnpj = row.cnpj ?? row.Cnpj ?? row.cpfCnpj ?? row.CpfCnpj;
+  const rawActive = row.ativo ?? row.Ativo;
+  return {
+    id,
+    name,
+    cnpj: typeof rawCnpj === 'string' && rawCnpj.trim() ? rawCnpj.trim() : null,
+    active: typeof rawActive === 'boolean' ? rawActive : null,
+  };
+}
+
+export async function fetchPdvLegalFiliais(): Promise<PdvLegalFilial[]> {
+  const { COD_EMPRESA, API_TOKEN } = getEnv();
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${BASE_URL}/filial/get`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      CodEmpresa: COD_EMPRESA,
+      Token: API_TOKEN,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new PdvApiError(
+      `Falha ao consultar filiais do PDV Legal (HTTP ${response.status}).`,
+      'FILIAIS_FETCH_FAILED',
+      detail.slice(0, 300),
+    );
+  }
+  const raw: unknown = await response.json().catch(() => null);
+  const rows = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).data)
+      ? (raw as { data: unknown[] }).data
+      : [];
+  return rows
+    .map(normalizePdvFilial)
+    .filter((filial): filial is PdvLegalFilial => filial !== null)
+    .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
+}
+
 /**
  * Detecta e valida o formato da resposta de cupons. Array direto, paginado
  * `{ data }` ou objeto vazio são aceitos; qualquer outro formato lança erro
