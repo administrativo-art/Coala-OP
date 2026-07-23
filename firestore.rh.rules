@@ -97,23 +97,23 @@ service cloud.firestore {
       allow write:  if isAdmin();
     }
 
-    // ─── jobRoles ────────────────────────────────────────────────────────────
-    // Coleção existente — qualquer autenticado lê; admins escrevem.
+    // ─── Catálogo interno de cargos, funções e departamentos ─────────────────
+    // Os documentos contêm dados internos (incluindo faixas salariais).
+    // Leitura direta fica limitada a RH/gestão; toda escrita passa pelas APIs,
+    // que aplicam validação de schema, permissão e auditoria.
     match /jobRoles/{roleId} {
-      allow read:   if isAuth();
-      allow write:  if isAdmin();
+      allow read:   if isManager();
+      allow write:  if false;
     }
 
-    // ─── jobDepartments ──────────────────────────────────────────────────────
     match /jobDepartments/{deptId} {
-      allow read:   if isAuth();
-      allow write:  if isAdmin();
+      allow read:   if isManager();
+      allow write:  if false;
     }
 
-    // ─── jobFunctions ────────────────────────────────────────────────────────
     match /jobFunctions/{funcId} {
-      allow read:   if isAuth();
-      allow write:  if isAdmin();
+      allow read:   if isManager();
+      allow write:  if false;
     }
 
     // ─── audit_log ──────────────────────────────────────────────────────────
