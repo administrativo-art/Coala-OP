@@ -4,9 +4,10 @@ import { FieldValue } from "firebase-admin/firestore";
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { maybeAdvanceAfterFirstAccess } from "@/lib/hr/onboarding-access-provisioning";
+import { createPdvLegalUser } from "@/lib/integrations/pdv-legal-admin";
 
 const FIRST_ACCESS_COLLECTION = "firstAccessLinks";
-const FIRST_ACCESS_TTL_DAYS = 7;
+const FIRST_ACCESS_TTL_DAYS = 2;
 
 function nowIso() {
   return new Date().toISOString();
@@ -130,6 +131,7 @@ export async function getFirstAccessLinkStatus(token: string) {
   const usedAt = typeof data.usedAt === "string" ? data.usedAt : null;
   const revokedAt = typeof data.revokedAt === "string" ? data.revokedAt : null;
   const userId = typeof data.userId === "string" ? data.userId : "";
+  const onboardingId = typeof data.onboardingId === "string" ? data.onboardingId : null;
   const expired = !expiresAt || new Date(expiresAt).getTime() <= Date.now();
 
   if (!userId) return { ok: false as const, reason: "invalid" as const };
@@ -139,6 +141,13 @@ export async function getFirstAccessLinkStatus(token: string) {
 
   const userSnap = await dbAdmin.collection("users").doc(userId).get();
   const user = userSnap.data() ?? {};
+  const onboardingSnap = onboardingId
+    ? await hrDbAdmin.collection("onboardingProcesses").doc(onboardingId).get()
+    : null;
+  const onboarding = onboardingSnap?.data() ?? {};
+  const pdvAccess = onboarding.pdvAccess && typeof onboarding.pdvAccess === "object" && !Array.isArray(onboarding.pdvAccess)
+    ? onboarding.pdvAccess as Record<string, unknown>
+    : {};
 
   return {
     ok: true as const,
@@ -146,7 +155,55 @@ export async function getFirstAccessLinkStatus(token: string) {
     email: typeof user.email === "string" ? user.email : null,
     username: typeof user.username === "string" ? user.username : null,
     expiresAt,
+    onboardingId,
+    pdvAccess: {
+      required: pdvAccess.required === true,
+      completed: pdvAccess.status === "completed",
+      profileName: typeof pdvAccess.profileName === "string" ? pdvAccess.profileName : null,
+      filialName: typeof pdvAccess.filialName === "string" ? pdvAccess.filialName : null,
+    },
   };
+}
+
+export async function provisionPdvFirstAccess(token: string, password: string) {
+  const status = await getFirstAccessLinkStatus(token);
+  if (!status.ok) return status;
+  if (!status.pdvAccess.required) return { ok: false as const, reason: "pdv_not_required" as const };
+  if (status.pdvAccess.completed) return { ok: true as const, alreadyCompleted: true };
+  if (!status.onboardingId) return { ok: false as const, reason: "invalid" as const };
+
+  const onboardingRef = hrDbAdmin.collection("onboardingProcesses").doc(status.onboardingId);
+  const [onboardingSnap, userSnap] = await Promise.all([
+    onboardingRef.get(),
+    dbAdmin.collection("users").doc(status.userId).get(),
+  ]);
+  const onboarding = onboardingSnap.data() ?? {};
+  const pdv = onboarding.pdvAccess && typeof onboarding.pdvAccess === "object" && !Array.isArray(onboarding.pdvAccess)
+    ? onboarding.pdvAccess as Record<string, unknown>
+    : {};
+  const filialId = typeof pdv.filialId === "string" ? pdv.filialId : "";
+  const profileId = typeof pdv.profileId === "string" ? pdv.profileId : "";
+  const name = typeof userSnap.data()?.username === "string" ? userSnap.data()?.username.trim() : "";
+  if (!filialId || !profileId || !name) return { ok: false as const, reason: "invalid" as const };
+
+  try {
+    const created = await createPdvLegalUser({ name, filialId, profileId, password });
+    const provisionedAt = nowIso();
+    await Promise.all([
+      dbAdmin.collection("users").doc(status.userId).set({ registrationIdPdv: created.id, updatedAt: provisionedAt }, { merge: true }),
+      onboardingRef.set({
+        pdvAccess: { ...pdv, status: "completed", userId: created.id, provisionedAt, lastError: null },
+        updatedAt: provisionedAt,
+      }, { merge: true }),
+    ]);
+    return { ok: true as const, userId: created.id };
+  } catch (error) {
+    await onboardingRef.set({
+      pdvAccess: { ...pdv, status: "failed", lastError: error instanceof Error ? error.message : "Falha ao criar acesso." },
+      updatedAt: nowIso(),
+    }, { merge: true });
+    throw error;
+  }
 }
 
 export async function consumeFirstAccessLink(token: string, password: string) {

@@ -8,6 +8,7 @@ import {
   getTermination,
   listTerminationEvents,
   reconcileTerminationProviderState,
+  revokeTerminationAccess,
   sendTerminationToAccountant,
   sendTerminationDocumentsForSignature,
   terminationContext,
@@ -54,6 +55,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     else if (body.action === "send_accountant") process = await sendTerminationToAccountant({ context, id, recipientEmail: String(body.recipientEmail ?? ""), appBaseUrl: request.nextUrl.origin });
     else if (body.action === "audit_documents") process = await auditTerminationDocuments({ context, id, approvedIds: Array.isArray(body.approvedIds) ? body.approvedIds.filter((value): value is string => typeof value === "string") : [], selectedIds: Array.isArray(body.selectedIds) ? body.selectedIds.filter((value): value is string => typeof value === "string") : [] });
     else if (body.action === "send_signatures") process = await sendTerminationDocumentsForSignature({ context, id });
+    else if (body.action === "revoke_access") process = await revokeTerminationAccess({
+      context,
+      id,
+      target: body.target as "pdv" | "bizneo" | "healthPlan",
+    });
     else if (body.action === "complete") process = await completeTermination({ context, id });
     else throw new Error("Ação inválida.");
     return NextResponse.json({ process });

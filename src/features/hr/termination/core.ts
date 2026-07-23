@@ -57,6 +57,7 @@ const STEP_DEFINITIONS: Array<Pick<TerminationStep, "id" | "label" | "lane" | "o
   { id: "document_audit", label: "Auditoria documental", lane: "documents", owner: "hr", required: true },
   { id: "signatures", label: "Assinaturas finais", lane: "documents", owner: "employee", required: true },
   { id: "legal_obligations", label: "Pagamento e obrigações", lane: "closure", owner: "hr", required: true },
+  { id: "access_revocation", label: "Bloqueio de acessos", lane: "operational", owner: "hr", required: true },
   { id: "operational", label: "Encerramento operacional", lane: "operational", owner: "manager", required: true },
   { id: "closure", label: "Fechamento do desligamento", lane: "closure", owner: "hr", required: true },
 ];
@@ -151,7 +152,26 @@ export function applyAccountantReadiness<T extends CltTerminationProcess>(proces
 }
 
 export function recalculateTermination<T extends CltTerminationProcess>(process: T, now = new Date()): T {
-  const readyProcess = applyAccountantReadiness(process, now.toISOString());
+  const hasAccessStep = process.steps.some((step) => step.id === "access_revocation");
+  let steps = hasAccessStep
+    ? process.steps
+    : process.steps.flatMap((step) => step.id === "closure"
+      ? [{ id: "access_revocation", label: "Bloqueio de acessos", lane: "operational", owner: "hr", required: true, status: "pending" } as TerminationStep, step]
+      : [step]);
+  if (process.notice?.contractEndDate && now.toISOString().slice(0, 10) >= process.notice.contractEndDate) {
+    steps = patchStep(steps, "access_revocation", {
+      status: steps.find((step) => step.id === "access_revocation")?.status === "blocked" ? "in_progress" : steps.find((step) => step.id === "access_revocation")?.status,
+      blockedReason: null,
+      startedAt: steps.find((step) => step.id === "access_revocation")?.startedAt ?? now.toISOString(),
+    });
+  }
+  const accessRevocation = process.accessRevocation ?? {
+    pdv: { status: "pending" as const },
+    bizneo: { status: "pending" as const },
+    healthPlan: { status: "pending" as const },
+    coalaOne: { status: "scheduled" as const },
+  };
+  const readyProcess = applyAccountantReadiness({ ...process, steps, accessRevocation }, now.toISOString());
   const progress = calculateTerminationProgress(readyProcess.steps);
   const health = calculateTerminationHealth(readyProcess, now);
   const nextDueAt = readyProcess.steps

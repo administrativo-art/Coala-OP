@@ -1421,11 +1421,23 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
 
   const systemEntry = (key: string) => {
     const fallback = SYSTEM_FIELD_DEFAULTS[key] ?? systemField(key, "Sistema", 999, "confidential");
+    const systemsCardKeys = new Set<string>([
+      SYSTEM_FIELD_KEYS.registrationBizneo,
+      SYSTEM_FIELD_KEYS.registrationPdv,
+      SYSTEM_FIELD_KEYS.loginBizneo,
+      SYSTEM_FIELD_KEYS.loginPdv,
+      SYSTEM_FIELD_KEYS.loginCoalaOne,
+      SYSTEM_FIELD_KEYS.accessProfile,
+      SYSTEM_FIELD_KEYS.operational,
+      SYSTEM_FIELD_KEYS.goals,
+      SYSTEM_FIELD_KEYS.functions,
+    ]);
     return {
       ...fallback,
       ...(fieldMap.fields[key] ?? {}),
       section: fallback.section,
       order: fallback.order,
+      ...(systemsCardKeys.has(key) ? { visibility: "restricted_partial" as const } : {}),
     } as FieldMapEntry;
   };
   const canShowSystemProfileField = (key: string) => {
@@ -1439,14 +1451,29 @@ function EmployeeProfileFields({ user, profileName, reloadKey = 0 }: { user: Use
   };
   [
     {
+      key: SYSTEM_FIELD_KEYS.loginBizneo,
+      value: user.email || "-",
+      hasValue: Boolean(user.email),
+    },
+    {
       key: SYSTEM_FIELD_KEYS.registrationBizneo,
       value: user.registrationIdBizneo ?? "-",
       hasValue: Boolean(user.registrationIdBizneo),
     },
     {
+      key: SYSTEM_FIELD_KEYS.loginPdv,
+      value: user.username || "-",
+      hasValue: Boolean(user.username),
+    },
+    {
       key: SYSTEM_FIELD_KEYS.registrationPdv,
       value: pdvRegistrationLabel(user),
       hasValue: pdvRegistrationLabel(user) !== "-",
+    },
+    {
+      key: SYSTEM_FIELD_KEYS.loginCoalaOne,
+      value: user.email || "-",
+      hasValue: Boolean(user.email),
     },
     {
       key: SYSTEM_FIELD_KEYS.operational,

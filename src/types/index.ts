@@ -1317,6 +1317,17 @@ export type OnboardingProcess = {
   finalizationSettings?: OnboardingFinalizationSettings;
   firstAccess?: OnboardingFirstAccessState;
   accessProvisioning?: OnboardingAccessProvisioningState;
+  pdvAccess?: {
+    required: boolean;
+    profileId?: string | null;
+    profileName?: string | null;
+    filialId?: string | null;
+    filialName?: string | null;
+    status?: 'not_required' | 'pending_password' | 'completed' | 'failed';
+    userId?: string | null;
+    provisionedAt?: string | null;
+    lastError?: string | null;
+  };
   status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'accountant_pending' | 'contract_pending' | 'ready_to_create_user' | 'awaiting_first_access' | 'active' | 'completed' | 'cancelled';
   currentStage?: OnboardingStageId;
   stages?: OnboardingStage[];

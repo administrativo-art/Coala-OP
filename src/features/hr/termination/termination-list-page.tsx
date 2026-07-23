@@ -26,6 +26,7 @@ const CARD_PHASES: Array<{ label: string; stepIds: TerminationStepId[] }> = [
   { label: "ASO demissional", stepIds: ["aso"] },
   { label: "Contabilidade", stepIds: ["accountant"] },
   { label: "Auditoria e assinaturas", stepIds: ["document_audit", "signatures"] },
+  { label: "Bloqueio de acessos", stepIds: ["access_revocation"] },
   { label: "Pagamento e encerramento", stepIds: ["legal_obligations", "operational"] },
   { label: "Fechamento", stepIds: ["closure"] },
 ];

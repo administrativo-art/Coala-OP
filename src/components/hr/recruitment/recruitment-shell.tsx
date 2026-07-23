@@ -7096,6 +7096,10 @@ function StartOnboardingModal({
   const [expectedAdmissionDate, setExpectedAdmissionDate] = useState('');
   const [finalizationSettings, setFinalizationSettings] = useState<OnboardingFinalizationSettings>(() => getFinalizationDraft(null));
   const [generateSignatureDocuments, setGenerateSignatureDocuments] = useState(false);
+  const [requiresPdvAccess, setRequiresPdvAccess] = useState(false);
+  const [pdvProfileId, setPdvProfileId] = useState('');
+  const [pdvProfiles, setPdvProfiles] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadingPdvProfiles, setLoadingPdvProfiles] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -7148,6 +7152,22 @@ function StartOnboardingModal({
     return () => { active = false; };
   }, [functionId, getToken, integrationMode, jobRoleId]);
 
+  useEffect(() => {
+    if (!requiresPdvAccess) return;
+    let active = true;
+    setLoadingPdvProfiles(true);
+    void apiFetch('/api/hr/integrations/pdvlegal/catalog', getToken)
+      .then(payload => {
+        if (!active) return;
+        const profiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
+        setPdvProfiles(profiles);
+        setPdvProfileId(current => profiles.some((item: { id: string }) => item.id === current) ? current : '');
+      })
+      .catch(caught => active && setError(caught instanceof Error ? caught.message : 'Falha ao carregar perfis do PDV Legal.'))
+      .finally(() => active && setLoadingPdvProfiles(false));
+    return () => { active = false; };
+  }, [getToken, requiresPdvAccess]);
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const normalizedCandidateName = formatPersonName(candidateName);
@@ -7177,6 +7197,8 @@ function StartOnboardingModal({
           generateSignatureDocuments,
           integrationMode,
           integrationTemplateId: integrationMode === 'import' ? integrationTemplateId : null,
+          requiresPdvAccess,
+          pdvProfileId: requiresPdvAccess ? pdvProfileId : null,
         }),
       });
       if (!result?.process) throw new Error('Integração criada, mas a resposta veio incompleta.');
@@ -7306,6 +7328,44 @@ function StartOnboardingModal({
             </span>
           </label>
 
+          <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Acesso ao PDV Legal</p>
+            <div className="mt-2 flex gap-4 text-xs font-bold text-slate-700">
+              <label className="flex items-center gap-2">
+                <input type="radio" name="pdvAccess" checked={!requiresPdvAccess} onChange={() => { setRequiresPdvAccess(false); setPdvProfileId(''); }} />
+                Não
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" name="pdvAccess" checked={requiresPdvAccess} onChange={() => setRequiresPdvAccess(true)} />
+                Sim
+              </label>
+            </div>
+            {requiresPdvAccess ? (
+              <div className="mt-3 space-y-2">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Perfil de acesso
+                  <select
+                    value={pdvProfileId}
+                    onChange={event => setPdvProfileId(event.target.value)}
+                    required
+                    disabled={loadingPdvProfiles}
+                    className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2.5 text-xs"
+                  >
+                    <option value="">{loadingPdvProfiles ? 'Sincronizando perfis...' : 'Selecione o perfil do PDV'}</option>
+                    {pdvProfiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+                  </select>
+                </label>
+                <p className="text-[11px] font-semibold text-blue-700">
+                  {unitId
+                    ? activeUnits.find(unit => unit.id === unitId)?.pdvFilialId
+                      ? `A filial será a vinculada à unidade ${activeUnits.find(unit => unit.id === unitId)?.name}.`
+                      : 'Esta unidade ainda não possui filial do PDV vinculada.'
+                    : 'Selecione uma unidade para determinar a filial do PDV.'}
+                </p>
+              </div>
+            ) : null}
+          </div>
+
           <label className="block text-sm font-semibold text-slate-700">
             Unidade
             <select
@@ -7410,7 +7470,7 @@ function StartOnboardingModal({
             </button>
             <button
               type="submit"
-              disabled={submitting || (integrationMode === 'import' && !integrationTemplateId)}
+              disabled={submitting || (integrationMode === 'import' && !integrationTemplateId) || (requiresPdvAccess && (!unitId || !pdvProfileId || !activeUnits.find(unit => unit.id === unitId)?.pdvFilialId))}
               className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -9474,7 +9534,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[12.5px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <RotateCw className={`h-3.5 w-3.5 ${updating === `${selectedProcess.id}:verify_integrations` ? 'animate-spin' : ''}`} />
-                    {updating === `${selectedProcess.id}:verify_integrations` ? 'Procurando cadastros...' : 'Procurar cadastros novamente'}
+                    {updating === `${selectedProcess.id}:verify_integrations` ? 'Sincronizando códigos...' : 'Sincronizar acessos'}
                   </button>
                 ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5">

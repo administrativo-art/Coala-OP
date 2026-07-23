@@ -33,6 +33,7 @@ export type TerminationStepId =
   | "document_audit"
   | "signatures"
   | "legal_obligations"
+  | "access_revocation"
   | "operational"
   | "closure";
 
@@ -151,6 +152,12 @@ export type CltTerminationProcess = {
     accessRevoked: boolean;
     benefitsClosed: boolean;
     notes?: string | null;
+  };
+  accessRevocation?: {
+    pdv: { status: "pending" | "completed" | "not_applicable" | "failed"; externalId?: string | null; completedAt?: string | null; completedBy?: string | null; error?: string | null };
+    bizneo: { status: "pending" | "completed" | "not_applicable"; externalId?: string | null; completedAt?: string | null; completedBy?: string | null };
+    healthPlan: { status: "pending" | "completed" | "not_applicable"; completedAt?: string | null; completedBy?: string | null };
+    coalaOne: { status: "scheduled" | "completed"; completedAt?: string | null };
   };
   documents: TerminationDocument[];
   steps: TerminationStep[];

@@ -13,7 +13,7 @@ import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { findBizneoUser } from '@/lib/integrations/bizneo-admin';
-import { getAccessToken as getPdvAccessToken } from '@/lib/integrations/pdv-legal-admin';
+import { findPdvLegalUser } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
 import { requiredOnboardingIntegrationsResolved } from '@/lib/hr/onboarding-integrations';
 import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-documents';
@@ -92,16 +92,25 @@ async function verifyAccessIntegrations(params: {
   }
 
   let pdvAlert: IntegrationAlert;
-  try {
-    await getPdvAccessToken();
-    if (knownPdvId) {
-      await userRef.set({ registrationIdPdv: knownPdvId, updatedAt: params.now }, { merge: true });
-      pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'resolved', message: `API acessível e código operacional vinculado (ID ${knownPdvId}).`, checkedAt: params.now, externalId: knownPdvId, source: 'pdv_api_and_local_link' };
-    } else {
-      pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: 'PDV acessível, mas nenhum código operacional está vinculado ao colaborador.', checkedAt: params.now, source: 'pdv_api_and_local_link' };
+  const pdvAccess = asRecord(params.process.pdvAccess);
+  if (pdvAccess.required !== true) {
+    pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'resolved', message: 'Acesso ao PDV não solicitado para este colaborador.', checkedAt: params.now, source: 'onboarding_configuration' };
+  } else {
+    try {
+      const pdvUser = await findPdvLegalUser({
+        id: knownPdvId,
+        name: asString(user.username) ?? asString(params.process.candidateName) ?? '',
+        filialId: asString(pdvAccess.filialId),
+      });
+      if (pdvUser) {
+        await userRef.set({ registrationIdPdv: pdvUser.id, updatedAt: params.now }, { merge: true });
+        pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'resolved', message: `Cadastro localizado na filial vinculada (ID ${pdvUser.id}).`, checkedAt: params.now, externalId: pdvUser.id, source: 'pdv_api' };
+      } else {
+        pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: 'Colaborador não localizado no PDV Legal para a filial desta unidade.', checkedAt: params.now, source: 'pdv_api' };
+      }
+    } catch (cause) {
+      pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: cause instanceof Error ? `Não foi possível consultar o PDV Legal: ${cause.message}` : 'Não foi possível consultar o PDV Legal.', checkedAt: params.now, source: 'pdv_api' };
     }
-  } catch (cause) {
-    pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: cause instanceof Error ? `Não foi possível autenticar no PDV Legal: ${cause.message}` : 'Não foi possível autenticar no PDV Legal.', checkedAt: params.now, source: 'pdv_api_and_local_link' };
   }
 
   const requiredIds = new Set(['bizneo_id', 'pdv_id']);

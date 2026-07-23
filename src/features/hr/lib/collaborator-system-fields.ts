@@ -4,6 +4,9 @@ import { normalizeFieldVisibility } from "@/types/rh";
 export const SYSTEM_FIELD_KEYS = {
   registrationBizneo: "system.documents.registration_bizneo",
   registrationPdv: "system.documents.registration_pdv",
+  loginBizneo: "system.access.login_bizneo",
+  loginPdv: "system.access.login_pdv",
+  loginCoalaOne: "system.access.login_coala_one",
   accessProfile: "system.documents.access_profile",
   jobRole: "system.role.job_role",
   operational: "system.role.operational",
@@ -100,13 +103,16 @@ export function systemField(label: string, section: string, order: number, visib
 }
 
 export const SYSTEM_FIELD_DEFAULTS: Record<string, FieldMapEntry> = {
-  [SYSTEM_FIELD_KEYS.registrationBizneo]: systemField("Matrícula Bizneo", "Dados contratuais", 60, "restricted_total"),
-  [SYSTEM_FIELD_KEYS.registrationPdv]: systemField("Matrícula PDV", "Dados contratuais", 70, "restricted_total"),
-  [SYSTEM_FIELD_KEYS.accessProfile]: systemField("Perfil de acesso", "Dados contratuais", 110, "restricted_total"),
+  [SYSTEM_FIELD_KEYS.registrationBizneo]: systemField("Matrícula Bizneo", "Sistemas", 20, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.registrationPdv]: systemField("Matrícula PDV", "Sistemas", 50, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.loginBizneo]: systemField("Login do Bizneo", "Sistemas", 10, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.loginPdv]: systemField("Nome de usuário do PDV", "Sistemas", 40, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.loginCoalaOne]: systemField("Login do Coala One", "Sistemas", 70, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.accessProfile]: systemField("Perfil de acesso do Coala One", "Sistemas", 80, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.jobRole]: systemField("Cargo", "Dados contratuais", 30, "public"),
-  [SYSTEM_FIELD_KEYS.operational]: systemField("Operacional", "Dados contratuais", 80, "public"),
-  [SYSTEM_FIELD_KEYS.goals]: systemField("Metas", "Dados contratuais", 90, "public"),
-  [SYSTEM_FIELD_KEYS.functions]: systemField("Funções", "Dados contratuais", 100, "public"),
+  [SYSTEM_FIELD_KEYS.operational]: systemField("Operacional", "Sistemas", 90, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.goals]: systemField("Metas", "Sistemas", 100, "restricted_partial"),
+  [SYSTEM_FIELD_KEYS.functions]: systemField("Funções", "Sistemas", 110, "restricted_partial"),
   [SYSTEM_FIELD_KEYS.shift]: systemField("Escala", "Escala e unidades", 10, "public"),
   [SYSTEM_FIELD_KEYS.units]: systemField("Unidades", "Escala e unidades", 20, "public"),
   [SYSTEM_FIELD_KEYS.uniforms]: systemField("Uniformes", "Uniformes", 10, "restricted_total"),

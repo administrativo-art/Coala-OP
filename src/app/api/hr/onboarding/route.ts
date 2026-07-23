@@ -15,6 +15,7 @@ import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-com
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
+import { fetchPdvLegalFiliais, fetchPdvLegalProfiles } from '@/lib/integrations/pdv-legal-admin';
 import {
   applyOnboardingSignatureMode,
   instantiateOnboardingDocuments,
@@ -165,6 +166,8 @@ export async function POST(request: NextRequest) {
   const integrationMode = input.integrationMode === 'import' ? 'import' : 'blank';
   const integrationTemplateId = asString(input.integrationTemplateId);
   const requestedTemplateVersion = asNumber(input.integrationTemplateVersion);
+  const requiresPdvAccess = asBoolean(input.requiresPdvAccess);
+  const pdvProfileId = asString(input.pdvProfileId);
 
   if (!candidateName) return jsonError('Informe o nome da pessoa em integração.');
   if (!candidateEmail || !candidateEmail.includes('@')) return jsonError('Informe um e-mail válido.');
@@ -178,6 +181,8 @@ export async function POST(request: NextRequest) {
   if (needsTransportVoucher && (transportVoucherValue === null || transportVoucherValue < 0)) {
     return jsonError('Informe o valor diário do vale-transporte.');
   }
+  if (requiresPdvAccess && !unitId) return jsonError('Selecione a unidade para liberar o PDV Legal.');
+  if (requiresPdvAccess && !pdvProfileId) return jsonError('Selecione o perfil de acesso do PDV Legal.');
 
   const [roleDoc, functionDoc, unitDoc, employerUnitDoc, shiftDefinitionDoc] = await Promise.all([
     hrDbAdmin.collection('jobRoles').doc(jobRoleId).get(),
@@ -207,6 +212,24 @@ export async function POST(request: NextRequest) {
     !shiftDefinitionMatchesUnit(shiftDefinitionDoc.data(), unitDoc.id)
   ) {
     return jsonError('O turno selecionado não pertence à unidade escolhida.', 400);
+  }
+  let pdvAccess: Record<string, unknown> = { required: false, status: 'not_required' };
+  if (requiresPdvAccess) {
+    const filialId = asString(unitDoc?.data()?.pdvFilialId);
+    if (!filialId) return jsonError('A unidade escolhida ainda não está vinculada a uma filial do PDV Legal.', 400);
+    const [profiles, filiais] = await Promise.all([fetchPdvLegalProfiles(), fetchPdvLegalFiliais()]);
+    const profile = profiles.find(item => item.id === pdvProfileId);
+    const filial = filiais.find(item => item.id === filialId);
+    if (!profile) return jsonError('O perfil escolhido não existe mais no PDV Legal. Sincronize e escolha novamente.', 400);
+    if (!filial) return jsonError('A filial vinculada à unidade não existe mais no PDV Legal.', 400);
+    pdvAccess = {
+      required: true,
+      profileId: profile.id,
+      profileName: profile.name,
+      filialId: filial.id,
+      filialName: filial.name,
+      status: 'pending_password',
+    };
   }
 
   const roleData = roleDoc.data() ?? {};
@@ -307,6 +330,7 @@ export async function POST(request: NextRequest) {
       transportVoucherValue,
       shiftDefinitionId: shiftDefinitionDoc?.exists ? shiftDefinitionDoc.id : null,
     },
+    pdvAccess,
     source: 'manual',
     integrationV2,
     probationV2,

@@ -5,7 +5,7 @@ import { getStorage } from "firebase-admin/storage";
 import type { NextRequest } from "next/server";
 
 import { createManualTask } from "@/features/tasks/lib/server";
-import { adminApp, dbAdmin } from "@/lib/firebase-admin";
+import { adminApp, authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { loadExpectedIdentity } from "@/lib/hr/employee-document-identity";
@@ -15,6 +15,7 @@ import { getUserDisplayName } from "@/lib/user-display";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { EMAIL_SENDERS, sendEmail } from "@/lib/email/resend";
 import { renderCoalaEmail } from "@/lib/email/template";
+import { deletePdvLegalUser } from "@/lib/integrations/pdv-legal-admin";
 import {
   buildProcessProjection,
   calculateMaterialDeadline,
@@ -341,6 +342,12 @@ export async function createEmployeeResignationRequest(params: {
     },
     accountant: { status: "not_started" },
     operational: { uniformsReturned: false, assetsReturned: false, scheduleRemoved: false, accessRevoked: false, benefitsClosed: false },
+    accessRevocation: {
+      pdv: { status: user.registrationIdPdv ? "pending" : "not_applicable", externalId: user.registrationIdPdv ?? null },
+      bizneo: { status: user.registrationIdBizneo ? "pending" : "not_applicable", externalId: user.registrationIdBizneo ?? null },
+      healthPlan: { status: "pending" },
+      coalaOne: { status: "scheduled" },
+    },
     documents,
     steps: createInitialTerminationSteps(now),
     nextDueAt: null,
@@ -533,6 +540,11 @@ export async function decideTerminationNotice(params: {
   const now = new Date().toISOString();
   let steps = patchStep(process.steps, "notice_decision", { status: "completed", completedAt: now, completedBy: params.context.userDoc.id });
   for (const id of ["aso", "accountant", "document_audit", "signatures", "legal_obligations"] as const) steps = patchStep(steps, id, { dueAt: legalPaymentDueDate });
+  steps = patchStep(steps, "access_revocation", {
+    status: "blocked",
+    dueAt: contractEndDate,
+    blockedReason: `Aguardando o término do contrato em ${contractEndDate}.`,
+  });
   steps = patchStep(steps, "legal_obligations", { status: "in_progress", startedAt: now });
   const updated = await saveTermination({
     ...process,
@@ -574,6 +586,81 @@ export async function updateTerminationStep(params: {
   return updated;
 }
 
+export async function revokeTerminationAccess(params: {
+  context: ServerUserContext;
+  id: string;
+  target: "pdv" | "bizneo" | "healthPlan";
+}) {
+  if (!["pdv", "bizneo", "healthPlan"].includes(params.target)) throw new Error("Sistema de acesso inválido.");
+  const process = await requireManagedProcess(params.context, params.id);
+  if (!process.notice) throw new Error("Defina o término do contrato antes de bloquear acessos.");
+  const today = new Date().toISOString().slice(0, 10);
+  if (today < process.notice.contractEndDate) {
+    throw new Error(`Os acessos só podem ser bloqueados a partir de ${process.notice.contractEndDate}.`);
+  }
+  const now = new Date().toISOString();
+  const userSnap = await dbAdmin.collection("users").doc(process.employeeId).get();
+  const user = userSnap.data() ?? {};
+  const current = process.accessRevocation ?? {
+    pdv: { status: "pending" as const },
+    bizneo: { status: "pending" as const },
+    healthPlan: { status: "pending" as const },
+    coalaOne: { status: "scheduled" as const },
+  };
+  const accessRevocation = structuredClone(current);
+
+  if (params.target === "pdv") {
+    const externalId = asString(accessRevocation.pdv.externalId) ?? asString(user.registrationIdPdv);
+    if (!externalId) {
+      accessRevocation.pdv = { status: "not_applicable", externalId: null, completedAt: now, completedBy: params.context.userDoc.id };
+    } else {
+      try {
+        await deletePdvLegalUser(externalId);
+        accessRevocation.pdv = { status: "completed", externalId, completedAt: now, completedBy: params.context.userDoc.id, error: null };
+      } catch (error) {
+        accessRevocation.pdv = { status: "failed", externalId, error: error instanceof Error ? error.message : "Falha ao remover acesso." };
+        await saveTermination({ ...process, accessRevocation, lastActivityAt: now, updatedAt: now });
+        throw error;
+      }
+    }
+  } else {
+    const externalId = params.target === "bizneo"
+      ? asString(accessRevocation.bizneo.externalId) ?? asString(user.registrationIdBizneo)
+      : null;
+    accessRevocation[params.target] = {
+      status: externalId || params.target === "healthPlan" ? "completed" : "not_applicable",
+      ...(externalId ? { externalId } : {}),
+      completedAt: now,
+      completedBy: params.context.userDoc.id,
+    } as never;
+  }
+
+  const externalDone = [accessRevocation.pdv, accessRevocation.bizneo, accessRevocation.healthPlan]
+    .every((item) => ["completed", "not_applicable"].includes(item.status));
+  const steps = patchStep(process.steps, "access_revocation", {
+    status: externalDone ? "completed" : "in_progress",
+    startedAt: process.steps.find((step) => step.id === "access_revocation")?.startedAt ?? now,
+    ...(externalDone ? { completedAt: now, completedBy: params.context.userDoc.id } : {}),
+  });
+  const updated = await saveTermination({
+    ...process,
+    accessRevocation,
+    operational: { ...process.operational!, accessRevoked: externalDone, benefitsClosed: accessRevocation.healthPlan.status === "completed" },
+    steps,
+    lastActivityAt: now,
+    updatedAt: now,
+  });
+  const label = params.target === "pdv" ? "PDV Legal" : params.target === "bizneo" ? "Bizneo" : "plano de saúde";
+  await appendTerminationEvent(process.id, {
+    type: "ACCESS_REVOKED",
+    at: now,
+    ...eventActor(params.context),
+    message: params.target === "pdv" ? `Acesso ao ${label} removido pela API.` : `Bloqueio no ${label} confirmado pelo RH.`,
+    data: { target: params.target },
+  });
+  return updated;
+}
+
 export async function completeTermination(params: { context: ServerUserContext; id: string }) {
   const process = await requireManagedProcess(params.context, params.id);
   if (!process.notice) throw new Error("Defina o aviso-prévio e a data de término.");
@@ -581,8 +668,26 @@ export async function completeTermination(params: { context: ServerUserContext; 
   if (incomplete.length) throw new Error(`Ainda existem etapas obrigatórias: ${incomplete.map((step) => step.label).join(", ")}.`);
   const now = new Date().toISOString();
   const steps = patchStep(process.steps, "closure", { status: "completed", startedAt: now, completedAt: now, completedBy: params.context.userDoc.id });
-  const updated = await saveTermination({ ...process, status: "completed", steps, completedAt: now, lastActivityAt: now, updatedAt: now });
-  await dbAdmin.collection("users").doc(process.employeeId).set({ isActive: false, employmentStatus: "terminated", terminationDate: process.notice.contractEndDate, updatedAt: now }, { merge: true });
+  await Promise.all([
+    authAdmin.updateUser(process.employeeId, { disabled: true }),
+    dbAdmin.collection("users").doc(process.employeeId).set({ isActive: false, employmentStatus: "terminated", terminationDate: process.notice.contractEndDate, updatedAt: now }, { merge: true }),
+  ]);
+  const updated = await saveTermination({
+    ...process,
+    status: "completed",
+    steps,
+    accessRevocation: {
+      ...(process.accessRevocation ?? {
+        pdv: { status: "not_applicable" },
+        bizneo: { status: "not_applicable" },
+        healthPlan: { status: "not_applicable" },
+      }),
+      coalaOne: { status: "completed", completedAt: now },
+    },
+    completedAt: now,
+    lastActivityAt: now,
+    updatedAt: now,
+  });
   await appendTerminationEvent(process.id, { type: "COMPLETED", at: now, ...eventActor(params.context), message: "Desligamento concluído e cadastro do colaborador inativado." });
   return updated;
 }

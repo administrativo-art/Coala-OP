@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   consumeFirstAccessLink,
   getFirstAccessLinkStatus,
+  provisionPdvFirstAccess,
 } from "@/lib/first-access-links";
 
 export const runtime = "nodejs";
@@ -36,6 +37,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ to
     email: status.email,
     username: status.username,
     expiresAt: status.expiresAt,
+    pdvAccess: status.pdvAccess,
   });
 }
 
@@ -47,11 +49,29 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   }
 
   const body = await request.json().catch(() => null);
+  const action = body?.action === "pdv_password" ? "pdv_password" : "coala_password";
   const password = typeof body?.password === "string" ? body.password : "";
+  if (action === "pdv_password") {
+    if (!/^[1-9]\d{3}$/.test(password)) {
+      return NextResponse.json({ error: "A senha do PDV deve ter exatamente 4 números e não pode começar com zero." }, { status: 400 });
+    }
+    try {
+      const result = await provisionPdvFirstAccess(clean, password);
+      if (!result.ok) return NextResponse.json({ error: errorMessage(result.reason) }, { status: 400 });
+      return NextResponse.json({ ok: true, nextStep: "coala_password" });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao criar acesso no PDV Legal." }, { status: 502 });
+    }
+  }
   if (password.length < 8) {
     return NextResponse.json({ error: "A senha deve ter pelo menos 8 caracteres." }, { status: 400 });
   }
 
+  const status = await getFirstAccessLinkStatus(clean);
+  if (!status.ok) return NextResponse.json({ error: errorMessage(status.reason) }, { status: 400 });
+  if (status.pdvAccess.required && !status.pdvAccess.completed) {
+    return NextResponse.json({ error: "Crie primeiro a senha do PDV Legal." }, { status: 409 });
+  }
   const result = await consumeFirstAccessLink(clean, password);
   if (!result.ok) {
     return NextResponse.json({ error: errorMessage(result.reason) }, { status: 400 });

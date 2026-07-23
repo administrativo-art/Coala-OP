@@ -51,6 +51,7 @@ const PHASES: Array<{
   { id: "aso", title: "ASO demissional", description: "Guia, pagamento, clínica, agendamento, recebimento e aprovação.", stepIds: ["aso"] },
   { id: "accountant", title: "Contabilidade", description: "Liberada somente depois do aviso definido e do ASO aprovado.", stepIds: ["accountant"] },
   { id: "documents", title: "Auditoria e assinaturas", description: "Revisão dos documentos e assinatura das partes.", stepIds: ["document_audit", "signatures"] },
+  { id: "access", title: "Bloqueio de acessos", description: "Revogação do PDV, Bizneo e plano de saúde.", stepIds: ["access_revocation"] },
   { id: "operations", title: "Pagamento e encerramento", description: "Obrigações rescisórias, devoluções e encerramentos operacionais.", stepIds: ["legal_obligations", "operational"] },
   { id: "closure", title: "Fechamento", description: "Conferência final e conclusão do desligamento.", stepIds: ["closure"] },
 ];
@@ -163,6 +164,67 @@ function MiniStep({ label, done, active, blocked }: { label: string; done: boole
             ? <Clock3 className="h-4 w-4 text-sky-600" />
             : <Circle className="h-4 w-4 text-slate-300" />}
       <span className={done ? "text-slate-700" : active || blocked ? "font-medium text-slate-800" : "text-slate-500"}>{label}</span>
+    </div>
+  );
+}
+
+function AccessRevocationPanel({
+  process,
+  busy,
+  onAction,
+}: {
+  process: CltTerminationProcess;
+  busy: boolean;
+  onAction: (body: Record<string, unknown>) => void;
+}) {
+  const state = process.accessRevocation;
+  const contractReached = Boolean(process.notice && new Date().toISOString().slice(0, 10) >= process.notice.contractEndDate);
+  const rows = [
+    { target: "pdv", label: "PDV Legal", status: state?.pdv.status ?? "pending", detail: state?.pdv.error ?? "Remoção executada e confirmada pela API." },
+    { target: "bizneo", label: "Bizneo", status: state?.bizneo.status ?? "pending", detail: "Confirmação operacional do bloqueio no Bizneo." },
+    { target: "healthPlan", label: "Plano de saúde", status: state?.healthPlan.status ?? "pending", detail: "Confirmação da exclusão do benefício." },
+  ] as const;
+  return (
+    <div className="space-y-3">
+      {!contractReached ? (
+        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" />
+          <p>Os bloqueios serão liberados na data de término do contrato: {dateLabel(process.notice?.contractEndDate)}.</p>
+        </div>
+      ) : null}
+      {rows.map((row) => {
+        const done = row.status === "completed" || row.status === "not_applicable";
+        return (
+          <div key={row.target} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
+            <div>
+              <p className="font-black text-slate-900">{row.label}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                {row.status === "not_applicable" ? "Colaborador sem cadastro vinculado." : row.detail}
+              </p>
+            </div>
+            {done ? (
+              <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Concluído</Badge>
+            ) : (
+              <Button
+                variant={row.target === "pdv" ? "default" : "outline"}
+                disabled={busy || !contractReached}
+                onClick={() => {
+                  if (row.target === "pdv" && !window.confirm("Remover agora o acesso deste colaborador no PDV Legal? Esta ação será enviada à API do PDV.")) return;
+                  onAction({ action: "revoke_access", target: row.target });
+                }}
+              >
+                {row.target === "pdv" ? "Remover pela API" : "Confirmar bloqueio"}
+              </Button>
+            )}
+          </div>
+        );
+      })}
+      <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+        <p className="font-black text-sky-900">Coala One</p>
+        <p className="mt-1 text-xs font-semibold text-sky-700">
+          O login será bloqueado automaticamente quando o RH concluir o desligamento.
+        </p>
+      </div>
     </div>
   );
 }
@@ -391,6 +453,8 @@ export function TerminationDetailPage({ id }: { id: string }) {
         ) : null}
       </>
     );
+  } else if (selectedPhase.id === "access") {
+    selectedContent = <AccessRevocationPanel process={process} busy={busy} onAction={(body) => void action(body)} />;
   } else if (selectedPhase.id === "operations") {
     selectedContent = (
       <>
@@ -738,6 +802,10 @@ export function TerminationDetailPage({ id }: { id: string }) {
                       </div>
                     ) : null}
                   </>
+                ) : null}
+
+                {phase.id === "access" ? (
+                  <AccessRevocationPanel process={process} busy={busy} onAction={(body) => void action(body)} />
                 ) : null}
 
                 {phase.id === "operations" ? (
