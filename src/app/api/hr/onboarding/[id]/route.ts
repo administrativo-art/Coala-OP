@@ -785,6 +785,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!collaboratorUserId) return jsonError('Crie o colaborador antes de verificar os acessos.');
     if (process.currentStage !== 'integration') return jsonError('Os acessos só podem ser verificados na etapa de integração.', 409);
     update.integrationAlerts = await verifyAccessIntegrations({ process, collaboratorUserId, now });
+  } else if (action === 'set_access_operational_check') {
+    if (process.currentStage !== 'integration') {
+      return jsonError('Os controles operacionais só podem ser atualizados na etapa de acessos.', 409);
+    }
+    const checkId = asString(body.checkId);
+    if (checkId !== 'odontoprev' && checkId !== 'transportVoucherSystem') {
+      return jsonError('Controle operacional inválido.');
+    }
+    const completed = asBoolean(body.completed);
+    if (completed === null) return jsonError('Informe se o controle foi concluído.');
+
+    const accessProvisioning = asRecord(process.accessProvisioning);
+    const operationalChecks = asRecord(accessProvisioning.operationalChecks);
+    update.accessProvisioning = {
+      ...accessProvisioning,
+      operationalChecks: {
+        ...operationalChecks,
+        [checkId]: {
+          completed,
+          updatedAt: now,
+          updatedBy: access.decoded.uid,
+        },
+      },
+    };
   } else if (action === 'complete') {
     if (!process.collaboratorUserId) return jsonError('Crie o colaborador antes de finalizar o onboarding.');
     if (process.currentStage !== 'integration') return jsonError('A integração não está na etapa de acessos.', 409);

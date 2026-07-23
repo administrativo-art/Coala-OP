@@ -1118,6 +1118,18 @@ export type OnboardingAccessProvisioningState = {
   status?: 'pending' | 'awaiting_delivery' | 'awaiting_password' | 'completed' | 'failed';
   userCreatedAt?: string | null;
   completedAt?: string | null;
+  operationalChecks?: {
+    odontoprev?: {
+      completed: boolean;
+      updatedAt: string;
+      updatedBy: string;
+    };
+    transportVoucherSystem?: {
+      completed: boolean;
+      updatedAt: string;
+      updatedBy: string;
+    };
+  };
   email?: {
     status?: 'not_sent' | 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained';
     providerId?: string | null;

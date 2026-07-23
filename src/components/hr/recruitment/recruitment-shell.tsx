@@ -8423,9 +8423,13 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
             {filtered.map(process => {
               const progress = processDocProgress(process);
-              const currentStage = consolidatedOnboardingStages(process).find(stage => stage.id === process.currentStage);
+              const processStages = consolidatedOnboardingStages(process);
+              const currentStage = processStages.find(stage => stage.id === process.currentStage);
+              const locatedStageIndex = processStages.findIndex(stage => stage.id === process.currentStage);
+              const currentStageIndex = process.status === 'completed'
+                ? Math.max(processStages.length - 1, 0)
+                : Math.max(0, locatedStageIndex);
               const formReceived = !!process.publicFormSubmittedAt;
-              const linkActive = processLinkActive(process);
               const color = colorForProcess(process.id);
               return (
                 <article
@@ -8484,28 +8488,39 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </span>
                   </div>
 
-                  <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress.percent}%` }} />
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10.5px] font-black uppercase tracking-wide text-slate-400">Progresso do processo</span>
+                      <span className="text-xs font-black text-pink-600">Fase {currentStageIndex + 1} de {processStages.length}</span>
+                    </div>
+                    <div
+                      className="mt-2 grid gap-1"
+                      style={{ gridTemplateColumns: `repeat(${Math.max(processStages.length, 1)}, minmax(0, 1fr))` }}
+                      role="img"
+                      aria-label={process.status === 'completed'
+                        ? `${processStages.length} fases concluídas`
+                        : `${currentStageIndex} fases concluídas, fase ${currentStageIndex + 1} em andamento, ${Math.max(processStages.length - currentStageIndex - 1, 0)} futuras`}
+                    >
+                      {processStages.map((stage, stageIndex) => (
+                        <span
+                          key={stage.id}
+                          className={`h-1.5 rounded-full ${
+                            process.status === 'completed' || stageIndex < currentStageIndex
+                              ? 'bg-emerald-500'
+                              : stageIndex === currentStageIndex
+                                ? 'bg-pink-600'
+                                : 'bg-slate-200'
+                          }`}
+                        />
+                      ))}
+                    </div>
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-2">
-                    {linkActive && process.publicToken ? (
-                      <button
-                        type="button"
-                        onClick={event => {
-                          event.stopPropagation();
-                          void copyLink(`${process.id}:card-public`, `${PUBLIC_RECRUITMENT_URL}/onboarding/${process.publicToken}`);
-                        }}
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
-                      >
-                        <Copy className="h-3 w-3" />
-                        {copiedLinkId === `${process.id}:card-public` ? 'Copiado' : 'Copiar link'}
-                      </button>
-                    ) : (
-                      <span className="text-[11px] font-bold text-slate-400">
-                        {process.publicToken && !process.publicTokenClosedAt ? 'Prazo expirado' : 'Link encerrado'}
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                      <Clock className="h-3.5 w-3.5" />
+                      Atualizado em {formatOnboardingDate(process.updatedAt)}
+                    </span>
                     <button
                       type="button"
                       onClick={event => {
@@ -9399,6 +9414,57 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       <div className="mt-1 text-[11.5px] font-semibold text-slate-500">{resolved ? 'Sincronizado' : alert ? 'Pendente' : 'Não verificado'} · {desc}</div>
                     </div>
                   )})}
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[12.5px] font-black text-slate-900">Cadastros complementares</p>
+                  <p className="mt-1 text-[11.5px] font-semibold text-slate-500">
+                    Marque cada cadastro quando a inclusão do colaborador estiver concluída.
+                  </p>
+                  <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                    {[
+                      {
+                        id: 'odontoprev' as const,
+                        label: 'Plano de saúde Odontoprev',
+                        description: 'Inclusão confirmada no plano.',
+                        completed: selectedProcess.accessProvisioning?.operationalChecks?.odontoprev?.completed === true,
+                      },
+                      {
+                        id: 'transportVoucherSystem' as const,
+                        label: 'Sistema de vale-transporte',
+                        description: 'Cadastro confirmado no sistema de VT.',
+                        completed: selectedProcess.accessProvisioning?.operationalChecks?.transportVoucherSystem?.completed === true,
+                      },
+                    ].map(check => (
+                      <label
+                        key={check.id}
+                        className={`flex items-start gap-3 rounded-xl border px-3.5 py-3 transition ${
+                          check.completed
+                            ? 'border-emerald-200 bg-emerald-50'
+                            : 'border-slate-200 bg-slate-50'
+                        } ${canManage && canActOnCurrentPhase ? 'cursor-pointer hover:border-pink-200' : 'cursor-not-allowed opacity-70'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={check.completed}
+                          disabled={!canManage || !canActOnCurrentPhase || updating === `${selectedProcess.id}:set_access_operational_check`}
+                          onChange={event => void patchProcess(selectedProcess.id, {
+                            action: 'set_access_operational_check',
+                            checkId: check.id,
+                            completed: event.target.checked,
+                          })}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-pink-600 accent-pink-600 focus:ring-pink-500"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-[12.5px] font-black text-slate-900">{check.label}</span>
+                          <span className={`mt-0.5 block text-[11.5px] font-semibold ${
+                            check.completed ? 'text-emerald-700' : 'text-slate-500'
+                          }`}>
+                            {check.completed ? 'Concluído' : check.description}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 {userCreated && canManage ? (
                   <button
