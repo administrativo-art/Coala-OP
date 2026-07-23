@@ -101,7 +101,7 @@ export function assertTerminationManager(context: ServerUserContext) {
 export async function getTermination(id: string) {
   const snapshot = await hrDbAdmin.collection(COLLECTION).doc(id).get();
   if (!snapshot.exists) return null;
-  return { id: snapshot.id, ...(serialize(snapshot.data()) as Omit<CltTerminationProcess, "id">) } as CltTerminationProcess;
+  return recalculateTermination({ id: snapshot.id, ...(serialize(snapshot.data()) as Omit<CltTerminationProcess, "id">) } as CltTerminationProcess);
 }
 
 export async function assertTerminationVisible(context: ServerUserContext, process: CltTerminationProcess) {
@@ -114,12 +114,12 @@ export async function listTerminations(context: ServerUserContext, scope: "all" 
   if (scope === "mine" || !canViewAll(context)) {
     const snapshot = await hrDbAdmin.collection(COLLECTION).where("employeeId", "==", context.userDoc.id).get();
     const processes = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...(serialize(doc.data()) as Omit<CltTerminationProcess, "id">) } as CltTerminationProcess))
+      .map((doc) => recalculateTermination({ id: doc.id, ...(serialize(doc.data()) as Omit<CltTerminationProcess, "id">) } as CltTerminationProcess))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return Promise.all(processes.map((process) => reconcileTerminationProviderState(process).catch(() => process)));
   }
   const snapshot = await hrDbAdmin.collection(COLLECTION).orderBy("createdAt", "desc").get();
-  const processes = snapshot.docs.map((doc) => ({ id: doc.id, ...(serialize(doc.data()) as Omit<CltTerminationProcess, "id">) } as CltTerminationProcess));
+  const processes = snapshot.docs.map((doc) => recalculateTermination({ id: doc.id, ...(serialize(doc.data()) as Omit<CltTerminationProcess, "id">) } as CltTerminationProcess));
   return Promise.all(processes.map((process) => reconcileTerminationProviderState(process).catch(() => process)));
 }
 
@@ -486,19 +486,19 @@ export async function validateTerminationRequest(params: { context: ServerUserCo
   let steps = patchStep(process.steps, "hr_validation", { status: "completed", startedAt: now, completedAt: now, completedBy: params.context.userDoc.id });
   steps = patchStep(steps, "notice_decision", { status: "in_progress", startedAt: now });
   steps = patchStep(steps, "aso", { status: "in_progress", startedAt: now, note: "Fluxo paralelo: guia, PIX, clínica, agendamento e ASO." });
-  steps = patchStep(steps, "accountant", { status: "in_progress", startedAt: now });
+  steps = patchStep(steps, "accountant", { status: "blocked", blockedReason: "Aguardando definição do aviso-prévio e conclusão do ASO." });
   const updated = await saveTermination({
     ...process,
     status: "active",
     hrValidation: { status: "confirmed", at: now, by: params.context.userDoc.id, byName: eventActor(params.context).actorName, notes: params.notes ?? null },
-    accountant: { ...(process.accountant ?? { status: "not_started" }), status: "ready_to_send" },
+    accountant: process.accountant ?? { status: "not_started" },
     steps,
     lastActivityAt: now,
     updatedAt: now,
   });
   await createTerminationAsoShadow(updated);
-  await createHrTask(params.context, updated, `Conduzir ASO demissional — ${process.employeeName}`, "Gere e valide a guia, solicite o PIX no Banco Inter e acompanhe clínica, agendamento e ASO. Esta trilha corre em paralelo.", "aso-dismissal").catch(() => null);
-  await appendTerminationEvent(process.id, { type: "HR_VALIDATED", at: now, ...eventActor(params.context), message: "RH validou o pedido. Aviso, ASO e contabilidade foram iniciados em paralelo." });
+  await createHrTask(params.context, updated, `Conduzir ASO demissional — ${process.employeeName}`, "Gere e valide a guia, solicite o PIX no Banco Inter e acompanhe clínica, agendamento e ASO.", "aso-dismissal").catch(() => null);
+  await appendTerminationEvent(process.id, { type: "HR_VALIDATED", at: now, ...eventActor(params.context), message: "RH validou o pedido. Aviso e ASO foram iniciados; a contabilidade aguardará a conclusão dos dois." });
   return updated;
 }
 
@@ -557,7 +557,9 @@ export async function updateTerminationStep(params: {
   note?: string | null;
 }) {
   const process = await requireManagedProcess(params.context, params.id);
-  if (["employee_request", "identity_signature", "hr_validation", "notice_decision", "closure"].includes(params.stepId)) throw new Error("Esta etapa possui uma ação específica.");
+  if (["employee_request", "identity_signature", "hr_validation", "notice_decision", "aso", "accountant", "document_audit", "signatures", "closure"].includes(params.stepId)) {
+    throw new Error("Esta etapa é atualizada automaticamente pelas ações do próprio fluxo.");
+  }
   const now = new Date().toISOString();
   const terminal = ["completed", "waived", "cancelled"].includes(params.status);
   const current = process.steps.find((step) => step.id === params.stepId);
@@ -588,6 +590,9 @@ export async function completeTermination(params: { context: ServerUserContext; 
 export async function sendTerminationToAccountant(params: { context: ServerUserContext; id: string; recipientEmail: string; appBaseUrl: string }) {
   const process = await requireManagedProcess(params.context, params.id);
   if (!process.notice) throw new Error("Defina o aviso-prévio antes do envio à contabilidade.");
+  if (process.steps.find((step) => step.id === "aso")?.status !== "completed") {
+    throw new Error("Conclua e aprove o ASO demissional antes do envio à contabilidade.");
+  }
   const recipient = params.recipientEmail.trim().toLowerCase();
   if (!recipient.includes("@")) throw new Error("Informe um e-mail válido da contabilidade.");
   const token = randomBytes(32).toString("base64url");

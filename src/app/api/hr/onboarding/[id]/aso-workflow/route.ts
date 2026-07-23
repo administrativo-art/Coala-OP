@@ -16,7 +16,7 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { createPaymentRequest, refreshPaymentRequest, submitPaymentRequest } from '@/features/financial/payment-requests/service.server';
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
 import { getTermination, saveTermination } from '@/features/hr/termination/server';
-import { patchStep } from '@/features/hr/termination/core';
+import { applyAccountantReadiness, patchStep } from '@/features/hr/termination/core';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -323,7 +323,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (process.processKind === 'termination_aso') {
       const termination = await getTermination(id);
       if (termination) {
-        await saveTermination({
+        await saveTermination(applyAccountantReadiness({
           ...termination,
           asoWorkflow: { status: decision, reviewedAt: now, rejectionReason: decision === 'rejected' ? reason : null },
           steps: patchStep(termination.steps, 'aso', {
@@ -332,7 +332,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           }),
           lastActivityAt: now,
           updatedAt: now,
-        });
+        }, now));
       }
     }
     return NextResponse.json({ ok: true });

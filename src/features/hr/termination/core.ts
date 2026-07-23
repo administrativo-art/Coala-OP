@@ -91,7 +91,12 @@ export function calculateTerminationHealth(
 ): TerminationHealth {
   if (process.status === "completed") return "completed";
   if (process.status === "cancelled") return "cancelled";
-  if (process.steps.some((step) => step.status === "blocked")) return "blocked";
+  const hasOperationalBlock = process.steps.some((step) => {
+    if (step.status !== "blocked") return false;
+    const expectedAccountantDependency = step.id === "accountant" && step.blockedReason?.startsWith("Aguardando ");
+    return !expectedAccountantDependency;
+  });
+  if (hasOperationalBlock) return "blocked";
   const today = now.toISOString().slice(0, 10);
   const openDueDates = process.steps
     .filter((step) => !["completed", "waived", "cancelled"].includes(step.status) && step.dueAt)
@@ -109,14 +114,51 @@ export function summarizeTermination(steps: TerminationStep[]) {
   return steps.find((step) => step.status === "pending")?.label ?? "Aguardando fechamento";
 }
 
+export function applyAccountantReadiness<T extends CltTerminationProcess>(process: T, now = new Date().toISOString()): T {
+  const accountantStep = process.steps.find((step) => step.id === "accountant");
+  if (!accountantStep || ["completed", "waived", "cancelled", "waiting_external"].includes(accountantStep.status)) return process;
+
+  const noticeReady = Boolean(process.notice);
+  const asoReady = process.steps.some((step) => step.id === "aso" && step.status === "completed")
+    || ["approved", "completed"].includes(String(process.asoWorkflow?.status ?? ""));
+  const ready = noticeReady && asoReady;
+  const progressedAccountant = ["sent", "documents_received", "correction_requested", "approved"].includes(process.accountant?.status ?? "");
+  if (progressedAccountant) return process;
+
+  const blockedReason = !noticeReady && !asoReady
+    ? "Aguardando definição do aviso-prévio e conclusão do ASO."
+    : !noticeReady
+      ? "Aguardando definição do aviso-prévio."
+      : "Aguardando conclusão e aprovação do ASO demissional.";
+  const steps = patchStep(process.steps, "accountant", ready ? {
+    status: "in_progress",
+    startedAt: accountantStep.startedAt ?? now,
+    blockedReason: null,
+    note: "Aviso-prévio definido e ASO aprovado. Envio à contabilidade liberado.",
+  } : {
+    status: "blocked",
+    blockedReason,
+    note: blockedReason,
+  });
+
+  return {
+    ...process,
+    steps,
+    accountant: ready
+      ? { ...(process.accountant ?? { status: "not_started" }), status: "ready_to_send" }
+      : { ...(process.accountant ?? { status: "not_started" }), status: "not_started" },
+  };
+}
+
 export function recalculateTermination<T extends CltTerminationProcess>(process: T, now = new Date()): T {
-  const progress = calculateTerminationProgress(process.steps);
-  const health = calculateTerminationHealth(process, now);
-  const nextDueAt = process.steps
+  const readyProcess = applyAccountantReadiness(process, now.toISOString());
+  const progress = calculateTerminationProgress(readyProcess.steps);
+  const health = calculateTerminationHealth(readyProcess, now);
+  const nextDueAt = readyProcess.steps
     .filter((step) => !["completed", "waived", "cancelled"].includes(step.status) && step.dueAt)
     .map((step) => step.dueAt!)
     .sort()[0] ?? null;
-  return { ...process, progress, health, nextDueAt, currentSummary: summarizeTermination(process.steps) };
+  return { ...readyProcess, progress, health, nextDueAt, currentSummary: summarizeTermination(readyProcess.steps) };
 }
 
 export function buildProcessProjection(process: CltTerminationProcess, version: number, syncedAt: string): ProcessProjection {
