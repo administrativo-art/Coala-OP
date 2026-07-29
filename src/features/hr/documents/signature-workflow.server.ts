@@ -21,6 +21,10 @@ import {
   SYSTEM_DOCUMENT_TEMPLATES,
   systemDocumentTemplateById,
 } from "@/features/hr/documents/system-template-catalog";
+import {
+  effectiveSystemDocumentTemplates,
+  systemTemplateWorkflowStatus,
+} from "@/features/hr/documents/document-template-workflow.server";
 import { createAutentiqueDocument, getAutentiqueDocumentStatus } from "@/lib/autentique.server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
@@ -292,9 +296,10 @@ async function sendAdmissionBundle(params: {
 }
 
 export async function listSignatureWorkflow(onboardingId: string) {
-  const [templatesSnapshot, workflowSnapshot] = await Promise.all([
+  const [templatesSnapshot, workflowSnapshot, effectiveSystemTemplates] = await Promise.all([
     dbAdmin.collection("companyDocumentTemplates").get(),
     hrDbAdmin.collection(WORKFLOW_COLLECTION).where("onboardingId", "==", onboardingId).get(),
+    effectiveSystemDocumentTemplates(SYSTEM_DOCUMENT_TEMPLATES),
   ]);
   const templates = templatesSnapshot.docs
     .filter((document) => document.get("status") === "published" && !document.get("deletedAt"))
@@ -307,7 +312,7 @@ export async function listSignatureWorkflow(onboardingId: string) {
       variables: Array.isArray(document.get("variables")) ? document.get("variables") : [],
       signatureScope: text(document.get("signatureScope")) ?? "bundle",
     }))
-  const systemTemplates = SYSTEM_DOCUMENT_TEMPLATES
+  const systemTemplates = effectiveSystemTemplates
     .filter((template) =>
       template.status === "published"
       && template.sourceFormat === "docx"
@@ -344,7 +349,8 @@ export async function selectSignatureTemplates(params: {
   const uniqueIds = Array.from(new Set(params.templateIds.filter(Boolean))).slice(0, 30);
   const templateDocs = await Promise.all(uniqueIds.map(async (id) => {
     const system = systemDocumentTemplateById(id);
-    if (system?.status === "published" && system.sourceFormat === "docx") {
+    const systemStatus = system ? await systemTemplateWorkflowStatus(system) : null;
+    if (systemStatus === "published" && system?.sourceFormat === "docx") {
       return {
         id,
         version: system.version,

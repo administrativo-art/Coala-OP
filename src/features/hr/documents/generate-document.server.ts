@@ -22,6 +22,7 @@ import { resolveDocumentLegalEntitySnapshot } from "@/features/hr/documents/lega
 import { buildGeneratedDocumentAudit } from "@/features/hr/documents/generated-document-audit";
 import { retentionFields } from "@/features/hr/documents/document-retention";
 import { systemDocumentTemplateById } from "@/features/hr/documents/system-template-catalog";
+import { systemTemplateWorkflowStatus } from "@/features/hr/documents/document-template-workflow.server";
 import { loadSystemDocumentTemplateSource } from "@/features/hr/documents/system-template-source.server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
@@ -140,10 +141,14 @@ export async function generateDocumentFromTemplate(
     .doc(params.templateId)
     .get();
   const systemTemplate = systemDocumentTemplateById(params.templateId);
+  const systemStatus = systemTemplate
+    ? await systemTemplateWorkflowStatus(systemTemplate)
+    : null;
   const storedPublished = storedTemplate.exists
     && storedTemplate.get("status") === "published"
     && typeof storedTemplate.get("storagePath") === "string";
-  const systemPublished = systemTemplate?.status === "published"
+  const systemPublished = systemTemplate !== null
+    && systemStatus === "published"
     && systemTemplate.sourceFormat === "docx"
     && Boolean(systemTemplate.sourcePath);
   if (!storedPublished && !systemPublished) {

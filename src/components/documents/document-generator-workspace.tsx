@@ -56,13 +56,6 @@ type PartyOption = {
   address: string;
 };
 
-const PARTY_TYPE_LABELS: Record<string, string> = {
-  employee: "Colaborador cadastrado",
-  company: "Empresa cadastrada",
-  external_person: "Pessoa avulsa",
-  external_company: "Empresa avulsa",
-};
-
 const SELECT_OPTION_LABELS: Record<string, string> = {
   pix: "Pix",
   transfer: "Transferência bancária",
@@ -147,17 +140,25 @@ function SchemaFieldInput(props: {
   if (field.kind === "party") {
     const party = record(current);
     const snapshot = record(party.snapshot);
-    const partyType = String(party.partyType ?? field.allowedPartyTypes?.[0] ?? "");
-    const availableParties = partyOptions.filter((option) => {
-      if (partyType === "employee") return option.partyType === "employee";
-      if (partyType === "external_person") return option.partyType === "external_person";
-      return option.partyType === "company";
-    });
+    const partyType = String(party.partyType ?? "");
+    const allowedPartyTypes = field.allowedPartyTypes ?? [];
+    const availableParties = partyOptions.filter((option) => allowedPartyTypes.includes(option.partyType));
+    const registeredPeople = availableParties.filter((option) =>
+      option.partyType === "employee" || option.partyType === "external_person"
+    );
+    const registeredCompanies = availableParties.filter((option) => option.partyType === "company");
+    const registeredSelection = typeof party.ref === "string" && party.ref
+      ? `registered:${partyType}:${party.ref}`
+      : "";
+    const manualSelection = !party.ref && (partyType === "external_person" || partyType === "external_company")
+      ? `manual:${partyType}`
+      : "";
+    const selection = registeredSelection || manualSelection;
+    const isManual = manualSelection !== "";
     const updateParty = (patch: Record<string, unknown>, snapshotPatch?: Record<string, unknown>) => {
       set({
-        partyType,
-        ref: null,
         ...party,
+        partyType,
         ...patch,
         snapshot: { ...snapshot, ...snapshotPatch },
       });
@@ -165,48 +166,80 @@ function SchemaFieldInput(props: {
     return (
       <div className="space-y-2 rounded-lg border bg-slate-50 p-3">
         {label}
-        <div className="grid gap-2 sm:grid-cols-3">
+        <p className="text-[11px] text-slate-500">
+          Selecione uma pessoa ou empresa cadastrada, ou informe uma parte avulsa.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(200px,1fr)]">
           <select
-            className="h-10 rounded-md border bg-white px-2 text-sm"
-            value={partyType}
-            onChange={(event) => set({
-              partyType: event.target.value,
-              ref: null,
-              snapshot: {},
-            })}
-          >
-            {(field.allowedPartyTypes ?? []).map((type) => (
-              <option key={type} value={type}>{PARTY_TYPE_LABELS[type] ?? type}</option>
-            ))}
-          </select>
-          <select
-            className="h-10 rounded-md border bg-white px-2 text-sm"
-            value={String(party.ref ?? "")}
+            className="h-10 rounded-md border bg-white px-2 text-sm sm:col-span-2"
+            value={selection}
             onChange={(event) => {
-              const selected = availableParties.find((option) => option.id === event.target.value);
-              if (!selected) {
-                updateParty({ ref: null }, { name: "", document: "", address: "" });
+              const selected = availableParties.find((option) =>
+                `registered:${option.partyType}:${option.id}` === event.target.value
+              );
+              if (selected) {
+                set({
+                  partyType: selected.partyType,
+                  ref: selected.id,
+                  snapshot: {
+                    name: selected.name,
+                    document: selected.document,
+                    address: selected.address,
+                  },
+                });
                 return;
               }
-              updateParty(
-                { ref: selected.id },
-                {
-                  name: selected.name,
-                  document: selected.document,
-                  address: selected.address,
-                },
-              );
+              if (event.target.value === "manual:external_person") {
+                set({ partyType: "external_person", ref: null, snapshot: {} });
+                return;
+              }
+              if (event.target.value === "manual:external_company") {
+                set({ partyType: "external_company", ref: null, snapshot: {} });
+                return;
+              }
+              set(undefined);
             }}
           >
-            <option value="">Digitar manualmente...</option>
-            {availableParties.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}{option.document ? ` · ${option.document}` : ""}
-              </option>
-            ))}
+            <option value="">Selecione uma pessoa ou empresa...</option>
+            {registeredPeople.length ? (
+              <optgroup label="Pessoas cadastradas">
+                {registeredPeople.map((option) => (
+                  <option key={`${option.partyType}:${option.id}`} value={`registered:${option.partyType}:${option.id}`}>
+                    {option.name}{option.document ? ` · ${option.document}` : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {registeredCompanies.length ? (
+              <optgroup label="Empresas cadastradas">
+                {registeredCompanies.map((option) => (
+                  <option key={`${option.partyType}:${option.id}`} value={`registered:${option.partyType}:${option.id}`}>
+                    {option.name}{option.document ? ` · ${option.document}` : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            <optgroup label="Cadastro avulso">
+              {allowedPartyTypes.includes("external_person") ? <option value="manual:external_person">Pessoa avulsa</option> : null}
+              {allowedPartyTypes.includes("external_company") ? <option value="manual:external_company">Empresa avulsa</option> : null}
+            </optgroup>
           </select>
-          <Input placeholder="Nome / razão social" value={String(snapshot.name ?? "")} onChange={(event) => updateParty({}, { name: event.target.value })} />
-          <Input className="sm:col-start-2" placeholder="CPF / CNPJ" value={String(snapshot.document ?? "")} onChange={(event) => updateParty({}, { document: event.target.value })} />
+          {selection ? (
+            <>
+              <Input
+                placeholder="Nome / razão social"
+                readOnly={!isManual}
+                value={String(snapshot.name ?? "")}
+                onChange={(event) => updateParty({ ref: null }, { name: event.target.value })}
+              />
+              <Input
+                placeholder="CPF / CNPJ"
+                readOnly={!isManual}
+                value={String(snapshot.document ?? "")}
+                onChange={(event) => updateParty({ ref: null }, { document: event.target.value })}
+              />
+            </>
+          ) : null}
         </div>
       </div>
     );
@@ -283,6 +316,7 @@ function SchemaFieldInput(props: {
 
 export function DocumentGeneratorWorkspace(props: {
   embedded?: boolean;
+  initialTemplateId?: string;
   onBack?: () => void;
   onGenerated?: (document: GeneratedResult) => void;
 } = {}) {
@@ -336,7 +370,11 @@ export function DocumentGeneratorWorkspace(props: {
           throw new Error(partiesPayload.error || "Falha ao carregar cadastros.");
         }
         if (active) {
-          setTemplates((templatesPayload.templates ?? []).filter((template: Template) => template.status === "published"));
+          const availableTemplates = (templatesPayload.templates ?? []).filter((template: Template) => template.status === "published");
+          setTemplates(availableTemplates);
+          if (props.initialTemplateId && availableTemplates.some((template: Template) => template.id === props.initialTemplateId)) {
+            setTemplateId((current) => current || props.initialTemplateId!);
+          }
           setPartyOptions(partiesPayload.parties ?? []);
         }
       } catch (cause) {
@@ -346,7 +384,7 @@ export function DocumentGeneratorWorkspace(props: {
       }
     })();
     return () => { active = false; };
-  }, [canGenerate, firebaseUser, token]);
+  }, [canGenerate, firebaseUser, props.initialTemplateId, token]);
 
   const selected = templates.find((template) => template.id === templateId) ?? null;
   const manualFields = useMemo(
@@ -543,12 +581,12 @@ export function DocumentGeneratorWorkspace(props: {
                   />
                 ))}
               </div>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" disabled={schemaStep === 0} onClick={() => setSchemaStep((current) => Math.max(0, current - 1))}>Anterior</Button>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" className="h-9 min-w-24 px-4" disabled={schemaStep === 0} onClick={() => setSchemaStep((current) => Math.max(0, current - 1))}>Anterior</Button>
                 {schemaStep < selected.formSchema.steps.length - 1 ? (
-                  <Button type="button" className="flex-1" onClick={() => setSchemaStep((current) => Math.min(selected.formSchema!.steps.length - 1, current + 1))}>Próximo</Button>
+                  <Button type="button" className="h-9 min-w-24 px-4" onClick={() => setSchemaStep((current) => Math.min(selected.formSchema!.steps.length - 1, current + 1))}>Próximo</Button>
                 ) : (
-                  <Button className="flex-1 gap-2" disabled={(selected.formSchema.anchor === "employee" && !employeeId) || generating} onClick={() => void generate()}>
+                  <Button className="h-9 min-w-32 gap-2 px-4" disabled={(selected.formSchema.anchor === "employee" && !employeeId) || generating} onClick={() => void generate()}>
                     {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}
                     Gerar prévia
                   </Button>

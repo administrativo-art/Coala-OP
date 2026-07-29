@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 
 import { SYSTEM_DOCUMENT_TEMPLATES } from "@/features/hr/documents/system-template-catalog";
+import { effectiveSystemDocumentTemplates } from "@/features/hr/documents/document-template-workflow.server";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { dbAdmin } from "@/lib/firebase-admin";
 
@@ -29,7 +30,8 @@ export async function GET(request: NextRequest) {
     const storedTemplates = snap.docs
       .filter((doc) => !doc.get("deletedAt"))
       .map((doc): Record<string, unknown> & { id: string } => ({ id: doc.id, ...serializedObject(doc.data()) }));
-    const templates = [...SYSTEM_DOCUMENT_TEMPLATES, ...storedTemplates]
+    const systemTemplates = await effectiveSystemDocumentTemplates(SYSTEM_DOCUMENT_TEMPLATES);
+    const templates = [...systemTemplates, ...storedTemplates]
       .sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")));
     return NextResponse.json({ templates });
   } catch (cause) {

@@ -158,6 +158,9 @@ export function resolveDocumentFormSchema(
         if (!field.allowedPartyTypes?.includes(partyType)) {
           throw new Error(`Tipo de parte inválido em ${field.label}.`);
         }
+        if (field.required && !String(snapshot.name ?? "").trim()) {
+          missing.push(field.label);
+        }
         parties.push({
           partyType,
           role: field.partyRole!,
@@ -231,15 +234,15 @@ export const RECEIPT_FORM_SCHEMA: DocumentFormSchema = {
         },
         {
           key: "receipt.issuer",
-          label: "Empresa emitente",
+          label: "Emitente",
           kind: "party",
           required: true,
           partyRole: "issuer",
-          allowedPartyTypes: ["company", "external_company"],
+          allowedPartyTypes: ["employee", "company", "external_person", "external_company"],
         },
         {
           key: "receipt.recipient",
-          label: "Quem recebeu",
+          label: "Recebedor",
           kind: "party",
           required: true,
           partyRole: "recipient",

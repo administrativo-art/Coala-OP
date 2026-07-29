@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { SYSTEM_DOCUMENT_TEMPLATES } from "@/features/hr/documents/system-template-catalog";
+import { effectiveSystemDocumentTemplates } from "@/features/hr/documents/document-template-workflow.server";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { dbAdmin } from "@/lib/firebase-admin";
 
@@ -10,9 +11,12 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     await assertFormalizationAccess(request, "documents.generate");
-    const snapshot = await dbAdmin.collection("companyDocumentTemplates")
-      .where("status", "==", "published")
-      .get();
+    const [snapshot, systemTemplates] = await Promise.all([
+      dbAdmin.collection("companyDocumentTemplates")
+        .where("status", "==", "published")
+        .get(),
+      effectiveSystemDocumentTemplates(SYSTEM_DOCUMENT_TEMPLATES),
+    ]);
     const stored: Array<Record<string, unknown> & {
       id: string;
       name: string;
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
         };
       });
     const templates = [
-      ...SYSTEM_DOCUMENT_TEMPLATES.filter(
+      ...systemTemplates.filter(
         (template) =>
           template.status === "published"
           && template.generationMode === "direct",
