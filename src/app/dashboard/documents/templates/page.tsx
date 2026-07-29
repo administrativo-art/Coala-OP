@@ -13,6 +13,8 @@ import {
   DOCUMENT_TEMPLATE_WORKFLOW_LABELS,
   type DocumentTemplateWorkflowStatus,
 } from "@/features/hr/documents/document-template-workflow";
+import type { TemplateFieldMapping } from "@/features/hr/documents/field-mapping";
+import { DOCUMENT_VARIABLES } from "@/features/hr/integration/document-variables";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 
 const CATEGORIES = ["Base institucional", "Admissão", "Contratos", "Declarações", "Políticas internas", "Comunicados", "Uniformes", "Outros"];
@@ -37,6 +39,7 @@ type DocumentTemplate = {
   sourceModule?: "documents" | "uniforms" | "admission" | "termination";
   sourceModulePath?: string;
   signatureScope?: "none" | "bundle" | "independent";
+  fieldMapping?: TemplateFieldMapping;
   workflowStatus?: DocumentTemplateWorkflowStatus;
   workflowUpdatedAt?: string | null;
   workflowUpdatedByName?: string | null;
@@ -49,6 +52,56 @@ type DocumentTemplate = {
     at?: string | null;
   }>;
 };
+
+const VARIABLE_CATALOG = new Map(DOCUMENT_VARIABLES.map((variable) => [variable.key, variable]));
+const FORMAT_LABELS: Record<string, string> = {
+  source: "Formato do cadastro",
+  date_br: "Data",
+  date_long_br: "Data por extenso",
+  currency_br: "Moeda",
+  currency_br_with_words: "Moeda e valor por extenso",
+  cpf_full: "CPF completo",
+  cpf_masked: "CPF parcialmente oculto",
+  cnpj: "CNPJ",
+  uppercase: "Maiúsculas",
+  text: "Texto",
+  multiline: "Texto longo",
+  number_br: "Número",
+  boolean_br: "Sim/Não",
+  select: "Lista de opções",
+};
+
+function variableBinding(template: DocumentTemplate, placeholder: string) {
+  const binding = template.fieldMapping?.[placeholder];
+  if (binding?.kind === "system") {
+    const source = VARIABLE_CATALOG.get(binding.key);
+    return {
+      sourceLabel: source?.label ?? binding.key,
+      sourceKey: binding.key,
+      format: FORMAT_LABELS[binding.formatter ?? "source"] ?? binding.formatter ?? "Formato do cadastro",
+    };
+  }
+  if (binding?.kind === "manual") {
+    return {
+      sourceLabel: `Campo manual: ${binding.label}`,
+      sourceKey: binding.required ? "Preenchimento obrigatório" : "Preenchimento opcional",
+      format: FORMAT_LABELS[binding.format] ?? binding.format,
+    };
+  }
+  const direct = VARIABLE_CATALOG.get(placeholder);
+  if (direct) {
+    return {
+      sourceLabel: direct.label,
+      sourceKey: placeholder,
+      format: FORMAT_LABELS[direct.format] ?? direct.format,
+    };
+  }
+  return {
+    sourceLabel: "Origem ainda não definida",
+    sourceKey: "Configuração pendente",
+    format: "—",
+  };
+}
 
 function templateStatusLabel(template: DocumentTemplate) {
   if (template.workflowStatus) return DOCUMENT_TEMPLATE_WORKFLOW_LABELS[template.workflowStatus];
@@ -266,13 +319,13 @@ export default function DocumentTemplatesPage() {
       </Dialog> : null}
 
       <Dialog open={Boolean(selectedTemplate)} onOpenChange={(open) => { if (!open) setSelectedTemplate(null); }}>
-        <DialogContent className="max-w-2xl rounded-xl p-0">
+        <DialogContent className="flex max-h-[82vh] w-[calc(100vw-32px)] max-w-5xl flex-col overflow-hidden rounded-xl p-0">
           {selectedTemplate ? (
             <>
-              <DialogHeader className="border-b px-5 py-4">
+              <DialogHeader className="shrink-0 border-b px-5 py-3">
                 <div className="flex items-start gap-3 pr-8">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-700">
-                    <FileStack className="h-5 w-5" />
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-700">
+                    <FileStack className="h-4 w-4" />
                   </span>
                   <div className="min-w-0">
                     <DialogTitle className="text-left">{selectedTemplate.name}</DialogTitle>
@@ -283,18 +336,18 @@ export default function DocumentTemplatesPage() {
                 </div>
               </DialogHeader>
 
-              <div className="space-y-4 px-5 py-4">
-                {selectedTemplate.description ? <p className="text-sm leading-6 text-slate-600">{selectedTemplate.description}</p> : null}
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg border bg-slate-50 p-3">
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
+                {selectedTemplate.description ? <p className="mb-3 text-sm text-slate-600">{selectedTemplate.description}</p> : null}
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-lg border bg-slate-50 px-3 py-2">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Status</p>
                     <p className="mt-1 text-sm font-bold text-slate-800">{templateStatusLabel(selectedTemplate)}</p>
                   </div>
-                  <div className="rounded-lg border bg-slate-50 p-3">
+                  <div className="rounded-lg border bg-slate-50 px-3 py-2">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Utilização</p>
                     <p className="mt-1 text-sm font-bold text-slate-800">{templateUsage(selectedTemplate).label}</p>
                   </div>
-                  <div className="rounded-lg border bg-slate-50 p-3">
+                  <div className="rounded-lg border bg-slate-50 px-3 py-2">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Assinatura</p>
                     <p className="mt-1 text-sm font-bold text-slate-800">
                       {selectedTemplate.signatureScope === "bundle" ? "Pacote" : selectedTemplate.signatureScope === "independent" ? "Individual" : "Não exige"}
@@ -302,110 +355,123 @@ export default function DocumentTemplatesPage() {
                   </div>
                 </div>
 
-                <section className="rounded-lg border">
-                  <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-                    <div>
-                      <p className="flex items-center gap-2 text-sm font-black text-slate-900"><Braces className="h-4 w-4 text-violet-600" />Variáveis vinculadas</p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
-                        {selectedTemplate.isSystem
-                          ? "A vinculação deste modelo oficial é controlada e versionada pelo sistema."
-                          : "Defina de onde vem cada informação utilizada no documento."}
-                      </p>
-                    </div>
-                    {!selectedTemplate.isSystem ? (
-                      <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => router.push(`/dashboard/documents/templates/${encodeURIComponent(selectedTemplate.id)}`)}>
-                        <Settings2 className="h-3.5 w-3.5" />Configurar
-                      </Button>
-                    ) : null}
-                  </div>
-                  <div className="max-h-48 overflow-y-auto p-3">
-                    {(selectedTemplate.variables ?? []).length ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {(selectedTemplate.variables ?? []).map((variable) => (
-                          <span key={variable} className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[10px] text-slate-600">{`{{${variable}}}`}</span>
-                        ))}
+                <div className={`mt-3 grid gap-3 ${selectedTemplate.isSystem && selectedTemplate.workflowStatus ? "lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]" : ""}`}>
+                  <section className="min-w-0 overflow-hidden rounded-lg border">
+                    <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5">
+                      <div>
+                        <p className="flex items-center gap-2 text-sm font-black text-slate-900"><Braces className="h-4 w-4 text-violet-600" />Vinculação das variáveis</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">
+                          {selectedTemplate.isSystem
+                            ? "Confira qual informação alimenta cada trecho do modelo oficial."
+                            : "Defina de onde vem cada informação utilizada no documento."}
+                        </p>
                       </div>
-                    ) : <p className="text-xs text-slate-500">Este modelo não utiliza variáveis.</p>}
-                  </div>
-                </section>
-
-                {selectedTemplate.isSystem && selectedTemplate.workflowStatus ? (
-                  <section className="rounded-lg border">
-                    <div className="border-b px-4 py-3">
-                      <p className="text-sm font-black text-slate-900">Tratamento e aprovação</p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
-                        Cada avanço registra responsável, data e observação no histórico do modelo.
-                      </p>
-                    </div>
-                    <div className="space-y-3 p-4">
-                      {DOCUMENT_TEMPLATE_WORKFLOW_ACTIONS[selectedTemplate.workflowStatus] ? (
-                        <>
-                          <label className="block space-y-1.5">
-                            <span className="text-xs font-bold text-slate-700">Observação ou evidência da etapa</span>
-                            <textarea
-                              className="min-h-20 w-full rounded-md border bg-white p-2 text-sm"
-                              placeholder="Ex.: Revisado pelo jurídico em 29/07/2026, sem ressalvas."
-                              value={workflowNote}
-                              onChange={(event) => setWorkflowNote(event.target.value)}
-                            />
-                          </label>
-                          <div className="flex justify-end">
-                            <Button
-                              size="sm"
-                              className="gap-2"
-                              disabled={
-                                workflowBusy
-                                || (DOCUMENT_TEMPLATE_WORKFLOW_ACTIONS[selectedTemplate.workflowStatus]?.next === "published" ? !canPublish : !canManage)
-                              }
-                              onClick={() => void advanceWorkflow(selectedTemplate)}
-                            >
-                              {workflowBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}
-                              {DOCUMENT_TEMPLATE_WORKFLOW_ACTIONS[selectedTemplate.workflowStatus]?.label}
-                            </Button>
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-xs text-slate-500">Este modelo não possui uma próxima etapa operacional.</p>
-                      )}
-                      {(selectedTemplate.workflowHistory ?? []).length ? (
-                        <div className="space-y-2 border-t pt-3">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Histórico</p>
-                          {[...(selectedTemplate.workflowHistory ?? [])].reverse().map((event, index) => (
-                            <div key={`${event.at ?? "event"}-${index}`} className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                              <p className="font-bold text-slate-800">
-                                {DOCUMENT_TEMPLATE_WORKFLOW_LABELS[event.from]} → {DOCUMENT_TEMPLATE_WORKFLOW_LABELS[event.to]}
-                              </p>
-                              <p className="mt-0.5">
-                                {event.actorName || "Usuário"}{event.at ? ` · ${new Date(event.at).toLocaleString("pt-BR")}` : ""}
-                              </p>
-                              {event.note ? <p className="mt-1">{event.note}</p> : null}
-                            </div>
-                          ))}
-                        </div>
+                      {!selectedTemplate.isSystem ? (
+                        <Button size="sm" variant="outline" className="h-8 shrink-0 gap-1.5" onClick={() => router.push(`/dashboard/documents/templates/${encodeURIComponent(selectedTemplate.id)}`)}>
+                          <Settings2 className="h-3.5 w-3.5" />Configurar
+                        </Button>
                       ) : null}
                     </div>
+                    <div className="max-h-[42vh] overflow-auto">
+                      {(selectedTemplate.variables ?? []).length ? (
+                        <table className="w-full min-w-[620px] text-left text-xs">
+                          <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                            <tr>
+                              <th className="px-3 py-2">Campo no documento</th>
+                              <th className="px-3 py-2">Origem do valor</th>
+                              <th className="px-3 py-2">Formatação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {(selectedTemplate.variables ?? []).map((variable) => {
+                              const binding = variableBinding(selectedTemplate, variable);
+                              return (
+                                <tr key={variable} className="align-top">
+                                  <td className="px-3 py-2"><code className="text-[10px] text-violet-700">{`{{${variable}}}`}</code></td>
+                                  <td className="px-3 py-2">
+                                    <p className="font-semibold text-slate-800">{binding.sourceLabel}</p>
+                                    <p className="mt-0.5 font-mono text-[10px] text-slate-400">{binding.sourceKey}</p>
+                                  </td>
+                                  <td className="px-3 py-2 text-slate-600">{binding.format}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : <p className="p-4 text-xs text-slate-500">Este modelo não utiliza variáveis.</p>}
+                    </div>
                   </section>
-                ) : null}
+
+                  {selectedTemplate.isSystem && selectedTemplate.workflowStatus ? (
+                    <section className="min-w-0 rounded-lg border">
+                      <div className="border-b px-4 py-2.5">
+                        <p className="text-sm font-black text-slate-900">Tratamento e aprovação</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">O avanço registra responsável, data e observação.</p>
+                      </div>
+                      <div className="space-y-3 p-3">
+                        {DOCUMENT_TEMPLATE_WORKFLOW_ACTIONS[selectedTemplate.workflowStatus] ? (
+                          <>
+                            <label className="block space-y-1.5">
+                              <span className="text-xs font-bold text-slate-700">Observação ou evidência</span>
+                              <textarea
+                                className="min-h-20 w-full rounded-md border bg-white p-2 text-sm"
+                                placeholder="Ex.: Revisado pelo jurídico, sem ressalvas."
+                                value={workflowNote}
+                                onChange={(event) => setWorkflowNote(event.target.value)}
+                              />
+                            </label>
+                            <div className="flex justify-end">
+                              <Button
+                                size="sm"
+                                className="gap-2"
+                                disabled={
+                                  workflowBusy
+                                  || (DOCUMENT_TEMPLATE_WORKFLOW_ACTIONS[selectedTemplate.workflowStatus]?.next === "published" ? !canPublish : !canManage)
+                                }
+                                onClick={() => void advanceWorkflow(selectedTemplate)}
+                              >
+                                {workflowBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}
+                                {DOCUMENT_TEMPLATE_WORKFLOW_ACTIONS[selectedTemplate.workflowStatus]?.label}
+                              </Button>
+                            </div>
+                          </>
+                        ) : <p className="text-xs text-slate-500">Este modelo não possui uma próxima etapa.</p>}
+                        {(selectedTemplate.workflowHistory ?? []).length ? (
+                          <div className="max-h-32 space-y-2 overflow-y-auto border-t pt-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Histórico</p>
+                            {[...(selectedTemplate.workflowHistory ?? [])].reverse().map((event, index) => (
+                              <div key={`${event.at ?? "event"}-${index}`} className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                <p className="font-bold text-slate-800">{DOCUMENT_TEMPLATE_WORKFLOW_LABELS[event.from]} → {DOCUMENT_TEMPLATE_WORKFLOW_LABELS[event.to]}</p>
+                                <p className="mt-0.5">{event.actorName || "Usuário"}{event.at ? ` · ${new Date(event.at).toLocaleString("pt-BR")}` : ""}</p>
+                                {event.note ? <p className="mt-1">{event.note}</p> : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="flex flex-wrap justify-end gap-2 border-t px-5 py-3">
-                <Button variant="outline" onClick={() => setSelectedTemplate(null)}>Fechar</Button>
+              <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t px-5 py-2.5">
+                <Button size="sm" variant="outline" onClick={() => setSelectedTemplate(null)}>Fechar</Button>
                 {selectedTemplate.previewUrl ? (
-                  <Button variant="outline" className="gap-2" onClick={() => void openTemplateFile(selectedTemplate, "preview")}>
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => void openTemplateFile(selectedTemplate, "preview")}>
                     <Eye className="h-4 w-4" />Visualizar prévia
                   </Button>
                 ) : null}
                 {selectedTemplate.downloadUrl ? (
-                  <Button variant="outline" className="gap-2" onClick={() => void openTemplateFile(selectedTemplate, "download")}>
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => void openTemplateFile(selectedTemplate, "download")}>
                     <Download className="h-4 w-4" />Baixar Word
                   </Button>
                 ) : null}
                 {!selectedTemplate.isSystem ? (
-                  <Button className="gap-2" onClick={() => router.push(`/dashboard/documents/templates/${encodeURIComponent(selectedTemplate.id)}`)}>
+                  <Button size="sm" className="gap-2" onClick={() => router.push(`/dashboard/documents/templates/${encodeURIComponent(selectedTemplate.id)}`)}>
                     <Settings2 className="h-4 w-4" />Configurar variáveis
                   </Button>
                 ) : templateUsage(selectedTemplate).path ? (
-                  <Button className="gap-2" onClick={() => router.push(templateUsage(selectedTemplate).path!)}>
+                  <Button size="sm" className="gap-2" onClick={() => router.push(templateUsage(selectedTemplate).path!)}>
                     <ExternalLink className="h-4 w-4" />{templateUsage(selectedTemplate).action}
                   </Button>
                 ) : null}
