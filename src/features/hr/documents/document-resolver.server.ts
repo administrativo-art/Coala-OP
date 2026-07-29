@@ -220,6 +220,7 @@ export async function resolveDocumentData(params: { employeeId?: string | null; 
   const computed: RecordValue = await buildComputed({ employeeId, user, fieldValues });
   const resolved: RecordValue = {};
   const flat: Record<string, unknown> = {};
+  const rawFlat: Record<string, unknown> = {};
   const missingRequired: string[] = [];
   const rawCache = new Map<string, unknown>();
 
@@ -256,12 +257,14 @@ export async function resolveDocumentData(params: { employeeId?: string | null; 
     else raw = await rawForEntry(entry);
     if (entry.format === "repeatable") {
       const rows = Array.isArray(raw) ? raw.map(record).map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, key.endsWith("date") ? formatDocumentVariableValue(value, "date_br") : value]))) : [];
+      rawFlat[entry.key] = raw;
       flat[entry.key] = rows; setPath(resolved, entry.key, rows);
     } else {
       const formatted = formatDocumentVariableValue(raw, entry.format);
+      rawFlat[entry.key] = raw;
       flat[entry.key] = formatted; setPath(resolved, entry.key, formatted);
       if (entry.required && !formatted) missingRequired.push(entry.key);
     }
   }
-  return { data: resolved, flat, missingRequired, variableCount: DOCUMENT_VARIABLES.length };
+  return { data: resolved, flat, rawFlat, missingRequired, variableCount: DOCUMENT_VARIABLES.length };
 }

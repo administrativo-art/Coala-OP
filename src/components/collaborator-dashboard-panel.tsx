@@ -773,98 +773,6 @@ function CountTimelineAction({ session, isLast }: { session: StockAuditSession; 
 }
 
 /* -------------------------------------------------------------------------- */
-/* Full schedule (dialog)                                                     */
-/* -------------------------------------------------------------------------- */
-
-function ScheduleTable({ shifts, loading, error }: { shifts: DPShift[]; loading: boolean; error: string | null }) {
-  const { units, shiftDefinitions } = useDPStore();
-  const today = new Date();
-  const todayKey = dateKey(today);
-  const orderedShifts = useMemo(
-    () => [...shifts].sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`)),
-    [shifts]
-  );
-  const workShifts = orderedShifts.filter((shift) => shift.type !== "day_off");
-  const unitIds = Array.from(new Set(workShifts.map((shift) => shift.unitId).filter(Boolean)));
-  const unitLabel =
-    unitIds
-      .map((unitId) => units.find((unit) => unit.id === unitId)?.name ?? unitId)
-      .filter(Boolean)
-      .join(", ") || "Unidade não definida";
-  const monthLabel = format(today, "MMMM 'de' yyyy", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase());
-
-  const describeShift = (shift: DPShift) => {
-    const definition = shift.shiftDefinitionId
-      ? shiftDefinitions.find((item) => item.id === shift.shiftDefinitionId)
-      : null;
-    const isOff = shift.type === "day_off";
-    return {
-      day: format(new Date(`${shift.date}T12:00:00`), "eee dd/MM", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase()),
-      time: isOff ? "" : `${shift.startTime} — ${shift.endTime}`,
-      name: definition?.name ?? (isOff ? "Folga" : "Turno"),
-      isOff,
-    };
-  };
-
-  if (loading) {
-    return (
-      <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        Carregando escala...
-      </div>
-    );
-  }
-
-  if (error) {
-    return <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>;
-  }
-
-  return (
-    <>
-      <p className="text-sm text-muted-foreground">
-        {unitLabel} · {workShifts.length} turno(s) em {monthLabel}
-      </p>
-
-      <div className="overflow-hidden rounded-xl border bg-white">
-        <div className="grid grid-cols-[1.1fr_1fr_1fr] border-b bg-muted/30 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-          <span>Dia</span>
-          <span>Turno</span>
-          <span>Horário</span>
-        </div>
-        {orderedShifts.length === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground">Nenhum turno encontrado para este mês.</div>
-        ) : (
-          orderedShifts.map((shift) => {
-            const detail = describeShift(shift);
-            const isToday = shift.date === todayKey;
-            const isPast = shift.date < todayKey;
-            return (
-              <div
-                key={shift.id}
-                className={`grid grid-cols-[1.1fr_1fr_1fr] items-center border-b px-4 py-3 text-sm last:border-b-0 ${
-                  isToday ? "bg-indigo-50/70" : ""
-                } ${isPast ? "text-muted-foreground/60" : ""}`}
-              >
-                <span className={`flex items-center gap-2 ${isToday ? "font-semibold text-indigo-700" : "font-medium"}`}>
-                  {detail.day}
-                  {isToday ? (
-                    <span className="rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                      Hoje
-                    </span>
-                  ) : null}
-                </span>
-                <span className={detail.isOff ? "italic text-muted-foreground" : "font-medium"}>{detail.name}</span>
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">{detail.time || "—"}</span>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
 /* Full goals (dialog)                                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -1086,20 +994,13 @@ function SidebarEscala({
       icon={<CalendarDays className="h-4 w-4" />}
       title="Escala"
       action={
-        <Dialog>
-          <DialogTrigger asChild>
-            <button type="button" className="text-xs font-medium text-indigo-600 hover:underline">
-              Ver mês
-            </button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[86vh] overflow-y-auto sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Minha escala</DialogTitle>
-              <DialogDescription>Turnos, horários e folgas do mês.</DialogDescription>
-            </DialogHeader>
-            <ScheduleTable shifts={shifts} loading={loading} error={error} />
-          </DialogContent>
-        </Dialog>
+        <Link
+          href="/dashboard/collaborator/schedule"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-pink-600 hover:underline"
+        >
+          Ver escala
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       }
     >
       {loading ? (

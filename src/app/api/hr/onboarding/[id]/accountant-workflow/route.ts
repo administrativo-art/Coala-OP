@@ -3,11 +3,10 @@ import path from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { getStorage } from 'firebase-admin/storage';
 
-import { accountantAdmissionEmailContent } from '@/features/hr/accountant/emails';
+import { accountantAdmissionEmailContent, renderAccountantAdmissionEmail } from '@/features/hr/accountant/emails';
 import { accountantAttachmentName, accountantTokenExpiresAt, candidateDocumentsForAccountant, createAccountantToken, missingAccountantPrerequisites } from '@/features/hr/accountant/workflow';
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
 import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
-import { renderCoalaEmail } from '@/lib/email/template';
 import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -141,7 +140,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     try {
       const result = await sendEmail({
         from: EMAIL_SENDERS.formalization, to: recipient, subject: emailContent.subject,
-        html: renderCoalaEmail({ brandName: 'Coala Shakes', message: emailContent.message, highlightBlock: { text: emailContent.detailsBlock, tone: 'green' }, afterActionMessage: emailContent.afterDetailsMessage, secondaryAction: { label: emailContent.registryUploadLabel, url: uploadUrl }, secondaryActionLead: emailContent.registryUploadLead, secondaryActionVariant: 'highlight', footer: 'Este é um e-mail automático e não aceita respostas.' }),
+        html: renderAccountantAdmissionEmail({
+          candidateName: text(process.candidateName, 240),
+          jobFunction: text(process.functionName, 240) || text(process.jobRoleName, 240),
+          companyName: text(process.employerUnitName, 240) || text(process.unitName, 240),
+          companyCnpj: CnpjValidator.format(text(process.employerCnpj, 30)),
+          admissionDate: dateBr(text(process.expectedAdmissionDate, 10)),
+          attachmentLabels: attachments.map((attachment) => attachment.label),
+          registryUploadUrl: uploadUrl,
+        }),
         text: emailContent.text,
         attachments: attachments.map(({ filename, content, contentType }) => ({ filename, content, contentType })),
         tags: [{ name: 'category', value: 'accountant_admission_request' }, { name: 'onboarding_id', value: id.slice(0, 256) }],

@@ -1,22 +1,19 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, CheckCircle2, FileText, Loader2, MapPin, PackageSearch, RotateCcw, Shirt } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeftRight, ArrowUpRight, CheckCircle2, ExternalLink, Loader2, MapPin, PackageSearch, PenLine, RotateCcw, Shirt } from "lucide-react";
 
 import {
   deliverUniform,
+  exchangeUniform,
   fetchUniformOverview,
   returnUniform,
   type UniformOverview,
 } from "@/features/uniforms/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import {
-  UniformDeliveryTermDocument,
-  UniformReturnTermDocument,
-} from "@/components/pdf/UniformTermDocument";
+import { SignatureCaptureModal } from "@/components/forms/signature-capture-modal";
 import { UniformInstructionsDialog, hasUniformCareInstructions } from "@/components/uniform-instructions-dialog";
 import type {
   UniformAssignment,
@@ -26,7 +23,6 @@ import type {
 } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -45,18 +41,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-
-const PDFDownloadLink = dynamic(
-  () => import("@react-pdf/renderer").then((mod) => mod.PDFDownloadLink),
-  {
-    ssr: false,
-    loading: () => (
-      <Button variant="outline" size="sm" disabled>
-        Carregando PDF...
-      </Button>
-    ),
-  },
-);
 
 const EMPTY_OVERVIEW: UniformOverview = { lots: [], assignments: [], events: [] };
 
@@ -84,13 +68,36 @@ function uniformDetails(item: { apparelType?: string | null; apparelColor?: stri
     .join(" · ");
 }
 
-function pdfSafeName(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .toLowerCase();
+type SignatureRole = "collaborator" | "responsible";
+type SignatureOperation = "delivery" | "exchange" | "return";
+type CapturedSignatures = { collaborator: string; responsible: string };
+const EMPTY_SIGNATURES: CapturedSignatures = { collaborator: "", responsible: "" };
+
+function SignaturePanel({
+  signatures,
+  onCapture,
+}: {
+  signatures: CapturedSignatures;
+  onCapture: (role: SignatureRole) => void;
+}) {
+  return (
+    <div className="rounded-2xl border bg-slate-50 p-3">
+      <p className="text-xs font-black uppercase text-slate-500">Assinaturas do termo</p>
+      <p className="mt-1 text-xs font-semibold text-slate-500">
+        O PDF final será gerado e arquivado após as duas assinaturas.
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <Button type="button" variant="outline" onClick={() => onCapture("collaborator")}>
+          {signatures.collaborator ? <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" /> : <PenLine className="mr-2 h-4 w-4" />}
+          {signatures.collaborator ? "Colaborador assinou" : "Assinatura do colaborador"}
+        </Button>
+        <Button type="button" variant="outline" onClick={() => onCapture("responsible")}>
+          {signatures.responsible ? <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" /> : <PenLine className="mr-2 h-4 w-4" />}
+          {signatures.responsible ? "Responsável assinou" : "Assinatura do responsável"}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function ItemPhoto({ item }: { item: { imageUrl?: string | null; productName?: string | null } }) {
@@ -112,7 +119,15 @@ function ItemPhoto({ item }: { item: { imageUrl?: string | null; productName?: s
   );
 }
 
-export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
+export function CollaboratorUniforms({
+  collaborator,
+  mode = "default",
+  onPossessionChange,
+}: {
+  collaborator: Pick<User, "id" | "username" | "email">;
+  mode?: "default" | "return-only";
+  onPossessionChange?: (piecesInPossession: number) => void;
+}) {
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
   const [overview, setOverview] = useState<UniformOverview>(EMPTY_OVERVIEW);
@@ -127,21 +142,45 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
   const [deliveryQuantity, setDeliveryQuantity] = useState(1);
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().slice(0, 10));
   const [deliveryNotes, setDeliveryNotes] = useState("");
-  const [deliveryTermGenerated, setDeliveryTermGenerated] = useState(false);
+  const [deliveryTransactionId, setDeliveryTransactionId] = useState("");
+  const [deliverySignatures, setDeliverySignatures] = useState<CapturedSignatures>(EMPTY_SIGNATURES);
 
   const [returnQuantity, setReturnQuantity] = useState(1);
   const [returnDate, setReturnDate] = useState(new Date().toISOString().slice(0, 10));
   const [returnedCondition, setReturnedCondition] = useState<UniformReturnedCondition>("usado");
   const [stockDisposition, setStockDisposition] = useState<UniformStockDisposition>("retorna_estoque");
   const [returnNotes, setReturnNotes] = useState("");
-  const [returnTermGenerated, setReturnTermGenerated] = useState(false);
-  const [returnTermSigned, setReturnTermSigned] = useState(false);
+  const [returnTransactionId, setReturnTransactionId] = useState("");
+  const [returnSignatures, setReturnSignatures] = useState<CapturedSignatures>(EMPTY_SIGNATURES);
+
+  const [exchangeTarget, setExchangeTarget] = useState<UniformAssignment | null>(null);
+  const [exchangeLotId, setExchangeLotId] = useState("");
+  const [exchangeQuantity, setExchangeQuantity] = useState(1);
+  const [exchangeDate, setExchangeDate] = useState(new Date().toISOString().slice(0, 10));
+  const [exchangeReturnedCondition, setExchangeReturnedCondition] = useState<UniformReturnedCondition>("usado");
+  const [exchangeStockDisposition, setExchangeStockDisposition] = useState<UniformStockDisposition>("retorna_estoque");
+  const [exchangeNotes, setExchangeNotes] = useState("");
+  const [exchangeTransactionId, setExchangeTransactionId] = useState("");
+  const [exchangeSignatures, setExchangeSignatures] = useState<CapturedSignatures>(EMPTY_SIGNATURES);
+  const [signatureTarget, setSignatureTarget] = useState<{ operation: SignatureOperation; role: SignatureRole } | null>(null);
+  const onPossessionChangeRef = useRef(onPossessionChange);
+
+  useEffect(() => {
+    onPossessionChangeRef.current = onPossessionChange;
+  }, [onPossessionChange]);
 
   const load = useCallback(async () => {
     if (!firebaseUser) return;
     setLoading(true);
     try {
-      setOverview(await fetchUniformOverview(firebaseUser, collaborator.id));
+      const nextOverview = await fetchUniformOverview(firebaseUser, collaborator.id);
+      setOverview(nextOverview);
+      onPossessionChangeRef.current?.(
+        nextOverview.assignments.reduce(
+          (total, assignment) => total + Math.max(0, Number(assignment.quantityInPossession ?? 0)),
+          0,
+        ),
+      );
     } catch (error) {
       toast({
         variant: "destructive",
@@ -171,6 +210,10 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
     () => availableLots.find((lot) => lot.id === deliveryLotId) ?? null,
     [availableLots, deliveryLotId],
   );
+  const selectedExchangeLot = useMemo(
+    () => availableLots.find((lot) => lot.id === exchangeLotId) ?? null,
+    [availableLots, exchangeLotId],
+  );
   const stockDiagnostics = useMemo(() => {
     const lotsWithQuantity = overview.lots.filter((lot) => Number(lot.quantity ?? 0) > 0);
     const blockedLots = lotsWithQuantity.filter((lot) => (lot.uniformStockStatus ?? "disponivel") !== "disponivel");
@@ -185,16 +228,23 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
   const canReturn = permissions.stock.uniforms?.return === true;
   const canOpenUniformStock = permissions.stock.uniforms?.view === true;
   const collaboratorName = collaborator.username || collaborator.email || "Colaborador";
-  const registeredByName = firebaseUser?.displayName || firebaseUser?.email || "Responsável/RH";
   const returnRequiresDiscard = returnedCondition === "danificado" || returnedCondition === "inutilizavel";
-  const canGenerateReturnTerm = !!returnTarget &&
-    returnQuantity > 0 &&
-    returnQuantity <= returnTarget.quantityInPossession &&
-    !!returnDate;
+  const exchangeRequiresDiscard = exchangeReturnedCondition === "danificado" || exchangeReturnedCondition === "inutilizavel";
 
-  const resetReturnTerm = () => {
-    setReturnTermGenerated(false);
-    setReturnTermSigned(false);
+  const openSignedTerm = async (transactionId: string) => {
+    if (!firebaseUser) return;
+    const response = await fetch(`/api/uniforms/terms/${encodeURIComponent(transactionId)}`, {
+      headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
+      cache: "no-store",
+    });
+    if (!response.ok) return;
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noreferrer";
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
   const closeReturnDialog = () => {
@@ -203,27 +253,46 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
     setReturnNotes("");
     setReturnedCondition("usado");
     setStockDisposition("retorna_estoque");
-    resetReturnTerm();
+    setReturnTransactionId("");
+    setReturnSignatures(EMPTY_SIGNATURES);
+  };
+
+  const closeExchangeDialog = () => {
+    setExchangeTarget(null);
+    setExchangeLotId("");
+    setExchangeQuantity(1);
+    setExchangeDate(new Date().toISOString().slice(0, 10));
+    setExchangeReturnedCondition("usado");
+    setExchangeStockDisposition("retorna_estoque");
+    setExchangeNotes("");
+    setExchangeTransactionId("");
+    setExchangeSignatures(EMPTY_SIGNATURES);
   };
 
   const submitDelivery = async () => {
     if (!firebaseUser || !deliveryLotId) return;
+    if (!deliverySignatures.collaborator || !deliverySignatures.responsible) return;
     setSaving(true);
     try {
-      await deliverUniform(firebaseUser, {
+      const result = await deliverUniform(firebaseUser, {
         lotId: deliveryLotId,
         collaboratorUserId: collaborator.id,
         quantity: deliveryQuantity,
         occurredAt: deliveryDate,
         notes: deliveryNotes || undefined,
+        transactionId: deliveryTransactionId,
+        collaboratorSignature: deliverySignatures.collaborator,
+        responsibleSignature: deliverySignatures.responsible,
       });
       setDeliveryOpen(false);
       setDeliveryLotId("");
       setDeliveryQuantity(1);
       setDeliveryNotes("");
-      setDeliveryTermGenerated(false);
+      setDeliveryTransactionId("");
+      setDeliverySignatures(EMPTY_SIGNATURES);
       await load();
-      toast({ title: "Uniforme entregue e vinculado ao colaborador." });
+      toast({ title: "Entrega registrada com termo assinado." });
+      void openSignedTerm(result.transaction.id);
     } catch (error) {
       toast({
         variant: "destructive",
@@ -237,31 +306,60 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
 
   const submitReturn = async () => {
     if (!firebaseUser || !returnTarget) return;
-    if (!returnTermGenerated || !returnTermSigned) {
-      toast({
-        variant: "destructive",
-        title: "Termo de devolução pendente",
-        description: "Gere o PDF, colete a assinatura e marque o termo como assinado antes de confirmar.",
-      });
-      return;
-    }
+    if (!returnSignatures.collaborator || !returnSignatures.responsible) return;
     setSaving(true);
     try {
-      await returnUniform(firebaseUser, {
+      const result = await returnUniform(firebaseUser, {
         assignmentId: returnTarget.id,
         quantity: returnQuantity,
         occurredAt: returnDate,
         returnedCondition,
         stockDisposition,
         notes: returnNotes || undefined,
+        transactionId: returnTransactionId,
+        collaboratorSignature: returnSignatures.collaborator,
+        responsibleSignature: returnSignatures.responsible,
       });
       closeReturnDialog();
       await load();
-      toast({ title: "Devolução registrada." });
+      toast({ title: "Devolução registrada com termo assinado." });
+      void openSignedTerm(result.transaction.id);
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Falha na devolução",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitExchange = async () => {
+    if (!firebaseUser || !exchangeTarget || !exchangeLotId) return;
+    if (!exchangeSignatures.collaborator || !exchangeSignatures.responsible) return;
+    setSaving(true);
+    try {
+      const result = await exchangeUniform(firebaseUser, {
+        assignmentId: exchangeTarget.id,
+        newLotId: exchangeLotId,
+        quantity: exchangeQuantity,
+        occurredAt: exchangeDate,
+        returnedCondition: exchangeReturnedCondition,
+        stockDisposition: exchangeStockDisposition,
+        notes: exchangeNotes || undefined,
+        transactionId: exchangeTransactionId,
+        collaboratorSignature: exchangeSignatures.collaborator,
+        responsibleSignature: exchangeSignatures.responsible,
+      });
+      closeExchangeDialog();
+      await load();
+      toast({ title: "Troca registrada em termo único." });
+      void openSignedTerm(result.transaction.id);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Falha na troca",
         description: error instanceof Error ? error.message : "Tente novamente.",
       });
     } finally {
@@ -282,11 +380,12 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
             {possession.reduce((sum, item) => sum + item.quantityInPossession, 0)} peça(s)
           </p>
         </div>
-        {canDeliver ? (
+        {canDeliver && mode === "default" ? (
           <Button
             size="sm"
             onClick={() => {
-              setDeliveryTermGenerated(false);
+              setDeliveryTransactionId(crypto.randomUUID());
+              setDeliverySignatures(EMPTY_SIGNATURES);
               setDeliveryOpen(true);
             }}
           >
@@ -334,24 +433,47 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                     </div>
                   </div>
                 </div>
-                {canReturn ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setReturnTarget(assignment);
-                      setReturnQuantity(1);
-                      setReturnDate(new Date().toISOString().slice(0, 10));
-                      setReturnedCondition("usado");
-                      setStockDisposition("retorna_estoque");
-                      setReturnNotes("");
-                      resetReturnTerm();
-                    }}
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" /> Registrar devolução
-                  </Button>
-                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {canDeliver && canReturn && mode === "default" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setExchangeTarget(assignment);
+                        setExchangeLotId("");
+                        setExchangeQuantity(1);
+                        setExchangeDate(new Date().toISOString().slice(0, 10));
+                        setExchangeReturnedCondition("usado");
+                        setExchangeStockDisposition("retorna_estoque");
+                        setExchangeNotes("");
+                        setExchangeTransactionId(crypto.randomUUID());
+                        setExchangeSignatures(EMPTY_SIGNATURES);
+                      }}
+                    >
+                      <ArrowLeftRight className="mr-2 h-4 w-4" /> Trocar
+                    </Button>
+                  ) : null}
+                  {canReturn ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setReturnTarget(assignment);
+                        setReturnQuantity(1);
+                        setReturnDate(new Date().toISOString().slice(0, 10));
+                        setReturnedCondition("usado");
+                        setStockDisposition("retorna_estoque");
+                        setReturnNotes("");
+                        setReturnTransactionId(crypto.randomUUID());
+                        setReturnSignatures(EMPTY_SIGNATURES);
+                      }}
+                    >
+                      <RotateCcw className="mr-2 h-4 w-4" /> Devolver
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             </div>
           ))}
@@ -377,7 +499,7 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
           <DialogHeader>
             <DialogTitle>Histórico de uniformes</DialogTitle>
             <DialogDescription>
-              Entregas e devoluções registradas para {collaborator.username}.
+              Entregas, trocas e devoluções registradas para {collaborator.username}.
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -395,16 +517,26 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                         <div>
                           <p className="text-xs font-black">{event.productName}</p>
                           <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                            {event.eventType === "UNIFORME_ENTREGA" ? "Entrega" : "Devolução"} · {event.quantity} un · {formatDate(event.occurredAt)}
+                            {event.eventType === "UNIFORME_ENTREGA" ? "Entrega" : event.eventType === "UNIFORME_TROCA" ? "Troca" : "Devolução"} · {event.quantity} un · {formatDate(event.occurredAt)}
                           </p>
+                          {event.eventType === "UNIFORME_TROCA" && event.exchangedFromProductName ? (
+                            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                              {event.exchangedFromProductName} → {event.productName}
+                            </p>
+                          ) : null}
                           {uniformDetails(event) ? (
                             <p className="mt-1 text-[11px] font-semibold text-slate-400">{uniformDetails(event)}</p>
                           ) : null}
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
                         {event.issuedCondition ? <Badge variant="secondary">{conditionLabel(event.issuedCondition)}</Badge> : null}
                         {event.returnedCondition ? <Badge variant="outline">{conditionLabel(event.returnedCondition)}</Badge> : null}
+                        {event.uniformTransactionId ? (
+                          <Button size="sm" variant="outline" onClick={() => void openSignedTerm(event.uniformTransactionId!)}>
+                            <ExternalLink className="mr-2 h-3.5 w-3.5" /> Termo
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -422,7 +554,10 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
         open={deliveryOpen}
         onOpenChange={(open) => {
           setDeliveryOpen(open);
-          if (!open) setDeliveryTermGenerated(false);
+          if (!open) {
+            setDeliveryTransactionId("");
+            setDeliverySignatures(EMPTY_SIGNATURES);
+          }
         }}
       >
         <DialogContent className="max-w-4xl">
@@ -484,7 +619,7 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                         type="button"
                         onClick={() => {
                           setDeliveryLotId(lot.id);
-                          setDeliveryTermGenerated(false);
+                          setDeliverySignatures(EMPTY_SIGNATURES);
                         }}
                         className={`rounded-2xl border p-3 text-left transition ${
                           selected
@@ -546,7 +681,7 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                       value={deliveryQuantity}
                       onChange={(event) => {
                         setDeliveryQuantity(Number(event.target.value));
-                        setDeliveryTermGenerated(false);
+                        setDeliverySignatures(EMPTY_SIGNATURES);
                       }}
                     />
                   </div>
@@ -557,7 +692,7 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                       value={deliveryDate}
                       onChange={(event) => {
                         setDeliveryDate(event.target.value);
-                        setDeliveryTermGenerated(false);
+                        setDeliverySignatures(EMPTY_SIGNATURES);
                       }}
                     />
                   </div>
@@ -573,53 +708,17 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                     value={deliveryNotes}
                     onChange={(event) => {
                       setDeliveryNotes(event.target.value);
-                      setDeliveryTermGenerated(false);
+                      setDeliverySignatures(EMPTY_SIGNATURES);
                     }}
                   />
                 </div>
               </>
             ) : null}
             {selectedDeliveryLot ? (
-              <div className="rounded-2xl border bg-slate-50 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-black uppercase text-slate-500">Termo de entrega</p>
-                    <p className="text-xs font-semibold text-slate-500">
-                      Gere o PDF para coletar a assinatura do colaborador.
-                    </p>
-                  </div>
-                  <PDFDownloadLink
-                    document={(
-                      <UniformDeliveryTermDocument
-                        collaboratorName={collaboratorName}
-                        registeredByName={registeredByName}
-                        lot={selectedDeliveryLot}
-                        quantity={deliveryQuantity}
-                        deliveryDate={deliveryDate}
-                        notes={deliveryNotes}
-                      />
-                    )}
-                    fileName={`termo-entrega-uniforme-${pdfSafeName(collaboratorName)}-${deliveryDate}.pdf`}
-                  >
-                    {(({ loading }: any) => (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={loading || deliveryQuantity <= 0}
-                        onClick={() => setDeliveryTermGenerated(true)}
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        {loading ? "Gerando..." : "Baixar termo"}
-                      </Button>
-                    )) as any}
-                  </PDFDownloadLink>
-                </div>
-                {deliveryTermGenerated ? (
-                  <p className="mt-2 text-xs font-semibold text-emerald-700">
-                    Termo gerado. A entrega pode ser confirmada após a assinatura física/digital.
-                  </p>
-                ) : null}
-              </div>
+              <SignaturePanel
+                signatures={deliverySignatures}
+                onCapture={(role) => setSignatureTarget({ operation: "delivery", role })}
+              />
             ) : null}
           </div>
           <DialogFooter>
@@ -632,6 +731,9 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                 disabled={
                   saving
                   || !deliveryLotId
+                  || !deliveryTransactionId
+                  || !deliverySignatures.collaborator
+                  || !deliverySignatures.responsible
                   || deliveryQuantity <= 0
                   || Boolean(selectedDeliveryLot && deliveryQuantity > selectedDeliveryLot.quantity)
                 }
@@ -661,7 +763,7 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                   value={returnQuantity}
                   onChange={(event) => {
                     setReturnQuantity(Number(event.target.value));
-                    resetReturnTerm();
+                    setReturnSignatures(EMPTY_SIGNATURES);
                   }}
                 />
               </div>
@@ -672,7 +774,7 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                   value={returnDate}
                   onChange={(event) => {
                     setReturnDate(event.target.value);
-                    resetReturnTerm();
+                    setReturnSignatures(EMPTY_SIGNATURES);
                   }}
                 />
               </div>
@@ -684,7 +786,7 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                 onValueChange={(value) => {
                   const condition = value as UniformReturnedCondition;
                   setReturnedCondition(condition);
-                  resetReturnTerm();
+                  setReturnSignatures(EMPTY_SIGNATURES);
                   if (
                     (condition === "danificado" || condition === "inutilizavel") &&
                     stockDisposition === "retorna_estoque"
@@ -708,81 +810,34 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
                 value={returnNotes}
                 onChange={(event) => {
                   setReturnNotes(event.target.value);
-                  resetReturnTerm();
+                  setReturnSignatures(EMPTY_SIGNATURES);
                 }}
                 placeholder="Ex: peça sem avaria, elástico cedido, mancha, rasgo, descarte autorizado..."
               />
             </div>
-            <div className="rounded-2xl border bg-slate-50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black uppercase text-slate-500">Termo de devolução</p>
-                  <p className="text-xs font-semibold text-slate-500">
-                    Gere o PDF com a avaliação para coletar a assinatura antes de definir o destino final.
-                  </p>
-                </div>
-                {returnTarget ? (
-                  <PDFDownloadLink
-                    document={(
-                      <UniformReturnTermDocument
-                        collaboratorName={collaboratorName}
-                        registeredByName={registeredByName}
-                        assignment={returnTarget}
-                        quantity={returnQuantity}
-                        returnDate={returnDate}
-                        returnedCondition={returnedCondition}
-                        notes={returnNotes}
-                      />
-                    )}
-                    fileName={`termo-devolucao-uniforme-${pdfSafeName(collaboratorName)}-${returnDate}.pdf`}
-                  >
-                    {(({ loading }: any) => (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={loading || !canGenerateReturnTerm}
-                        onClick={() => setReturnTermGenerated(true)}
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        {loading ? "Gerando..." : "Baixar termo"}
-                      </Button>
-                    )) as any}
-                  </PDFDownloadLink>
-                ) : null}
-              </div>
+            <div className="space-y-2">
+              <Label>Destino da peça</Label>
+              <Select
+                value={stockDisposition}
+                onValueChange={(value) => {
+                  setStockDisposition(value as UniformStockDisposition);
+                  setReturnSignatures(EMPTY_SIGNATURES);
+                }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="retorna_estoque" disabled={returnRequiresDiscard}>Retornar ao estoque como usado</SelectItem>
+                  <SelectItem value="descartar">Descartar</SelectItem>
+                </SelectContent>
+              </Select>
+              {returnRequiresDiscard ? (
+                <p className="text-xs font-semibold text-amber-700">Peças danificadas ou inutilizáveis devem ser descartadas.</p>
+              ) : null}
             </div>
-            {returnTermGenerated ? (
-              <div className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
-                <div className="space-y-2">
-                  <Label>Destino final após assinatura</Label>
-                  <Select value={stockDisposition} onValueChange={(value) => setStockDisposition(value as UniformStockDisposition)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="retorna_estoque" disabled={returnRequiresDiscard}>
-                        Retornar ao estoque como usado
-                      </SelectItem>
-                      <SelectItem value="descartar">Descartar</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {returnRequiresDiscard ? (
-                    <p className="text-xs font-semibold text-amber-700">
-                      Peças danificadas ou inutilizáveis devem ser descartadas.
-                    </p>
-                  ) : null}
-                </div>
-                <label className="flex items-start gap-2 text-xs font-semibold text-slate-700">
-                  <Checkbox
-                    checked={returnTermSigned}
-                    onCheckedChange={(checked) => setReturnTermSigned(checked === true)}
-                  />
-                  <span>O termo foi assinado/conferido e o destino final já pode ser registrado.</span>
-                </label>
-              </div>
-            ) : (
-              <p className="rounded-2xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                Após baixar o termo para assinatura, o sistema libera a decisão final: retornar ao estoque como usado ou descartar.
-              </p>
-            )}
+            <SignaturePanel
+              signatures={returnSignatures}
+              onCapture={(role) => setSignatureTarget({ operation: "return", role })}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeReturnDialog}>Cancelar</Button>
@@ -790,8 +845,9 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
               onClick={submitReturn}
               disabled={
                 saving ||
-                !returnTermGenerated ||
-                !returnTermSigned ||
+                !returnTransactionId ||
+                !returnSignatures.collaborator ||
+                !returnSignatures.responsible ||
                 returnQuantity <= 0 ||
                 returnQuantity > (returnTarget?.quantityInPossession ?? 0)
               }
@@ -801,6 +857,160 @@ export function CollaboratorUniforms({ collaborator }: { collaborator: User }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!exchangeTarget} onOpenChange={(open) => !open && closeExchangeDialog()}>
+        <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Trocar uniforme</DialogTitle>
+            <DialogDescription>
+              A devolução e a nova entrega serão registradas juntas em um único termo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3">
+              <p className="text-xs font-black uppercase text-amber-700">Peça devolvida</p>
+              <p className="mt-1 text-sm font-black">{exchangeTarget?.productName}</p>
+              <p className="mt-1 text-xs font-semibold text-amber-700">{exchangeTarget ? uniformDetails(exchangeTarget) : null}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Nova peça</Label>
+              <Select
+                value={exchangeLotId}
+                onValueChange={(value) => {
+                  setExchangeLotId(value);
+                  setExchangeSignatures(EMPTY_SIGNATURES);
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecione a peça que será entregue" /></SelectTrigger>
+                <SelectContent>
+                  {availableLots.map((lot) => (
+                    <SelectItem key={lot.id} value={lot.id}>
+                      {lot.productName} · {uniformDetails(lot) || "sem variação"} · {lot.quantity} un
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Quantidade</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={Math.min(exchangeTarget?.quantityInPossession ?? 1, selectedExchangeLot?.quantity ?? 1)}
+                  value={exchangeQuantity}
+                  onChange={(event) => {
+                    setExchangeQuantity(Number(event.target.value));
+                    setExchangeSignatures(EMPTY_SIGNATURES);
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Data</Label>
+                <Input
+                  type="date"
+                  value={exchangeDate}
+                  onChange={(event) => {
+                    setExchangeDate(event.target.value);
+                    setExchangeSignatures(EMPTY_SIGNATURES);
+                  }}
+                />
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Condição da peça devolvida</Label>
+                <Select
+                  value={exchangeReturnedCondition}
+                  onValueChange={(value) => {
+                    const condition = value as UniformReturnedCondition;
+                    setExchangeReturnedCondition(condition);
+                    setExchangeSignatures(EMPTY_SIGNATURES);
+                    if (
+                      (condition === "danificado" || condition === "inutilizavel") &&
+                      exchangeStockDisposition === "retorna_estoque"
+                    ) {
+                      setExchangeStockDisposition("descartar");
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bom_estado">Bom estado</SelectItem>
+                    <SelectItem value="usado">Usado</SelectItem>
+                    <SelectItem value="danificado">Danificado</SelectItem>
+                    <SelectItem value="inutilizavel">Inutilizável</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Destino da peça devolvida</Label>
+                <Select
+                  value={exchangeStockDisposition}
+                  onValueChange={(value) => {
+                    setExchangeStockDisposition(value as UniformStockDisposition);
+                    setExchangeSignatures(EMPTY_SIGNATURES);
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="retorna_estoque" disabled={exchangeRequiresDiscard}>Retornar ao estoque como usado</SelectItem>
+                    <SelectItem value="descartar">Descartar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Motivo e ressalvas da troca</Label>
+              <Textarea
+                value={exchangeNotes}
+                onChange={(event) => {
+                  setExchangeNotes(event.target.value);
+                  setExchangeSignatures(EMPTY_SIGNATURES);
+                }}
+                placeholder="Ex.: ajuste de tamanho, desgaste, troca de função..."
+              />
+            </div>
+            <SignaturePanel
+              signatures={exchangeSignatures}
+              onCapture={(role) => setSignatureTarget({ operation: "exchange", role })}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeExchangeDialog}>Cancelar</Button>
+            <Button
+              onClick={submitExchange}
+              disabled={
+                saving ||
+                !exchangeLotId ||
+                !exchangeTransactionId ||
+                !exchangeSignatures.collaborator ||
+                !exchangeSignatures.responsible ||
+                exchangeQuantity <= 0 ||
+                exchangeQuantity > (exchangeTarget?.quantityInPossession ?? 0) ||
+                exchangeQuantity > (selectedExchangeLot?.quantity ?? 0)
+              }
+            >
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowLeftRight className="mr-2 h-4 w-4" />}
+              Confirmar troca
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <SignatureCaptureModal
+        open={!!signatureTarget}
+        title={signatureTarget?.role === "collaborator" ? "Assinatura do colaborador" : "Assinatura do responsável"}
+        description="A assinatura será incorporada ao termo final da movimentação de uniforme."
+        onOpenChange={(open) => { if (!open) setSignatureTarget(null); }}
+        onSignatureCaptured={(dataUrl) => {
+          if (!signatureTarget) return;
+          const update = (current: CapturedSignatures) => ({ ...current, [signatureTarget.role]: dataUrl });
+          if (signatureTarget.operation === "delivery") setDeliverySignatures(update);
+          if (signatureTarget.operation === "return") setReturnSignatures(update);
+          if (signatureTarget.operation === "exchange") setExchangeSignatures(update);
+        }}
+      />
 
       <UniformInstructionsDialog
         item={instructionsTarget}

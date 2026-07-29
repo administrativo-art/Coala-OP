@@ -4,6 +4,9 @@ export const DEFAULT_PROBATION_CONFIG = {
   evaluationWindowDays: 10,
 } as const;
 
+/** Regra operacional: a data de admissão é o dia 1 de cada período. */
+export const PROBATION_DAY_COUNTING_RULE = "admission_day_is_day_one" as const;
+
 export type ProbationConfig = {
   firstPeriodDays: number;
   secondPeriodDays: number;

@@ -5,6 +5,11 @@ import type {
   OnboardingStageId,
 } from '@/types';
 
+// 'probation' foi removido desta lista: o período de experiência não é mais uma etapa
+// sequencial de currentStage (nenhum código transiciona para ela — o botão "Finalizar
+// integração" sempre pula de 'integration' direto para 'done'). O acompanhamento real dos
+// 90 dias é feito pelo motor independente `probationV2` (ver probation-process.ts), exibido
+// no grupo "Experiência" da tela, sem depender desta lista.
 export const ONBOARDING_STAGE_IDS: OnboardingStageId[] = [
   'documents',
   'document_review',
@@ -13,7 +18,6 @@ export const ONBOARDING_STAGE_IDS: OnboardingStageId[] = [
   'signature',
   'formalization_validation',
   'integration',
-  'probation',
   'done',
 ];
 
@@ -25,8 +29,7 @@ export const DEFAULT_ONBOARDING_STAGES: OnboardingStage[] = [
   { id: 'signature', label: 'Assinatura dos documentos', order: 4, required: true, dueDays: null },
   { id: 'formalization_validation', label: 'Validação da formalização', order: 5, required: true, dueDays: null },
   { id: 'integration', label: 'Criação de usuário e integrações', order: 6, required: true, dueDays: null },
-  { id: 'probation', label: 'Período de experiência', order: 7, required: true, dueDays: 90 },
-  { id: 'done', label: 'Finalizado', order: 8, required: true, dueDays: null },
+  { id: 'done', label: 'Finalizado', order: 7, required: true, dueDays: null },
 ];
 
 export const DEFAULT_ONBOARDING_DOCUMENTS: OnboardingDocumentTemplate[] = [

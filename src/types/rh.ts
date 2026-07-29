@@ -226,6 +226,28 @@ export type ImageVoiceConsentRecord = {
   protocolo?: string | null;
   origem?: string;
   onboarding_id?: string | null;
+  status?: "granted" | "denied" | "revoked";
+  termVersion?: string;
+  termHash?: string;
+  decisionAt?: string;
+  decisionChannel?: string;
+  decisionEvidence?: Record<string, unknown>;
+  signedDocumentId?: string | null;
+  revokedAt?: string | null;
+  revocationReason?: string | null;
+  revocationChannel?: string | null;
+  operationalEffectStatus?: "not_applicable" | "pending" | "in_progress" | "completed";
+  operationalEffectAt?: string | null;
+  usages?: Array<{
+    usageId: string;
+    channel: string;
+    asset: string;
+    publishedAt: string;
+    registeredAt: string;
+    registeredBy: string;
+    removedAt: string | null;
+    removedBy: string | null;
+  }>;
 };
 
 export type OnboardingPrivacyAcknowledgementRecord = {

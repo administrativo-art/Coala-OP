@@ -1,95 +1,118 @@
 # Kit de documentos admissionais
 
-## Estado desta versão
+## Estado da implementação
 
-Os nove modelos originais fornecidos pela operação em 20/07/2026 estão preservados nesta pasta, sem alterações de conteúdo ou formatação. Esta é a fonte documental para a adaptação do fluxo de geração e assinatura.
+Os nove modelos originais recebidos pela operação em 20/07/2026 permanecem
+preservados como versões `v1`. As versões `v2` são matrizes parametrizadas,
+preparadas por scripts determinísticos e validadas por renderização.
 
 - Categoria funcional: **Informações admissionais**
-- Versão do kit: **1.0**
 - Formato editável: **DOCX**
-- Formato oficial para assinatura e auditoria: **um único PDF consolidado**
-- Estado operacional: **modelos arquivados; publicação e consolidação ainda não implantadas**
+- Formato oficial: **PDF gerado, timbrado e rastreável**
+- Assinatura contratual: **um PDF consolidado**
+- Consentimento de imagem e voz: **solicitação independente**
+- Vale-transporte: **dois modelos alternativos e versionados**
+- Estado técnico: **implementado**
+- Estado de publicação: **bloqueado por revisão jurídica e homologação do RH**
 
-## Inventário e integridade
+Os modelos continuam com estado `draft` no catálogo do sistema. Essa trava é
+intencional: impede o uso oficial antes da aprovação do conteúdo e da assinatura
+única do pacote.
 
-| Ordem | Arquivo | SHA-256 |
-|---:|---|---|
-| 1 | `01-contrato-experiencia-v1.docx` | `935fbe335a50349a389a61a537c9f20570da5ac26d8a3e437506b5d91734bc12` |
-| 2 | `02-banco-horas-v1.docx` | `f8310fabb8da2c9a102eb1d93d37ccf748a6d8ae5580f32d16693c058c13aaa1` |
-| 3 | `03-termo-lgpd-v1.docx` | `9a2d03b2c6303af1801dbb32511ee865496216ad5994e3e81ba8ee1416a89587` |
-| 4 | `04-imagem-voz-v1.docx` | `8c3a5883b1d413b310be6095a05a48d88b0e824c0124390d2d033afa5ee6fcce` |
-| 5 | `05-metas-premios-v1.docx` | `ef6ebf77cdf7cf079fa01395dd7c826190e23a73be277ffeccf5d5fb79c078b0` |
-| 6 | `06-vale-transporte-v1.docx` | `da7c9f8b849a6a42e989ffc3e2ec71bb945670aaa114cc43fcb3188568373395` |
-| 7 | `07-confidencialidade-v1.docx` | `01f6f0536f72869fd4decd6ebad73a8a214341db32bd38a4184c927a5e6189fa` |
-| 8 | `08-ponto-eletronico-v1.docx` | `cf3b4baecba1e12932cb1513e09b78a0448cbc6beaf5021e9d8f430b2e30f1e2` |
-| 9 | `09-termo-encerramento-v1.docx` | `e63f92bc5a8769952f0bb3cc713466bb55463a065bc5f6d397488d276d03365b` |
+## Modelos operacionais
 
-O arquivo `kit-manifest.json` registra a ordem, os identificadores estáveis e o comportamento esperado de cada componente.
+| Ordem | Arquivo v2 | SHA-256 | Assinatura |
+|---:|---|---|---|
+| 1 | `01-contrato-experiencia-v2.docx` | `6cddfc54a23a17964493f94c71f8af52b89d17ef953db9b7acdb5c836fbff53d` | Pacote |
+| 2 | `02-banco-horas-v2.docx` | `cff1a19adbca0847db5337182e503340edeb590b8786a238c6249be957fe0b32` | Pacote |
+| 3 | `03-termo-lgpd-v2.docx` | `70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265` | Pacote |
+| 4 | `04-imagem-voz-v2.docx` | `a3d20c516afa510c6aa9d58ae359827490b76289643f7508932fce61d8c42381` | Independente |
+| 5 | `05-metas-premios-v2.docx` | `a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745` | Pacote |
+| 6A | `06-vale-transporte-solicitacao-v2.docx` | `cd643a4caf7c088e98af1dc6908cac7d2005163a795f323df1fcd8450fca53bb` | Pacote |
+| 6B | `06-vale-transporte-renuncia-v2.docx` | `3ea7e9e3ddbfa2a4ffefe780efbd03677984131e4fdf3ca8437aa81fc3a1a6de` | Pacote |
+| 7 | `07-confidencialidade-v2.docx` | `56306e646b241ab3b0bb93c804dc3cf549a833efb583bf990c9a18c8ba275f80` | Pacote |
+| 8 | `08-ponto-eletronico-v2.docx` | `eba3f36cf5ca9c5effb72c36cfc05f3487b192f5ff9206c0bc604f66235e3f5a` | Pacote |
+| 9 | `09-termo-encerramento-v2.docx` | `1b4a98f7a9fba99d61ab07ffde24584b52516fb53bd0379d101216923d05b030` | Alvo final |
 
-## Campos encontrados nos modelos
+O termo de encerramento recebe a lista real dos componentes e suas páginas. A
+modalidade de vale-transporte é escolhida a partir da decisão vigente; quando a
+decisão muda, o documento anterior é marcado como `Substituído`, sem apagar o
+histórico.
 
-| Campo atual | Significado esperado | Origem futura |
-|---|---|---|
-| `custom_field_15914645` | Nome completo do colaborador | formulário de admissão |
-| `custom_field_15874630` | Número da CTPS | formulário ou documento validado |
-| `custom_field_15874638` | Série da CTPS | formulário ou documento validado |
-| `custom_field_15874657` | Remuneração mensal | cargo/função da integração |
-| `contract_start` | Data de admissão | integração |
-| `custom_field_15914630` | Término dos primeiros 45 dias | cálculo do sistema |
-| `custom_field_15914631` | Término final de 90 dias | cálculo do sistema |
-| `CAMPO_CPF_DO_TITULAR` | CPF do colaborador | formulário ou documento validado |
-| `CAMPO_DATA_PUBLICACAO_TERMO` | Vigência da versão do termo LGPD | versão do modelo |
-| `custom_field_15874601` | Opção de vale-transporte | resposta do candidato |
-| `CAMPO_ENDERECO_RESIDENCIAL` | Endereço residencial | formulário ou comprovante validado |
-| `CAMPO_OPCAO_IMAGEM_VOZ` | Marcação da autorização de imagem e voz | consentimento explícito salvo no processo |
+## Geração e composição
 
-Antes da publicação, os nomes legados devem ser mapeados para o catálogo de variáveis do Coala. Não se deve preencher esses campos por substituição textual fora do gerador de DOCX.
+1. O RH seleciona e gera os documentos aplicáveis.
+2. O sistema resolve cadastro, empresa responsável, datas e campos manuais.
+3. Os valores efetivamente renderizados são gravados em registro de auditoria
+   protegido, junto com versões de catálogo e formatadores.
+4. Cada DOCX é convertido para PDF e recebe o papel timbrado.
+5. O compositor calcula `contentHash`, aplica o rodapé rastreável e calcula
+   `artifactHash`.
+6. O termo de encerramento é criado com o índice real.
+7. Os componentes de escopo `bundle` são consolidados em um PDF, com protocolo
+   `ADM`, manifesto e `packageHash`.
+8. O pacote é enviado em uma única solicitação à Autentique.
+9. O retorno assinado e o relatório do provedor recebem hashes próprios; todos
+   os documentos lógicos apontam para o mesmo pacote arquivado.
 
-## Ajustes obrigatórios antes da publicação
+O rodapé rastreável é aplicado ao PDF, e não ao DOCX, evitando circularidade de
+hash e permitindo conhecer a posição real do componente:
 
-1. **Empresa dinâmica.** Razão social, CNPJ e endereço estão fixos como CT Sorvetes Ltda. Devem usar o CNPJ responsável escolhido pelo RH na criação da integração e preservar um snapshot dos dados usados.
-2. **Função dinâmica.** O contrato de experiência fixa a função como `ATENDENTE`. Deve utilizar cargo/função da integração.
-3. **Assinatura única.** Os oito documentos possuem blocos individuais de assinatura. Na versão operacional consolidada, esses blocos devem ser retirados ou transformados em identificação das partes; os únicos campos de assinatura devem ficar no termo de encerramento.
-4. **Lista dinâmica.** O termo de encerramento atualmente lista sempre os oito documentos. A lista e a numeração devem refletir exatamente os modelos selecionados pelo RH.
-5. **Consentimento de imagem e voz.** A marcação deve reproduzir o booleano explícito já respondido pelo candidato. O RH não pode alterar a resposta ao montar o kit. A versão do termo, data da resposta e metadados de auditoria continuam preservados separadamente.
-6. **Vale-transporte.** A redação e a opção exibida devem corresponder à resposta validada do candidato.
-7. **Campos de página.** Os modelos possuem `PAGE` e `NUMPAGES`. Depois da consolidação, a paginação deve ser recalculada para o PDF completo.
-8. **Papel timbrado.** Os arquivos recebidos não contêm a logo como mídia incorporada. A versão operacional deve aplicar o papel timbrado oficial sem alterar os originais desta pasta.
+```text
+Pacote ADM-2026-000184 • Componente 3/8 • Págs. 7–8/23 • Conteúdo 8F2A91C4
+```
 
-## Fluxo recomendado de geração e assinatura
+O código impresso é uma chave de localização. A verificação autoritativa compara
+o artefato apresentado com o arquivado pelo sistema.
 
-1. O RH acessa a etapa **Geração dos documentos admissionais**.
-2. O sistema exibe os oito modelos selecionáveis, com nome, versão, campos pendentes e indicação de que serão abrangidos pela assinatura final.
-3. O RH marca os documentos que deseja gerar. O termo de encerramento não é selecionável e é sempre acrescentado ao final.
-4. O sistema popula cada DOCX e disponibiliza a versão editável para download.
-5. Se houver edição manual, o RH envia novamente o DOCX alterado. A versão original e a alterada permanecem no histórico.
-6. O sistema converte cada documento aprovado em PDF, mantém a ordem do manifesto e produz o termo final com a lista efetivamente selecionada.
-7. Todos os PDFs são consolidados em um único arquivo. O RH visualiza, audita e valida o pacote completo.
-8. Após a validação, o pacote é bloqueado por hash e enviado como **um único documento** ao provedor de assinatura.
-9. O candidato assina uma vez no termo final. Se a empresa também for signatária, cada parte assina uma vez no mesmo termo.
-10. O PDF assinado e o relatório do provedor são arquivados. Cada documento lógico do perfil aponta para o mesmo pacote e exibe `Incluído no kit assinado`.
+## Regras especiais
 
-## Auditoria mínima do pacote
+### Consentimento de imagem e voz
 
-O registro do pacote deve preservar:
+O consentimento não integra a assinatura única. O sistema registra concessão,
+negação e revogação, versão e hash do termo, canal e evidência da decisão,
+documento assinado e inventário de usos. A revogação bloqueia novos usos, cria
+efeito operacional e preserva a prova histórica.
 
-- identificador do processo e do colaborador;
-- modelos selecionados, ordem e versão de cada modelo;
-- hash dos DOCX gerados e dos DOCX eventualmente reenviados pelo RH;
-- hash de cada PDF intermediário;
-- hash do PDF consolidado antes da assinatura;
-- decisão de imagem e voz registrada separadamente;
-- usuário e data de geração, edição, revisão e aprovação;
-- identificador da solicitação no provedor;
-- hash do PDF assinado e relatório de assinatura;
-- vínculo entre o pacote assinado e cada documento lógico do colaborador.
+### Vale-transporte
 
-## Impacto no código atual
+Solicitação e declaração de não utilização são documentos diferentes. Cada
+alteração possui versão, data de eficácia, protocolo e chave de idempotência
+próprios. O documento anterior fica `Substituído`.
 
-O sistema já permite selecionar modelos e gerar DOCX individualmente. Porém, o envio atual percorre cada documento aprovado e cria uma solicitação separada no Autentique. Para atender este kit, a etapa precisa passar a criar um registro de pacote, consolidar os PDFs aprovados e realizar apenas uma solicitação de assinatura para o PDF final.
+### Experiência de 45/90 dias
 
-Essa mudança não deve reaproveitar o estado `assinado` de um componente isolado. O indicador de cada documento somente muda para assinado quando o pacote completo assinado for recebido, validado e arquivado.
+O primeiro dia de trabalho conta como dia 1. As datas finais são calculadas pelo
+sistema e impressas por extenso. A regra possui testes para virada de mês, ano e
+ano bissexto.
 
-## Validação jurídica
+## Integridade das fontes
 
-A assinatura eletrônica deve preservar autoria, integridade e aceitação pelas partes. A adoção de uma única assinatura ao final de um PDF consolidado deve ser validada pelo jurídico trabalhista, especialmente quanto à redação do termo de encerramento e aos poderes do signatário da empresa.
+As versões `v1` são a fonte histórica imutável. As versões `v2` são reproduzíveis
+pelos scripts:
+
+```bash
+node --import tsx scripts/prepare-probation-contract-template.mts
+node --import tsx scripts/prepare-hours-bank-template.mts
+node --import tsx scripts/prepare-admission-templates.mts
+node --import tsx scripts/prepare-admission-closing-template.mts
+```
+
+Nenhum modelo é preparado por substituição livre em produção. O construtor com
+IA apenas propõe um plano de mapeamento; a aplicação continua sendo
+determinística, com hash da fonte e contagem exata de ocorrências.
+
+## Validação e publicação
+
+Antes de trocar os modelos para `published`:
+
+1. concluir a revisão jurídica dos textos, do consentimento separado, das duas
+   modalidades de vale-transporte e da assinatura única;
+2. homologar visualmente Carlito como substituta métrica de Calibri;
+3. implantar o Gotenberg reprodutível e executar o canário remoto dos modelos;
+4. validar as duas bandas inferiores reservadas para marca e rastreabilidade;
+5. executar um pacote real de homologação na Autentique;
+6. obter o aceite formal do RH.
+
+Os detalhes técnicos e as pendências externas estão em
+[`../../GERADOR-DE-DOCUMENTOS.md`](../../GERADOR-DE-DOCUMENTOS.md).

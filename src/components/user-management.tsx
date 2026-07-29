@@ -34,6 +34,7 @@ import {
   employmentRelationshipLabel,
   terminationCopyForRelationship,
   terminationReasonsForRelationship,
+  type EmploymentTerminationReason,
 } from '@/lib/hr/employment-relationship';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { PhotoCaptureModal } from './photo-capture-modal';
@@ -43,6 +44,7 @@ import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { pickUserColor, getUserColor } from '@/lib/utils/user-colors';
 import { createAuditLog } from '@/features/audit/client';
+import { createManagedTerminationProcess } from '@/features/hr/termination/client';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -761,13 +763,27 @@ export function UserManagement({
         toast({ title: 'Motivo incompatível com o vínculo.', description: 'Selecione uma opção válida para o tipo de vínculo cadastrado.', variant: 'destructive' });
         return;
       }
+      if (inactivationMode === 'contract_termination') {
+        if (!firebaseUser || !terminationReason) return;
+        const result = await createManagedTerminationProcess(firebaseUser, {
+          employeeId: userToInactivate.id,
+          terminationDate,
+          terminationReason: terminationReason as EmploymentTerminationReason,
+          terminationCause: requiresTerminationSubtype(terminationReason) ? terminationCause : undefined,
+          terminationNotes: terminationNotes || undefined,
+        });
+        setUserToInactivate(null);
+        toast({
+          title: result.reused ? 'Processo de desligamento já existente.' : terminationCopy.success,
+          description: `${userToInactivate.username} permanecerá ativo até a conclusão formal.`,
+        });
+        window.location.assign(`/dashboard/dp/terminations/${result.process.id}`);
+        return;
+      }
       await terminateUser({
         uid: userToInactivate.id,
-        inactivationType: inactivationMode,
-        terminationDate: inactivationMode === 'contract_termination' ? terminationDate : undefined,
-        terminationReason: inactivationMode === 'contract_termination' ? terminationReason : undefined,
-        terminationCause: requiresTerminationSubtype(terminationReason) ? terminationCause : undefined,
-        terminationNotes: terminationNotes || (inactivationMode === 'temporary' ? 'Inativação temporária pela tela de usuários.' : undefined),
+        inactivationType: 'temporary',
+        terminationNotes: terminationNotes || 'Inativação temporária pela tela de usuários.',
       });
       await logUserAudit('user_inactivated', userToInactivate, {
         email: userToInactivate.email,

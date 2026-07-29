@@ -17,7 +17,7 @@ import {
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
-  Files, Building2, FileStack, Stethoscope
+  Files, Building2, FileStack
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -171,13 +171,10 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Acompanhamento", href: "/dashboard/processes", icon: ListChecks, show: permissions.dp?.view },
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
           { label: "Pedir demissão", href: "/dashboard/resignation", icon: FileText, show: user?.employmentRelationshipType === "clt" && user?.isActive !== false },
-          { label: "Desligamentos", href: "/dashboard/dp/terminations", icon: FileStack, show: permissions.dp?.view },
           {
             label: "Recrutamento", href: "__group:recruitment", icon: Users, show: permissions.dp?.view || hasFormalizationPermission(permissions, "view"),
             children: [
               { label: "Gestão da vaga", href: "/dashboard/hr/recruitment", icon: LayoutGrid, show: permissions.dp?.view },
-              { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: hasFormalizationPermission(permissions, "view") },
-              { label: "Clínicas de ASO", href: "/dashboard/hr/recruitment/integration/clinics", icon: Stethoscope, show: hasFormalizationPermission(permissions, "aso.view") },
               { label: "Banco de talentos", href: "/dashboard/hr/recruitment/talents", icon: Users, show: permissions.dp?.view },
             ],
           },
@@ -189,9 +186,11 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             icon: Users,
             show: permissions.dp?.collaborators?.view,
             children: [
-              { label: "Controle de uniformes", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
+              { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: hasFormalizationPermission(permissions, "view") },
               { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
               { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
+              { label: "Uniforme", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
+              { label: "Desligamento", href: "/dashboard/dp/terminations", icon: FileStack, show: permissions.dp?.view },
             ],
           },
           { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
@@ -204,6 +203,18 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         color: SECTION_COLORS.docs,
         items: [
           {
+            label: "Central de documentos",
+            href: "/dashboard/documents/generated",
+            icon: FileStack,
+            show: hasFormalizationPermission(permissions, "documents.view"),
+          },
+          {
+            label: "Modelos",
+            href: "/dashboard/documents/templates",
+            icon: FileStack,
+            show: hasFormalizationPermission(permissions, "templates.view"),
+          },
+          {
             label: "Documentos da empresa",
             href: "/dashboard/documents/company",
             icon: Building2,
@@ -214,12 +225,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             href: "/dashboard/documents/collaborators",
             icon: Users,
             show: hasFormalizationPermission(permissions, "documents.view"),
-          },
-          {
-            label: "Modelos",
-            href: "/dashboard/documents/templates",
-            icon: FileStack,
-            show: hasFormalizationPermission(permissions, "templates.view"),
           },
         ],
       },
@@ -267,7 +272,14 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           .map(i => (i.children ? { ...i, children: i.children.filter(c => c.show) } : i)),
       }))
       .filter(s => s.items.length > 0);
-  }, [canAccessPurchasing, pendingTaskCount, permissions]);
+  }, [
+    canAccessPurchasing,
+    pendingTaskCount,
+    permissions,
+    user?.employmentRelationshipType,
+    user?.id,
+    user?.isActive,
+  ]);
 
   // Flatten items + their children for active-route matching.
   const flatItems = useMemo(

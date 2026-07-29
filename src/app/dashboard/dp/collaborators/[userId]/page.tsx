@@ -2,6 +2,7 @@
 
 import React, { use, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format, differenceInDays, differenceInMonths, differenceInYears } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -12,6 +13,7 @@ import {
   FileText,
   Globe2,
   IdCard,
+  Image as ImageIcon,
   Loader2,
   Lock,
   MapPin,
@@ -90,6 +92,7 @@ import {
   terminationReasonsForRelationship,
   type EmploymentTerminationReason,
 } from "@/lib/hr/employment-relationship";
+import { createManagedTerminationProcess } from "@/features/hr/termination/client";
 
 const FIELD_VISIBILITIES: NormalizedFieldVisibility[] = ["public", "restricted_partial", "restricted_total", "confidential"];
 const FIELD_VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
@@ -2165,7 +2168,8 @@ function TerminationDialog({
 
 export default function CollaboratorProfilePage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = use(params);
-  const { activeUsers, terminatedUsers, permissions, firebaseUser, user: currentUser, updateUser, terminateUser } = useAuth();
+  const router = useRouter();
+  const { activeUsers, terminatedUsers, permissions, firebaseUser, user: currentUser, updateUser } = useAuth();
   const { toast } = useToast();
   const { shiftDefinitions, units, vacations, vacationsLoading } = useDPBootstrap();
   const [fieldMapReloadKey, setFieldMapReloadKey] = useState(0);
@@ -2425,41 +2429,26 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   );
 
   async function confirmTermination(payload: TerminationPayload) {
-    if (!canTerminateCollaborator || terminationSaving) return;
+    if (!canTerminateCollaborator || terminationSaving || !firebaseUser) return;
     setTerminationSaving(true);
     try {
-      await terminateUser({
-        uid: collaborator.id,
-        inactivationType: "contract_termination",
+      const result = await createManagedTerminationProcess(firebaseUser, {
+        employeeId: collaborator.id,
         terminationDate: payload.terminationDate,
         terminationReason: payload.terminationReason,
         terminationCause: payload.terminationCause,
         terminationNotes: payload.terminationNotes,
       });
-      if (firebaseUser) {
-        await createAuditLog(firebaseUser, {
-          module: "dp.collaborators",
-          action: "collaborator_contract_termination_registered",
-          targetType: "user",
-          targetId: collaborator.id,
-          targetName: collaborator.username,
-          metadata: {
-            termination_date: payload.terminationDate,
-            employment_relationship_type: collaborator.employmentRelationshipType ?? null,
-            termination_reason: payload.terminationReason,
-            termination_cause: payload.terminationCause ?? null,
-          },
-        }).catch(() => undefined);
-      }
       setTerminationDialogOpen(false);
       toast({
-        title: terminationCopyForRelationship(collaborator.employmentRelationshipType).success,
-        description: `${displayName(collaborator.username)} foi inativado(a).`,
+        title: result.reused ? "Processo de desligamento já existente." : "Processo de desligamento iniciado.",
+        description: `${displayName(collaborator.username)} permanecerá com acesso até a conclusão formal do processo.`,
       });
+      router.push(`/dashboard/dp/terminations/${result.process.id}`);
     } catch (error) {
       toast({
-        title: "Erro ao registrar rescisão.",
-        description: error instanceof Error ? error.message : "Não foi possível inativar o colaborador.",
+        title: "Erro ao iniciar desligamento.",
+        description: error instanceof Error ? error.message : "Não foi possível criar o processo formal.",
         variant: "destructive",
       });
     } finally {
@@ -2881,6 +2870,13 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                     >
                       <FileText className="h-4 w-4 text-[#df2f78]" />
                       Documentos do colaborador
+                    </Link>
+                    <Link
+                      href={`/dashboard/documents/consents/${encodeURIComponent(collaborator.registrationIdBizneo || collaborator.id)}`}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+                    >
+                      <ImageIcon className="h-4 w-4 text-[#df2f78]" />
+                      Consentimento de imagem e voz
                     </Link>
                     {canTerminateCollaborator ? (
                       <button

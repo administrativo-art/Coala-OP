@@ -662,6 +662,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     protocolo: protocol,
     origem: 'onboarding_publico',
     onboarding_id: doc.id,
+    status: imageVoiceAuthorized ? 'granted' : 'denied',
+    termVersion: imageVoiceTerm.version,
+    termHash: imageVoiceTerm.hash,
+    decisionAt: now,
+    decisionChannel: 'onboarding_public',
+    decisionEvidence: {
+      protocol,
+      ip: evidence.clientIp,
+      userAgent: evidence.userAgent,
+      snapshotId: imageVoiceConsentSnapshotId,
+    },
+    signedDocumentId: null,
+    revokedAt: null,
+    revocationReason: null,
+    revocationChannel: null,
+    operationalEffectStatus: 'not_applicable',
+    operationalEffectAt: null,
+    usages: [],
   };
 
   await doc.ref.set({

@@ -14,7 +14,6 @@ import { createAutentiqueDocument, getAutentiqueDocumentStatus } from "@/lib/aut
 import { getUserDisplayName } from "@/lib/user-display";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { EMAIL_SENDERS, sendEmail } from "@/lib/email/resend";
-import { renderCoalaEmail } from "@/lib/email/template";
 import { deletePdvLegalUser } from "@/lib/integrations/pdv-legal-admin";
 import {
   buildProcessProjection,
@@ -25,11 +24,15 @@ import {
   recalculateTermination,
 } from "./core";
 import { buildTerminationRequestConfirmation } from "./request-document.server";
+import { renderTerminationAccountantEmail } from "./emails";
 import type {
   CltTerminationProcess,
   TerminationDocument,
   TerminationEvent,
 } from "./types";
+import type { ManagedTerminationCreateInput } from "./schemas";
+import { terminationReasonsForRelationship } from "@/lib/hr/employment-relationship";
+import { recalculateEmploymentEndRetention } from "@/features/hr/documents/document-retention.server";
 
 const COLLECTION = "terminationProcesses";
 const PROJECTION_COLLECTION = "processProjections";
@@ -218,6 +221,211 @@ async function createHrTask(context: ServerUserContext, process: CltTerminationP
       visibilityScope: "project",
     },
   });
+}
+
+export async function createManagedTermination(params: {
+  context: ServerUserContext;
+  input: ManagedTerminationCreateInput;
+}) {
+  assertTerminationManager(params.context);
+  const targetSnapshot = await dbAdmin.collection("users").doc(params.input.employeeId).get();
+  if (!targetSnapshot.exists) throw new Error("Colaborador não encontrado.");
+  const target = {
+    id: targetSnapshot.id,
+    ...(targetSnapshot.data() as Omit<ServerUserContext["userDoc"], "id">),
+  };
+  if (target.isActive === false) throw new Error("O colaborador já está inativo.");
+  const relationship = target.employmentRelationshipType;
+  if (relationship !== "clt" && relationship !== "pj") {
+    throw new Error(
+      relationship === "internship"
+        ? "O fluxo específico de desligamento de estágio ainda não está disponível."
+        : "Defina o tipo de vínculo antes de iniciar o desligamento.",
+    );
+  }
+  const allowedReasons = terminationReasonsForRelationship(relationship);
+  if (!allowedReasons.some((reason) => reason === params.input.terminationReason)) {
+    throw new Error("Motivo de encerramento incompatível com o tipo de vínculo.");
+  }
+
+  const existingSnapshot = await hrDbAdmin
+    .collection(COLLECTION)
+    .where("employeeId", "==", target.id)
+    .get();
+  const existing = existingSnapshot.docs
+    .map((document) => ({
+      id: document.id,
+      ...(serialize(document.data()) as Omit<CltTerminationProcess, "id">),
+    }))
+    .find((process) => !["completed", "cancelled"].includes(process.status));
+  if (existing) return { process: recalculateTermination(existing), reused: true };
+
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  const processId = randomUUID();
+  const protocol = processProtocol(new Date(now));
+  const unit = await loadUnit(target);
+  const identity = await loadExpectedIdentity(target.id).catch(() => null);
+  const legalPaymentDueDate = calculateMaterialDeadline(params.input.terminationDate);
+  let steps = createInitialTerminationSteps(now);
+  steps = patchStep(steps, "request_validation_notice", {
+    status: "completed",
+    completedAt: now,
+    completedBy: params.context.userDoc.id,
+    note: "Desligamento iniciado e validado pelo RH.",
+  });
+  steps = patchStep(steps, "uniform_return", {
+    status: "in_progress",
+    startedAt: now,
+    dueAt: params.input.terminationDate,
+  });
+  steps = patchStep(steps, "aso", relationship === "clt" ? {
+    status: "pending",
+    dueAt: legalPaymentDueDate,
+    note: "Aguardando a devolução dos uniformes.",
+  } : {
+    status: "completed",
+    startedAt: now,
+    completedAt: now,
+    completedBy: params.context.userDoc.id,
+    note: "ASO demissional não aplicável ao vínculo PJ.",
+  });
+  steps = patchStep(steps, "accountant", {
+    status: relationship === "clt" ? "blocked" : "in_progress",
+    startedAt: relationship === "pj" ? now : null,
+    dueAt: legalPaymentDueDate,
+    blockedReason: relationship === "clt" ? "Aguardando conclusão e aprovação do ASO demissional." : null,
+  });
+  for (const stepId of ["document_audit", "signatures", "legal_obligations"] as const) {
+    steps = patchStep(steps, stepId, { dueAt: legalPaymentDueDate });
+  }
+  steps = patchStep(steps, "legal_obligations", { status: "in_progress", startedAt: now });
+  steps = patchStep(steps, "access_revocation", {
+    status: today >= params.input.terminationDate ? "in_progress" : "blocked",
+    dueAt: params.input.terminationDate,
+    startedAt: today >= params.input.terminationDate ? now : null,
+    blockedReason: today >= params.input.terminationDate
+      ? null
+      : `Aguardando o término do contrato em ${params.input.terminationDate}.`,
+  });
+
+  const process = recalculateTermination({
+    id: processId,
+    processType: relationship === "clt" ? "clt_hr_termination" : "pj_contract_termination",
+    employeeId: target.id,
+    employeeName: target.username,
+    employeeEmail: target.email,
+    employeeCpfMasked: maskCpf(identity?.cpf),
+    employeePhoneMasked: target.phone ? maskPhone(target.phone) : null,
+    employmentRelationshipType: relationship,
+    terminationReason: params.input.terminationReason,
+    terminationCause: params.input.terminationCause ?? null,
+    terminationNotes: params.input.terminationNotes ?? null,
+    unitId: unit.id,
+    unitName: unit.name,
+    jobRoleName: target.jobRoleName ?? null,
+    status: "active",
+    health: "on_track",
+    progress: 0,
+    currentSummary: "Desligamento iniciado pelo RH",
+    source: "hr_manual",
+    request: {
+      noticePreference: "request_waiver",
+      desiredLastDay: params.input.terminationDate,
+      notes: params.input.terminationNotes ?? null,
+      submittedAt: now,
+      protocol,
+      identityStatus: "manual_verified",
+    },
+    hrValidation: {
+      status: "confirmed",
+      at: now,
+      by: params.context.userDoc.id,
+      byName: getUserDisplayName(params.context.userDoc, params.context.userDoc.id),
+      notes: `Iniciado pelo RH: ${params.input.terminationReason}.`,
+    },
+    notice: {
+      decision: "hr_defined",
+      communicationDate: today,
+      noticeStartDate: null,
+      contractEndDate: params.input.terminationDate,
+      legalPaymentDueDate,
+      notes: params.input.terminationNotes ?? null,
+      decidedAt: now,
+      decidedBy: params.context.userDoc.id,
+    },
+    accountant: { status: relationship === "clt" ? "not_started" : "ready_to_send" },
+    operational: {
+      uniformsReturned: false,
+      assetsReturned: false,
+      scheduleRemoved: false,
+      accessRevoked: false,
+      benefitsClosed: false,
+    },
+    accessRevocation: {
+      pdv: target.registrationIdPdv
+        ? { status: "pending", externalId: target.registrationIdPdv }
+        : { status: "not_applicable" },
+      bizneo: target.registrationIdBizneo
+        ? { status: "pending", externalId: target.registrationIdBizneo }
+        : { status: "not_applicable" },
+      healthPlan: relationship === "clt" ? { status: "pending" } : { status: "not_applicable" },
+      coalaOne: { status: "scheduled" },
+    },
+    documents: [],
+    steps,
+    nextDueAt: null,
+    lastActivityAt: now,
+    createdAt: now,
+    updatedAt: now,
+  } satisfies CltTerminationProcess);
+
+  const lockRef = hrDbAdmin.collection("terminationActiveByEmployee").doc(target.id);
+  const transactionResult = await hrDbAdmin.runTransaction(async (transaction) => {
+    const lockSnapshot = await transaction.get(lockRef);
+    const lockedProcessId = asString(lockSnapshot.get("processId"));
+    if (lockedProcessId) {
+      const lockedRef = hrDbAdmin.collection(COLLECTION).doc(lockedProcessId);
+      const lockedSnapshot = await transaction.get(lockedRef);
+      if (lockedSnapshot.exists && !["completed", "cancelled"].includes(String(lockedSnapshot.get("status")))) {
+        return {
+          process: recalculateTermination({
+            id: lockedSnapshot.id,
+            ...(serialize(lockedSnapshot.data()) as Omit<CltTerminationProcess, "id">),
+          }),
+          reused: true,
+        };
+      }
+    }
+    transaction.set(hrDbAdmin.collection(COLLECTION).doc(process.id), process);
+    transaction.set(lockRef, { processId: process.id, updatedAt: now });
+    return { process, reused: false };
+  });
+  if (transactionResult.reused) return transactionResult;
+
+  await Promise.all([
+    syncTerminationProjection(process),
+    appendTerminationEvent(process.id, {
+      type: "HR_TERMINATION_CREATED",
+      at: now,
+      ...eventActor(params.context),
+      message: `Desligamento iniciado pelo RH. Motivo: ${params.input.terminationReason}. Término previsto em ${params.input.terminationDate}.`,
+      data: {
+        terminationReason: params.input.terminationReason,
+        terminationCause: params.input.terminationCause ?? null,
+        terminationDate: params.input.terminationDate,
+      },
+    }),
+    createHrTask(
+      params.context,
+      process,
+      `Conduzir desligamento — ${process.employeeName}`,
+      `Processo iniciado pelo RH. Término previsto em ${params.input.terminationDate}.`,
+      "hr-managed-start",
+      params.input.terminationDate,
+    ).catch(() => null),
+  ]);
+  return transactionResult;
 }
 
 export async function createEmployeeResignationRequest(params: {
@@ -414,7 +622,7 @@ export async function markTerminationIdentitySigned(params: {
     status: "hr_review",
     request: { ...process.request, identityStatus: "verified" },
     documents,
-    steps: patchStep(process.steps, "identity_signature", { status: "completed", completedAt: now, completedBy: process.employeeId }),
+    steps: patchStep(process.steps, "request_validation_notice", { status: "in_progress", startedAt: process.createdAt }),
     lastActivityAt: now,
     updatedAt: now,
   });
@@ -490,9 +698,8 @@ export async function validateTerminationRequest(params: { context: ServerUserCo
     throw new Error("A confirmação de identidade ainda não foi concluída.");
   }
   const now = new Date().toISOString();
-  let steps = patchStep(process.steps, "hr_validation", { status: "completed", startedAt: now, completedAt: now, completedBy: params.context.userDoc.id });
-  steps = patchStep(steps, "notice_decision", { status: "in_progress", startedAt: now });
-  steps = patchStep(steps, "aso", { status: "in_progress", startedAt: now, note: "Fluxo paralelo: guia, PIX, clínica, agendamento e ASO." });
+  let steps = patchStep(process.steps, "request_validation_notice", { status: "in_progress", startedAt: process.createdAt, note: "Identidade confirmada e manifestação validada pelo RH. Aguardando definição do aviso-prévio." });
+  steps = patchStep(steps, "aso", { status: "pending", note: "Aguardando a devolução dos uniformes." });
   steps = patchStep(steps, "accountant", { status: "blocked", blockedReason: "Aguardando definição do aviso-prévio e conclusão do ASO." });
   const updated = await saveTermination({
     ...process,
@@ -503,9 +710,7 @@ export async function validateTerminationRequest(params: { context: ServerUserCo
     lastActivityAt: now,
     updatedAt: now,
   });
-  await createTerminationAsoShadow(updated);
-  await createHrTask(params.context, updated, `Conduzir ASO demissional — ${process.employeeName}`, "Gere e valide a guia, solicite o PIX no Banco Inter e acompanhe clínica, agendamento e ASO.", "aso-dismissal").catch(() => null);
-  await appendTerminationEvent(process.id, { type: "HR_VALIDATED", at: now, ...eventActor(params.context), message: "RH validou o pedido. Aviso e ASO foram iniciados; a contabilidade aguardará a conclusão dos dois." });
+  await appendTerminationEvent(process.id, { type: "HR_VALIDATED", at: now, ...eventActor(params.context), message: "RH validou o pedido. A devolução dos uniformes antecede o ASO demissional." });
   return updated;
 }
 
@@ -520,8 +725,18 @@ export async function decideTerminationNotice(params: {
 }) {
   const process = await requireManagedProcess(params.context, params.id);
   if (process.hrValidation?.status !== "confirmed") throw new Error("Valide o pedido antes de definir o aviso-prévio.");
-  const calculated = params.decision === "worked" ? calculateNoticeDates(params.communicationDate) : null;
-  const contractEndDate = calculated?.contractEndDate ?? params.contractEndDate ?? params.communicationDate;
+  const submittedAt = new Date(process.request.submittedAt);
+  const communicationParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Belem",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(submittedAt);
+  const communicationPart = (type: "year" | "month" | "day") =>
+    communicationParts.find((part) => part.type === type)?.value ?? "";
+  const communicationDate = `${communicationPart("year")}-${communicationPart("month")}-${communicationPart("day")}`;
+  const calculated = params.decision === "worked" ? calculateNoticeDates(communicationDate) : null;
+  const contractEndDate = calculated?.contractEndDate ?? communicationDate;
   let holidays = params.holidays ?? [];
   if (!holidays.length && process.unitId) {
     const unit = await dbAdmin.collection("dp_units").doc(process.unitId).get();
@@ -538,7 +753,12 @@ export async function decideTerminationNotice(params: {
   }
   const legalPaymentDueDate = calculateMaterialDeadline(contractEndDate, holidays);
   const now = new Date().toISOString();
-  let steps = patchStep(process.steps, "notice_decision", { status: "completed", completedAt: now, completedBy: params.context.userDoc.id });
+  let steps = patchStep(process.steps, "request_validation_notice", { status: "completed", completedAt: now, completedBy: params.context.userDoc.id, note: "Pedido, identidade, validação e aviso-prévio concluídos." });
+  steps = patchStep(steps, "uniform_return", {
+    status: "in_progress",
+    startedAt: process.steps.find((step) => step.id === "uniform_return")?.startedAt ?? now,
+    dueAt: contractEndDate,
+  });
   for (const id of ["aso", "accountant", "document_audit", "signatures", "legal_obligations"] as const) steps = patchStep(steps, id, { dueAt: legalPaymentDueDate });
   steps = patchStep(steps, "access_revocation", {
     status: "blocked",
@@ -548,7 +768,7 @@ export async function decideTerminationNotice(params: {
   steps = patchStep(steps, "legal_obligations", { status: "in_progress", startedAt: now });
   const updated = await saveTermination({
     ...process,
-    notice: { decision: params.decision, communicationDate: params.communicationDate, noticeStartDate: calculated?.noticeStartDate ?? null, contractEndDate, legalPaymentDueDate, notes: params.notes ?? null, decidedAt: now, decidedBy: params.context.userDoc.id },
+    notice: { decision: params.decision, communicationDate, noticeStartDate: calculated?.noticeStartDate ?? null, contractEndDate, legalPaymentDueDate, notes: params.notes ?? null, decidedAt: now, decidedBy: params.context.userDoc.id },
     steps,
     lastActivityAt: now,
     updatedAt: now,
@@ -569,7 +789,7 @@ export async function updateTerminationStep(params: {
   note?: string | null;
 }) {
   const process = await requireManagedProcess(params.context, params.id);
-  if (["employee_request", "identity_signature", "hr_validation", "notice_decision", "aso", "accountant", "document_audit", "signatures", "closure"].includes(params.stepId)) {
+  if (["request_validation_notice", "employee_request", "identity_signature", "hr_validation", "notice_decision", "uniform_return", "aso", "accountant", "document_audit", "signatures", "closure"].includes(params.stepId)) {
     throw new Error("Esta etapa é atualizada automaticamente pelas ações do próprio fluxo.");
   }
   const now = new Date().toISOString();
@@ -584,6 +804,91 @@ export async function updateTerminationStep(params: {
   const updated = await saveTermination({ ...process, steps, lastActivityAt: now, updatedAt: now });
   await appendTerminationEvent(process.id, { type: "STEP_UPDATED", at: now, ...eventActor(params.context), message: `${current?.label ?? params.stepId}: ${params.status}.`, data: { stepId: params.stepId, status: params.status } });
   return updated;
+}
+
+export async function syncTerminationUniformReturn(params: {
+  context: ServerUserContext;
+  id: string;
+}) {
+  const process = await requireManagedProcess(params.context, params.id);
+  const requestStep = process.steps.find((step) => step.id === "request_validation_notice");
+  if (requestStep?.status !== "completed") {
+    throw new Error("Conclua a abertura, validação e definição do término antes de validar os uniformes.");
+  }
+  const assignments = await dbAdmin
+    .collection("uniformAssignments")
+    .where("workspaceId", "==", WORKSPACE_ID)
+    .get();
+  const pendingAssignments = assignments.docs
+    .filter((document) => document.get("collaboratorUserId") === process.employeeId)
+    .map((document) => Number(document.get("quantityInPossession") ?? 0))
+    .filter((quantity) => quantity > 0);
+  const pendingPieces = pendingAssignments.reduce((total, quantity) => total + quantity, 0);
+  const now = new Date().toISOString();
+  const current = process.steps.find((step) => step.id === "uniform_return");
+  const completed = pendingPieces === 0;
+  let steps = patchStep(process.steps, "uniform_return", completed ? {
+    status: "completed",
+    startedAt: current?.startedAt ?? now,
+    completedAt: now,
+    completedBy: params.context.userDoc.id,
+    note: "Nenhuma peça permanece em posse do colaborador.",
+  } : {
+    status: "in_progress",
+    startedAt: current?.startedAt ?? now,
+    completedAt: null,
+    completedBy: null,
+    note: `${pendingPieces} peça(s) ainda em posse do colaborador.`,
+  });
+  if (completed && process.employmentRelationshipType === "clt") {
+    const asoStep = steps.find((step) => step.id === "aso");
+    if (asoStep && !["completed", "in_progress", "waiting_external"].includes(asoStep.status)) {
+      steps = patchStep(steps, "aso", {
+        status: "in_progress",
+        startedAt: now,
+        note: "Uniformes devolvidos. Fluxo de ASO demissional liberado.",
+      });
+    }
+  }
+  const updated = await saveTermination({
+    ...process,
+    operational: {
+      ...(process.operational ?? {
+        assetsReturned: false,
+        scheduleRemoved: false,
+        accessRevoked: false,
+        benefitsClosed: false,
+      }),
+      uniformsReturned: completed,
+    },
+    steps,
+    lastActivityAt: now,
+    updatedAt: now,
+  });
+  if (current?.status !== steps.find((step) => step.id === "uniform_return")?.status || current?.note !== steps.find((step) => step.id === "uniform_return")?.note) {
+    await appendTerminationEvent(process.id, {
+      type: completed ? "UNIFORMS_RETURNED" : "UNIFORMS_RETURN_PENDING",
+      at: now,
+      ...eventActor(params.context),
+      message: completed
+        ? "Devolução de uniformes validada sem peças pendentes."
+        : `Devolução de uniformes pendente: ${pendingPieces} peça(s) ainda em posse.`,
+      data: { pendingPieces },
+    });
+  }
+  if (completed && process.employmentRelationshipType === "clt") {
+    await Promise.all([
+      createTerminationAsoShadow(updated),
+      createHrTask(
+        params.context,
+        updated,
+        `Conduzir ASO demissional — ${process.employeeName}`,
+        "Uniformes devolvidos. Gere e valide a guia, solicite o PIX e acompanhe clínica, agendamento e ASO.",
+        "aso-dismissal",
+      ).catch(() => null),
+    ]);
+  }
+  return { process: updated, pendingPieces };
 }
 
 export async function revokeTerminationAccess(params: {
@@ -704,7 +1009,18 @@ export async function completeTermination(params: { context: ServerUserContext; 
   const steps = patchStep(process.steps, "closure", { status: "completed", startedAt: now, completedAt: now, completedBy: params.context.userDoc.id });
   await Promise.all([
     authAdmin.updateUser(process.employeeId, { disabled: true }),
-    dbAdmin.collection("users").doc(process.employeeId).set({ isActive: false, employmentStatus: "terminated", terminationDate: process.notice.contractEndDate, updatedAt: now }, { merge: true }),
+    dbAdmin.collection("users").doc(process.employeeId).set({
+      isActive: false,
+      employmentStatus: "terminated",
+      inactivationType: "contract_termination",
+      terminationDate: process.notice.contractEndDate,
+      terminationReason: process.terminationReason ?? null,
+      terminationCause: process.terminationCause ?? null,
+      terminationNotes: process.terminationNotes ?? null,
+      terminationRelationshipType: process.employmentRelationshipType,
+      terminationProcessId: process.id,
+      updatedAt: now,
+    }, { merge: true }),
   ]);
   const updated = await saveTermination({
     ...process,
@@ -721,6 +1037,12 @@ export async function completeTermination(params: { context: ServerUserContext; 
     completedAt: now,
     lastActivityAt: now,
     updatedAt: now,
+  });
+  await hrDbAdmin.collection("terminationActiveByEmployee").doc(process.employeeId).delete().catch(() => undefined);
+  await recalculateEmploymentEndRetention({
+    employeeId: process.employeeId,
+    employmentEndedAt: process.notice.contractEndDate,
+    actorId: params.context.userDoc.id,
   });
   await appendTerminationEvent(process.id, { type: "COMPLETED", at: now, ...eventActor(params.context), message: "Desligamento concluído e cadastro do colaborador inativado." });
   return updated;
@@ -747,11 +1069,23 @@ export async function sendTerminationToAccountant(params: { context: ServerUserC
     const [buffer] = await bucket.file(document.storagePath).download();
     accountantAttachments.push({ filename: document.fileName, content: buffer.toString("base64"), contentType: document.mimeType });
   }
+  const noticeLabel = process.notice.decision === "worked"
+    ? "Cumprido — 30 dias"
+    : process.notice.decision === "exception_review"
+      ? "Exceção em análise"
+      : "Indenizado";
   await sendEmail({
     from: EMAIL_SENDERS.formalization,
     to: recipient,
     subject: `Desligamento CLT — ${process.employeeName}`,
-    html: renderCoalaEmail({ brandName: "Coala Shakes", title: "Processamento de desligamento", message: summary, highlightBlock: { text: "Use o link seguro para consultar o resumo e anexar os documentos rescisórios.", tone: "green", action: { label: "Enviar documentos", url } }, footer: "Link individual, auditado e com validade de 30 dias." }),
+    html: renderTerminationAccountantEmail({
+      employeeName: process.employeeName,
+      protocol: process.request.protocol,
+      contractEndDate: process.notice.contractEndDate,
+      legalPaymentDueDate: process.notice.legalPaymentDueDate,
+      noticeLabel,
+      documentsUrl: url,
+    }),
     text: `${summary}\n\nEnviar documentos: ${url}`,
     attachments: accountantAttachments,
     tags: [{ name: "category", value: "termination_accountant" }, { name: "termination_id", value: process.id.slice(0, 256) }],

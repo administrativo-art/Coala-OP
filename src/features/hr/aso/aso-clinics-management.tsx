@@ -44,6 +44,179 @@ async function readError(response: Response) {
   const payload = await response.json().catch(() => ({}));
   return payload.error || "Não foi possível concluir a operação.";
 }
+
+type ClinicEntity = {
+  id: string;
+  name: string;
+  fantasyName?: string;
+  document?: string;
+  contact?: { email?: string };
+  address?: {
+    street?: string; number?: string; complement?: string; neighborhood?: string;
+    city?: string; state?: string; zipCode?: string;
+  };
+};
+
+function formForEntity(entity: ClinicEntity, clinic?: Clinic): FormState {
+  if (clinic) {
+    return {
+      entityId: clinic.entityId,
+      active: clinic.active,
+      asoPrice: String(clinic.asoPrice ?? ""),
+      defaultPaymentDescription: clinic.defaultPaymentDescription ?? "",
+      schedulingEmail: clinic.schedulingEmail ?? "",
+      street: clinic.address?.street ?? "",
+      number: clinic.address?.number ?? "",
+      complement: clinic.address?.complement ?? "",
+      district: clinic.address?.district ?? "",
+      city: clinic.address?.city ?? "",
+      state: clinic.address?.state ?? "MA",
+      postalCode: clinic.address?.postalCode ?? "",
+      reference: clinic.address?.reference ?? "",
+      mapsUrl: clinic.address?.mapsUrl ?? "",
+    };
+  }
+  return {
+    ...EMPTY,
+    entityId: entity.id,
+    schedulingEmail: entity.contact?.email ?? "",
+    street: entity.address?.street ?? "",
+    number: entity.address?.number ?? "",
+    complement: entity.address?.complement ?? "",
+    district: entity.address?.neighborhood ?? "",
+    city: entity.address?.city ?? "",
+    state: entity.address?.state ?? "MA",
+    postalCode: entity.address?.zipCode ?? "",
+  };
+}
+
+export function AsoClinicEntityDialog({
+  entity,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  entity: ClinicEntity | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved?: (clinic: Clinic) => void;
+}) {
+  const { firebaseUser } = useAuth();
+  const { toast } = useToast();
+  const [form, setForm] = useState<FormState>(EMPTY);
+  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const set = (key: keyof FormState, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+
+  useEffect(() => {
+    if (!open || !entity || !firebaseUser) return;
+    let cancelled = false;
+    setLoading(true);
+    void firebaseUser.getIdToken()
+      .then((token) => fetch("/api/hr/aso-clinics", {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      }))
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readError(response));
+        return response.json();
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        const current = (payload.clinics ?? []).find((item: Clinic) => item.entityId === entity.id) ?? null;
+        setClinic(current);
+        setForm(formForEntity(entity, current ?? undefined));
+      })
+      .catch((error) => {
+        if (!cancelled) toast({
+          variant: "destructive",
+          title: "Configuração de ASO indisponível",
+          description: error instanceof Error ? error.message : "Falha ao carregar.",
+        });
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [entity, firebaseUser, open, toast]);
+
+  async function save() {
+    if (!entity || !firebaseUser) return;
+    setSaving(true);
+    try {
+      const response = await fetch("/api/hr/aso-clinics", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entityId: entity.id,
+          active: form.active,
+          asoPrice: Number(form.asoPrice.replace(",", ".")),
+          defaultPaymentDescription: form.defaultPaymentDescription,
+          schedulingEmail: form.schedulingEmail,
+          address: {
+            street: form.street, number: form.number, complement: form.complement || undefined,
+            district: form.district, city: form.city, state: form.state, postalCode: form.postalCode,
+            reference: form.reference || undefined, mapsUrl: form.mapsUrl || undefined,
+          },
+        }),
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const payload = await response.json();
+      const saved = { ...payload.clinic, entity: clinic?.entity, paymentProfile: clinic?.paymentProfile } as Clinic;
+      setClinic(saved);
+      onSaved?.(saved);
+      toast({ title: "Serviço de ASO salvo", description: "A configuração foi vinculada a este mesmo fornecedor." });
+      onOpenChange(false);
+    } catch (error) {
+      toast({ variant: "destructive", title: "Não foi possível salvar", description: error instanceof Error ? error.message : "Falha ao salvar." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Serviços de saúde ocupacional</DialogTitle>
+          <DialogDescription>
+            Configuração de ASO vinculada ao cadastro de {entity?.fantasyName || entity?.name || "fornecedor"}. Nome e CPF/CNPJ permanecem no cadastro principal.
+          </DialogDescription>
+        </DialogHeader>
+        {loading ? <div className="grid min-h-48 place-items-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : (
+          <div className="grid gap-4 py-2 md:grid-cols-2">
+            <div className="rounded-xl border bg-muted/30 p-3 md:col-span-2">
+              <p className="font-semibold">{entity?.fantasyName || entity?.name}</p>
+              <p className="text-xs text-muted-foreground">{entity?.document || "Documento não informado"}</p>
+            </div>
+            <div className="space-y-2"><Label>Valor padrão do ASO</Label><Input inputMode="decimal" value={form.asoPrice} onChange={(event) => set("asoPrice", event.target.value)} placeholder="0,00" /></div>
+            <div className="space-y-2"><Label>E-mail de agendamento</Label><Input type="email" value={form.schedulingEmail} onChange={(event) => set("schedulingEmail", event.target.value)} /></div>
+            <div className="space-y-2 md:col-span-2"><Label>Descrição padrão do pagamento</Label><Input value={form.defaultPaymentDescription} onChange={(event) => set("defaultPaymentDescription", event.target.value)} /></div>
+            <div className="space-y-2"><Label>Logradouro da clínica</Label><Input value={form.street} onChange={(event) => set("street", event.target.value)} /></div>
+            <div className="space-y-2"><Label>Número</Label><Input value={form.number} onChange={(event) => set("number", event.target.value)} /></div>
+            <div className="space-y-2"><Label>Complemento</Label><Input value={form.complement} onChange={(event) => set("complement", event.target.value)} /></div>
+            <div className="space-y-2"><Label>Bairro</Label><Input value={form.district} onChange={(event) => set("district", event.target.value)} /></div>
+            <div className="space-y-2"><Label>Cidade</Label><Input value={form.city} onChange={(event) => set("city", event.target.value)} /></div>
+            <div className="grid grid-cols-[100px_1fr] gap-3"><div className="space-y-2"><Label>UF</Label><Input maxLength={2} value={form.state} onChange={(event) => set("state", event.target.value.toUpperCase())} /></div><div className="space-y-2"><Label>CEP</Label><Input value={form.postalCode} onChange={(event) => set("postalCode", event.target.value)} /></div></div>
+            <div className="space-y-2 md:col-span-2"><Label>Referência</Label><Input value={form.reference} onChange={(event) => set("reference", event.target.value)} /></div>
+            <div className="space-y-2 md:col-span-2"><Label>Link do Google Maps</Label><Input value={form.mapsUrl} onChange={(event) => set("mapsUrl", event.target.value)} /></div>
+            <div className="flex items-center justify-between rounded-xl border p-3 md:col-span-2"><div><p className="text-sm font-medium">Disponível para novos ASOs</p><p className="text-xs text-muted-foreground">O RH poderá selecionar este fornecedor na integração.</p></div><Switch checked={form.active} onCheckedChange={(checked) => set("active", checked)} /></div>
+            <div className="rounded-xl bg-amber-50 p-3 text-xs font-medium text-amber-900 md:col-span-2">
+              A chave Pix e sua validação continuam protegidas no perfil financeiro deste mesmo fornecedor.
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button onClick={() => void save()} disabled={loading || saving || !entity}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Salvar configuração de ASO
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AsoClinicsManagement() {
   const { firebaseUser } = useAuth();
   const { toast } = useToast();

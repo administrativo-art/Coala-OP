@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { EMAIL_SENDERS, sendEmail } from "@/lib/email/resend";
-import { renderCoalaEmail } from "@/lib/email/template";
+import { renderPasswordResetEmail } from "@/lib/email/first-access-template";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,13 +66,7 @@ export async function POST(request: NextRequest) {
       from: EMAIL_SENDERS.access,
       to: email,
       subject,
-      html: renderCoalaEmail({
-        brandName: "Coala One",
-        title: "Vamos criar uma nova senha?",
-        message: "Recebemos uma solicitação para redefinir sua senha do Coala One. Use o botão abaixo para continuar. Se você não fez essa solicitação, ignore esta mensagem.",
-        action: { label: "Trocar minha senha", url: resetUrl },
-        secondaryAction: { label: "Acessar o Coala One", url: "https://op.coalashakes.com" },
-      }),
+      html: renderPasswordResetEmail({ actionUrl: resetUrl }),
       text: `Redefina sua senha do Coala One\n\nAcesse o link para criar uma nova senha: ${resetUrl}\n\nSe você não fez essa solicitação, ignore esta mensagem.\n\nEssa é uma mensagem automática, não responda esse e-mail.`,
     });
 

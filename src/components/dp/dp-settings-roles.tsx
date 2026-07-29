@@ -91,6 +91,7 @@ const functionSchema = z.object({
   parentId: z.string().optional(),
   compatibleRoleIds: z.array(z.string()).default([]),
   defaultProfileId: z.string().optional(),
+  monthlySalary: z.coerce.number().nonnegative("Deve ser um valor positivo.").optional(),
   isActive: z.boolean().default(true),
   description: z.string().trim().optional(),
 });
@@ -668,6 +669,7 @@ function FunctionDialog({
       parentId: "",
       compatibleRoleIds: [],
       defaultProfileId: "",
+      monthlySalary: undefined,
       isActive: true,
       description: "",
     },
@@ -681,6 +683,7 @@ function FunctionDialog({
       parentId: item?.parentId ?? defaultParentId ?? "",
       compatibleRoleIds: item?.compatibleRoleIds ?? [],
       defaultProfileId: item?.defaultProfileId ?? "",
+      monthlySalary: item?.salaryRange?.min ?? undefined,
       isActive: item?.isActive ?? true,
       description: item?.description ?? "",
     });
@@ -828,6 +831,30 @@ function FunctionDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="monthlySalary"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Salário mensal (R$)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Ex: 1800"
+                      {...field}
+                      value={field.value ?? ""}
+                    />
+                  </FormControl>
+                  <p className="text-sm text-muted-foreground">
+                    Base salarial da função, usada para preencher a integração do colaborador ao contratar. Gratificações ou adicionais são tratados à parte.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}
@@ -1088,6 +1115,9 @@ export function DPSettingsRoles() {
       parentId: values.parentId || null,
       compatibleRoleIds: values.compatibleRoleIds,
       defaultProfileId: values.defaultProfileId || undefined,
+      salaryRange: values.monthlySalary !== undefined
+        ? { min: values.monthlySalary, currency: "BRL" }
+        : undefined,
       isActive: values.isActive,
       description: values.description || undefined,
     };

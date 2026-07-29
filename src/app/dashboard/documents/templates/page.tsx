@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileStack, Loader2, Plus, Search, Upload, X } from "lucide-react";
+import { Download, Eye, FileStack, Loader2, LockKeyhole, Plus, Search, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 
-const CATEGORIES = ["Admissão", "Contratos", "Declarações", "Políticas internas", "Comunicados", "Outros"];
+const CATEGORIES = ["Base institucional", "Admissão", "Contratos", "Declarações", "Políticas internas", "Comunicados", "Uniformes", "Outros"];
 
 type DocumentTemplate = {
   id: string;
@@ -21,6 +21,13 @@ type DocumentTemplate = {
   createdByName?: string;
   updatedAt?: string;
   variables?: string[];
+  description?: string;
+  templateKind?: "system_pdf" | "reference_docx";
+  sourceFormat?: "pdf" | "docx";
+  isSystem?: boolean;
+  previewUrl?: string;
+  downloadUrl?: string;
+  letterheadVersion?: string;
 };
 
 export default function DocumentTemplatesPage() {
@@ -55,6 +62,58 @@ export default function DocumentTemplatesPage() {
   }, [canView, firebaseUser]);
 
   useEffect(() => { void loadTemplates(); }, [loadTemplates]);
+
+  const openTemplate = useCallback(async (template: DocumentTemplate) => {
+    if (!template.isSystem) {
+      router.push(`/dashboard/documents/templates/${encodeURIComponent(template.id)}`);
+      return;
+    }
+    if (!firebaseUser || (!template.previewUrl && !template.downloadUrl)) return;
+    setMessage("");
+    try {
+      const token = await firebaseUser.getIdToken();
+      if (template.previewUrl) {
+        const response = await fetch(template.previewUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (response.ok) {
+          const url = URL.createObjectURL(await response.blob());
+          const nextWindow = window.open(url, "_blank", "noopener,noreferrer");
+          if (!nextWindow) {
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = `${template.name}.pdf`;
+            anchor.click();
+          }
+          window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+          return;
+        }
+        if (!template.downloadUrl) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || "Falha ao abrir o PDF.");
+        }
+      }
+      if (template.downloadUrl) {
+        const response = await fetch(template.downloadUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || "Falha ao baixar o arquivo Word.");
+        }
+        const url = URL.createObjectURL(await response.blob());
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${template.name}.docx`;
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao abrir o modelo.");
+    }
+  }, [firebaseUser, router]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("pt-BR");
@@ -104,9 +163,24 @@ export default function DocumentTemplatesPage() {
       ) : (
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((template) => (
-            <article key={template.id} className="flex min-h-24 cursor-pointer items-start gap-3 rounded-lg border bg-white p-3 shadow-sm transition hover:border-teal-200 hover:shadow-md" onClick={() => router.push(`/dashboard/documents/templates/${encodeURIComponent(template.id)}`)}>
+            <article
+              key={template.id}
+              className="flex min-h-24 cursor-pointer items-start gap-3 rounded-lg border bg-white p-3 shadow-sm transition hover:border-teal-200 hover:shadow-md"
+              onClick={() => void openTemplate(template)}
+            >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-50 text-violet-700"><FileStack className="h-4 w-4" /></span>
-              <div className="min-w-0 flex-1"><p className="truncate text-sm font-black text-slate-900">{template.name}</p><p className="mt-1 text-xs text-slate-500">{template.category} · versão {template.version} · {template.variables?.length ?? 0} variáveis</p><p className="mt-1 truncate font-mono text-[10px] text-slate-400" title={template.id}>ID: {template.id}</p><span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${template.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{template.status === 'published' ? 'Publicado' : 'Rascunho'}</span></div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-slate-900">{template.name}</p>
+                <p className="mt-1 text-xs text-slate-500">{template.category} · versão {template.version} · {template.variables?.length ?? 0} variáveis</p>
+                {template.description ? <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{template.description}</p> : null}
+                <p className="mt-1 truncate font-mono text-[10px] text-slate-400" title={template.id}>ID: {template.id}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${template.status === 'published' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{template.status === 'published' ? 'Publicado' : template.isSystem ? 'Em preparação' : 'Rascunho'}</span>
+                  {template.isSystem ? <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-700"><LockKeyhole className="h-3 w-3" />Modelo do sistema</span> : null}
+                  {template.isSystem && template.templateKind === "system_pdf" ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-700"><Eye className="h-3 w-3" />Visualizar PDF</span> : null}
+                  {template.isSystem && template.templateKind === "reference_docx" ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-700"><Download className="h-3 w-3" />Prévia ou Word</span> : null}
+                </div>
+              </div>
             </article>
           ))}
         </div>

@@ -48,15 +48,15 @@ export function terminationCopyForRelationship(value: unknown) {
   if (value === "pj") {
     return {
       action: "Encerrar contrato PJ",
-      title: "Registrar encerramento contratual",
-      description: "Isso encerra o vínculo PJ, inativa o acesso e mantém o histórico contratual.",
+      title: "Iniciar encerramento contratual",
+      description: "Isso inicia o processo formal. O acesso será inativado somente na conclusão.",
       dateLabel: "Data do encerramento",
       reasonLabel: "Motivo do encerramento",
       missingDate: "Informe a data do encerramento.",
       missingReason: "Selecione o motivo do encerramento.",
-      submit: "Confirmar encerramento",
-      saving: "Encerrando...",
-      success: "Encerramento contratual registrado.",
+      submit: "Iniciar encerramento",
+      saving: "Iniciando...",
+      success: "Processo de encerramento iniciado.",
     };
   }
 
@@ -79,14 +79,14 @@ export function terminationCopyForRelationship(value: unknown) {
 
   return {
     action: "Rescisão",
-    title: "Registrar rescisão",
-    description: "Isso inativa o acesso e mantém o histórico para uma possível recontratação.",
+    title: "Iniciar desligamento",
+    description: "Isso cria o processo formal. O acesso será inativado somente na conclusão.",
     dateLabel: "Data da demissão",
     reasonLabel: "Tipo de demissão",
     missingDate: "Informe a data da demissão.",
     missingReason: "Selecione o tipo de demissão.",
-    submit: "Confirmar rescisão",
-    saving: "Inativando...",
-    success: "Rescisão registrada.",
+    submit: "Iniciar desligamento",
+    saving: "Iniciando...",
+    success: "Processo de desligamento iniciado.",
   };
 }

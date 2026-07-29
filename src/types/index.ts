@@ -330,6 +330,15 @@ export type UniformEvent = {
   assignmentId?: string;
   sourceDeliveryEventId?: string;
   issuedCondition?: UniformCondition;
+  uniformTransactionId?: string;
+  termDocumentId?: string;
+  termStoragePath?: string;
+  termContentHash?: string;
+  signatureStatus?: 'signed';
+  exchangedFromAssignmentId?: string;
+  exchangedToAssignmentId?: string;
+  exchangedFromProductId?: string;
+  exchangedFromProductName?: string;
 };
 
 export type UniformAssignmentStatus = 'em_posse' | 'devolvido_parcial' | 'devolvido';
@@ -354,6 +363,57 @@ export type UniformAssignment = {
   apparelColor?: string;
   uniformCareInstructions?: InstructionSection[];
   imageUrl?: string;
+  deliveryTransactionId?: string;
+  deliveryTermDocumentId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UniformTransactionType = 'delivery' | 'exchange' | 'return';
+
+export type UniformTransactionItem = {
+  direction: 'outgoing' | 'incoming';
+  assignmentId?: string;
+  lotId?: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  condition: UniformCondition | UniformReturnedCondition;
+  stockDisposition?: UniformStockDisposition;
+  apparelType?: string;
+  apparelSize?: string;
+  apparelColor?: string;
+};
+
+export type UniformTransaction = {
+  id: string;
+  workspaceId: string;
+  type: UniformTransactionType;
+  status: 'signed_committed';
+  collaboratorUserId: string;
+  collaboratorName: string;
+  occurredAt: string;
+  notes?: string;
+  items: UniformTransactionItem[];
+  eventIds: string[];
+  movementIds: string[];
+  assignmentIds: string[];
+  signatures: {
+    collaborator: { name: string; imageHash: string; capturedAt: string };
+    responsible: { name: string; userId: string; imageHash: string; capturedAt: string };
+  };
+  term: {
+    documentId: string;
+    templateId?: string;
+    fileName: string;
+    storagePath: string;
+    contentHash: string;
+    mimeType: 'application/pdf';
+    size: number;
+    archiveStatus: 'archived' | 'pending' | 'failed';
+  };
+  registeredByUserId: string;
+  registeredByUserName: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -847,6 +907,8 @@ export type User = {
   terminationCause?: string;
   terminationNotes?: string;
   terminationRelationshipType?: 'clt' | 'pj' | 'internship';
+  terminationProcessId?: string;
+  employmentStatus?: 'active' | 'terminated';
 };
 
 export type HrQuestionType =
@@ -1122,6 +1184,16 @@ export type OnboardingFinalizationSettings = {
   shiftDefinitionId?: string | null;
 };
 
+export type OnboardingTrainingItem = {
+  id: string;
+  label: string;
+  detail?: string | null;
+  status: 'pending' | 'current' | 'done';
+  order: number;
+  completedAt?: string | null;
+  createdAt?: string | null;
+};
+
 export type OnboardingFirstAccessState = {
   status?: 'pending' | 'used' | 'revoked' | 'expired';
   tokenId?: string | null;
@@ -1375,6 +1447,7 @@ export type OnboardingProcess = {
     completionRequestedAt?: string | null;
   };
   probationV2?: import('@/features/hr/integration/probation-process').ProbationProcessState;
+  trainingItems?: OnboardingTrainingItem[];
   approvedAt?: string | null;
   approvedBy?: string | null;
   createdAt: string;
@@ -1547,6 +1620,7 @@ export type JobFunction = {
   publicRequirements?: string[];
   benefits?: string[];
   workSchedule?: string;
+  salaryRange?: JobRoleSalaryRange;
   publicSalaryRange?: JobRoleSalaryRange;
   recruitmentDisplay?: RecruitmentDisplaySettings;
   applicationSuccessMessage?: string | null;

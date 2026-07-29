@@ -4,6 +4,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { extractDocxVariables, generateDocx, replaceDocxTextWithVariable } from "@/features/hr/documents/docx-generator";
+import { validateDocxForLetterhead } from "@/features/hr/documents/docx-template-validation";
 import { normalizeFieldMapping, pendingPlaceholders } from "@/features/hr/documents/field-mapping";
 import {
   DOCUMENT_VARIABLE_SCHEMA_VERSION,
@@ -147,6 +148,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const { reference, document, bucket, source } = await sourceFor(id);
     const marked = applyMappings(source, mappings);
     const variables = extractDocxVariables(marked.buffer);
+    const missingWrittenVariables = mappings
+      .map((mapping) => mapping.variableKey)
+      .filter((variableKey) => !variables.includes(variableKey));
+    if (missingWrittenVariables.length) {
+      throw new Error(`A gravação não pôde ser verificada para: ${missingWrittenVariables.join(", ")}.`);
+    }
 
     if (action === "test") {
       const preview = generateDocx(marked.buffer, demoData(variables));
@@ -162,6 +169,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     const fieldMapping = normalizeFieldMapping(document.get("fieldMapping"), variables);
     const pending = pendingPlaceholders(variables, fieldMapping);
+    const templateValidation = validateDocxForLetterhead(marked.buffer);
     const sourceVersion = Number(document.get("version") ?? 0);
     const version = sourceVersion + 1;
     const storagePath = `document-templates/${id}/versions/${String(version).padStart(3, "0")}/template.docx`;
@@ -175,7 +183,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       },
     });
     const update = {
-      status: pending.length ? "draft" : "published",
+      status: "draft",
       version,
       storagePath,
       size: marked.buffer.length,
@@ -184,6 +192,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       fieldMapping,
       variableContract: DOCUMENT_VARIABLE_SCHEMA_VERSION,
       unknownVariables: pending,
+      letterheadProfileId: templateValidation.profileId,
+      templateValidation,
       updatedAt: now,
       updatedBy: access.decoded.uid,
       updatedByName: access.actorName,

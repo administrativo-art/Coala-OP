@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   generateSelectedSignatureDocuments,
   listSignatureWorkflow,
+  reconcileSignatureDocuments,
   reviewSignatureDocument,
   selectSignatureTemplates,
   sendSignatureDocuments,
@@ -82,6 +83,8 @@ export async function POST(
     const action = typeof body.action === "string" ? body.action : "";
     const requiredAction: FormalizationAction = action === "send"
       ? "signatures.send"
+      : action === "reconcile"
+        ? "signatures.view"
       : action === "approve" || action === "request_changes"
         ? "documents.review"
         : "documents.generate";
@@ -119,6 +122,8 @@ export async function POST(
         actorId: access.decoded.uid,
         actorName: access.actorName,
       });
+    } else if (action === "reconcile") {
+      result = await reconcileSignatureDocuments({ onboardingId: id });
     } else {
       return error("Ação inválida.");
     }

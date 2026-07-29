@@ -101,23 +101,35 @@ export async function POST(request: Request) {
         { merge: true }
       );
       const workflowDocumentId = requestDoc.get("workflowDocumentId");
+      const workflowDocumentIds = Array.isArray(requestDoc.get("workflowDocumentIds"))
+        ? requestDoc.get("workflowDocumentIds").filter((value: unknown): value is string => typeof value === "string" && !!value)
+        : [];
+      if (typeof workflowDocumentId === "string" && workflowDocumentId && !workflowDocumentIds.includes(workflowDocumentId)) {
+        workflowDocumentIds.push(workflowDocumentId);
+      }
       const terminationId = requestDoc.get("terminationId");
       const purpose = requestDoc.get("purpose");
-      if (typeof workflowDocumentId === "string" && workflowDocumentId) {
+      if (workflowDocumentIds.length) {
         const workflowStatus = event.type === "document.finished" ? "signed" : status;
-        await hrDbAdmin.collection("hrSignatureDocuments").doc(workflowDocumentId).set({
-          status: workflowStatus,
-          providerLastEvent: event.type,
-          providerLastEventId: event.id,
-          providerEventAt: event.createdAt,
-          ...(emailDeliveryStatus ? { emailStatus: emailDeliveryStatus } : {}),
-          ...(typeof mail.sent === "string" ? { emailSentAt: mail.sent } : {}),
-          ...(typeof mail.delivered === "string" ? { emailDeliveredAt: mail.delivered } : {}),
-          ...(typeof mail.reason === "string" ? { emailDeliveryError: mail.reason } : {}),
-          ...(event.type === "signature.viewed" ? { viewedAt: event.createdAt } : {}),
-          ...(event.type === "document.finished" ? { signedAt: event.createdAt } : {}),
-          updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        const batch = hrDbAdmin.batch();
+        workflowDocumentIds.forEach((id: string) => batch.set(
+          hrDbAdmin.collection("hrSignatureDocuments").doc(id),
+          {
+            status: workflowStatus,
+            providerLastEvent: event.type,
+            providerLastEventId: event.id,
+            providerEventAt: event.createdAt,
+            ...(emailDeliveryStatus ? { emailStatus: emailDeliveryStatus } : {}),
+            ...(typeof mail.sent === "string" ? { emailSentAt: mail.sent } : {}),
+            ...(typeof mail.delivered === "string" ? { emailDeliveredAt: mail.delivered } : {}),
+            ...(typeof mail.reason === "string" ? { emailDeliveryError: mail.reason } : {}),
+            ...(event.type === "signature.viewed" ? { viewedAt: event.createdAt } : {}),
+            ...(event.type === "document.finished" ? { signedAt: event.createdAt } : {}),
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        ));
+        await batch.commit();
       }
       if (
         event.type === "document.finished" &&
@@ -131,7 +143,12 @@ export async function POST(request: Request) {
             } else if (typeof terminationId === "string" && purpose === "termination_final_document" && typeof requestDoc.get("terminationDocumentId") === "string") {
               await markTerminationDocumentSigned({ terminationId, documentId: requestDoc.get("terminationDocumentId"), signedUrl: files.signed as string, signedAt: event.createdAt ?? new Date().toISOString() });
             } else {
-              await archiveAutentiqueSignedDocument({ signatureRequestId: requestDoc.id, signedUrl: files.signed as string, signedAt: event.createdAt });
+              await archiveAutentiqueSignedDocument({
+                signatureRequestId: requestDoc.id,
+                signedUrl: files.signed as string,
+                signedAt: event.createdAt,
+                confirmedByEventId: event.id,
+              });
             }
           } catch (error) {
             console.error("[autentique-webhook] Falha ao arquivar documento assinado.", error);

@@ -3,6 +3,13 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   transpilePackages: ['@react-pdf/renderer'],
+  outputFileTracingIncludes: {
+    '/api/documents/templates/**': [
+      './docs/modelos-documentos/admissionais/*.docx',
+      './src/features/hr/documents/assets/coala-shakes-letterhead-a4-v2.png',
+      './src/features/hr/documents/assets/coala-shakes-letterhead-overlay-a4-v2.png',
+    ],
+  },
   async headers() {
     return [
       {

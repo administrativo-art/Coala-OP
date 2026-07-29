@@ -25,6 +25,10 @@ import { Input } from "@/components/ui/input";
 import { TemplateVariableWizard } from "@/components/hr/documents/template-variable-wizard";
 import { useAuth } from "@/hooks/use-auth";
 import { DOCUMENT_VARIABLES, isDocumentVariableKey } from "@/features/hr/integration/document-variables";
+import {
+  DOCUMENT_OUTPUT_FORMATTERS,
+  type DocumentOutputFormatter,
+} from "@/features/hr/documents/document-output-formatters";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import {
   LEGACY_LOOP_KEYS,
@@ -45,6 +49,24 @@ type TemplateDetail = {
   variables?: string[];
   storagePath?: string;
   fieldMapping?: TemplateFieldMapping;
+  templateValidation?: {
+    valid: boolean;
+    profileId: string;
+    issues: Array<{ code: string; message: string }>;
+  };
+};
+
+type AiMappingPlan = {
+  sourceHash: string;
+  reviewed: boolean;
+  formSchemaProposal?: Record<string, unknown> | null;
+  mappings: Array<{
+    exactText: string;
+    expectedOccurrences: number;
+    variableKey: string;
+    confidence: number;
+    rationale: string;
+  }>;
 };
 
 type GeneratedDocument = {
@@ -112,6 +134,18 @@ function SystemKeySelect({ value, onChange }: { value: string; onChange: (key: s
     </select>
   );
 }
+
+const OUTPUT_FORMATTER_LABELS: Record<DocumentOutputFormatter, string> = {
+  source: "Formato padrão do campo",
+  date_br: "Data — 28/07/2026",
+  date_long_br: "Data por extenso",
+  currency_br: "Moeda — R$ 1.518,00",
+  currency_br_with_words: "Moeda e valor por extenso",
+  cpf_full: "CPF completo",
+  cpf_masked: "CPF parcialmente oculto",
+  cnpj: "CNPJ formatado",
+  uppercase: "Texto em maiúsculas",
+};
 
 function ManualFieldEditor({ binding, onChange }: { binding: ManualFieldBinding; onChange: (next: ManualFieldBinding) => void }) {
   return (
@@ -202,6 +236,12 @@ export default function DocumentTemplateDetailPage() {
   const [variableWizardOpen, setVariableWizardOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [notice, setNotice] = useState("");
+  const [aiPlan, setAiPlan] = useState<AiMappingPlan | null>(null);
+  const [aiBlocked, setAiBlocked] = useState(false);
+  const [aiFindings, setAiFindings] = useState<Array<{ type: string; maskedEvidence: string }>>([]);
+  const [selectedAiMappings, setSelectedAiMappings] = useState<Set<number>>(new Set());
+  const [aiBusy, setAiBusy] = useState(false);
+  const [acceptAiSchema, setAcceptAiSchema] = useState(false);
 
   const [generated, setGenerated] = useState<GeneratedDocument[]>([]);
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -221,9 +261,10 @@ export default function DocumentTemplateDetailPage() {
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${await token()}` };
-      const [detailResponse, generatedResponse] = await Promise.all([
+      const [detailResponse, generatedResponse, aiResponse] = await Promise.all([
         fetch(`/api/documents/templates/${encodeURIComponent(params.id)}`, { headers, cache: "no-store" }),
         fetch(`/api/documents/generated?templateId=${encodeURIComponent(params.id)}`, { headers, cache: "no-store" }),
+        fetch(`/api/documents/templates/${encodeURIComponent(params.id)}/ai-plan`, { headers, cache: "no-store" }),
       ]);
       const detailPayload = await detailResponse.json();
       if (!detailResponse.ok) throw new Error(detailPayload.error || "Falha ao carregar o modelo.");
@@ -232,6 +273,15 @@ export default function DocumentTemplateDetailPage() {
       setSuggestions(detailPayload.suggestions ?? {});
       const generatedPayload = await generatedResponse.json().catch(() => ({}));
       if (generatedResponse.ok) setGenerated(generatedPayload.documents ?? []);
+      const aiPayload = await aiResponse.json().catch(() => ({}));
+      if (aiResponse.ok) {
+        const plan = aiPayload.plan as AiMappingPlan | null;
+        setAiPlan(plan);
+        setAiBlocked(aiPayload.blocked === true);
+        setAiFindings(Array.isArray(aiPayload.findings) ? aiPayload.findings : []);
+        setSelectedAiMappings(new Set(plan?.mappings.map((_, index) => index) ?? []));
+        setAcceptAiSchema(Boolean(plan?.formSchemaProposal));
+      }
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao carregar o modelo.");
     } finally {
@@ -317,6 +367,60 @@ export default function DocumentTemplateDetailPage() {
     }
   }
 
+  async function proposeAiPlan() {
+    if (!template) return;
+    setAiBusy(true);
+    setMessage("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/documents/templates/${encodeURIComponent(template.id)}/ai-plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao analisar o modelo com IA.");
+      const plan = payload.plan as AiMappingPlan;
+      setAiPlan(plan);
+      setAiBlocked(false);
+      setAiFindings([]);
+      setSelectedAiMappings(new Set(plan.mappings.map((_, index) => index)));
+      setAcceptAiSchema(Boolean(plan.formSchemaProposal));
+      setNotice("Plano proposto. Revise cada linha antes de aplicar.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao analisar o modelo.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function applyAiPlan() {
+    if (!template || !aiPlan) return;
+    const mappings = aiPlan.mappings.filter((_, index) => selectedAiMappings.has(index));
+    if (!mappings.length) {
+      setMessage("Selecione ao menos um mapeamento.");
+      return;
+    }
+    setAiBusy(true);
+    setMessage("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/documents/templates/${encodeURIComponent(template.id)}/ai-plan`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ mappings, acceptFormSchema: acceptAiSchema }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao aplicar o plano revisado.");
+      setNotice(`Plano aplicado como versão ${payload.template?.version ?? "nova"}. O modelo permanece em rascunho.`);
+      await loadTemplate();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao aplicar o plano.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   function openGenerateDialog(prefill?: GeneratedDocument) {
     const defaults: Record<string, string> = {};
     manualBindings.forEach(([placeholder, binding]) => {
@@ -342,7 +446,7 @@ export default function DocumentTemplateDetailPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao gerar documento.");
       setGenerateOpen(false);
-      setNotice(payload.document?.pdfAvailable ? "Prévia gerada — abra o PDF para conferir." : "Prévia gerada. PDF indisponível neste ambiente; baixe o DOCX para conferir.");
+      setNotice(payload.document?.pdfAvailable ? "Prévia gerada — abra o PDF para conferir." : "Prévia gerada, mas a finalização está bloqueada porque o PDF oficial não foi produzido.");
       await loadTemplate();
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao gerar documento.");
@@ -378,19 +482,19 @@ export default function DocumentTemplateDetailPage() {
     }
   }
 
-  async function finalizeDocument(id: string) {
+  async function changeGeneratedStatus(id: string, status: "approved" | "final") {
     setBusyDocument(id);
     setMessage("");
     try {
       const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
-        body: JSON.stringify({ status: "final" }),
+        body: JSON.stringify({ status }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao finalizar.");
       setGenerated((current) => current.map((item) => (item.id === id ? { ...item, ...payload.document } : item)));
-      setNotice("Documento finalizado.");
+      setNotice(status === "approved" ? "Documento aprovado para finalização." : "Documento finalizado.");
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao finalizar.");
     } finally {
@@ -423,6 +527,7 @@ export default function DocumentTemplateDetailPage() {
   if (!template) return <p className="p-6 text-sm text-rose-600">{message || "Modelo não encontrado."}</p>;
 
   const published = template.status === "published";
+  const layoutValid = template.templateValidation?.valid !== false;
 
   return (
     <div className="space-y-4">
@@ -455,7 +560,7 @@ export default function DocumentTemplateDetailPage() {
               {canGenerate ? <Button size="sm" className="h-9 gap-2 rounded-lg" onClick={() => openGenerateDialog()}><FilePlus2 className="h-4 w-4" />Gerar documento</Button> : null}
             </>
           ) : (
-            canPublish ? <Button size="sm" className="h-9 gap-2 rounded-lg" disabled={saving || pendingCount > 0 || !template.storagePath} onClick={() => void saveMapping(true)}>
+            canPublish ? <Button size="sm" className="h-9 gap-2 rounded-lg" disabled={saving || pendingCount > 0 || !template.storagePath || !layoutValid} onClick={() => void saveMapping(true)}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Publicar
             </Button> : null
           )}
@@ -464,6 +569,78 @@ export default function DocumentTemplateDetailPage() {
 
       {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
       {notice ? <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{notice}</div> : null}
+      {!layoutValid ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs font-black text-amber-900">Modelo fora da área segura do papel timbrado</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-[11px] text-amber-800">
+            {template.templateValidation?.issues.map((issue) => <li key={`${issue.code}-${issue.message}`}>{issue.message}</li>)}
+          </ul>
+        </div>
+      ) : null}
+
+      {canManage && template.storagePath ? (
+        <section className="rounded-lg border border-violet-100 bg-white shadow-sm">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-100 px-4 py-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-black text-slate-900">
+                <Sparkles className="h-4 w-4 text-violet-600" />Preparação assistida por IA
+              </h2>
+              <p className="text-xs text-slate-500">A IA propõe. Somente o plano revisado é aplicado pelo motor determinístico.</p>
+            </div>
+            <Button size="sm" variant="outline" className="h-8 border-violet-200 text-xs text-violet-700" disabled={aiBusy || aiBlocked} onClick={() => void proposeAiPlan()}>
+              {aiBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
+              {aiPlan ? "Gerar novo plano" : "Propor mapeamento"}
+            </Button>
+          </header>
+          {aiBlocked ? (
+            <div className="m-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+              <p className="font-black">Envio à IA bloqueado: a matriz parece conter dados pessoais reais.</p>
+              <ul className="mt-1 list-disc pl-4">
+                {aiFindings.map((finding, index) => <li key={`${finding.type}-${index}`}>{finding.type}: {finding.maskedEvidence}</li>)}
+              </ul>
+            </div>
+          ) : aiPlan ? (
+            <div className="space-y-3 p-4">
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full min-w-[760px] text-left text-xs">
+                  <thead className="bg-slate-50 text-[10px] uppercase text-slate-500">
+                    <tr><th className="p-2">Usar</th><th className="p-2">Trecho exato</th><th className="p-2">Variável</th><th className="p-2">Ocorrências</th><th className="p-2">Confiança</th><th className="p-2">Justificativa</th></tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {aiPlan.mappings.map((item, index) => (
+                      <tr key={`${item.exactText}-${index}`} className={item.confidence < 0.75 ? "bg-amber-50" : ""}>
+                        <td className="p-2"><input type="checkbox" checked={selectedAiMappings.has(index)} onChange={(event) => setSelectedAiMappings((current) => {
+                          const next = new Set(current);
+                          if (event.target.checked) next.add(index); else next.delete(index);
+                          return next;
+                        })} /></td>
+                        <td className="max-w-64 p-2 font-medium text-slate-800">{item.exactText}</td>
+                        <td className="p-2"><code className="rounded bg-slate-100 px-1 py-0.5">{`{{${item.variableKey}}}`}</code></td>
+                        <td className="p-2">{item.expectedOccurrences}</td>
+                        <td className="p-2 font-bold">{Math.round(item.confidence * 100)}%</td>
+                        <td className="max-w-72 p-2 text-slate-500">{item.rationale}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {aiPlan.formSchemaProposal ? (
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                  <input type="checkbox" checked={acceptAiSchema} onChange={(event) => setAcceptAiSchema(event.target.checked)} />
+                  Aplicar também o schema de formulário proposto, se ele passar na validação
+                </label>
+              ) : null}
+              <div className="flex justify-end">
+                <Button size="sm" className="gap-2 bg-violet-700 hover:bg-violet-800" disabled={aiBusy || selectedAiMappings.size === 0} onClick={() => void applyAiPlan()}>
+                  {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Aplicar plano revisado
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="px-4 py-5 text-xs text-slate-500">Nenhum plano solicitado. A fonte não será enviada à IA até esta ação.</p>
+          )}
+        </section>
+      ) : null}
 
       <section className="rounded-lg border bg-white shadow-sm">
         <header className="flex items-center justify-between border-b px-4 py-3">
@@ -521,7 +698,27 @@ export default function DocumentTemplateDetailPage() {
                   {binding?.kind === "manual" ? <Pencil className="ml-auto h-3.5 w-3.5 text-slate-400" /> : null}
                 </div>
                 {binding?.kind === "system" ? (
-                  <div className="pl-7"><SystemKeySelect value={binding.key} onChange={(next) => setBinding(key, { kind: "system", key: next })} /></div>
+                  <div className="grid gap-2 pl-7 sm:grid-cols-2">
+                    <SystemKeySelect
+                      value={binding.key}
+                      onChange={(next) => setBinding(key, { ...binding, key: next })}
+                    />
+                    <select
+                      className="h-9 w-full rounded-md border bg-white px-2 text-xs"
+                      value={binding.formatter ?? "source"}
+                      onChange={(event) => {
+                        const formatter = event.target.value as DocumentOutputFormatter;
+                        setBinding(key, {
+                          ...binding,
+                          formatter: formatter === "source" ? undefined : formatter,
+                        });
+                      }}
+                    >
+                      {DOCUMENT_OUTPUT_FORMATTERS.map((formatter) => (
+                        <option key={formatter} value={formatter}>{OUTPUT_FORMATTER_LABELS[formatter]}</option>
+                      ))}
+                    </select>
+                  </div>
                 ) : null}
                 {binding?.kind === "manual" ? (
                   <div className="pl-7"><ManualFieldEditor binding={binding} onChange={(next) => setBinding(key, next)} /></div>
@@ -542,7 +739,8 @@ export default function DocumentTemplateDetailPage() {
         ) : (
           <div className="divide-y">
             {generated.map((item) => {
-              const isDraft = item.status === "draft";
+              const isReview = item.status === "draft" || item.status === "review_pending";
+              const isApproved = item.status === "approved";
               const busy = busyDocument === item.id;
               return (
                 <div key={item.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
@@ -551,20 +749,23 @@ export default function DocumentTemplateDetailPage() {
                     <p className="truncate text-xs font-bold text-slate-800">{item.employeeName ?? item.employeeId ?? item.onboardingId ?? "—"}</p>
                     <p className="text-[11px] text-slate-500">{formatDateTime(item.generatedAt)} · por {item.generatedByName ?? "—"}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${isDraft ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
-                    {isDraft ? "Em conferência" : "Finalizado"}
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${isReview ? "bg-amber-50 text-amber-700" : isApproved ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700"}`}>
+                    {isReview ? "Em conferência" : isApproved ? "Aprovado" : "Finalizado"}
                   </span>
                   <div className="flex shrink-0 gap-1">
                     {canViewGenerated && item.pdfAvailable ? (
                       <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" disabled={busy} onClick={() => void openGeneratedFile(item.id, "pdf")}><Eye className="h-3.5 w-3.5" />PDF</Button>
                     ) : null}
                     {canViewGenerated ? <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" disabled={busy} onClick={() => void openGeneratedFile(item.id, "docx")}><Download className="h-3.5 w-3.5" />DOCX</Button> : null}
-                    {isDraft && canReview ? (
+                    {isReview && canReview ? (
                       <>
                         <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" disabled={busy || !published} onClick={() => openGenerateDialog(item)}><Wand2 className="h-3.5 w-3.5" />Corrigir</Button>
-                        <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-emerald-700" disabled={busy} onClick={() => void finalizeDocument(item.id)}><Lock className="h-3.5 w-3.5" />Finalizar</Button>
+                        <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-sky-700" disabled={busy || !item.pdfAvailable} onClick={() => void changeGeneratedStatus(item.id, "approved")}><CheckCircle2 className="h-3.5 w-3.5" />Aprovar</Button>
                         <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-rose-600" disabled={busy} onClick={() => void discardDocument(item.id)}><Trash2 className="h-3.5 w-3.5" />Descartar</Button>
                       </>
+                    ) : null}
+                    {isApproved && canReview ? (
+                      <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-emerald-700" disabled={busy} onClick={() => void changeGeneratedStatus(item.id, "final")}><Lock className="h-3.5 w-3.5" />Finalizar</Button>
                     ) : null}
                   </div>
                 </div>

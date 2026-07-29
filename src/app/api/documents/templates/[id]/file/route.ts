@@ -4,8 +4,10 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { extractDocxVariables } from "@/features/hr/documents/docx-generator";
+import { validateDocxForLetterhead } from "@/features/hr/documents/docx-template-validation";
 import { DOCUMENT_VARIABLE_SCHEMA_VERSION } from "@/features/hr/integration/document-variables";
 import { normalizeFieldMapping, pendingPlaceholders } from "@/features/hr/documents/field-mapping";
+import { scanDocxTemplateForPersonalData } from "@/features/hr/documents/document-template-ai";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
@@ -27,14 +29,39 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (file.size > MAX_BYTES) return error("O modelo DOCX deve possuir até 10 MB.");
     const buffer = Buffer.from(await file.arrayBuffer());
     let variables: string[];
-    try { variables = extractDocxVariables(buffer); } catch { return error("O arquivo DOCX está corrompido ou não é um modelo válido."); }
+    let templateValidation;
+    try {
+      variables = extractDocxVariables(buffer);
+      templateValidation = validateDocxForLetterhead(buffer);
+    } catch {
+      return error("O arquivo DOCX está corrompido ou não é um modelo válido.");
+    }
     const fieldMapping = normalizeFieldMapping(document.get("fieldMapping"), variables);
+    const personalDataScan = scanDocxTemplateForPersonalData(buffer);
     const pending = pendingPlaceholders(variables, fieldMapping);
     const version = Number(document.get("version") ?? 0) + 1;
     const storagePath = `document-templates/${id}/versions/${String(version).padStart(3, "0")}/template.docx`;
     await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, { resumable: false, metadata: { contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", cacheControl: "private, no-store", metadata: { templateId: id, version: String(version) } } });
     const now = Timestamp.now();
-    const update = { status: pending.length ? "draft" : "published", version, storagePath, originalName: file.name.slice(0, 180), size: file.size, contentHash: createHash("sha256").update(buffer).digest("hex"), variables, fieldMapping, variableContract: DOCUMENT_VARIABLE_SCHEMA_VERSION, unknownVariables: pending, updatedAt: now, updatedBy: access.decoded.uid, updatedByName: access.actorName };
+    const update = {
+      status: "draft",
+      version,
+      storagePath,
+      originalName: file.name.slice(0, 180),
+      size: file.size,
+      contentHash: createHash("sha256").update(buffer).digest("hex"),
+      variables,
+      fieldMapping,
+      variableContract: DOCUMENT_VARIABLE_SCHEMA_VERSION,
+      unknownVariables: pending,
+      letterheadProfileId: templateValidation.profileId,
+      templateValidation,
+      aiPreparationBlocked: !personalDataScan.safeForAi,
+      aiPreparationFindings: personalDataScan.findings,
+      updatedAt: now,
+      updatedBy: access.decoded.uid,
+      updatedByName: access.actorName,
+    };
     await reference.update(update);
     return NextResponse.json({ template: { id, ...(serializeHrValue({ ...document.data(), ...update }) as Record<string, unknown>) } });
   } catch (cause) { return error(cause instanceof Error ? cause.message : "Falha ao enviar modelo.", 403); }

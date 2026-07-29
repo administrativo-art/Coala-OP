@@ -1,11 +1,15 @@
 import { execFile } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+
+import { cloudRunIdentityAuthorization } from "@/features/hr/documents/cloud-run-auth.server";
 
 const execFileAsync = promisify(execFile);
 const CONVERSION_TIMEOUT_MS = 60_000;
+const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
 const SOFFICE_CANDIDATES = [
   process.env.SOFFICE_PATH,
@@ -26,9 +30,29 @@ async function convertViaHttp(buffer: Buffer): Promise<Buffer | null> {
     new Blob([new Uint8Array(buffer)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
     "documento.docx",
   );
-  const response = await fetch(url, { method: "POST", body: form, signal: AbortSignal.timeout(CONVERSION_TIMEOUT_MS) });
+  const audience = process.env.DOCX_TO_PDF_AUDIENCE?.trim();
+  const authorization = audience
+    ? await cloudRunIdentityAuthorization(audience)
+    : null;
+  const response = await fetch(url, {
+    method: "POST",
+    body: form,
+    headers: authorization ? { Authorization: authorization } : undefined,
+    signal: AbortSignal.timeout(CONVERSION_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`Conversor HTTP respondeu ${response.status}.`);
-  return Buffer.from(await response.arrayBuffer());
+  return assertConvertedPdf(Buffer.from(await response.arrayBuffer()));
+}
+
+function assertConvertedPdf(buffer: Buffer) {
+  if (
+    buffer.byteLength < 5 ||
+    buffer.byteLength > MAX_PDF_BYTES ||
+    buffer.subarray(0, 4).toString() !== "%PDF"
+  ) {
+    throw new Error("O conversor não devolveu um PDF válido.");
+  }
+  return buffer;
 }
 
 async function findSoffice(): Promise<string | null> {
@@ -51,11 +75,24 @@ async function convertViaSoffice(buffer: Buffer): Promise<Buffer | null> {
   try {
     const input = path.join(workDir, "documento.docx");
     await writeFile(input, buffer);
-    await execFileAsync(binary, ["--headless", "--norestore", "--convert-to", "pdf", "--outdir", workDir, input], {
+    const profileDir = path.join(workDir, "libreoffice-profile");
+    await mkdir(profileDir, { recursive: true });
+    await execFileAsync(binary, [
+      `-env:UserInstallation=${pathToFileURL(profileDir).href}`,
+      "--headless",
+      "--norestore",
+      "--nodefault",
+      "--nolockcheck",
+      "--convert-to",
+      "pdf",
+      "--outdir",
+      workDir,
+      input,
+    ], {
       timeout: CONVERSION_TIMEOUT_MS,
-      env: { ...process.env, HOME: workDir },
+      env: process.env,
     });
-    return await readFile(path.join(workDir, "documento.pdf"));
+    return assertConvertedPdf(await readFile(path.join(workDir, "documento.pdf")));
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }

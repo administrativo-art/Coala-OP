@@ -5,10 +5,9 @@ import { getStorage } from 'firebase-admin/storage';
 
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
 import { createAsoToken, formatAsoAppointment, isoAfterDays } from '@/features/hr/aso/workflow';
-import { candidateAsoEmailContent, clinicAsoEmailContent } from '@/features/hr/aso/emails';
+import { candidateAsoEmailContent, clinicAsoEmailContent, renderCandidateAsoAppointmentEmail, renderClinicAsoRequestEmail } from '@/features/hr/aso/emails';
 import { selectLatestSocialContract, type CompanyDocumentMetadata } from '@/features/hr/aso/company-document-selection';
 import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
-import { renderCoalaEmail } from '@/lib/email/template';
 import { adminApp } from '@/lib/firebase-admin';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
@@ -225,11 +224,20 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         to: clinicEmail,
         replyTo: `aso+${replyToken.token}@${inboundDomain}`,
         subject: clinicEmailContent.subject,
-        html: renderCoalaEmail({
-          brandName: 'Coala Shakes', title: clinicEmailContent.title,
-          message: clinicEmailContent.message,
-          highlightBlock: { text: clinicEmailContent.emphasis, tone: 'green', action: { label: 'Informar data e horário', url: replyUrl } },
-          footer: null,
+        html: renderClinicAsoRequestEmail({
+          candidateName: text(process.candidateName, 240),
+          jobFunction: text(process.functionName, 240) || text(process.jobRoleName, 240),
+          companyName: text(process.employerUnitName, 240) || text(process.unitName, 240),
+          companyCnpj,
+          companyAddress,
+          companyContacts,
+          attachments: [
+            { label: 'Contrato social', fileName: contractAttachmentName },
+            { label: 'Comprovante de pagamento', fileName: proofAttachmentName },
+            { label: 'Guia de solicitação do ASO', fileName: guideAttachmentName },
+          ],
+          replyUrl,
+          examType: process.asoExamType === 'dismissal' ? 'dismissal' : 'admission',
         }),
         text: `${clinicEmailContent.text}\n${replyUrl}`,
         attachments: [
@@ -285,15 +293,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const result = await sendEmail({
       from: EMAIL_SENDERS.formalization, to: recipient,
       subject: candidateEmailContent.subject,
-      html: renderCoalaEmail({
-        brandName: 'Coala Shakes', title: candidateEmailContent.title,
-        message: candidateEmailContent.message,
-        highlightBlock: { text: candidateEmailContent.locationBlock, tone: 'green', action: { label: 'Abrir localização no Google Maps', url: candidateEmailContent.mapsUrl } },
-        afterActionMessage: candidateEmailContent.afterActionMessage,
-        secondaryAction: { label: 'Enviar ASO', url: uploadUrl },
-        secondaryActionLead: 'Após o exame, envie o ASO digitalizado por esse link:',
-        secondaryActionVariant: 'highlight',
-        footer: 'Este é um e-mail automático e não aceita respostas.',
+      html: renderCandidateAsoAppointmentEmail({
+        candidateName: text(process.candidateName, 240),
+        appointmentDate: date,
+        appointmentTime: time,
+        uploadUrl,
+        instructions,
+        examType: process.asoExamType === 'dismissal' ? 'dismissal' : 'admission',
       }),
       text: candidateEmailContent.text,
       tags: [{ name: 'category', value: 'aso_candidate_notice' }, { name: 'onboarding_id', value: id.slice(0, 256) }],

@@ -66,6 +66,8 @@ import {
 } from '@/components/ui/form';
 import { Search, MoreHorizontal, Pencil, UserX, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { createManagedTerminationProcess } from '@/features/hr/termination/client';
+import { CLT_TERMINATION_REASONS } from '@/lib/hr/employment-relationship';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -87,7 +89,7 @@ const collaboratorSchema = z.object({
 type CollaboratorFormValues = z.infer<typeof collaboratorSchema>;
 
 const terminationSchema = z.object({
-  terminationReason: z.enum(['Sem Justa Causa', 'Pedido de Demissão', 'Acordo', 'Justa Causa'], {
+  terminationReason: z.enum(CLT_TERMINATION_REASONS, {
     required_error: 'Selecione o motivo do desligamento.',
   }),
   terminationCause: z.string().optional(),
@@ -633,7 +635,7 @@ interface TerminationDialogProps {
 }
 
 function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps) {
-  const { terminateUser } = useAuth();
+  const { firebaseUser } = useAuth();
   const { toast } = useToast();
 
   const form = useForm<TerminationFormValues>({
@@ -658,20 +660,22 @@ function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps)
   }, [open, form]);
 
   async function onSubmit(values: TerminationFormValues) {
-    if (!user) return;
+    if (!user || !firebaseUser) return;
     try {
-      await terminateUser({
-        uid: user.id,
-        inactivationType: 'contract_termination',
+      const result = await createManagedTerminationProcess(firebaseUser, {
+        employeeId: user.id,
         terminationReason: values.terminationReason,
-        terminationCause: values.terminationCause,
-        terminationNotes: values.terminationNotes,
+        terminationCause: values.terminationCause || undefined,
+        terminationNotes: values.terminationNotes || undefined,
         terminationDate: values.terminationDate,
       });
-      toast({ title: `${user.username} foi desligado(a).` });
+      toast({
+        title: result.reused ? 'Processo de desligamento já existente.' : `Processo de ${user.username} iniciado.`,
+      });
       onOpenChange(false);
+      window.location.assign(`/dashboard/dp/terminations/${result.process.id}`);
     } catch {
-      toast({ title: 'Erro ao desligar colaborador.', variant: 'destructive' });
+      toast({ title: 'Erro ao iniciar desligamento.', variant: 'destructive' });
     }
   }
 
@@ -681,8 +685,8 @@ function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps)
         <AlertDialogHeader>
           <AlertDialogTitle>Desligar colaborador</AlertDialogTitle>
           <AlertDialogDescription>
-            Esta ação removerá o acesso de <strong>{user?.username}</strong> ao sistema.
-            O histórico será mantido na lista de desligados.
+            Esta ação iniciará o processo formal de <strong>{user?.username}</strong>.
+            O acesso será removido somente na conclusão do fluxo.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -716,10 +720,9 @@ function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps)
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Sem Justa Causa">Sem Justa Causa</SelectItem>
-                      <SelectItem value="Pedido de Demissão">Pedido de Demissão</SelectItem>
-                      <SelectItem value="Acordo">Acordo</SelectItem>
-                      <SelectItem value="Justa Causa">Justa Causa</SelectItem>
+                      {CLT_TERMINATION_REASONS.map((reason) => (
+                        <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

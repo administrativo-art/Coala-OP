@@ -57,5 +57,9 @@ env:
     secret: AUTENTIQUE_API_TOKEN
   - variable: AUTENTIQUE_ALLOW_PRODUCTION
     value: "false"
+  - variable: DOCX_TO_PDF_URL
+    value: "https://coala-gotenberg-qsrxz2aeqa-rj.a.run.app"
+  - variable: DOCX_TO_PDF_AUDIENCE
+    value: "https://coala-gotenberg-qsrxz2aeqa-rj.a.run.app"
   - variable: NEXT_PUBLIC_APP_URL
     value: "https://op.coalashakes.com"

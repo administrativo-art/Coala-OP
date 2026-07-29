@@ -20,9 +20,8 @@ const healthLabel = {
 };
 
 const CARD_PHASES: Array<{ label: string; stepIds: TerminationStepId[] }> = [
-  { label: "Pedido e identidade", stepIds: ["employee_request", "identity_signature"] },
-  { label: "Validação do RH", stepIds: ["hr_validation"] },
-  { label: "Definição do aviso-prévio", stepIds: ["notice_decision"] },
+  { label: "Pedido, identidade, validação e aviso-prévio", stepIds: ["request_validation_notice"] },
+  { label: "Devolução de uniformes", stepIds: ["uniform_return"] },
   { label: "ASO demissional", stepIds: ["aso"] },
   { label: "Contabilidade", stepIds: ["accountant"] },
   { label: "Auditoria e assinaturas", stepIds: ["document_audit", "signatures"] },

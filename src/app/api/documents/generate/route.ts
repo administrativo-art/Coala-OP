@@ -13,11 +13,13 @@ export async function POST(request: NextRequest) {
     const access = await assertFormalizationAccess(request, "documents.generate");
     const body = await request.json().catch(() => ({}));
     const templateId = text(body.templateId); const employeeId = text(body.employeeId); const onboardingId = text(body.onboardingId);
-    if (!templateId || (!employeeId && !onboardingId)) return error("Informe o modelo e o colaborador ou integração.");
+    if (!templateId) return error("Informe o modelo.");
     const includeSensitive = hasFormalizationPermission(access.permissions, "sensitiveData.view", access.isDefaultAdmin);
     const manualValues = body.manualValues && typeof body.manualValues === "object" && !Array.isArray(body.manualValues) ? body.manualValues as Record<string, unknown> : undefined;
-    const lifecycle = body.lifecycle === "draft" ? "draft" as const : "final" as const;
-    const generated = await generateDocumentFromTemplate({ templateId, employeeId, onboardingId, includeSensitive, manualValues, lifecycle, actorId: access.decoded.uid, actorName: access.actorName });
+    const formValues = body.formValues && typeof body.formValues === "object" && !Array.isArray(body.formValues) ? body.formValues as Record<string, unknown> : undefined;
+    const lifecycle = body.lifecycle === "final" ? "final" as const : "draft" as const;
+    const revisionKey = text(body.revisionKey);
+    const generated = await generateDocumentFromTemplate({ templateId, employeeId, onboardingId, includeSensitive, manualValues, formValues, lifecycle, revisionKey, actorId: access.decoded.uid, actorName: access.actorName });
     if (body.output === "json") {
       return NextResponse.json({ document: { id: generated.id, fileName: generated.fileName, status: generated.status, pdfAvailable: !!generated.pdfStoragePath, missingRequired: generated.missingRequired, templateVersion: generated.templateVersion } });
     }

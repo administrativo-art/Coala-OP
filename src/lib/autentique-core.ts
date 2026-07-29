@@ -101,14 +101,15 @@ export function statusFromAutentiqueEvent(type: string) {
   if (type === "signature.rejected") return "rejected";
   if (type === "signature.delivery_failed") return "delivery_failed";
   if (type === "signature.viewed") return "viewed";
-  if (type === "document.deleted") return "deleted";
+  if (type === "document.expired") return "expired";
+  if (type === "document.cancelled" || type === "document.deleted") return "cancelled";
   return null;
 }
 
 export function mergeAutentiqueStatus(current: unknown, eventType: string) {
   const currentStatus = typeof current === "string" ? current : "sent";
-  if (["signed", "deleted"].includes(currentStatus)) return currentStatus;
-  if (currentStatus === "rejected" && eventType !== "document.deleted") {
+  if (["signed", "cancelled"].includes(currentStatus)) return currentStatus;
+  if (["rejected", "expired"].includes(currentStatus) && !["document.cancelled", "document.deleted"].includes(eventType)) {
     return currentStatus;
   }
   return statusFromAutentiqueEvent(eventType) ?? currentStatus;

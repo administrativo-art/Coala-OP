@@ -11,6 +11,7 @@ import {
   revokeTerminationAccess,
   sendTerminationToAccountant,
   sendTerminationDocumentsForSignature,
+  syncTerminationUniformReturn,
   terminationContext,
   updateTerminationStep,
   validateTerminationRequest,
@@ -52,6 +53,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       notes: typeof body.notes === "string" ? body.notes : null,
     });
     else if (body.action === "update_step") process = await updateTerminationStep({ context, id, stepId: body.stepId as never, status: body.status as never, note: typeof body.note === "string" ? body.note : null });
+    else if (body.action === "sync_uniform_return") {
+      const result = await syncTerminationUniformReturn({ context, id });
+      return NextResponse.json(result);
+    }
     else if (body.action === "send_accountant") process = await sendTerminationToAccountant({ context, id, recipientEmail: String(body.recipientEmail ?? ""), appBaseUrl: request.nextUrl.origin });
     else if (body.action === "audit_documents") process = await auditTerminationDocuments({ context, id, approvedIds: Array.isArray(body.approvedIds) ? body.approvedIds.filter((value): value is string => typeof value === "string") : [], selectedIds: Array.isArray(body.selectedIds) ? body.selectedIds.filter((value): value is string => typeof value === "string") : [] });
     else if (body.action === "send_signatures") process = await sendTerminationDocumentsForSignature({ context, id });

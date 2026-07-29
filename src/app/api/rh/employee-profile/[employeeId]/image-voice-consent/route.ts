@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { revokeImageVoiceConsent } from "@/features/hr/consents/image-voice-consent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,17 +87,26 @@ export async function POST(
 
     const now = new Date().toISOString();
     const evidence = clientEvidence(request);
+    const body = await request.json().catch(() => ({})) as { reason?: unknown };
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : null;
     const eventRef = employeeRef.collection("consentimentos_imagem_voz_historico").doc();
     const notificationRef = hrDbAdmin.collection("hrNotifications").doc(`image_voice_revocation_${eventRef.id}`);
     const auditRef = hrDbAdmin.collection("audit_log").doc();
+    const normalized = revokeImageVoiceConsent(current, {
+      at: now,
+      channel: "employee_profile",
+      reason,
+    });
     const nextConsent = {
       ...current,
+      ...normalized,
       autorizado: false,
       respondido_em: now,
       ...evidence,
       origem: "perfil_colaborador",
       revogado_por: actor.userDoc.id,
       evento_id: eventRef.id,
+      revogado_em: now,
     };
 
     const batch = hrDbAdmin.batch();

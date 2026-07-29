@@ -193,6 +193,7 @@ const jobFunctionBaseSchema = z.object({
   publicRequirements: stringListSchema,
   benefits: stringListSchema,
   workSchedule: z.string().trim().max(250).optional(),
+  salaryRange: salaryRangeSchema.optional(),
   publicSalaryRange: salaryRangeSchema.optional(),
   recruitmentDisplay: recruitmentDisplaySchema,
   recruitmentModelSavedAt: z.string().trim().optional().nullable(),

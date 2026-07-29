@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
 import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
+import { recordTransportVoucherDecision } from "@/features/hr/lib/transport-voucher-decision.server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 
@@ -176,9 +177,27 @@ export async function PATCH(
     await userRef.set(payload, { merge: true });
 
     if (hasOwn(payload, "needsTransportVoucher") || hasOwn(payload, "transportVoucherValue")) {
+      const active = payload.needsTransportVoucher === true;
+      const latestHistory = Array.isArray(payload.transportVoucherHistory)
+        ? [...payload.transportVoucherHistory].reverse().find((entry) => entry && typeof entry === "object") as Record<string, unknown> | undefined
+        : undefined;
+      const decisionChanged =
+        active !== (existingUser.needsTransportVoucher === true)
+        || (active && valuesDiffer(payload.transportVoucherValue, existingUser.transportVoucherValue));
+      if (decisionChanged) {
+        await recordTransportVoucherDecision({
+          employeeId: userId,
+          active,
+          dailyValue: typeof payload.transportVoucherValue === "number" ? payload.transportVoucherValue : null,
+          effectiveDate: typeof latestHistory?.effectiveDate === "string" ? latestHistory.effectiveDate : null,
+          reason: typeof latestHistory?.reason === "string" ? latestHistory.reason : null,
+          entity: existingUser.unitId ?? existingUser.unitIds?.[0] ?? "CS",
+          actorId: actor.decoded.uid,
+        });
+      }
       await syncTransportVoucherProjection({
         userId,
-        active: payload.needsTransportVoucher === true,
+        active,
         valueReais: typeof payload.transportVoucherValue === "number" ? payload.transportVoucherValue : null,
         actorId: actor.decoded.uid,
         source: "collaborator_data_contract_v1",

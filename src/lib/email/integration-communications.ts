@@ -9,7 +9,10 @@ import {
 } from "@/features/hr/integration/schemas";
 
 import { EMAIL_SENDERS, sendEmail } from "./resend";
-import { renderCoalaEmail } from "./template";
+import {
+  renderFirstAccessEmail,
+  renderFormalizationStartedEmail,
+} from "./first-access-template";
 
 const SYSTEM_URL = "https://op.coalashakes.com";
 
@@ -144,15 +147,19 @@ export async function sendTrackedIntegrationCommunication(
       from: isFirstAccess ? EMAIL_SENDERS.access : EMAIL_SENDERS.formalization,
       to: recipient,
       subject,
-      html: renderCoalaEmail({
-        brandName: isFirstAccess ? "Coala One" : "Coala Shakes",
-        title,
-        message,
-        action: { label: communication.buttonLabel, url: input.actionUrl },
-        ...(isFirstAccess
-          ? { secondaryAction: { label: "Acessar o Coala One", url: SYSTEM_URL } }
-          : {}),
-      }),
+      html: isFirstAccess
+        ? renderFirstAccessEmail({
+            userName: input.variables["employee.name"] ?? "colaborador(a)",
+            actionUrl: input.actionUrl,
+            integrationCompleted: true,
+          })
+        : renderFormalizationStartedEmail({
+            candidateName: input.variables["employee.name"] ?? "candidato(a)",
+            jobRole: input.variables["system.role.job_role"] ?? "Colaborador(a)",
+            jobFunction: input.variables["system.role.functions"] ?? "A definir",
+            deadlineLabel: formatDateTime(input.expiresAt),
+            actionUrl: input.actionUrl,
+          }),
       text: plainText(title, message, communication.buttonLabel, input.actionUrl, isFirstAccess),
     });
     await ref.set({

@@ -1,0 +1,523 @@
+{
+  "schemaVersion": 1,
+  "renderer": {
+    "officeFont": "Calibri",
+    "converterFont": "Carlito",
+    "letterheadVersion": "coala-letterhead-v2"
+  },
+  "templates": {
+    "system-receipt-standard": {
+      "sourcePath": "docs/modelos-documentos/recibos/recibo-v1.docx",
+      "sourceHash": "4697f1bf5879c02f4255f7304b09ead562d42d519f8016f9c1e42a86ce14b112",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        74
+      ],
+      "anchors": [],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-employment-probation-contract": {
+      "sourcePath": "docs/modelos-documentos/admissionais/01-contrato-experiencia-v2.docx",
+      "sourceHash": "6cddfc54a23a17964493f94c71f8af52b89d17ef953db9b7acdb5c836fbff53d",
+      "pageCount": 3,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        374,
+        407,
+        121
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "CONTRATO DE TRABALHO A TÍTULO DE EXPERIÊNCIA",
+          "xMin": 100.65,
+          "yMin": 72.01,
+          "xMax": 494.51,
+          "yMax": 93.97
+        },
+        {
+          "page": 3,
+          "phrase": "E por estarem de pleno acordo",
+          "xMin": 80.1,
+          "yMin": 201.33,
+          "xMax": 233.88,
+          "yMax": 214.75
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-hours-bank-agreement": {
+      "sourcePath": "docs/modelos-documentos/admissionais/02-banco-horas-v2.docx",
+      "sourceHash": "cff1a19adbca0847db5337182e503340edeb590b8786a238c6249be957fe0b32",
+      "pageCount": 2,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-BoldItalic",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        375,
+        315
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "ACORDO INDIVIDUAL DE BANCO DE HORAS",
+          "xMin": 135.6,
+          "yMin": 72.01,
+          "xMax": 459.6,
+          "yMax": 93.97
+        },
+        {
+          "page": 2,
+          "phrase": "E por estarem de pleno acordo",
+          "xMin": 80.1,
+          "yMin": 575.43,
+          "xMax": 222.35,
+          "yMax": 588.85
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-lgpd-awareness-term": {
+      "sourcePath": "docs/modelos-documentos/admissionais/03-termo-lgpd-v2.docx",
+      "sourceHash": "70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265",
+      "pageCount": 9,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        274,
+        323,
+        329,
+        298,
+        292,
+        277,
+        263,
+        267,
+        187
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "TERMO DE CIÊNCIA SOBRE O TRATAMENTO DE DADOS PESSOAIS",
+          "xMin": 93.75,
+          "yMin": 72.01,
+          "xMax": 501.36,
+          "yMax": 115.97
+        },
+        {
+          "page": 9,
+          "phrase": "compreende que a assinatura registra ciência",
+          "xMin": 102.27,
+          "yMin": 423.78,
+          "xMax": 304.51,
+          "yMax": 437.2
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-image-voice-consent": {
+      "sourcePath": "docs/modelos-documentos/admissionais/04-imagem-voz-v2.docx",
+      "sourceHash": "a3d20c516afa510c6aa9d58ae359827490b76289643f7508932fce61d8c42381",
+      "pageCount": 2,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        285,
+        252
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "TERMO DE CONSENTIMENTO PARA USO DE IMAGEM E VOZ",
+          "xMin": 93.55,
+          "yMin": 72.01,
+          "xMax": 501.63,
+          "yMax": 115.97
+        },
+        {
+          "page": 2,
+          "phrase": "removerá em prazo razoável",
+          "xMin": 80.1,
+          "yMin": 369.93,
+          "xMax": 212.02,
+          "yMax": 383.35
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-goals-awards-policy": {
+      "sourcePath": "docs/modelos-documentos/admissionais/05-metas-premios-v2.docx",
+      "sourceHash": "a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745",
+      "pageCount": 2,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        315,
+        208
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "REGULAMENTO DE METAS E PRÊMIOS POR DESEMPENHO",
+          "xMin": 81.4,
+          "yMin": 72.01,
+          "xMax": 513.72,
+          "yMax": 93.97
+        },
+        {
+          "page": 2,
+          "phrase": "não integram a remuneração",
+          "xMin": 80.1,
+          "yMin": 393.93,
+          "xMax": 514.29,
+          "yMax": 425.2
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-transportation-voucher-request": {
+      "sourcePath": "docs/modelos-documentos/admissionais/06-vale-transporte-solicitacao-v2.docx",
+      "sourceHash": "cd643a4caf7c088e98af1dc6908cac7d2005163a795f323df1fcd8450fca53bb",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        273
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "SOLICITAÇÃO DE VALE-TRANSPORTE",
+          "xMin": 162.05,
+          "yMin": 72.01,
+          "xMax": 433.22,
+          "yMax": 93.97
+        },
+        {
+          "page": 1,
+          "phrase": "poderei requerê-lo a qualquer tempo",
+          "xMin": 205.35,
+          "yMin": 614.63,
+          "xMax": 386.66,
+          "yMax": 628.05
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-transportation-voucher-waiver": {
+      "sourcePath": "docs/modelos-documentos/admissionais/06-vale-transporte-renuncia-v2.docx",
+      "sourceHash": "3ea7e9e3ddbfa2a4ffefe780efbd03677984131e4fdf3ca8437aa81fc3a1a6de",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        271
+      ],
+      "anchors": [],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-confidentiality-agreement": {
+      "sourcePath": "docs/modelos-documentos/admissionais/07-confidencialidade-v2.docx",
+      "sourceHash": "56306e646b241ab3b0bb93c804dc3cf549a833efb583bf990c9a18c8ba275f80",
+      "pageCount": 2,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        },
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        319,
+        185
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "TERMO DE CONFIDENCIALIDADE E SIGILO",
+          "xMin": 143.3,
+          "yMin": 72.01,
+          "xMax": 451.87,
+          "yMax": 93.97
+        },
+        {
+          "page": 2,
+          "phrase": "Consequências",
+          "xMin": 108.9,
+          "yMin": 307.73,
+          "xMax": 179.67,
+          "yMax": 321.15
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-electronic-time-tracking-awareness": {
+      "sourcePath": "docs/modelos-documentos/admissionais/08-ponto-eletronico-v2.docx",
+      "sourceHash": "eba3f36cf5ca9c5effb72c36cfc05f3487b192f5ff9206c0bc604f66235e3f5a",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        309
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "TERMO DE CIÊNCIA REGISTRO ELETRÔNICO DE PONTO",
+          "xMin": 85.1,
+          "yMin": 72.01,
+          "xMax": 509.99,
+          "yMax": 93.97
+        },
+        {
+          "page": 1,
+          "phrase": "Portaria MTP",
+          "xMin": 258.9,
+          "yMin": 254.33,
+          "xMax": 318.75,
+          "yMax": 267.75
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    },
+    "system-admission-bundle-closing-term": {
+      "sourcePath": "docs/modelos-documentos/admissionais/09-termo-encerramento-v2.docx",
+      "sourceHash": "1b4a98f7a9fba99d61ab07ffde24584b52516fb53bd0379d101216923d05b030",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "width": 595.3,
+          "height": 841.89
+        }
+      ],
+      "fonts": [
+        {
+          "name": "Carlito-Bold",
+          "embedded": true
+        },
+        {
+          "name": "Carlito-Regular",
+          "embedded": true
+        }
+      ],
+      "wordsPerPage": [
+        75
+      ],
+      "anchors": [
+        {
+          "page": 1,
+          "phrase": "TERMO DE ENCERRAMENTO CIÊNCIA E ASSINATURA",
+          "xMin": 100.5,
+          "yMin": 72.01,
+          "xMax": 494.65,
+          "yMax": 93.97
+        },
+        {
+          "page": 1,
+          "phrase": "EMPREGADORA CONTROLADORA",
+          "xMin": 378.4,
+          "yMin": 407.58,
+          "xMax": 506.68,
+          "yMax": 418.56
+        }
+      ],
+      "safeAreaProfile": "coala-letterhead-v2"
+    }
+  }
+}

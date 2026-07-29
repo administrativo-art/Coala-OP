@@ -41,4 +41,58 @@ describe("gerador DOCX", () => {
     assert.match(normalized, /<w:tbl>/);
     assert.match(normalized, /<w:tc>/);
   });
+  it("não substitui texto atravessando a fronteira entre parágrafos", () => {
+    const zip = new PizZip(fixture());
+    const xml = zip.file("word/document.xml")?.asText() ?? "";
+    zip.file(
+      "word/document.xml",
+      xml.replace(
+        "<w:p><w:r><w:t>{{#if employee.has_vt}}</w:t></w:r></w:p>",
+        "<w:p><w:r><w:t>JOÃO DA</w:t></w:r></w:p><w:p><w:r><w:t> SILVA</w:t></w:r></w:p>",
+      ),
+    );
+    const input = zip.generate({ type: "nodebuffer" }) as Buffer;
+    assert.throws(
+      () => replaceDocxTextWithVariable(input, "JOÃO DA SILVA", "employee.name"),
+      /não foi encontrado/,
+    );
+  });
+
+  it("repete uma linha OOXML completa para zero, um e muitos itens", () => {
+    const base = new PizZip(fixture());
+    const xml = base.file("word/document.xml")?.asText() ?? "";
+    const row = "<w:tbl><w:tr><w:tc><w:p><w:r><w:t>{{#items}}{{description}}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>{{value}}{{/items}}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>";
+    base.file("word/document.xml", xml.replace("<w:sectPr/>", `${row}<w:sectPr/>`));
+    const input = base.generate({ type: "nodebuffer" }) as Buffer;
+    for (const count of [0, 1, 12]) {
+      const output = generateDocx(input, {
+        employee: { name: "Maria", has_vt: false },
+        items: Array.from({ length: count }, (_, index) => ({
+          description: `Item ${index + 1}`,
+          value: `R$ ${index + 1},00`,
+        })),
+      });
+      const rendered = new PizZip(output).file("word/document.xml")?.asText() ?? "";
+      const rows = Array.from(rendered.matchAll(/<w:tr>/g)).length;
+      assert.equal(rows, count);
+      if (count) assert.match(rendered, new RegExp(`Item ${count}`));
+    }
+  });
+
+  it("remove a empresa antiga dos metadados do documento gerado", () => {
+    const zip = new PizZip(fixture());
+    zip.file(
+      "docProps/core.xml",
+      '<?xml version="1.0"?><cp:coreProperties xmlns:cp="cp" xmlns:dc="dc">' +
+        "<dc:creator>Empresa antiga</dc:creator>" +
+        "<cp:lastModifiedBy>Usuário antigo</cp:lastModifiedBy>" +
+        "</cp:coreProperties>",
+    );
+    const input = zip.generate({ type: "nodebuffer" }) as Buffer;
+    const output = generateDocx(input, { employee: { name: "Maria" } });
+    const core = new PizZip(output).file("docProps/core.xml")?.asText();
+    assert.match(core ?? "", /<dc:creator>Coala One<\/dc:creator>/);
+    assert.match(core ?? "", /<cp:lastModifiedBy>Coala One<\/cp:lastModifiedBy>/);
+    assert.doesNotMatch(core ?? "", /Empresa antiga|Usuário antigo/);
+  });
 });

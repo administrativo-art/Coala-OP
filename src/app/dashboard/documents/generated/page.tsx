@@ -1,13 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Download, Eye, FileStack, Loader2, Lock, Search, Trash2 } from "lucide-react";
+import { CheckCircle2, Clock3, Download, Eye, FileStack, Loader2, Lock, Search, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DocumentGeneratorWorkspace } from "@/components/documents/document-generator-workspace";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
+import {
+  DOCUMENT_STATUS_LABELS,
+  type GeneratedDocumentStatus,
+} from "@/features/hr/documents/document-lifecycle";
 
 type GeneratedDocument = {
   id: string;
@@ -20,7 +24,123 @@ type GeneratedDocument = {
   pdfAvailable?: boolean;
   generatedAt?: string;
   generatedByName?: string;
+  signatureScope?: string;
+  postAdmissionSignatureScope?: string | null;
+  signatureStatus?: string | null;
+  signatureRequestId?: string | null;
+  protocol?: string | null;
+  preSignatureHash?: string | null;
 };
+
+type AuditPayload = {
+  document: {
+    protocol?: string | null;
+    resolvedValuesHash?: string | null;
+    retentionUntil?: string | null;
+    legalHold?: boolean;
+  };
+  audit: {
+    catalogVersion?: string;
+    resolvedAt?: string;
+    values?: Record<string, {
+      renderedValue?: unknown;
+      rawValue?: unknown;
+      sourceType?: string;
+      sourceReference?: string;
+      formatter?: string;
+      formatterVersion?: string;
+      sensitive?: boolean;
+    }>;
+  };
+};
+
+type SignatureTrailPayload = {
+  signature: {
+    requestId?: string;
+    provider?: string;
+    providerDocumentId?: string;
+    status?: string | null;
+    protocol?: string | null;
+    emailStatus?: string | null;
+  } | null;
+  timeline: Array<{
+    id: string;
+    label: string;
+    occurredAt?: string | null;
+    description?: string;
+    source?: string;
+  }>;
+};
+
+type DocumentQueueFilter =
+  | "all"
+  | "review_pending"
+  | "approved"
+  | "final"
+  | "signature_pending"
+  | "partially_signed"
+  | "signed"
+  | "rejected"
+  | "expired"
+  | "cancelled"
+  | "failed"
+  | "superseded";
+
+const DOCUMENT_QUEUE_FILTERS: Array<{
+  value: DocumentQueueFilter;
+  label: string;
+}> = [
+  { value: "all", label: "Todos" },
+  { value: "review_pending", label: "Em conferência" },
+  { value: "approved", label: "Aprovados" },
+  { value: "final", label: "Finalizados sem assinatura" },
+  { value: "signature_pending", label: "Aguardando assinatura" },
+  { value: "partially_signed", label: "Parcialmente assinados" },
+  { value: "signed", label: "Assinados" },
+  { value: "rejected", label: "Recusados" },
+  { value: "expired", label: "Expirados" },
+  { value: "cancelled", label: "Cancelados" },
+  { value: "failed", label: "Falhas de assinatura" },
+  { value: "superseded", label: "Substituídos" },
+];
+
+const SIGNATURE_STATUS_LABELS: Record<string, string> = {
+  sending: "Preparando envio",
+  sent: "Enviado · aguardando",
+  viewed: "Visualizado",
+  partially_signed: "Parcialmente assinado",
+  signed: "Assinado · concluído",
+  archived: "Concluído e arquivado",
+  rejected: "Recusado",
+  expired: "Expirado",
+  cancelled: "Cancelado",
+  failed: "Falha no envio",
+};
+
+function signatureStatusTone(status: string) {
+  if (["signed", "archived"].includes(status)) {
+    return {
+      dot: "bg-emerald-700",
+      pill: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    };
+  }
+  if (["rejected", "delivery_failed", "failed"].includes(status)) {
+    return {
+      dot: "bg-rose-600",
+      pill: "border-rose-100 bg-rose-50 text-rose-700",
+    };
+  }
+  if (["expired", "cancelled"].includes(status)) {
+    return {
+      dot: "bg-slate-500",
+      pill: "border-slate-200 bg-slate-50 text-slate-700",
+    };
+  }
+  return {
+    dot: "bg-violet-700",
+    pill: "border-violet-200 bg-white text-violet-700",
+  };
+}
 
 function formatDateTime(value?: string) {
   if (!value) return "—";
@@ -34,12 +154,20 @@ export default function GeneratedDocumentsPage() {
   const { firebaseUser, permissions } = useAuth();
   const canView = hasFormalizationPermission(permissions, "documents.view");
   const canReview = hasFormalizationPermission(permissions, "documents.review");
+  const canViewAudit = hasFormalizationPermission(permissions, "sensitiveData.view");
+  const canSendSignature = hasFormalizationPermission(permissions, "signatures.send");
+  const canViewSignature = hasFormalizationPermission(permissions, "signatures.view");
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "final">("all");
+  const [statusFilter, setStatusFilter] = useState<DocumentQueueFilter>("all");
   const [busyDocument, setBusyDocument] = useState<string | null>(null);
+  const [audit, setAudit] = useState<AuditPayload | null>(null);
+  const [signatureTrail, setSignatureTrail] = useState<SignatureTrailPayload | null>(null);
+  const [selectedId, setSelectedId] = useState("");
+  const [detailTab, setDetailTab] = useState<"document" | "audit" | "signature">("document");
+  const [viewMode, setViewMode] = useState<"queue" | "generator">("queue");
 
   const token = useCallback(async () => {
     if (!firebaseUser) throw new Error("Sessão expirada.");
@@ -53,7 +181,13 @@ export default function GeneratedDocumentsPage() {
       const response = await fetch("/api/documents/generated", { headers: { Authorization: `Bearer ${await token()}` }, cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao carregar documentos gerados.");
-      setDocuments(payload.documents ?? []);
+      const loaded = payload.documents ?? [];
+      setDocuments(loaded);
+      setSelectedId((current) =>
+        current && loaded.some((item: GeneratedDocument) => item.id === current)
+          ? current
+          : loaded[0]?.id ?? ""
+      );
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Falha ao carregar documentos gerados.");
     } finally {
@@ -66,11 +200,53 @@ export default function GeneratedDocumentsPage() {
   const filtered = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("pt-BR");
     return documents.filter((item) => {
-      if (statusFilter !== "all" && item.status !== statusFilter) return false;
+      const normalizedStatus = item.status === "draft" ? "review_pending" : item.status;
+      const signatureStatus = String(item.signatureStatus ?? "");
+      const matchesStatus =
+        statusFilter === "all"
+        || (statusFilter === "review_pending" && normalizedStatus === "review_pending")
+        || (statusFilter === "approved" && normalizedStatus === "approved")
+        || (statusFilter === "final" && normalizedStatus === "final" && !signatureStatus)
+        || (
+          statusFilter === "signature_pending"
+          && ["pending", "sending", "sent", "viewed"].includes(signatureStatus)
+        )
+        || (statusFilter === "partially_signed" && signatureStatus === "partially_signed")
+        || (
+          statusFilter === "signed"
+          && ["signed", "archived"].includes(signatureStatus)
+        )
+        || (statusFilter === "rejected" && signatureStatus === "rejected")
+        || (statusFilter === "expired" && signatureStatus === "expired")
+        || (
+          statusFilter === "cancelled"
+          && (normalizedStatus === "cancelled" || signatureStatus === "cancelled")
+        )
+        || (
+          statusFilter === "failed"
+          && ["delivery_failed", "failed"].includes(signatureStatus)
+        )
+        || (statusFilter === "superseded" && normalizedStatus === "superseded");
+      if (!matchesStatus) return false;
       if (!term) return true;
-      return `${item.templateName ?? ""} ${item.employeeName ?? ""}`.toLocaleLowerCase("pt-BR").includes(term);
+      return `${item.templateName ?? ""} ${item.employeeName ?? ""} ${item.protocol ?? ""}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(term);
     });
   }, [documents, search, statusFilter]);
+  useEffect(() => {
+    if (!filtered.length) return;
+    if (!filtered.some((item) => item.id === selectedId)) {
+      setSelectedId(filtered[0].id);
+      setDetailTab("document");
+      setAudit(null);
+      setSignatureTrail(null);
+    }
+  }, [filtered, selectedId]);
+  const selectedDocument = useMemo(
+    () => documents.find((item) => item.id === selectedId) ?? null,
+    [documents, selectedId],
+  );
 
   async function openFile(id: string, format: "pdf" | "docx") {
     setBusyDocument(id);
@@ -99,20 +275,39 @@ export default function GeneratedDocumentsPage() {
     }
   }
 
-  async function finalize(id: string) {
+  async function changeStatus(id: string, status: "approved" | "final") {
     setBusyDocument(id);
     setMessage("");
     try {
       const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
-        body: JSON.stringify({ status: "final" }),
+        body: JSON.stringify({ status }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Falha ao finalizar.");
       setDocuments((current) => current.map((item) => (item.id === id ? { ...item, ...payload.document } : item)));
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Falha ao finalizar.");
+      setMessage(cause instanceof Error ? cause.message : "Falha ao atualizar documento.");
+    } finally {
+      setBusyDocument(null);
+    }
+  }
+
+  async function openAudit(id: string) {
+    setBusyDocument(id);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}/audit`, {
+        headers: { Authorization: `Bearer ${await token()}` },
+        cache: "no-store",
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao carregar auditoria.");
+      setAudit(payload);
+      setDetailTab("audit");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao carregar auditoria.");
     } finally {
       setBusyDocument(null);
     }
@@ -137,67 +332,376 @@ export default function GeneratedDocumentsPage() {
     }
   }
 
+  async function sendForSignature(id: string) {
+    if (!window.confirm("Enviar este documento individualmente para assinatura eletrônica?")) return;
+    setBusyDocument(id);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}/signature`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao enviar para assinatura.");
+      setDocuments((current) => current.map((item) => item.id === id
+        ? { ...item, signatureStatus: String(payload.status ?? "sent"), status: "final" }
+        : item));
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao enviar para assinatura.");
+    } finally {
+      setBusyDocument(null);
+    }
+  }
+
+  async function reconcileSignature(id: string) {
+    setBusyDocument(id);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}/signature`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ action: "reconcile" }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao atualizar assinatura.");
+      setDocuments((current) => current.map((item) => item.id === id
+        ? { ...item, signatureStatus: String(payload.status ?? item.signatureStatus) }
+        : item));
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao atualizar assinatura.");
+    } finally {
+      setBusyDocument(null);
+    }
+  }
+
+  async function openSignatureTrail(id: string) {
+    setBusyDocument(id);
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/documents/generated/${encodeURIComponent(id)}/signature`,
+        {
+          headers: { Authorization: `Bearer ${await token()}` },
+          cache: "no-store",
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao carregar a trilha.");
+      setSignatureTrail(payload);
+      setDetailTab("signature");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao carregar a trilha.");
+    } finally {
+      setBusyDocument(null);
+    }
+  }
+
   if (!canView) return <p className="p-6 text-sm text-slate-500">Sem permissão para acessar documentos gerados.</p>;
 
   return (
-    <div className="space-y-3">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Documentos</p>
-        <h1 className="text-xl font-black text-slate-950">Documentos gerados</h1>
-        <p className="text-xs text-slate-500">Prévias em conferência e documentos finalizados a partir dos <Link className="font-bold text-teal-700" href="/dashboard/documents/templates">modelos</Link>.</p>
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <div className="relative flex-1 rounded-lg border bg-white p-2 shadow-sm">
-          <Search className="absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input className="h-9 pl-9 text-sm" placeholder="Buscar por modelo ou colaborador..." value={search} onChange={(event) => setSearch(event.target.value)} />
+    <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-teal-700">
+            Gestão documental
+          </p>
+          <h1 className="text-xl font-black text-slate-950">Central de documentos</h1>
         </div>
-        <select className="h-[52px] rounded-lg border bg-white px-3 text-sm shadow-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
-          <option value="all">Todos os estados</option>
-          <option value="draft">Em conferência</option>
-          <option value="final">Finalizados</option>
-        </select>
-      </div>
-      {message ? <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{message}</div> : null}
-      {loading ? (
-        <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-teal-700" /></div>
-      ) : filtered.length === 0 ? (
-        <div className="grid min-h-52 place-items-center rounded-lg border border-dashed bg-white p-8 text-center">
-          <div><FileStack className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-black text-slate-700">Nenhum documento gerado</p></div>
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="h-2 w-2 rounded-full bg-amber-600" />
+            {documents.filter((item) => ["draft", "review_pending"].includes(item.status)).length} em conferência
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="h-2 w-2 rounded-full bg-violet-700" />
+            {documents.filter((item) => ["sent", "partially_signed"].includes(String(item.signatureStatus))).length} para assinar
+          </span>
+          {viewMode === "queue" && hasFormalizationPermission(permissions, "documents.generate") ? (
+            <Button
+              className="gap-2 bg-rose-500 font-bold hover:bg-rose-600"
+              onClick={() => setViewMode("generator")}
+            >
+                <FileStack className="h-4 w-4" />
+                Gerar documento
+            </Button>
+          ) : viewMode === "generator" ? (
+            <Button variant="outline" className="font-bold" onClick={() => setViewMode("queue")}>
+              Voltar à fila
+            </Button>
+          ) : null}
         </div>
+      </header>
+
+      {message ? (
+        <div className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700">
+          {message}
+        </div>
+      ) : null}
+
+      {viewMode === "generator" ? (
+        <DocumentGeneratorWorkspace
+          embedded
+          onBack={() => setViewMode("queue")}
+          onGenerated={() => {
+            void load();
+            setViewMode("queue");
+          }}
+        />
       ) : (
-        <div className="divide-y rounded-lg border bg-white shadow-sm">
-          {filtered.map((item) => {
-            const isDraft = item.status === "draft";
-            const busy = busyDocument === item.id;
-            return (
-              <div key={item.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-                <FileStack className="h-4 w-4 shrink-0 text-slate-400" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-slate-800">
-                    <Link className="hover:underline" href={`/dashboard/documents/templates/${encodeURIComponent(item.templateId)}`}>{item.templateName ?? "Modelo"}</Link>
-                    {" · "}{item.employeeName ?? item.employeeId ?? item.onboardingId ?? "—"}
-                  </p>
-                  <p className="text-[11px] text-slate-500">{formatDateTime(item.generatedAt)} · por {item.generatedByName ?? "—"}</p>
-                </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${isDraft ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
-                  {isDraft ? "Em conferência" : "Finalizado"}
-                </span>
-                <div className="flex shrink-0 gap-1">
-                  {item.pdfAvailable ? (
-                    <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" disabled={busy} onClick={() => void openFile(item.id, "pdf")}><Eye className="h-3.5 w-3.5" />PDF</Button>
-                  ) : null}
-                  <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs" disabled={busy} onClick={() => void openFile(item.id, "docx")}><Download className="h-3.5 w-3.5" />DOCX</Button>
-                  {isDraft && canReview ? (
-                    <>
-                      <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-emerald-700" disabled={busy} onClick={() => void finalize(item.id)}><Lock className="h-3.5 w-3.5" />Finalizar</Button>
-                      <Button size="sm" variant="ghost" className="h-8 gap-1 px-2 text-xs text-rose-600" disabled={busy} onClick={() => void discard(item.id)}><Trash2 className="h-3.5 w-3.5" />Descartar</Button>
-                    </>
-                  ) : null}
+      <div className="grid min-h-[680px] lg:grid-cols-[minmax(360px,1fr)_minmax(390px,0.78fr)]">
+        <section className="min-w-0 border-r">
+          <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
+            <h2 className="mr-auto text-sm font-black text-slate-900">Fila de documentos</h2>
+            <select
+              className="h-8 rounded-md border bg-white px-2 text-xs"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as DocumentQueueFilter)}
+            >
+              {DOCUMENT_QUEUE_FILTERS.map((filter) => (
+                <option key={filter.value} value={filter.value}>{filter.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="border-b p-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                className="h-9 pl-9 text-xs"
+                placeholder="Buscar documento, protocolo ou parte..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="max-h-[610px] overflow-y-auto">
+            {loading ? (
+              <div className="grid min-h-40 place-items-center">
+                <Loader2 className="h-5 w-5 animate-spin text-teal-700" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="grid min-h-52 place-items-center p-8 text-center">
+                <div>
+                  <FileStack className="mx-auto h-8 w-8 text-slate-300" />
+                  <p className="mt-3 text-sm font-black text-slate-700">Nenhum documento encontrado</p>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ) : filtered.map((item) => {
+              const isReview = item.status === "draft" || item.status === "review_pending";
+              const isApproved = item.status === "approved";
+              const status = (item.status === "draft" ? "review_pending" : item.status) as GeneratedDocumentStatus;
+              const active = selectedId === item.id;
+              const signatureTone = signatureStatusTone(String(item.signatureStatus ?? ""));
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`flex w-full items-center gap-3 border-b px-4 py-3 text-left transition ${
+                    active ? "bg-teal-50 shadow-[inset_3px_0_0_#0f766e]" : "hover:bg-slate-50"
+                  }`}
+                  onClick={() => {
+                    setSelectedId(item.id);
+                    setDetailTab("document");
+                    setAudit(null);
+                    setSignatureTrail(null);
+                  }}
+                >
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${
+                    isReview ? "bg-amber-600" : isApproved ? "bg-sky-700" : item.signatureStatus ? signatureTone.dot : "bg-emerald-700"
+                  }`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-extrabold text-slate-900">
+                      {item.templateName ?? "Modelo"} · {item.employeeName ?? item.employeeId ?? item.onboardingId ?? "Documento avulso"}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-slate-500">
+                      {formatDateTime(item.generatedAt)} · {item.generatedByName ?? "—"}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-extrabold uppercase ${
+                    isReview
+                      ? "border-amber-100 bg-amber-50 text-amber-700"
+                      : isApproved
+                        ? "border-sky-100 bg-sky-50 text-sky-700"
+                        : item.signatureStatus
+                          ? signatureTone.pill
+                          : "border-emerald-100 bg-emerald-50 text-emerald-700"
+                  }`}>
+                    {item.signatureStatus
+                      ? SIGNATURE_STATUS_LABELS[String(item.signatureStatus)]
+                        ?? String(item.signatureStatus)
+                      : DOCUMENT_STATUS_LABELS[status] ?? item.status}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <aside className="min-w-0 bg-[#fbfaf8]">
+          {!selectedDocument ? (
+            <div className="grid h-full min-h-96 place-items-center p-8 text-center text-xs text-slate-500">
+              Selecione um documento na fila.
+            </div>
+          ) : (
+            <div className="flex h-full flex-col">
+              <div className="border-b bg-white px-4 py-3">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-violet-700">
+                  Detalhe do documento
+                </p>
+                <h2 className="mt-0.5 truncate text-sm font-black text-slate-950">
+                  {selectedDocument.templateName ?? "Documento"} · {selectedDocument.employeeName ?? selectedDocument.employeeId ?? "Avulso"}
+                </h2>
+                <nav className="mt-3 flex gap-5 text-xs">
+                  <button
+                    className={`pb-1 font-bold ${detailTab === "document" ? "border-b-2 border-violet-700 text-violet-700" : "text-slate-500"}`}
+                    onClick={() => setDetailTab("document")}
+                  >
+                    Documento
+                  </button>
+                  {canViewAudit ? (
+                    <button
+                      className={`pb-1 font-bold ${detailTab === "audit" ? "border-b-2 border-violet-700 text-violet-700" : "text-slate-500"}`}
+                      onClick={() => void openAudit(selectedDocument.id)}
+                    >
+                      Auditoria
+                    </button>
+                  ) : null}
+                  {canViewSignature ? (
+                    <button
+                      className={`pb-1 font-bold ${detailTab === "signature" ? "border-b-2 border-violet-700 text-violet-700" : "text-slate-500"}`}
+                      onClick={() => void openSignatureTrail(selectedDocument.id)}
+                    >
+                      Assinatura
+                    </button>
+                  ) : null}
+                </nav>
+              </div>
+
+              <div className="max-h-[600px] flex-1 overflow-y-auto p-4">
+                {detailTab === "document" ? (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 rounded-lg border bg-white p-3 text-xs sm:grid-cols-2">
+                      <p><span className="block text-[10px] font-bold text-slate-400">Modelo</span><span className="font-extrabold">{selectedDocument.templateName ?? "—"}</span></p>
+                      <p><span className="block text-[10px] font-bold text-slate-400">Colaborador / parte</span><span className="font-extrabold">{selectedDocument.employeeName ?? selectedDocument.employeeId ?? "Documento avulso"}</span></p>
+                      <p><span className="block text-[10px] font-bold text-slate-400">Gerado em</span><span className="font-semibold">{formatDateTime(selectedDocument.generatedAt)}</span></p>
+                      <p><span className="block text-[10px] font-bold text-slate-400">Por</span><span className="font-semibold">{selectedDocument.generatedByName ?? "—"}</span></p>
+                      <p><span className="block text-[10px] font-bold text-slate-400">Protocolo</span><span className="font-mono font-extrabold">{selectedDocument.protocol ?? "—"}</span></p>
+                      <p><span className="block text-[10px] font-bold text-slate-400">Estado</span><span className="font-extrabold">{selectedDocument.signatureStatus ?? DOCUMENT_STATUS_LABELS[(selectedDocument.status === "draft" ? "review_pending" : selectedDocument.status) as GeneratedDocumentStatus] ?? selectedDocument.status}</span></p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {selectedDocument.pdfAvailable ? (
+                        <Button variant="outline" disabled={busyDocument === selectedDocument.id} onClick={() => void openFile(selectedDocument.id, "pdf")}>
+                          <Eye className="mr-2 h-4 w-4" />Ver PDF
+                        </Button>
+                      ) : null}
+                      <Button variant="outline" disabled={busyDocument === selectedDocument.id} onClick={() => void openFile(selectedDocument.id, "docx")}>
+                        <Download className="mr-2 h-4 w-4" />DOCX
+                      </Button>
+                    </div>
+                    <p className="pt-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Ações</p>
+                    <div className="flex flex-wrap gap-2">
+                      {["draft", "review_pending"].includes(selectedDocument.status) && canReview ? (
+                        <>
+                          <Button size="sm" variant="outline" className="text-sky-700" disabled={!selectedDocument.pdfAvailable || busyDocument === selectedDocument.id} onClick={() => void changeStatus(selectedDocument.id, "approved")}><CheckCircle2 className="mr-1.5 h-4 w-4" />Aprovar</Button>
+                          <Button size="sm" variant="outline" className="text-rose-600" disabled={busyDocument === selectedDocument.id} onClick={() => void discard(selectedDocument.id)}><Trash2 className="mr-1.5 h-4 w-4" />Descartar</Button>
+                        </>
+                      ) : null}
+                      {selectedDocument.status === "approved" && canReview ? (
+                        <Button size="sm" variant="outline" className="text-emerald-700" disabled={busyDocument === selectedDocument.id} onClick={() => void changeStatus(selectedDocument.id, "final")}><Lock className="mr-1.5 h-4 w-4" />Finalizar</Button>
+                      ) : null}
+                      {canSendSignature
+                        && (selectedDocument.signatureScope === "independent" || selectedDocument.postAdmissionSignatureScope === "independent")
+                        && ["approved", "final"].includes(selectedDocument.status)
+                        && !["sent", "signed"].includes(String(selectedDocument.signatureStatus)) ? (
+                          <Button size="sm" className="bg-violet-700 hover:bg-violet-800" disabled={busyDocument === selectedDocument.id} onClick={() => void sendForSignature(selectedDocument.id)}><Send className="mr-1.5 h-4 w-4" />Enviar para assinatura</Button>
+                        ) : null}
+                      {canViewSignature && ["sent", "partially_signed"].includes(String(selectedDocument.signatureStatus)) ? (
+                        <Button size="sm" variant="outline" className="text-violet-700" disabled={busyDocument === selectedDocument.id} onClick={() => void reconcileSignature(selectedDocument.id)}><Clock3 className="mr-1.5 h-4 w-4" />Atualizar estado</Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : detailTab === "audit" ? (
+                  <div className="space-y-3">
+                    {busyDocument === selectedDocument.id && !audit ? (
+                      <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-violet-700" /></div>
+                    ) : (
+                      <>
+                        <div className="grid gap-2 rounded-lg border bg-white p-3 text-xs sm:grid-cols-2">
+                          <p><span className="font-bold text-slate-400">Protocolo:</span> {audit?.document.protocol ?? "—"}</p>
+                          <p><span className="font-bold text-slate-400">Catálogo:</span> {audit?.audit.catalogVersion ?? "—"}</p>
+                          <p className="break-all sm:col-span-2"><span className="font-bold text-slate-400">Hash:</span> {audit?.document.resolvedValuesHash ?? "—"}</p>
+                        </div>
+                        <div className="overflow-hidden rounded-lg border bg-white">
+                          <div className="grid grid-cols-[1fr_1.2fr_0.9fr] bg-slate-50 px-3 py-2 text-[9px] font-extrabold uppercase text-slate-400">
+                            <span>Variável</span><span>Valor</span><span>Origem</span>
+                          </div>
+                          {Object.entries(audit?.audit.values ?? {}).map(([key, value]) => (
+                            <div key={key} className="grid grid-cols-[1fr_1.2fr_0.9fr] gap-2 border-t px-3 py-2 text-[11px]">
+                              <span className="break-all font-mono">{key}</span>
+                              <span className="break-words">{value.sensitive && value.renderedValue == null ? "Dado sensível protegido" : String(value.renderedValue ?? "—")}</span>
+                              <span className="text-slate-500">{value.sourceType ?? "—"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {busyDocument === selectedDocument.id && !signatureTrail ? (
+                      <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-violet-700" /></div>
+                    ) : (
+                      <>
+                        <div className="mb-4 grid gap-2 rounded-lg border bg-white p-3 text-xs sm:grid-cols-2">
+                          <p><span className="block text-[10px] font-bold text-slate-400">Provedor</span><span className="font-extrabold">{signatureTrail?.signature?.provider ?? "Autentique"}</span></p>
+                      <p><span className="block text-[10px] font-bold text-slate-400">Estado</span><span className="font-extrabold text-violet-700">{SIGNATURE_STATUS_LABELS[String(signatureTrail?.signature?.status ?? "")] ?? "Ainda não enviado"}</span></p>
+                          <p><span className="block text-[10px] font-bold text-slate-400">Protocolo</span><span className="font-mono font-extrabold">{signatureTrail?.signature?.protocol ?? selectedDocument.protocol ?? "—"}</span></p>
+                          <p><span className="block text-[10px] font-bold text-slate-400">ID externo</span><span className="break-all font-mono text-[10px] font-bold">{signatureTrail?.signature?.providerDocumentId ?? "—"}</span></p>
+                          <p className="sm:col-span-2"><span className="block text-[10px] font-bold text-slate-400">Hash pré-assinatura</span><span className="break-all font-mono text-[10px] text-slate-500">{selectedDocument.preSignatureHash ?? "—"}</span></p>
+                        </div>
+                        {signatureTrail?.signature && (signatureTrail.timeline ?? []).length ? (
+                          <ol>
+                            {(signatureTrail?.timeline ?? []).map((event, index, events) => (
+                              <li key={event.id} className="relative flex gap-3 pb-5">
+                                {index < events.length - 1 ? <span className="absolute left-[7px] top-4 h-full w-0.5 bg-emerald-600" /> : null}
+                                <span className="relative mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-[3px] border-emerald-100 bg-emerald-700" />
+                                <div>
+                                  <p className="text-xs font-extrabold text-slate-900">{event.label}</p>
+                                  <p className="text-[10px] text-slate-400">{formatDateTime(event.occurredAt ?? undefined)}{event.source ? ` · ${event.source}` : ""}</p>
+                                  {event.description ? <p className="mt-0.5 text-[11px] text-slate-500">{event.description}</p> : null}
+                                </div>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <div className="rounded-xl border border-dashed bg-white px-5 py-8 text-center">
+                            <Send className="mx-auto h-8 w-8 text-violet-300" />
+                            <p className="mt-3 text-xs font-extrabold text-slate-800">Ainda não enviado para assinatura</p>
+                            <p className="mt-1 text-[11px] text-slate-500">A trilha aparecerá aqui após o envio e o primeiro evento.</p>
+                            {canSendSignature
+                              && (selectedDocument.signatureScope === "independent"
+                                || selectedDocument.postAdmissionSignatureScope === "independent")
+                              && ["approved", "final"].includes(selectedDocument.status) ? (
+                                <Button
+                                  size="sm"
+                                  className="mt-4 bg-violet-700 hover:bg-violet-800"
+                                  disabled={busyDocument === selectedDocument.id}
+                                  onClick={() => void sendForSignature(selectedDocument.id)}
+                                >
+                                  Enviar para assinatura
+                                </Button>
+                              ) : null}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
       )}
     </div>
   );

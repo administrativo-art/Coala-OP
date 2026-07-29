@@ -48,10 +48,8 @@ export function calculateMaterialDeadline(
 }
 
 const STEP_DEFINITIONS: Array<Pick<TerminationStep, "id" | "label" | "lane" | "owner" | "required">> = [
-  { id: "employee_request", label: "Pedido e carta", lane: "request", owner: "employee", required: true },
-  { id: "identity_signature", label: "Confirmação de identidade", lane: "request", owner: "employee", required: true },
-  { id: "hr_validation", label: "Validação da manifestação", lane: "request", owner: "hr", required: true },
-  { id: "notice_decision", label: "Definição do aviso-prévio", lane: "notice", owner: "employer", required: true },
+  { id: "request_validation_notice", label: "Pedido, identidade, validação e aviso-prévio", lane: "request", owner: "hr", required: true },
+  { id: "uniform_return", label: "Devolução de uniformes", lane: "operational", owner: "manager", required: true },
   { id: "aso", label: "ASO demissional", lane: "aso", owner: "hr", required: true },
   { id: "accountant", label: "Processamento pela contabilidade", lane: "accountant", owner: "accountant", required: true },
   { id: "document_audit", label: "Auditoria documental", lane: "documents", owner: "hr", required: true },
@@ -65,10 +63,41 @@ const STEP_DEFINITIONS: Array<Pick<TerminationStep, "id" | "label" | "lane" | "o
 export function createInitialTerminationSteps(now: string): TerminationStep[] {
   return STEP_DEFINITIONS.map((step) => ({
     ...step,
-    status: step.id === "employee_request" ? "completed" : step.id === "identity_signature" ? "in_progress" : "pending",
-    ...(step.id === "employee_request" ? { startedAt: now, completedAt: now } : {}),
-    ...(step.id === "identity_signature" ? { startedAt: now } : {}),
+    status: step.id === "request_validation_notice" ? "in_progress" : "pending",
+    ...(step.id === "request_validation_notice" ? { startedAt: now } : {}),
   }));
+}
+
+function unifyRequestValidationNotice(
+  process: Pick<CltTerminationProcess, "steps" | "notice" | "createdAt">,
+) {
+  const legacyIds = new Set<TerminationStepId>([
+    "employee_request",
+    "identity_signature",
+    "hr_validation",
+    "notice_decision",
+  ]);
+  const current = process.steps.find((step) => step.id === "request_validation_notice");
+  const legacy = process.steps.filter((step) => legacyIds.has(step.id));
+  const startedAt = [current?.startedAt, ...legacy.map((step) => step.startedAt)]
+    .filter((value): value is string => Boolean(value))
+    .sort()[0] ?? process.createdAt;
+  const completedAt = process.notice?.decidedAt ?? current?.completedAt ?? null;
+  const unified: TerminationStep = {
+    id: "request_validation_notice",
+    label: "Pedido, identidade, validação e aviso-prévio",
+    lane: "request",
+    owner: "hr",
+    required: true,
+    status: process.notice ? "completed" : "in_progress",
+    startedAt,
+    completedAt,
+    completedBy: process.notice?.decidedBy ?? current?.completedBy ?? null,
+  };
+  const remaining = process.steps.filter(
+    (step) => step.id !== "request_validation_notice" && !legacyIds.has(step.id),
+  );
+  return [unified, ...remaining];
 }
 
 export function patchStep(
@@ -152,12 +181,29 @@ export function applyAccountantReadiness<T extends CltTerminationProcess>(proces
 }
 
 export function recalculateTermination<T extends CltTerminationProcess>(process: T, now = new Date()): T {
-  const hasAccessStep = process.steps.some((step) => step.id === "access_revocation");
+  const unifiedSteps = unifyRequestValidationNotice(process);
+  const hasAccessStep = unifiedSteps.some((step) => step.id === "access_revocation");
   let steps = hasAccessStep
-    ? process.steps
-    : process.steps.flatMap((step) => step.id === "closure"
+    ? unifiedSteps
+    : unifiedSteps.flatMap((step) => step.id === "closure"
       ? [{ id: "access_revocation", label: "Bloqueio de acessos", lane: "operational", owner: "hr", required: true, status: "pending" } as TerminationStep, step]
       : [step]);
+  if (!steps.some((step) => step.id === "uniform_return")) {
+    const uniformStep: TerminationStep = {
+      id: "uniform_return",
+      label: "Devolução de uniformes",
+      lane: "operational",
+      owner: "manager",
+      required: true,
+      status: process.operational?.uniformsReturned
+        ? "completed"
+        : process.status === "completed"
+          ? "waived"
+          : "in_progress",
+      ...(process.operational?.uniformsReturned ? { completedAt: process.updatedAt } : {}),
+    };
+    steps = steps.flatMap((step) => step.id === "request_validation_notice" ? [step, uniformStep] : [step]);
+  }
   if (process.notice?.contractEndDate && now.toISOString().slice(0, 10) >= process.notice.contractEndDate) {
     steps = patchStep(steps, "access_revocation", {
       status: steps.find((step) => step.id === "access_revocation")?.status === "blocked" ? "in_progress" : steps.find((step) => step.id === "access_revocation")?.status,
@@ -182,6 +228,9 @@ export function recalculateTermination<T extends CltTerminationProcess>(process:
 }
 
 export function buildProcessProjection(process: CltTerminationProcess, version: number, syncedAt: string): ProcessProjection {
+  const title = process.source === "hr_manual"
+    ? `Desligamento — ${process.employeeName}`
+    : `Pedido de demissão — ${process.employeeName}`;
   return {
     id: `termination:${process.id}`,
     sourceType: "termination",
@@ -190,7 +239,7 @@ export function buildProcessProjection(process: CltTerminationProcess, version: 
     sourceId: process.id,
     module: "dp",
     type: process.processType,
-    title: `Pedido de demissão — ${process.employeeName}`,
+    title,
     subjectId: process.employeeId,
     subjectName: process.employeeName,
     status: process.status,

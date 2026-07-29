@@ -1,0 +1,383 @@
+import { UNIFORM_SYSTEM_TEMPLATES } from "@/features/uniforms/template-catalog";
+import {
+  PROBATION_CONTRACT_V2_FIELD_MAPPING,
+  PROBATION_CONTRACT_V2_HASH,
+  PROBATION_CONTRACT_V2_SOURCE,
+  PROBATION_CONTRACT_V2_VARIABLES,
+} from "@/features/hr/documents/probation-contract-template";
+import {
+  HOURS_BANK_V2_HASH,
+  HOURS_BANK_V2_SOURCE,
+  HOURS_BANK_V2_VARIABLES,
+} from "@/features/hr/documents/hours-bank-template";
+import type { TemplateFieldMapping } from "@/features/hr/documents/field-mapping";
+import {
+  RECEIPT_FORM_SCHEMA,
+  type DocumentFormSchema,
+} from "@/features/hr/documents/document-form-schema";
+
+export type SystemDocumentTemplateKind = "system_pdf" | "reference_docx";
+export type SystemDocumentTemplateRenderer = "letterhead" | "uniform" | "admission_docx";
+export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference";
+
+export type SystemDocumentTemplate = {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  status: "published" | "draft";
+  version: number;
+  templateKind: SystemDocumentTemplateKind;
+  renderer: SystemDocumentTemplateRenderer;
+  /** Define onde o documento nasce; modelos contextuais não aparecem no gerador avulso. */
+  generationMode: SystemDocumentGenerationMode;
+  sourceModule?: "documents" | "uniforms" | "admission" | "termination";
+  sourceModulePath?: string;
+  variables: string[];
+  fieldMapping?: TemplateFieldMapping;
+  formSchema?: DocumentFormSchema;
+  letterheadVersion: "coala-letterhead-v2";
+  signatureScope: "none" | "bundle" | "independent";
+  postAdmissionSignatureScope?: "none" | "independent";
+  retentionPolicyId: string;
+  contentHash?: string;
+  sourcePath?: string;
+  sourceFormat: "pdf" | "docx";
+  isSystem: true;
+  previewUrl: string;
+  downloadUrl?: string;
+  updatedAt: string;
+};
+
+const UPDATED_AT = "2026-07-28T00:00:00.000Z";
+const ADMISSION_BASE = "docs/modelos-documentos/admissionais";
+
+const baseTemplates: SystemDocumentTemplate[] = [
+  {
+    id: "system-letterhead-blank",
+    name: "Papel timbrado Coala Shakes - em branco",
+    category: "Base institucional",
+    description: "Página A4 oficial com faixa superior sem margem e marca institucional no canto inferior direito.",
+    status: "published",
+    version: 2,
+    templateKind: "system_pdf",
+    renderer: "letterhead",
+    generationMode: "reference",
+    sourceModule: "documents",
+    variables: [],
+    letterheadVersion: "coala-letterhead-v2",
+    signatureScope: "none",
+    retentionPolicyId: "institutional_active_version",
+    sourceFormat: "pdf",
+    isSystem: true,
+    previewUrl: "/api/documents/templates/system-letterhead-blank/preview",
+    updatedAt: UPDATED_AT,
+  },
+  {
+    id: "system-receipt-standard",
+    name: "Recibo de pagamento",
+    category: "Financeiro e recibos",
+    description: "Recibo guiado por schema, com partes livres, itens repetíveis, total automático e pagamento condicional.",
+    status: "published",
+    version: 1,
+    templateKind: "reference_docx",
+    renderer: "admission_docx",
+    generationMode: "direct",
+    sourceModule: "documents",
+    variables: [
+      "description",
+      "receipt.city",
+      "receipt.direction",
+      "receipt.issueDate",
+      "receipt.issuer.snapshot.document",
+      "receipt.issuer.snapshot.name",
+      "receipt.items",
+      "receipt.number",
+      "receipt.payment.account",
+      "receipt.payment.agency",
+      "receipt.payment.bank",
+      "receipt.payment.method",
+      "receipt.payment.pixKey",
+      "receipt.recipient.snapshot.document",
+      "receipt.recipient.snapshot.name",
+      "receipt.totalWithWords",
+      "value",
+    ],
+    formSchema: RECEIPT_FORM_SCHEMA,
+    letterheadVersion: "coala-letterhead-v2",
+    signatureScope: "independent",
+    retentionPolicyId: "fiscal_generation_date_pending",
+    contentHash: "4697f1bf5879c02f4255f7304b09ead562d42d519f8016f9c1e42a86ce14b112",
+    sourcePath: "docs/modelos-documentos/recibos/recibo-v1.docx",
+    sourceFormat: "docx",
+    isSystem: true,
+    previewUrl: "/api/documents/templates/system-receipt-standard/preview",
+    downloadUrl: "/api/documents/templates/system-receipt-standard/source",
+    updatedAt: UPDATED_AT,
+  },
+];
+
+const uniformTemplates: SystemDocumentTemplate[] = UNIFORM_SYSTEM_TEMPLATES.map((template) => ({
+  ...template,
+  status: "published",
+  version: 1,
+  templateKind: "system_pdf",
+  renderer: "uniform",
+  generationMode: "contextual",
+  sourceModule: "uniforms",
+  sourceModulePath: "/dashboard/stock/uniforms",
+  variables: [
+    "collaborator.name",
+    "collaborator.document",
+    "movement.date",
+    "movement.items",
+    "movement.notes",
+    "movement.signatures",
+  ],
+  letterheadVersion: "coala-letterhead-v2",
+  signatureScope: "none",
+  retentionPolicyId: "employment_plus_5y",
+  sourceFormat: "pdf",
+  isSystem: true,
+  previewUrl: `/api/documents/templates/${template.id}/preview`,
+  updatedAt: UPDATED_AT,
+}));
+
+const admissionTemplates: SystemDocumentTemplate[] = [
+  {
+    id: "system-admission-employment-probation-contract",
+    name: "Contrato de Trabalho a Título de Experiência",
+    category: "Contratos",
+    description: "Piloto parametrizado e validado tecnicamente. Permanece em preparação até a revisão jurídica e homologação do RH.",
+    sourcePath: PROBATION_CONTRACT_V2_SOURCE,
+    contentHash: PROBATION_CONTRACT_V2_HASH,
+    version: 2,
+    variables: [...PROBATION_CONTRACT_V2_VARIABLES],
+    fieldMapping: PROBATION_CONTRACT_V2_FIELD_MAPPING,
+  },
+  {
+    id: "system-admission-hours-bank-agreement",
+    name: "Acordo Individual de Banco de Horas",
+    category: "Admissão",
+    description: "Piloto parametrizado e validado tecnicamente. Permanece em preparação até a revisão jurídica e homologação do RH.",
+    sourcePath: HOURS_BANK_V2_SOURCE,
+    contentHash: HOURS_BANK_V2_HASH,
+    version: 2,
+    variables: [...HOURS_BANK_V2_VARIABLES],
+  },
+  {
+    id: "system-admission-lgpd-awareness-term",
+    name: "Termo de Ciência sobre o Tratamento de Dados Pessoais",
+    category: "Admissão",
+    description: "Modelo parametrizado tecnicamente; aguarda revisão jurídica e homologação do RH.",
+    sourcePath: `${ADMISSION_BASE}/03-termo-lgpd-v2.docx`,
+    contentHash: "70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265",
+    version: 2,
+    variables: [
+      "employee.cpf",
+      "employee.name",
+      "integration.employer_address",
+      "integration.employer_cnpj",
+      "integration.employer_name",
+      "term_effective_date",
+    ],
+    fieldMapping: {
+      term_effective_date: {
+        kind: "manual",
+        label: "Vigência do termo LGPD",
+        format: "date_br",
+        required: true,
+        defaultValue: "2026-07-28",
+      },
+    },
+  },
+  {
+    id: "system-admission-image-voice-consent",
+    name: "Termo de Consentimento para Uso de Imagem e Voz",
+    category: "Admissão",
+    description: "Modelo parametrizado para solicitação e assinatura independente do pacote admissional.",
+    sourcePath: `${ADMISSION_BASE}/04-imagem-voz-v2.docx`,
+    contentHash: "a3d20c516afa510c6aa9d58ae359827490b76289643f7508932fce61d8c42381",
+    version: 2,
+    variables: [
+      "employee.cpf",
+      "employee.name",
+      "integration.employer_address",
+      "integration.employer_cnpj",
+      "integration.employer_name",
+    ],
+  },
+  {
+    id: "system-admission-goals-awards-policy",
+    name: "Regulamento de Metas e Prêmios por Desempenho",
+    category: "Admissão",
+    description: "Modelo parametrizado tecnicamente; aguarda revisão jurídica e homologação do RH.",
+    sourcePath: `${ADMISSION_BASE}/05-metas-premios-v2.docx`,
+    contentHash: "a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745",
+    version: 2,
+    variables: [
+      "employee.ctps_number",
+      "employee.ctps_series",
+      "employee.name",
+      "integration.employer_address",
+      "integration.employer_cnpj",
+      "integration.employer_name",
+    ],
+  },
+  {
+    id: "system-admission-transportation-voucher-request",
+    name: "Solicitação de Vale-Transporte",
+    category: "Admissão",
+    description: "Modelo de solicitação, separado da declaração de não utilização.",
+    sourcePath: `${ADMISSION_BASE}/06-vale-transporte-solicitacao-v2.docx`,
+    contentHash: "cd643a4caf7c088e98af1dc6908cac7d2005163a795f323df1fcd8450fca53bb",
+    version: 2,
+    variables: [
+      "employee.address",
+      "employee.ctps_number",
+      "employee.ctps_series",
+      "employee.name",
+      "integration.employer_name",
+      "transport_voucher_decision_text",
+    ],
+    postAdmissionSignatureScope: "independent" as const,
+    fieldMapping: {
+      transport_voucher_decision_text: {
+        kind: "manual",
+        label: "Decisão de vale-transporte",
+        format: "text",
+        required: true,
+        defaultValue: "opto",
+      },
+    },
+  },
+  {
+    id: "system-admission-transportation-voucher-waiver",
+    name: "Declaração de Não Utilização de Vale-Transporte",
+    category: "Admissão",
+    description: "Modelo de não utilização/renúncia, versionado separadamente da solicitação.",
+    sourcePath: `${ADMISSION_BASE}/06-vale-transporte-renuncia-v2.docx`,
+    contentHash: "3ea7e9e3ddbfa2a4ffefe780efbd03677984131e4fdf3ca8437aa81fc3a1a6de",
+    version: 2,
+    variables: [
+      "employee.address",
+      "employee.ctps_number",
+      "employee.ctps_series",
+      "employee.name",
+      "integration.employer_name",
+      "transport_voucher_decision_text",
+      "transport_voucher_document_title",
+    ],
+    postAdmissionSignatureScope: "independent" as const,
+    fieldMapping: {
+      transport_voucher_decision_text: {
+        kind: "manual",
+        label: "Decisão de vale-transporte",
+        format: "text",
+        required: true,
+        defaultValue: "não opto",
+      },
+      transport_voucher_document_title: {
+        kind: "manual",
+        label: "Título da declaração",
+        format: "text",
+        required: true,
+        defaultValue: "DECLARAÇÃO DE NÃO UTILIZAÇÃO DE VALE-TRANSPORTE",
+      },
+    },
+  },
+  {
+    id: "system-admission-confidentiality-agreement",
+    name: "Termo de Confidencialidade e Sigilo",
+    category: "Admissão",
+    description: "Modelo parametrizado tecnicamente; aguarda revisão jurídica e homologação do RH.",
+    sourcePath: `${ADMISSION_BASE}/07-confidencialidade-v2.docx`,
+    contentHash: "56306e646b241ab3b0bb93c804dc3cf549a833efb583bf990c9a18c8ba275f80",
+    version: 2,
+    variables: [
+      "employee.ctps_number",
+      "employee.ctps_series",
+      "employee.name",
+      "integration.employer_address",
+      "integration.employer_cnpj",
+      "integration.employer_name",
+    ],
+  },
+  {
+    id: "system-admission-electronic-time-tracking-awareness",
+    name: "Termo de Ciência - Registro Eletrônico de Ponto",
+    category: "Admissão",
+    description: "Modelo parametrizado tecnicamente; aguarda revisão jurídica e homologação do RH.",
+    sourcePath: `${ADMISSION_BASE}/08-ponto-eletronico-v2.docx`,
+    contentHash: "eba3f36cf5ca9c5effb72c36cfc05f3487b192f5ff9206c0bc604f66235e3f5a",
+    version: 2,
+    variables: [
+      "employee.ctps_number",
+      "employee.ctps_series",
+      "employee.name",
+      "integration.employer_address",
+      "integration.employer_cnpj",
+      "integration.employer_name",
+    ],
+  },
+  {
+    id: "system-admission-bundle-closing-term",
+    name: "Termo de Encerramento, Ciência e Assinatura",
+    category: "Admissão",
+    description: "Documento final obrigatório com lista dinâmica dos componentes reais do pacote.",
+    sourcePath: `${ADMISSION_BASE}/09-termo-encerramento-v2.docx`,
+    contentHash: "1b4a98f7a9fba99d61ab07ffde24584b52516fb53bd0379d101216923d05b030",
+    version: 2,
+    variables: [
+      "bundle_components_summary",
+      "contract_start_long",
+      "employee.name",
+      "integration.employer_name",
+    ],
+    fieldMapping: {
+      bundle_components_summary: {
+        kind: "manual",
+        label: "Componentes incluídos no pacote",
+        format: "multiline",
+        required: true,
+      },
+      contract_start_long: {
+        kind: "system",
+        key: "integration.expected_admission_date",
+        formatter: "date_long_br",
+      },
+    },
+  },
+].map((template): SystemDocumentTemplate => ({
+  ...template,
+  status: "draft",
+  version: template.version ?? 1,
+  templateKind: "reference_docx",
+  renderer: "admission_docx",
+  generationMode: "direct",
+  sourceModule: "documents",
+  variables: [...(template.variables ?? [])],
+  fieldMapping: template.fieldMapping as TemplateFieldMapping | undefined,
+  letterheadVersion: "coala-letterhead-v2",
+  signatureScope: template.id === "system-admission-image-voice-consent"
+    ? "independent"
+    : "bundle",
+  retentionPolicyId: template.id === "system-admission-image-voice-consent"
+    ? "consent_until_revoked_plus_5y"
+    : "employment_plus_5y",
+  sourceFormat: "docx",
+  isSystem: true,
+  previewUrl: `/api/documents/templates/${template.id}/preview`,
+  downloadUrl: `/api/documents/templates/${template.id}/source`,
+  updatedAt: UPDATED_AT,
+}));
+
+export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
+  ...baseTemplates,
+  ...uniformTemplates,
+  ...admissionTemplates,
+];
+
+export function systemDocumentTemplateById(id: string) {
+  return SYSTEM_DOCUMENT_TEMPLATES.find((template) => template.id === id) ?? null;
+}

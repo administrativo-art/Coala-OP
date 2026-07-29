@@ -24,10 +24,12 @@ export type TerminationStepStatus =
   | "cancelled";
 
 export type TerminationStepId =
+  | "request_validation_notice"
   | "employee_request"
   | "identity_signature"
   | "hr_validation"
   | "notice_decision"
+  | "uniform_return"
   | "aso"
   | "accountant"
   | "document_audit"
@@ -56,7 +58,8 @@ export type NoticeDecision =
   | "worked"
   | "waived_no_discount"
   | "waived_with_discount"
-  | "exception_review";
+  | "exception_review"
+  | "hr_defined";
 
 export type TerminationEvent = {
   id?: string;
@@ -94,13 +97,16 @@ export type TerminationDocument = {
 
 export type CltTerminationProcess = {
   id: string;
-  processType: "clt_employee_resignation";
+  processType: "clt_employee_resignation" | "clt_hr_termination" | "pj_contract_termination";
   employeeId: string;
   employeeName: string;
   employeeEmail: string;
   employeeCpfMasked?: string | null;
   employeePhoneMasked?: string | null;
-  employmentRelationshipType: "clt";
+  employmentRelationshipType: "clt" | "pj";
+  terminationReason?: string | null;
+  terminationCause?: string | null;
+  terminationNotes?: string | null;
   unitId?: string | null;
   unitName?: string | null;
   jobRoleName?: string | null;
@@ -176,7 +182,7 @@ export type ProcessProjection = {
   sourceCollection: "terminationProcesses";
   sourceId: string;
   module: "dp";
-  type: "clt_employee_resignation";
+  type: CltTerminationProcess["processType"];
   title: string;
   subjectId: string;
   subjectName: string;

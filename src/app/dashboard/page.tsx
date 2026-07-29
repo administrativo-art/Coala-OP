@@ -81,20 +81,20 @@ function DashboardCard({
   children: ReactNode
 }) {
   return (
-    <Card className={cn("overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm", className)}>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 border-b border-zinc-100 px-5 py-5">
+    <Card className={cn("overflow-hidden rounded-xl border border-zinc-200/80 bg-white shadow-sm", className)}>
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b border-zinc-100 px-4 py-3">
         <div>
-          <CardTitle className="text-base font-bold tracking-tight text-zinc-950">{title}</CardTitle>
-          <CardDescription className="mt-1 max-w-[260px] text-sm leading-snug text-zinc-400">{description}</CardDescription>
+          <CardTitle className="text-sm font-extrabold tracking-tight text-zinc-950">{title}</CardTitle>
+          <CardDescription className="mt-0.5 max-w-[320px] text-xs leading-snug text-zinc-400">{description}</CardDescription>
         </div>
-        <div className="rounded-xl bg-pink-100/70 p-2.5 text-pink-500">
+        <div className="rounded-lg bg-pink-100/70 p-2 text-pink-500">
           <Icon className="h-4 w-4" />
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 p-5">
+      <CardContent className="space-y-3 p-4">
         {children}
         {!hideDetailsLink ? (
-          <Link href={href} className="inline-flex items-center gap-8 px-5 text-sm font-bold text-pink-500">
+          <Link href={href} className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500">
             Ver detalhes <ArrowRight className="h-4 w-4" />
           </Link>
         ) : null}
@@ -104,15 +104,15 @@ function DashboardCard({
 }
 
 function EmptyState({ children }: { children: ReactNode }) {
-  return <p className="rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-zinc-400">{children}</p>
+  return <p className="rounded-lg border border-dashed border-zinc-200 px-3 py-4 text-xs text-zinc-400">{children}</p>
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
-      <p className="text-sm font-semibold text-zinc-400">{label}</p>
-      <p className="mt-1 text-2xl font-black tracking-tight text-zinc-950">{value}</p>
-      {detail ? <p className="mt-1 text-xs font-medium text-zinc-400">{detail}</p> : null}
+    <div className="rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
+      <p className="text-xs font-semibold text-zinc-400">{label}</p>
+      <p className="mt-0.5 text-xl font-black tracking-tight text-zinc-950">{value}</p>
+      {detail ? <p className="mt-0.5 text-[11px] font-medium text-zinc-400">{detail}</p> : null}
     </div>
   )
 }
@@ -540,25 +540,25 @@ function ManagementDashboard() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1680px] space-y-8 px-4 pb-12 pt-3 sm:px-6 2xl:px-8">
-      <div className="flex flex-col justify-between gap-4 border-b border-zinc-200 pb-7 md:flex-row md:items-end">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-4 py-1 text-sm font-bold text-pink-500">
-            <Target className="h-3.5 w-3.5" />
+    <div className="w-full space-y-3 pb-6">
+      <div className="flex flex-col justify-between gap-3 border-b border-zinc-200 pb-3 md:flex-row md:items-end">
+        <div className="min-w-0">
+          <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-2.5 py-1 text-[11px] font-extrabold text-pink-500">
+            <Target className="h-3 w-3" />
             Painel da gestão
           </div>
-          <h1 className="text-3xl font-black tracking-tight text-zinc-950 md:text-4xl">Bem-vindo, {user?.username}!</h1>
-          <p className="mt-2 max-w-2xl text-base font-medium text-zinc-400">
+          <h1 className="text-xl font-black tracking-tight text-zinc-950">Bem-vindo, {user?.username}!</h1>
+          <p className="mt-1 max-w-2xl text-xs font-medium text-zinc-400">
             Dados operacionais, comerciais, DP e financeiro para acompanhamento diário.
           </p>
         </div>
-        <div className="hidden items-center gap-3 rounded-xl border border-zinc-200 bg-white px-5 py-3 text-sm font-semibold text-zinc-500 shadow-sm sm:flex">
+        <div className="hidden items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-500 shadow-sm sm:flex">
           <Calendar className="h-4 w-4 text-zinc-400" />
           {format(today, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
         {(permissions.pricing.view || permissions.goals?.view || canViewTechnicalSheets(permissions)) && (
           <DashboardCard title="Metas e faturamento" description="Meta geral, projeção e metas atuais por quiosque." href="/dashboard/goals/tracking" icon={Target} className="order-1" hideDetailsLink>
             <div className="grid gap-3 md:grid-cols-3">
@@ -580,16 +580,16 @@ function ManagementDashboard() {
               <div className="space-y-3">
                 {goalRows.slice(0, 5).map((goal) => (
                   <div key={goal.kioskId} className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-3 text-sm">
+                    <div className="flex items-center justify-between gap-3 text-xs">
                       <span className="truncate font-bold text-zinc-800">{goal.name}</span>
                       <span className="whitespace-nowrap font-semibold text-zinc-500">
                         {formatCurrency(goal.current)} / {formatCurrency(goal.target)}
                       </span>
-                      <span className={cn("w-10 text-right text-sm font-black", goal.progress >= 0.8 ? "text-zinc-900" : "text-amber-500")}>
+                      <span className={cn("w-10 text-right text-xs font-black", goal.progress >= 0.8 ? "text-zinc-900" : "text-amber-500")}>
                         {Math.round(goal.progress * 100)}%
                       </span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
                       <div
                         className={cn("h-full rounded-full", goal.progress >= 0.8 ? "bg-pink-500" : "bg-amber-400")}
                         style={{ width: `${Math.min(100, Math.round(goal.progress * 100))}%` }}
@@ -599,7 +599,7 @@ function ManagementDashboard() {
                 ))}
               </div>
             )}
-            <button type="button" className="inline-flex items-center gap-8 px-5 text-sm font-bold text-pink-500" onClick={() => setGoalsModalOpen(true)}>
+            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setGoalsModalOpen(true)}>
               Ver detalhes <ArrowRight className="h-4 w-4" />
             </button>
           </DashboardCard>
@@ -641,10 +641,10 @@ function ManagementDashboard() {
                 const dueDate = task.dueDate ? startOfDay(new Date(task.dueDate)) : null
                 const isOverdue = !!dueDate && isBefore(dueDate, today)
                 return (
-                  <div key={task.id} className="flex items-start justify-between gap-3 rounded-xl border border-zinc-100 bg-white p-4 text-sm shadow-sm">
+                  <div key={task.id} className="flex items-start justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 text-xs shadow-sm">
                     <div className="min-w-0">
-                      <p className="truncate text-base font-black text-zinc-800">{task.title}</p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-400">{getTaskStatusLabel(task.status)}</p>
+                      <p className="truncate text-sm font-black text-zinc-800">{task.title}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-zinc-400">{getTaskStatusLabel(task.status)}</p>
                     </div>
                     <span
                       className={cn(
@@ -677,11 +677,11 @@ function ManagementDashboard() {
             ) : (
               <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
                 {criticalRestockItems.map(({ base, current, minimum, leadTime, ruptureDate, orderLimitDate }) => (
-                  <div key={base.id} className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50/50 p-4 text-sm">
+                  <div key={base.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/50 p-3 text-xs">
                     <div className="min-w-0">
-                      <p className="truncate text-base font-black text-zinc-800">{base.name}</p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-400">Atual {numberFormatter.format(current)} · mín. {numberFormatter.format(minimum)}</p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-400">
+                      <p className="truncate text-sm font-black text-zinc-800">{base.name}</p>
+                      <p className="mt-1 text-xs font-semibold text-zinc-400">Atual {numberFormatter.format(current)} · mín. {numberFormatter.format(minimum)}</p>
+                      <p className="mt-1 text-xs font-semibold text-zinc-400">
                         Ruptura: <span className={cn(!ruptureDate && "text-zinc-400", ruptureDate && isSameOrBefore(ruptureDate, today) && "text-pink-500")}>
                           {ruptureDate ? format(ruptureDate, "dd/MM/yyyy") : "sem consumo médio"}
                         </span>{" "}
@@ -689,7 +689,7 @@ function ManagementDashboard() {
                         {orderLimitDate ? format(orderLimitDate, "dd/MM/yyyy") : "sem data"}
                       </p>
                     </div>
-                    <span className="whitespace-nowrap rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-600">
+                    <span className="whitespace-nowrap rounded-full bg-pink-100 px-2.5 py-1 text-xs font-black text-pink-600">
                       {leadTime ? `${leadTime}d` : "sem dia(s)"}
                     </span>
                   </div>
@@ -709,7 +709,7 @@ function ManagementDashboard() {
             hideDetailsLink
           >
             <Select value={selectedSalesKioskId} onValueChange={setSelectedSalesKioskId}>
-              <SelectTrigger className="h-11 rounded-lg border-zinc-200 bg-white px-4 font-semibold text-zinc-600">
+              <SelectTrigger className="h-8 rounded-lg border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600">
                 <SelectValue placeholder="Filtrar unidade" />
               </SelectTrigger>
               <SelectContent>
@@ -732,8 +732,8 @@ function ManagementDashboard() {
                     const delta = item.quantity - item.previous
                     const sameElapsedDelta = item.sameElapsedCurrent - item.sameElapsedPrevious
                     return (
-                      <div key={item.name} className="flex items-center justify-between gap-4 rounded-xl border border-zinc-100 bg-white p-4 shadow-sm">
-                        <div className="flex min-w-0 flex-1 items-center gap-4">
+                      <div key={item.name} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           <span
                             className={cn(
                               "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black",
@@ -746,8 +746,8 @@ function ManagementDashboard() {
                             {index + 1}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-base font-black text-zinc-800">{item.name}</p>
-                            <div className="mt-2 h-2 max-w-[180px] overflow-hidden rounded-full bg-zinc-100">
+                            <p className="truncate text-sm font-black text-zinc-800">{item.name}</p>
+                            <div className="mt-1.5 h-1.5 max-w-[180px] overflow-hidden rounded-full bg-zinc-100">
                               <div
                                 className="h-full rounded-full bg-pink-300"
                                 style={{ width: `${Math.max(12, Math.round((item.quantity / maxBestSellerQuantity) * 100))}%` }}
@@ -759,8 +759,8 @@ function ManagementDashboard() {
                           </div>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-lg font-black text-zinc-800">{numberFormatter.format(item.quantity)}</p>
-                          <p className={cn("text-sm font-bold", delta >= 0 ? "text-emerald-600" : "text-red-500")}>
+                          <p className="text-base font-black text-zinc-800">{numberFormatter.format(item.quantity)}</p>
+                          <p className={cn("text-xs font-bold", delta >= 0 ? "text-emerald-600" : "text-red-500")}>
                             {delta >= 0 ? "+" : ""}{numberFormatter.format(delta)}
                           </p>
                           <p className={cn("text-xs font-bold", sameElapsedDelta >= 0 ? "text-emerald-600" : "text-red-500")}>
@@ -774,7 +774,7 @@ function ManagementDashboard() {
               </>
             )}
             {bestSellers.length > 0 ? (
-              <button type="button" className="inline-flex items-center gap-8 px-5 text-sm font-bold text-pink-500" onClick={() => setSalesModalOpen(true)}>
+              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setSalesModalOpen(true)}>
                 Ver lista completa <ArrowRight className="h-4 w-4" />
               </button>
             ) : null}
@@ -785,7 +785,7 @@ function ManagementDashboard() {
           <DashboardCard title="Escala da semana" description="Selecione a unidade para ver os turnos desta semana." href="/dashboard/dp/schedules" icon={Briefcase} className="order-2 xl:col-span-2" hideDetailsLink>
             {currentSchedules.length > 0 ? (
               <Select value={selectedWeeklySchedule ? selectedWeeklySchedule.unitId ?? selectedWeeklySchedule.id : ""} onValueChange={setSelectedScheduleUnitId}>
-                <SelectTrigger className="h-11 rounded-lg border-zinc-200 bg-white px-4 font-semibold text-zinc-600">
+                <SelectTrigger className="h-8 rounded-lg border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-600">
                   <SelectValue placeholder="Selecionar unidade" />
                 </SelectTrigger>
                 <SelectContent>
@@ -815,7 +815,7 @@ function ManagementDashboard() {
                     <div
                       key={dateKey}
                       className={cn(
-                        "min-h-[112px] rounded-xl border bg-white p-3 text-center shadow-sm",
+                        "min-h-[96px] rounded-lg border bg-white p-2.5 text-center shadow-sm",
                         isToday ? "border-pink-300 bg-pink-50/40" : "border-zinc-100"
                       )}
                     >
@@ -841,7 +841,7 @@ function ManagementDashboard() {
               </div>
             )}
             {currentSchedules.length > 0 ? (
-              <button type="button" className="inline-flex items-center gap-8 px-5 text-sm font-bold text-pink-500" onClick={() => setScheduleModalOpen(true)}>
+              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setScheduleModalOpen(true)}>
                 Ver escala do mês <ArrowRight className="h-4 w-4" />
               </button>
             ) : null}
@@ -859,11 +859,11 @@ function ManagementDashboard() {
                 {upcomingVacations.map(({ vacation, start }, index) => {
                   const employeeName = userNameById.get(vacation.userId) ?? vacation.userId
                   return (
-                    <div key={vacation.id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-white p-4 text-sm shadow-sm">
-                      <div className="flex min-w-0 items-center gap-4">
+                    <div key={vacation.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 bg-white p-3 text-xs shadow-sm">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div
                           className={cn(
-                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black text-white",
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black text-white",
                             index % 3 === 0 && "bg-sky-500",
                             index % 3 === 1 && "bg-violet-600",
                             index % 3 === 2 && "bg-pink-500"
@@ -872,15 +872,15 @@ function ManagementDashboard() {
                           {getInitials(employeeName)}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-base font-black text-zinc-800">{employeeName}</p>
-                          <p className="text-sm font-semibold text-zinc-400">
+                          <p className="truncate text-sm font-black text-zinc-800">{employeeName}</p>
+                          <p className="text-xs font-semibold text-zinc-400">
                             {format(start, "dd/MM", { locale: ptBR })} a {vacation.endDate ? format(new Date(`${vacation.endDate}T12:00:00`), "dd/MM", { locale: ptBR }) : "sem fim"}
                           </p>
                         </div>
                       </div>
                       <span
                         className={cn(
-                          "rounded-lg border px-3 py-1 text-sm font-bold",
+                          "rounded-lg border px-2.5 py-1 text-xs font-bold",
                           vacation.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-600",
                           vacation.status === "PLANNED" && "border-sky-200 bg-sky-50 text-sky-600",
                           vacation.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-600"
@@ -893,7 +893,7 @@ function ManagementDashboard() {
                 })}
               </div>
             )}
-            <button type="button" className="inline-flex items-center gap-8 px-5 text-sm font-bold text-pink-500" onClick={() => setVacationsModalOpen(true)}>
+            <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setVacationsModalOpen(true)}>
               Ver detalhes <ArrowRight className="h-4 w-4" />
             </button>
           </DashboardCard>
@@ -912,20 +912,20 @@ function ManagementDashboard() {
               <EmptyState>Carregando pagamentos...</EmptyState>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-red-200 bg-red-50/50 p-5">
-                  <p className="text-sm font-black uppercase tracking-wide text-pink-500">Vencidos</p>
-                  <p className="mt-2 text-3xl font-black text-red-600">{formatCurrency(financialSummary.overdueTotal)}</p>
-                  <p className="mt-2 text-sm font-semibold text-pink-400">{financialSummary.overdue.length} pagamento(s)</p>
+                <div className="rounded-lg border border-red-200 bg-red-50/50 p-3">
+                  <p className="text-xs font-black uppercase tracking-wide text-pink-500">Vencidos</p>
+                  <p className="mt-1 text-xl font-black text-red-600">{formatCurrency(financialSummary.overdueTotal)}</p>
+                  <p className="mt-1 text-xs font-semibold text-pink-400">{financialSummary.overdue.length} pagamento(s)</p>
                 </div>
-                <div className="rounded-xl border border-zinc-100 bg-white p-5 shadow-sm">
-                  <p className="text-sm font-black uppercase tracking-wide text-zinc-500">A vencer no mês</p>
-                  <p className="mt-2 text-3xl font-black text-zinc-800">{formatCurrency(financialSummary.upcomingTotal)}</p>
-                  <p className="mt-2 text-sm font-semibold text-zinc-400">{financialSummary.upcoming.length} pagamento(s)</p>
+                <div className="rounded-lg border border-zinc-100 bg-white p-3 shadow-sm">
+                  <p className="text-xs font-black uppercase tracking-wide text-zinc-500">A vencer no mês</p>
+                  <p className="mt-1 text-xl font-black text-zinc-800">{formatCurrency(financialSummary.upcomingTotal)}</p>
+                  <p className="mt-1 text-xs font-semibold text-zinc-400">{financialSummary.upcoming.length} pagamento(s)</p>
                 </div>
               </div>
             )}
             {!expensesLoading ? (
-              <button type="button" className="inline-flex items-center gap-8 px-5 text-sm font-bold text-pink-500" onClick={() => setPaymentsModalOpen(true)}>
+              <button type="button" className="inline-flex items-center gap-3 px-1 text-xs font-extrabold text-pink-500" onClick={() => setPaymentsModalOpen(true)}>
                 Detalhar pagamentos <ArrowRight className="h-4 w-4" />
               </button>
             ) : null}

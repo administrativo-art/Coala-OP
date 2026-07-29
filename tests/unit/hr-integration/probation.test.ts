@@ -53,6 +53,16 @@ describe("período de experiência", () => {
     assert.equal(addCalendarDays("2028-02-29", 1), "2028-03-01");
   });
 
+  test("conta a admissão como dia 1 também na virada do ano", () => {
+    const schedule = buildProbationSchedule("2026-12-31", {
+      firstPeriodDays: 45,
+      secondPeriodDays: 45,
+      evaluationWindowDays: 10,
+    });
+    assert.equal(schedule.firstPeriod.endDate, "2027-02-13");
+    assert.equal(schedule.finalEndDate, "2027-03-30");
+  });
+
   test("rejeita soma acima de 90 e janela maior que o período", () => {
     assert.throws(
       () => validateProbationConfig({ firstPeriodDays: 60, secondPeriodDays: 31, evaluationWindowDays: 10 }),
@@ -71,4 +81,3 @@ describe("período de experiência", () => {
     );
   });
 });
-

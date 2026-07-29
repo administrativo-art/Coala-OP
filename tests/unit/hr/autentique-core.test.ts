@@ -60,6 +60,8 @@ test("normaliza evento de assinatura e encontra o documento", () => {
     providerSignatureId: "signature-1",
   });
   assert.equal(statusFromAutentiqueEvent("document.finished"), "signed");
+  assert.equal(statusFromAutentiqueEvent("document.expired"), "expired");
+  assert.equal(statusFromAutentiqueEvent("document.cancelled"), "cancelled");
 });
 
 test("evento atrasado não regride um documento já assinado", () => {

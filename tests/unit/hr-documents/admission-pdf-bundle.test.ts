@@ -44,3 +44,20 @@ test("recusa componente que não seja PDF", async () => {
     /não possui uma versão PDF válida/,
   );
 });
+
+test("mantém consentimento independente fora do pacote contratual", async () => {
+  const logoPng = await readFile(path.join(process.cwd(), "src/features/hr/documents/assets/coala-shakes-letterhead-mark-v1.png"));
+  await assert.rejects(
+    buildAdmissionPdfBundle({
+      title: "Kit inválido",
+      logoPng,
+      components: [{
+        id: "image-consent",
+        name: "Consentimento de imagem e voz",
+        buffer: await pdfWithPages(1),
+        signatureScope: "independent",
+      }],
+    }),
+    /aceite independente/,
+  );
+});

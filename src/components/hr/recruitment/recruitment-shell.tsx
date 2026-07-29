@@ -32,6 +32,7 @@ import type {
   OnboardingProcess,
   OnboardingStage,
   OnboardingStageId,
+  OnboardingTrainingItem,
   RecruitmentCompositionPreset,
   RecruitmentCriterionCategory,
   RecruitmentQuestionCondition,
@@ -86,7 +87,7 @@ import {
   Briefcase, ChevronDown, ChevronRight, ExternalLink, Paperclip,
   Globe, PauseCircle, Archive, Plus, Pencil, SlidersHorizontal,
   FolderOpen, Copy, ArrowLeft, MapPin, Sparkles, Users, RotateCw,
-  Download, Send, Eye, Wallet, RefreshCw,
+  Download, Send, Eye, Wallet, RefreshCw, GraduationCap,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -7762,7 +7763,91 @@ function ProbationV2Panel({ process, getToken, canManage, onRefresh }: { process
     setBusy('term'); setError(null);
     try { const token = await getToken(); const response = await fetch('/api/documents/generate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ templateId, onboardingId: process.id }) }); if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.error || 'Falha ao gerar termo.'); } const id = response.headers.get('X-Generated-Document-Id'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'termo-prorrogacao.docx'; anchor.click(); URL.revokeObjectURL(url); await patch('term_generated', { generatedDocumentId: id }); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao gerar termo.'); } finally { setBusy(null); }
   }
-  return <section className="mx-6 mt-5 rounded-2xl border border-amber-200 bg-amber-50/40 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Experiência</p><h3 className="mt-1 text-base font-black text-slate-950">{state.status === 'awaiting_admission' ? 'Aguardando data de admissão' : `${state.schedule?.totalDays ?? 0} dias programados`}</h3><p className="text-xs text-slate-500">{state.schedule ? `${state.schedule.admissionDate} até ${state.schedule.finalEndDate}` : 'Informe a admissão para calcular todas as etapas.'}</p></div>{canManage && state.status === 'awaiting_admission' ? <input type="date" onChange={event => { if (event.target.value) void patch('set_admission_date', { admissionDate: event.target.value }); }} className="h-9 rounded-lg border bg-white px-3 text-xs" /> : null}</div>{error ? <div className="mt-3"><ErrorLine msg={error} /></div> : null}{state.schedule ? <div className="mt-4 grid gap-3 md:grid-cols-2">{state.evaluations.map(evaluation => <div key={evaluation.id} className="rounded-xl border bg-white p-3"><div className="flex items-center justify-between gap-2"><p className="text-sm font-black">{evaluation.label}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${evaluation.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : evaluation.status === 'available' ? 'bg-blue-50 text-blue-700' : evaluation.status === 'overdue' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>{evaluation.status}</span></div><p className="mt-1 text-xs text-slate-500">Janela: {evaluation.windowStartDate} a {evaluation.windowEndDate}</p>{evaluation.result ? <p className="mt-2 text-xs font-bold">Resultado: {evaluation.result}</p> : null}{canManage && ['available','overdue'].includes(evaluation.status) ? <div className="mt-3 flex gap-2"><button type="button" disabled={!!busy} onClick={() => void patch('evaluate', { evaluationId: evaluation.id, result: 'approved', notes: window.prompt('Observações da avaliação:') ?? '' })} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar</button><button type="button" disabled={!!busy} onClick={() => void patch('evaluate', { evaluationId: evaluation.id, result: 'rejected', notes: window.prompt('Motivo:') ?? '' })} className="h-8 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Reprovar</button></div> : null}</div>)}</div> : null}{state.extensionTerm.required ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-3"><div><p className="text-sm font-black">Termo de prorrogação obrigatório</p><p className="text-xs text-slate-500">{state.extensionTerm.signedAt ? 'Assinado' : state.extensionTerm.generatedDocumentId ? 'Gerado, aguardando assinatura' : 'Pendente de geração'}</p></div>{canManage ? <div className="flex gap-2">{!state.extensionTerm.generatedDocumentId ? <button type="button" disabled={!!busy} onClick={() => void generateExtensionTerm()} className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-black text-white">Gerar termo</button> : null}{state.extensionTerm.generatedDocumentId && !state.extensionTerm.signedAt ? <button type="button" disabled={!!busy} onClick={() => void patch('term_signed')} className="h-8 rounded-lg bg-slate-950 px-3 text-xs font-black text-white">Marcar assinado</button> : null}</div> : null}</div> : null}{canManage && state.status === 'decision_pending' ? <div className="mt-3 flex gap-2"><button type="button" disabled={!!busy} onClick={() => void patch('decide', { result: 'effective', notes: window.prompt('Observações da efetivação:') ?? '' })} className="h-9 rounded-lg bg-emerald-600 px-4 text-xs font-black text-white">Efetivar</button><button type="button" disabled={!!busy} onClick={() => void patch('decide', { result: 'terminated', notes: window.prompt('Observações do desligamento:') ?? '' })} className="h-9 rounded-lg bg-rose-600 px-4 text-xs font-black text-white">Não efetivar</button></div> : null}</section>;
+  return <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Experiência</p><h3 className="mt-1 text-base font-black text-slate-950">{state.status === 'awaiting_admission' ? 'Aguardando data de admissão' : `${state.schedule?.totalDays ?? 0} dias programados`}</h3><p className="text-xs text-slate-500">{state.schedule ? `${state.schedule.admissionDate} até ${state.schedule.finalEndDate}` : 'Informe a admissão para calcular todas as etapas.'}</p></div>{canManage && state.status === 'awaiting_admission' ? <input type="date" onChange={event => { if (event.target.value) void patch('set_admission_date', { admissionDate: event.target.value }); }} className="h-9 rounded-lg border bg-white px-3 text-xs" /> : null}</div>{error ? <div className="mt-3"><ErrorLine msg={error} /></div> : null}{state.schedule ? <div className="mt-4 grid gap-3 md:grid-cols-2">{state.evaluations.map(evaluation => <div key={evaluation.id} className="rounded-xl border bg-white p-3"><div className="flex items-center justify-between gap-2"><p className="text-sm font-black">{evaluation.label}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${evaluation.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : evaluation.status === 'available' ? 'bg-blue-50 text-blue-700' : evaluation.status === 'overdue' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>{evaluation.status}</span></div><p className="mt-1 text-xs text-slate-500">Janela: {evaluation.windowStartDate} a {evaluation.windowEndDate}</p>{evaluation.result ? <p className="mt-2 text-xs font-bold">Resultado: {evaluation.result}</p> : null}{canManage && ['available','overdue'].includes(evaluation.status) ? <div className="mt-3 flex gap-2"><button type="button" disabled={!!busy} onClick={() => void patch('evaluate', { evaluationId: evaluation.id, result: 'approved', notes: window.prompt('Observações da avaliação:') ?? '' })} className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar</button><button type="button" disabled={!!busy} onClick={() => void patch('evaluate', { evaluationId: evaluation.id, result: 'rejected', notes: window.prompt('Motivo:') ?? '' })} className="h-8 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Reprovar</button></div> : null}</div>)}</div> : null}{state.extensionTerm.required ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-3"><div><p className="text-sm font-black">Termo de prorrogação obrigatório</p><p className="text-xs text-slate-500">{state.extensionTerm.signedAt ? 'Assinado' : state.extensionTerm.generatedDocumentId ? 'Gerado, aguardando assinatura' : 'Pendente de geração'}</p></div>{canManage ? <div className="flex gap-2">{!state.extensionTerm.generatedDocumentId ? <button type="button" disabled={!!busy} onClick={() => void generateExtensionTerm()} className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-black text-white">Gerar termo</button> : null}{state.extensionTerm.generatedDocumentId && !state.extensionTerm.signedAt ? <button type="button" disabled={!!busy} onClick={() => void patch('term_signed')} className="h-8 rounded-lg bg-slate-950 px-3 text-xs font-black text-white">Marcar assinado</button> : null}</div> : null}</div> : null}{canManage && state.status === 'decision_pending' ? <div className="mt-3 flex gap-2"><button type="button" disabled={!!busy} onClick={() => void patch('decide', { result: 'effective', notes: window.prompt('Observações da efetivação:') ?? '' })} className="h-9 rounded-lg bg-emerald-600 px-4 text-xs font-black text-white">Efetivar</button><button type="button" disabled={!!busy} onClick={() => void patch('decide', { result: 'terminated', notes: window.prompt('Observações do desligamento:') ?? '' })} className="h-9 rounded-lg bg-rose-600 px-4 text-xs font-black text-white">Não efetivar</button></div> : null}</section>;
+}
+
+const TRAINING_STATUS_META: Record<OnboardingTrainingItem['status'], { label: string; badgeBg: string; badgeFg: string; iconBg: string; border: string; bg: string }> = {
+  done: { label: 'Concluído', badgeBg: 'bg-emerald-50', badgeFg: 'text-emerald-700', iconBg: 'bg-emerald-600 text-white', border: 'border-emerald-200', bg: 'bg-emerald-50/40' },
+  current: { label: 'Em andamento', badgeBg: 'bg-pink-50', badgeFg: 'text-pink-700', iconBg: 'bg-pink-600 text-white', border: 'border-pink-200', bg: 'bg-pink-50/40' },
+  pending: { label: 'Pendente', badgeBg: 'bg-slate-100', badgeFg: 'text-slate-500', iconBg: 'bg-slate-100 text-slate-400', border: 'border-slate-100', bg: 'bg-white' },
+};
+
+function TrainingPanel({ process, getToken, canManage, onRefresh }: { process: OnboardingProcess; getToken: () => Promise<string>; canManage: boolean; onRefresh: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const items = [...(process.trainingItems ?? [])].sort((a, b) => a.order - b.order);
+  const doneCount = items.filter(item => item.status === 'done').length;
+
+  async function patch(action: string, body: Record<string, unknown> = {}) {
+    setBusy(action);
+    setError(null);
+    try {
+      await apiFetch(`/api/hr/onboarding/${process.id}/training`, getToken, { method: 'PATCH', body: JSON.stringify({ action, ...body }) });
+      onRefresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Falha ao atualizar treinamento.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function addTraining() {
+    const label = window.prompt('Nome do treinamento:');
+    if (!label || !label.trim()) return;
+    const detail = window.prompt('Detalhe (opcional, ex: duração ou modalidade):') ?? '';
+    void patch('add', { label: label.trim(), detail: detail.trim() });
+  }
+
+  return (
+    <div className="p-[18px]">
+      <div className="mb-3 flex items-center justify-between gap-2.5">
+        <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">Trilhas de integração</p>
+        <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600">{doneCount}/{items.length} concluídos</span>
+      </div>
+      {error && <div className="mb-3"><ErrorLine msg={error} /></div>}
+      {items.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-[13px] font-medium text-slate-500">
+          Nenhuma trilha cadastrada ainda para esta pessoa.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {items.map(item => {
+            const meta = TRAINING_STATUS_META[item.status];
+            return (
+              <div key={item.id} className={`flex items-center gap-3 rounded-xl border ${meta.border} ${meta.bg} px-3.5 py-2.5`}>
+                <span className={`grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] ${meta.iconBg}`}>
+                  {item.status === 'done' ? <CheckCircle2 className="h-4 w-4" /> : item.status === 'current' ? <RefreshCw className="h-4 w-4" /> : <GraduationCap className="h-4 w-4" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13.5px] font-extrabold text-slate-900">{item.label}</p>
+                  {item.detail && <p className="mt-0.5 text-xs font-medium text-slate-500">{item.detail}</p>}
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-extrabold uppercase tracking-wide ${meta.badgeBg} ${meta.badgeFg}`}>{meta.label}</span>
+                {canManage && item.status !== 'done' && (
+                  <div className="flex shrink-0 gap-1.5">
+                    {item.status === 'pending' && (
+                      <button type="button" disabled={!!busy} onClick={() => void patch('set_status', { itemId: item.id, status: 'current' })} className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50">
+                        Iniciar
+                      </button>
+                    )}
+                    <button type="button" disabled={!!busy} onClick={() => void patch('set_status', { itemId: item.id, status: 'done' })} className="h-8 rounded-lg bg-emerald-600 px-2.5 text-[11px] font-black text-white hover:bg-emerald-500">
+                      Concluir
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {canManage && (
+        <button type="button" onClick={addTraining} className="mt-3.5 inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[12.5px] font-bold text-slate-600 hover:bg-slate-50">
+          <Plus className="h-4 w-4" />
+          Adicionar treinamento
+        </button>
+      )}
+    </div>
+  );
 }
 
 function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh }: {
@@ -7788,7 +7873,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const [processStateFilter, setProcessStateFilter] = useState<'active' | 'completed'>('active');
   const [view, setView] = useState<'grid' | 'detail'>('grid');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [phaseId, setPhaseId] = useState<OnboardingStageId | null>(null);
+  const [phaseId, setPhaseId] = useState<OnboardingStageId | 'training' | null>(null);
   const [showStartModal, setShowStartModal] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -8622,10 +8707,38 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const answers = selectedProcess.publicFormAnswers;
   const currentStageId = selectedProcess.currentStage ?? selectedProcess.stages?.[0]?.id ?? null;
   const activePhaseId = phaseId ?? currentStageId;
+  const isTrainingPhase = activePhaseId === 'training';
+  const isProbationPhase = activePhaseId === 'probation';
+  const isExperienceGroupPhase = isTrainingPhase || isProbationPhase;
+  // 'probation' não é mais reconstruída por consolidatedOnboardingStages (ver ONBOARDING_STAGE_IDS
+  // em recruitment-onboarding.ts) — o acompanhamento de experiência é dirigido por `probationV2`,
+  // exibido como uma linha sintética no grupo "Experiência", igual ao treinamento.
   const visibleStages = consolidatedOnboardingStages(selectedProcess);
-  const activeStage = visibleStages.find(stage => stage.id === activePhaseId) ?? null;
-  const activeDetails = activePhaseId ? ONBOARDING_STAGE_DETAILS[activePhaseId] : null;
-  const activeKind = activePhaseId ? ONBOARDING_STAGE_KIND[activePhaseId] : 'generico';
+  const trainingItems = [...(selectedProcess.trainingItems ?? [])].sort((a, b) => a.order - b.order);
+  const trainingDoneCount = trainingItems.filter(item => item.status === 'done').length;
+  const probationV2 = selectedProcess.probationV2 ?? null;
+  const probationRowState: 'done' | 'active' | 'pending' = !probationV2
+    ? 'pending'
+    : probationV2.status === 'effective' || probationV2.status === 'terminated'
+      ? 'done'
+      : probationV2.status === 'awaiting_admission'
+        ? 'pending'
+        : 'active';
+  const activeStage: { label: string; dueDays?: number | null } | null = isTrainingPhase
+    ? { label: 'Treinamento' }
+    : isProbationPhase
+      ? { label: 'Avaliações de experiência' }
+      : (visibleStages.find(stage => stage.id === activePhaseId) ?? null);
+  const activeDetails = isTrainingPhase
+    ? { owner: 'Liderança', focus: 'Trilhas de integração e capacitação dos primeiros dias.' }
+    : isProbationPhase
+      ? { owner: 'Liderança', focus: 'Acompanhamento dos primeiros 90 dias, com avaliações e decisão de efetivação.' }
+      : (activePhaseId ? ONBOARDING_STAGE_DETAILS[activePhaseId as OnboardingStageId] : null);
+  const activeKind = isTrainingPhase
+    ? 'training' as const
+    : isProbationPhase
+      ? 'experiencia' as const
+      : (activePhaseId ? ONBOARDING_STAGE_KIND[activePhaseId as OnboardingStageId] : 'generico');
   const accent = colorForProcess(selectedProcess.id);
 
   const linkActive = processLinkActive(selectedProcess);
@@ -8683,7 +8796,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     },
   ] as const;
   const currentStageOrder = stageOrderOf(selectedProcess, selectedProcess.currentStage);
-  const activeStageOrder = stageOrderOf(selectedProcess, activePhaseId);
+  const activeStageOrder = stageOrderOf(selectedProcess, isExperienceGroupPhase ? null : activePhaseId);
   const isCurrentPhase = !!activePhaseId && activePhaseId === selectedProcess.currentStage;
   const isFuturePhase = activeStageOrder > currentStageOrder;
   const isPastPhase = activeStageOrder >= 0 && currentStageOrder >= 0 && activeStageOrder < currentStageOrder;
@@ -8929,6 +9042,94 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 </p>
               )}
             </div>
+
+            <p className="mb-3.5 mt-5 border-t border-slate-200 pt-4 text-[11px] font-black uppercase tracking-wide text-slate-500">Experiência</p>
+            <div className="space-y-1">
+              {(() => {
+                const isActivePhase = isProbationPhase;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setPhaseId('probation')}
+                    className={`flex w-full gap-3 rounded-xl px-2.5 py-2 text-left transition ${
+                      isActivePhase ? 'bg-white shadow-sm' : 'hover:bg-white/70'
+                    }`}
+                  >
+                    <span className="flex flex-col items-center">
+                      <span className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border text-[11px] font-black ${
+                        probationRowState === 'done'
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : probationRowState === 'active'
+                            ? 'border-pink-600 bg-pink-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-400'
+                      }`}>
+                        {probationRowState === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                      </span>
+                      <span className={`my-0.5 min-h-[22px] w-0.5 flex-1 ${probationRowState === 'done' ? 'bg-emerald-300' : 'bg-slate-200'}`} />
+                    </span>
+                    <span className="min-w-0 flex-1 pb-3">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className={`text-[13px] font-black ${
+                          isActivePhase ? 'text-pink-600' : probationRowState === 'done' ? 'text-slate-700' : 'text-slate-400'
+                        }`}>
+                          Avaliações de experiência
+                        </span>
+                        {probationV2?.schedule?.totalDays ? (
+                          <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-400">
+                            {probationV2.schedule.totalDays}d
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 block text-[11.5px] font-semibold text-slate-400">Liderança</span>
+                    </span>
+                  </button>
+                );
+              })()}
+              {(() => {
+                const trainingState = trainingItems.length === 0
+                  ? 'pending'
+                  : trainingDoneCount === trainingItems.length
+                    ? 'done'
+                    : 'active';
+                const isActivePhase = isTrainingPhase;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setPhaseId('training')}
+                    className={`flex w-full gap-3 rounded-xl px-2.5 py-2 text-left transition ${
+                      isActivePhase ? 'bg-white shadow-sm' : 'hover:bg-white/70'
+                    }`}
+                  >
+                    <span className="flex flex-col items-center">
+                      <span className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border text-[11px] font-black ${
+                        trainingState === 'done'
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : trainingState === 'active'
+                            ? 'border-pink-600 bg-pink-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-400'
+                      }`}>
+                        {trainingState === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <GraduationCap className="h-3.5 w-3.5" />}
+                      </span>
+                    </span>
+                    <span className="min-w-0 flex-1 pb-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className={`text-[13px] font-black ${
+                          isActivePhase ? 'text-pink-600' : trainingState === 'done' ? 'text-slate-700' : 'text-slate-400'
+                        }`}>
+                          Treinamento
+                        </span>
+                        {trainingItems.length > 0 && (
+                          <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-400">
+                            {trainingDoneCount}/{trainingItems.length}
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block text-[11.5px] font-semibold text-slate-400">Liderança</span>
+                    </span>
+                  </button>
+                );
+              })()}
+            </div>
           </aside>
 
           {/* phase panel */}
@@ -8943,6 +9144,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     : activeKind === 'integracao' ? 'Acessos'
                     : activeKind === 'assinatura' ? 'Assinatura'
                     : activeKind === 'experiencia' ? 'Experiência'
+                    : activeKind === 'training' ? 'Experiência'
                     : 'Etapa'}
                 </span>
                 <h3 className="mt-1 text-lg font-black tracking-tight text-slate-900">{activeStage?.label ?? 'Etapa'}</h3>
@@ -9755,8 +9957,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               </div>
             )}
 
-            {/* GENERICO / EXPERIENCIA */}
-            {(activeKind === 'generico' || activeKind === 'experiencia') && (
+            {/* GENERICO */}
+            {activeKind === 'generico' && (
               <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-5 py-[18px]">
                 <div className="flex items-center gap-2.5">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-600">
@@ -9765,6 +9967,42 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <div className="text-sm font-black text-slate-900">{genericStatus}</div>
                 </div>
                 <p className="mt-3 text-[13px] font-medium leading-relaxed text-slate-500">{genericDesc}</p>
+              </div>
+            )}
+
+            {/* EXPERIENCIA (avaliações de experiência + efetivação) */}
+            {activeKind === 'experiencia' && (
+              selectedProcess.probationV2 ? (
+                <div className="mt-4">
+                  <ProbationV2Panel
+                    process={selectedProcess}
+                    getToken={getToken}
+                    canManage={canManage}
+                    onRefresh={onRefresh}
+                  />
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-5 py-[18px]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-600">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </span>
+                    <div className="text-sm font-black text-slate-900">{genericStatus}</div>
+                  </div>
+                  <p className="mt-3 text-[13px] font-medium leading-relaxed text-slate-500">{genericDesc}</p>
+                </div>
+              )
+            )}
+
+            {/* TREINAMENTO */}
+            {activeKind === 'training' && (
+              <div className="mt-4 rounded-2xl border border-slate-100 bg-white">
+                <TrainingPanel
+                  process={selectedProcess}
+                  getToken={getToken}
+                  canManage={canManage}
+                  onRefresh={onRefresh}
+                />
               </div>
             )}
           </div>

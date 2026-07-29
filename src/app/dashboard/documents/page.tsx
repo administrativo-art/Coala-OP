@@ -7,12 +7,23 @@ import { hasFormalizationPermission, type FormalizationAction } from "@/lib/hr-f
 
 const destinations = [
   {
+    title: "Gestão de documentos",
+    description: "Acesse separadamente os modelos e o gerador de documentos avulsos.",
+    href: "/dashboard/documents/management",
+    icon: FileStack,
+    tone: "bg-violet-50 text-violet-700",
+    permissions: [
+      "templates.view",
+      "documents.generate",
+    ] as FormalizationAction[],
+  },
+  {
     title: "Documentos da empresa",
     description: "Contratos, licenças, certidões e arquivos institucionais.",
     href: "/dashboard/documents/company",
     icon: Building2,
     tone: "bg-teal-50 text-teal-700",
-    permission: "companyDocuments.view" as FormalizationAction,
+    permissions: ["companyDocuments.view"] as FormalizationAction[],
   },
   {
     title: "Documentos dos colaboradores",
@@ -20,30 +31,24 @@ const destinations = [
     href: "/dashboard/documents/collaborators",
     icon: Users,
     tone: "bg-sky-50 text-sky-700",
-    permission: "documents.view" as FormalizationAction,
+    permissions: ["documents.view"] as FormalizationAction[],
   },
   {
-    title: "Modelos",
-    description: "Modelos de contratos, termos e documentos internos.",
-    href: "/dashboard/documents/templates",
-    icon: FileStack,
-    tone: "bg-violet-50 text-violet-700",
-    permission: "templates.view" as FormalizationAction,
-  },
-  {
-    title: "Documentos gerados",
-    description: "Prévias em conferência e documentos finalizados a partir de modelos.",
+    title: "Central de documentos",
+    description: "Fila, conferência, auditoria e trilha de assinatura dos documentos.",
     href: "/dashboard/documents/generated",
     icon: FilePlus2,
     tone: "bg-amber-50 text-amber-700",
-    permission: "documents.view" as FormalizationAction,
+    permissions: ["documents.view"] as FormalizationAction[],
   },
 ];
 
 export default function DocumentsPage() {
   const { permissions } = useAuth();
-  const visibleDestinations = destinations.filter(({ permission }) =>
-    hasFormalizationPermission(permissions, permission)
+  const visibleDestinations = destinations.filter(({ permissions: required }) =>
+    required.some((permission) =>
+      hasFormalizationPermission(permissions, permission)
+    )
   );
   return (
     <div className="space-y-4">
@@ -51,7 +56,7 @@ export default function DocumentsPage() {
         <p className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Gestão documental</p>
         <h1 className="text-xl font-black text-slate-950">Documentos</h1>
       </header>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {visibleDestinations.map(({ title, description, href, icon: Icon, tone }) => (
           <Link
             key={href}

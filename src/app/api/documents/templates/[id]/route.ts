@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 import {
   normalizeFieldMapping,
   pendingPlaceholders,
   suggestSystemKey,
 } from "@/features/hr/documents/field-mapping";
+import { validateDocxForLetterhead } from "@/features/hr/documents/docx-template-validation";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
-import { dbAdmin } from "@/lib/firebase-admin";
+import { adminApp, dbAdmin } from "@/lib/firebase-admin";
+import { firebaseClientConfig } from "@/lib/firebase-client-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,8 +86,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (body.status !== undefined) {
       if (body.status !== "draft" && body.status !== "published") return error("Status inválido.");
       if (body.status === "published") {
-        if (typeof document.get("storagePath") !== "string") return error("Envie o arquivo DOCX antes de publicar.");
+        const storagePath = document.get("storagePath");
+        if (typeof storagePath !== "string") return error("Envie o arquivo DOCX antes de publicar.");
         if (pending.length) return error(`Defina a origem destes campos antes de publicar: ${pending.join(", ")}.`);
+        let validation = document.get("templateValidation") as ReturnType<typeof validateDocxForLetterhead> | undefined;
+        if (!validation || typeof validation.valid !== "boolean") {
+          const [source] = await getStorage(adminApp)
+            .bucket(firebaseClientConfig.storageBucket)
+            .file(storagePath)
+            .download();
+          validation = validateDocxForLetterhead(source);
+          update.templateValidation = validation;
+          update.letterheadProfileId = validation.profileId;
+        }
+        if (!validation.valid) {
+          return error(
+            `O modelo não respeita a área segura do papel timbrado: ${validation.issues.map((issue) => issue.message).join(" ")}`,
+          );
+        }
       }
       update.status = body.status;
     }

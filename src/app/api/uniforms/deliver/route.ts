@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import {
+  archiveUniformTermInEmployeeDossier,
+  createAndStoreUniformTerm,
+  deleteStoredUniformTerm,
+  isUniformTransactionId,
+  parseUniformSignature,
+} from "@/features/uniforms/term.server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { UNIFORM_STOCK_ID, UNIFORM_STOCK_NAME } from "@/lib/uniform";
@@ -11,6 +18,7 @@ import type {
   UniformAssignment,
   UniformCondition,
   UniformEvent,
+  UniformTransaction,
 } from "@/types";
 
 export const runtime = "nodejs";
@@ -36,6 +44,13 @@ function getUniformCareInstructions(
   return hasSteps ? primary : fallback;
 }
 
+function maskedDocument(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 11) return `***.${digits.slice(3, 6)}.***-${digits.slice(-2)}`;
+  if (digits.length === 14) return `${digits.slice(0, 2)}.***.***/****-${digits.slice(-2)}`;
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const context = await requireUser(request);
@@ -52,26 +67,86 @@ export async function POST(request: NextRequest) {
     const quantity = Number(body.quantity);
     const occurredAt = normalizeDate(body.occurredAt);
     const notes = String(body.notes ?? "").trim() || undefined;
+    const transactionId = body.transactionId;
+    const collaboratorSignature = parseUniformSignature(body.collaboratorSignature, "colaborador");
+    const responsibleSignature = parseUniformSignature(body.responsibleSignature, "responsável");
 
-    if (!lotId || !collaboratorUserId || !Number.isInteger(quantity) || quantity <= 0 || !occurredAt) {
+    if (
+      !lotId ||
+      !collaboratorUserId ||
+      !Number.isInteger(quantity) ||
+      quantity <= 0 ||
+      !occurredAt ||
+      !isUniformTransactionId(transactionId)
+    ) {
       return NextResponse.json(
-        { error: "Lote, colaborador, quantidade inteira positiva e data são obrigatórios." },
+        { error: "Lote, colaborador, quantidade, data e protocolo são obrigatórios." },
         { status: 400 },
       );
     }
 
+    const transactionRef = dbAdmin.collection("uniformTransactions").doc(transactionId);
+    const existingTransaction = await transactionRef.get();
+    if (existingTransaction.exists) {
+      const existing = { id: existingTransaction.id, ...existingTransaction.data() } as UniformTransaction;
+      const assignmentId = existing.assignmentIds[0];
+      const assignmentSnapshot = assignmentId
+        ? await dbAdmin.collection("uniformAssignments").doc(assignmentId).get()
+        : null;
+      return NextResponse.json({
+        transaction: existing,
+        assignment: assignmentSnapshot?.exists ? { id: assignmentSnapshot.id, ...assignmentSnapshot.data() } : null,
+      });
+    }
+
     const lotRef = dbAdmin.collection("lots").doc(lotId);
     const collaboratorRef = dbAdmin.collection("users").doc(collaboratorUserId);
-    const movementRef = dbAdmin.collection("movementHistory").doc();
-    const eventRef = dbAdmin.collection("uniformEvents").doc();
-    const assignmentRef = dbAdmin.collection("uniformAssignments").doc(eventRef.id);
+    const movementRef = dbAdmin.collection("movementHistory").doc(`${transactionId}_delivery`);
+    const eventRef = dbAdmin.collection("uniformEvents").doc(`${transactionId}_delivery`);
+    const assignmentRef = dbAdmin.collection("uniformAssignments").doc(`${transactionId}_delivery`);
     const now = new Date().toISOString();
+    const [lotPreview, collaboratorPreview] = await Promise.all([lotRef.get(), collaboratorRef.get()]);
+    if (!lotPreview.exists) throw new Error("Lote de uniforme não encontrado.");
+    if (!collaboratorPreview.exists) throw new Error("Colaborador não encontrado.");
+    const lotPreviewData = { id: lotPreview.id, ...lotPreview.data() } as LotEntry;
+    const collaboratorPreviewData = collaboratorPreview.data() ?? {};
+    const responsibleName = String(context.userDoc.username ?? "Responsável/RH");
+    const collaboratorName = String(collaboratorPreviewData.username ?? collaboratorPreviewData.name ?? "Colaborador");
+    const signedAt = now;
+    const storedTerm = await createAndStoreUniformTerm({
+      transactionId,
+      type: "delivery",
+      collaboratorUserId,
+      collaboratorName,
+      collaboratorDocument: maskedDocument(collaboratorPreviewData.cpf ?? collaboratorPreviewData.document),
+      registeredByName: responsibleName,
+      occurredAt,
+      outgoingItems: [{
+        productName: String(lotPreviewData.productName ?? "Uniforme"),
+        quantity,
+        condition: String(lotPreviewData.condition ?? "novo"),
+        apparelType: lotPreviewData.apparelType,
+        apparelSize: lotPreviewData.apparelSize,
+        apparelColor: lotPreviewData.apparelColor,
+      }],
+      incomingItems: [],
+      notes,
+      collaboratorSignature: collaboratorSignature.dataUrl,
+      responsibleSignature: responsibleSignature.dataUrl,
+      signedAt,
+    });
 
-    const assignment = await dbAdmin.runTransaction(async (tx) => {
-      const [lotSnap, collaboratorSnap] = await Promise.all([
-        tx.get(lotRef),
-        tx.get(collaboratorRef),
-      ]);
+    let assignment: UniformAssignment;
+    try {
+      assignment = await dbAdmin.runTransaction(async (tx) => {
+        const [lotSnap, collaboratorSnap, transactionSnap] = await Promise.all([
+          tx.get(lotRef),
+          tx.get(collaboratorRef),
+          tx.get(transactionRef),
+        ]);
+        if (transactionSnap.exists) {
+          throw new Error("Esta movimentação já foi registrada.");
+        }
       if (!lotSnap.exists) throw new Error("Lote de uniforme não encontrado.");
       if (!collaboratorSnap.exists) throw new Error("Colaborador não encontrado.");
 
@@ -151,6 +226,11 @@ export async function POST(request: NextRequest) {
         registeredByUserId: context.userDoc.id,
         registeredByUserName: context.userDoc.username,
         notes,
+        uniformTransactionId: transactionId,
+        termDocumentId: storedTerm.documentId,
+        termStoragePath: storedTerm.storagePath,
+        termContentHash: storedTerm.contentHash,
+        signatureStatus: "signed",
         createdAt: now,
         updatedAt: now,
       };
@@ -174,6 +254,51 @@ export async function POST(request: NextRequest) {
         apparelColor,
         uniformCareInstructions,
         imageUrl,
+        deliveryTransactionId: transactionId,
+        deliveryTermDocumentId: storedTerm.documentId,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const transaction: Omit<UniformTransaction, "id"> = {
+        workspaceId: WORKSPACE_ID,
+        type: "delivery",
+        status: "signed_committed",
+        collaboratorUserId,
+        collaboratorName,
+        occurredAt,
+        notes,
+        items: [{
+          direction: "outgoing",
+          assignmentId: assignmentRef.id,
+          lotId,
+          productId: lot.productId,
+          productName: lot.productName,
+          quantity,
+          condition: issuedCondition,
+          apparelType,
+          apparelSize,
+          apparelColor,
+        }],
+        eventIds: [eventRef.id],
+        movementIds: [movementRef.id],
+        assignmentIds: [assignmentRef.id],
+        signatures: {
+          collaborator: { name: collaboratorName, imageHash: collaboratorSignature.imageHash, capturedAt: signedAt },
+          responsible: { name: responsibleName, userId: context.userDoc.id, imageHash: responsibleSignature.imageHash, capturedAt: signedAt },
+        },
+        term: {
+          documentId: storedTerm.documentId,
+          templateId: storedTerm.templateId,
+          fileName: storedTerm.fileName,
+          storagePath: storedTerm.storagePath,
+          contentHash: storedTerm.contentHash,
+          mimeType: "application/pdf",
+          size: storedTerm.size,
+          archiveStatus: "pending",
+        },
+        registeredByUserId: context.userDoc.id,
+        registeredByUserName: responsibleName,
         createdAt: now,
         updatedAt: now,
       };
@@ -185,11 +310,43 @@ export async function POST(request: NextRequest) {
       tx.set(movementRef, pruneUndefined(movement));
       tx.set(eventRef, pruneUndefined(event));
       tx.set(assignmentRef, pruneUndefined(assignmentData));
+      tx.set(transactionRef, pruneUndefined(transaction));
 
       return { id: assignmentRef.id, ...assignmentData };
-    });
+      });
+    } catch (error) {
+      const committed = await transactionRef.get().catch(() => null);
+      if (!committed?.exists) {
+        await deleteStoredUniformTerm(storedTerm.storagePath).catch(() => undefined);
+      }
+      throw error;
+    }
 
-    return NextResponse.json({ assignment }, { status: 201 });
+    try {
+      await archiveUniformTermInEmployeeDossier({
+        transactionId,
+        type: "delivery",
+        collaboratorUserId,
+        collaboratorName,
+        occurredAt,
+        registeredByUserId: context.userDoc.id,
+        registeredByName: responsibleName,
+        fileName: storedTerm.fileName,
+        storagePath: storedTerm.storagePath,
+        storageSubfolder: storedTerm.storageSubfolder,
+        contentHash: storedTerm.contentHash,
+        size: storedTerm.size,
+        signedAt,
+      });
+      await transactionRef.set({ "term.archiveStatus": "archived", updatedAt: new Date().toISOString() }, { merge: true });
+    } catch {
+      await transactionRef.set({ "term.archiveStatus": "failed", updatedAt: new Date().toISOString() }, { merge: true });
+    }
+
+    return NextResponse.json({
+      assignment,
+      transaction: { id: transactionId, termDocumentId: storedTerm.documentId },
+    }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Falha ao entregar uniforme." },

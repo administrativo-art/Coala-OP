@@ -37,31 +37,28 @@ export function RegistrationCatalog({ defaultTab = 'base' }: { defaultTab?: Regi
 
   return (
     <PermissionGuard allowed={permissions.registration.view}>
-      <div className="-m-4 min-h-[calc(100vh-4rem)] bg-[#f5f0e8] text-[#281f1a] sm:-m-6">
-        <div className="mx-auto w-full max-w-[1540px] px-5 pb-16 pt-8 sm:px-8 lg:px-12 lg:pt-12">
-          <div className="flex items-center gap-2 text-sm font-medium uppercase tracking-[0.12em] text-[#a49990]">
+      <div className="space-y-3 text-[#281f1a]">
+          <section className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-2.5">
             <BackButton
               fallbackHref="/dashboard/settings?department=operacional&tab=cadastros"
-              variant="ghost"
+              variant="outline"
               iconOnly
-              className="h-8 w-8 rounded-full text-[#a49990] hover:bg-[#ebe2d7] hover:text-[#a6325b]"
+              className="h-9 w-9 shrink-0 rounded-lg bg-white text-[#777784]"
               ariaLabel="Voltar para configurações"
             />
-            <span>Operacional</span>
-            <span>/</span>
-            <span className="text-[#a6325b]">Cadastros</span>
-          </div>
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#fde5f0] text-[#a6325b]">
+                <Box className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-extrabold uppercase tracking-[.12em] text-[#a6325b]">Configurações</p>
+                <h1 className="text-lg font-black tracking-[-.02em] text-[#181820]">Cadastros</h1>
+                <p className="text-[11px] font-medium text-[#777784]">Insumos e diretório de pessoas e empresas.</p>
+              </div>
+            </div>
+          </section>
 
-          <div className="mt-5">
-            <h1 className="text-5xl font-black tracking-[-0.055em] text-[#211814] sm:text-6xl">
-              Cadastros
-            </h1>
-            <p className="mt-3 max-w-4xl text-lg leading-relaxed text-[#746961] sm:text-xl">
-              Catálogo de insumos e diretório de pessoas — a base de compras, ficha técnica e contagem de estoque.
-            </p>
-          </div>
-
-          <div className="mt-10 grid border-b border-[#ded3c5] sm:grid-cols-3">
+          <div className="grid gap-1 rounded-xl border border-[#e2e0da] bg-white p-1.5 shadow-[0_2px_8px_rgba(15,23,42,.05)] sm:grid-cols-3">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const selected = activeTab === tab.id;
@@ -71,32 +68,30 @@ export function RegistrationCatalog({ defaultTab = 'base' }: { defaultTab?: Regi
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'relative flex min-h-24 items-center justify-center gap-4 px-4 py-5 text-left text-lg font-bold text-[#746961] transition-colors',
-                    selected && 'text-[#211814]',
+                    'flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-left text-xs font-extrabold text-[#777784] transition-colors hover:bg-[#f7f6f3]',
+                    selected && 'bg-[#fdeaf2] text-[#a6325b] hover:bg-[#fdeaf2]',
                   )}
                 >
-                  <Icon className={cn('h-6 w-6 text-[#a79c93]', selected && 'text-[#a6325b]')} />
-                  <span className="max-w-40 leading-tight">{tab.label}</span>
+                  <Icon className={cn('h-4 w-4 text-[#9d9da9]', selected && 'text-[#a6325b]')} />
+                  <span className="truncate">{tab.label}</span>
                   <span
                     className={cn(
-                      'rounded-full bg-[#e6e0d8] px-3 py-1 text-sm font-bold text-[#746961]',
-                      selected && 'bg-[#a6325b] text-white',
+                      'rounded-full bg-[#efefef] px-2 py-0.5 text-[10px] font-black text-[#777784]',
+                      selected && 'bg-white text-[#a6325b]',
                     )}
                   >
                     {counts[tab.id]}
                   </span>
-                  {selected && <span className="absolute inset-x-4 -bottom-px h-1 rounded-full bg-[#a6325b]" />}
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-10">
+          <div>
             {activeTab === 'base' && <BaseProductManagement />}
             {activeTab === 'derived' && <ItemManagement />}
             {activeTab === 'entities' && <EntityManagement />}
           </div>
-        </div>
       </div>
     </PermissionGuard>
   );

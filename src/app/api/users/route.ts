@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
 import { EMAIL_SENDERS, sendEmail } from "@/lib/email/resend";
-import { renderCoalaEmail } from "@/lib/email/template";
+import { renderFirstAccessEmail } from "@/lib/email/first-access-template";
 import { createFirstAccessLink } from "@/lib/first-access-links";
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { isEmploymentRelationshipType } from "@/lib/hr/employment-relationship";
@@ -176,12 +176,9 @@ export async function POST(request: NextRequest) {
         from: EMAIL_SENDERS.access,
         to: email,
         subject,
-        html: renderCoalaEmail({
-          brandName: "Coala One",
-          title: "Seu acesso ao Coala One foi criado",
-          message: `Olá, ${username}. Seu cadastro inicial foi criado. Use o botão abaixo para definir sua senha de acesso. O link é individual e expira em 7 dias.`,
-          action: { label: "Definir minha senha", url: firstAccess.url },
-          secondaryAction: { label: "Acessar o Coala One", url: SYSTEM_URL },
+        html: renderFirstAccessEmail({
+          userName: username,
+          actionUrl: firstAccess.url,
         }),
         text: `Seu acesso ao Coala One foi criado\n\nOlá, ${username}. Use este link individual para definir sua senha: ${firstAccess.url}\n\nO link expira em 7 dias.\n\nEssa é uma mensagem automática, não responda este e-mail.`,
       });

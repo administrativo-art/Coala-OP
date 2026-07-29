@@ -1,5 +1,6 @@
 import { dbAdmin } from "@/lib/firebase-admin";
 import type { ServerUserContext } from "@/lib/auth-server";
+import { buildCollaboratorSchedulePayload } from "@/features/collaborator-schedule/server";
 
 function compactUnique(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0)));
@@ -13,14 +14,6 @@ function serializeValue(value: unknown): unknown {
   }
   if (Array.isArray(value)) return value.map(serializeValue);
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, serializeValue(entry)]));
-}
-
-function normalizeIdentity(value: string | null | undefined) {
-  return (value ?? "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
 }
 
 function dateKeyFromTimestamp(value: unknown) {
@@ -43,34 +36,22 @@ export async function buildCollaboratorDashboardPayload(access: ServerUserContex
   const user = access.userDoc;
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
-  const start = `${year}-${String(month).padStart(2, "0")}-01`;
-  const endDate = new Date(year, month, 0);
-  const end = `${year}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
-
-  const userIds = compactUnique([access.decoded.uid, user.id, user.registrationIdBizneo, user.registrationIdPdv]);
-  const userNames = compactUnique([user.username, user.email]).map(normalizeIdentity);
-
-  const schedulesSnap = await dbAdmin
-    .collection("dp_schedules")
-    .where("year", "==", year)
-    .where("month", "==", month)
-    .get();
-
-  const shiftsNested = await Promise.all(
-    schedulesSnap.docs.map(async (scheduleDoc) => {
-      const schedule = { id: scheduleDoc.id, ...scheduleDoc.data() } as Record<string, any>;
-      const snapshotMatchedUserIds = Object.entries(schedule.snapshot?.users ?? {})
-        .filter(([, snapshotUser]) => userNames.includes(normalizeIdentity((snapshotUser as any)?.username)))
-        .map(([id]) => id);
-      const acceptedIds = new Set([...userIds, ...snapshotMatchedUserIds]);
-
-      const shiftsSnap = await scheduleDoc.ref.collection("shifts").get();
-      return shiftsSnap.docs
-        .map((doc) => ({ id: doc.id, scheduleId: scheduleDoc.id, ...doc.data() }))
-        .filter((shift: any) => acceptedIds.has(String(shift.userId)) && shift.date >= start && shift.date <= end);
-    })
+  const pdvAccessIds = Array.isArray(user.pdvAccesses)
+    ? user.pdvAccesses.map((entry) => entry.externalUserId)
+    : [];
+  const userIds = compactUnique([
+    access.decoded.uid,
+    user.id,
+    user.registrationIdBizneo,
+    user.registrationIdPdv,
+    ...pdvAccessIds,
+  ]);
+  const schedulePayload = await buildCollaboratorSchedulePayload(
+    access,
+    year,
+    month
   );
-  const visibleShifts = shiftsNested.flat();
+  const visibleShifts = schedulePayload.shifts;
 
   const activePeriodsSnap = await dbAdmin.collection("goalPeriods").where("status", "==", "active").get();
   const activePeriods = activePeriodsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Record<string, any>));

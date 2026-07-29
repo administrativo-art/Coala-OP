@@ -29,8 +29,15 @@ test("feriado no vencimento prorroga ao próximo dia útil", () => {
 
 test("progresso considera somente etapas obrigatórias concluídas ou dispensadas", () => {
   const initial = createInitialTerminationSteps("2026-07-22T12:00:00.000Z");
-  const signed = patchStep(initial, "identity_signature", { status: "completed" });
-  assert.equal(calculateTerminationProgress(signed), 18);
+  const firstPhaseCompleted = patchStep(initial, "request_validation_notice", { status: "completed" });
+  assert.equal(calculateTerminationProgress(firstPhaseCompleted), 10);
+});
+
+test("devolução de uniformes é a segunda etapa obrigatória", () => {
+  const steps = createInitialTerminationSteps("2026-07-22T12:00:00.000Z");
+  assert.equal(steps[0]?.id, "request_validation_notice");
+  assert.equal(steps[1]?.id, "uniform_return");
+  assert.equal(steps[1]?.required, true);
 });
 
 function processFixture(overrides: Partial<CltTerminationProcess> = {}): CltTerminationProcess {

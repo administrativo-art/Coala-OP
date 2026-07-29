@@ -18,12 +18,16 @@ type SignatureCaptureModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSignatureCaptured: (dataUrl: string) => void;
+  title?: string;
+  description?: string;
 };
 
 export function SignatureCaptureModal({
   open,
   onOpenChange,
   onSignatureCaptured,
+  title = "Capturar assinatura",
+  description = "Assine na área abaixo para anexar à execução.",
 }: SignatureCaptureModalProps) {
   const signatureRef = useRef<SignatureCanvas | null>(null);
 
@@ -49,9 +53,9 @@ export function SignatureCaptureModal({
               <PenLine className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle>Capturar assinatura</DialogTitle>
+              <DialogTitle>{title}</DialogTitle>
               <DialogDescription>
-                Assine na área abaixo para anexar à execução.
+                {description}
               </DialogDescription>
             </div>
           </div>

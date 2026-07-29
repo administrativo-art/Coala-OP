@@ -3,6 +3,11 @@ import {
   formatDocumentVariableValue,
   isDocumentVariableKey,
 } from "@/features/hr/integration/document-variables";
+import {
+  DOCUMENT_OUTPUT_FORMATTERS,
+  formatDocumentOutput,
+  type DocumentOutputFormatter,
+} from "@/features/hr/documents/document-output-formatters";
 
 /** Sub-chaves usadas dentro de loops repetíveis (ex.: filhos) — válidas sem mapeamento. */
 export const LEGACY_LOOP_KEYS = ["name", "cpf", "birth_date", "relation"] as const;
@@ -28,7 +33,11 @@ export const MANUAL_FIELD_FORMAT_LABELS: Record<ManualFieldFormat, string> = {
   select: "Lista de opções",
 };
 
-export type SystemFieldBinding = { kind: "system"; key: string };
+export type SystemFieldBinding = {
+  kind: "system";
+  key: string;
+  formatter?: DocumentOutputFormatter;
+};
 export type ManualFieldBinding = {
   kind: "manual";
   label: string;
@@ -55,7 +64,14 @@ export function normalizeFieldMapping(input: unknown, variables: string[]): Temp
     if (!known.has(placeholder) || !isRecord(raw)) continue;
     if (raw.kind === "system") {
       if (typeof raw.key === "string" && isDocumentVariableKey(raw.key)) {
-        mapping[placeholder] = { kind: "system", key: raw.key };
+        const formatter = DOCUMENT_OUTPUT_FORMATTERS.includes(raw.formatter as DocumentOutputFormatter)
+          ? raw.formatter as DocumentOutputFormatter
+          : undefined;
+        mapping[placeholder] = {
+          kind: "system",
+          key: raw.key,
+          ...(formatter && formatter !== "source" ? { formatter } : {}),
+        };
       }
       continue;
     }
@@ -177,6 +193,7 @@ export type ApplyFieldMappingResult = {
 export function applyFieldMapping(params: {
   data: Record<string, unknown>;
   flat: Record<string, unknown>;
+  rawFlat?: Record<string, unknown>;
   mapping: TemplateFieldMapping;
   manualValues?: Record<string, unknown>;
 }): ApplyFieldMappingResult {
@@ -184,7 +201,16 @@ export function applyFieldMapping(params: {
   const missingManual: string[] = [];
   for (const [placeholder, binding] of Object.entries(params.mapping)) {
     if (binding.kind === "system") {
-      setPath(data, placeholder, params.flat[binding.key] ?? "");
+      const sourceValue = binding.formatter
+        ? params.rawFlat?.[binding.key] ?? params.flat[binding.key]
+        : params.flat[binding.key];
+      setPath(
+        data,
+        placeholder,
+        binding.formatter
+          ? formatDocumentOutput(sourceValue, binding.formatter)
+          : sourceValue ?? "",
+      );
       continue;
     }
     const raw = params.manualValues?.[placeholder] ?? binding.defaultValue;

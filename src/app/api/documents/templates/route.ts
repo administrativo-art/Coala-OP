@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 
+import { SYSTEM_DOCUMENT_TEMPLATES } from "@/features/hr/documents/system-template-catalog";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { dbAdmin } from "@/lib/firebase-admin";
 
@@ -25,9 +26,10 @@ export async function GET(request: NextRequest) {
   try {
     await assertFormalizationAccess(request, "templates.view");
     const snap = await dbAdmin.collection(COLLECTION).get();
-    const templates = snap.docs
+    const storedTemplates = snap.docs
       .filter((doc) => !doc.get("deletedAt"))
-      .map((doc): Record<string, unknown> & { id: string } => ({ id: doc.id, ...serializedObject(doc.data()) }))
+      .map((doc): Record<string, unknown> & { id: string } => ({ id: doc.id, ...serializedObject(doc.data()) }));
+    const templates = [...SYSTEM_DOCUMENT_TEMPLATES, ...storedTemplates]
       .sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")));
     return NextResponse.json({ templates });
   } catch (cause) {
@@ -51,6 +53,9 @@ export async function POST(request: NextRequest) {
       version: 1,
       content: null,
       variables: [],
+      letterheadProfileId: "coala-letterhead-v2",
+      retentionPolicyId: "employment_plus_5y",
+      signatureScope: "none",
       createdBy: access.decoded.uid,
       createdByName: access.actorName,
       createdAt: now,

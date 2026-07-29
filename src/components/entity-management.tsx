@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Plus, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser, Upload, Check, ChevronLeft, ChevronRight, MapPinned, MoreHorizontal, Tags, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Edit, Building, User, Phone, Mail, MapPin, Search, Eraser, Upload, Check, ChevronLeft, ChevronRight, MapPinned, MoreHorizontal, Tags, RefreshCw, Loader2, AlertTriangle, Stethoscope } from 'lucide-react';
 import { type Entity } from '@/types';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import type { CompanyLookupResponse, NormalizedCompanyData } from '@/lib/company/company-lookup-types';
@@ -29,6 +29,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { AsoClinicEntityDialog } from '@/features/hr/aso/aso-clinics-management';
+import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 
 const entitySchema = z.object({
   type: z.enum(['pessoa_fisica', 'pessoa_juridica']),
@@ -829,11 +831,38 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
 
 export function EntityManagement() {
   const { entities, loading, deleteEntity } = useEntities();
+  const { firebaseUser, permissions } = useAuth();
   const [entityToDelete, setEntityToDelete] = useState<Entity | null>(null);
   const [entityToEdit, setEntityToEdit] = useState<Entity | null>(null);
+  const [asoEntity, setAsoEntity] = useState<Entity | null>(null);
+  const [asoClinicStatuses, setAsoClinicStatuses] = useState<Record<string, { active: boolean }>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
+  const canViewAsoClinics = hasFormalizationPermission(permissions, 'aso.view');
+  const canManageAsoClinics = hasFormalizationPermission(permissions, 'aso.manage');
+
+  const loadAsoClinicStatuses = useCallback(async () => {
+    if (!firebaseUser || !canViewAsoClinics) {
+      setAsoClinicStatuses({});
+      return;
+    }
+    try {
+      const response = await fetch('/api/hr/aso-clinics', {
+        headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      setAsoClinicStatuses(Object.fromEntries(
+        (payload.clinics ?? []).map((clinic: { entityId: string; active: boolean }) => [clinic.entityId, { active: clinic.active }]),
+      ));
+    } catch {
+      // O diretório principal continua disponível mesmo se a extensão de ASO falhar.
+    }
+  }, [canViewAsoClinics, firebaseUser]);
+
+  useEffect(() => { void loadAsoClinicStatuses(); }, [loadAsoClinicStatuses]);
 
   const filteredEntities = useMemo(() => {
     return entities.filter(entity => {
@@ -874,45 +903,45 @@ export function EntityManagement() {
   return (
     <>
       <Card className="border-0 bg-transparent shadow-none">
-        <CardHeader className="px-0 pb-6 pt-0">
-          <CardTitle className="text-3xl font-black tracking-[-0.035em] text-[#281f1a] sm:text-4xl">
+        <CardHeader className="px-0 pb-3 pt-0">
+          <CardTitle className="text-lg font-black tracking-[-0.02em] text-[#181820]">
             Pessoas e empresas
           </CardTitle>
-          <CardDescription className="text-base text-[#756a62] sm:text-lg">
+          <CardDescription className="text-[11px] font-medium text-[#777784]">
             Colaboradores, fornecedores, sócios e clientes do sistema.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5 px-0">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-col gap-3 sm:flex-row">
+        <CardContent className="space-y-3 px-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-12 rounded-2xl border-[#dccbb8] bg-[#fffdf9] px-6 text-[#281f1a] hover:bg-white"
+                  className="h-8 rounded-lg border-[#e2e0da] bg-white px-3 text-[11px] font-extrabold text-[#494952]"
                 >
-                  <Tags className="mr-2 h-4 w-4" /> Categorias de cadastro
+                  <Tags className="mr-1.5 h-3.5 w-3.5" /> Categorias de cadastro
                 </Button>
-                <Button onClick={handleAddNew} className="h-12 rounded-2xl bg-[#a6325b] px-6 text-white hover:bg-[#8e294d]">
-                  <Plus className="mr-2 h-5 w-5" /> Adicionar cadastro
+                <Button onClick={handleAddNew} className="h-8 rounded-lg bg-[#df2f78] px-3 text-[11px] font-extrabold text-white hover:bg-[#cc2069]">
+                  <Plus className="mr-1.5 h-4 w-4" /> Adicionar cadastro
                 </Button>
               </div>
-              <p className="text-sm text-[#756a62]">
-                <strong className="text-[#281f1a]">{filteredEntities.length}</strong> de {entities.length}
+              <p className="text-[11px] font-bold text-[#777784]">
+                <strong className="text-[#494952]">{filteredEntities.length}</strong> de {entities.length}
               </p>
             </div>
 
             <div className="relative w-full">
-                    <Search className="absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#9e938b]" />
+                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9d9da9]" />
                     <Input
                         placeholder="Buscar por nome, CPF/CNPJ, e-mail..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-16 w-full rounded-2xl border-[#dccbb8] bg-[#fffdf9] pl-14 text-base shadow-none placeholder:text-[#8f847b]"
+                        className="h-8 w-full rounded-md border-0 bg-[#f6f5f2] pl-9 text-xs font-medium shadow-none placeholder:text-[#9d9da9]"
                     />
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="h-11 w-full rounded-full border-[#dccbb8] bg-[#fffdf9] sm:w-[220px]">
+                    <SelectTrigger className="h-8 w-full rounded-md border-[#e2e0da] bg-white text-[11px] font-bold text-[#494952] sm:w-[180px]">
                         <SelectValue placeholder="Filtrar por tipo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -921,22 +950,22 @@ export function EntityManagement() {
                         <SelectItem value="pessoa_juridica">Pessoa jurídica</SelectItem>
                     </SelectContent>
                 </Select>
-                <Button className="h-11 rounded-full text-[#756a62]" variant="ghost" onClick={() => { setSearchTerm(''); setTypeFilter('all'); }}>
-                    <Eraser className="mr-2 h-4 w-4" />
+                <Button className="h-8 rounded-md px-2.5 text-[11px] font-bold text-[#777784]" variant="ghost" onClick={() => { setSearchTerm(''); setTypeFilter('all'); }}>
+                    <Eraser className="mr-1.5 h-3.5 w-3.5" />
                     Limpar
                 </Button>
             </div>
            
-            <div className="overflow-x-auto rounded-[26px] border border-[#dccbb8] bg-[#fffdf9]">
+            <div className="overflow-x-auto rounded-xl border border-[#e2e0da] bg-white shadow-[0_2px_8px_rgba(15,23,42,.04)]">
                 <Table>
                     <TableHeader>
-                        <TableRow className="border-[#e6ddd3] hover:bg-transparent">
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Nome / Razão social</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Tipo</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Documento</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Contato</TableHead>
-                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Cidade/UF</TableHead>
-                            <TableHead className="w-24 text-right">Ações</TableHead>
+                        <TableRow className="h-10 border-[#ececf0] bg-[#fbfbfc] hover:bg-[#fbfbfc]">
+                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Nome / Razão social</TableHead>
+                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Tipo</TableHead>
+                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Documento</TableHead>
+                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Contato</TableHead>
+                            <TableHead className="text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Cidade/UF</TableHead>
+                            <TableHead className="w-20 text-right text-[10px] font-extrabold uppercase tracking-[.07em] text-[#9d9da9]">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -948,11 +977,11 @@ export function EntityManagement() {
                             ))
                         ) : filteredEntities.length > 0 ? (
                             filteredEntities.map(entity => (
-                                <TableRow key={entity.id} className="h-24 border-[#e6ddd3] hover:bg-[#faf6f0]">
+                                <TableRow key={entity.id} className="h-16 border-[#f2f2f5] hover:bg-[#fbfbfc]">
                                     <TableCell>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2.5">
                                             <div className={cn(
-                                              'flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-black text-white',
+                                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black text-white',
                                               entity.type === 'pessoa_juridica'
                                                 ? 'bg-gradient-to-br from-orange-500 to-amber-500'
                                                 : 'bg-gradient-to-br from-violet-500 to-blue-500',
@@ -964,9 +993,9 @@ export function EntityManagement() {
                                                   .join('')
                                                   .toUpperCase()}
                                             </div>
-                                            <div>
-                                                <p className="max-w-64 truncate font-bold text-[#281f1a]">{entity.fantasyName || entity.name}</p>
-                                                {entity.fantasyName ? <p className="text-xs text-muted-foreground">{entity.name}</p> : null}
+                                            <div className="min-w-0">
+                                                <p className="max-w-64 truncate text-sm font-extrabold text-[#1d1d26]">{entity.fantasyName || entity.name}</p>
+                                                {entity.fantasyName ? <p className="max-w-64 truncate text-[11px] font-medium text-[#a6a6b0]">{entity.name}</p> : null}
                                                 {entity.nickname ? (
                                                     <Badge variant="secondary" className="mt-1 rounded-md px-1.5 py-0 text-[10px] font-medium">
                                                         {entity.nickname}
@@ -977,10 +1006,20 @@ export function EntityManagement() {
                                                     Inativo
                                                   </Badge>
                                                 ) : null}
+                                                {asoClinicStatuses[entity.id] ? (
+                                                  <Badge variant="outline" className={cn(
+                                                    'ml-1 mt-1 rounded-md px-1.5 py-0 text-[10px] font-medium',
+                                                    asoClinicStatuses[entity.id].active
+                                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                                      : 'border-slate-200 bg-slate-50 text-slate-600',
+                                                  )}>
+                                                    Clínica ASO{asoClinicStatuses[entity.id].active ? '' : ' inativa'}
+                                                  </Badge>
+                                                ) : null}
                                             </div>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-sm">
+                                    <TableCell className="text-xs">
                                         <span className={cn(
                                           'inline-flex items-center gap-2 font-medium',
                                           entity.type === 'pessoa_juridica' ? 'text-orange-500' : 'text-indigo-500',
@@ -989,9 +1028,9 @@ export function EntityManagement() {
                                           {entity.type === 'pessoa_juridica' ? 'Empresa' : 'Pessoa física'}
                                         </span>
                                     </TableCell>
-                                    <TableCell className="font-mono text-sm text-[#756a62]">{entity.document}</TableCell>
+                                    <TableCell className="font-mono text-xs text-[#6f6f7c]">{entity.document}</TableCell>
                                     <TableCell>
-                                        <div className="space-y-1 text-xs text-muted-foreground">
+                                        <div className="space-y-0.5 text-[11px] text-[#777784]">
                                             {entity.contact?.email ? <p className="flex items-center gap-1"><Mail className="h-3 w-3" />{entity.contact.email}</p> : null}
                                             {entity.contact?.phone ? <p className="flex items-center gap-1"><Phone className="h-3 w-3" />{entity.contact.phone}</p> : null}
                                             {!entity.contact?.email && !entity.contact?.phone ? '-' : null}
@@ -999,7 +1038,7 @@ export function EntityManagement() {
                                     </TableCell>
                                     <TableCell>
                                         {entity.address?.city ? (
-                                            <span className="flex items-center gap-1 text-sm">
+                                            <span className="flex items-center gap-1 text-xs text-[#6f6f7c]">
                                                 <MapPin className="h-3 w-3 text-muted-foreground" />
                                                 {entity.address.city}{entity.address.state ? `/${entity.address.state}` : ''}
                                             </span>
@@ -1016,6 +1055,11 @@ export function EntityManagement() {
                                             <DropdownMenuItem onSelect={() => handleEdit(entity)}>
                                               <Edit className="mr-2 h-4 w-4" /> Editar
                                             </DropdownMenuItem>
+                                            {canManageAsoClinics ? (
+                                              <DropdownMenuItem onSelect={() => setAsoEntity(entity)}>
+                                                <Stethoscope className="mr-2 h-4 w-4" /> Serviços de saúde ocupacional
+                                              </DropdownMenuItem>
+                                            ) : null}
                                             <DropdownMenuSeparator />
                                             {entity.status !== 'inactive' ? (
                                               <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => handleDeleteClick(entity)}>
@@ -1044,6 +1088,15 @@ export function EntityManagement() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         entityToEdit={entityToEdit}
+      />
+
+      <AsoClinicEntityDialog
+        entity={asoEntity}
+        open={Boolean(asoEntity)}
+        onOpenChange={(nextOpen) => { if (!nextOpen) setAsoEntity(null); }}
+        onSaved={(clinic) => {
+          setAsoClinicStatuses((current) => ({ ...current, [clinic.entityId]: { active: clinic.active } }));
+        }}
       />
 
       {entityToDelete && (

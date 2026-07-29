@@ -8,6 +8,7 @@ import type {
   UniformReturnedCondition,
   UniformStockDisposition,
   UniformStockStatus,
+  UniformTransaction,
 } from "@/types";
 
 type FirebaseUserLike = {
@@ -77,9 +78,12 @@ export function deliverUniform(
     quantity: number;
     occurredAt: string;
     notes?: string;
+    transactionId: string;
+    collaboratorSignature: string;
+    responsibleSignature: string;
   },
 ) {
-  return authedJson<{ assignment: UniformAssignment }>(
+  return authedJson<{ assignment: UniformAssignment; transaction: Pick<UniformTransaction, "id"> & { termDocumentId?: string } }>(
     firebaseUser,
     "/api/uniforms/deliver",
     { method: "POST", body: JSON.stringify(input) },
@@ -95,11 +99,36 @@ export function returnUniform(
     returnedCondition: UniformReturnedCondition;
     stockDisposition: UniformStockDisposition;
     notes?: string;
+    transactionId: string;
+    collaboratorSignature: string;
+    responsibleSignature: string;
   },
 ) {
-  return authedJson<{ assignment: UniformAssignment }>(
+  return authedJson<{ assignment: UniformAssignment; transaction: Pick<UniformTransaction, "id"> & { termDocumentId?: string } }>(
     firebaseUser,
     "/api/uniforms/return",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function exchangeUniform(
+  firebaseUser: FirebaseUserLike,
+  input: {
+    assignmentId: string;
+    newLotId: string;
+    quantity: number;
+    occurredAt: string;
+    returnedCondition: UniformReturnedCondition;
+    stockDisposition: UniformStockDisposition;
+    notes?: string;
+    transactionId: string;
+    collaboratorSignature: string;
+    responsibleSignature: string;
+  },
+) {
+  return authedJson<{ assignment: UniformAssignment; transaction: Pick<UniformTransaction, "id"> & { termDocumentId?: string } }>(
+    firebaseUser,
+    "/api/uniforms/exchange",
     { method: "POST", body: JSON.stringify(input) },
   );
 }

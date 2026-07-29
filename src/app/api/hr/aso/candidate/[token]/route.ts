@@ -42,6 +42,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ to
   if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) return NextResponse.json({ error: 'Este link expirou. Solicite um novo link ao RH.' }, { status: 410 });
   return NextResponse.json({
     candidateName: text(process.candidateName, 240),
+    examType: process.asoExamType === 'dismissal' ? 'dismissal' : 'admission',
     uploadEnabled: uploadOpen(text(workflow.appointmentAt, 40)), uploadOpensOn: text(appointment.date, 10),
     alreadyUploaded: Boolean(text(record(workflow.asoDocument).storagePath, 1500)) && text(record(workflow.asoDocument).status, 30) !== 'rejected', expiresAt,
   });
@@ -65,10 +66,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   const storagePath = `hr/onboarding/${snapshot.id}/aso/returned/${randomUUID()}.${extension}`;
   await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, { resumable: false, metadata: { contentType: file.type, cacheControl: 'private, max-age=0, no-store', metadata: { onboardingId: snapshot.id, hashSha256 } } });
   const asoDocument = { fileName: file.name.slice(0, 240), storagePath, hashSha256, mimeType: file.type, size: file.size, uploadedAt: now, status: 'received', reviewedAt: null, reviewedBy: null, rejectionReason: null };
+  const examLabel = process.asoExamType === 'dismissal' ? 'demissional' : 'admissional';
   await Promise.all([
     snapshot.ref.set({ asoWorkflow: { ...workflow, status: 'aso_received', asoDocument, updatedAt: now }, asoCandidateTokenUsedAt: now, updatedAt: now }, { merge: true }),
     snapshot.ref.collection('asoEvents').doc(randomUUID()).set({ type: 'ASO_UPLOADED_BY_CANDIDATE', at: now, actorId: null, actorEmail: text(process.candidateEmail, 320) || null, fileName: asoDocument.fileName, hashSha256, size: file.size }),
-    hrDbAdmin.collection('hrNotifications').doc(`aso_received_${snapshot.id}_${hashSha256.slice(0, 16)}`).set({ type: 'aso_received', status: 'pending', onboardingId: snapshot.id, title: 'ASO recebido para conferência', message: `${text(process.candidateName, 240) || 'O candidato'} enviou o ASO admissional.`, channels: ['in_app'], recipient: { strategy: 'hr_pool' }, createdAt: now, updatedAt: now }),
+    hrDbAdmin.collection('hrNotifications').doc(`aso_received_${snapshot.id}_${hashSha256.slice(0, 16)}`).set({ type: 'aso_received', status: 'pending', onboardingId: snapshot.id, title: 'ASO recebido para conferência', message: `${text(process.candidateName, 240) || 'O colaborador'} enviou o ASO ${examLabel}.`, channels: ['in_app'], recipient: { strategy: 'hr_pool' }, createdAt: now, updatedAt: now }),
   ]);
   return NextResponse.json({ ok: true });
 }

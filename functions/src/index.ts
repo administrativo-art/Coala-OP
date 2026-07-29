@@ -610,6 +610,74 @@ export const cleanupExpiredEmployeeDocumentBatches = onSchedule({
   console.log(`[cleanupExpiredEmployeeDocumentBatches] ${expired.size} lote(s) e ${removedItems} item(ns) removidos.`);
 });
 
+// Reconcilia somente a âncora de retenção. Não exclui documentos: as políticas
+// jurídicas continuam pendentes e o descarte só poderá existir após aprovação.
+export const reconcileGeneratedDocumentRetention = onSchedule({
+  schedule: '30 3 * * *',
+  timeZone: BRT,
+  retryCount: 2,
+  memory: '256MiB',
+}, async () => {
+  const terminated = await db.collection('users')
+    .where('employmentStatus', '==', 'terminated')
+    .limit(100)
+    .get();
+  let updated = 0;
+  const unresolved: string[] = [];
+  for (const user of terminated.docs) {
+    const rawEndedAt = user.get('terminationDate');
+    const endedAt = typeof rawEndedAt === 'string'
+      ? rawEndedAt
+      : typeof rawEndedAt?.toDate === 'function'
+        ? rawEndedAt.toDate().toISOString()
+        : null;
+    if (!endedAt || Number.isNaN(new Date(endedAt).getTime())) {
+      unresolved.push(user.id);
+      continue;
+    }
+    const documents = await db.collection('generatedDocuments')
+      .where('employeeId', '==', user.id)
+      .get();
+    const targets = documents.docs.filter((document) =>
+      document.get('retentionAnchorType') === 'employment_end'
+      && !document.get('retentionUntil')
+    );
+    for (let offset = 0; offset < targets.length; offset += 200) {
+      const batch = db.batch();
+      targets.slice(offset, offset + 200).forEach((document) => {
+        const until = new Date(endedAt);
+        // Prazo provisório já registrado na versão da política. O job apenas
+        // materializa a data; nenhuma exclusão usa esta data enquanto o estado
+        // da política for pending_legal.
+        until.setUTCFullYear(until.getUTCFullYear() + 5);
+        const fields = {
+          retentionAnchorAt: endedAt,
+          retentionUntil: until.toISOString(),
+          retentionCalculatedAt: Timestamp.now(),
+          retentionCalculatedBy: 'system:scheduled-retention-reconciliation',
+        };
+        batch.set(document.ref, fields, { merge: true });
+        batch.set(document.ref.collection('audit').doc('resolvedValues'), fields, { merge: true });
+        updated += 1;
+      });
+      await batch.commit();
+    }
+  }
+  await db.collection('systemJobReports').doc('generated-document-retention-latest').set({
+    job: 'reconcileGeneratedDocumentRetention',
+    scannedEmployees: terminated.size,
+    updatedDocuments: updated,
+    unresolvedEmployeeIds: unresolved,
+    emptyReconciliation: unresolved.length === 0,
+    ranAt: Timestamp.now(),
+  });
+  console.log('[reconcileGeneratedDocumentRetention] Concluído.', {
+    scannedEmployees: terminated.size,
+    updatedDocuments: updated,
+    unresolved: unresolved.length,
+  });
+});
+
 export const syncBizneoUsersMonthly = onSchedule({
   schedule: '0 3 1 * *',
   timeZone: BRT,
@@ -745,26 +813,6 @@ const internalAppCors = [
   /localhost(:\d+)?$/,
 ];
 
-const CLT_TERMINATION_REASONS = new Set([
-  'Dispensa sem justa causa',
-  'Dispensa por justa causa',
-  'Pedido de demissão (resilição pelo empregado)',
-  'Rescisão indireta',
-  'Rescisão por culpa recíproca',
-  'Rescisão por acordo entre as partes',
-  'Extinção legal ou por motivo de ordem pública',
-]);
-
-const PJ_TERMINATION_REASONS = new Set([
-  'Encerramento por iniciativa da contratante',
-  'Encerramento por iniciativa do prestador',
-  'Encerramento por acordo entre as partes',
-  'Término do prazo contratual',
-  'Rescisão por descumprimento contratual',
-  'Encerramento das atividades do prestador',
-  'Força maior ou impossibilidade de execução',
-]);
-
 // --- Criar usuário (Auth + Firestore) server-side ---
 export const createUser = onCall(
   { cors: internalAppCors },
@@ -871,38 +919,18 @@ export const terminateUser = onCall(
       throw new HttpsError('permission-denied', 'Sem permissão para desligar usuários.');
     }
 
-    const { uid, inactivationType, terminationReason, terminationCause, terminationNotes, terminationDate } = request.data;
+    const { uid, inactivationType, terminationNotes } = request.data;
     if (!uid) throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
 
     const targetRef = db.collection('users').doc(uid);
     const targetSnapshot = await targetRef.get();
     if (!targetSnapshot.exists) throw new HttpsError('not-found', 'Usuário não encontrado.');
-    const employmentRelationshipType = targetSnapshot.get('employmentRelationshipType');
     const normalizedType = inactivationType === 'contract_termination' ? 'contract_termination' : 'temporary';
     if (normalizedType === 'contract_termination') {
-      if (employmentRelationshipType !== 'clt' && employmentRelationshipType !== 'pj') {
-        throw new HttpsError(
-          'failed-precondition',
-          employmentRelationshipType === 'internship'
-            ? 'O fluxo específico de desligamento de estágio ainda não está disponível.'
-            : 'Defina o tipo de vínculo antes de registrar o encerramento.'
-        );
-      }
-      const allowedReasons = employmentRelationshipType === 'pj'
-        ? PJ_TERMINATION_REASONS
-        : CLT_TERMINATION_REASONS;
-      if (!terminationReason || !allowedReasons.has(terminationReason)) {
-        throw new HttpsError('invalid-argument', 'Motivo de encerramento incompatível com o tipo de vínculo.');
-      }
-      if (employmentRelationshipType !== 'clt' && terminationCause) {
-        throw new HttpsError('invalid-argument', 'Subtipo de justa causa é aplicável somente ao vínculo CLT.');
-      }
-      if (employmentRelationshipType === 'clt' && terminationReason === 'Dispensa por justa causa' && !terminationCause) {
-        throw new HttpsError('invalid-argument', 'Selecione o subtipo da justa causa.');
-      }
-      if (employmentRelationshipType === 'clt' && terminationReason !== 'Dispensa por justa causa' && terminationCause) {
-        throw new HttpsError('invalid-argument', 'O subtipo de justa causa não se aplica ao motivo selecionado.');
-      }
+      throw new HttpsError(
+        'failed-precondition',
+        'Desligamentos contratuais devem ser iniciados pelo fluxo formal de terminationProcesses.'
+      );
     }
 
     try {
@@ -918,21 +946,13 @@ export const terminateUser = onCall(
           type: normalizedType,
           at: nowIso,
           actorUid: request.auth.uid,
-          reason: terminationReason ?? null,
-          cause: terminationCause ?? null,
+          reason: 'Inativação temporária',
+          cause: null,
           notes: terminationNotes ?? null,
-          terminationDate: normalizedType === 'contract_termination' ? (terminationDate ?? nowIso) : null,
-          employmentRelationshipType: employmentRelationshipType ?? null,
+          terminationDate: null,
+          employmentRelationshipType: targetSnapshot.get('employmentRelationshipType') ?? null,
         }),
       };
-
-      if (normalizedType === 'contract_termination') {
-        updatePayload.terminationDate = terminationDate ?? nowIso;
-        updatePayload.terminationReason = terminationReason ?? null;
-        updatePayload.terminationCause = terminationCause ?? null;
-        updatePayload.terminationNotes = terminationNotes ?? null;
-        updatePayload.terminationRelationshipType = employmentRelationshipType;
-      }
 
       await targetRef.update(updatePayload);
 
@@ -967,6 +987,8 @@ export const reactivateUser = onCall(
         terminationCause: FieldValue.delete(),
         terminationNotes: FieldValue.delete(),
         terminationRelationshipType: FieldValue.delete(),
+        terminationProcessId: FieldValue.delete(),
+        employmentStatus: 'active',
         inactivationHistory: FieldValue.arrayUnion({
           type: 'reactivation',
           at: new Date().toISOString(),
