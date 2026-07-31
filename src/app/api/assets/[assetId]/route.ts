@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 
 import { requireUser } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -114,7 +115,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
     description: body.description?.trim?.() || null,
     department: body.department?.trim?.() || null,
     exactLocation: body.exactLocation?.trim?.() || null,
+    responsibleUserId: body.responsibleUserId?.trim?.() || null,
     responsibleName: body.responsibleName?.trim?.() || null,
+    responsibilityStatus: body.responsibleUserId ? 'assigned' : null,
+    previousResponsibleUserId: null,
+    previousResponsibleName: null,
+    responsibilityVacatedAt: null,
     inUse: typeof body.inUse === 'boolean' ? body.inUse : current.inUse ?? true,
     possessionStatus: body.possessionStatus?.trim?.() || null,
     purchaseDate: body.purchaseDate || null,
@@ -252,6 +258,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
     const withdrawerName = String(body.withdrawerName ?? '').trim();
     const destinationName = String(body.destinationName ?? '').trim();
     const newResponsibleName = String(body.newResponsibleName ?? '').trim() || null;
+    const newResponsibleUserId = String(body.newResponsibleUserId ?? '').trim() || null;
     if (!withdrawerName || !destinationName) return jsonError('Quem retira e destino são obrigatórios.');
     await dbAdmin.collection('assetMovements').add({
       assetId,
@@ -274,6 +281,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
     }
     if (newResponsibleName) {
       assetUpdates.responsibleName = newResponsibleName;
+      assetUpdates.responsibleUserId = newResponsibleUserId ?? FieldValue.delete();
+      assetUpdates.responsibilityStatus = 'assigned';
+      assetUpdates.previousResponsibleUserId = FieldValue.delete();
+      assetUpdates.previousResponsibleName = FieldValue.delete();
+      assetUpdates.responsibilityVacatedAt = FieldValue.delete();
     }
     if (Object.keys(assetUpdates).length > 0) {
       await ref.update({ ...assetUpdates, updatedAt: now });

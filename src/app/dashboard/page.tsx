@@ -118,7 +118,10 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 }
 
 function getShiftUserName(schedule: DPSchedule | undefined, shift: DPShift, users: User[]) {
-  return schedule?.snapshot?.users?.[shift.userId]?.username ?? users.find((user) => user.id === shift.userId)?.username ?? shift.userId
+  return schedule?.snapshot?.users?.[shift.userId]?.username
+    ?? shift.userName
+    ?? users.find((user) => user.id === shift.userId)?.username
+    ?? "Colaborador não identificado"
 }
 
 function getShiftLabel(shift: DPShift) {

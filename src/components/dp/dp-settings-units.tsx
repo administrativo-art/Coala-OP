@@ -827,13 +827,23 @@ export function DPSettingsUnits() {
     if (!entity.responsibleSourceName && !entity.responsibleUserName) return null;
 
     const sourceTypeLabel = entity.responsibleSourceType === "job_function" ? "Função" : "Cargo";
+    const activeResponsible = entity.responsibleUserId
+      ? responsibilityUsers.find((user) => user.id === entity.responsibleUserId)
+      : null;
+    const needsReplacement = entity.responsibilityStatus === "replacement_required"
+      || (!!entity.responsibleUserId && !activeResponsible);
 
     return (
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <UserRound className="h-3.5 w-3.5" />
-        {entity.responsibleUserName ? (
+        {activeResponsible ? (
           <Badge variant="outline" className="rounded-full">
-            Responsável: {entity.responsibleUserName}
+            Responsável: {activeResponsible.username}
+          </Badge>
+        ) : null}
+        {needsReplacement ? (
+          <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-amber-700">
+            Definir novo responsável
           </Badge>
         ) : null}
         {entity.responsibleSourceName ? (

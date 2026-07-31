@@ -13,6 +13,12 @@ const RESPONSIBILITY_FIELDS = [
   "responsibleUserName",
 ] as const;
 
+const RESPONSIBILITY_VACANCY_FIELDS = [
+  "responsibilityStatus",
+  "responsibilityVacatedAt",
+  "responsibilityVacatedByTerminationUserId",
+] as const;
+
 export function canManageOperationalUnits(context: ServerUserContext) {
   return !!(
     context.isDefaultAdmin ||
@@ -123,7 +129,7 @@ export function applyResponsibilityPatch(update: JsonObject, body: JsonObject) {
   const sourceId = optionalString(body.responsibleSourceId);
 
   if (!sourceType || !sourceId) {
-    RESPONSIBILITY_FIELDS.forEach((field) => {
+    [...RESPONSIBILITY_FIELDS, ...RESPONSIBILITY_VACANCY_FIELDS].forEach((field) => {
       update[field] = FieldValue.delete();
     });
     return;
@@ -134,4 +140,7 @@ export function applyResponsibilityPatch(update: JsonObject, body: JsonObject) {
   update.responsibleSourceName = optionalString(body.responsibleSourceName) ?? FieldValue.delete();
   update.responsibleUserId = optionalString(body.responsibleUserId) ?? FieldValue.delete();
   update.responsibleUserName = optionalString(body.responsibleUserName) ?? FieldValue.delete();
+  RESPONSIBILITY_VACANCY_FIELDS.forEach((field) => {
+    update[field] = FieldValue.delete();
+  });
 }

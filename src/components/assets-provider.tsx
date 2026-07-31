@@ -30,6 +30,7 @@ export interface AssetsContextType {
     destinationName: string;
     destinationKioskId?: string;
     newResponsibleName?: string;
+    newResponsibleUserId?: string;
     notes?: string;
   }) => Promise<void>;
 }
@@ -194,6 +195,7 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     destinationName: string;
     destinationKioskId?: string;
     newResponsibleName?: string;
+    newResponsibleUserId?: string;
     notes?: string;
   }) => {
     await authedFetch(`/api/assets/${assetId}`, {

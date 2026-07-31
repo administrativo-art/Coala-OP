@@ -8,6 +8,7 @@ import { setGlobalOptions } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { syncDayAdmin } from './pdv-sync.js';
 import { randomUUID } from 'node:crypto';
+import { applyUserTerminationEffects } from './user-termination-effects.js';
 
 // ─── Módulo RH (Coala RH v1.3) ───────────────────────────────────────────────
 export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
@@ -989,6 +990,9 @@ export const reactivateUser = onCall(
         terminationRelationshipType: FieldValue.delete(),
         terminationProcessId: FieldValue.delete(),
         employmentStatus: 'active',
+        terminationEffectsVersion: FieldValue.delete(),
+        terminationEffectsAppliedAt: FieldValue.delete(),
+        terminationEffectsReportPath: FieldValue.delete(),
         inactivationHistory: FieldValue.arrayUnion({
           type: 'reactivation',
           at: new Date().toISOString(),
@@ -999,6 +1003,16 @@ export const reactivateUser = onCall(
           terminationDate: null,
         }),
       });
+
+      const employees = await hrDb.collection('employees').where('auth_uid', '==', uid).get();
+      const employeeWrites = hrDb.batch();
+      employees.docs.forEach((employee) => employeeWrites.set(employee.ref, {
+        status: 'active',
+        employment_status: 'active',
+        is_active: true,
+        reactivated_at: new Date().toISOString(),
+      }, { merge: true }));
+      if (!employees.empty) await employeeWrites.commit();
 
       return { success: true };
     } catch (error: any) {
@@ -1021,6 +1035,24 @@ export const onUserProfileChange = onDocumentWritten(
     }
 
     const userData = event.data.after.data()!;
+    const isContractTermination = userData.isActive === false && (
+      userData.inactivationType === 'contract_termination' || userData.employmentStatus === 'terminated'
+    );
+    if (isContractTermination && userData.terminationEffectsVersion !== 1) {
+      const report = await applyUserTerminationEffects({
+        db,
+        hrDb,
+        checklistDb,
+        userId,
+        user: userData,
+      });
+      await event.data.after.ref.set({
+        terminationEffectsVersion: report.version,
+        terminationEffectsAppliedAt: report.appliedAt,
+        terminationEffectsReportPath: `terminationImpactReports/${userId}__${report.effectiveDate}`,
+      }, { merge: true });
+      console.log(`✅ Efeitos do desligamento aplicados para ${userId}`, report.counts);
+    }
     const profileId = userData.profileId;
 
     if (!profileId) {

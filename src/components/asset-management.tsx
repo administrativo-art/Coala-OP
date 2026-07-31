@@ -46,6 +46,7 @@ const assetSchema = z.object({
   currentKioskId: z.string().min(1, 'Selecione a unidade.'),
   department: z.string().optional(),
   exactLocation: z.string().optional(),
+  responsibleUserId: z.string().optional(),
   responsibleName: z.string().optional(),
   inUse: z.boolean().optional(),
   possessionStatus: z.string().optional(),
@@ -294,6 +295,7 @@ function LabelPreview({ code, name, brand, model, unitName, category }: { code?:
 function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { addAsset, categories } = useAssets();
   const { kiosks } = useKiosks();
+  const { activeUsers } = useAuth();
   const { toast } = useToast();
   const [status, setStatus] = useState<AssetStatus>('ativo');
   const [submitting, setSubmitting] = useState(false);
@@ -302,7 +304,7 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetSchema),
-    defaultValues: { code: '', name: '', category: 'Patrimônio', subcategory: '', brand: '', model: '', serialNumber: '', imageUrl: '', currentKioskId: '', purchaseDate: '', supplierName: '', invoiceNumber: '', paymentMethod: '', warrantyEndsAt: '', exactLocation: '', responsibleName: '', notes: '' },
+    defaultValues: { code: '', name: '', category: 'Patrimônio', subcategory: '', brand: '', model: '', serialNumber: '', imageUrl: '', currentKioskId: '', purchaseDate: '', supplierName: '', invoiceNumber: '', paymentMethod: '', warrantyEndsAt: '', exactLocation: '', responsibleUserId: '', responsibleName: '', notes: '' },
   });
   const v = form.watch();
   const imageUrl = v.imageUrl;
@@ -333,10 +335,19 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   async function onSubmit(values: AssetFormValues) {
     const kiosk = kiosks.find((k) => k.id === values.currentKioskId);
+    const responsible = activeUsers.find((user) => user.id === values.responsibleUserId);
     const normalizedCode = normalizeAssetCodeInput(values.code);
     setSubmitting(true);
     try {
-      await addAsset({ ...values, code: normalizedCode, status, currentKioskName: kiosk?.name, sourceType: 'manual' });
+      await addAsset({
+        ...values,
+        code: normalizedCode,
+        status,
+        currentKioskName: kiosk?.name,
+        responsibleUserId: responsible?.id,
+        responsibleName: responsible?.username,
+        sourceType: 'manual',
+      });
       toast({ title: 'Patrimônio cadastrado.' });
       resetAll();
       onOpenChange(false);
@@ -504,8 +515,17 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     <FormField control={form.control} name="exactLocation" render={({ field }) => (
                       <FormItem><FieldLabel>Local específico</FieldLabel><FormControl><input className={FORM_INPUT} placeholder="Cozinha principal" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
-                    <FormField control={form.control} name="responsibleName" render={({ field }) => (
-                      <FormItem><FieldLabel>Responsável</FieldLabel><FormControl><input className={FORM_INPUT} placeholder="Nome do responsável" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                    <FormField control={form.control} name="responsibleUserId" render={({ field }) => (
+                      <FormItem>
+                        <FieldLabel>Responsável</FieldLabel>
+                        <Select value={field.value || 'none'} onValueChange={(value) => field.onChange(value === 'none' ? '' : value)}>
+                          <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">Sem responsável</SelectItem>
+                            {activeUsers.map((user) => <SelectItem key={user.id} value={user.id}>{user.username}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
                     )} />
                   </div>
                   <div>
@@ -645,6 +665,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       currentKioskId: '',
       department: '',
       exactLocation: '',
+      responsibleUserId: '',
       responsibleName: '',
       inUse: true,
       possessionStatus: '',
@@ -693,6 +714,9 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       currentKioskId: asset.currentKioskId ?? '',
       department: asset.department ?? '',
       exactLocation: asset.exactLocation ?? '',
+      responsibleUserId: asset.responsibleUserId
+        ?? activeUsers.find((user) => user.username === asset.responsibleName)?.id
+        ?? '',
       responsibleName: asset.responsibleName ?? '',
       inUse: asset.inUse ?? true,
       possessionStatus: asset.possessionStatus ?? '',
@@ -824,6 +848,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         destinationName,
         destinationKioskId: movDestType === 'cadastrado' ? movDestKioskId : undefined,
         newResponsibleName: newResponsibleName || undefined,
+        newResponsibleUserId: movRespType === 'cadastrado' ? movRespUserId : undefined,
         notes: movNotes || undefined,
       });
       toast({ title: 'Movimentação registrada.' });
@@ -889,6 +914,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     setSaving(true);
     try {
       const kiosk = kiosks.find((k) => k.id === asset.currentKioskId);
+      const responsible = activeUsers.find((user) => user.id === values.responsibleUserId);
       const normalizedCode = normalizeAssetCodeInput(values.code ?? asset.code);
       await updateAsset(asset.id, {
         code: normalizedCode,
@@ -903,7 +929,8 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         currentKioskId: asset.currentKioskId,
         currentKioskName: asset.currentKioskName || kiosk?.name,
         exactLocation: (values.exactLocation === 'none' ? undefined : values.exactLocation) || undefined,
-        responsibleName: (values.responsibleName === 'none' ? undefined : values.responsibleName) || undefined,
+        responsibleUserId: responsible?.id,
+        responsibleName: responsible?.username,
         inUse: values.inUse,
         possessionStatus: values.possessionStatus || undefined,
         purchaseDate: values.purchaseDate || undefined,
@@ -1188,14 +1215,14 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                           </Select>
                         </FormItem>
                       )} />
-                      <FormField control={form.control} name="responsibleName" render={({ field }) => (
+                      <FormField control={form.control} name="responsibleUserId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Responsável</FormLabel>
-                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                          <Select value={field.value || 'none'} onValueChange={(value) => field.onChange(value === 'none' ? '' : value)} disabled={!permissions.assets?.edit}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                             <SelectContent>
                               <SelectItem value="none"><span className="text-muted-foreground">Sem responsável</span></SelectItem>
-                              {activeUsers.map((u) => <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>)}
+                              {activeUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </FormItem>

@@ -197,12 +197,13 @@ function ShiftDialog({
 
   async function onSubmit(values: ShiftFormValues) {
     const hasCrossConflict = !!siblingOccupied?.get(values.userId)?.has(values.date);
+    const userName = operationalUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
     try {
       if (isEdit && shift) {
-        await updateShift({ ...shift, ...values, type: 'work', hasConflict: hasCrossConflict || shift.hasConflict });
+        await updateShift({ ...shift, ...values, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict || shift.hasConflict });
         toast({ title: 'Turno atualizado.' });
       } else {
-        await addShift({ ...values, scheduleId, type: 'work', hasConflict: hasCrossConflict });
+        await addShift({ ...values, scheduleId, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict });
         toast({ title: 'Turno adicionado.' });
       }
       if (hasCrossConflict) {

@@ -190,6 +190,7 @@ export function DPBulkShiftEditDialog({
             scheduleId: shift.scheduleId,
             unitId: shift.unitId,
             userId: shift.userId,
+            ...(shift.userName ? { userName: shift.userName } : {}),
             shiftDefinitionId: undefined,
             date: shift.date,
             startTime: '',

@@ -201,7 +201,12 @@ export type Asset = {
   currentKioskName?: string;
   department?: string;
   exactLocation?: string;
+  responsibleUserId?: string;
   responsibleName?: string;
+  responsibilityStatus?: 'assigned' | 'pending_assignment';
+  previousResponsibleUserId?: string;
+  previousResponsibleName?: string;
+  responsibilityVacatedAt?: string;
   inUse?: boolean;
   possessionStatus?: string;
   status: AssetStatus;
@@ -3118,6 +3123,9 @@ export type DPUnitResponsibility = {
   responsibleSourceName?: string;
   responsibleUserId?: string;
   responsibleUserName?: string;
+  responsibilityStatus?: 'assigned' | 'replacement_required';
+  responsibilityVacatedAt?: string;
+  responsibilityVacatedByTerminationUserId?: string;
 };
 
 export type DPUnitOrganization = {
@@ -3176,6 +3184,7 @@ export type DPShift = {
   scheduleId: string;
   unitId: string;
   userId: string;            // referência ao users/ (Firebase UID)
+  userName?: string;         // snapshot mínimo para a escala não depender do diretório carregado
   shiftDefinitionId?: string;
   date: string; // YYYY-MM-DD
   startTime: string;
