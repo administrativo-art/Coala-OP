@@ -1,8 +1,16 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { FieldMapEntry, EmployeeFieldValue, RhRole, BizneoEmployeeId } from '@/types/rh';
 import { callOnFieldUpdate } from '../lib/rh-client';
+import { formatFieldOptionLabel } from '../lib/field-option-labels';
 
 type FieldInput = {
   key:   string;
@@ -27,7 +35,8 @@ function parseValue(entry: FieldMapEntry, raw: string): unknown {
   return raw || null;
 }
 
-function FieldInput({ entry, value, onChange }: {
+function FieldInput({ fieldKey, entry, value, onChange }: {
+  fieldKey: string;
   entry:    FieldMapEntry;
   value:    string;
   onChange: (v: string) => void;
@@ -36,20 +45,32 @@ function FieldInput({ entry, value, onChange }: {
 
   if (entry.type === 'boolean') {
     return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
-        <option value="">Selecionar…</option>
-        <option value="true">Sim</option>
-        <option value="false">Não</option>
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={`${base} h-10`}>
+          <SelectValue placeholder="Selecionar…" />
+        </SelectTrigger>
+        <SelectContent className="z-[70] rounded-xl">
+          <SelectItem value="true">Sim</SelectItem>
+          <SelectItem value="false">Não</SelectItem>
+        </SelectContent>
+      </Select>
     );
   }
 
   if (entry.type === 'single_select' && entry.options?.length) {
     return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
-        <option value="">Selecionar…</option>
-        {entry.options.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={`${base} h-10`}>
+          <SelectValue placeholder="Selecionar…" />
+        </SelectTrigger>
+        <SelectContent className="z-[70] rounded-xl">
+          {entry.options.map((option) => (
+            <SelectItem key={option} value={option} className="rounded-lg">
+              {formatFieldOptionLabel(fieldKey, option)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     );
   }
 
@@ -74,7 +95,7 @@ function FieldInput({ entry, value, onChange }: {
                 : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300'
             }`}
           >
-            {o}
+            {formatFieldOptionLabel(fieldKey, o)}
           </button>
         ))}
       </div>
@@ -166,7 +187,7 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
               {field.entry.label}
               {field.entry.required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            <FieldInput entry={field.entry} value={rawValue} onChange={setRawValue} />
+            <FieldInput fieldKey={field.key} entry={field.entry} value={rawValue} onChange={setRawValue} />
             {field.entry.help_text && (
               <p className="text-[11px] text-gray-400 mt-1">{field.entry.help_text}</p>
             )}

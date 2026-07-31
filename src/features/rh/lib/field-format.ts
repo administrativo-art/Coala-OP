@@ -1,5 +1,6 @@
 import type { EmployeeFieldValue, FieldType, RhRole } from '@/types/rh';
 import { maskSensitiveText } from '@/types/rh';
+import { formatFieldOptionLabel } from './field-option-labels';
 
 type SerializedTimestamp = {
   seconds?: number;
@@ -80,10 +81,10 @@ export function formatFieldValue(
   }
 
   if (type === 'multi_select' && Array.isArray(fv.value_json)) {
-    return (fv.value_json as string[]).join(', ') || '—';
+    return (fv.value_json as string[]).map((value) => formatFieldOptionLabel(fieldKey, value)).join(', ') || '—';
   }
 
-  return fv.value_text ?? fv.value_text ?? '—';
+  return fv.value_text ? formatFieldOptionLabel(fieldKey, fv.value_text) : '—';
 }
 
 export function getProfileCompletionBadge(pct: number): {

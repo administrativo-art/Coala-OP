@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Check, ChevronLeft, ChevronRight, LogOut, ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { formatPixKeyTypeLabel } from "@/features/rh/lib/field-option-labels";
 import type {
   ProfileComplianceField,
   ProfileComplianceFormValues,
@@ -168,7 +169,7 @@ export function ProfileComplianceGate({ children }: { children: React.ReactNode 
     ["E-mail de acesso", values.accessEmail],
     ["Celular", values.mobilePhone],
     ["Endereço", `${values.addressStreet}, ${values.addressNoNumber ? "S/N" : values.addressNumber} — ${values.addressNeighborhood}, ${values.addressCity}/${values.addressState}`],
-    ["Chave PIX", `${values.pixKeyType.toUpperCase()} · ${values.pixKey}`],
+    ["Chave PIX", `${formatPixKeyTypeLabel(values.pixKeyType)} · ${values.pixKey}`],
     ["Contato de emergência", `${values.emergencyName} · ${values.emergencyRelation} · ${values.emergencyPhone}`],
   ], [values]);
 

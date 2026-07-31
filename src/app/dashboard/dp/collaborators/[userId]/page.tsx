@@ -1253,15 +1253,21 @@ function EmployeeProfileFields({
     roleIds: currentUser?.jobRoleId ? [currentUser.jobRoleId] : [],
     functionIds: (currentUser?.jobFunctionIds ?? []).filter(Boolean),
   };
+  const legacyPdvFilialId = user.pdvAccessFilialId?.trim() ?? "";
+  const legacyPdvUnit = legacyPdvFilialId
+    ? units.find((unit) => unit.pdvFilialId === legacyPdvFilialId)
+    : user.unitIds?.length === 1
+      ? units.find((unit) => unit.id === user.unitIds?.[0])
+      : undefined;
   const legacyPdvAccess: UserPdvAccess[] = user.registrationIdPdv
     ? [{
         externalUserId: user.registrationIdPdv,
-        filialId: user.pdvAccessFilialId ?? "",
+        filialId: legacyPdvFilialId,
         filialName: user.pdvAccessFilialName ?? null,
         profileId: user.pdvAccessProfileId ?? "",
         profileName: user.pdvAccessProfileName ?? null,
-        unitId: units.find((unit) => unit.pdvFilialId === user.pdvAccessFilialId)?.id ?? null,
-        unitName: units.find((unit) => unit.pdvFilialId === user.pdvAccessFilialId)?.name ?? null,
+        unitId: legacyPdvUnit?.id ?? null,
+        unitName: legacyPdvUnit?.name ?? null,
         status: "active",
       }]
     : [];
@@ -1793,7 +1799,7 @@ function EmployeeProfileFields({
                                       {access.unitName ?? access.filialName ?? `Filial ${access.filialId || "não identificada"}`}
                                     </p>
                                     <p className="mt-1 text-[10px] font-bold text-[#777784]">
-                                      Usuário {access.externalUserId} · {access.profileName ?? "Perfil não identificado"}
+                                      Usuário {access.externalUserId} · {access.profileName ?? "Perfil do PDV ainda não sincronizado"}
                                     </p>
                                   </div>
                                   {canManageFieldVisibility ? (
