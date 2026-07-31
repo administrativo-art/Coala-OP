@@ -1413,8 +1413,8 @@ function CollaboratorDashboardPanelInner() {
   const [loadingCollaboratorData, setLoadingCollaboratorData] = useState(true);
   const [collaboratorDataError, setCollaboratorDataError] = useState<string | null>(null);
   const currentUserIds = useMemo(
-    () => compactUnique([firebaseUser?.uid, user?.id, user?.registrationIdBizneo, user?.registrationIdPdv]),
-    [firebaseUser?.uid, user?.id, user?.registrationIdBizneo, user?.registrationIdPdv]
+    () => compactUnique([firebaseUser?.uid, user?.id, user?.hrEmployeeId, user?.registrationIdBizneo, user?.registrationIdPdv]),
+    [firebaseUser?.uid, user?.id, user?.hrEmployeeId, user?.registrationIdBizneo, user?.registrationIdPdv]
   );
   const showMockup = useMemo(
     () => canPreviewCollaboratorMockups(user ?? {}, firebaseUser),

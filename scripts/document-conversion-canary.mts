@@ -22,6 +22,7 @@ const EXISTING_RAW_DIRECTORY = path.resolve(
 );
 const USE_EXISTING = process.env.DOCUMENT_CANARY_USE_EXISTING === "true";
 const UPDATE_GOLDEN = process.env.DOCUMENT_CANARY_UPDATE_GOLDEN === "true";
+const TEMPLATE_ID = process.env.DOCUMENT_CANARY_TEMPLATE_ID?.trim();
 const PAGE_TOLERANCE_POINTS = 0.25;
 const ANCHOR_TOLERANCE_POINTS = 4;
 const A4_WIDTH = 595.28;
@@ -61,10 +62,6 @@ const ANCHORS: Record<string, AnchorDefinition[]> = {
     { page: 1, phrase: "TERMO DE CONFIDENCIALIDADE E SIGILO" },
     { page: 2, phrase: "Consequências" },
   ],
-  "system-admission-electronic-time-tracking-awareness": [
-    { page: 1, phrase: "TERMO DE CIÊNCIA REGISTRO ELETRÔNICO DE PONTO" },
-    { page: 1, phrase: "Portaria MTP" },
-  ],
   "system-admission-bundle-closing-term": [
     { page: 1, phrase: "TERMO DE ENCERRAMENTO CIÊNCIA E ASSINATURA" },
     { page: 1, phrase: "EMPREGADORA CONTROLADORA" },
@@ -101,8 +98,8 @@ type TemplateEvidence = {
 type CanaryGolden = {
   schemaVersion: 1;
   renderer: {
-    officeFont: "Calibri";
-    converterFont: "Carlito";
+    officeFont: string;
+    converterFont: string;
     letterheadVersion: "coala-letterhead-v2";
   };
   templates: Record<string, TemplateEvidence>;
@@ -254,8 +251,21 @@ async function inspectPdf(
   if (!fonts.length || fonts.some((font) => !font.embedded)) {
     throw new Error("O PDF possui fonte ausente ou não incorporada.");
   }
-  if (!fonts.some((font) => font.name.toLocaleLowerCase().includes("carlito"))) {
-    throw new Error("O PDF não incorporou Carlito.");
+  if (
+    fonts.some((font) =>
+      !/(?:caladea|cambria|carlito)/iu.test(font.name),
+    )
+  ) {
+    throw new Error(
+      `O PDF incorporou fonte fora do perfil permitido: ${fonts.map((font) => font.name).join(", ")}.`,
+    );
+  }
+  if (
+    !fonts.some((font) =>
+      /(?:caladea|cambria|carlito)/iu.test(font.name),
+    )
+  ) {
+    throw new Error("O PDF não incorporou uma fonte compatível com o padrão documental.");
   }
 
   return {
@@ -402,8 +412,19 @@ function compareEvidence(
 
 await mkdir(OUTPUT_DIRECTORY, { recursive: true });
 const templates = SYSTEM_DOCUMENT_TEMPLATES.filter(
-  (template) => template.renderer === "admission_docx" && template.sourcePath,
+  (template) => (
+    template.renderer === "admission_docx"
+    && template.sourcePath
+    && (!TEMPLATE_ID || template.id === TEMPLATE_ID)
+  ),
 );
+if (!templates.length) {
+  throw new Error(
+    TEMPLATE_ID
+      ? `Modelo não encontrado no canário: ${TEMPLATE_ID}.`
+      : "Nenhum modelo admissional encontrado para o canário.",
+  );
+}
 const evidence: Record<string, TemplateEvidence> = {};
 
 for (const template of templates) {
@@ -431,15 +452,25 @@ for (const template of templates) {
 const current: CanaryGolden = {
   schemaVersion: 1,
   renderer: {
-    officeFont: "Calibri",
-    converterFont: "Carlito",
+    officeFont: "Calibri/Cambria",
+    converterFont: "Carlito/Caladea",
     letterheadVersion: "coala-letterhead-v2",
   },
   templates: evidence,
 };
 
 if (UPDATE_GOLDEN) {
-  await writeFile(GOLDEN_PATH, `${JSON.stringify(current, null, 2)}\n`);
+  const existing = TEMPLATE_ID
+    ? JSON.parse(await readFile(GOLDEN_PATH, "utf8")) as CanaryGolden
+    : null;
+  const updated = existing
+    ? {
+        ...existing,
+        renderer: current.renderer,
+        templates: { ...existing.templates, ...current.templates },
+      }
+    : current;
+  await writeFile(GOLDEN_PATH, `${JSON.stringify(updated, null, 2)}\n`);
   process.stdout.write(`Golden atualizado: ${GOLDEN_PATH}\n`);
 } else {
   const golden = JSON.parse(await readFile(GOLDEN_PATH, "utf8")) as CanaryGolden;

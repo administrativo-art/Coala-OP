@@ -33,6 +33,7 @@ import { GoalTemplateFormModal } from '@/components/goal-template-form-modal';
 import { AddEmployeeGoalModal } from '@/components/add-employee-goal-modal';
 import { CloseGoalModal } from '@/components/close-goal-modal';
 import { GoalMethodSettings } from '@/components/goal-method-settings';
+import { canAccessUnit } from '@/lib/unit-access';
 
 function formatPeriodLabel(period: GoalPeriodDoc, goalPeriod: GoalPeriod): string {
   const start = period.startDate?.toDate?.() ?? new Date();
@@ -59,13 +60,14 @@ function periodKindLabel(period: GoalPeriod) {
 export function GoalsRegistrationDashboard() {
   const { templates, periods, employeeGoals, loading } = useGoals();
   const { kiosks } = useKiosks();
-  const { user, permissions } = useAuth();
+  const { user, permissions, isDefaultAdmin } = useAuth();
   const { toast } = useToast();
 
   const isAdmin = permissions.settings?.manageUsers ?? false;
   const canManageGoalMethods = isAdmin || !!permissions.goals?.manage;
-  const userKioskIds = user?.assignedKioskIds ?? [];
-  const availableKiosks = isAdmin ? kiosks : kiosks.filter(kiosk => userKioskIds.includes(kiosk.id));
+  const availableKiosks = user
+    ? kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }))
+    : [];
 
   const [activeSection, setActiveSection] = useState<'goals' | 'methods'>('goals');
   const [filterKioskId, setFilterKioskId] = useState<string>('all');
@@ -106,7 +108,9 @@ export function GoalsRegistrationDashboard() {
   }
 
   const filteredPeriods = useMemo(() => {
-    const base = isAdmin ? periods : periods.filter(period => userKioskIds.includes(period.kioskId));
+    const base = user
+      ? periods.filter((period) => canAccessUnit(user, period.kioskId, { isDefaultAdmin }))
+      : [];
 
     return (filterKioskId === 'all' ? base : base.filter(period => period.kioskId === filterKioskId))
       .filter(period => {
@@ -119,7 +123,7 @@ export function GoalsRegistrationDashboard() {
         const bDate = b.startDate?.toDate?.()?.getTime?.() ?? 0;
         return bDate - aDate;
       });
-  }, [periods, filterKioskId, filterPeriod, isAdmin, userKioskIds, templates]);
+  }, [periods, filterKioskId, filterPeriod, isDefaultAdmin, templates, user]);
 
   const getKioskName = (id: string) => kiosks.find(kiosk => kiosk.id === id)?.name ?? id;
   const getTemplateType = (templateId: string) => templates.find(template => template.id === templateId)?.type ?? 'revenue';

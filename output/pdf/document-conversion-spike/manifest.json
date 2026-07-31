@@ -1,56 +1,26 @@
 {
-  "generatedAt": "2026-07-28T23:47:53.766Z",
-  "soffice": "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+  "generatedAt": "2026-07-30T16:14:58.902Z",
+  "converter": "remote-gotenberg",
   "usedExistingPdf": false,
   "templateCount": 11,
-  "convertedCount": 11,
-  "failedCount": 0,
-  "safeAreaValidCount": 11,
+  "convertedCount": 10,
+  "failedCount": 1,
+  "safeAreaValidCount": 10,
   "results": [
     {
       "id": "system-receipt-standard",
       "name": "Recibo de pagamento",
       "sourcePath": "docs/modelos-documentos/recibos/recibo-v1.docx",
-      "outputPath": "output/pdf/document-conversion-spike/system-receipt-standard.pdf",
-      "status": "converted",
-      "pageCount": 1,
-      "pageSizes": [
-        {
-          "page": 1,
-          "width": 595.3,
-          "height": 841.89,
-          "a4": true
-        }
-      ],
-      "fonts": [
-        {
-          "name": "BAAAAA+Carlito",
-          "embedded": true,
-          "subset": true,
-          "unicode": true
-        },
-        {
-          "name": "CAAAAA+Carlito-Bold",
-          "embedded": true,
-          "subset": true,
-          "unicode": true
-        }
-      ],
-      "allFontsEmbedded": true,
-      "safeArea": {
-        "profileId": "coala-letterhead-v2",
-        "valid": true,
-        "sectionCount": 1,
-        "issues": []
-      }
+      "status": "failed",
+      "error": "Conversor remoto indisponível. Configure DOCX_TO_PDF_URL e DOCX_TO_PDF_AUDIENCE."
     },
     {
       "id": "system-admission-employment-probation-contract",
       "name": "Contrato de Trabalho a Título de Experiência",
-      "sourcePath": "docs/modelos-documentos/admissionais/01-contrato-experiencia-v2.docx",
+      "sourcePath": "docs/modelos-documentos/admissionais/01-contrato-experiencia-v3.docx",
       "outputPath": "output/pdf/document-conversion-spike/system-admission-employment-probation-contract.pdf",
       "status": "converted",
-      "pageCount": 3,
+      "pageCount": 4,
       "pageSizes": [
         {
           "page": 1,
@@ -69,17 +39,23 @@
           "width": 595.3,
           "height": 841.89,
           "a4": true
+        },
+        {
+          "page": 4,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
         }
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Caladea-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
         },
         {
-          "name": "CAAAAA+Carlito-Bold",
+          "name": "CAAAAA+Caladea-Bold",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -116,7 +92,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -207,7 +183,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -250,7 +226,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -293,7 +269,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -330,7 +306,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -367,7 +343,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -410,7 +386,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -447,7 +423,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true
@@ -484,7 +460,7 @@
       ],
       "fonts": [
         {
-          "name": "BAAAAA+Carlito",
+          "name": "BAAAAA+Carlito-Regular",
           "embedded": true,
           "subset": true,
           "unicode": true

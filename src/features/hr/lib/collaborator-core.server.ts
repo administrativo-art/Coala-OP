@@ -1,5 +1,6 @@
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { isUnitAccessScope, normalizeUnitAccessScope } from "@/lib/unit-access";
 import { shiftDefinitionMatchesUnit } from "@/lib/dp-shift-definitions";
 
 type AnyRecord = Record<string, unknown>;
@@ -51,6 +52,8 @@ export type CollaboratorCoreInput = {
   unitIds?: unknown;
   assignedKioskIds?: unknown;
   responsibleUnitIds?: unknown;
+  unitAccessScope?: unknown;
+  unitAccessUnitIds?: unknown;
   shiftDefinitionId?: unknown;
   operational?: unknown;
   operacional?: unknown;
@@ -164,6 +167,18 @@ export async function resolveCollaboratorCore(
   const needsTransportVoucher = hasOwn(data, "needsTransportVoucher")
     ? asBoolean(data.needsTransportVoucher) ?? false
     : null;
+  const unitAccessScope = hasOwn(data, "unitAccessScope")
+    ? normalizeUnitAccessScope(data.unitAccessScope)
+    : normalizeUnitAccessScope(currentUser.unitAccessScope);
+  if (hasOwn(data, "unitAccessScope") && !isUnitAccessScope(data.unitAccessScope)) {
+    throw new Error("Escopo de unidades inválido.");
+  }
+  const unitAccessUnitIds = hasOwn(data, "unitAccessUnitIds")
+    ? asStringArray(data.unitAccessUnitIds)
+    : asStringArray(currentUser.unitAccessUnitIds);
+  if (unitAccessScope === "selected" && unitAccessUnitIds.length === 0) {
+    throw new Error("Selecione ao menos uma unidade para o escopo específico.");
+  }
 
   const patch = stripUndefined({
     ...(role ? { jobRoleId: role.id, jobRoleName: role.name ?? "" } : {}),
@@ -172,6 +187,10 @@ export async function resolveCollaboratorCore(
       jobFunctionNames: functions.map((item) => item.name),
     } : {}),
     ...(hasOwn(data, "responsibleUnitIds") ? { responsibleUnitIds: asStringArray(data.responsibleUnitIds) } : {}),
+    ...(hasOwn(data, "unitAccessScope") || hasOwn(data, "unitAccessUnitIds") ? {
+      unitAccessScope,
+      unitAccessUnitIds: unitAccessScope === "selected" ? unitAccessUnitIds : [],
+    } : {}),
     ...(unitIds.length > 0 ? { unitIds, assignedKioskIds: unitIds } : {}),
     ...(hasOwn(data, "shiftDefinitionId") ? { shiftDefinitionId: shiftDefinitionId ?? null } : {}),
     ...(operationalValue !== null ? { operacional: operationalValue } : {}),

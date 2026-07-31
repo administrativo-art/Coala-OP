@@ -185,6 +185,38 @@ const styles = StyleSheet.create({
     right: 150,
     textAlign: "left",
   },
+  previewNoticeTop: {
+    color: "#6D28D9",
+    fontFamily: "Helvetica-Bold",
+    fontSize: 7,
+    left: 36,
+    position: "absolute",
+    right: 36,
+    textAlign: "center",
+    top: 15,
+  },
+  previewNoticeBottom: {
+    bottom: 15,
+    color: "#6D28D9",
+    fontFamily: "Helvetica-Bold",
+    fontSize: 7,
+    left: 36,
+    position: "absolute",
+    right: 36,
+    textAlign: "center",
+  },
+  previewWatermark: {
+    color: "#D1D5DB",
+    fontFamily: "Helvetica-Bold",
+    fontSize: 27,
+    left: 55,
+    opacity: 0.22,
+    position: "absolute",
+    right: 55,
+    textAlign: "center",
+    top: 400,
+    transform: "rotate(32deg)",
+  },
 });
 
 const modernStyles = StyleSheet.create({
@@ -678,6 +710,7 @@ export function SignedUniformMovementTermDocument({
   responsibleSignature,
   logoDataUri,
   letterheadDataUri,
+  preview = false,
 }: {
   type: "delivery" | "exchange" | "return";
   protocol: string;
@@ -693,6 +726,7 @@ export function SignedUniformMovementTermDocument({
   signedAt?: string | null;
   logoDataUri?: string | null;
   letterheadDataUri?: string | null;
+  preview?: boolean;
 }) {
   const title = type === "delivery"
     ? "Termo de entrega"
@@ -860,6 +894,13 @@ export function SignedUniformMovementTermDocument({
           : logoDataUri
             ? <Image fixed style={styles.letterheadBackground} src={logoDataUri} />
             : null}
+        {preview ? (
+          <>
+            <Text fixed style={styles.previewNoticeTop}>PRÉVIA COM DADOS FICTÍCIOS — SEM VALIDADE</Text>
+            <Text fixed style={styles.previewNoticeBottom}>PRÉVIA COM DADOS FICTÍCIOS — SEM VALIDADE</Text>
+            <Text fixed style={styles.previewWatermark}>PRÉVIA COM DADOS FICTÍCIOS — SEM VALIDADE</Text>
+          </>
+        ) : null}
         <View style={modernStyles.meta}>
           <Text style={modernStyles.pagePill}>PÁGINA 1 DE 1</Text>
           <Text style={modernStyles.movementPill}>MOVIMENTAÇÃO DE UNIFORME</Text>

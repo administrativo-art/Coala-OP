@@ -8,7 +8,9 @@ import { EMAIL_SENDERS, sendEmail } from "@/lib/email/resend";
 import { renderFirstAccessEmail } from "@/lib/email/first-access-template";
 import { createFirstAccessLink } from "@/lib/first-access-links";
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
+import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { isEmploymentRelationshipType } from "@/lib/hr/employment-relationship";
+import { canDelegateUnitAccess } from "@/lib/unit-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +36,8 @@ const USER_DATA_FIELDS = new Set([
   "employmentRelationshipType",
   "responsibleUnitIds",
   "unitIds",
+  "unitAccessScope",
+  "unitAccessUnitIds",
   "admissionDate",
   "birthDate",
 ]);
@@ -50,6 +54,14 @@ function text(value: unknown, max = 320) {
 
 function normalizeEmail(value: unknown) {
   return text(value).toLowerCase();
+}
+
+function personRecordType(userData: Record<string, unknown>) {
+  const role = text(userData.jobRoleName).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (role.includes("diretor") || role.includes("presidente") || role.includes("vice-presidente")) return "director";
+  if (userData.employmentRelationshipType === "pj") return "pj";
+  if (userData.employmentRelationshipType === "internship") return "internship";
+  return "employee";
 }
 
 function dateTimestamp(value: unknown) {
@@ -112,6 +124,12 @@ export async function POST(request: NextRequest) {
     if (!isEmploymentRelationshipType(rawUserData.employmentRelationshipType)) {
       return NextResponse.json({ error: "Selecione o tipo de vínculo: CLT, PJ ou Estágio." }, { status: 400 });
     }
+    if (!canDelegateUnitAccess(actor.userDoc, rawUserData, { isDefaultAdmin: actor.isDefaultAdmin })) {
+      return NextResponse.json(
+        { error: "O escopo do novo usuário não pode ultrapassar o seu próprio escopo de unidades." },
+        { status: 403 },
+      );
+    }
 
     const profileSnapshot = await dbAdmin.collection("profiles").doc(profileId).get();
     if (!profileSnapshot.exists) {
@@ -143,12 +161,32 @@ export async function POST(request: NextRequest) {
     await authAdmin.setCustomUserClaims(authUser.uid, { profileId, isDefaultAdmin });
 
     const userData = cleanUserData(rawUserData);
+    const hrEmployeeId = authUser.uid;
+    const normalizedPersonRecordType = personRecordType(userData);
     await dbAdmin.collection("users").doc(authUser.uid).set({
       ...userData,
+      hrEmployeeId,
+      personRecordType: normalizedPersonRecordType,
+      profileCompliance: {
+        status: "pending",
+        policyVersion: 1,
+        missingFields: [],
+        invalidFields: [],
+        evaluatedAt: null,
+        completedAt: null,
+        lastConfirmedAt: null,
+        nextReviewAt: null,
+      },
       email,
       username,
       profileId,
       assignedKioskIds: Array.isArray(userData.assignedKioskIds) ? userData.assignedKioskIds : [],
+      unitAccessScope: userData.unitAccessScope === "all" || userData.unitAccessScope === "selected"
+        ? userData.unitAccessScope
+        : "linked",
+      unitAccessUnitIds: userData.unitAccessScope === "selected" && Array.isArray(userData.unitAccessUnitIds)
+        ? userData.unitAccessUnitIds
+        : [],
       avatarUrl: text(userData.avatarUrl, 2000),
       operacional: userData.operacional === true,
       isActive: true,
@@ -159,6 +197,30 @@ export async function POST(request: NextRequest) {
       createdBy: actor.decoded.uid,
       createdByEmail: actor.decoded.email ?? null,
     });
+
+    const nowTimestamp = Timestamp.now();
+    const unitIds = Array.isArray(userData.unitIds)
+      ? userData.unitIds.filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
+      : Array.isArray(userData.assignedKioskIds)
+        ? userData.assignedKioskIds.filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
+        : [];
+    await hrDbAdmin.collection("employees").doc(hrEmployeeId).set({
+      bizneo_employee_id: hrEmployeeId,
+      auth_uid: authUser.uid,
+      source_user_id: authUser.uid,
+      source: "manual_user_creation",
+      name: username,
+      email,
+      access_email: email,
+      person_record_type: normalizedPersonRecordType,
+      status: "active",
+      job_role_id: text(userData.jobRoleId) || profileId,
+      unit_id: unitIds[0] ?? "sem-unidade",
+      profile_completion: 0,
+      synced_at: nowTimestamp,
+      created_at: nowTimestamp,
+      updated_at: nowTimestamp,
+    }, { merge: true });
 
     const firstAccess = await createFirstAccessLink({
       userId: authUser.uid,
@@ -217,6 +279,7 @@ export async function POST(request: NextRequest) {
       await Promise.allSettled([
         authAdmin.deleteUser(createdUserId),
         dbAdmin.collection("users").doc(createdUserId).delete(),
+        hrDbAdmin.collection("employees").doc(createdUserId).delete(),
       ]);
     }
     const message = error instanceof Error ? error.message : "Falha ao criar usuário.";

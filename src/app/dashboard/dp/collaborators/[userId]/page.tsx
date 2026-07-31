@@ -30,6 +30,7 @@ import { BackButton } from "@/components/navigation/back-button";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { createAuditLog } from "@/features/audit/client";
 import type { DPUnit, DPVacationRecord, User, UserPdvAccess } from "@/types";
+import { getHrEmployeeId } from "@/lib/hr/person-link";
 import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
 import { useEmployeeProfile, useFieldMap } from "@/features/rh/hooks/useEmployeeProfile";
 import { SectionEditModal } from "@/features/rh/components/SectionEditModal";
@@ -1197,7 +1198,7 @@ function EmployeeProfileFields({
   reloadKey?: number;
 }) {
   const { firebaseUser, permissions, user: currentUser } = useAuth();
-  const employeeId = user.registrationIdBizneo || user.id;
+  const employeeId = getHrEmployeeId(user) ?? user.id;
   const [editKey, setEditKey] = useState<string | null>(null);
   const [profileReloadKey, setProfileReloadKey] = useState(0);
   const [visibilitySavingKey, setVisibilitySavingKey] = useState<string | null>(null);
@@ -2625,7 +2626,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
       visible: canShowSystemBlock(systemBlockKeys.asoControl),
       content: (
         <EmployeeAsoControlPanel
-          employeeId={collaborator.registrationIdBizneo || collaborator.id}
+          employeeId={getHrEmployeeId(collaborator) ?? collaborator.id}
           reloadKey={fieldMapReloadKey}
           action={systemBlockVisibilityControl(systemBlockKeys.asoControl)}
         />
@@ -2637,7 +2638,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
       visible: canShowSystemBlock(systemBlockKeys.familySalary),
       content: (
         <EmployeeFamilySalaryPanel
-          employeeId={collaborator.registrationIdBizneo || collaborator.id}
+          employeeId={getHrEmployeeId(collaborator) ?? collaborator.id}
           reloadKey={fieldMapReloadKey}
           action={systemBlockVisibilityControl(systemBlockKeys.familySalary)}
           canEdit={canManageSystemFieldVisibility}
@@ -2872,7 +2873,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                       Documentos do colaborador
                     </Link>
                     <Link
-                      href={`/dashboard/documents/consents/${encodeURIComponent(collaborator.registrationIdBizneo || collaborator.id)}`}
+                      href={`/dashboard/documents/consents/${encodeURIComponent(getHrEmployeeId(collaborator) ?? collaborator.id)}`}
                       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
                     >
                       <ImageIcon className="h-4 w-4 text-[#df2f78]" />

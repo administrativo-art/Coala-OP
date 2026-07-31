@@ -7,6 +7,7 @@ import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { canReceivePurchase } from "@/lib/purchasing-permissions";
+import { canAccessAnyUnit } from "@/lib/unit-access";
 import { type OperationalUploadKind } from "@/lib/operational-upload-client";
 
 export const runtime = "nodejs";
@@ -83,6 +84,14 @@ async function assertTargetAccess(
   }
   const target = await dbAdmin.collection("repositionActivities").doc(targetId).get();
   if (!target.exists) throw new Error("Reposição não encontrada.");
+  const activity = target.data() ?? {};
+  if (!canAccessAnyUnit(
+    context.userDoc,
+    [activity.kioskOriginId, activity.kioskDestinationId],
+    { isDefaultAdmin: context.isDefaultAdmin }
+  )) {
+    throw new Error("Reposição fora do seu escopo de unidades.");
+  }
 }
 
 function buildObjectPath(
@@ -187,7 +196,7 @@ export async function POST(request: NextRequest) {
     const status =
       message.includes("Authorization") || message.includes("Usuário")
         ? 401
-        : message.startsWith("Sem permissão")
+        : message.startsWith("Sem permissão") || message.includes("escopo de unidades")
           ? 403
           : 400;
     return NextResponse.json({ error: message }, { status });

@@ -38,6 +38,7 @@ import { RequestItemAdditionModal } from './request-item-addition-modal';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useItemAddition } from '@/hooks/use-item-addition';
 import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from '@/lib/stock-expiry-alert';
+import { canAccessUnit } from '@/lib/unit-access';
 
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
@@ -411,7 +412,7 @@ interface StockSessionManagementProps {
 }
 
 export function StockSessionManagement({ showExportButton = false }: StockSessionManagementProps) {
-  const { user, permissions } = useAuth();
+  const { user, permissions, isDefaultAdmin } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { products, getProductFullName, loading: productsLoading } = useProducts();
@@ -425,19 +426,20 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   const stockDataLoading = kiosksLoading || lotsLoading || productsLoading || baseProductsLoading;
   const loading = auditLoading || stockDataLoading;
 
-  const isAdmin = permissions.settings.manageUsers; // admin vê tudo
   const pendingAudits = useMemo(() => auditSessions.filter(s =>
     s.status === 'pending_review' &&
-    (isAdmin || user?.assignedKioskIds?.includes(s.kioskId))
-  ), [auditSessions, isAdmin, user]);
+    Boolean(user) && canAccessUnit(user!, s.kioskId, { isDefaultAdmin })
+  ), [auditSessions, isDefaultAdmin, user]);
 
   const countableKiosks = useMemo(
-    () => (isAdmin ? kiosks : kiosks.filter((k) => user?.assignedKioskIds?.includes(k.id))),
-    [isAdmin, kiosks, user],
+    () => user ? kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin })) : [],
+    [isDefaultAdmin, kiosks, user],
   );
   const pendingRequests = useMemo(
-    () => itemAdditionRequests.filter((r) => r.status === 'pending' && (isAdmin || user?.assignedKioskIds?.includes(r.kioskId))),
-    [itemAdditionRequests, isAdmin, user],
+    () => itemAdditionRequests.filter((request) =>
+      request.status === 'pending' && Boolean(user) && canAccessUnit(user!, request.kioskId, { isDefaultAdmin })
+    ),
+    [isDefaultAdmin, itemAdditionRequests, user],
   );
   
   const handleStartSession = async (kioskId: string) => {

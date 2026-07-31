@@ -5,8 +5,23 @@ service cloud.firestore {
 
     // --- FUNÇÕES DE APOIO ---
 
-    function isAuth() {
+    function isAuthenticated() {
       return request.auth != null;
+    }
+
+    function hasCurrentProfileCompliance() {
+      let compliance = isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('profileCompliance', {})
+        : {};
+      return compliance.get('status', '') == 'complete'
+        && compliance.get('policyVersion', 0) == 1
+        && compliance.get('nextReviewAt', null) is timestamp
+        && compliance.get('nextReviewAt', null) > request.time;
+    }
+
+    function isAuth() {
+      return isAuthenticated() && hasCurrentProfileCompliance();
     }
 
     function isAdmin() {
@@ -194,7 +209,9 @@ service cloud.firestore {
 
     // Perfis
     match /profiles/{profileId} {
-      allow read: if isAuth();
+      // O perfil mínimo é necessário para concluir o bootstrap da autenticação.
+      // Todo conteúdo operacional continua condicionado à conformidade cadastral.
+      allow read: if isAuthenticated();
       allow create: if isAuth() && (isAdmin() || getPerms().settings.manageProfiles == true)
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2
@@ -228,7 +245,8 @@ service cloud.firestore {
 
     // Usuários: escrita somente via APIs/Cloud Functions.
     match /users/{userId} {
-      allow read: if isAuth() && (request.auth.uid == userId || canReadUsersDirectory());
+      // O diretório de terceiros é servido pela API, que aplica o escopo de unidades.
+      allow read: if isAuthenticated() && request.auth.uid == userId;
       allow write: if false;
     }
 
@@ -405,11 +423,8 @@ service cloud.firestore {
 
     // Atividades de reposição
     match /repositionActivities/{activityId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().stock.analysis.restock == true);
-      allow create, update: if isAuth() && (isAdmin() || getPerms().stock.analysis.restock == true)
-        && request.resource.data.keys().hasAll(['status'])
-        && request.resource.data.status is string;
-      allow delete: if isAuth() && (isAdmin() || getPerms().reposition.cancel == true);
+      // Leitura e escrita passam pelas APIs, que aplicam permissão + escopo.
+      allow read, write: if false;
     }
 
     // Relatórios de consumo
@@ -469,10 +484,8 @@ service cloud.firestore {
 
     // Tarefas
     match /tasks/{taskId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().tasks.view == true);
-      allow create, update: if isAuth() && (isAdmin() || getPerms().tasks.manage == true)
-        && isValidTask(request.resource.data);
-      allow delete: if isAuth() && (isAdmin() || getPerms().tasks.manage == true);
+      // O motor de tarefas é exclusivamente server-side para respeitar o escopo.
+      allow read, write: if false;
     }
 
     // Simulações de preço

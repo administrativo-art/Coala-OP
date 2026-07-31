@@ -7,6 +7,7 @@ import { ptBR } from 'date-fns/locale';
 import { useGoals } from '@/contexts/goals-context';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
+import { canAccessUnit } from '@/lib/unit-access';
 import { useDPStore } from '@/store/use-dp-store';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
 import { useGoalMethodConfigs } from '@/hooks/use-goal-method-configs';
@@ -234,15 +235,16 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   const { addTemplate, addPeriod, addEmployeeGoal, periods, templates } = useGoals();
   const { kiosks } = useKiosks();
   const { activeConfigs: goalMethodConfigs } = useGoalMethodConfigs();
-  const { user, permissions, users } = useAuth();
+  const { user, permissions, users, isDefaultAdmin } = useAuth();
   const { shiftDefinitions, schedules, units, unitGroups, unitOrganizations } = useDPStore();
   const { toast } = useToast();
   const { categories } = useProductSimulationCategories();
   const simCtx = useContext(ProductSimulationContext);
   const simulations = simCtx?.simulations ?? [];
 
-  const isAdmin = permissions.settings?.manageUsers ?? false;
-  const availableKiosks = isAdmin ? kiosks : kiosks.filter(k => user?.assignedKioskIds?.includes(k.id));
+  const availableKiosks = user
+    ? kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }))
+    : [];
 
   // Product lines from cost & price module
   const productLines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);

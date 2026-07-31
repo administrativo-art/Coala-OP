@@ -11,6 +11,7 @@ import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
 import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2, ShoppingCart, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { canAccessUnit } from '@/lib/unit-access';
 import { useTasks } from '@/hooks/use-tasks';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -74,7 +75,7 @@ function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
 
 export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const router = useRouter();
-  const { user, users } = useAuth();
+  const { user, users, isDefaultAdmin } = useAuth();
   const { profiles } = useProfiles();
   const { updateTask, deleteTask } = useTasks();
   const [rejectionNotes, setRejectionNotes] = useState('');
@@ -98,7 +99,7 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const isMyTurn = useMemo(() => {
     if (!task || !user) return false;
     const { status, assigneeType, assigneeId, approverType, approverId } = task;
-    const userUnitIds = Array.from(new Set([...(user.unitIds ?? []), ...(user.assignedKioskIds ?? [])]));
+    if (task.unitId && !canAccessUnit(user, task.unitId, { isDefaultAdmin })) return false;
     const userRoleIds = Array.from(new Set([
       user.profileId,
       user.jobRoleId,
@@ -109,15 +110,15 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
         if (approverType === 'user' && approverId === user.id) return true;
         if (approverType === 'profile' && user.profileId === approverId) return true;
         if (approverType === 'role' && approverId && userRoleIds.includes(approverId)) return true;
-        if (approverType === 'unit' && approverId && userUnitIds.includes(approverId)) return true;
+        if (approverType === 'unit' && approverId && canAccessUnit(user, approverId, { isDefaultAdmin })) return true;
     } else if (status === 'pending' || status === 'reopened' || status === 'in_progress') {
         if (assigneeType === 'user' && assigneeId === user.id) return true;
         if (assigneeType === 'profile' && user.profileId === assigneeId) return true;
         if (assigneeType === 'role' && userRoleIds.includes(assigneeId)) return true;
-        if (assigneeType === 'unit' && userUnitIds.includes(assigneeId)) return true;
+        if (assigneeType === 'unit' && canAccessUnit(user, assigneeId, { isDefaultAdmin })) return true;
     }
     return false;
-  }, [task, user, users, profiles]);
+  }, [isDefaultAdmin, task, user]);
 
   const originLink = useMemo(() => {
     if (!task) return null;

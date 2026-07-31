@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncRepositionTaskSafely } from "@/features/reposition/lib/task-sync";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
+import { canAccessAnyUnit, canAccessUnit } from "@/lib/unit-access";
 import { type RepositionActivity } from "@/types";
 
 export const runtime = "nodejs";
@@ -69,14 +70,11 @@ export async function GET(request: NextRequest) {
     const snap = await dbAdmin.collection("repositionActivities").get();
     const activities = snap.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<RepositionActivity, "id">) }))
-      .filter((activity) => {
-        if (canManage(context)) return true;
-        if (!context.permissions?.reposition?.receive) return true;
-
-        const assignedKioskIds = context.userDoc.assignedKioskIds ?? [];
-        const unitIds = context.userDoc.unitIds ?? [];
-        return assignedKioskIds.includes(activity.kioskDestinationId) || unitIds.includes(activity.kioskDestinationId);
-      })
+      .filter((activity) => canAccessAnyUnit(
+        context.userDoc,
+        [activity.kioskOriginId, activity.kioskDestinationId],
+        { isDefaultAdmin: context.isDefaultAdmin }
+      ))
       .map((activity) => detail === "full" ? toFullListItem(activity) : toSummary(activity))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
@@ -125,6 +123,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Payload inválido para criação da reposição." },
         { status: 400 }
+      );
+    }
+
+    const canAccessOrigin = canAccessUnit(context.userDoc, body.kioskOriginId, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    });
+    const canAccessDestination = canAccessUnit(context.userDoc, body.kioskDestinationId, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    });
+    if (!canAccessOrigin || !canAccessDestination) {
+      return NextResponse.json(
+        { error: "A origem e o destino precisam estar dentro do seu escopo de unidades." },
+        { status: 403 }
       );
     }
 

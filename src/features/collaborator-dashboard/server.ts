@@ -42,6 +42,7 @@ export async function buildCollaboratorDashboardPayload(access: ServerUserContex
   const userIds = compactUnique([
     access.decoded.uid,
     user.id,
+    user.hrEmployeeId,
     user.registrationIdBizneo,
     user.registrationIdPdv,
     ...pdvAccessIds,

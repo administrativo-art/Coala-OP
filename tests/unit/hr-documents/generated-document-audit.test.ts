@@ -5,7 +5,7 @@ import { buildGeneratedDocumentAudit } from "../../../src/features/hr/documents/
 
 test("registra valor renderizado, origem e versões sem repetir bruto sensível", () => {
   const { audit } = buildGeneratedDocumentAudit({
-    variables: ["employee.name", "employee.bank_account", "receipt_note"],
+    variables: ["employee.name", "employee.pix_key", "receipt_note"],
     mapping: {
       receipt_note: {
         kind: "manual",
@@ -15,24 +15,24 @@ test("registra valor renderizado, origem e versões sem repetir bruto sensível"
       },
     },
     data: {
-      employee: { name: "MARIA", bank_account: "000123-4" },
+      employee: { name: "MARIA", pix_key: "11999999999" },
       receipt_note: "Quitado",
     },
     flat: {
       "employee.name": "MARIA",
-      "employee.bank_account": "000123-4",
+      "employee.pix_key": "11999999999",
     },
     rawFlat: {
       "employee.name": "MARIA",
-      "employee.bank_account": "000123-4",
+      "employee.pix_key": "11999999999",
     },
     manualValues: { receipt_note: "Quitado" },
     resolvedAt: "2026-07-28T00:00:00.000Z",
   });
 
   assert.equal(audit.values["employee.name"].renderedValue, "MARIA");
-  assert.equal(audit.values["employee.bank_account"].sensitive, true);
-  assert.equal(audit.values["employee.bank_account"].rawValue, null);
+  assert.equal(audit.values["employee.pix_key"].sensitive, true);
+  assert.equal(audit.values["employee.pix_key"].rawValue, null);
   assert.equal(audit.values.receipt_note.sourceType, "manual");
   assert.equal(audit.catalogVersion, "coala-documents-v2");
 });

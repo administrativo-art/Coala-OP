@@ -4,10 +4,18 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 import { extractDocxVariables } from "@/features/hr/documents/docx-generator";
-import { validateDocxForLetterhead } from "@/features/hr/documents/docx-template-validation";
+import { applyCtDocumentStandard } from "@/features/hr/documents/ct-document-standard.server";
+import {
+  validateCtDocumentStandard,
+  validateDocxForLetterhead,
+} from "@/features/hr/documents/docx-template-validation";
 import { DOCUMENT_VARIABLE_SCHEMA_VERSION } from "@/features/hr/integration/document-variables";
 import { normalizeFieldMapping, pendingPlaceholders } from "@/features/hr/documents/field-mapping";
 import { scanDocxTemplateForPersonalData } from "@/features/hr/documents/document-template-ai";
+import {
+  documentTemplateEditBlockMessage,
+  isDocumentTemplateContentEditable,
+} from "@/features/hr/documents/document-template-governance";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
@@ -23,16 +31,31 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const reference = dbAdmin.collection("companyDocumentTemplates").doc(id);
     const document = await reference.get();
     if (!document.exists || document.get("deletedAt")) return error("Modelo não encontrado.", 404);
+    if (!isDocumentTemplateContentEditable({
+      officialCandidate: document.get("officialCandidate") === true,
+      status: document.get("status"),
+      workflowStatus: document.get("workflowStatus"),
+    })) {
+      return error(documentTemplateEditBlockMessage({
+        officialCandidate: document.get("officialCandidate") === true,
+        status: document.get("status"),
+        workflowStatus: document.get("workflowStatus"),
+      }), 409);
+    }
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File) || !file.name.toLowerCase().endsWith(".docx")) return error("Envie um arquivo Word no formato DOCX.");
     if (file.size > MAX_BYTES) return error("O modelo DOCX deve possuir até 10 MB.");
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const originalBuffer = Buffer.from(await file.arrayBuffer());
+    let buffer: Buffer;
     let variables: string[];
     let templateValidation;
+    let documentStandardValidation;
     try {
+      buffer = applyCtDocumentStandard(originalBuffer);
       variables = extractDocxVariables(buffer);
       templateValidation = validateDocxForLetterhead(buffer);
+      documentStandardValidation = validateCtDocumentStandard(buffer);
     } catch {
       return error("O arquivo DOCX está corrompido ou não é um modelo válido.");
     }
@@ -41,14 +64,53 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const pending = pendingPlaceholders(variables, fieldMapping);
     const version = Number(document.get("version") ?? 0) + 1;
     const storagePath = `document-templates/${id}/versions/${String(version).padStart(3, "0")}/template.docx`;
-    await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, { resumable: false, metadata: { contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", cacheControl: "private, no-store", metadata: { templateId: id, version: String(version) } } });
+    const originalStoragePath = `document-templates/${id}/versions/${String(version).padStart(3, "0")}/original.docx`;
+    const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
+    await Promise.all([
+      bucket.file(originalStoragePath).save(originalBuffer, {
+        resumable: false,
+        metadata: {
+          contentType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          cacheControl: "private, no-store",
+          metadata: {
+            templateId: id,
+            version: String(version),
+            artifact: "original",
+          },
+        },
+      }),
+      bucket.file(storagePath).save(buffer, {
+        resumable: false,
+        metadata: {
+          contentType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          cacheControl: "private, no-store",
+          metadata: {
+            templateId: id,
+            version: String(version),
+            artifact: "standardized-candidate",
+          },
+        },
+      }),
+    ]);
     const now = Timestamp.now();
     const update = {
       status: "draft",
+      preparationStatus: "ai_mapping",
+      ...(document.get("officialCandidate") === true ? {
+        workflowStatus: "technical_validation",
+        workflowNote: null,
+      } : {}),
       version,
       storagePath,
+      originalStoragePath,
       originalName: file.name.slice(0, 180),
-      size: file.size,
+      originalSize: file.size,
+      originalContentHash: createHash("sha256")
+        .update(originalBuffer)
+        .digest("hex"),
+      size: buffer.byteLength,
       contentHash: createHash("sha256").update(buffer).digest("hex"),
       variables,
       fieldMapping,
@@ -56,8 +118,27 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       unknownVariables: pending,
       letterheadProfileId: templateValidation.profileId,
       templateValidation,
+      documentStandardVersion: 1,
+      documentStandardValidation,
+      documentStandardAppliedAt: now,
+      documentStandardAutomaticRules: [
+        "estilos_ct",
+        "pagina_a4",
+        "margens_ct",
+        "hifenizacao",
+        "numeracao_multinivel",
+        "campo_pagina",
+      ],
       aiPreparationBlocked: !personalDataScan.safeForAi,
       aiPreparationFindings: personalDataScan.findings,
+      aiMappingPlan: null,
+      fieldPreparationTestedAt: null,
+      fieldPreparationTestedBy: null,
+      fieldPreparationTestedByName: null,
+      sourceIntegrity: null,
+      contentUpdatedAt: now,
+      contentUpdatedBy: access.decoded.uid,
+      contentUpdatedByName: access.actorName,
       updatedAt: now,
       updatedBy: access.decoded.uid,
       updatedByName: access.actorName,

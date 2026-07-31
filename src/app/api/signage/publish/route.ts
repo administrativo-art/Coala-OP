@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     const access = await assertSignageAccess(req, 'manage');
     const payload = await req.json();
     const requestedKioskIds = Array.isArray(payload.kioskIds) ? payload.kioskIds.map(String) : [];
-    const kioskIds = sanitizeKioskIds(requestedKioskIds, access.allowedKioskIds, access.isAdmin);
+    const kioskIds = sanitizeKioskIds(requestedKioskIds, access.allowedKioskIds, access.allUnits);
 
     if (!kioskIds.length) {
       return NextResponse.json({ error: 'Selecione ao menos um quiosque para publicar.' }, { status: 400 });

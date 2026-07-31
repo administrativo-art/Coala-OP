@@ -10,6 +10,7 @@ type FieldConfig = {
   employeeVisible: boolean;
   employeeEditable: boolean;
   order: number;
+  helpText?: string;
   options?: string[];
   conditionals?: FieldMapEntry["conditionals"];
   group?: FieldMapEntry["group"];
@@ -54,6 +55,7 @@ function field(config: FieldConfig): FieldMapEntry {
     },
   };
   if (config.required !== undefined) entry.required = config.required;
+  if (config.helpText !== undefined) entry.help_text = config.helpText;
   if (config.options !== undefined) entry.options = config.options;
   if (config.conditionals !== undefined) entry.conditionals = config.conditionals;
   if (config.group !== undefined) entry.group = config.group;
@@ -110,11 +112,17 @@ export const DEFAULT_SYSTEM_FIELDS: Record<string, FieldMapEntry> = {
 export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   ...DEFAULT_SYSTEM_FIELDS,
   "employee.name": field({ label: "Nome completo", section: "Dados pessoais", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: false, order: 10 }),
-  "employee.state": field({ label: "Estado (UF)", section: "Dados pessoais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: true, order: 20, options: UF_OPTIONS }),
-  "employee.city": field({ label: "Cidade", section: "Dados pessoais", type: "text", visibility: "public", employeeVisible: true, employeeEditable: true, order: 30 }),
+  "employee.state": field({ label: "Estado (UF)", section: "Dados pessoais", type: "single_select", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 20, options: UF_OPTIONS }),
+  "employee.city": field({ label: "Cidade", section: "Dados pessoais", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 30 }),
   "employee.address": field({ label: "Endereço", section: "Dados pessoais", type: "text", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 40 }),
-  "employee.phone": field({ label: "Telefone celular", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 50 }),
-  "employee.personal_email": field({ label: "E-mail pessoal", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 60 }),
+  "employee.address_zipcode": field({ label: "CEP", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 41 }),
+  "employee.address_street": field({ label: "Logradouro", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 42 }),
+  "employee.address_number": field({ label: "Número", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 43 }),
+  "employee.address_no_number": field({ label: "Sem número", section: "Dados pessoais", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 44 }),
+  "employee.address_complement": field({ label: "Complemento", section: "Dados pessoais", type: "text", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 45 }),
+  "employee.address_neighborhood": field({ label: "Bairro", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 46 }),
+  "employee.phone": field({ label: "Telefone celular", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 50 }),
+  "employee.personal_email": field({ label: "E-mail de acesso", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 60, helpText: "É o mesmo e-mail utilizado para entrar no Coala One. Não existe um segundo e-mail pessoal." }),
   "employee.nationality": field({ label: "Nacionalidade", section: "Dados pessoais", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 70 }),
   "employee.birth_date": field({ label: "Data de nascimento", section: "Dados pessoais", type: "date", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 80 }),
   "employee.marital_status": field({ label: "Estado civil", section: "Dados pessoais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 90, options: ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União estável"] }),
@@ -161,7 +169,7 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
 
   "employee.emergency_name": field({ label: "Nome", section: "Contatos de emergência", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 10 }),
   "employee.emergency_phone": field({ label: "Celular (com DDD)", section: "Contatos de emergência", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 20 }),
-  "employee.emergency_relation": field({ label: "Grau de parentesco", section: "Contatos de emergência", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: true, order: 30, options: ["Mãe/Pai", "Cônjuge", "Filho(a)", "Irmão/Irmã", "Parente", "Amigo(a)", "Outro"] }),
+  "employee.emergency_relation": field({ label: "Grau de parentesco", section: "Contatos de emergência", type: "single_select", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 30, options: ["Mãe/Pai", "Cônjuge", "Filho(a)", "Irmão/Irmã", "Parente", "Amigo(a)", "Outro"] }),
   "employee.has_food_restriction": field({ label: "Possui restrição alimentar relevante à atividade?", section: "Saúde e segurança", type: "boolean", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 10, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
   "employee.food_restrictions": field({ label: "Ingredientes relacionados à restrição", section: "Saúde e segurança", type: "multi_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 20, options: ["Leite e derivados", "Trigo ou glúten", "Ovos", "Soja", "Amendoim", "Castanhas ou outras oleaginosas", "Corantes ou aromatizantes", "Outro ingrediente"], conditionals: HAS_FOOD_RESTRICTION_CONDITION, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
   "employee.food_restriction_other": field({ label: "Outro ingrediente", section: "Saúde e segurança", type: "text", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 30, conditionals: HAS_FOOD_RESTRICTION_CONDITION, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
@@ -169,10 +177,8 @@ export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
   "employee.needs_workplace_adaptation": field({ label: "Necessita de adaptação funcional?", section: "Saúde e segurança", type: "boolean", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 50, lgpd: { legal_basis: "legal_obligation", requires_consent: false } }),
   "employee.workplace_adaptation_notes": field({ label: "Orientação funcional de SST", section: "Saúde e segurança", type: "multiline", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 60, conditionals: NEEDS_WORKPLACE_ADAPTATION_CONDITION, lgpd: { legal_basis: "legal_obligation", requires_consent: false } }),
 
-  "employee.bank_name": field({ label: "Banco", section: "Dados bancários", type: "single_select", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10, options: ["Banco do Brasil", "Bradesco", "Caixa", "Itaú", "Santander", "Nubank", "Inter", "Outro"] }),
-  "employee.bank_agency": field({ label: "Agência", section: "Dados bancários", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),
-  "employee.bank_account": field({ label: "Conta corrente", section: "Dados bancários", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.pix_key": field({ label: "Chave Pix", section: "Dados bancários", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.pix_key_type": field({ label: "Tipo da chave Pix", section: "Pagamento via Pix", type: "single_select", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 10, options: ["cpf", "cnpj", "phone", "email", "random"] }),
+  "employee.pix_key": field({ label: "Chave Pix", section: "Pagamento via Pix", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 20 }),
 
   "employee.aso_admission_date": field({ label: "Exame admissional", section: "Controle de ASOs", type: "date", required: true, visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 10 }),
   "employee.aso_dismissal_date": field({ label: "Exame demissional", section: "Controle de ASOs", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),

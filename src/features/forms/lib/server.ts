@@ -371,6 +371,7 @@ export async function listFormExecutionsForAssignee(params: {
   workspaceId: string;
   userId: string;
   unitIds: string[];
+  allUnits?: boolean;
   statuses?: string[];
   limit?: number;
 }) {
@@ -390,13 +391,14 @@ export async function listFormExecutionsForAssignee(params: {
   return executions
     .filter((execution) => {
       if (allowedStatuses.size > 0 && !allowedStatuses.has(execution.status)) return false;
+      if (!params.allUnits && !allowedUnitIds.has(execution.unit_id)) return false;
       if (execution.assigned_user_id === params.userId) return true;
       if (execution.collaborator_user_ids?.includes(params.userId)) return true;
       const assignedToUnitPool =
         execution.assigned_user_id === "__unit_pool__" ||
         execution.assigned_user_id === "unit_pool" ||
         execution.assigned_user_id === "";
-      return assignedToUnitPool && allowedUnitIds.has(execution.unit_id);
+      return assignedToUnitPool;
     })
     .sort((left, right) =>
       String(left.due_at ?? left.scheduled_for ?? left.created_at ?? "").localeCompare(

@@ -19,14 +19,21 @@ export async function GET(request: NextRequest) {
       "sensitiveData.view",
       access.isDefaultAdmin,
     );
+    const includeSignatureContacts = includeSensitive || hasFormalizationPermission(
+      access.permissions,
+      "signatures.send",
+      access.isDefaultAdmin,
+    );
     const { searchParams } = new URL(request.url);
     const employeeId = searchParams.get("employeeId")?.trim();
     const templateId = searchParams.get("templateId")?.trim();
+    const includeDiscarded = searchParams.get("includeDiscarded") === "true";
     let query: FirebaseFirestore.Query = dbAdmin.collection("generatedDocuments");
     if (employeeId) query = query.where("employeeId", "==", employeeId);
     if (templateId) query = query.where("templateId", "==", templateId);
     const snap = await query.limit(300).get();
     const documents = snap.docs
+      .filter((doc) => includeDiscarded || doc.get("status") !== "discarded")
       .map((doc): Record<string, unknown> & { id: string } => {
         const data = serializeHrValue(doc.data());
         const record = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
@@ -39,6 +46,25 @@ export async function GET(request: NextRequest) {
           pdfAvailable: !!record.pdfStoragePath,
           pdfStoragePath: undefined,
           manualValues: includeSensitive ? record.manualValues : undefined,
+          parties: Array.isArray(record.parties)
+            ? record.parties.map((party) => {
+                const item = party && typeof party === "object" && !Array.isArray(party)
+                  ? party as Record<string, unknown>
+                  : {};
+                const snapshot = item.snapshot && typeof item.snapshot === "object" && !Array.isArray(item.snapshot)
+                  ? item.snapshot as Record<string, unknown>
+                  : {};
+                return {
+                  ...item,
+                  snapshot: {
+                    ...snapshot,
+                    signatureEmail: includeSignatureContacts
+                      ? snapshot.signatureEmail ?? null
+                      : undefined,
+                  },
+                };
+              })
+            : [],
         };
       })
       .sort((a, b) => String(b.generatedAt ?? "").localeCompare(String(a.generatedAt ?? "")));

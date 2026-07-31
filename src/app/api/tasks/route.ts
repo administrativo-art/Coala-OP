@@ -14,6 +14,7 @@ import {
   listTasks,
 } from "@/features/tasks/lib/server";
 import { type Task, type TaskOrigin } from "@/types";
+import { canAccessUnit } from "@/lib/unit-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,6 +92,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Título da tarefa é obrigatório." },
         { status: 400 }
+      );
+    }
+
+    if (
+      typeof body.unitId === "string" &&
+      !canAccessUnit(context.userDoc, body.unitId, {
+        isDefaultAdmin: context.isDefaultAdmin,
+      })
+    ) {
+      return NextResponse.json(
+        { error: "A unidade da tarefa está fora do seu escopo de acesso." },
+        { status: 403 }
       );
     }
 

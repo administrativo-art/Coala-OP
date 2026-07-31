@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  Check,
+  ChevronsUpDown,
   CircleAlert,
+  Eye,
   ExternalLink,
   FileCheck2,
   FilePlus2,
@@ -13,7 +16,16 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type {
   ManualFieldBinding,
   TemplateFieldMapping,
@@ -54,6 +66,9 @@ type PartyOption = {
   name: string;
   document: string;
   address: string;
+  email: string;
+  signatureName: string;
+  signatureUserId: string;
 };
 
 const SELECT_OPTION_LABELS: Record<string, string> = {
@@ -121,6 +136,134 @@ function withValueAt(root: Record<string, unknown>, path: string, value: unknown
   return output;
 }
 
+function PartySearchSelect(props: {
+  availableParties: PartyOption[];
+  allowedPartyTypes: DocumentFormField["allowedPartyTypes"];
+  selection: string;
+  onSelect: (selection: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const registeredPeople = props.availableParties.filter((option) =>
+    option.partyType === "employee" || option.partyType === "external_person"
+  );
+  const registeredCompanies = props.availableParties.filter((option) =>
+    option.partyType === "company" || option.partyType === "external_company"
+  );
+  const selected = props.availableParties.find((option) =>
+    `registered:${option.partyType}:${option.id}` === props.selection
+  );
+  const selectedLabel = selected?.name
+    ?? (props.selection === "manual:external_person"
+      ? "Pessoa avulsa"
+      : props.selection === "manual:external_company"
+        ? "Empresa avulsa"
+        : "Buscar pessoa ou empresa...");
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-10 w-full justify-between bg-white font-normal sm:col-span-2"
+        >
+          <span className="truncate">{selectedLabel}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] min-w-[min(92vw,560px)] p-0"
+      >
+        <Command>
+          <CommandInput placeholder="Buscar por nome, CPF, CNPJ ou e-mail..." />
+          <CommandList>
+            <CommandEmpty>Nenhum cadastro encontrado.</CommandEmpty>
+            {registeredPeople.length ? (
+              <CommandGroup heading="Pessoas cadastradas">
+                {registeredPeople.map((option) => {
+                  const value = `registered:${option.partyType}:${option.id}`;
+                  return (
+                    <CommandItem
+                      key={value}
+                      value={`${option.name} ${option.document} ${option.email} ${option.id}`}
+                      onSelect={() => {
+                        props.onSelect(value);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check className={`mr-2 h-4 w-4 ${props.selection === value ? "opacity-100" : "opacity-0"}`} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{option.name}</span>
+                        <span className="block truncate text-[11px] text-slate-500">
+                          {[option.document, option.email].filter(Boolean).join(" · ") || "Sem documento ou e-mail"}
+                        </span>
+                      </span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            ) : null}
+            {registeredCompanies.length ? (
+              <CommandGroup heading="Empresas cadastradas">
+                {registeredCompanies.map((option) => {
+                  const value = `registered:${option.partyType}:${option.id}`;
+                  return (
+                    <CommandItem
+                      key={value}
+                      value={`${option.name} ${option.document} ${option.email} ${option.id}`}
+                      onSelect={() => {
+                        props.onSelect(value);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check className={`mr-2 h-4 w-4 ${props.selection === value ? "opacity-100" : "opacity-0"}`} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{option.name}</span>
+                        <span className="block truncate text-[11px] text-slate-500">
+                          {[option.document, option.email].filter(Boolean).join(" · ") || "Sem documento ou e-mail"}
+                        </span>
+                      </span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            ) : null}
+            <CommandGroup heading="Cadastro avulso">
+              {props.allowedPartyTypes?.includes("external_person") ? (
+                <CommandItem
+                  value="Pessoa avulsa"
+                  onSelect={() => {
+                    props.onSelect("manual:external_person");
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${props.selection === "manual:external_person" ? "opacity-100" : "opacity-0"}`} />
+                  Pessoa avulsa
+                </CommandItem>
+              ) : null}
+              {props.allowedPartyTypes?.includes("external_company") ? (
+                <CommandItem
+                  value="Empresa avulsa"
+                  onSelect={() => {
+                    props.onSelect("manual:external_company");
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${props.selection === "manual:external_company" ? "opacity-100" : "opacity-0"}`} />
+                  Empresa avulsa
+                </CommandItem>
+              ) : null}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function SchemaFieldInput(props: {
   field: DocumentFormField;
   formValues: Record<string, unknown>;
@@ -143,10 +286,6 @@ function SchemaFieldInput(props: {
     const partyType = String(party.partyType ?? "");
     const allowedPartyTypes = field.allowedPartyTypes ?? [];
     const availableParties = partyOptions.filter((option) => allowedPartyTypes.includes(option.partyType));
-    const registeredPeople = availableParties.filter((option) =>
-      option.partyType === "employee" || option.partyType === "external_person"
-    );
-    const registeredCompanies = availableParties.filter((option) => option.partyType === "company");
     const registeredSelection = typeof party.ref === "string" && party.ref
       ? `registered:${partyType}:${party.ref}`
       : "";
@@ -170,12 +309,13 @@ function SchemaFieldInput(props: {
           Selecione uma pessoa ou empresa cadastrada, ou informe uma parte avulsa.
         </p>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(200px,1fr)]">
-          <select
-            className="h-10 rounded-md border bg-white px-2 text-sm sm:col-span-2"
-            value={selection}
-            onChange={(event) => {
+          <PartySearchSelect
+            availableParties={availableParties}
+            allowedPartyTypes={field.allowedPartyTypes}
+            selection={selection}
+            onSelect={(nextSelection) => {
               const selected = availableParties.find((option) =>
-                `registered:${option.partyType}:${option.id}` === event.target.value
+                `registered:${option.partyType}:${option.id}` === nextSelection
               );
               if (selected) {
                 set({
@@ -185,45 +325,24 @@ function SchemaFieldInput(props: {
                     name: selected.name,
                     document: selected.document,
                     address: selected.address,
+                    email: selected.email,
+                    signatureName: selected.signatureName,
+                    signatureUserId: selected.signatureUserId,
                   },
                 });
                 return;
               }
-              if (event.target.value === "manual:external_person") {
+              if (nextSelection === "manual:external_person") {
                 set({ partyType: "external_person", ref: null, snapshot: {} });
                 return;
               }
-              if (event.target.value === "manual:external_company") {
+              if (nextSelection === "manual:external_company") {
                 set({ partyType: "external_company", ref: null, snapshot: {} });
                 return;
               }
               set(undefined);
             }}
-          >
-            <option value="">Selecione uma pessoa ou empresa...</option>
-            {registeredPeople.length ? (
-              <optgroup label="Pessoas cadastradas">
-                {registeredPeople.map((option) => (
-                  <option key={`${option.partyType}:${option.id}`} value={`registered:${option.partyType}:${option.id}`}>
-                    {option.name}{option.document ? ` · ${option.document}` : ""}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-            {registeredCompanies.length ? (
-              <optgroup label="Empresas cadastradas">
-                {registeredCompanies.map((option) => (
-                  <option key={`${option.partyType}:${option.id}`} value={`registered:${option.partyType}:${option.id}`}>
-                    {option.name}{option.document ? ` · ${option.document}` : ""}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-            <optgroup label="Cadastro avulso">
-              {allowedPartyTypes.includes("external_person") ? <option value="manual:external_person">Pessoa avulsa</option> : null}
-              {allowedPartyTypes.includes("external_company") ? <option value="manual:external_company">Empresa avulsa</option> : null}
-            </optgroup>
-          </select>
+          />
           {selection ? (
             <>
               <Input
@@ -238,6 +357,27 @@ function SchemaFieldInput(props: {
                 value={String(snapshot.document ?? "")}
                 onChange={(event) => updateParty({ ref: null }, { document: event.target.value })}
               />
+              <Input
+                type="email"
+                placeholder="E-mail para assinatura"
+                readOnly={!isManual}
+                value={String(snapshot.email ?? "")}
+                onChange={(event) => updateParty({}, { email: event.target.value })}
+              />
+              <Input
+                placeholder="Endereço"
+                readOnly={!isManual}
+                value={String(snapshot.address ?? "")}
+                onChange={(event) => updateParty({ ref: null }, { address: event.target.value })}
+              />
+              {!isManual
+              && ["company", "external_company"].includes(partyType)
+              && snapshot.signatureName ? (
+                <p className="text-[11px] font-medium text-violet-700 sm:col-span-2">
+                  Assinatura pela empresa: {String(snapshot.signatureName)}
+                  {snapshot.email ? ` · ${String(snapshot.email)}` : ""}
+                </p>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -468,13 +608,26 @@ export function DocumentGeneratorWorkspace(props: {
 
   async function openGeneratedPdf() {
     if (!result?.pdfAvailable) return;
-    const response = await fetch(`/api/documents/generated/${encodeURIComponent(result.id)}/file?format=pdf`, {
-      headers: { Authorization: `Bearer ${await token()}` },
-    });
-    if (!response.ok) throw new Error("Falha ao abrir o PDF.");
-    const url = URL.createObjectURL(await response.blob());
-    window.open(url, "_blank", "noopener,noreferrer");
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    const previewWindow = window.open("about:blank", "_blank");
+    if (previewWindow) previewWindow.opener = null;
+    try {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(result.id)}/file?format=pdf`, {
+        headers: { Authorization: `Bearer ${await token()}` },
+      });
+      if (!response.ok) throw new Error("Falha ao abrir o PDF.");
+      const url = URL.createObjectURL(await response.blob());
+      if (previewWindow) previewWindow.location.href = url;
+      else {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.target = "_blank";
+        anchor.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (cause) {
+      previewWindow?.close();
+      setMessage(cause instanceof Error ? cause.message : "Falha ao abrir o PDF.");
+    }
   }
 
   if (!canGenerate) return <p className="p-6 text-sm text-slate-500">Sem permissão para gerar documentos.</p>;
@@ -594,8 +747,29 @@ export function DocumentGeneratorWorkspace(props: {
               </div>
               {result ? (
                 <div className={`rounded-lg border p-3 ${result.pdfAvailable ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                  <p className="text-xs font-black">Prévia registrada</p>
-                  {result.pdfAvailable ? <Button className="mt-2" size="sm" variant="outline" onClick={() => void openGeneratedPdf()}>Conferir PDF</Button> : null}
+                  <p className="flex items-center gap-2 text-xs font-black text-slate-900">
+                    {result.pdfAvailable ? <FileCheck2 className="h-4 w-4 text-emerald-600" /> : <CircleAlert className="h-4 w-4 text-amber-600" />}
+                    {result.pdfAvailable ? "Prévia em PDF pronta para conferência" : "DOCX gerado; PDF ainda indisponível"}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    {result.pdfAvailable
+                      ? "Abra o PDF, confira o conteúdo e depois volte à fila para aprovar."
+                      : "A conversão não foi concluída. O documento não poderá ser aprovado até o PDF existir."}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {result.pdfAvailable ? (
+                      <Button size="sm" variant="outline" onClick={() => void openGeneratedPdf()}>
+                        <Eye className="mr-2 h-4 w-4" />Conferir PDF
+                      </Button>
+                    ) : null}
+                    {props.onBack ? (
+                      <Button size="sm" variant="outline" onClick={props.onBack}>Voltar à fila</Button>
+                    ) : (
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href="/dashboard/documents/generated">Abrir documentos gerados</Link>
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ) : null}
             </div>

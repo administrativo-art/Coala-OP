@@ -10,6 +10,7 @@ import {
   serializeHrValue,
 } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { resolvePersonLink } from "@/features/hr/lib/person-link.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +22,9 @@ function cleanText(value: unknown, max = 300) {
 async function employeeReference(employeeId: string) {
   const id = decodeURIComponent(employeeId ?? "").trim();
   if (!id) throw new Error("Colaborador obrigatório.");
-  const ref = hrDbAdmin.collection("employees").doc(id);
-  const snapshot = await ref.get();
-  if (!snapshot.exists) throw new Error("Colaborador não encontrado no RH.");
-  return { id, ref, snapshot };
+  const link = await resolvePersonLink(id);
+  if (!link.employeeDocument?.exists) throw new Error("Colaborador não encontrado no RH.");
+  return { id: link.employeeDocument.id, ref: link.employeeDocument.ref, snapshot: link.employeeDocument };
 }
 
 export async function GET(

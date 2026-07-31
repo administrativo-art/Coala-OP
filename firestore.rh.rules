@@ -24,18 +24,26 @@ service cloud.firestore {
       return cache.get('rh_role', null);
     }
 
-    function isAdmin()   { return isDefaultAdmin() || rhRole() == 'admin'; }
-    function isManager() { return isAdmin() || rhRole() == 'manager'; }
-    function isEmployee() { return isManager() || rhRole() == 'employee'; }
+    function hasCurrentProfileCompliance() {
+      let cache = rhCache();
+      return isAuth()
+          && cache.get('profile_compliance_status', 'pending') == 'complete'
+          && cache.get('profile_compliance_policy_version', 0) == 1
+          && cache.get('profile_compliance_next_review_at', timestamp.date(1970, 1, 1)) > request.time;
+    }
+
+    function isAdmin()   { return hasCurrentProfileCompliance() && (isDefaultAdmin() || rhRole() == 'admin'); }
+    function isManager() { return hasCurrentProfileCompliance() && (isAdmin() || rhRole() == 'manager'); }
+    function isEmployee() { return hasCurrentProfileCompliance() && (isManager() || rhRole() == 'employee'); }
 
     // Retorna true se o usuário logado é o próprio colaborador (via rh_access_cache)
     function isOwner(bizneoId) {
-      return isAuth() && rhCache().get('bizneo_employee_id', null) == bizneoId;
+      return hasCurrentProfileCompliance() && rhCache().get('bizneo_employee_id', null) == bizneoId;
     }
 
     // Manager vê colaboradores da mesma unit_id
     function isSameUnit(employeeUnitId) {
-      return isAuth() && rhCache().get('unit_id', null) == employeeUnitId;
+      return hasCurrentProfileCompliance() && rhCache().get('unit_id', null) == employeeUnitId;
     }
 
     function canReadEmployee(bizneoId, employeeUnitId) {
@@ -123,6 +131,7 @@ service cloud.firestore {
       allow read:   if isAdmin()
                     || (
                       rhRole() == 'manager'
+                      && hasCurrentProfileCompliance()
                       && resource.data.employee_id is string
                       && exists(
                         /databases/$(database)/documents/employees/$(resource.data.employee_id)

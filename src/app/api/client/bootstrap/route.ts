@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
+import {
+  canAccessUnit,
+  canAccessUserByUnit,
+  filterUnitsByAccess,
+  type UnitAccessUser,
+} from "@/lib/unit-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +57,13 @@ function serializeValue(value: unknown): unknown {
 async function collectionData(collectionName: string) {
   const snap = await dbAdmin.collection(collectionName).get();
   return snap.docs.map((doc) => serializeValue({ id: doc.id, ...doc.data() }));
+}
+
+async function rawCollectionData(
+  collectionName: string
+): Promise<Array<{ id: string } & Record<string, unknown>>> {
+  const snap = await dbAdmin.collection(collectionName).get();
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
 function canReadUsers(context: ServerUserContext) {
@@ -147,12 +160,22 @@ export async function GET(request: NextRequest) {
             payload.users = [serializeValue(context.userDoc)];
             return;
           }
-          payload.users = await collectionData("users");
+          const users = await rawCollectionData("users");
+          payload.users = users
+            .filter((user) => user.id === context.userDoc.id || canAccessUserByUnit(
+              context.userDoc,
+              user as UnitAccessUser,
+              { isDefaultAdmin: context.isDefaultAdmin }
+            ))
+            .map(serializeValue);
           return;
         }
 
         if (collectionName === "kiosks") {
-          payload.kiosks = await collectionData("kiosks");
+          const kiosks = await rawCollectionData("kiosks");
+          payload.kiosks = filterUnitsByAccess(kiosks, context.userDoc, {
+            isDefaultAdmin: context.isDefaultAdmin,
+          }).map(serializeValue);
           return;
         }
 
@@ -171,7 +194,12 @@ export async function GET(request: NextRequest) {
             payload.lots = [];
             return;
           }
-          payload.lots = await collectionData("lots");
+          const lots = await rawCollectionData("lots");
+          payload.lots = lots
+            .filter((lot) => canAccessUnit(context.userDoc, String(lot["kioskId"] ?? ""), {
+              isDefaultAdmin: context.isDefaultAdmin,
+            }))
+            .map(serializeValue);
           return;
         }
 
@@ -184,13 +212,26 @@ export async function GET(request: NextRequest) {
           }
 
           const [templates, periods, employeeGoals] = await Promise.all([
-            collectionData("goalTemplates"),
-            collectionData("goalPeriods"),
-            collectionData("employeeGoals"),
+            rawCollectionData("goalTemplates"),
+            rawCollectionData("goalPeriods"),
+            rawCollectionData("employeeGoals"),
           ]);
-          payload.goalTemplates = templates;
-          payload.goalPeriods = periods;
-          payload.employeeGoals = employeeGoals;
+          const visibleTemplates = templates.filter((template) => canAccessUnit(
+            context.userDoc,
+            String(template["kioskId"] ?? ""),
+            { isDefaultAdmin: context.isDefaultAdmin }
+          ));
+          const visiblePeriods = periods.filter((period) => canAccessUnit(
+            context.userDoc,
+            String(period["kioskId"] ?? ""),
+            { isDefaultAdmin: context.isDefaultAdmin }
+          ));
+          const visiblePeriodIds = new Set(visiblePeriods.map((period) => period.id));
+          payload.goalTemplates = visibleTemplates.map(serializeValue);
+          payload.goalPeriods = visiblePeriods.map(serializeValue);
+          payload.employeeGoals = employeeGoals
+            .filter((goal) => visiblePeriodIds.has(String(goal["periodId"] ?? "")))
+            .map(serializeValue);
         }
       })
     );

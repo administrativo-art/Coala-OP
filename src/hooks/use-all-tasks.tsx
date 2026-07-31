@@ -10,6 +10,7 @@ import { useReturnRequests } from './use-return-requests';
 import { useStockAudit } from './use-stock-audit';
 import { ClipboardCheck, Truck, ShieldAlert, ListOrdered, ListTodo, History } from 'lucide-react';
 import { type Task, type RepositionActivity } from '@/types';
+import { canAccessUnit, resolveUnitAccess } from '@/lib/unit-access';
 
 export interface LegacyTask {
   id: string;
@@ -60,7 +61,7 @@ const AllTasksContext = createContext<AllTasksContextType>({
 export const useAllTasks = () => useContext(AllTasksContext);
 
 export const AllTasksProvider = ({ children }: { children: React.ReactNode }) => {
-  const { user, permissions, loading: authLoading } = useAuth();
+  const { user, permissions, isDefaultAdmin, loading: authLoading } = useAuth();
   const { tasks, loading: tasksLoading } = useTasks();
   const { activities: repositionActivities, loading: repositionLoading } = useReposition();
   const { requests: returnRequests, loading: returnsLoading } = useReturnRequests();
@@ -69,9 +70,15 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const shouldLoadTasks = !!user;
   const shouldLoadAudit = !!user && !!permissions.stock.stockCount.approve;
   const shouldLoadReturns = !!user && !!permissions.stock.returns.updateStatus;
-  const shouldLoadReposition = !!user && (
-    user.username === 'Tiago Brasil' ||
-    (Array.isArray(user.assignedKioskIds) && user.assignedKioskIds.length > 0) ||
+  const unitAccess = useMemo(
+    () => user ? resolveUnitAccess(user, { isDefaultAdmin }) : null,
+    [isDefaultAdmin, user]
+  );
+  const hasUnitAccess = !!unitAccess && (unitAccess.allUnits || unitAccess.unitIds.length > 0);
+  const shouldLoadReposition = !!user && hasUnitAccess && (
+    !!permissions.reposition.view ||
+    !!permissions.reposition.receive ||
+    !!permissions.reposition.prepareDispatch ||
     !!permissions.stock.stockCount.approve
   );
 
@@ -133,7 +140,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
         ) {
             return;
         }
-        if (activity.status === 'Aguardando despacho' && user.username === 'Tiago Brasil') {
+        if (activity.status === 'Aguardando despacho' && permissions.reposition.prepareDispatch) {
              allLegacyTasks.push({
                 id: `dispatch-${activity.id}`,
                 type: 'Reposição',
@@ -202,8 +209,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const pendingReceipts: PendingReceipt[] = useMemo(() => {
     if (loading || !user) return [];
 
-    const assignedKioskIds = Array.isArray(user.assignedKioskIds) ? user.assignedKioskIds : [];
-    if (assignedKioskIds.length === 0) return [];
+    if (!permissions.reposition.receive || !unitAccess || (!unitAccess.allUnits && unitAccess.unitIds.length === 0)) return [];
 
     // Recebimento é responsabilidade do quiosque de destino: aparece para qualquer
     // atendente dele, mesmo que a Task ligada esteja atribuída a outro usuário.
@@ -211,7 +217,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     return repositionActivities
       .filter((activity: RepositionActivity) => {
         if (activity.status !== 'Aguardando recebimento') return false;
-        if (!activity.kioskDestinationId || !assignedKioskIds.includes(activity.kioskDestinationId)) return false;
+        if (!canAccessUnit(user, activity.kioskDestinationId, { isDefaultAdmin })) return false;
         const coveringTask = activity.taskId ? tasks.find((task) => task.id === activity.taskId) : undefined;
         const coveringAssignedToMe = !!coveringTask && (
           (coveringTask.assigneeType === 'user' && coveringTask.assigneeId === user.id) ||
@@ -221,7 +227,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
             coveringTask.assigneeId === user.jobRoleId ||
             (user.jobFunctionIds ?? []).includes(coveringTask.assigneeId)
           )) ||
-          (coveringTask.assigneeType === 'unit' && assignedKioskIds.includes(coveringTask.assigneeId))
+          (coveringTask.assigneeType === 'unit' && canAccessUnit(user, coveringTask.assigneeId, { isDefaultAdmin }))
         );
         return !coveringAssignedToMe;
       })
@@ -232,13 +238,12 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
         description: `Itens enviados de ${activity.kioskOriginName} para ${activity.kioskDestinationName}`,
         link: `/dashboard/stock/reposition?returnTo=${encodeURIComponent('/dashboard/collaborator')}`,
       }));
-  }, [loading, user, repositionActivities, tasks]);
+  }, [isDefaultAdmin, loading, permissions.reposition.receive, repositionActivities, tasks, unitAccess, user]);
 
   const completedReceipts: CompletedReceipt[] = useMemo(() => {
     if (loading || !user) return [];
 
-    const assignedKioskIds = Array.isArray(user.assignedKioskIds) ? user.assignedKioskIds : [];
-    if (assignedKioskIds.length === 0) return [];
+    if (!unitAccess || (!unitAccess.allUnits && unitAccess.unitIds.length === 0)) return [];
 
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
@@ -247,7 +252,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
       .filter((activity: RepositionActivity) => {
         const signedAt = activity.receiptSignature?.signedAt;
         if (!signedAt) return false;
-        if (!activity.kioskDestinationId || !assignedKioskIds.includes(activity.kioskDestinationId)) return false;
+        if (!canAccessUnit(user, activity.kioskDestinationId, { isDefaultAdmin })) return false;
         return new Date(signedAt).getTime() >= startOfToday.getTime();
       })
       .map((activity: RepositionActivity) => ({
@@ -259,7 +264,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
         hasDivergence: activity.status === 'Recebido com divergência',
       }))
       .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
-  }, [loading, user, repositionActivities]);
+  }, [isDefaultAdmin, loading, repositionActivities, unitAccess, user]);
 
   const value = useMemo(() => ({
     allTasks,

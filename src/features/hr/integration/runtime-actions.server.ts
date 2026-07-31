@@ -216,6 +216,13 @@ async function writeProfileValue(params: {
     "employeeId",
     "collaboratorUserId",
   ]);
+  if (params.fieldKey === "employee.personal_email") {
+    return {
+      employeeId: employeeId ?? null,
+      fieldKey: params.fieldKey,
+      status: "managed_by_access_account",
+    };
+  }
   const requestId = idempotencyKey([
     "integration_profile_update",
     params.processId,
@@ -272,9 +279,6 @@ async function writeProfileValue(params: {
   if (params.fieldKey === "employee.name" && typeof params.value === "string") {
     employeePatch.name = params.value;
     userPatch.username = params.value;
-  }
-  if (params.fieldKey === "employee.personal_email" && typeof params.value === "string") {
-    employeePatch.email = params.value;
   }
   if (params.fieldKey === "employee.has_vt" && typeof params.value === "boolean") {
     userPatch.needsTransportVoucher = params.value;

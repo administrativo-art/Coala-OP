@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertHrAccess } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { canAccessDocument } from "@/lib/hr/employee-document-access";
-import { buildEmployeeDocumentAccessSubject, loadEmployeeDocumentAccessSettings } from "@/features/hr/lib/employee-document-access-server";
+import { buildEmployeeDocumentAccessSubject, loadEmployeeDocumentAccessSettings, loadVisibleEmployeeIds } from "@/features/hr/lib/employee-document-access-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     const ownProfileOnly = access.permissions.dp?.collaborators?.ownProfileOnly === true;
     const ownEmployeeId = access.userDoc.id;
     const accessSettings = await loadEmployeeDocumentAccessSettings(access);
+    const visibleEmployeeIds = await loadVisibleEmployeeIds(access);
 
     const snap = await hrDbAdmin.collection(COLLECTION).get();
     const summaries = new Map<string, EmployeeDocumentSummary>();
@@ -87,6 +88,7 @@ export async function GET(request: NextRequest) {
 
       const employeeId = typeof data.employeeId === "string" ? data.employeeId.trim() : "";
       if (!employeeId) continue;
+      if (!visibleEmployeeIds.has(employeeId)) continue;
       if (ownProfileOnly && employeeId !== ownEmployeeId) continue;
       const subject = buildEmployeeDocumentAccessSubject(access, accessSettings, employeeId);
       if (!canAccessDocument(
@@ -118,6 +120,7 @@ export async function GET(request: NextRequest) {
       if (!REVIEW_BATCH_STATUSES.has(String(batch.get("status") ?? ""))) continue;
       const employeeId = String(batch.get("employeeId") ?? "").trim();
       if (!employeeId || (ownProfileOnly && employeeId !== ownEmployeeId)) continue;
+      if (!visibleEmployeeIds.has(employeeId)) continue;
 
       const summary = summaries.get(employeeId) ?? emptySummary(employeeId);
       const subject = buildEmployeeDocumentAccessSubject(access, accessSettings, employeeId);

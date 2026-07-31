@@ -74,6 +74,11 @@ import {
 
 const roleSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do cargo."),
+  cbo: z.string()
+    .trim()
+    .regex(/^\d{4}-\d{2}$/, "Use o formato 0000-00.")
+    .optional()
+    .or(z.literal("")),
   departmentId: z.string().optional(),
   parentId: z.string().optional(),
   reportsTo: z.string().optional(),
@@ -210,8 +215,10 @@ function HrTreeSection<T extends HrTreeItem>({
               <span className="h-4 w-4" />
             )}
           </button>
-          <span className="w-8 shrink-0 text-right font-mono text-[11px] text-slate-400">{number}</span>
-          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tone.dot)} />
+          <span className="w-16 shrink-0 whitespace-nowrap text-right font-mono text-[11px] tabular-nums text-slate-400">
+            {number}
+          </span>
+          <span className={cn("ml-1 h-1.5 w-1.5 shrink-0 rounded-full", tone.dot)} />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
               <span className={cn("truncate text-slate-950", depth === 0 ? "font-bold" : "font-medium")}>{node.name}</span>
@@ -416,6 +423,7 @@ function RoleDialog({
     resolver: zodResolver(roleSchema),
     defaultValues: {
       name: "",
+      cbo: "",
       departmentId: "",
       parentId: "",
       reportsTo: "",
@@ -430,6 +438,7 @@ function RoleDialog({
     if (!open) return;
     form.reset({
       name: role?.name ?? "",
+      cbo: role?.cbo ?? "",
       departmentId: role?.departmentId ?? "",
       parentId: role?.parentId ?? role?.reportsTo ?? defaultParentId ?? "",
       reportsTo: role?.reportsTo ?? role?.parentId ?? defaultParentId ?? "",
@@ -474,6 +483,31 @@ function RoleDialog({
             />
 
             <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="cbo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CBO do cargo</FormLabel>
+                    <FormControl>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="Ex.: 5134-15"
+                        maxLength={7}
+                        {...field}
+                        onChange={(event) => {
+                          const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
+                          field.onChange(digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits);
+                        }}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Usado automaticamente em contratos e integrações trabalhistas.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="departmentId"
@@ -976,9 +1010,176 @@ function CatalogSearchInput({
   );
 }
 
+type LinkedRolePerson = {
+  id: string;
+  name: string;
+  functions: Array<{
+    id: string;
+    name: string;
+    hierarchyRank: number;
+  }>;
+  unitNames: string[];
+};
+
+function normalizedSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function RoleLinkedPeopleDialog({
+  role,
+  people,
+  onOpenChange,
+}: {
+  role: JobRole | null;
+  people: LinkedRolePerson[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [search, setSearch] = React.useState("");
+  const [functionFilter, setFunctionFilter] = React.useState("__all__");
+  const [unitFilter, setUnitFilter] = React.useState("__all__");
+
+  React.useEffect(() => {
+    setSearch("");
+    setFunctionFilter("__all__");
+    setUnitFilter("__all__");
+  }, [role?.id]);
+
+  const functionOptions = React.useMemo(() => {
+    const options = new Map<string, { id: string; name: string; hierarchyRank: number }>();
+    people.flatMap((person) => person.functions).forEach((item) => {
+      const current = options.get(item.id);
+      if (!current || item.hierarchyRank < current.hierarchyRank) options.set(item.id, item);
+    });
+    return Array.from(options.values()).sort((left, right) =>
+      left.hierarchyRank - right.hierarchyRank
+      || left.name.localeCompare(right.name, "pt-BR")
+    );
+  }, [people]);
+  const functionOrdinalById = React.useMemo(
+    () => new Map(functionOptions.map((item, index) => [item.id, index + 1])),
+    [functionOptions]
+  );
+  const unitOptions = React.useMemo(
+    () => Array.from(new Set(people.flatMap((person) => person.unitNames)))
+      .sort((left, right) => left.localeCompare(right, "pt-BR")),
+    [people]
+  );
+  const filteredPeople = React.useMemo(() => {
+    const query = normalizedSearch(search);
+    return people.filter((person) => (
+      (!query || normalizedSearch(person.name).includes(query))
+      && (functionFilter === "__all__" || person.functions.some((item) => item.id === functionFilter))
+      && (unitFilter === "__all__" || person.unitNames.includes(unitFilter))
+    ));
+  }, [functionFilter, people, search, unitFilter]);
+
+  return (
+    <Dialog open={!!role} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Colaboradores vinculados</DialogTitle>
+          <DialogDescription>
+            {role
+              ? `${role.name} · ${filteredPeople.length} de ${people.length} colaborador(es) ativo(s)`
+              : "Consulte as pessoas vinculadas ao cargo."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por nome..."
+              className="h-10 rounded-xl pl-9"
+            />
+          </div>
+          <Select value={functionFilter} onValueChange={setFunctionFilter}>
+            <SelectTrigger className="h-10 rounded-xl">
+              <SelectValue placeholder="Todas as funções" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas as funções</SelectItem>
+              {functionOptions.map((item, index) => (
+                <SelectItem key={item.id} value={item.id}>{index + 1}ª · {item.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={unitFilter} onValueChange={setUnitFilter}>
+            <SelectTrigger className="h-10 rounded-xl">
+              <SelectValue placeholder="Todas as unidades" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas as unidades</SelectItem>
+              {unitOptions.map((name) => (
+                <SelectItem key={name} value={name}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-slate-200">
+          <div className="sticky top-0 grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <span>Nome</span>
+            <span>Função atual</span>
+            <span>Unidade</span>
+          </div>
+
+          {filteredPeople.length > 0 ? (
+            filteredPeople.map((person) => (
+              <div
+                key={person.id}
+                className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0"
+              >
+                <span className="min-w-0 break-words font-semibold text-slate-900">{person.name}</span>
+                <span className="flex min-w-0 flex-wrap items-start gap-1">
+                  {person.functions.length > 0
+                    ? person.functions.map((item) => (
+                      <Badge key={item.id} variant="secondary" className="whitespace-normal text-left font-medium">
+                        {functionOrdinalById.get(item.id)}ª · {item.name}
+                      </Badge>
+                    ))
+                    : <span className="text-slate-500">Sem função vinculada</span>}
+                </span>
+                <span className="min-w-0 text-slate-600">
+                  {person.unitNames.length > 0
+                    ? person.unitNames.join(", ")
+                    : "Sem unidade vinculada"}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="grid min-h-32 place-items-center px-6 py-8 text-center">
+              <div>
+                <Users2 className="mx-auto h-7 w-7 text-slate-300" />
+                <p className="mt-2 text-sm font-semibold text-slate-700">
+                  {people.length > 0
+                    ? "Nenhum colaborador encontrado com esses filtros."
+                    : "Nenhum colaborador ativo vinculado."}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function DPSettingsRoles() {
   const { firebaseUser, activeUsers } = useAuth();
-  const { departments, roles, functions, loading, error, refresh, access } = useHrBootstrap();
+  const { departments, roles, functions, units, loading, error, refresh, access } = useHrBootstrap();
   const { profiles } = useProfiles();
   const { toast } = useToast();
 
@@ -992,6 +1193,7 @@ export function DPSettingsRoles() {
   const [defaultFunctionParentId, setDefaultFunctionParentId] = React.useState<string | null>(null);
   const [defaultDepartmentParentId, setDefaultDepartmentParentId] = React.useState<string | null>(null);
   const [syncRole, setSyncRole] = React.useState<JobRole | null>(null);
+  const [linkedPeopleRole, setLinkedPeopleRole] = React.useState<JobRole | null>(null);
   const [syncingRoleId, setSyncingRoleId] = React.useState<string | null>(null);
   const [roleQuery, setRoleQuery] = React.useState("");
   const [functionQuery, setFunctionQuery] = React.useState("");
@@ -1042,6 +1244,108 @@ export function DPSettingsRoles() {
     [departments]
   );
 
+  const functionNameById = React.useMemo(
+    () => new Map(functions.map((item) => [item.id, item.name])),
+    [functions]
+  );
+
+  const functionHierarchyRankById = React.useMemo(() => {
+    const functionById = new Map(functions.map((item) => [item.id, item]));
+    const childrenByParent = new Map<string | null, JobFunction[]>();
+    functions.forEach((item) => {
+      const parentId = item.parentId && functionById.has(item.parentId)
+        ? item.parentId
+        : null;
+      childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), item]);
+    });
+    childrenByParent.forEach((items) => {
+      items.sort((left, right) =>
+        (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER)
+        || left.name.localeCompare(right.name, "pt-BR")
+      );
+    });
+
+    const rankById = new Map<string, number>();
+    const visited = new Set<string>();
+    function visit(item: JobFunction) {
+      if (visited.has(item.id)) return;
+      visited.add(item.id);
+      rankById.set(item.id, rankById.size);
+      (childrenByParent.get(item.id) ?? []).forEach(visit);
+    }
+    (childrenByParent.get(null) ?? []).forEach(visit);
+    functions
+      .filter((item) => !visited.has(item.id))
+      .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"))
+      .forEach(visit);
+    return rankById;
+  }, [functions]);
+
+  const unitNameById = React.useMemo(
+    () => new Map(units.map((unit) => [unit.id, unit.name])),
+    [units]
+  );
+
+  const linkedRolePeople = React.useMemo<LinkedRolePerson[]>(() => {
+    if (!linkedPeopleRole) return [];
+
+    return activeUsers
+      .filter((user) => user.jobRoleId === linkedPeopleRole.id)
+      .map((user) => {
+        const currentFunctions = (user.jobFunctionIds ?? [])
+          .map((id) => {
+            const name = functionNameById.get(id);
+            return name
+              ? {
+                id,
+                name,
+                hierarchyRank: functionHierarchyRankById.get(id) ?? Number.MAX_SAFE_INTEGER,
+              }
+              : null;
+          })
+          .filter((item): item is NonNullable<typeof item> => !!item);
+        const legacyFunctionNames = (user.jobFunctionNames ?? []).filter(Boolean);
+        const resolvedFunctions = currentFunctions.length > 0
+          ? currentFunctions
+          : Array.from(new Set(legacyFunctionNames)).map((name, index) => {
+            const catalogItem = functions.find((item) => item.name === name);
+            return {
+              id: catalogItem?.id ?? `legacy:${name}`,
+              name,
+              hierarchyRank: catalogItem
+                ? functionHierarchyRankById.get(catalogItem.id) ?? Number.MAX_SAFE_INTEGER
+                : Number.MAX_SAFE_INTEGER - legacyFunctionNames.length + index,
+            };
+          });
+        const resolvedFunctionsSorted = [...resolvedFunctions].sort((left, right) =>
+          left.hierarchyRank - right.hierarchyRank
+          || left.name.localeCompare(right.name, "pt-BR")
+        );
+        const unitNames = (user.unitIds ?? [])
+          .map((id) => unitNameById.get(id))
+          .filter((name): name is string => !!name);
+
+        return {
+          id: user.id,
+          name: user.username,
+          functions: resolvedFunctionsSorted,
+          unitNames,
+        };
+      })
+      .sort((left, right) =>
+        (left.functions[0]?.hierarchyRank ?? Number.MAX_SAFE_INTEGER)
+        - (right.functions[0]?.hierarchyRank ?? Number.MAX_SAFE_INTEGER)
+        || left.name.localeCompare(right.name, "pt-BR")
+      );
+  }, [
+    activeUsers,
+    functionHierarchyRankById,
+    functionNameById,
+    functions,
+    linkedPeopleRole,
+    unitNameById,
+  ]);
+
   const roleSyncSummary = React.useMemo(() => {
     const summary = new Map<string, { assigned: number; mismatched: number }>();
 
@@ -1070,6 +1374,7 @@ export function DPSettingsRoles() {
 
     const payload = {
       name: values.name,
+      cbo: values.cbo || undefined,
       departmentId: values.departmentId || null,
       departmentName: values.departmentId ? departmentNameById.get(values.departmentId) ?? null : null,
       parentId: values.parentId || null,
@@ -1340,8 +1645,19 @@ export function DPSettingsRoles() {
         meta={(role) => (
           <>
             {role.departmentId ? <Badge variant="outline">{departmentNameById.get(role.departmentId) ?? role.departmentName ?? "Departamento removido"}</Badge> : <span>Sem departamento</span>}
+            {role.cbo ? <Badge variant="outline">CBO {role.cbo}</Badge> : null}
             {role.defaultProfileId ? <Badge variant="secondary"><ShieldCheck className="mr-1 h-3.5 w-3.5" />{profileNameById.get(role.defaultProfileId) ?? role.defaultProfileId}</Badge> : null}
             {role.loginRestricted ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">Login restrito por escala</Badge> : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setLinkedPeopleRole(role)}
+            >
+              <Users2 className="mr-1 h-3.5 w-3.5" />
+              Ver vinculados ({roleSyncSummary.get(role.id)?.assigned ?? 0})
+            </Button>
             {access.canManageCatalog && role.defaultProfileId && (roleSyncSummary.get(role.id)?.mismatched ?? 0) > 0 ? (
               <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" disabled={syncingRoleId === role.id} onClick={() => setSyncRole(role)}>
                 {syncingRoleId === role.id ? "Aplicando..." : "Aplicar perfil"}
@@ -1426,6 +1742,14 @@ export function DPSettingsRoles() {
         functions={functions}
         defaultParentId={defaultFunctionParentId}
         onSubmit={handleFunctionSubmit}
+      />
+
+      <RoleLinkedPeopleDialog
+        role={linkedPeopleRole}
+        people={linkedRolePeople}
+        onOpenChange={(open) => {
+          if (!open) setLinkedPeopleRole(null);
+        }}
       />
 
       <AlertDialog open={!!syncRole} onOpenChange={(open) => !open && setSyncRole(null)}>

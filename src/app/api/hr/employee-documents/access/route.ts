@@ -6,7 +6,7 @@ import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { canAccessDocument } from "@/lib/hr/employee-document-access";
-import { buildEmployeeDocumentAccessSubject, loadEmployeeDocumentAccessSettings } from "@/features/hr/lib/employee-document-access-server";
+import { assertEmployeeUnitAccess, buildEmployeeDocumentAccessSubject, loadEmployeeDocumentAccessSettings } from "@/features/hr/lib/employee-document-access-server";
 
 export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     const ref = hrDbAdmin.collection("employeeDocuments").doc(String(id ?? ""));
     const snap = await ref.get();
     if (!snap.exists || snap.get("deletedAt")) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
+    await assertEmployeeUnitAccess(access, String(snap.get("employeeId") ?? ""));
 
     // Enforce a política de sigilo do documento no backend (nunca no cliente).
     const accessSettings = await loadEmployeeDocumentAccessSettings(access);

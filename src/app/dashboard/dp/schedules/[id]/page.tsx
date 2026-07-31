@@ -4,9 +4,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { useDP } from '@/components/dp-context';
 import { useParams } from 'next/navigation';
 import { DPScheduleEditor } from '@/components/dp/dp-schedule-editor';
+import { canAccessUnit, resolveUnitAccess } from '@/lib/unit-access';
 
 export default function DPScheduleEditorPage() {
-  const { permissions } = useAuth();
+  const { permissions, user, isDefaultAdmin } = useAuth();
   const { schedules, schedulesLoading, schedulesError } = useDP();
   const { id } = useParams<{ id: string }>();
 
@@ -26,6 +27,16 @@ export default function DPScheduleEditorPage() {
 
   if (!schedule) {
     return <p className="text-muted-foreground p-6">Escala não encontrada.</p>;
+  }
+
+  const canAccessSchedule = Boolean(user) && (
+    schedule.unitId
+      ? canAccessUnit(user!, schedule.unitId, { isDefaultAdmin })
+      : resolveUnitAccess(user!, { isDefaultAdmin }).allUnits
+  );
+
+  if (!canAccessSchedule) {
+    return <p className="text-muted-foreground p-6">Você não possui acesso à unidade desta escala.</p>;
   }
 
   return <DPScheduleEditor schedule={schedule} />;

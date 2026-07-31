@@ -52,6 +52,10 @@ const entitySchema = z.object({
     email: z.string().email('E-mail inválido.').or(z.literal('')).optional(),
   }),
   responsible: z.string().optional(),
+  documentSignatoryUserId: z.string().optional(),
+  documentSignatoryName: z.string().optional(),
+  documentSignatoryEmail: z.string().email('E-mail de assinatura inválido.').or(z.literal('')).optional(),
+  documentSignatoryScope: z.enum(['entity', 'cnpj_root']).optional(),
   status: z.enum(['active', 'inactive']).optional(),
   cadastralStatus: z.string().optional(),
   openingDate: z.string().optional(),
@@ -92,6 +96,14 @@ const entitySchema = z.object({
 
 type EntityFormValues = z.infer<typeof entitySchema>;
 
+type DocumentSignatoryOption = {
+    id: string;
+    name: string;
+    email: string;
+};
+
+const NO_DOCUMENT_SIGNATORY = '__none__';
+
 const emptyEntityFormValues: EntityFormValues = {
     type: 'pessoa_fisica',
     name: '',
@@ -101,6 +113,10 @@ const emptyEntityFormValues: EntityFormValues = {
     address: { zipCode: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' },
     contact: { phone: '', email: '' },
     responsible: '',
+    documentSignatoryUserId: '',
+    documentSignatoryName: '',
+    documentSignatoryEmail: '',
+    documentSignatoryScope: 'entity',
     status: 'active',
     cadastralStatus: '',
     openingDate: '',
@@ -156,6 +172,10 @@ function getEntityFormValues(entity: Entity | null): EntityFormValues {
             email: entity.contact?.email ?? legacyEntity.email ?? '',
         },
         responsible: entity.responsible ?? '',
+        documentSignatoryUserId: entity.documentSignatoryUserId ?? '',
+        documentSignatoryName: entity.documentSignatoryName ?? '',
+        documentSignatoryEmail: entity.documentSignatoryEmail ?? '',
+        documentSignatoryScope: entity.documentSignatoryScope ?? 'entity',
         status: entity.status ?? 'active',
         cadastralStatus: entity.situacao_cadastral ?? '',
         openingDate: entity.data_abertura ?? '',
@@ -239,6 +259,21 @@ function entityPayloadFromForm(values: EntityFormValues): Omit<Entity, 'id'> & R
             email: values.contact?.email,
         },
         responsible: values.responsible,
+        documentSignatoryUserId: values.type === 'pessoa_juridica'
+            ? values.documentSignatoryUserId
+            : undefined,
+        documentSignatoryName: values.type === 'pessoa_juridica'
+            ? values.documentSignatoryName
+            : undefined,
+        documentSignatoryEmail: values.type === 'pessoa_juridica'
+            ? values.documentSignatoryEmail
+            : undefined,
+        documentSignatoryScope: values.type === 'pessoa_juridica'
+            ? values.documentSignatoryScope
+            : undefined,
+        cnpjRoot: values.type === 'pessoa_juridica' && cnpj.length === 14
+            ? cnpj.slice(0, 8)
+            : undefined,
         status: values.status ?? 'active',
         rg: values.type === 'pessoa_fisica' ? values.rg : undefined,
         birthDate: values.type === 'pessoa_fisica' ? values.birthDate : undefined,
@@ -303,6 +338,8 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     const [cnpjLookupMessage, setCnpjLookupMessage] = useState<string | null>(null);
     const [cnpjLookupResult, setCnpjLookupResult] = useState<CompanyLookupResponse | null>(null);
     const [loadedCompanyEntityId, setLoadedCompanyEntityId] = useState<string | null>(null);
+    const [documentSignatoryOptions, setDocumentSignatoryOptions] = useState<DocumentSignatoryOption[]>([]);
+    const [documentSignatoryLoading, setDocumentSignatoryLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const lastAutoLookupCnpjRef = useRef<string>('');
 
@@ -320,6 +357,33 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         setLoadedCompanyEntityId(entityToEdit?.id ?? null);
         lastAutoLookupCnpjRef.current = CnpjValidator.clean(entityToEdit?.document ?? '');
     }, [entityToEdit, form, open]);
+
+    useEffect(() => {
+        if (!open || !firebaseUser) return;
+        let cancelled = false;
+        setDocumentSignatoryLoading(true);
+        void (async () => {
+            try {
+                const response = await fetch('/api/companies/document-signatories', {
+                    headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
+                    cache: 'no-store',
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(payload.error || 'Falha ao listar responsáveis.');
+                if (!cancelled) setDocumentSignatoryOptions(payload.options ?? []);
+            } catch (error) {
+                if (!cancelled) {
+                    setCnpjLookupMessage(error instanceof Error ? error.message : 'Falha ao listar responsáveis.');
+                    setDocumentSignatoryOptions([]);
+                }
+            } finally {
+                if (!cancelled) setDocumentSignatoryLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [firebaseUser, open]);
 
     const entityType = form.watch('type');
     const statusWatch = form.watch('status') ?? 'active';
@@ -712,8 +776,80 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                                         </div>
                                                     ) : null}
                                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Responsável</FormLabel><span className="text-xs text-muted-foreground">opcional</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                        <FormField control={form.control} name="responsible" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Responsável cadastral</FormLabel><span className="text-xs text-muted-foreground">opcional</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
                                                         <FormField control={form.control} name="nickname" render={({ field }) => (<FormItem><div className="flex items-center justify-between"><FormLabel>Apelido</FormLabel><span className="text-xs text-muted-foreground">busca interna</span></div><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
+                                                    </div>
+                                                    <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-4">
+                                                        <div className="mb-3">
+                                                            <p className="text-sm font-bold text-slate-900">Responsável pela assinatura documental</p>
+                                                            <p className="text-xs text-slate-500">
+                                                                Esta pessoa assina pela empresa nos documentos enviados à Autentique.
+                                                            </p>
+                                                        </div>
+                                                        <div className="grid gap-4 md:grid-cols-2">
+                                                            <FormField
+                                                                control={form.control}
+                                                                name="documentSignatoryUserId"
+                                                                render={({ field }) => (
+                                                                    <FormItem>
+                                                                        <FormLabel>Pessoa responsável</FormLabel>
+                                                                        <Select
+                                                                            value={field.value || NO_DOCUMENT_SIGNATORY}
+                                                                            disabled={documentSignatoryLoading}
+                                                                            onValueChange={(value) => {
+                                                                                if (value === NO_DOCUMENT_SIGNATORY) {
+                                                                                    field.onChange('');
+                                                                                    form.setValue('documentSignatoryName', '');
+                                                                                    form.setValue('documentSignatoryEmail', '');
+                                                                                    return;
+                                                                                }
+                                                                                const option = documentSignatoryOptions.find((item) => item.id === value);
+                                                                                field.onChange(value);
+                                                                                form.setValue('documentSignatoryName', option?.name ?? '');
+                                                                                form.setValue('documentSignatoryEmail', option?.email ?? '');
+                                                                            }}
+                                                                        >
+                                                                            <FormControl>
+                                                                                <SelectTrigger>
+                                                                                    <SelectValue placeholder="Selecione..." />
+                                                                                </SelectTrigger>
+                                                                            </FormControl>
+                                                                            <SelectContent>
+                                                                                <SelectItem value={NO_DOCUMENT_SIGNATORY}>Sem responsável definido</SelectItem>
+                                                                                {documentSignatoryOptions.map((option) => (
+                                                                                    <SelectItem key={option.id} value={option.id}>
+                                                                                        {option.name} · {option.email}
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                        <FormMessage />
+                                                                    </FormItem>
+                                                                )}
+                                                            />
+                                                            <FormField
+                                                                control={form.control}
+                                                                name="documentSignatoryScope"
+                                                                render={({ field }) => (
+                                                                    <FormItem>
+                                                                        <FormLabel>Abrangência</FormLabel>
+                                                                        <Select value={field.value ?? 'entity'} onValueChange={field.onChange}>
+                                                                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                                            <SelectContent>
+                                                                                <SelectItem value="entity">Somente este CNPJ</SelectItem>
+                                                                                <SelectItem value="cnpj_root">Matriz e filiais do mesmo CNPJ-base</SelectItem>
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                        <FormMessage />
+                                                                    </FormItem>
+                                                                )}
+                                                            />
+                                                        </div>
+                                                        {form.watch('documentSignatoryEmail') ? (
+                                                            <p className="mt-3 text-xs font-medium text-violet-800">
+                                                                Convites de assinatura: {form.watch('documentSignatoryName')} · {form.watch('documentSignatoryEmail')}
+                                                            </p>
+                                                        ) : null}
                                                     </div>
                                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                                         <FormField control={form.control} name="cadastralStatus" render={({ field }) => (<FormItem><FormLabel>Situação cadastral</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)}/>
@@ -1000,6 +1136,12 @@ export function EntityManagement() {
                                                     <Badge variant="secondary" className="mt-1 rounded-md px-1.5 py-0 text-[10px] font-medium">
                                                         {entity.nickname}
                                                     </Badge>
+                                                ) : null}
+                                                {entity.documentSignatoryName ? (
+                                                    <p className="mt-1 max-w-72 truncate text-[10px] font-semibold text-violet-700">
+                                                        Assina pela empresa: {entity.documentSignatoryName}
+                                                        {entity.documentSignatoryScope === 'cnpj_root' ? ' · matriz e filiais' : ''}
+                                                    </p>
                                                 ) : null}
                                                 {entity.status === 'inactive' ? (
                                                   <Badge variant="outline" className="mt-1 rounded-md border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] font-medium text-amber-800">

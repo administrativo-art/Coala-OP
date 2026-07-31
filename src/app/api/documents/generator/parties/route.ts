@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { assertFormalizationAccess } from "@/features/hr/lib/server-access";
+import { loadVisibleEmployeeIds } from "@/features/hr/lib/employee-document-access-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 
@@ -13,6 +14,9 @@ type PartyOption = {
   name: string;
   document: string;
   address: string;
+  email: string;
+  signatureName: string;
+  signatureUserId: string;
 };
 
 function text(...values: unknown[]) {
@@ -45,7 +49,8 @@ function entityAddress(data: FirebaseFirestore.DocumentData) {
 
 export async function GET(request: NextRequest) {
   try {
-    await assertFormalizationAccess(request, "documents.generate");
+    const access = await assertFormalizationAccess(request, "documents.generate");
+    const visibleEmployeeIds = await loadVisibleEmployeeIds(access);
     const [entities, employees] = await Promise.all([
       dbAdmin.collection("entities").get(),
       hrDbAdmin.collection("employees").get(),
@@ -57,10 +62,14 @@ export async function GET(request: NextRequest) {
     const employeeCpfs = employeeCpfDocuments.length
       ? await hrDbAdmin.getAll(...employeeCpfDocuments)
       : [];
+    const employeeCpfById = new Map(
+      employees.docs.map((employee, index) => [employee.id, employeeCpfs[index]?.data()])
+    );
 
     const employeeOptions: PartyOption[] = employees.docs
       .filter((employee) => String(employee.get("status") ?? "active") !== "inactive")
-      .map((employee, index) => ({
+      .filter((employee) => visibleEmployeeIds.has(employee.id))
+      .map((employee) => ({
         id: employee.id,
         partyType: "employee",
         name: text(
@@ -69,8 +78,15 @@ export async function GET(request: NextRequest) {
           employee.get("email"),
           "Colaborador sem nome",
         ),
-        document: fieldText(employeeCpfs[index]?.data()),
+        document: fieldText(employeeCpfById.get(employee.id)),
         address: text(employee.get("address")),
+        email: text(employee.get("documentSignatureEmail"), employee.get("email")),
+        signatureName: text(
+          employee.get("documentSignatureName"),
+          employee.get("name"),
+          employee.get("username"),
+        ),
+        signatureUserId: employee.id,
       }));
 
     const entityOptions: PartyOption[] = entities.docs
@@ -91,6 +107,19 @@ export async function GET(request: NextRequest) {
           ),
           document: text(data.document, data.cnpj),
           address: entityAddress(data),
+          email: text(
+            data.documentSignatoryEmail,
+            data.email,
+            data.contactEmail,
+            data.email_financeiro,
+            data.financeEmail,
+          ),
+          signatureName: text(
+            data.documentSignatoryName,
+            data.responsible,
+            data.name,
+          ),
+          signatureUserId: text(data.documentSignatoryUserId),
         };
       });
 

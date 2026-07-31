@@ -3,9 +3,12 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import path from "node:path";
+import React from "react";
+import { renderToBuffer } from "@react-pdf/renderer";
 import { PDFDocument } from "pdf-lib";
 import PizZip from "pizzip";
 
+import { SignedUniformMovementTermDocument } from "../../src/components/pdf/UniformTermDocument";
 import { applyCoalaLetterheadToPdf } from "../../src/features/hr/documents/letterhead-pdf.server";
 import {
   SYSTEM_DOCUMENT_TEMPLATES,
@@ -13,7 +16,7 @@ import {
 } from "../../src/features/hr/documents/system-template-catalog";
 
 test("catálogo reúne base institucional, uniformes e kit admissional", () => {
-  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 15);
+  assert.equal(SYSTEM_DOCUMENT_TEMPLATES.length, 14);
   assert.deepEqual(
     [...new Set(SYSTEM_DOCUMENT_TEMPLATES.map((template) => template.category))].sort(),
     ["Admissão", "Base institucional", "Contratos", "Financeiro e recibos", "Uniformes"].sort(),
@@ -25,7 +28,14 @@ test("catálogo reúne base institucional, uniformes e kit admissional", () => {
   );
   assert.equal(
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.renderer === "admission_docx").length,
-    11,
+    10,
+  );
+});
+
+test("termo de ponto eletrônico não integra o catálogo operacional", () => {
+  assert.equal(
+    systemDocumentTemplateById("system-admission-electronic-time-tracking-awareness"),
+    null,
   );
 });
 
@@ -38,6 +48,44 @@ test("timbrado é aplicado ao PDF sem alterar a quantidade de páginas", async (
   const rendered = await PDFDocument.load(output);
   assert.equal(rendered.getPageCount(), 2);
   assert.ok(output.length > input.length);
+});
+
+test("prévia fictícia de uniforme gera PDF válido sem pós-processamento", async () => {
+  const document = React.createElement(SignedUniformMovementTermDocument, {
+      type: "return",
+      protocol: "DEMO",
+      collaboratorName: "Nome do colaborador",
+      collaboratorDocument: "***.***.***-**",
+      registeredByName: "Responsável/RH",
+      occurredAt: "30/07/2026",
+      outgoingItems: [],
+      incomingItems: [{
+        productName: "Camiseta polo",
+        quantity: 1,
+        condition: "usado",
+        stockDisposition: "retorna_estoque",
+      }],
+      preview: true,
+    }) as Parameters<typeof renderToBuffer>[0];
+  const output = Buffer.from(await renderToBuffer(document));
+  const rendered = await PDFDocument.load(output);
+  assert.equal(rendered.getPageCount(), 1);
+  assert.equal(output.subarray(0, 4).toString(), "%PDF");
+});
+
+test("prévias versionadas dos três modelos de uniforme são PDFs A4 válidos", async () => {
+  for (const type of ["delivery", "exchange", "return"]) {
+    const output = await readFile(path.join(
+      process.cwd(),
+      "public/document-previews/uniforms",
+      `uniform-${type}-preview.pdf`,
+    ));
+    const rendered = await PDFDocument.load(output);
+    assert.equal(rendered.getPageCount(), 1);
+    const { width, height } = rendered.getPage(0).getSize();
+    assert.ok(Math.abs(width - 595.28) < 0.1);
+    assert.ok(Math.abs(height - 841.89) < 0.1);
+  }
 });
 
 test("identificadores do catálogo são únicos e todos usam o timbrado vigente", () => {
@@ -96,36 +144,51 @@ test("fontes admissionais preservam os hashes catalogados", async () => {
   }
 });
 
-test("contrato de experiência v2 está parametrizado sem alterar partes opacas", async () => {
+test("contrato de experiência v3 usa somente os campos vigentes", async () => {
   const template = systemDocumentTemplateById(
     "system-admission-employment-probation-contract",
   );
-  assert.equal(template?.version, 2);
+  assert.equal(template?.version, 3);
   assert.equal(template?.status, "draft");
-  assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v2.docx"), true);
-  assert.equal(
-    template?.fieldMapping?.contract_monthly_salary?.kind,
-    "system",
-  );
+  assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v3.docx"), true);
+  const salaryBinding = template?.fieldMapping?.contract_monthly_salary;
+  assert.equal(salaryBinding?.kind, "system");
+  if (salaryBinding?.kind === "system") {
+    assert.equal(salaryBinding.formatter, "currency_br_with_words");
+  }
   assert.ok(template?.variables.includes("integration.employer_name"));
   assert.ok(template?.variables.includes("contract_final_end_long"));
+  assert.ok(template?.variables.includes("employee.address"));
+  assert.ok(template?.variables.includes("contract_employee_cpf"));
+  assert.equal(template?.variables.includes("employee.pis"), false);
+  assert.equal(template?.variables.includes("employee.ctps_number"), false);
+  assert.equal(template?.variables.includes("employee.ctps_series"), false);
+  assert.equal(template?.fieldMapping?.contract_job_cbo?.kind, "system");
+  assert.equal(template?.fieldMapping?.contract_work_scale, undefined);
+  assert.equal(template?.fieldMapping?.contract_work_hours, undefined);
+  assert.equal(template?.fieldMapping?.contract_workplace_address, undefined);
+  assert.equal(template?.fieldMapping?.contract_cct_registry, undefined);
+  assert.equal(template?.fieldMapping?.contract_cct_validity, undefined);
+  assert.equal(template?.fieldMapping?.contract_union_employees, undefined);
+  assert.equal(template?.fieldMapping?.contract_union_employers, undefined);
+  assert.equal(template?.variables.length, 14);
 
-  const [original, prepared] = await Promise.all([
-    readFile(path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v1.docx")),
-    readFile(path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v2.docx")),
-  ]);
-  const originalZip = new PizZip(original);
+  const prepared = await readFile(
+    path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v3.docx"),
+  );
   const preparedZip = new PizZip(prepared);
-  const names = Array.from(new Set([
-    ...Object.keys(originalZip.files),
-    ...Object.keys(preparedZip.files),
-  ])).filter((name) => !name.endsWith("/"));
-  const changed = names.filter((name) => {
-    const before = originalZip.file(name)?.asUint8Array();
-    const after = preparedZip.file(name)?.asUint8Array();
-    return !before || !after || Buffer.compare(Buffer.from(before), Buffer.from(after)) !== 0;
-  }).sort();
-  assert.deepEqual(changed, ["word/document.xml", "word/footer1.xml"]);
+  const documentXml = preparedZip.file("word/document.xml")?.asText() ?? "";
+  assert.equal(documentXml.includes("PIS/NIT"), false);
+  assert.equal(documentXml.includes("{{contract_monthly_salary_words}}"), false);
+  assert.equal(documentXml.includes("{{contract_cct_registry}}"), false);
+  assert.equal(documentXml.includes("{{contract_work_hours}}"), false);
+  assert.equal(documentXml.includes("{{contract_workplace_address}}"), false);
+  assert.ok(documentXml.includes("{{contract_monthly_salary}}"));
+  assert.ok(documentXml.includes("JORNADA DE TRABALHO"));
+  assert.ok(documentXml.includes("CONFIDENCIALIDADE E PROPRIEDADE INTELECTUAL"));
+  assert.ok(documentXml.includes("Termo de Confidencialidade que"));
+  assert.ok(documentXml.includes("artigos 88 a 93 da Lei nº 9.279/1996"));
+  assert.ok(documentXml.includes('<w:jc w:val="right"/>'));
 });
 
 test("acordo de banco de horas v2 está parametrizado sem alterar partes opacas", async () => {

@@ -63,6 +63,10 @@ describe("mapeamento de campos de modelos", () => {
     assert.equal(formatManualValue(false, "boolean_br"), "Não");
     assert.equal(formatManualValue("  texto  ", "text"), "texto");
     assert.equal(formatManualValue("", "currency_br"), "");
+    assert.equal(formatManualValue("513415", "cbo"), "CBO\u00A05134-15");
+    assert.equal(formatManualValue("66055123", "cep"), "66055-123");
+    assert.equal(formatManualValue("08:30", "time_br"), "08:30");
+    assert.equal(formatManualValue("25:00", "time_br"), "");
   });
 
   test("applyFieldMapping injeta sistema e manual, acusando obrigatórios vazios", () => {
@@ -83,6 +87,20 @@ describe("mapeamento de campos de modelos", () => {
     assert.equal(result.data.obs, "");
     assert.deepEqual((result.data.recibo as Record<string, unknown>).mes, "");
     assert.deepEqual(result.missingManual, ["Mês"]);
+    assert.deepEqual(result.missingSystem, []);
+  });
+
+  test("applyFieldMapping bloqueia origem obrigatória do sistema vazia", () => {
+    const mapping: TemplateFieldMapping = {
+      cbo: { kind: "system", key: "integration.job_cbo" },
+      opcional: { kind: "system", key: "integration.cct_registry", required: false },
+    };
+    const result = applyFieldMapping({
+      data: {},
+      flat: { "integration.job_cbo": "", "integration.cct_registry": "" },
+      mapping,
+    });
+    assert.deepEqual(result.missingSystem, ["cbo"]);
   });
 
   test("applyFieldMapping usa defaultValue quando não informado", () => {

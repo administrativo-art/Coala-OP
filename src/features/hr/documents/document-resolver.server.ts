@@ -1,5 +1,6 @@
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { resolvePersonLink } from "@/features/hr/lib/person-link.server";
 import { DOCUMENT_VARIABLES, formatDocumentVariableValue, type DocumentVariableCatalogEntry } from "@/features/hr/integration/document-variables";
 import type { DPVacationRecord, UniformAssignment, UniformEvent } from "@/types";
 import type { ConditionalRule } from "@/types/rh";
@@ -166,10 +167,110 @@ function familySalarySummary(fieldValues: RecordValue) {
   ].join("\n");
 }
 
-async function buildComputed(params: { employeeId: string | null; user: RecordValue; fieldValues: RecordValue }) {
-  const [uniforms, vacations] = await Promise.all([
+function minutes(value: unknown) {
+  if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) return null;
+  const [hours, mins] = value.split(":").map(Number);
+  return hours * 60 + mins;
+}
+
+function normalizedCbo(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.length === 6 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : "";
+}
+
+async function employmentContext(params: { onboarding: RecordValue; user: RecordValue }) {
+  const finalization = record(params.onboarding.finalizationSettings);
+  const unitIds = Array.isArray(params.user.unitIds)
+    ? params.user.unitIds.filter((value): value is string => typeof value === "string")
+    : [];
+  const jobRoleId = firstText(params.onboarding.jobRoleId, params.user.jobRoleId);
+  const unitId = firstText(params.onboarding.unitId, unitIds[0]);
+  const shiftDefinitionId = firstText(
+    finalization.shiftDefinitionId,
+    params.onboarding.shiftDefinitionId,
+    params.user.shiftDefinitionId,
+  );
+  const [roleDocument, unitDocument, shiftDocument, agreementsSnapshot] = await Promise.all([
+    jobRoleId ? hrDbAdmin.collection("jobRoles").doc(jobRoleId).get() : Promise.resolve(null),
+    unitId ? dbAdmin.collection("dp_units").doc(unitId).get() : Promise.resolve(null),
+    shiftDefinitionId ? dbAdmin.collection("dp_shiftDefinitions").doc(shiftDefinitionId).get() : Promise.resolve(null),
+    unitId
+      ? dbAdmin.collection("documentCollectiveAgreements").where("unitId", "==", unitId).get()
+      : Promise.resolve(null),
+  ]);
+  const role = roleDocument?.exists ? record(roleDocument.data()) : {};
+  const unit = unitDocument?.exists ? record(unitDocument.data()) : {};
+  const shift = shiftDocument?.exists ? record(shiftDocument.data()) : {};
+  const referenceDate = firstText(params.onboarding.expectedAdmissionDate)
+    ?? new Date().toISOString().slice(0, 10);
+  const storedAgreements: RecordValue[] = agreementsSnapshot
+    ? agreementsSnapshot.docs.map((document): RecordValue => ({
+        ...record(document.data()),
+        id: document.id,
+      }))
+    : [];
+  const agreements = storedAgreements.filter((agreement) => {
+    if (agreement.status === "archived" || agreement.status === "draft") return false;
+    const start = firstText(agreement.validFrom);
+    const end = firstText(agreement.validUntil);
+    return (!start || start <= referenceDate) && (!end || end >= referenceDate);
+  }).sort((left, right) =>
+    String(right.validFrom ?? "").localeCompare(String(left.validFrom ?? ""))
+  );
+  const agreement = agreements[0] ?? {};
+  const start = firstText(shift.startTime);
+  const end = firstText(shift.endTime);
+  const breakStart = minutes(shift.breakStart);
+  const breakEnd = minutes(shift.breakEnd);
+  const startMinutes = minutes(start);
+  const endMinutes = minutes(end);
+  const overnightEnd = startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes
+    ? endMinutes + 24 * 60
+    : endMinutes;
+  const breakMinutes = breakStart !== null && breakEnd !== null
+    ? Math.max(0, breakEnd - breakStart)
+    : 0;
+  const dailyMinutes = startMinutes !== null && overnightEnd !== null
+    ? Math.max(0, overnightEnd - startMinutes - breakMinutes)
+    : null;
+  const workDays = Array.isArray(shift.daysOfWeek) ? shift.daysOfWeek.length : 0;
+  const weeklyHours = dailyMinutes !== null && workDays
+    ? Math.round((dailyMinutes * workDays / 60) * 100) / 100
+    : null;
+  const validity = firstText(agreement.validity)
+    ?? [
+      firstText(agreement.validFrom) ? dateBr(agreement.validFrom) : null,
+      firstText(agreement.validUntil) ? dateBr(agreement.validUntil) : null,
+    ].filter(Boolean).join(" a ");
+
+  return {
+    jobCbo: normalizedCbo(role.cbo ?? role.cboCode ?? role.occupationCode),
+    workScale: firstText(shift.name, shift.code),
+    workHours: start && end
+      ? `${start} às ${end}${shift.breakStart && shift.breakEnd ? `, intervalo de ${shift.breakStart} às ${shift.breakEnd}` : ""}`
+      : null,
+    weeklyHours,
+    workplaceAddress: firstText(unit.address, params.onboarding.unitAddress),
+    cct: {
+      id: firstText(agreement.id),
+      registryNumber: firstText(agreement.registryNumber, agreement.mteRegistry),
+      validity,
+      employeeUnion: firstText(agreement.employeeUnion, agreement.professionalUnion),
+      employerUnion: firstText(agreement.employerUnion, agreement.economicUnion),
+    },
+  };
+}
+
+async function buildComputed(params: {
+  employeeId: string | null;
+  user: RecordValue;
+  fieldValues: RecordValue;
+  onboarding: RecordValue;
+}) {
+  const [uniforms, vacations, employment] = await Promise.all([
     uniformSummary(params.employeeId, params.fieldValues),
     vacationSummary(params.employeeId, params.user, params.fieldValues),
+    employmentContext({ onboarding: params.onboarding, user: params.user }),
   ]);
   const children = fieldStoredRaw(params.fieldValues["employee.children"]);
   const under14Count = Array.isArray(children)
@@ -184,6 +285,7 @@ async function buildComputed(params: { employeeId: string | null; user: RecordVa
     aso: { summary: asoSummary(params.fieldValues) },
     familySalary: { summary: familySalarySummary(params.fieldValues) },
     children: { under14Count },
+    employment,
   };
 }
 
@@ -206,9 +308,9 @@ export async function resolveDocumentData(params: { employeeId?: string | null; 
   const onboardingDocument = params.onboardingId ? await hrDbAdmin.collection("onboardingProcesses").doc(params.onboardingId).get() : null;
   const onboarding = onboardingDocument?.exists ? record(onboardingDocument.data()) : {};
   const employeeId = params.employeeId || String(onboarding.employeeId ?? onboarding.collaboratorUserId ?? "") || null;
-  const [employeeDocument, userDocument] = employeeId ? await Promise.all([
-    hrDbAdmin.collection("employees").doc(employeeId).get(), dbAdmin.collection("users").doc(employeeId).get(),
-  ]) : [null, null];
+  const personLink = employeeId ? await resolvePersonLink(employeeId) : null;
+  const employeeDocument = personLink?.employeeDocument ?? null;
+  const userDocument = personLink?.userDocument ?? null;
   const employee = employeeDocument?.exists ? record(employeeDocument.data()) : onboarding;
   const user = userDocument?.exists ? record(userDocument.data()) : { ...record(onboarding.finalizationSettings), email: onboarding.candidateEmail, username: onboarding.candidateName, jobRoleId: onboarding.jobRoleId, shiftDefinitionId: onboarding.shiftDefinitionId };
   const valuesSnapshot = employeeDocument?.exists ? await employeeDocument.ref.collection("field_values").get() : null;
@@ -217,7 +319,7 @@ export async function resolveDocumentData(params: { employeeId?: string | null; 
   const answers = record(record(onboarding.integrationV2).answers);
   const blocks = Array.isArray(snapshot.blocks) ? snapshot.blocks.map(record) : [];
   blocks.forEach((block) => { if (typeof block.variableKey === "string" && answers[String(block.id)] !== undefined) fieldValues[block.variableKey] = { value_json: answers[String(block.id)] }; });
-  const computed: RecordValue = await buildComputed({ employeeId, user, fieldValues });
+  const computed: RecordValue = await buildComputed({ employeeId: personLink?.userId ?? employeeId, user, fieldValues, onboarding });
   const resolved: RecordValue = {};
   const flat: Record<string, unknown> = {};
   const rawFlat: Record<string, unknown> = {};

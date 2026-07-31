@@ -30,20 +30,11 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
       );
     }
 
-    try {
-      assertTaskPermission(
-        context.permissions,
-        context.isDefaultAdmin,
-        null,
-        "manage"
+    if (!canActOnTask(context, currentTask)) {
+      return NextResponse.json(
+        { error: "Sem permissão para atuar nesta tarefa ou unidade." },
+        { status: 403 }
       );
-    } catch {
-      if (!canActOnTask(context, currentTask)) {
-        return NextResponse.json(
-          { error: "Sem permissão para atuar nesta tarefa." },
-          { status: 403 }
-        );
-      }
     }
 
     const body = (await request.json().catch(() => null)) as

@@ -17,6 +17,7 @@ import {
   type UploadItemStatus,
 } from "@/lib/hr/employee-document-batch";
 import { buildEmployeeProfileSuggestions } from "@/lib/hr/employee-document-profile-suggestions";
+import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ export async function PATCH(request: NextRequest) {
     if (!itemSnap.exists) return error("Item não encontrado.", 404);
     const item = itemSnap.data() as Record<string, unknown>;
     if (["filed", "filing"].includes(String(item.status))) return error("Item já arquivado ou em arquivamento.");
+    await assertEmployeeUnitAccess(access, String(item.employeeId ?? ""));
 
     // Recalcula os contadores do lote a partir do estado real dos itens.
     const recountBatch = async () => {
@@ -95,6 +97,7 @@ export async function PATCH(request: NextRequest) {
       return error("Trocar o colaborador exige uma justificativa.");
     }
     const employeeId = employeeChanged ? newEmployeeId : currentEmployeeId;
+    await assertEmployeeUnitAccess(access, employeeId);
     const typeCode = newTypeCode || String(item.documentTypeCode ?? "UNKNOWN_DOCUMENT");
 
     const config = getDocumentTypeConfig(typeCode);

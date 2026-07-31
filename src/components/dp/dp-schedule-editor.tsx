@@ -72,6 +72,7 @@ import {
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { buildShiftStreakState, isDayOffShift, isWorkShift } from '@/lib/dp-shift-rules';
 import { DPBulkShiftEditDialog } from '@/components/dp/dp-bulk-shift-edit-dialog';
+import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -497,7 +498,7 @@ interface DPScheduleEditorProps {
 }
 
 export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
-  const { activeUsers, permissions, updateUser } = useAuth();
+  const { activeUsers, permissions, updateUser, user, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const {
     updateSchedule,
@@ -531,6 +532,15 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     (unitsError && units.length === 0 ? unitsError : null) ??
     (shiftDefsError && shiftDefinitions.length === 0 ? shiftDefsError : null);
   const ancillaryBootstrapError = schedulesError ?? calendarsError;
+  const accessibleSchedules = useMemo(() => {
+    if (!user) return [];
+    const access = resolveUnitAccess(user, { isDefaultAdmin });
+    return schedules.filter((candidate) =>
+      candidate.unitId
+        ? canAccessUnit(user, candidate.unitId, { isDefaultAdmin })
+        : access.allUnits
+    );
+  }, [isDefaultAdmin, schedules, user]);
 
   // Calendar for holidays
   const { holidays } = useDPHolidays(schedule.calendarId ?? null);
@@ -558,12 +568,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   }, [schedule.month, schedule.year]);
 
   const prevSchedule = useMemo(() => {
-    const candidates = schedules.filter(s => s.month === prevPeriod.month && s.year === prevPeriod.year);
+    const candidates = accessibleSchedules.filter(s => s.month === prevPeriod.month && s.year === prevPeriod.year);
     if (schedule.unitId) {
       return findOperationalUnitRecord(candidates, schedule.unitId, units) ?? null;
     }
     return candidates.find(s => !s.unitId) ?? candidates[0] ?? null;
-  }, [prevPeriod.month, prevPeriod.year, schedule.unitId, schedules, units]);
+  }, [accessibleSchedules, prevPeriod.month, prevPeriod.year, schedule.unitId, units]);
   const prevScheduleId = prevSchedule?.id ?? null;
   const { shifts: prevShifts } = useDPShifts(prevScheduleId);
 
@@ -575,7 +585,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
 
   const prevSiblingIds = useMemo(() => {
     if (!schedule.unitId) return [];
-    return schedules
+    return accessibleSchedules
       .filter(s =>
         s.id !== prevScheduleId &&
         s.month === prevPeriod.month &&
@@ -584,7 +594,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         !operationalUnitIdsMatch(s.unitId, schedule.unitId, units)
       )
       .map(s => s.id);
-  }, [prevPeriod.month, prevPeriod.year, prevScheduleId, schedule.unitId, schedules, units]);
+  }, [accessibleSchedules, prevPeriod.month, prevPeriod.year, prevScheduleId, schedule.unitId, units]);
   const { shifts: prevSiblingShifts } = useDPSiblingShifts(prevSiblingIds);
 
   // Last 7 days of previous month for preview
@@ -737,15 +747,19 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     shifts.forEach(s => { if (!seen.has(s.unitId)) seen.set(s.unitId, s.unitId); });
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name } as DPUnit));
   }, [units, shifts]);
+  const accessibleUnits = useMemo(
+    () => user ? filterUnitsByAccess(allUnits, user, { isDefaultAdmin }) : [],
+    [allUnits, isDefaultAdmin, user],
+  );
 
   // In per-unit mode, always show only the schedule's own unit
   const activeUnits = useMemo(() => {
     if (isPerUnit && schedule.unitId) {
-      const own = allUnits.find(u => u.id === schedule.unitId);
+      const own = accessibleUnits.find(u => u.id === schedule.unitId);
       return own ? [own] : [];
     }
-    return unitFilter === '__all__' ? allUnits : allUnits.filter(u => u.id === unitFilter);
-  }, [isPerUnit, schedule.unitId, allUnits, unitFilter]);
+    return unitFilter === '__all__' ? accessibleUnits : accessibleUnits.filter(u => u.id === unitFilter);
+  }, [isPerUnit, schedule.unitId, accessibleUnits, unitFilter]);
 
   // Shift definition lookup
   const defMap = useMemo(() => {
@@ -788,7 +802,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   // ── Per-unit mode: sibling schedules (same month/year, different unitId) ──
   const siblingIds = useMemo(() => {
     if (!isPerUnit || !schedule.unitId) return [];
-    return schedules
+    return accessibleSchedules
       .filter(s =>
         s.id !== schedule.id &&
         s.month === schedule.month &&
@@ -797,7 +811,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         !operationalUnitIdsMatch(s.unitId, schedule.unitId, units)
       )
       .map(s => s.id);
-  }, [isPerUnit, schedules, schedule.id, schedule.month, schedule.year, schedule.unitId, units]);
+  }, [accessibleSchedules, isPerUnit, schedule.id, schedule.month, schedule.year, schedule.unitId, units]);
 
   const { shifts: siblingShifts } = useDPSiblingShifts(siblingIds);
   const workShifts = useMemo(() => shifts.filter(isWorkShift), [shifts]);

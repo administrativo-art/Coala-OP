@@ -14,7 +14,7 @@ import {
   fileExtension,
 } from "@/lib/hr/employee-document-planning";
 import { canAccessDocument, resolveDocumentVisibility } from "@/lib/hr/employee-document-access";
-import { buildEmployeeDocumentAccessSubject, loadEmployeeDocumentAccessSettings } from "@/features/hr/lib/employee-document-access-server";
+import { assertEmployeeUnitAccess, buildEmployeeDocumentAccessSubject, loadEmployeeDocumentAccessSettings } from "@/features/hr/lib/employee-document-access-server";
 import { getDocumentTypeConfig } from "@/lib/hr/employee-document-catalog";
 import {
   resolveDocumentDestination,
@@ -191,6 +191,7 @@ export async function GET(request: NextRequest) {
     if (access.permissions.dp?.collaborators?.ownProfileOnly === true && employeeId !== access.userDoc.id) {
       return error("Este perfil permite acessar apenas os próprios documentos.", 403);
     }
+    await assertEmployeeUnitAccess(access, employeeId);
     const snap = await hrDbAdmin.collection(COLLECTION).where("employeeId", "==", employeeId).get();
     // Aplica a política de sigilo por documento; o usuário só recebe o que pode ver.
     const accessSettings = await loadEmployeeDocumentAccessSettings(access);
@@ -232,6 +233,7 @@ export async function POST(request: NextRequest) {
       const candidateId = typeof manifest.candidateId === "string" && manifest.candidateId.trim() ? manifest.candidateId.trim() : null;
       const documents = Array.isArray(manifest.documents) ? manifest.documents : [];
       if (!employeeId || documents.length === 0) return error("Manifesto de upload inválido.");
+      await assertEmployeeUnitAccess(access, employeeId);
 
       const savedDocuments: SaveResult[] = [];
       const failures: { documentId?: string; error: string }[] = [];
@@ -263,6 +265,7 @@ export async function POST(request: NextRequest) {
     const employeeId = text(form.get("employeeId"), 128);
     const candidateId = text(form.get("candidateId"), 128) || null;
     if (!(file instanceof File) || !employeeId) return error("Selecione um arquivo e informe o colaborador.");
+    await assertEmployeeUnitAccess(access, employeeId);
     const document = await saveEmployeeDocument({
       access, employeeId, candidateId,
       documentTypeCode: text(form.get("documentTypeCode"), 80) || null,
@@ -283,7 +286,9 @@ export async function PATCH(request: NextRequest) {
     const status = typeof body.status === "string" ? body.status : "";
     if (!id || (!STATUSES.has(status) && !LEGACY_STATUSES.has(status))) return error("Documento ou status inválido.");
     const ref = hrDbAdmin.collection(COLLECTION).doc(id);
-    if (!(await ref.get()).exists) return error("Documento não encontrado.", 404);
+    const snap = await ref.get();
+    if (!snap.exists) return error("Documento não encontrado.", 404);
+    await assertEmployeeUnitAccess(access, String(snap.get("employeeId") ?? ""));
     const now = Timestamp.now();
     const update: Record<string, unknown> = { status, updatedAt: now };
     if (status === "validated") Object.assign(update, { validatedBy: access.decoded.uid, validatedByName: access.actorName, validatedAt: now });
@@ -300,6 +305,7 @@ export async function DELETE(request: NextRequest) {
     const ref = hrDbAdmin.collection(COLLECTION).doc(id);
     const snap = await ref.get();
     if (!snap.exists) return error("Documento não encontrado.", 404);
+    await assertEmployeeUnitAccess(access, String(snap.get("employeeId") ?? ""));
     const storagePath = snap.get("storagePath");
     if (typeof storagePath === "string") await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).delete({ ignoreNotFound: true });
     await ref.update({ deletedAt: Timestamp.now(), deletedBy: access.decoded.uid, storagePath: FieldValue.delete(), updatedAt: Timestamp.now() });

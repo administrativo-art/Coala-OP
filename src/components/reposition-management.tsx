@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic';
 
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
+import { canAccessUnit } from '@/lib/unit-access';
 import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot, type Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
@@ -803,7 +804,7 @@ function RepositionActivityCard({
 export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
   const router = useRouter();
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
-  const { permissions, user, firebaseUser } = useAuth();
+  const { permissions, user, firebaseUser, isDefaultAdmin } = useAuth();
   const { toast } = useToast();
   const { products } = useProducts();
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
@@ -1108,14 +1109,9 @@ export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
                   onReopenDispatch={setActivityToReopenDispatch}
                   onReopenAudit={setActivityToReopenAudit}
                   canManagePreparation={canManagePreparation}
-                  canReceive={
-                    canManagePreparation ||
-                    (permissions.reposition.receive &&
-                      (
-                        !!user?.assignedKioskIds?.includes(activity.kioskDestinationId) ||
-                        !!user?.unitIds?.includes(activity.kioskDestinationId)
-                      ))
-                  }
+                  canReceive={Boolean(user) && (
+                    canManagePreparation || permissions.reposition.receive
+                  ) && canAccessUnit(user!, activity.kioskDestinationId, { isDefaultAdmin })}
                   canFinalizeStep={canFinalizeStep}
                   canRevert={canRevertSteps}
                   products={products}

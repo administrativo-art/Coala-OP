@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/auth-server";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { revokeImageVoiceConsent } from "@/features/hr/consents/image-voice-consent";
+import { resolvePersonLink } from "@/features/hr/lib/person-link.server";
+import { isOwnHrEmployeeId } from "@/lib/hr/person-link";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,16 +30,16 @@ export async function POST(
       return NextResponse.json({ error: "Colaborador obrigatório." }, { status: 400 });
     }
 
-    const employeeRef = hrDbAdmin.collection("employees").doc(normalizedEmployeeId);
-    const employeeSnap = await employeeRef.get();
-    if (!employeeSnap.exists) {
+    const personLink = await resolvePersonLink(normalizedEmployeeId);
+    const employeeSnap = personLink.employeeDocument;
+    if (!employeeSnap?.exists) {
       return NextResponse.json({ error: "Colaborador não encontrado no RH." }, { status: 404 });
     }
+    const employeeRef = employeeSnap.ref;
 
     const employee = employeeSnap.data() ?? {};
     const isOwner = employee.auth_uid === actor.userDoc.id
-      || actor.userDoc.registrationIdBizneo === normalizedEmployeeId
-      || actor.userDoc.id === normalizedEmployeeId;
+      || isOwnHrEmployeeId(actor.userDoc, employeeSnap.id);
     if (!isOwner) {
       return NextResponse.json(
         { error: "Somente o próprio colaborador pode revogar esta autorização." },

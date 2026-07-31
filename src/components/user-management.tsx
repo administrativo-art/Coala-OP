@@ -260,6 +260,8 @@ const userSchema = z.object({
     required_error: 'Selecione o tipo de vínculo.',
   }),
   responsibleUnitIds: z.array(z.string()).optional(),
+  unitAccessScope: z.enum(['linked', 'selected', 'all']).default('linked'),
+  unitAccessUnitIds: z.array(z.string()).optional(),
   admissionDate: z.string().optional(),
   birthDate: z.string().optional(),
   shiftDefinitionId: z.string().optional(),
@@ -272,6 +274,9 @@ const userSchema = z.object({
 }, {
     message: 'Selecione pelo menos um quiosque.',
     path: ['assignedKioskIds'],
+}).refine(data => data.unitAccessScope !== 'selected' || (data.unitAccessUnitIds?.length ?? 0) > 0, {
+    message: 'Selecione ao menos uma unidade para o escopo específico.',
+    path: ['unitAccessUnitIds'],
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -290,6 +295,8 @@ const USER_AUDIT_FIELDS = [
   'jobFunctionNames',
   'employmentRelationshipType',
   'responsibleUnitIds',
+  'unitAccessScope',
+  'unitAccessUnitIds',
   'admissionDate',
   'birthDate',
   'shiftDefinitionId',
@@ -389,6 +396,8 @@ export function UserManagement({
         jobFunctionIds: [],
         employmentRelationshipType: undefined,
         responsibleUnitIds: [],
+        unitAccessScope: 'linked',
+        unitAccessUnitIds: [],
         admissionDate: '',
         birthDate: '',
         shiftDefinitionId: '',
@@ -401,6 +410,7 @@ export function UserManagement({
   const selectedFunctionIds = form.watch('jobFunctionIds') ?? [];
   const selectedProfileId = form.watch('profileId') ?? '';
   const selectedKioskIds = form.watch('assignedKioskIds') ?? [];
+  const selectedUnitAccessScope = form.watch('unitAccessScope') ?? 'linked';
   const admissionDateValue = form.watch('admissionDate');
   const birthDateValue = form.watch('birthDate');
   const needsTransportVoucherValue = form.watch('needsTransportVoucher');
@@ -620,6 +630,8 @@ export function UserManagement({
       jobFunctionIds: [],
       employmentRelationshipType: undefined,
       responsibleUnitIds: [],
+      unitAccessScope: 'linked',
+      unitAccessUnitIds: [],
       admissionDate: '',
       birthDate: '',
       shiftDefinitionId: '',
@@ -647,6 +659,8 @@ export function UserManagement({
       jobFunctionIds: user.jobFunctionIds ?? [],
       employmentRelationshipType: user.employmentRelationshipType,
       responsibleUnitIds: user.responsibleUnitIds ?? [],
+      unitAccessScope: user.unitAccessScope ?? 'linked',
+      unitAccessUnitIds: (user.unitAccessUnitIds ?? []).filter((id) => units.some((unit) => unit.id === id)),
       admissionDate: timestampToDateInput(user.admissionDate),
       birthDate: timestampToDateInput(user.birthDate),
       shiftDefinitionId: user.shiftDefinitionId ?? '',
@@ -658,7 +672,7 @@ export function UserManagement({
     setPdvOperatorIds(existing);
     setPendingTransportVoucherHistory([]);
     setShowForm(true);
-  }, [form]);
+  }, [form, units]);
 
   useEffect(() => {
     if (!editUserId || initializedEditUserIdRef.current === editUserId) return;
@@ -832,6 +846,15 @@ export function UserManagement({
     const birthDate = values.birthDate
       ? Timestamp.fromDate(new Date(values.birthDate + 'T12:00:00'))
       : undefined;
+    const expandedUnitAccessUnitIds = values.unitAccessScope === 'selected'
+      ? Array.from(new Set([
+          ...(values.unitAccessUnitIds ?? []),
+          ...kiosks.flatMap((kiosk) => {
+            const unit = matchDPUnitForKiosk(kiosk.name, units);
+            return unit && values.unitAccessUnitIds?.includes(unit.id) ? [kiosk.id] : [];
+          }),
+        ]))
+      : [];
 
     if (editingUser) {
       const updatedData: Partial<User> = {
@@ -848,6 +871,8 @@ export function UserManagement({
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           employmentRelationshipType: values.employmentRelationshipType,
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
+          unitAccessScope: values.unitAccessScope,
+          unitAccessUnitIds: expandedUnitAccessUnitIds,
           unitIds: selectedWorkUnitIds.length > 0 ? selectedWorkUnitIds : undefined,
           admissionDate,
           birthDate,
@@ -888,6 +913,8 @@ export function UserManagement({
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           employmentRelationshipType: values.employmentRelationshipType,
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
+          unitAccessScope: values.unitAccessScope,
+          unitAccessUnitIds: expandedUnitAccessUnitIds,
           unitIds: selectedWorkUnitIds.length > 0 ? selectedWorkUnitIds : undefined,
           admissionDate,
           birthDate,
@@ -1258,6 +1285,48 @@ export function UserManagement({
                         <FormMessage />
                       </FormItem>
                     )} />
+                    <div className={selectedUnitAccessScope === 'selected' ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4"}>
+                      <FormField control={form.control} name="unitAccessScope" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Escopo de visualização por unidade</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="linked">Somente unidades vinculadas</SelectItem>
+                              <SelectItem value="selected">Unidades específicas</SelectItem>
+                              <SelectItem value="all">Todas as unidades</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            Define onde o usuário pode visualizar e operar. As permissões do perfil continuam definindo o que ele pode fazer.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      {selectedUnitAccessScope === 'selected' ? (
+                        <FormField control={form.control} name="unitAccessUnitIds" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unidades liberadas no escopo</FormLabel>
+                            <FormControl>
+                              <MultiSelect
+                                options={responsibleUnitOptions}
+                                selected={field.value ?? []}
+                                onChange={field.onChange}
+                                placeholder="Selecione as unidades"
+                              />
+                            </FormControl>
+                            <FormDescription className="text-xs">
+                              Não altera a lotação nem as unidades sob responsabilidade.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      ) : null}
+                    </div>
                     <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
                       <FormField control={form.control} name="profileId" render={() => (
                         <FormItem>

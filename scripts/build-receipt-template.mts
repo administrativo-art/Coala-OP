@@ -4,33 +4,102 @@ import path from "node:path";
 
 import PizZip from "pizzip";
 
-const SOURCE = path.resolve("docs/modelos-documentos/admissionais/06-vale-transporte-v1.docx");
-const OUTPUT = path.resolve("docs/modelos-documentos/recibos/recibo-v1.docx");
+import { applyCtDocumentStandard } from "../src/features/hr/documents/ct-document-standard.server";
 
-function run(text: string, options?: { bold?: boolean; size?: number }) {
-  const properties = [
-    '<w:rFonts w:ascii="Carlito" w:hAnsi="Carlito" w:cs="Carlito"/>',
-    options?.bold ? "<w:b/><w:bCs/>" : "",
-    `<w:sz w:val="${options?.size ?? 22}"/><w:szCs w:val="${options?.size ?? 22}"/>`,
-  ].join("");
-  return `<w:r><w:rPr>${properties}</w:rPr><w:t xml:space="preserve">${text}</w:t></w:r>`;
+const SOURCE = path.resolve(
+  "docs/modelos-documentos/recibos/recibo-v1.docx",
+);
+const OUTPUT = path.resolve(
+  "docs/modelos-documentos/recibos/recibo-v3.docx",
+);
+const PAGE_WIDTH = 8504;
+
+function escapeXml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
-function paragraph(text: string, options?: {
-  bold?: boolean;
-  size?: number;
-  align?: "left" | "center" | "right";
-  before?: number;
+function run(text: string, characterStyle?: string) {
+  const style = characterStyle
+    ? `<w:rPr><w:rStyle w:val="${characterStyle}"/></w:rPr>`
+    : "";
+  return `<w:r>${style}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+}
+
+function paragraph(
+  styleId: string,
+  content: string | Array<{ text: string; characterStyle?: string }>,
+) {
+  const runs = typeof content === "string"
+    ? run(content)
+    : content.map((item) => run(item.text, item.characterStyle)).join("");
+  return `<w:p><w:pPr><w:pStyle w:val="${styleId}"/></w:pPr>${runs}</w:p>`;
+}
+
+function cell(params: {
+  width: number;
+  content: string;
+  fill?: string;
+  border?: string;
+  verticalAlign?: "top" | "center";
+  margin?: number;
+}) {
+  const border = params.border ?? "DCE2EA";
+  const margin = params.margin ?? 120;
+  return [
+    "<w:tc>",
+    "<w:tcPr>",
+    `<w:tcW w:w="${params.width}" w:type="dxa"/>`,
+    params.fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${params.fill}"/>` : "",
+    `<w:tcBorders><w:top w:val="single" w:sz="5" w:color="${border}"/><w:left w:val="single" w:sz="5" w:color="${border}"/><w:bottom w:val="single" w:sz="5" w:color="${border}"/><w:right w:val="single" w:sz="5" w:color="${border}"/></w:tcBorders>`,
+    `<w:tcMar><w:top w:w="${margin}" w:type="dxa"/><w:left w:w="${margin}" w:type="dxa"/><w:bottom w:w="${margin}" w:type="dxa"/><w:right w:w="${margin}" w:type="dxa"/></w:tcMar>`,
+    `<w:vAlign w:val="${params.verticalAlign ?? "center"}"/>`,
+    "</w:tcPr>",
+    params.content,
+    "</w:tc>",
+  ].join("");
+}
+
+function table(params: {
+  columns: number[];
+  rows: string[];
   after?: number;
 }) {
-  return `<w:p><w:pPr><w:spacing w:before="${options?.before ?? 0}" w:after="${options?.after ?? 140}"/><w:jc w:val="${options?.align ?? "left"}"/></w:pPr>${run(text, options)}</w:p>`;
+  return [
+    "<w:tbl>",
+    "<w:tblPr>",
+    `<w:tblW w:w="${params.columns.reduce((sum, width) => sum + width, 0)}" w:type="dxa"/>`,
+    '<w:tblLayout w:type="fixed"/>',
+    `<w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar>`,
+    "</w:tblPr>",
+    `<w:tblGrid>${params.columns.map((width) => `<w:gridCol w:w="${width}"/>`).join("")}</w:tblGrid>`,
+    params.rows.join(""),
+    "</w:tbl>",
+    params.after
+      ? `<w:p><w:pPr><w:spacing w:before="0" w:after="${params.after}"/></w:pPr></w:p>`
+      : "",
+  ].join("");
 }
 
-function cell(content: string, width: number, bold = false) {
-  return `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/><w:tcMar><w:top w:w="100" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tcMar></w:tcPr>${paragraph(content, { bold, after: 0 })}</w:tc>`;
+function row(cells: string[], options?: { header?: boolean; repeatHeader?: boolean }) {
+  return [
+    "<w:tr>",
+    options?.repeatHeader ? '<w:trPr><w:tblHeader/></w:trPr>' : "",
+    ...cells,
+    "</w:tr>",
+  ].join("");
 }
 
-const source = await readFile(SOURCE);
+function labelValue(label: string, value: string) {
+  return [
+    paragraph("CTReciboRotulo", label),
+    paragraph("CTReciboValor", value),
+  ].join("");
+}
+
+const source = applyCtDocumentStandard(await readFile(SOURCE));
 const zip = new PizZip(source);
 const documentPath = "word/document.xml";
 const original = zip.file(documentPath)?.asText();
@@ -39,38 +108,220 @@ const rootOpen = original.match(/^([\s\S]*?<w:body>)/)?.[1];
 const section = original.match(/(<w:sectPr[\s\S]*?<\/w:sectPr>)[\s\S]*?<\/w:body>/)?.[1];
 if (!rootOpen || !section) throw new Error("Estrutura do DOCX base não reconhecida.");
 
-const table = [
-  '<w:tbl><w:tblPr><w:tblW w:w="8706" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="6" w:color="B8C0CC"/><w:left w:val="single" w:sz="6" w:color="B8C0CC"/><w:bottom w:val="single" w:sz="6" w:color="B8C0CC"/><w:right w:val="single" w:sz="6" w:color="B8C0CC"/><w:insideH w:val="single" w:sz="4" w:color="D7DCE3"/><w:insideV w:val="single" w:sz="4" w:color="D7DCE3"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="6500"/><w:gridCol w:w="2206"/></w:tblGrid>',
-  `<w:tr>${cell("Descrição", 6500, true)}${cell("Valor", 2206, true)}</w:tr>`,
-  `<w:tr>${cell("{{#receipt.items}}{{description}}", 6500)}${cell("{{value}}{{/receipt.items}}", 2206)}</w:tr>`,
-  "</w:tbl>",
-].join("");
+const identification = table({
+  columns: [PAGE_WIDTH / 2, PAGE_WIDTH / 2],
+  rows: [
+    row([
+      cell({
+        width: PAGE_WIDTH / 2,
+        content: labelValue("PAGADOR / EMITENTE", "{{receipt.issuer.snapshot.name}}"),
+      }),
+      cell({
+        width: PAGE_WIDTH / 2,
+        content: labelValue("CPF/CNPJ DO PAGADOR", "{{receipt.issuer.snapshot.document}}"),
+      }),
+    ]),
+    row([
+      cell({
+        width: PAGE_WIDTH / 2,
+        content: labelValue("RECEBEDOR", "{{receipt.recipient.snapshot.name}}"),
+      }),
+      cell({
+        width: PAGE_WIDTH / 2,
+        content: labelValue("CPF/CNPJ DO RECEBEDOR", "{{receipt.recipient.snapshot.document}}"),
+      }),
+    ]),
+  ],
+  after: 100,
+});
+
+const items = table({
+  columns: [1800, 5000, 1704],
+  rows: [
+    row([
+      cell({
+        width: 1800,
+        fill: "F3F6FA",
+        content: paragraph("CTReciboRotulo", "ITEM"),
+      }),
+      cell({
+        width: 5000,
+        fill: "F3F6FA",
+        content: paragraph("CTReciboRotulo", "DESCRIÇÃO"),
+      }),
+      cell({
+        width: 1704,
+        fill: "F3F6FA",
+        content: paragraph("CTReciboRotulo", "VALOR"),
+      }),
+    ], { repeatHeader: true }),
+    row([
+      cell({
+        width: 1800,
+        content: paragraph("CTReciboValor", "{{#receipt.items}}{{name}}"),
+        verticalAlign: "top",
+      }),
+      cell({
+        width: 5000,
+        content: paragraph("CTReciboTabela", "{{description}}"),
+        verticalAlign: "top",
+      }),
+      cell({
+        width: 1704,
+        content: paragraph("CTReciboValorDireita", "{{value}}{{/receipt.items}}"),
+        verticalAlign: "top",
+      }),
+    ]),
+  ],
+  after: 100,
+});
+
+const total = table({
+  columns: [5100, 3404],
+  rows: [
+    row([
+      cell({
+        width: 5100,
+        border: "FFFFFF",
+        content: paragraph("CTReciboTabela", ""),
+      }),
+      cell({
+        width: 3404,
+        border: "F5A8C9",
+        fill: "FDE8F1",
+        margin: 190,
+        content: [
+          paragraph("CTReciboTotalRotulo", "TOTAL DO RECIBO"),
+          paragraph("CTReciboTotalValor", "{{receipt.total}}"),
+        ].join(""),
+      }),
+    ]),
+  ],
+  after: 80,
+});
+
+const declaration = table({
+  columns: [PAGE_WIDTH],
+  rows: [
+    row([
+      cell({
+        width: PAGE_WIDTH,
+        fill: "F6F7F9",
+        border: "F6F7F9",
+        margin: 150,
+        content: paragraph("CTReciboDeclaracao", [
+          { text: "Declaro que o valor total de " },
+          {
+            text: "{{receipt.total}}",
+            characterStyle: "CTReciboDestaque",
+          },
+          {
+            text: " corresponde integralmente aos itens discriminados neste recibo, dando plena e geral quitação exclusivamente quanto a esses valores.",
+          },
+        ]),
+      }),
+    ]),
+  ],
+  after: 0,
+});
+
+const signatures = table({
+  columns: [4052, 400, 4052],
+  rows: [
+    row([
+      cell({
+        width: 4052,
+        border: "FFFFFF",
+        content: [
+          paragraph("CTAssinaturaLinha", "{{receipt.issuer.snapshot.name}}"),
+          paragraph("CTAssinatura", "{{receipt.issuer.snapshot.document}}"),
+          paragraph("CTAssinatura", "EMITENTE"),
+        ].join(""),
+      }),
+      cell({
+        width: 400,
+        border: "FFFFFF",
+        content: paragraph("CTAssinatura", ""),
+      }),
+      cell({
+        width: 4052,
+        border: "FFFFFF",
+        content: [
+          paragraph("CTAssinaturaLinha", "{{receipt.recipient.snapshot.name}}"),
+          paragraph("CTAssinatura", "{{receipt.recipient.snapshot.document}}"),
+          paragraph("CTAssinatura", "RECEBEDOR"),
+        ].join(""),
+      }),
+    ]),
+  ],
+});
 
 const body = [
-  paragraph("RECIBO", { bold: true, size: 32, align: "center", after: 80 }),
-  paragraph("Documento {{receipt.number}}", { bold: true, size: 20, align: "center", after: 320 }),
-  paragraph("{{receipt.direction}} {{receipt.recipient.snapshot.name}}, documento {{receipt.recipient.snapshot.document}}, os valores discriminados abaixo.", { after: 220 }),
-  paragraph("Emitente: {{receipt.issuer.snapshot.name}} · Documento: {{receipt.issuer.snapshot.document}}", { bold: true, after: 260 }),
-  table,
-  paragraph("Total: {{receipt.totalWithWords}}", { bold: true, size: 24, align: "right", before: 180, after: 240 }),
-  paragraph("Forma de pagamento: {{receipt.payment.method}}", { bold: true }),
-  paragraph("{{#if receipt.payment.method == 'pix'}}Chave Pix: {{receipt.payment.pixKey}}{{/if}}"),
-  paragraph("{{#if receipt.payment.method == 'transfer'}}Banco: {{receipt.payment.bank}} · Agência: {{receipt.payment.agency}} · Conta: {{receipt.payment.account}}{{/if}}"),
-  paragraph("Para maior clareza, firmamos o presente recibo, dando quitação exclusivamente quanto aos valores e itens acima descritos.", { before: 220, after: 260 }),
-  paragraph("{{receipt.city}}, {{receipt.issueDate}}.", { align: "right", after: 520 }),
-  paragraph("____________________________________________", { align: "center", after: 40 }),
-  paragraph("{{receipt.issuer.snapshot.name}}", { bold: true, align: "center", after: 0 }),
-  paragraph("EMITENTE", { size: 18, align: "center", after: 0 }),
+  paragraph("CTReciboNumero", "Nº {{receipt.number}}"),
+  paragraph("CTReciboEtiqueta", "RECIBO DE PAGAMENTO"),
+  paragraph("CTReciboTitulo", "RECIBO"),
+  paragraph(
+    "CTReciboSubtitulo",
+    "Comprovante referente aos itens discriminados abaixo.",
+  ),
+  paragraph("CTReciboIntroducao", [
+    { text: "{{receipt.direction}} a importância de " },
+    {
+      text: "{{receipt.totalWithWords}}",
+      characterStyle: "CTReciboDestaque",
+    },
+    { text: "." },
+  ]),
+  paragraph("CTReciboSecao", "IDENTIFICAÇÃO"),
+  identification,
+  paragraph("CTReciboSecao", "ITENS"),
+  items,
+  total,
+  paragraph("CTReciboSubtitulo", [
+    { text: "Pagamento: " },
+    { text: "{{receipt.payment.methodLabel}}", characterStyle: "CTReciboDestaque" },
+    { text: "{{#if receipt.payment.method == 'pix'}} · Chave Pix: {{receipt.payment.pixKey}}{{/if}}" },
+    { text: "{{#if receipt.payment.method == 'transfer'}} · Banco: {{receipt.payment.bank}} · Agência: {{receipt.payment.agency}} · Conta: {{receipt.payment.account}}{{/if}}" },
+  ]),
+  paragraph("CTReciboSecao", "DECLARAÇÃO"),
+  declaration,
+  paragraph("CTReciboData", "{{receipt.city}}/{{receipt.state}}, {{receipt.issueDate}}."),
+  signatures,
 ].join("");
 
-zip.file(documentPath, `${rootOpen}${body}${section}</w:body></w:document>`);
-const footerPath = "word/footer1.xml";
-const footer = zip.file(footerPath)?.asText();
-if (!footer?.includes("Vale-Transporte — CT Sorvetes Ltda")) {
-  throw new Error("Rodapé do DOCX base não reconhecido.");
+zip.file(
+  documentPath,
+  `${rootOpen}${body}${section}</w:body></w:document>`,
+);
+const corePath = "docProps/core.xml";
+const core = zip.file(corePath)?.asText();
+if (core) {
+  const replaceCoreValue = (xml: string, tag: string, value: string) => {
+    const pattern = new RegExp(`(<${tag}(?:\\s[^>]*)?>)[\\s\\S]*?(<\\/${tag}>)`);
+    return pattern.test(xml)
+      ? xml.replace(pattern, `$1${escapeXml(value)}$2`)
+      : xml;
+  };
+  zip.file(
+    corePath,
+    replaceCoreValue(
+      replaceCoreValue(
+        replaceCoreValue(core, "dc:title", "Recibo de pagamento"),
+        "dc:creator",
+        "Coala One",
+      ),
+      "cp:lastModifiedBy",
+      "Coala One",
+    ),
+  );
 }
-zip.file(footerPath, footer.replace("Vale-Transporte — CT Sorvetes Ltda", "Recibo — Coala One"));
-const output = zip.generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
+const deterministicDate = new Date("2026-07-30T00:00:00.000Z");
+Object.values(zip.files).forEach((file) => {
+  file.date = deterministicDate;
+});
+const output = Buffer.from(
+  zip.generate({ type: "nodebuffer", compression: "DEFLATE" }),
+);
 await mkdir(path.dirname(OUTPUT), { recursive: true });
 await writeFile(OUTPUT, output);
 process.stdout.write(`${JSON.stringify({

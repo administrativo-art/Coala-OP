@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "renderer": {
-    "officeFont": "Calibri",
-    "converterFont": "Carlito",
+    "officeFont": "Calibri/Cambria",
+    "converterFont": "Carlito/Caladea",
     "letterheadVersion": "coala-letterhead-v2"
   },
   "templates": {
     "system-receipt-standard": {
-      "sourcePath": "docs/modelos-documentos/recibos/recibo-v1.docx",
-      "sourceHash": "4697f1bf5879c02f4255f7304b09ead562d42d519f8016f9c1e42a86ce14b112",
+      "sourcePath": "docs/modelos-documentos/recibos/recibo-v2.docx",
+      "sourceHash": "0100561b924cab4423382e8380cf7b90bba60005566f009ee82435253f6e85b4",
       "pageCount": 1,
       "pageSizes": [
         {
@@ -18,23 +18,23 @@
       ],
       "fonts": [
         {
-          "name": "Carlito-Bold",
+          "name": "Caladea-Bold",
           "embedded": true
         },
         {
-          "name": "Carlito-Regular",
+          "name": "Caladea-Regular",
           "embedded": true
         }
       ],
       "wordsPerPage": [
-        74
+        109
       ],
       "anchors": [],
       "safeAreaProfile": "coala-letterhead-v2"
     },
     "system-admission-employment-probation-contract": {
       "sourcePath": "docs/modelos-documentos/admissionais/01-contrato-experiencia-v2.docx",
-      "sourceHash": "6cddfc54a23a17964493f94c71f8af52b89d17ef953db9b7acdb5c836fbff53d",
+      "sourceHash": "0b0ce20b71e53ad9fd5576a52bcbfb57dfdfc6f678f82a9cb8cc7f646437da52",
       "pageCount": 3,
       "pageSizes": [
         {
@@ -61,9 +61,9 @@
         }
       ],
       "wordsPerPage": [
-        374,
-        407,
-        121
+        355,
+        430,
+        361
       ],
       "anchors": [
         {
@@ -78,9 +78,9 @@
           "page": 3,
           "phrase": "E por estarem de pleno acordo",
           "xMin": 80.1,
-          "yMin": 201.33,
+          "yMin": 615.78,
           "xMax": 233.88,
-          "yMax": 214.75
+          "yMax": 629.2
         }
       ],
       "safeAreaProfile": "coala-letterhead-v2"
@@ -429,49 +429,6 @@
           "yMin": 307.73,
           "xMax": 179.67,
           "yMax": 321.15
-        }
-      ],
-      "safeAreaProfile": "coala-letterhead-v2"
-    },
-    "system-admission-electronic-time-tracking-awareness": {
-      "sourcePath": "docs/modelos-documentos/admissionais/08-ponto-eletronico-v2.docx",
-      "sourceHash": "eba3f36cf5ca9c5effb72c36cfc05f3487b192f5ff9206c0bc604f66235e3f5a",
-      "pageCount": 1,
-      "pageSizes": [
-        {
-          "width": 595.3,
-          "height": 841.89
-        }
-      ],
-      "fonts": [
-        {
-          "name": "Carlito-Bold",
-          "embedded": true
-        },
-        {
-          "name": "Carlito-Regular",
-          "embedded": true
-        }
-      ],
-      "wordsPerPage": [
-        309
-      ],
-      "anchors": [
-        {
-          "page": 1,
-          "phrase": "TERMO DE CIÊNCIA REGISTRO ELETRÔNICO DE PONTO",
-          "xMin": 85.1,
-          "yMin": 72.01,
-          "xMax": 509.99,
-          "yMax": 93.97
-        },
-        {
-          "page": 1,
-          "phrase": "Portaria MTP",
-          "xMin": 258.9,
-          "yMin": 254.33,
-          "xMax": 318.75,
-          "yMax": 267.75
         }
       ],
       "safeAreaProfile": "coala-letterhead-v2"

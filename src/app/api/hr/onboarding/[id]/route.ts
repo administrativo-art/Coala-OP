@@ -393,13 +393,33 @@ async function createCollaboratorFromOnboarding(params: {
     throw new Error('O perfil de acesso configurado no cargo ou função não existe.');
   }
 
+  const employeeId = authUser.uid;
+  const relationship = isEmploymentRelationshipType(params.process.employmentRelationshipType)
+    ? params.process.employmentRelationshipType
+    : 'clt';
+  const personRecordType = relationship === 'pj'
+    ? 'pj'
+    : relationship === 'internship'
+      ? 'internship'
+      : 'employee';
+
   await dbAdmin.collection('users').doc(authUser.uid).set({
     username: name,
     email,
+    hrEmployeeId: employeeId,
+    personRecordType,
+    profileCompliance: {
+      status: 'pending',
+      policyVersion: 1,
+      missingFields: [],
+      invalidFields: [],
+      evaluatedAt: null,
+      completedAt: null,
+      lastConfirmedAt: null,
+      nextReviewAt: null,
+    },
     profileId,
-    ...(isEmploymentRelationshipType(params.process.employmentRelationshipType)
-      ? { employmentRelationshipType: params.process.employmentRelationshipType }
-      : {}),
+    employmentRelationshipType: relationship,
     ...collaboratorCore.userPatch,
     transportVoucherHistory,
     isActive: true,
@@ -412,7 +432,6 @@ async function createCollaboratorFromOnboarding(params: {
     createdAt: now,
   }, { merge: true });
 
-  const employeeId = authUser.uid;
   const employeeRef = hrDbAdmin.collection('employees').doc(employeeId);
   const onboardingImageVoiceConsent = asRecord(params.process.consentimento_imagem_voz);
   const hasExplicitImageVoiceDecision = typeof onboardingImageVoiceConsent.autorizado === 'boolean';
@@ -425,6 +444,8 @@ async function createCollaboratorFromOnboarding(params: {
     source: 'recruitment_onboarding',
     name,
     email,
+    access_email: email,
+    person_record_type: personRecordType,
     status: 'active',
     job_role_id: collaboratorCore.role?.id ?? asString(params.process.jobRoleId) ?? profileId,
     unit_id: unitId ?? 'sem-unidade',
@@ -465,7 +486,6 @@ async function createCollaboratorFromOnboarding(params: {
   const fieldValuesRef = employeeRef.collection('field_values');
   const values: Record<string, Record<string, unknown>> = {
     'employee.name': { value_text: name },
-    'employee.personal_email': { value_text: email },
     'employee.job_role_id': { value_text: collaboratorCore.role?.name ?? asString(params.process.jobRoleName) ?? asString(params.process.jobRoleId) ?? '' },
     'employee.admission_date': { value_date: admissionTimestamp },
   };

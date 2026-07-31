@@ -17,6 +17,7 @@ import {
 } from '@/lib/dp-shift-definitions';
 import { isWorkShift } from '@/lib/dp-shift-rules';
 import { activeOperationalUnits, canonicalOperationalUnitId } from '@/lib/dp-units';
+import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -595,7 +596,7 @@ export function DPSchedulesList() {
     shiftDefsLoading,
     shiftDefsError,
   } = useDP();
-  const { permissions } = useAuth();
+  const { permissions, user, isDefaultAdmin } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -607,7 +608,21 @@ export function DPSchedulesList() {
   const createDependenciesReady = !unitsLoading && !calendarsLoading && !unitsError && !calendarsError;
   const exportDependenciesReady = !shiftDefsLoading && !unitsLoading && !shiftDefsError && !unitsError;
   const ancillaryErrors = [unitsError, calendarsError, shiftDefsError].filter(Boolean);
-  const activeUnits = React.useMemo(() => activeOperationalUnits(units), [units]);
+  const activeUnits = React.useMemo(
+    () => user
+      ? filterUnitsByAccess(activeOperationalUnits(units), user, { isDefaultAdmin })
+      : [],
+    [isDefaultAdmin, units, user],
+  );
+  const visibleSchedules = React.useMemo(() => {
+    if (!user) return [];
+    const access = resolveUnitAccess(user, { isDefaultAdmin });
+    return schedules.filter((schedule) =>
+      schedule.unitId
+        ? canAccessUnit(user, schedule.unitId, { isDefaultAdmin })
+        : access.allUnits
+    );
+  }, [isDefaultAdmin, schedules, user]);
 
   const canCreate = permissions.dp?.schedules?.create ?? false;
   const canDelete = permissions.dp?.schedules?.delete ?? false;
@@ -623,7 +638,7 @@ export function DPSchedulesList() {
     // unitId → year → schedules
     const byUnit = new Map<string, Map<number, DPSchedule[]>>();
 
-    for (const s of schedules) {
+    for (const s of visibleSchedules) {
       const key = canonicalOperationalUnitId(s.unitId, units) ?? '__legacy__';
       if (!byUnit.has(key)) byUnit.set(key, new Map());
       const byYear = byUnit.get(key)!;
@@ -665,7 +680,7 @@ export function DPSchedulesList() {
     }
 
     return result;
-  }, [schedules, units]);
+  }, [units, visibleSchedules]);
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -719,7 +734,7 @@ export function DPSchedulesList() {
           <p className="mt-1 text-amber-800/80">{ancillaryErrors[0]}</p>
         </div>
       )}
-      {schedules.length === 0 ? (
+      {visibleSchedules.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <CalendarDays className="h-8 w-8 opacity-30" />
           <p className="text-sm">Nenhuma escala cadastrada.</p>
@@ -799,7 +814,7 @@ export function DPSchedulesList() {
 
       {/* FABs */}
       <div className="fixed bottom-4 right-4 flex flex-col gap-2 items-end sm:bottom-6 sm:right-6">
-        {schedules.some(s => s.unitId) && (
+        {visibleSchedules.some(s => s.unitId) && (
           <Button
             onClick={() => setExportBizneoOpen(true)}
             variant="outline"
@@ -810,7 +825,7 @@ export function DPSchedulesList() {
             Exportar Bizneo
           </Button>
         )}
-        {canCreate && schedules.length > 0 && (
+        {canCreate && visibleSchedules.length > 0 && (
           <Button
             onClick={() => openCreate()}
             className="h-9 gap-1.5 rounded-lg px-3 text-xs shadow-md"
@@ -828,13 +843,13 @@ export function DPSchedulesList() {
         onOpenChange={setCreateOpen}
         defaultUnitId={createDefaultUnit}
         calendars={calendars}
-        units={units}
-        schedules={schedules}
+        units={activeUnits}
+        schedules={visibleSchedules}
       />
       <BizneoExportDialog
         open={exportBizneoOpen}
         onOpenChange={setExportBizneoOpen}
-        schedules={schedules}
+        schedules={visibleSchedules}
         units={units}
         shiftDefinitions={shiftDefinitions}
       />

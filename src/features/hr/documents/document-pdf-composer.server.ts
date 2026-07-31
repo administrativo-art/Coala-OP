@@ -4,7 +4,6 @@ import {
   PDFDocument,
   PDFFont,
   PDFPage,
-  StandardFonts,
   rgb,
 } from "pdf-lib";
 
@@ -17,6 +16,7 @@ import {
   type DocumentPdfProfile,
   type DocumentSignatureScope,
 } from "@/features/hr/documents/document-package-manifest";
+import { embedCaladeaFont } from "@/features/hr/documents/document-pdf-fonts.server";
 
 export const DOCUMENT_TRACEABILITY_BANDS = {
   brand: {
@@ -193,7 +193,7 @@ export async function composeDocumentPackage(params: {
     const document = await PDFDocument.load(item.component.buffer, {
       ignoreEncryption: false,
     });
-    const font = await document.embedFont(StandardFonts.Helvetica);
+    const font = await embedCaladeaFont(document);
     const label = trackingLabel({
       mode,
       protocol: params.protocol,

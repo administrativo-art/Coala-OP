@@ -13,10 +13,17 @@ import {
   extractDocxVariables,
   replaceDocxTextWithVariable,
 } from "@/features/hr/documents/docx-generator";
-import { validateDocxForLetterhead } from "@/features/hr/documents/docx-template-validation";
+import {
+  validateCtDocumentStandard,
+  validateDocxForLetterhead,
+} from "@/features/hr/documents/docx-template-validation";
 import { normalizeFieldMapping, pendingPlaceholders } from "@/features/hr/documents/field-mapping";
 import { DOCUMENT_VARIABLE_SCHEMA_VERSION } from "@/features/hr/integration/document-variables";
 import { isDocumentFormSchema } from "@/features/hr/documents/document-form-schema";
+import {
+  documentTemplateEditBlockMessage,
+  isDocumentTemplateContentEditable,
+} from "@/features/hr/documents/document-template-governance";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
@@ -32,6 +39,17 @@ async function templateSource(id: string) {
   const reference = dbAdmin.collection("companyDocumentTemplates").doc(id);
   const document = await reference.get();
   if (!document.exists || document.get("deletedAt")) throw new Error("Modelo não encontrado.");
+  if (!isDocumentTemplateContentEditable({
+    officialCandidate: document.get("officialCandidate") === true,
+    status: document.get("status"),
+    workflowStatus: document.get("workflowStatus"),
+  })) {
+    throw new Error(documentTemplateEditBlockMessage({
+      officialCandidate: document.get("officialCandidate") === true,
+      status: document.get("status"),
+      workflowStatus: document.get("workflowStatus"),
+    }));
+  }
   const storagePath = document.get("storagePath");
   if (typeof storagePath !== "string" || !storagePath) throw new Error("Envie o DOCX antes de solicitar o plano.");
   const [source] = await getStorage(adminApp)
@@ -111,6 +129,7 @@ export async function POST(
     };
     await reference.set({
       aiMappingPlan: plan,
+      preparationStatus: "validation_editing",
       aiPreparationBlocked: false,
       aiPreparationFindings: [],
       aiPlanCreatedAt: new Date(),
@@ -178,6 +197,7 @@ export async function PATCH(
 
     const variables = extractDocxVariables(prepared);
     const templateValidation = validateDocxForLetterhead(prepared);
+    const documentStandardValidation = validateCtDocumentStandard(prepared);
     if (!templateValidation.valid) {
       return error(
         "O DOCX preparado não respeita a área segura do papel timbrado.",
@@ -215,6 +235,11 @@ export async function PATCH(
       : null;
     const update = {
       status: "draft",
+      preparationStatus: "validation_editing",
+      ...(document.get("officialCandidate") === true ? {
+        workflowStatus: "technical_validation",
+        workflowNote: null,
+      } : {}),
       version,
       storagePath,
       originalName: String(document.get("originalName") ?? "modelo.docx"),
@@ -226,12 +251,18 @@ export async function PATCH(
       unknownVariables: pending,
       letterheadProfileId: templateValidation.profileId,
       templateValidation,
+      documentStandardVersion: 1,
+      documentStandardValidation,
       ...(schemaProposal ? { formSchema: schemaProposal } : {}),
       aiMappingPlan: reviewedPlan,
       aiPreparationBlocked: false,
       aiPreparationFindings: [],
       aiPlanAppliedAt: Timestamp.now(),
       aiPlanAppliedBy: actor.decoded.uid,
+      sourceIntegrity: null,
+      contentUpdatedAt: Timestamp.now(),
+      contentUpdatedBy: actor.decoded.uid,
+      contentUpdatedByName: actor.actorName,
       updatedAt: Timestamp.now(),
       updatedBy: actor.decoded.uid,
       updatedByName: actor.actorName,

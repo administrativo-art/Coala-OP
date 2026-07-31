@@ -42,6 +42,7 @@ import {
   normalizeOnboardingStages,
 } from "@/lib/recruitment-onboarding";
 import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
+import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type {
   CandidateStatus,
@@ -414,6 +415,13 @@ function RoleDetailModal({
             <p className="text-sm leading-relaxed text-slate-600">{role.description}</p>
           )}
 
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">CBO do cargo</p>
+            <p className={cn("mt-1 font-semibold", role.cbo ? "text-slate-900" : "text-amber-700")}>
+              {role.cbo || "Não cadastrado — a geração de documentos trabalhistas será bloqueada."}
+            </p>
+          </div>
+
           {employees.length > 0 && (
             <div>
               <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-500">
@@ -596,6 +604,7 @@ function RoleEditModal({
 }) {
   const [values, setValues] = React.useState({
     name: "",
+    cbo: "",
     publicTitle: "",
     departmentId: "",
     parentId: "",
@@ -611,6 +620,7 @@ function RoleEditModal({
     if (!role) return;
     setValues({
       name: role.name ?? "",
+      cbo: role.cbo ?? "",
       publicTitle: role.publicTitle ?? "",
       departmentId: role.departmentId ?? "",
       parentId: role.parentId ?? role.reportsTo ?? "",
@@ -634,6 +644,7 @@ function RoleEditModal({
     const department = departments.find((item) => item.id === values.departmentId);
     await onSave({
       name: values.name.trim(),
+      cbo: values.cbo.trim() || undefined,
       publicTitle: values.publicTitle.trim() || undefined,
       departmentId: values.departmentId || null,
       departmentName: department?.name ?? null,
@@ -666,14 +677,36 @@ function RoleEditModal({
               />
             </label>
             <label className="space-y-1.5 text-sm">
-              <span className="font-semibold text-slate-700">Título público</span>
+              <span className="font-semibold text-slate-700">CBO do cargo</span>
               <input
-                value={values.publicTitle}
-                onChange={(event) => setValues((current) => ({ ...current, publicTitle: event.target.value }))}
+                value={values.cbo}
+                onChange={(event) => {
+                  const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
+                  const cbo = digits.length > 4
+                    ? `${digits.slice(0, 4)}-${digits.slice(4)}`
+                    : digits;
+                  setValues((current) => ({ ...current, cbo }));
+                }}
+                inputMode="numeric"
+                maxLength={7}
+                pattern="\d{4}-\d{2}"
+                placeholder="Ex.: 5134-15"
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               />
+              <span className="text-xs text-slate-500">
+                Herdado por todas as funções vinculadas a este cargo e usado nos documentos.
+              </span>
             </label>
           </div>
+
+          <label className="block space-y-1.5 text-sm">
+            <span className="font-semibold text-slate-700">Título público</span>
+            <input
+              value={values.publicTitle}
+              onChange={(event) => setValues((current) => ({ ...current, publicTitle: event.target.value }))}
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            />
+          </label>
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1.5 text-sm">
@@ -1018,6 +1051,9 @@ function DraggableDroppableCard({
             <p className="mt-0.5 text-[11px] font-black uppercase tracking-[0.16em] text-pink-500">
               {node.role.publicTitle || "Cargo interno"}
             </p>
+            {node.role.cbo ? (
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">CBO {node.role.cbo}</p>
+            ) : null}
           </button>
           <div className="flex shrink-0 items-center gap-1">
             {hasChildren && (

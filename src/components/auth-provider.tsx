@@ -4,7 +4,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, getDocFromCache } from "firebase/firestore";
+import { doc, getDoc, getDocFromCache } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
@@ -34,6 +34,7 @@ export interface AuthContextType {
   terminatedUsers: User[];
   isAuthenticated: boolean;
   loading: boolean;
+  isDefaultAdmin: boolean;
   permissions: PermissionSet;
   login: (email: string, password: string) => Promise<{
     success: boolean;
@@ -207,26 +208,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const q = query(collection(db, "users"));
-    const unsubscribeUsers = onSnapshot(q, (snapshot) => {
-        const usersData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
-        setUsers(usersData);
-    }, (error) => {
-        console.error("[AuthProvider] Falha ao carregar diretório de usuários.", error);
-        const currentFirebaseUser = firebaseUser ?? auth.currentUser;
-        if (!currentFirebaseUser) {
-          setUsers([appUser]);
-          return;
-        }
+    let active = true;
+    const currentFirebaseUser = firebaseUser ?? auth.currentUser;
+    if (!currentFirebaseUser) {
+      setUsers([appUser]);
+      return;
+    }
 
-        void fetchClientBootstrap(currentFirebaseUser, ["users"])
-          .then((payload) => setUsers(payload.users?.length ? payload.users : [appUser]))
-          .catch((fallbackError) => {
-            console.error("[AuthProvider] Server users fallback failed.", fallbackError);
-            setUsers([appUser]);
-          });
-    });
-    return () => unsubscribeUsers();
+    const loadDirectory = async () => {
+      try {
+        const payload = await fetchClientBootstrap(currentFirebaseUser, ["users"]);
+        if (active) setUsers(payload.users?.length ? payload.users : [appUser]);
+      } catch (error) {
+        console.error("[AuthProvider] Falha ao carregar diretório de usuários.", error);
+        if (active) setUsers([appUser]);
+      }
+    };
+
+    void loadDirectory();
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadDirectory();
+    }, 60000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
   }, [appUser, firebaseUser, permissions, permissionsReady, profilesLoading]);
 
   const mergeRecursive = useCallback((target: Record<string, any>, source: Record<string, any>) => {
@@ -502,6 +509,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const activeUsers = useMemo(() => users.filter(u => u.isActive !== false), [users]);
   const terminatedUsers = useMemo(() => users.filter(u => u.isActive === false), [users]);
+  const isDefaultAdmin = useMemo(() => {
+    if (!appUser) return false;
+    const userProfile = profiles.find((profile) => profile.id === appUser.profileId);
+    return userProfile?.isDefaultAdmin === true || appUser.profileId === adminProfileId;
+  }, [adminProfileId, appUser, profiles]);
 
   const value = useMemo(() => ({
     user: appUser,
@@ -511,6 +523,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     terminatedUsers,
     isAuthenticated: !!appUser,
     loading: loading || profilesLoading || !permissionsReady,
+    isDefaultAdmin,
     permissions,
     login,
     logout,
@@ -523,7 +536,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     changePassword,
     recordLoginAccess,
   }), [
-    appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading,
+    appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading, isDefaultAdmin,
     permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, reactivateUser, resetPassword, changePassword, recordLoginAccess,
   ]);
 

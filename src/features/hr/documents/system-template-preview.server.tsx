@@ -4,13 +4,16 @@ import React from "react";
 import { Document, Image, Page, renderToBuffer, StyleSheet } from "@react-pdf/renderer";
 
 import { convertDocxToPdf } from "@/features/hr/documents/pdf-converter.server";
+import { generateDocx } from "@/features/hr/documents/docx-generator";
+import { buildDocumentTemplateDemoData } from "@/features/hr/documents/document-template-demo-data";
+import { stampDocumentTemplateDemoPreview } from "@/features/hr/documents/document-template-demo-preview.server";
 import { applyCoalaLetterheadToPdf } from "@/features/hr/documents/letterhead-pdf.server";
 import {
   type SystemDocumentTemplate,
 } from "@/features/hr/documents/system-template-catalog";
 import { loadSystemDocumentTemplateSource } from "@/features/hr/documents/system-template-source.server";
-import { renderUniformSystemTemplatePreview } from "@/features/uniforms/term.server";
 import { uniformSystemTemplateById } from "@/features/uniforms/template-catalog";
+import { loadUniformSystemTemplatePreview } from "@/features/uniforms/template-preview.server";
 
 const styles = StyleSheet.create({
   page: {
@@ -60,14 +63,18 @@ export async function renderSystemDocumentTemplatePreview(template: SystemDocume
   if (template.renderer === "uniform") {
     const uniformTemplate = uniformSystemTemplateById(template.id);
     if (!uniformTemplate) throw new Error("Modelo de uniforme não encontrado.");
-    return renderUniformSystemTemplatePreview(uniformTemplate.type);
+    return loadUniformSystemTemplatePreview(uniformTemplate.type);
   }
   const source = await loadSystemTemplateSource(template);
-  const pdf = await convertDocxToPdf(source);
+  const demoDocx = generateDocx(source, buildDocumentTemplateDemoData({
+    variables: template.variables,
+    fieldMapping: template.fieldMapping,
+  }));
+  const pdf = await convertDocxToPdf(demoDocx);
   if (!pdf) {
     throw new SystemTemplatePreviewUnavailableError(
       "A prévia em PDF não está disponível neste ambiente. Baixe o arquivo Word original.",
     );
   }
-  return applyCoalaLetterheadToPdf(pdf);
+  return stampDocumentTemplateDemoPreview(await applyCoalaLetterheadToPdf(pdf));
 }

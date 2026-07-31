@@ -22,6 +22,7 @@ import {
   type UploadItemStatus,
 } from "@/lib/hr/employee-document-batch";
 import { applyEmployeeProfileSuggestions } from "@/lib/hr/employee-document-profile-suggestions";
+import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
     if (!batchSnap.exists) return error("Lote não encontrado.", 404);
 
     const batchEmployeeId = String(batchSnap.get("employeeId") ?? "");
+    await assertEmployeeUnitAccess(access, batchEmployeeId);
     const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
 
     // Identidade resolvida POR colaborador do item (permite item redirecionado).
@@ -105,6 +107,7 @@ export async function POST(request: NextRequest) {
         }
         const documentId = String(item.documentId ?? itemDoc.id);
         const employeeId = String(item.employeeId ?? batchEmployeeId);
+        await assertEmployeeUnitAccess(access, employeeId);
         const identity = await identityFor(employeeId);
         const employeeCode = employeeCodeFrom(identity, employeeId);
         const config = getDocumentTypeConfig(item.documentTypeCode);

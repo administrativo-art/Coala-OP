@@ -49,6 +49,12 @@ export async function GET(request: NextRequest) {
           enabled: access.canManageCatalog,
         },
         {
+          id: "profile-compliance",
+          label: "Atualização cadastral",
+          href: "/dashboard/settings?department=pessoal&tab=profile-compliance",
+          enabled: access.canView,
+        },
+        {
           id: "recruitment",
           label: "Recrutamento",
           href: "/dashboard/hr/recruitment",

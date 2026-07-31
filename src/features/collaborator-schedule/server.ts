@@ -69,6 +69,7 @@ export async function buildCollaboratorSchedulePayload(
     compactUnique([
       access.decoded.uid,
       user.id,
+      user.hrEmployeeId,
       user.registrationIdBizneo,
       user.registrationIdPdv,
       ...pdvAccessIds,

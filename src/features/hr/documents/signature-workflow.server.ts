@@ -6,6 +6,7 @@ import { getStorage } from "firebase-admin/storage";
 import { PDFDocument } from "pdf-lib";
 
 import { admissionClosingComponentsSummary } from "@/features/hr/documents/admission-closing-term";
+import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company-document-signatory.server";
 import { composeDocumentPackage } from "@/features/hr/documents/document-pdf-composer.server";
 import { generateDocumentFromTemplate } from "@/features/hr/documents/generate-document.server";
 import {
@@ -165,6 +166,24 @@ async function sendAdmissionBundle(params: {
     ]))
     .digest("hex");
   const legalEntity = record(loaded[0]?.legalEntitySnapshot);
+  const companySignatory = await resolveCompanyDocumentSignatory({
+    entityId: legalEntity.entityId,
+    cnpj: legalEntity.cnpj,
+  });
+  const signers = [
+    {
+      email: params.recipient,
+      name: text(params.process.candidateName) ?? "Colaborador",
+      action: "SIGN" as const,
+    },
+    ...(companySignatory && companySignatory.email !== params.recipient
+      ? [{
+          email: companySignatory.email,
+          name: companySignatory.name,
+          action: "SIGN" as const,
+        }]
+      : []),
+  ];
   const protocol = await allocateIdempotentDocumentProtocol({
     entity: legalEntity.tradeName ?? legalEntity.legalName ?? legalEntity.cnpj ?? "CS",
     type: "ADM",
@@ -249,7 +268,7 @@ async function sendAdmissionBundle(params: {
     preSignatureHash: composed.packageHash,
     packageHash: composed.packageHash,
     documentName: `Kit admissional ${protocol}`,
-    signers: [{ email: params.recipient, action: "SIGN" }],
+    signers,
     requestedAt: now,
     requestedBy: params.actorId,
     requestedByName: params.actorName,
@@ -260,8 +279,8 @@ async function sendAdmissionBundle(params: {
       buffer: composed.buffer,
       fileName: `kit-admissional-${protocol}.pdf`,
       documentName: `Kit admissional ${protocol}`,
-      message: "Confira o kit admissional completo e realize uma única assinatura eletrônica.",
-      signers: [{ email: params.recipient, action: "SIGN" }],
+      message: "Confira o kit admissional completo e realize a assinatura eletrônica.",
+      signers,
     });
     const sentAt = new Date().toISOString();
     await requestRef.set({
@@ -707,12 +726,72 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     throw new Error("Este modelo não permite assinatura individual fora do fluxo de origem.");
   }
   const employeeId = text(generated.get("employeeId"));
-  if (!employeeId) throw new Error("O documento não está vinculado a um colaborador.");
-  const employee = await dbAdmin.collection("users").doc(employeeId).get();
-  const recipient = (text(params.recipient) ?? text(employee.get("email")))?.toLowerCase();
-  if (!recipient || !/^\S+@\S+\.\S+$/.test(recipient)) {
-    throw new Error("O colaborador não possui um e-mail válido.");
+  const employee = employeeId
+    ? await dbAdmin.collection("users").doc(employeeId).get()
+    : null;
+  const generatedParties = await Promise.all((Array.isArray(generated.get("parties"))
+    ? generated.get("parties") as unknown[]
+    : [])
+    .map(record)
+    .map(async (party) => {
+      const snapshot = record(party.snapshot);
+      const partyType = String(party.partyType ?? "external_person");
+      const companySignatory = ["company", "external_company"].includes(partyType)
+        ? await resolveCompanyDocumentSignatory({
+            entityId: party.ref,
+          })
+        : null;
+      return {
+        partyType,
+        role: String(party.role ?? "recipient"),
+        ref: text(party.ref),
+        name: text(snapshot.name) ?? "Parte",
+        documentMasked: text(snapshot.documentMasked) ?? "",
+        signatureName: companySignatory?.name
+          ?? text(snapshot.signatureName)
+          ?? text(snapshot.name)
+          ?? "Signatário",
+        email: companySignatory?.email
+          ?? text(snapshot.signatureEmail)?.toLowerCase()
+          ?? null,
+      };
+    }));
+  const explicitRecipient = text(params.recipient)?.toLowerCase();
+  const fallbackEmployeeEmail = text(
+    employee?.get("documentSignatureEmail")
+    ?? employee?.get("email")
+  )?.toLowerCase();
+  const fallbackEmployeeName = text(
+    employee?.get("documentSignatureName")
+    ?? generated.get("employeeName")
+    ?? employee?.get("username")
+  ) ?? "Colaborador";
+  const signerCandidates = explicitRecipient
+    ? [{ email: explicitRecipient, name: fallbackEmployeeName }]
+    : generatedParties.length
+      ? generatedParties.map((party) => ({
+          email: party.email,
+          name: party.signatureName,
+        }))
+      : [{ email: fallbackEmployeeEmail, name: fallbackEmployeeName }];
+  if (
+    !signerCandidates.length
+    || signerCandidates.some((candidate) =>
+      !candidate.email || !/^\S+@\S+\.\S+$/.test(candidate.email)
+    )
+  ) {
+    throw new Error("Informe um e-mail válido para cada signatário antes do envio.");
   }
+  const signers = Array.from(new Map(
+    signerCandidates.map((candidate) => [
+      candidate.email!,
+      {
+        email: candidate.email!,
+        name: candidate.name,
+        action: "SIGN" as const,
+      },
+    ]),
+  ).values());
   const sourcePath = text(generated.get("pdfStoragePath"));
   if (!sourcePath) throw new Error("O PDF oficial ainda não foi gerado.");
   const requestRef = hrDbAdmin.collection(REQUEST_COLLECTION)
@@ -729,7 +808,11 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
       generated.get("legalEntitySnapshot"),
       generated.get("legalEntityId") ?? "CS",
     ),
-    type: String(generated.get("templateId")).includes("transportation-voucher-waiver") ? "VTN" : "VT",
+    type: String(generated.get("templateId")).includes("receipt")
+      ? "REC"
+      : String(generated.get("templateId")).includes("transportation-voucher-waiver")
+        ? "VTN"
+        : "VT",
     actorId: params.actorId,
     reservationKey: `standalone:${params.generatedDocumentId}`,
   });
@@ -738,18 +821,40 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     .digest("hex");
   const composed = await composeDocumentPackage({
     packageId,
-    packageType: "generic",
+    packageType: String(generated.get("templateId")).includes("receipt")
+      ? "receipt"
+      : "generic",
     protocol,
     title: text(generated.get("templateName")) ?? "Documento",
-    parties: [{
-      partyType: "employee",
-      role: "recipient",
-      ref: employeeId,
-      snapshot: {
-        name: text(generated.get("employeeName")) ?? text(employee.get("username")) ?? "Colaborador",
-        documentMasked: "",
-      },
-    }],
+    parties: generatedParties.length
+      ? generatedParties.map((party) => ({
+          partyType: (
+            ["employee", "company", "external_person", "external_company"].includes(party.partyType)
+              ? party.partyType
+              : "external_person"
+          ) as "employee" | "company" | "external_person" | "external_company",
+          role: (
+            ["issuer", "recipient", "payer", "payee", "contractor", "contracted", "witness"].includes(party.role)
+              ? party.role
+              : "recipient"
+          ) as "issuer" | "recipient" | "payer" | "payee" | "contractor" | "contracted" | "witness",
+          ref: party.ref,
+          snapshot: {
+            name: party.name,
+            documentMasked: party.documentMasked,
+          },
+        }))
+      : [{
+          partyType: "employee" as const,
+          role: "recipient" as const,
+          ref: employeeId,
+          snapshot: {
+            name: text(generated.get("employeeName"))
+              ?? text(employee?.get("username"))
+              ?? "Colaborador",
+            documentMasked: "",
+          },
+        }],
     components: [{
       componentId: params.generatedDocumentId,
       title: text(generated.get("templateName")) ?? "Documento",
@@ -780,7 +885,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     status: "sending",
     provider: "autentique",
     generatedDocumentId: params.generatedDocumentId,
-    employeeId,
+    employeeId: employeeId ?? null,
     templateId: generated.get("templateId") ?? null,
     documentTypeCode: generated.get("documentTypeCode") ?? "UNKNOWN_DOCUMENT",
     storagePath: preSignaturePath,
@@ -792,7 +897,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
     preSignatureHash: composed.packageHash,
     packageHash: composed.packageHash,
     documentName,
-    signers: [{ email: recipient, action: "SIGN" }],
+    signers,
     requestedAt: now,
     requestedBy: params.actorId,
     requestedByName: params.actorName,
@@ -804,7 +909,7 @@ export async function sendGeneratedDocumentForStandaloneSignature(params: {
       fileName: buildSignatureFileName(documentName, "pdf"),
       documentName,
       message: "Confira o documento e realize a assinatura eletrônica.",
-      signers: [{ email: recipient, action: "SIGN" }],
+      signers,
     });
     const sentAt = new Date().toISOString();
     await Promise.all([

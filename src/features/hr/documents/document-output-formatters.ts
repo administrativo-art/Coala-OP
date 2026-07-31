@@ -9,6 +9,11 @@ export const DOCUMENT_OUTPUT_FORMATTERS = [
   "cpf_full",
   "cpf_masked",
   "cnpj",
+  "cpf_labeled",
+  "cnpj_labeled",
+  "cbo_labeled",
+  "registry_number_labeled",
+  "nonbreaking_range",
   "uppercase",
 ] as const;
 
@@ -109,12 +114,51 @@ function currencyWithWords(value: unknown) {
   const numeric = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format(amount);
+  }).format(amount).replace(/^R\$\s+/, "R$\u00A0");
   const words = [
     `${integerInWords(reais)} ${reais === 1 ? "real" : "reais"}`,
     cents ? `${integerInWords(cents)} ${cents === 1 ? "centavo" : "centavos"}` : "",
   ].filter(Boolean).join(" e ");
   return `${numeric} (${amount < 0 ? "menos " : ""}${words})`;
+}
+
+function labeledValue(prefix: string, value: unknown) {
+  const text = String(value ?? "").trim();
+  return text ? `${prefix}\u00A0${text}` : "";
+}
+
+function labeledCpf(value: unknown) {
+  return labeledValue(
+    "CPF",
+    formatDocumentVariableValue(value, "cpf"),
+  );
+}
+
+function labeledCnpj(value: unknown) {
+  return labeledValue(
+    "CNPJ",
+    formatDocumentVariableValue(value, "cnpj"),
+  );
+}
+
+function labeledCbo(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.length === 6
+    ? labeledValue("CBO", `${digits.slice(0, 4)}-${digits.slice(4)}`)
+    : "";
+}
+
+function labeledRegistryNumber(value: unknown) {
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/^(?:n[º°˚o.]?|número)\s*/iu, "");
+  return labeledValue("nº", normalized);
+}
+
+function nonbreakingRange(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+a\s+/giu, "\u00A0a\u00A0");
 }
 
 function dateLong(value: unknown) {
@@ -145,6 +189,11 @@ export function formatDocumentOutput(
       return digits.length === 11 ? `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**` : "";
     }
     case "cnpj": return formatDocumentVariableValue(value, "cnpj");
+    case "cpf_labeled": return labeledCpf(value);
+    case "cnpj_labeled": return labeledCnpj(value);
+    case "cbo_labeled": return labeledCbo(value);
+    case "registry_number_labeled": return labeledRegistryNumber(value);
+    case "nonbreaking_range": return nonbreakingRange(value);
     case "uppercase": return String(value ?? "").toLocaleUpperCase("pt-BR");
     case "source":
     default:

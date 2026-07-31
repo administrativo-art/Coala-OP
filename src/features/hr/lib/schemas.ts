@@ -148,6 +148,11 @@ export const jobDepartmentCreateSchema = z.object({
 
 const jobRoleBaseSchema = z.object({
   name: z.string().trim().min(2).max(120),
+  cbo: z.string()
+    .trim()
+    .regex(/^\d{4}-\d{2}$/, "Informe o CBO no formato 0000-00.")
+    .optional()
+    .or(z.literal("")),
   publicTitle: z.string().trim().min(2).max(120).optional(),
   slug: z.string().trim().min(1).max(120).optional(),
   departmentId: z.string().trim().min(1).nullable().optional(),
@@ -362,6 +367,7 @@ export function normalizeJobRoleInput(
 ) {
   return stripUndefined({
     ...input,
+    cbo: input.cbo?.trim() || undefined,
     publicTitle: input.publicTitle?.trim() || input.name,
     slug: input.slug?.trim() || slugify(input.name),
     parentId: input.parentId ?? input.reportsTo ?? null,
@@ -385,6 +391,7 @@ export function normalizeJobRolePatch(
 ) {
   return stripUndefined({
     ...input,
+    cbo: input.cbo === undefined ? undefined : input.cbo.trim() || undefined,
     publicTitle:
       input.publicTitle === undefined
         ? undefined

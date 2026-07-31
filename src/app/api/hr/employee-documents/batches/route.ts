@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { assertHrAccess, serializeHrValue } from "@/features/hr/lib/server-access";
+import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 
 export const runtime = "nodejs";
@@ -18,9 +19,10 @@ function obj(value: unknown): Record<string, unknown> {
 
 export async function GET(request: NextRequest) {
   try {
-    await assertHrAccess(request, "manage");
+    const access = await assertHrAccess(request, "manage");
     const employeeId = request.nextUrl.searchParams.get("employeeId")?.trim();
     if (!employeeId) return error("Colaborador não informado.");
+    await assertEmployeeUnitAccess(access, employeeId);
 
     const batches = await hrDbAdmin.collection(BATCHES).where("employeeId", "==", employeeId).get();
     const resumable = batches.docs

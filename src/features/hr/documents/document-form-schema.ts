@@ -42,6 +42,7 @@ export type DocumentFormField = {
   condition?: DocumentFormCondition;
   partyRole?: DocumentPartyRole;
   allowedPartyTypes?: DocumentPartyType[];
+  requiresEmailForSignature?: boolean;
   itemFields?: Array<{
     key: string;
     label: string;
@@ -80,6 +81,9 @@ export type DocumentPartySnapshot = {
     name: string;
     document: string | null;
     address?: string | null;
+    email?: string | null;
+    signatureName?: string | null;
+    signatureUserId?: string | null;
   };
 };
 
@@ -161,6 +165,13 @@ export function resolveDocumentFormSchema(
         if (field.required && !String(snapshot.name ?? "").trim()) {
           missing.push(field.label);
         }
+        const email = String(snapshot.email ?? "").trim().toLocaleLowerCase("pt-BR");
+        if (
+          field.requiresEmailForSignature
+          && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+        ) {
+          missing.push(`${field.label}: e-mail para assinatura`);
+        }
         parties.push({
           partyType,
           role: field.partyRole!,
@@ -169,6 +180,13 @@ export function resolveDocumentFormSchema(
             name: String(snapshot.name ?? "").trim(),
             document: typeof snapshot.document === "string" ? snapshot.document : null,
             address: typeof snapshot.address === "string" ? snapshot.address : null,
+            email: email || null,
+            signatureName: typeof snapshot.signatureName === "string"
+              ? snapshot.signatureName.trim()
+              : null,
+            signatureUserId: typeof snapshot.signatureUserId === "string"
+              ? snapshot.signatureUserId.trim()
+              : null,
           },
         });
       }
@@ -197,6 +215,21 @@ export function resolveDocumentFormSchema(
       }
       return item;
     }));
+  }
+  const paymentMethod = String(
+    atPath(output, "receipt.payment.method") ?? "",
+  ).trim();
+  if (paymentMethod) {
+    const labelByMethod: Record<string, string> = {
+      pix: "Pix",
+      transfer: "Transferência bancária",
+      cash: "Dinheiro",
+    };
+    setPath(
+      output,
+      "receipt.payment.methodLabel",
+      labelByMethod[paymentMethod.toLocaleLowerCase("pt-BR")] ?? paymentMethod,
+    );
   }
   return { values: output, missing, parties };
 }
@@ -230,7 +263,7 @@ export const RECEIPT_FORM_SCHEMA: DocumentFormSchema = {
           label: "Direção do recibo",
           kind: "select",
           required: true,
-          options: ["Recebemos de", "Pagamos a"],
+          options: ["Recebemos", "Pagamos"],
         },
         {
           key: "receipt.issuer",
@@ -239,6 +272,7 @@ export const RECEIPT_FORM_SCHEMA: DocumentFormSchema = {
           required: true,
           partyRole: "issuer",
           allowedPartyTypes: ["employee", "company", "external_person", "external_company"],
+          requiresEmailForSignature: true,
         },
         {
           key: "receipt.recipient",
@@ -247,6 +281,7 @@ export const RECEIPT_FORM_SCHEMA: DocumentFormSchema = {
           required: true,
           partyRole: "recipient",
           allowedPartyTypes: ["employee", "company", "external_person", "external_company"],
+          requiresEmailForSignature: true,
         },
       ],
     },
@@ -260,6 +295,7 @@ export const RECEIPT_FORM_SCHEMA: DocumentFormSchema = {
           kind: "repeatable",
           required: true,
           itemFields: [
+            { key: "name", label: "Item", kind: "text", required: true },
             { key: "description", label: "Descrição", kind: "text", required: true },
             { key: "value", label: "Valor", kind: "currency", required: true },
           ],
@@ -338,6 +374,17 @@ export const RECEIPT_FORM_SCHEMA: DocumentFormSchema = {
           label: "Cidade",
           kind: "text",
           required: true,
+        },
+        {
+          key: "receipt.state",
+          label: "Estado (UF)",
+          kind: "select",
+          required: true,
+          options: [
+            "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO",
+            "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
+            "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+          ],
         },
         {
           key: "receipt.issueDate",

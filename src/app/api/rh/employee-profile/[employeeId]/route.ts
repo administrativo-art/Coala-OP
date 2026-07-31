@@ -7,6 +7,9 @@ import { DEFAULT_COMPLEMENTARY_FIELDS, DEFAULT_PROFILE_BLOCKS } from "@/features
 import type { Employee, EmployeeFieldValue, FieldMap, RhAccessCache, RhRole } from "@/types/rh";
 import { canViewField } from "@/types/rh";
 import { refreshProbationProcess, type ProbationProcessState } from "@/features/hr/integration/probation-process";
+import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
+import { resolvePersonLink } from "@/features/hr/lib/person-link.server";
+import { isOwnHrEmployeeId } from "@/lib/hr/person-link";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +22,9 @@ const RETIRED_PROFILE_FIELD_KEYS = new Set([
   "employee.family_salary_end_1",
   "employee.family_salary_birth_1",
   "employee.family_salary_name_1",
+  "employee.bank_name",
+  "employee.bank_agency",
+  "employee.bank_account",
 ]);
 
 function withoutRetiredFields(fields: Record<string, FieldMap["fields"][string]>) {
@@ -28,7 +34,7 @@ function withoutRetiredFields(fields: Record<string, FieldMap["fields"][string]>
 }
 
 function canReadRhProfile(actor: Awaited<ReturnType<typeof requireUser>>, employeeId: string) {
-  const isOwnerTarget = actor.userDoc.registrationIdBizneo === employeeId || actor.userDoc.id === employeeId;
+  const isOwnerTarget = isOwnHrEmployeeId(actor.userDoc, employeeId);
   if (actor.permissions.dp?.collaborators?.ownProfileOnly === true) {
     return Boolean(actor.isDefaultAdmin || actor.permissions.settings?.manageUsers === true || isOwnerTarget);
   }
@@ -45,12 +51,12 @@ function inferRole(actor: Awaited<ReturnType<typeof requireUser>>, employee?: Em
   if (actor.isDefaultAdmin || actor.permissions.settings?.manageUsers === true) return "admin";
   if (
     actor.permissions.dp?.collaborators?.ownProfileOnly === true &&
-    (employee?.auth_uid === actor.userDoc.id || actor.userDoc.registrationIdBizneo === employee?.bizneo_employee_id)
+    (employee?.auth_uid === actor.userDoc.id || isOwnHrEmployeeId(actor.userDoc, employee?.bizneo_employee_id))
   ) {
     return "employee";
   }
   if (actor.permissions.dp?.collaborators?.view === true || actor.permissions.dp?.collaborators?.edit === true) return "manager";
-  if (employee?.auth_uid === actor.userDoc.id || actor.userDoc.registrationIdBizneo === employee?.bizneo_employee_id) return "employee";
+  if (employee?.auth_uid === actor.userDoc.id || isOwnHrEmployeeId(actor.userDoc, employee?.bizneo_employee_id)) return "employee";
   return "employee";
 }
 
@@ -89,19 +95,27 @@ export async function GET(
     if (!canReadRhProfile(actor, normalizedEmployeeId)) {
       return NextResponse.json({ error: "Sem permissão para visualizar perfil RH." }, { status: 403 });
     }
+    await assertEmployeeUnitAccess(actor, normalizedEmployeeId);
 
     const fieldMap = await loadFieldMap(actor);
-    const employeeSnap = await hrDbAdmin.collection("employees").doc(normalizedEmployeeId).get();
-    if (!employeeSnap.exists) {
+    const personLink = await resolvePersonLink(normalizedEmployeeId);
+    const employeeSnap = personLink.employeeDocument;
+    if (!employeeSnap?.exists) {
       return NextResponse.json({ error: "Colaborador não encontrado no RH." }, { status: 404 });
     }
 
-    const employee = employeeSnap.data() as Employee;
+    const linkedUser = personLink.userDocument?.data() ?? {};
+    const accessEmail = typeof linkedUser.email === "string" ? linkedUser.email.trim().toLowerCase() : "";
+    const employee = {
+      ...(employeeSnap.data() as Employee),
+      ...(accessEmail ? { email: accessEmail, access_email: accessEmail } : {}),
+    };
+    const resolvedEmployeeId = employeeSnap.id;
     let imageVoiceConsent = employee.consentimento_imagem_voz ?? null;
     let privacyAcknowledgement = employee.ciencia_privacidade_onboarding ?? null;
     let onboardingSnap = await hrDbAdmin
       .collection("onboardingProcesses")
-      .where("employeeId", "==", normalizedEmployeeId)
+      .where("employeeId", "==", resolvedEmployeeId)
       .limit(1)
       .get();
     const employeeEmail = typeof employee.email === "string" ? employee.email.trim().toLowerCase() : "";
@@ -127,14 +141,14 @@ export async function GET(
     const role = inferRole(actor, employee);
     const cache: RhAccessCache = {
       auth_uid: actor.userDoc.id,
-      bizneo_employee_id: employee.bizneo_employee_id ?? normalizedEmployeeId,
+      bizneo_employee_id: employee.bizneo_employee_id ?? resolvedEmployeeId,
       rh_role: role,
       unit_id: employee.unit_id,
       // Admin SDK Timestamp reconciliado com o tipo declarado (client Timestamp).
       updated_at: Timestamp.now() as unknown as RhAccessCache["updated_at"],
     };
     const visibilityContext = {
-      isOwner: employee.auth_uid === actor.userDoc.id || actor.userDoc.registrationIdBizneo === normalizedEmployeeId,
+      isOwner: employee.auth_uid === actor.userDoc.id || isOwnHrEmployeeId(actor.userDoc, resolvedEmployeeId),
       canViewConfidential: role === "admin",
       userId: actor.userDoc.id,
       roleIds: actor.userDoc.jobRoleId ? [actor.userDoc.jobRoleId] : [],
@@ -153,6 +167,14 @@ export async function GET(
         .filter((snap) => snap.exists)
         .map((snap) => [snap.id, snap.data() as EmployeeFieldValue]),
     );
+    if (accessEmail && readableKeys.includes("employee.personal_email")) {
+      fieldValues["employee.personal_email"] = {
+        field_key: "employee.personal_email",
+        value_text: accessEmail,
+        updated_at: Timestamp.now() as unknown as EmployeeFieldValue["updated_at"],
+        updated_by: "system:access-account",
+      };
+    }
 
     return NextResponse.json(
       {

@@ -6,15 +6,16 @@
 - Base fixada por digest:
   `sha256:fce81fe9f385be06fe3a8c8a90d8d8fbf77e21e6ebd93d060c306ff3cc59f522`
 - Arquitetura do Cloud Run: `linux/amd64`
-- Fonte declarada nos DOCX: Calibri
-- Fonte exigida no conversor: Carlito, incluindo regular, bold, italic e
+- Fonte declarada nos DOCX oficiais: Cambria
+- Fonte exigida no conversor: Caladea, incluindo regular, bold, italic e
   bold-italic
+- Compatibilidade legada: Calibri resolve para Carlito nas quatro faces
 - Serviço privado: somente identidades com `roles/run.invoker`
 
-O build falha se o Fontconfig deixar de resolver qualquer face de Calibri para
-Carlito. Não se usa tag móvel no deploy: a imagem customizada é construída,
-seu digest é resolvido no Artifact Registry e o Cloud Run recebe a referência
-imutável `imagem@sha256`.
+O build falha se o Fontconfig deixar de resolver Cambria para Caladea ou
+Calibri para Carlito. Não se usa tag móvel no deploy: a imagem customizada é
+construída, seu digest é resolvido no Artifact Registry e o Cloud Run recebe a
+referência imutável `imagem@sha256`.
 
 ## Implantação
 
@@ -53,8 +54,9 @@ script:
 
 Quando `DOCX_TO_PDF_AUDIENCE` existe, a aplicação solicita um identity token
 ao metadata server do ambiente Google e envia `Authorization: Bearer` ao Cloud
-Run. Localmente, sem essas variáveis, permanece disponível o fallback do
-LibreOffice.
+Run. A aplicação não executa o LibreOffice instalado na máquina do usuário.
+No desenvolvimento local, configure as mesmas variáveis e autentique o `gcloud`;
+se o serviço remoto estiver indisponível, a prévia degrada para DOCX.
 
 ## Canário
 
@@ -76,7 +78,7 @@ export DOCUMENT_CANARY_ID_TOKEN="$(gcloud auth print-identity-token)"
 npm run validate:document-canary
 ```
 
-O golden atual representa o baseline local com Carlito. Depois que o primeiro
+O golden controlado deve representar o baseline remoto com Caladea. Depois que o primeiro
 canário remoto for aprovado visualmente, uma atualização deliberada pode ser
 feita com `DOCUMENT_CANARY_UPDATE_GOLDEN=true`. Alterações de golden devem
 passar por revisão, nunca ocorrer durante deploy automático.

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
-import { generateDocx } from "@/features/hr/documents/docx-generator";
+import { extractDocxVariables, generateDocx } from "@/features/hr/documents/docx-generator";
 import { applyFieldMapping, normalizeFieldMapping } from "@/features/hr/documents/field-mapping";
 import { convertDocxToPdf } from "@/features/hr/documents/pdf-converter.server";
 import { resolveDocumentData } from "@/features/hr/documents/document-resolver.server";
@@ -23,9 +23,11 @@ import { buildGeneratedDocumentAudit } from "@/features/hr/documents/generated-d
 import { retentionFields } from "@/features/hr/documents/document-retention";
 import { systemDocumentTemplateById } from "@/features/hr/documents/system-template-catalog";
 import { systemTemplateWorkflowStatus } from "@/features/hr/documents/document-template-workflow.server";
+import { inspectStoredDocumentTemplateIntegrity } from "@/features/hr/documents/document-template-integrity.server";
 import { loadSystemDocumentTemplateSource } from "@/features/hr/documents/system-template-source.server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
+import { DOCUMENT_VARIABLES } from "@/features/hr/integration/document-variables";
 
 export type GenerateDocumentFromTemplateParams = {
   templateId: string;
@@ -68,6 +70,18 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function missingSystemDataMessage(keys: string[]) {
+  const groups = new Map<string, string[]>();
+  keys.forEach((key) => {
+    const entry = DOCUMENT_VARIABLES.find((variable) => variable.key === key);
+    const section = entry?.section ?? "Cadastro do sistema";
+    groups.set(section, [...(groups.get(section) ?? []), entry?.label ?? key]);
+  });
+  return Array.from(groups.entries())
+    .map(([section, labels]) => `${section}: ${labels.join(", ")}`)
+    .join("; ");
 }
 
 function sanitizeFormValue(value: unknown, depth = 0): unknown {
@@ -197,6 +211,15 @@ export async function generateDocumentFromTemplate(
     parties = schemaResolved.parties;
     missingSchema = schemaResolved.missing;
   }
+  const mappedSystemKeys = mapped.missingSystem.map((placeholder) => {
+    const binding = mapping[placeholder];
+    return binding?.kind === "system" ? binding.key : placeholder;
+  });
+  if (mappedSystemKeys.length) {
+    throw new Error(
+      `A geração foi bloqueada. Complete estes dados na fonte oficial: ${missingSystemDataMessage(mappedSystemKeys)}.`,
+    );
+  }
   const missingForm = [...mapped.missingManual, ...missingSchema];
   if (missingForm.length) {
     throw new Error(`Preencha os campos obrigatórios: ${missingForm.join(", ")}.`);
@@ -228,6 +251,11 @@ export async function generateDocumentFromTemplate(
   const missingRequired = resolved.missingRequired.filter((key) =>
     usedSystemVariables.has(key)
   );
+  if (missingRequired.length) {
+    throw new Error(
+      `A geração foi bloqueada. Complete estes dados na fonte oficial: ${missingSystemDataMessage(missingRequired)}.`,
+    );
+  }
   const legalEntitySnapshot = await resolveDocumentLegalEntitySnapshot({
     cnpj: resolved.rawFlat["integration.employer_cnpj"],
     fallbackName: resolved.rawFlat["integration.employer_name"],
@@ -255,13 +283,40 @@ export async function generateDocumentFromTemplate(
   const id = generationKey;
   const existing = await dbAdmin.collection("generatedDocuments").doc(id).get();
   if (existing.exists && typeof existing.get("storagePath") === "string") {
-    const [existingBuffer] = await bucket.file(existing.get("storagePath")).download();
+    const existingStoragePath = String(existing.get("storagePath"));
+    const [existingBuffer] = await bucket.file(existingStoragePath).download();
+    let existingPdfStoragePath = typeof existing.get("pdfStoragePath") === "string"
+      ? String(existing.get("pdfStoragePath"))
+      : null;
+    if (!existingPdfStoragePath) {
+      const convertedPdf = await convertDocxToPdf(existingBuffer);
+      if (convertedPdf) {
+        const pdfBuffer = await applyCoalaLetterheadToPdf(convertedPdf);
+        const folder = existingStoragePath.slice(0, existingStoragePath.lastIndexOf("/"));
+        const baseName = String(existing.get("originalName") ?? "documento.docx")
+          .replace(/\.docx$/i, "");
+        existingPdfStoragePath = `${folder}/${baseName}.pdf`;
+        const pdfContentHash = createHash("sha256").update(pdfBuffer).digest("hex");
+        await Promise.all([
+          bucket.file(existingPdfStoragePath).save(pdfBuffer, {
+            resumable: false,
+            metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
+          }),
+          existing.ref.set({
+            pdfStoragePath: existingPdfStoragePath,
+            pdfContentHash,
+            pdfGenerationStatus: "ready",
+            pdfGeneratedAt: Timestamp.now(),
+          }, { merge: true }),
+        ]);
+      }
+    }
     return {
       id,
       buffer: existingBuffer,
       fileName: String(existing.get("originalName") ?? "documento.docx"),
       storagePath: existing.get("storagePath"),
-      pdfStoragePath: typeof existing.get("pdfStoragePath") === "string" ? existing.get("pdfStoragePath") : null,
+      pdfStoragePath: existingPdfStoragePath,
       status: ["draft", "review_pending", "approved"].includes(String(existing.get("status")))
         ? existing.get("status")
         : "final",
@@ -269,10 +324,25 @@ export async function generateDocumentFromTemplate(
       templateVersion: existing.get("templateVersion"),
     };
   }
-  const source = storedPublished
-    ? (await bucket.file(String(templateValue("storagePath"))).download())[0]
-    : await loadSystemDocumentTemplateSource(systemTemplate!);
+  let source: Buffer;
+  if (storedPublished) {
+    const integrity = await inspectStoredDocumentTemplateIntegrity(storedTemplate);
+    if (!integrity.valid) {
+      throw new Error(
+        `A geração foi bloqueada porque o DOCX publicado não corresponde ao mapeamento: ${integrity.issues.map((issue) => issue.message).join(" ")}`,
+      );
+    }
+    source = (await bucket.file(String(templateValue("storagePath"))).download())[0];
+  } else {
+    source = await loadSystemDocumentTemplateSource(systemTemplate!);
+  }
   const buffer = generateDocx(source, mapped.data);
+  const unresolvedTokens = extractDocxVariables(buffer);
+  if (unresolvedTokens.length) {
+    throw new Error(
+      `A geração deixou campos sem resolução: ${unresolvedTokens.join(", ")}.`,
+    );
+  }
   const now = Timestamp.now();
   const generatedAtIso = now.toDate().toISOString();
   const status = params.lifecycle === "draft" ? "review_pending" : "final";
@@ -346,10 +416,13 @@ export async function generateDocumentFromTemplate(
       snapshot: {
         name: party.snapshot.name,
         documentMasked: maskPartyDocument(party.snapshot.document),
+        signatureEmail: party.snapshot.email?.trim().toLocaleLowerCase("pt-BR") || null,
+        signatureName: party.snapshot.signatureName?.trim() || party.snapshot.name,
       },
     })),
     storagePath,
     pdfStoragePath,
+    pdfGenerationStatus: pdfStoragePath ? "ready" : "unavailable",
     originalName: fileName,
     generationKey,
     pipelineVersion: DOCUMENT_PIPELINE_VERSION,

@@ -50,6 +50,10 @@ const DPLoginAccessAudit = dynamic(
   () => import("@/components/dp/dp-login-access-audit").then((m) => m.DPLoginAccessAudit),
   { ssr: false }
 );
+const ProfileComplianceOverview = dynamic(
+  () => import("@/components/dp/profile-compliance-overview").then((m) => m.ProfileComplianceOverview),
+  { ssr: false }
+);
 const DPSettingsCalendars = dynamic(
   () => import("@/components/dp/dp-settings-calendars").then((m) => m.DPSettingsCalendars),
   { ssr: false }
@@ -627,6 +631,13 @@ export default function SettingsPage() {
       content: <InternalPrivacySettings />,
     },
     {
+      value: "profile-compliance",
+      label: "Atualização cadastral",
+      title: "Atualização cadastral",
+      description: "Acompanhe a obrigatoriedade e as confirmações trimestrais dos dados pessoais.",
+      content: <ProfileComplianceOverview />,
+    },
+    {
       value: "profile-fields",
       label: "Campos do perfil",
       title: "Campos do perfil",
@@ -686,6 +697,13 @@ export default function SettingsPage() {
         permissions.settings.manageProfiles ||
         permissions.dp?.collaborators?.edit ||
         permissions.dp?.collaborators?.terminate
+      );
+    }
+    if (tab.value === "profile-compliance") {
+      return !!(
+        permissions.settings.manageUsers ||
+        permissions.dp?.collaborators?.view ||
+        permissions.dp?.collaborators?.edit
       );
     }
     if (tab.value === "profile-fields") {
@@ -757,7 +775,7 @@ export default function SettingsPage() {
       title: "Governança",
       description: "Centralize privacidade, auditoria e controles internos do departamento pessoal.",
       content: null,
-      children: pickPersonalTabs(["privacy", "audit"]),
+      children: pickPersonalTabs(["profile-compliance", "privacy", "audit"]),
     },
   ].filter((tab) => (tab.children?.length ?? 0) > 0);
 

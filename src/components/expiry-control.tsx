@@ -19,6 +19,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMe
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Search, ClipboardCheck, Inbox, Camera, Filter, Settings, Truck, Archive, History, Eraser, RefreshCw, ArrowRight, LineChart, Warehouse, MinusCircle, Download, Shield, AlertCircle, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { canAccessUnit } from '@/lib/unit-access';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
@@ -127,7 +128,7 @@ function ActiveReservationsSummary({ selectedKioskId }: { selectedKioskId: strin
 }
 
 function ExpiryControlContent() {
-  const { user, permissions } = useAuth();
+  const { user, permissions, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const { lots, loading, addLot, updateLot, deleteLotsByIds, forceDeleteLotById, moveMultipleLots } = useExpiryProducts();
   const { products, loading: productsLoading, getProductFullName } = useProducts();
@@ -182,27 +183,29 @@ function ExpiryControlContent() {
     const commonStockLots = lots.filter(
       (lot) => lot.kioskId !== UNIFORM_STOCK_ID && !uniformProductIds.has(lot.productId),
     );
-    if (user.username === 'Tiago Brasil' || (permissions.stock.inventoryControl.editLot && permissions.stock.inventoryControl.writeDown)) return commonStockLots;
-    return commonStockLots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
-  }, [lots, products, user, loading, permissions]);
+    return commonStockLots.filter((lot) => canAccessUnit(user, lot.kioskId, { isDefaultAdmin }));
+  }, [isDefaultAdmin, lots, products, user, loading]);
 
   const sortedKiosks = useMemo(() => {
-    return [...kiosks].sort((a,b) => {
+    const visibleKiosks = user
+      ? kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }))
+      : [];
+    return visibleKiosks.sort((a,b) => {
         if (a.id === 'matriz') return -1;
         if (b.id === 'matriz') return 1;
         return a.name.localeCompare(b.name);
     });
-  }, [kiosks]);
+  }, [isDefaultAdmin, kiosks, user]);
   
   useEffect(() => {
-    if (!kioskQuery && kiosks.length > 0 && !selectedKioskId) {
-      if (user?.username === 'Tiago Brasil') {
-        setSelectedKioskId('all');
-      } else if (user?.assignedKioskIds && user.assignedKioskIds.length > 0) {
-        setSelectedKioskId(user.assignedKioskIds[0]);
-      }
+    if (!kioskQuery && sortedKiosks.length > 0 && !selectedKioskId) {
+      setSelectedKioskId(
+        isDefaultAdmin || user?.unitAccessScope === 'all'
+          ? 'all'
+          : sortedKiosks[0].id,
+      );
     }
-  }, [kiosks, selectedKioskId, user, kioskQuery]);
+  }, [isDefaultAdmin, kioskQuery, selectedKioskId, sortedKiosks, user?.unitAccessScope]);
   
   useEffect(() => {
     if (scannedLotId) {

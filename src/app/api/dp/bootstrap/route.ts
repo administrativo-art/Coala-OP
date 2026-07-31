@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { canAccessUnit, filterUnitsByAccess } from '@/lib/unit-access';
 
 function serializeValue(value: any): any {
   if (value === null || value === undefined) return value;
@@ -42,12 +43,23 @@ export async function GET(req: NextRequest) {
         dbAdmin.collection('dp_calendars').orderBy('createdAt', 'desc').get(),
       ]);
 
+      const units = filterUnitsByAccess(
+        unitsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        context.userDoc,
+        { isDefaultAdmin: context.isDefaultAdmin }
+      );
+      const schedules = schedulesSnap.docs
+        .map(doc => ({ id: doc.id, ...serializeValue(doc.data()) }))
+        .filter(schedule => canAccessUnit(context.userDoc, schedule.unitId, {
+          isDefaultAdmin: context.isDefaultAdmin,
+        }));
+
       return NextResponse.json({
-        units: unitsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        units,
         unitGroups: groupsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
         unitOrganizations: organizationsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
         shiftDefinitions: shiftsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
-        schedules: schedulesSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
+        schedules,
         vacations: vacationsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
         calendars: calendarsSnap.docs.map(doc => ({ id: doc.id, ...serializeValue(doc.data()) })),
         bootstrapMode: 'full',

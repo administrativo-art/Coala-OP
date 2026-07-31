@@ -28,6 +28,7 @@ import { GoalsProvider } from '@/components/goals-provider';
 import { useGoals } from '@/contexts/goals-context';
 import { type SalesReport } from '@/types';
 import { getUserDisplayName } from '@/lib/user-display';
+import { canAccessUnit } from '@/lib/unit-access';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MONTH_NUMS = [1,2,3,4,5,6,7,8,9,10,11,12];
@@ -37,7 +38,7 @@ const COLORS = ['#E91E8C','#6366F1','#10B981','#F59E0B','#EF4444','#8B5CF6','#06
 const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function getReportsByPreset(
-  reports: SalesReport[], kioskId: string, isAdmin: boolean, user: any, preset: string
+  reports: SalesReport[], kioskId: string, user: any, isDefaultAdmin: boolean, preset: string
 ): SalesReport[] {
   const today = new Date();
   let start: Date, end: Date;
@@ -50,7 +51,7 @@ function getReportsByPreset(
   }
   return reports.filter(r => {
     const km = kioskId === 'all' || r.kioskId === kioskId;
-    const um = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+    const um = Boolean(user) && canAccessUnit(user, r.kioskId, { isDefaultAdmin });
     if (!r.day) {
       if (preset === 'yesterday' || preset === 'today') return false;
       const ms = new Date(r.year, r.month - 1, 1);
@@ -70,19 +71,18 @@ export function SalesAnalysisDashboard() {
 function SalesAnalysisDashboardInner() {
   const { salesReports, loading: reportsLoading } = useSalesReports();
   const { kiosks } = useKiosks();
-  const { user, permissions, users, firebaseUser } = useAuth();
+  const { user, users, firebaseUser, isDefaultAdmin } = useAuth();
   const { periods, employeeGoals, templates } = useGoals();
   const { simulations } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
   const { toast } = useToast();
 
-  const isAdmin = permissions.settings.manageUsers;
   const loading = reportsLoading;
 
   const availableKiosks = useMemo(() => {
-    if (isAdmin) return kiosks;
-    return kiosks.filter(k => user?.assignedKioskIds?.includes(k.id));
-  }, [kiosks, user, isAdmin]);
+    if (!user) return [];
+    return kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }));
+  }, [isDefaultAdmin, kiosks, user]);
 
   // Filtros
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
@@ -176,7 +176,7 @@ function SalesAnalysisDashboardInner() {
 
     return salesReports.filter(r => {
       const kioskMatch = selectedKioskId === 'all' || r.kioskId === selectedKioskId;
-      const userKioskMatch = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+      const userKioskMatch = Boolean(user) && canAccessUnit(user!, r.kioskId, { isDefaultAdmin });
 
       let dateMatch = false;
       if (r.day) {
@@ -197,7 +197,7 @@ function SalesAnalysisDashboardInner() {
 
       return kioskMatch && userKioskMatch && dateMatch;
     });
-  }, [salesReports, selectedKioskId, dateRange, activePreset, isAdmin, user]);
+  }, [salesReports, selectedKioskId, dateRange, activePreset, isDefaultAdmin, user]);
 
   const simulationMap = useMemo(() => new Map(simulations.map(s => [s.id, s])), [simulations]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -231,7 +231,7 @@ function SalesAnalysisDashboardInner() {
 
     const prevReports = salesReports.filter(r => {
       const kioskMatch = selectedKioskId === 'all' || r.kioskId === selectedKioskId;
-      const userKioskMatch = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+      const userKioskMatch = Boolean(user) && canAccessUnit(user!, r.kioskId, { isDefaultAdmin });
       
       if (!r.day) return false;
       const reportDate = new Date(r.year, r.month - 1, r.day);
@@ -245,7 +245,7 @@ function SalesAnalysisDashboardInner() {
     const variation = prevTotal > 0 ? ((totalUnits - prevTotal) / prevTotal) * 100 : null;
 
     return { totalUnits, topProduct, variation, uniqueProducts: productRanking.length, totalCoupons };
-  }, [productRanking, selectedKioskId, salesReports, isAdmin, user, dateRange, filteredReports]);
+  }, [productRanking, selectedKioskId, salesReports, isDefaultAdmin, user, dateRange, filteredReports]);
 
   // ── CURVA ABC ─────────────────────────────────────────────────────────────
   const abcCurve = useMemo(() => {
@@ -312,12 +312,12 @@ function SalesAnalysisDashboardInner() {
   // ── COMPARATIVO QUIOSQUES ──────────────────────────────────────────────────
   const kioskComparison = useMemo(() => {
     const byKiosk: Record<string, { kioskName: string; total: number }> = {};
-    filteredReports.filter(r => isAdmin || user?.assignedKioskIds?.includes(r.kioskId)).forEach(r => {
+    filteredReports.filter((report) => Boolean(user) && canAccessUnit(user!, report.kioskId, { isDefaultAdmin })).forEach(r => {
       if (!byKiosk[r.kioskId]) byKiosk[r.kioskId] = { kioskName: r.kioskName || r.kioskId, total: 0 };
       r.items.forEach(item => { byKiosk[r.kioskId].total += item.quantity; });
     });
     return Object.entries(byKiosk).map(([kioskId, data]) => ({ kioskId, ...data })).sort((a, b) => b.total - a.total);
-  }, [filteredReports, isAdmin, user]);
+  }, [filteredReports, isDefaultAdmin, user]);
 
   const [hourlySelectedProduct, setHourlySelectedProduct] = useState<string>('all');
   const [comboSearch, setComboSearch] = useState('');
@@ -433,7 +433,6 @@ function SalesAnalysisDashboardInner() {
     }));
 
     return availableKiosks
-      .filter(k => isAdmin || user?.assignedKioskIds?.includes(k.id))
       .map(kiosk => ({
         kioskId: kiosk.id,
         kioskName: kiosk.name,
@@ -445,7 +444,7 @@ function SalesAnalysisDashboardInner() {
           isLastYear: p.isLastYear,
         })),
       }));
-  }, [salesReports, availableKiosks, isAdmin, user, kioskHistoryMonths]);
+  }, [salesReports, availableKiosks, kioskHistoryMonths]);
 
   // ── PAINEL: HORÁRIOS — por quiosque ─────────────────────────────────────
   const buildHourlyData = (reports: SalesReport[]) => {
@@ -498,13 +497,12 @@ function SalesAnalysisDashboardInner() {
 
   const panelHourlyByKiosk = useMemo(() => {
     return availableKiosks
-      .filter(k => isAdmin || user?.assignedKioskIds?.includes(k.id))
       .map(kiosk => ({
         kioskId: kiosk.id,
         kioskName: kiosk.name,
         data: buildHourlyData(filteredReports.filter(r => r.kioskId === kiosk.id)),
       }));
-  }, [filteredReports, availableKiosks, isAdmin, user]);
+  }, [filteredReports, availableKiosks]);
 
   // ── PAINEL: EVOLUÇÃO — usa meses presentes em filteredReports ────────────
   const panelEvolution = useMemo(() => {

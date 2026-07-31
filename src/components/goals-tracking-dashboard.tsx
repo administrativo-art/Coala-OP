@@ -39,6 +39,7 @@ import { GoalsAiAnalysisModal } from '@/components/goals-ai-analysis-modal';
 import { GoalsAnalysisOutputSchema } from '@/ai/flows/goals-schemas';
 import { getUserDisplayName, pickUserIdentitySnapshot, type UserIdentityLike } from '@/lib/user-display';
 import { calculateTieredGoalBonus, formatCurrencyBRL } from '@/lib/goal-methods';
+import { canAccessUnit } from '@/lib/unit-access';
 import {
   type GoalDistributionSnapshot,
   getEmployeeDistributionDateKeys,
@@ -2589,14 +2590,13 @@ const TYPE_ORDER: Record<string, number> = { revenue: 0, ticket: 1, product_line
 export function GoalsTrackingDashboard() {
   const { periods, employeeGoals, templates, loading, deletePeriod, deleteEmployeeGoal, rebalancePeriodEmployeeGoals } = useGoals();
   const { salesReports } = useSalesReports();
-  const { user, permissions, users, firebaseUser } = useAuth();
+  const { user, permissions, users, firebaseUser, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const { toast } = useToast();
   const [fallbackUsersById, setFallbackUsersById] = useState<Record<string, UserIdentityLike | null>>({});
   const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot | null>(null);
 
   const isManager = (permissions.goals?.manage ?? false) || (permissions.settings?.manageUsers ?? false);
-  const userKioskIds = user?.assignedKioskIds ?? [];
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
   const usersById = useMemo(
     () => Object.fromEntries(users.map(collaborator => [collaborator.id, collaborator])),
@@ -2824,9 +2824,9 @@ export function GoalsTrackingDashboard() {
     periods.filter(p => {
       if (p.status !== 'active') return false;
       if (selectedKioskId !== 'all' && p.kioskId !== selectedKioskId) return false;
-      return isManager || userKioskIds.includes(p.kioskId);
+      return Boolean(user) && canAccessUnit(user!, p.kioskId, { isDefaultAdmin });
     }),
-    [periods, userKioskIds, isManager, selectedKioskId]
+    [isDefaultAdmin, periods, selectedKioskId, user]
   );
 
   useEffect(() => {
@@ -2912,8 +2912,8 @@ export function GoalsTrackingDashboard() {
   }, [periodGroups, templates, distributionSnapshot]);
 
   const availableKiosks = useMemo(
-    () => kiosks.filter(kiosk => isManager || userKioskIds.includes(kiosk.id)),
-    [kiosks, isManager, userKioskIds]
+    () => user ? kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin })) : [],
+    [isDefaultAdmin, kiosks, user]
   );
 
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});

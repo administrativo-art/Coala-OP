@@ -1,9 +1,9 @@
 import { UNIFORM_SYSTEM_TEMPLATES } from "@/features/uniforms/template-catalog";
 import {
-  PROBATION_CONTRACT_V2_FIELD_MAPPING,
-  PROBATION_CONTRACT_V2_HASH,
-  PROBATION_CONTRACT_V2_SOURCE,
-  PROBATION_CONTRACT_V2_VARIABLES,
+  PROBATION_CONTRACT_V3_FIELD_MAPPING,
+  PROBATION_CONTRACT_V3_HASH,
+  PROBATION_CONTRACT_V3_SOURCE,
+  PROBATION_CONTRACT_V3_VARIABLES,
 } from "@/features/hr/documents/probation-contract-template";
 import {
   HOURS_BANK_V2_HASH,
@@ -23,6 +23,9 @@ export type SystemDocumentGenerationMode = "direct" | "contextual" | "reference"
 export type SystemDocumentTemplate = {
   id: string;
   name: string;
+  documentTitle?: string;
+  shortName?: string;
+  slug?: string;
   category: string;
   description: string;
   status: "published" | "draft";
@@ -79,13 +82,14 @@ const baseTemplates: SystemDocumentTemplate[] = [
     category: "Financeiro e recibos",
     description: "Recibo guiado por schema, com partes livres, itens repetíveis, total automático e pagamento condicional.",
     status: "published",
-    version: 1,
+    version: 3,
     templateKind: "reference_docx",
     renderer: "admission_docx",
     generationMode: "direct",
     sourceModule: "documents",
     variables: [
       "description",
+      "name",
       "receipt.city",
       "receipt.direction",
       "receipt.issueDate",
@@ -93,13 +97,16 @@ const baseTemplates: SystemDocumentTemplate[] = [
       "receipt.issuer.snapshot.name",
       "receipt.items",
       "receipt.number",
+      "receipt.state",
       "receipt.payment.account",
       "receipt.payment.agency",
       "receipt.payment.bank",
       "receipt.payment.method",
+      "receipt.payment.methodLabel",
       "receipt.payment.pixKey",
       "receipt.recipient.snapshot.document",
       "receipt.recipient.snapshot.name",
+      "receipt.total",
       "receipt.totalWithWords",
       "value",
     ],
@@ -107,8 +114,8 @@ const baseTemplates: SystemDocumentTemplate[] = [
     letterheadVersion: "coala-letterhead-v2",
     signatureScope: "independent",
     retentionPolicyId: "fiscal_generation_date_pending",
-    contentHash: "4697f1bf5879c02f4255f7304b09ead562d42d519f8016f9c1e42a86ce14b112",
-    sourcePath: "docs/modelos-documentos/recibos/recibo-v1.docx",
+    contentHash: "d461b8bf57b5860b73f57f431742bae1e0e35a79ffcddfa066ef41eebd430da7",
+    sourcePath: "docs/modelos-documentos/recibos/recibo-v3.docx",
     sourceFormat: "docx",
     isSystem: true,
     previewUrl: "/api/documents/templates/system-receipt-standard/preview",
@@ -147,19 +154,22 @@ const admissionTemplates: SystemDocumentTemplate[] = [
   {
     id: "system-admission-employment-probation-contract",
     name: "Contrato de Trabalho a Título de Experiência",
+    documentTitle: "CONTRATO DE TRABALHO A TÍTULO DE EXPERIÊNCIA",
+    shortName: "Contrato de experiência",
+    slug: "contrato-experiencia",
     category: "Contratos",
-    description: "Piloto parametrizado e validado tecnicamente. Permanece em preparação até a revisão jurídica e homologação do RH.",
-    sourcePath: PROBATION_CONTRACT_V2_SOURCE,
-    contentHash: PROBATION_CONTRACT_V2_HASH,
-    version: 2,
-    variables: [...PROBATION_CONTRACT_V2_VARIABLES],
-    fieldMapping: PROBATION_CONTRACT_V2_FIELD_MAPPING,
+    description: "Versão 3 no padrão documental CT Sorvetes, em teste visual antes da disponibilização.",
+    sourcePath: PROBATION_CONTRACT_V3_SOURCE,
+    contentHash: PROBATION_CONTRACT_V3_HASH,
+    version: 3,
+    variables: [...PROBATION_CONTRACT_V3_VARIABLES],
+    fieldMapping: PROBATION_CONTRACT_V3_FIELD_MAPPING,
   },
   {
     id: "system-admission-hours-bank-agreement",
     name: "Acordo Individual de Banco de Horas",
     category: "Admissão",
-    description: "Piloto parametrizado e validado tecnicamente. Permanece em preparação até a revisão jurídica e homologação do RH.",
+    description: "Modelo parametrizado e validado tecnicamente. Aguarda homologação do RH.",
     sourcePath: HOURS_BANK_V2_SOURCE,
     contentHash: HOURS_BANK_V2_HASH,
     version: 2,
@@ -169,7 +179,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-lgpd-awareness-term",
     name: "Termo de Ciência sobre o Tratamento de Dados Pessoais",
     category: "Admissão",
-    description: "Modelo parametrizado tecnicamente; aguarda revisão jurídica e homologação do RH.",
+    description: "Modelo parametrizado tecnicamente; aguarda homologação do RH.",
     sourcePath: `${ADMISSION_BASE}/03-termo-lgpd-v2.docx`,
     contentHash: "70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265",
     version: 2,
@@ -211,7 +221,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-goals-awards-policy",
     name: "Regulamento de Metas e Prêmios por Desempenho",
     category: "Admissão",
-    description: "Modelo parametrizado tecnicamente; aguarda revisão jurídica e homologação do RH.",
+    description: "Modelo parametrizado tecnicamente; aguarda homologação do RH.",
     sourcePath: `${ADMISSION_BASE}/05-metas-premios-v2.docx`,
     contentHash: "a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745",
     version: 2,
@@ -290,26 +300,9 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-confidentiality-agreement",
     name: "Termo de Confidencialidade e Sigilo",
     category: "Admissão",
-    description: "Modelo parametrizado tecnicamente; aguarda revisão jurídica e homologação do RH.",
+    description: "Modelo parametrizado tecnicamente; aguarda homologação do RH.",
     sourcePath: `${ADMISSION_BASE}/07-confidencialidade-v2.docx`,
     contentHash: "56306e646b241ab3b0bb93c804dc3cf549a833efb583bf990c9a18c8ba275f80",
-    version: 2,
-    variables: [
-      "employee.ctps_number",
-      "employee.ctps_series",
-      "employee.name",
-      "integration.employer_address",
-      "integration.employer_cnpj",
-      "integration.employer_name",
-    ],
-  },
-  {
-    id: "system-admission-electronic-time-tracking-awareness",
-    name: "Termo de Ciência - Registro Eletrônico de Ponto",
-    category: "Admissão",
-    description: "Modelo parametrizado tecnicamente; aguarda revisão jurídica e homologação do RH.",
-    sourcePath: `${ADMISSION_BASE}/08-ponto-eletronico-v2.docx`,
-    contentHash: "eba3f36cf5ca9c5effb72c36cfc05f3487b192f5ff9206c0bc604f66235e3f5a",
     version: 2,
     variables: [
       "employee.ctps_number",

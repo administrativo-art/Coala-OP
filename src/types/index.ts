@@ -837,6 +837,9 @@ export type UserPdvAccess = {
   updatedAt?: string | null;
 };
 
+export type UnitAccessScope = 'linked' | 'selected' | 'all';
+export type PersonRecordType = 'employee' | 'director' | 'partner' | 'pj' | 'internship' | 'test';
+
 export type User = {
   id: string; // Firebase Auth UID
   username: string;
@@ -858,6 +861,20 @@ export type User = {
   pdvAccessFilialName?: string;
   pdvAccesses?: UserPdvAccess[];
   // Departamento Pessoal (RH)
+  /** ID canônico do cadastro em coala-rh/employees. */
+  hrEmployeeId?: string;
+  /** Natureza cadastral da pessoa; não concede permissões de acesso. */
+  personRecordType?: PersonRecordType;
+  profileCompliance?: {
+    status: 'pending' | 'complete' | 'overdue';
+    policyVersion: number;
+    missingFields?: string[];
+    invalidFields?: string[];
+    evaluatedAt?: Timestamp | string | null;
+    completedAt?: Timestamp | string | null;
+    lastConfirmedAt?: Timestamp | string | null;
+    nextReviewAt?: Timestamp | string | null;
+  };
   registrationIdBizneo?: string;   // matrícula no Bizneo HR
   registrationIdPdv?: string;      // código no PDV
   jobRoleId?: string;
@@ -866,6 +883,13 @@ export type User = {
   jobFunctionNames?: string[];
   employmentRelationshipType?: 'clt' | 'pj' | 'internship';
   responsibleUnitIds?: string[];
+  /**
+   * Limite territorial do acesso aos dados.
+   * Ausente equivale a `linked`, preservando o comportamento legado.
+   */
+  unitAccessScope?: UnitAccessScope;
+  /** Usado somente quando unitAccessScope === `selected`. */
+  unitAccessUnitIds?: string[];
   jobRoleProfileSyncDisabled?: boolean;
   mustChangePassword?: boolean;
   passwordChangedAt?: Timestamp;
@@ -1569,6 +1593,7 @@ export type JobRole = {
 // ...
   id: string;
   name: string;
+  cbo?: string;
   publicTitle: string;
   slug: string;
   departmentId?: string | null;
@@ -1942,6 +1967,11 @@ export type Entity = {
     email?: string;
   };
   responsible?: string; // Only for pessoa_juridica
+  documentSignatoryUserId?: string;
+  documentSignatoryName?: string;
+  documentSignatoryEmail?: string;
+  documentSignatoryScope?: 'entity' | 'cnpj_root';
+  cnpjRoot?: string;
   status?: 'active' | 'inactive';
   inactivatedAt?: string;
   inactivatedBy?: string;

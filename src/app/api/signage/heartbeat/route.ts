@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const snapshot = await signageDbAdmin.collection('playerHeartbeats').get();
     const heartbeats = snapshot.docs
       .map(doc => ({ kioskId: doc.id, ...doc.data() } as PlayerHeartbeat))
-      .filter((heartbeat) => access.isAdmin || access.allowedKioskIds.includes(heartbeat.kioskId));
+      .filter((heartbeat) => access.allUnits || access.allowedKioskIds.includes(heartbeat.kioskId));
 
     return NextResponse.json({ heartbeats });
   } catch (error) {

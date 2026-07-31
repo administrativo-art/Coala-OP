@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock3, Download, Eye, FileStack, Loader2, Lock, Search, Send, Trash2 } from "lucide-react";
+import { CheckCircle2, Clock3, Download, Eye, FileStack, Loader2, Lock, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DocumentGeneratorWorkspace } from "@/components/documents/document-generator-workspace";
@@ -30,6 +30,17 @@ type GeneratedDocument = {
   signatureRequestId?: string | null;
   protocol?: string | null;
   preSignatureHash?: string | null;
+  parties?: Array<{
+    partyType?: string;
+    role?: string;
+    ref?: string | null;
+    snapshot?: {
+      name?: string;
+      documentMasked?: string;
+      signatureEmail?: string | null;
+      signatureName?: string | null;
+    };
+  }>;
 };
 
 type AuditPayload = {
@@ -116,6 +127,93 @@ const SIGNATURE_STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelado",
   failed: "Falha no envio",
 };
+
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  "receipt.city": "Cidade de emissão",
+  "receipt.state": "Estado de emissão",
+  "receipt.direction": "Direção do recibo",
+  "receipt.issueDate": "Data de emissão",
+  "receipt.issuer.snapshot.document": "CPF/CNPJ do emitente",
+  "receipt.issuer.snapshot.name": "Emitente",
+  "receipt.items": "Itens do recibo",
+  "receipt.number": "Número do recibo",
+  "receipt.payment.account": "Conta",
+  "receipt.payment.agency": "Agência",
+  "receipt.payment.bank": "Banco",
+  "receipt.payment.method": "Forma de pagamento",
+  "receipt.payment.methodLabel": "Forma de pagamento exibida",
+  "receipt.payment.pixKey": "Chave Pix",
+  "receipt.recipient.snapshot.document": "CPF/CNPJ do recebedor",
+  "receipt.recipient.snapshot.name": "Recebedor",
+  "receipt.total": "Total",
+  "receipt.totalWithWords": "Total por extenso",
+};
+
+const AUDIT_SOURCE_LABELS: Record<string, string> = {
+  schema_form: "Informado na geração",
+  mapped_system: "Cadastro do sistema",
+  manual: "Preenchimento manual",
+  template: "Modelo",
+  integration: "Integração",
+  employee: "Cadastro do colaborador",
+};
+
+function auditValueText(key: string, value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return `${index + 1}. ${String(item)}`;
+      }
+      const row = item as Record<string, unknown>;
+      return `${index + 1}. ${String(row.name ?? "Item")}`
+        + `${row.description ? ` — ${String(row.description)}` : ""}`
+        + `${row.value ? ` — ${String(row.value)}` : ""}`;
+    }).join("\n");
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== null && item !== undefined && item !== "")
+      .map(([label, item]) => `${label}: ${String(item)}`)
+      .join(" · ") || "—";
+  }
+  if (key.endsWith("issueDate") && typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  return value === null || value === undefined || value === "" ? "—" : String(value);
+}
+
+function visibleAuditEntries(audit: AuditPayload | null) {
+  return Object.entries(audit?.audit.values ?? {}).filter(([key, value]) => {
+    if (["name", "description", "value"].includes(key)) return false;
+    return !(
+      value.sourceType === "template"
+      && value.renderedValue == null
+      && value.rawValue == null
+    );
+  });
+}
+
+function documentPartiesLabel(document: GeneratedDocument) {
+  const names = (document.parties ?? [])
+    .map((party) => party.snapshot?.name?.trim())
+    .filter((name): name is string => Boolean(name));
+  return names.join(" ↔ ")
+    || document.employeeName
+    || document.employeeId
+    || document.onboardingId
+    || "Documento avulso";
+}
+
+function signatureContacts(document: GeneratedDocument) {
+  return (document.parties ?? []).map((party) => ({
+    role: party.role === "issuer" ? "Emitente" : party.role === "recipient" ? "Recebedor" : "Signatário",
+    name: party.snapshot?.signatureName?.trim()
+      || party.snapshot?.name?.trim()
+      || "Parte sem nome",
+    email: party.snapshot?.signatureEmail?.trim().toLocaleLowerCase("pt-BR") || null,
+  }));
+}
 
 function signatureStatusTone(status: string) {
   if (["signed", "archived"].includes(status)) {
@@ -247,9 +345,22 @@ export default function GeneratedDocumentsPage() {
     () => documents.find((item) => item.id === selectedId) ?? null,
     [documents, selectedId],
   );
+  const selectedSignatureContacts = useMemo(
+    () => selectedDocument ? signatureContacts(selectedDocument) : [],
+    [selectedDocument],
+  );
+  const selectedHasSignatureRecipients = Boolean(
+    selectedDocument?.employeeId
+    || (
+      selectedSignatureContacts.length
+      && selectedSignatureContacts.every((contact) => Boolean(contact.email))
+    )
+  );
 
   async function openFile(id: string, format: "pdf" | "docx") {
     setBusyDocument(id);
+    const previewWindow = format === "pdf" ? window.open("about:blank", "_blank") : null;
+    if (previewWindow) previewWindow.opener = null;
     try {
       const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}/file${format === "pdf" ? "?format=pdf" : ""}`, {
         headers: { Authorization: `Bearer ${await token()}` },
@@ -260,7 +371,15 @@ export default function GeneratedDocumentsPage() {
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      if (format === "pdf") window.open(url, "_blank", "noopener");
+      if (format === "pdf") {
+        if (previewWindow) previewWindow.location.href = url;
+        else {
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.target = "_blank";
+          anchor.click();
+        }
+      }
       else {
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -269,7 +388,29 @@ export default function GeneratedDocumentsPage() {
       }
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (cause) {
+      previewWindow?.close();
       setMessage(cause instanceof Error ? cause.message : "Falha ao abrir o arquivo.");
+    } finally {
+      setBusyDocument(null);
+    }
+  }
+
+  async function retryPdf(id: string) {
+    setBusyDocument(id);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/documents/generated/${encodeURIComponent(id)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${await token()}` },
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Falha ao gerar a prévia em PDF.");
+      setDocuments((current) => current.map((item) => (
+        item.id === id ? { ...item, ...payload.document, pdfAvailable: true } : item
+      )));
+      await openFile(id, "pdf");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Falha ao gerar a prévia em PDF.");
     } finally {
       setBusyDocument(null);
     }
@@ -445,7 +586,6 @@ export default function GeneratedDocumentsPage() {
           onBack={() => setViewMode("queue")}
           onGenerated={() => {
             void load();
-            setViewMode("queue");
           }}
         />
       ) : (
@@ -511,7 +651,7 @@ export default function GeneratedDocumentsPage() {
                   }`} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-extrabold text-slate-900">
-                      {item.templateName ?? "Modelo"} · {item.employeeName ?? item.employeeId ?? item.onboardingId ?? "Documento avulso"}
+                      {item.templateName ?? "Modelo"} · {documentPartiesLabel(item)}
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] text-slate-500">
                       {formatDateTime(item.generatedAt)} · {item.generatedByName ?? "—"}
@@ -549,7 +689,7 @@ export default function GeneratedDocumentsPage() {
                   Detalhe do documento
                 </p>
                 <h2 className="mt-0.5 truncate text-sm font-black text-slate-950">
-                  {selectedDocument.templateName ?? "Documento"} · {selectedDocument.employeeName ?? selectedDocument.employeeId ?? "Avulso"}
+                  {selectedDocument.templateName ?? "Documento"} · {documentPartiesLabel(selectedDocument)}
                 </h2>
                 <nav className="mt-3 flex gap-5 text-xs">
                   <button
@@ -582,7 +722,7 @@ export default function GeneratedDocumentsPage() {
                   <div className="space-y-3">
                     <div className="grid gap-3 rounded-lg border bg-white p-3 text-xs sm:grid-cols-2">
                       <p><span className="block text-[10px] font-bold text-slate-400">Modelo</span><span className="font-extrabold">{selectedDocument.templateName ?? "—"}</span></p>
-                      <p><span className="block text-[10px] font-bold text-slate-400">Colaborador / parte</span><span className="font-extrabold">{selectedDocument.employeeName ?? selectedDocument.employeeId ?? "Documento avulso"}</span></p>
+                      <p><span className="block text-[10px] font-bold text-slate-400">Colaborador / partes</span><span className="font-extrabold">{documentPartiesLabel(selectedDocument)}</span></p>
                       <p><span className="block text-[10px] font-bold text-slate-400">Gerado em</span><span className="font-semibold">{formatDateTime(selectedDocument.generatedAt)}</span></p>
                       <p><span className="block text-[10px] font-bold text-slate-400">Por</span><span className="font-semibold">{selectedDocument.generatedByName ?? "—"}</span></p>
                       <p><span className="block text-[10px] font-bold text-slate-400">Protocolo</span><span className="font-mono font-extrabold">{selectedDocument.protocol ?? "—"}</span></p>
@@ -598,6 +738,25 @@ export default function GeneratedDocumentsPage() {
                         <Download className="mr-2 h-4 w-4" />DOCX
                       </Button>
                     </div>
+                    {!selectedDocument.pdfAvailable ? (
+                      <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                        <p>O DOCX foi criado, mas a prévia em PDF não está disponível. A aprovação permanece bloqueada até a conversão ser concluída.</p>
+                        {canReview ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-amber-300 bg-white text-amber-900"
+                            disabled={busyDocument === selectedDocument.id}
+                            onClick={() => void retryPdf(selectedDocument.id)}
+                          >
+                            {busyDocument === selectedDocument.id
+                              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                            Gerar PDF agora
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <p className="pt-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Ações</p>
                     <div className="flex flex-wrap gap-2">
                       {["draft", "review_pending"].includes(selectedDocument.status) && canReview ? (
@@ -613,7 +772,7 @@ export default function GeneratedDocumentsPage() {
                         && (selectedDocument.signatureScope === "independent" || selectedDocument.postAdmissionSignatureScope === "independent")
                         && ["approved", "final"].includes(selectedDocument.status)
                         && !["sent", "signed"].includes(String(selectedDocument.signatureStatus)) ? (
-                          <Button size="sm" className="bg-violet-700 hover:bg-violet-800" disabled={busyDocument === selectedDocument.id} onClick={() => void sendForSignature(selectedDocument.id)}><Send className="mr-1.5 h-4 w-4" />Enviar para assinatura</Button>
+                          <Button size="sm" className="bg-violet-700 hover:bg-violet-800" disabled={!selectedHasSignatureRecipients || busyDocument === selectedDocument.id} onClick={() => void sendForSignature(selectedDocument.id)}><Send className="mr-1.5 h-4 w-4" />Enviar para assinatura</Button>
                         ) : null}
                       {canViewSignature && ["sent", "partially_signed"].includes(String(selectedDocument.signatureStatus)) ? (
                         <Button size="sm" variant="outline" className="text-violet-700" disabled={busyDocument === selectedDocument.id} onClick={() => void reconcileSignature(selectedDocument.id)}><Clock3 className="mr-1.5 h-4 w-4" />Atualizar estado</Button>
@@ -626,20 +785,30 @@ export default function GeneratedDocumentsPage() {
                       <div className="grid min-h-40 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-violet-700" /></div>
                     ) : (
                       <>
+                        <div className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] text-violet-900">
+                          Esta auditoria registra exatamente quais valores foram usados na geração, de onde vieram e o hash do conjunto resolvido. Ela permite explicar e conferir o conteúdo emitido sem depender apenas da leitura do PDF.
+                        </div>
                         <div className="grid gap-2 rounded-lg border bg-white p-3 text-xs sm:grid-cols-2">
                           <p><span className="font-bold text-slate-400">Protocolo:</span> {audit?.document.protocol ?? "—"}</p>
                           <p><span className="font-bold text-slate-400">Catálogo:</span> {audit?.audit.catalogVersion ?? "—"}</p>
                           <p className="break-all sm:col-span-2"><span className="font-bold text-slate-400">Hash:</span> {audit?.document.resolvedValuesHash ?? "—"}</p>
                         </div>
                         <div className="overflow-hidden rounded-lg border bg-white">
-                          <div className="grid grid-cols-[1fr_1.2fr_0.9fr] bg-slate-50 px-3 py-2 text-[9px] font-extrabold uppercase text-slate-400">
-                            <span>Variável</span><span>Valor</span><span>Origem</span>
+                          <div className="grid grid-cols-[1.1fr_1.4fr_0.9fr] bg-slate-50 px-3 py-2 text-[9px] font-extrabold uppercase text-slate-400">
+                            <span>Campo</span><span>Valor utilizado</span><span>Origem</span>
                           </div>
-                          {Object.entries(audit?.audit.values ?? {}).map(([key, value]) => (
-                            <div key={key} className="grid grid-cols-[1fr_1.2fr_0.9fr] gap-2 border-t px-3 py-2 text-[11px]">
-                              <span className="break-all font-mono">{key}</span>
-                              <span className="break-words">{value.sensitive && value.renderedValue == null ? "Dado sensível protegido" : String(value.renderedValue ?? "—")}</span>
-                              <span className="text-slate-500">{value.sourceType ?? "—"}</span>
+                          {visibleAuditEntries(audit).map(([key, value]) => (
+                            <div key={key} className="grid grid-cols-[1.1fr_1.4fr_0.9fr] gap-2 border-t px-3 py-2 text-[11px]">
+                              <span>
+                                <span className="block font-semibold text-slate-800">{AUDIT_FIELD_LABELS[key] ?? key}</span>
+                                <span className="mt-0.5 block break-all font-mono text-[9px] text-slate-400">{key}</span>
+                              </span>
+                              <span className="whitespace-pre-line break-words">
+                                {value.sensitive && value.renderedValue == null
+                                  ? "Dado sensível protegido"
+                                  : auditValueText(key, value.renderedValue)}
+                              </span>
+                              <span className="text-slate-500">{AUDIT_SOURCE_LABELS[value.sourceType ?? ""] ?? value.sourceType ?? "—"}</span>
                             </div>
                           ))}
                         </div>
@@ -659,6 +828,27 @@ export default function GeneratedDocumentsPage() {
                           <p><span className="block text-[10px] font-bold text-slate-400">ID externo</span><span className="break-all font-mono text-[10px] font-bold">{signatureTrail?.signature?.providerDocumentId ?? "—"}</span></p>
                           <p className="sm:col-span-2"><span className="block text-[10px] font-bold text-slate-400">Hash pré-assinatura</span><span className="break-all font-mono text-[10px] text-slate-500">{selectedDocument.preSignatureHash ?? "—"}</span></p>
                         </div>
+                        {signatureContacts(selectedDocument).length ? (
+                          <div className="mb-4 overflow-hidden rounded-lg border bg-white">
+                            <div className="bg-slate-50 px-3 py-2 text-[9px] font-extrabold uppercase text-slate-400">Signatários</div>
+                            {signatureContacts(selectedDocument).map((signer, index) => (
+                              <div key={`${signer.role}-${index}`} className="flex items-center justify-between gap-3 border-t px-3 py-2 text-xs">
+                                <div>
+                                  <p className="font-bold text-slate-800">{signer.name}</p>
+                                  <p className="text-[10px] text-slate-400">{signer.role}</p>
+                                </div>
+                                <span className={signer.email ? "text-slate-600" : "font-bold text-rose-600"}>
+                                  {signer.email ?? "E-mail ausente"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {!selectedHasSignatureRecipients && !selectedDocument.employeeId ? (
+                          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+                            Informe um e-mail válido para cada signatário durante a geração do documento. Sem um canal de entrega, o envio à Autentique fica bloqueado.
+                          </div>
+                        ) : null}
                         {signatureTrail?.signature && (signatureTrail.timeline ?? []).length ? (
                           <ol>
                             {(signatureTrail?.timeline ?? []).map((event, index, events) => (
@@ -685,7 +875,7 @@ export default function GeneratedDocumentsPage() {
                                 <Button
                                   size="sm"
                                   className="mt-4 bg-violet-700 hover:bg-violet-800"
-                                  disabled={busyDocument === selectedDocument.id}
+                                  disabled={!selectedHasSignatureRecipients || busyDocument === selectedDocument.id}
                                   onClick={() => void sendForSignature(selectedDocument.id)}
                                 >
                                   Enviar para assinatura

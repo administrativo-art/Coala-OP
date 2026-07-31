@@ -14,6 +14,7 @@ import { employeeCodeFrom, findEmployeeIdentityByExtractedIdentity, loadExpected
 import { matchEmployeeAgainstExpected, type EmployeeMatchStatus } from "@/lib/hr/employee-document-match";
 import { computeBatchCounters, deriveBatchStatus, type UploadItemStatus } from "@/lib/hr/employee-document-batch";
 import { buildEmployeeProfileSuggestions } from "@/lib/hr/employee-document-profile-suggestions";
+import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
     if (!tempStoragePath) return error("Arquivo temporário não está mais disponível.", 410);
     const employeeId = String(item.employeeId ?? "");
     if (!employeeId) return error("Colaborador do item não encontrado.");
+    await assertEmployeeUnitAccess(access, employeeId);
 
     await itemRef.update({ status: "analyzing", updatedAt: Timestamp.now() });
     const file = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(tempStoragePath);

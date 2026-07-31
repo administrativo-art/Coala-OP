@@ -201,7 +201,10 @@ export type Employee = {
   bizneo_employee_id: BizneoEmployeeId;
   auth_uid?:          AuthUid;
   name:               string;
+  /** Mesmo e-mail usado para autenticação no Coala One. */
   email:              string;
+  access_email?:      string;
+  person_record_type?: 'employee' | 'director' | 'partner' | 'pj' | 'internship' | 'test';
   photo_url?:         string;
   status:             EmployeeStatus;
   job_role_id:        JobRoleId;
@@ -291,6 +294,10 @@ export type RhAccessCache = {
   job_function_id?:     string;
   job_function_ids?:    string[];
   function_ids?:        string[];
+  profile_compliance_status?: 'pending' | 'complete' | 'overdue';
+  profile_compliance_policy_version?: number;
+  profile_compliance_next_review_at?: Timestamp;
+  profile_compliance_updated_at?: Timestamp;
   updated_at:           Timestamp;
 };
 

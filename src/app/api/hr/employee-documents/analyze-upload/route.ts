@@ -36,6 +36,7 @@ import {
   type UploadItemStatus,
 } from "@/lib/hr/employee-document-batch";
 import { buildEmployeeProfileSuggestions } from "@/lib/hr/employee-document-profile-suggestions";
+import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,6 +79,7 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
   if (!employeeId || files.length === 0) {
     return error("Informe o colaborador e selecione ao menos um arquivo.");
   }
+  await assertEmployeeUnitAccess(access, employeeId);
 
   const batchId = randomUUID();
   const traceId = randomUUID();

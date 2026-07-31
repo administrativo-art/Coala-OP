@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPersonName } from "@/lib/person-name";
+import { canAccessUserByUnit } from "@/lib/unit-access";
 import {
   EMPLOYEE_DOCUMENT_CATEGORIES,
   EMPLOYEE_DOCUMENT_TYPE_CATALOG,
@@ -247,7 +248,7 @@ function DocumentCollaboratorCard({
 
 export default function DPDocumentsPage() {
   const router = useRouter();
-  const { permissions, activeUsers, terminatedUsers, firebaseUser, user: currentUser } = useAuth();
+  const { permissions, activeUsers, terminatedUsers, firebaseUser, user: currentUser, isDefaultAdmin } = useAuth();
   const { units } = useDPBootstrap();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"active" | "all" | "inactive">("active");
@@ -266,7 +267,17 @@ export default function DPDocumentsPage() {
   const canView = Boolean(permissions.settings?.manageUsers || (permissions.dp?.collaborators?.view && !ownProfileOnly));
   const canManage = permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.edit === true;
   const showStorageNotice = process.env.NODE_ENV !== "production";
-  const allUsers = useMemo(() => [...activeUsers, ...terminatedUsers], [activeUsers, terminatedUsers]);
+  const allUsers = useMemo(() => {
+    if (!currentUser) return [];
+    return [...activeUsers, ...terminatedUsers].filter((candidate) =>
+      candidate.id === currentUser.id || canAccessUserByUnit(currentUser, candidate, { isDefaultAdmin })
+    );
+  }, [activeUsers, currentUser, isDefaultAdmin, terminatedUsers]);
+  const visibleActiveCount = useMemo(
+    () => allUsers.filter((candidate) => candidate.isActive !== false).length,
+    [allUsers],
+  );
+  const visibleInactiveCount = allUsers.length - visibleActiveCount;
   const unitNameById = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
 
   useEffect(() => {
@@ -329,6 +340,7 @@ export default function DPDocumentsPage() {
         user.username,
         user.email,
         user.jobRoleName,
+        user.hrEmployeeId,
         user.registrationIdBizneo,
         user.registrationIdPdv,
       ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
@@ -460,8 +472,8 @@ export default function DPDocumentsPage() {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant={statusFilter === "active" ? "default" : "outline"} className="h-7 rounded-full px-2.5 text-[11px]" onClick={() => setStatusFilter("active")}>Ativos {activeUsers.length}</Button>
-            <Button size="sm" variant={statusFilter === "inactive" ? "default" : "outline"} className="h-7 rounded-full px-2.5 text-[11px]" onClick={() => setStatusFilter("inactive")}>Inativos {terminatedUsers.length}</Button>
+            <Button size="sm" variant={statusFilter === "active" ? "default" : "outline"} className="h-7 rounded-full px-2.5 text-[11px]" onClick={() => setStatusFilter("active")}>Ativos {visibleActiveCount}</Button>
+            <Button size="sm" variant={statusFilter === "inactive" ? "default" : "outline"} className="h-7 rounded-full px-2.5 text-[11px]" onClick={() => setStatusFilter("inactive")}>Inativos {visibleInactiveCount}</Button>
             <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} className="h-7 rounded-full px-2.5 text-[11px]" onClick={() => setStatusFilter("all")}>Todos {allUsers.length}</Button>
           </div>
         </div>

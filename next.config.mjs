@@ -8,6 +8,8 @@ const nextConfig = {
       './docs/modelos-documentos/admissionais/*.docx',
       './src/features/hr/documents/assets/coala-shakes-letterhead-a4-v2.png',
       './src/features/hr/documents/assets/coala-shakes-letterhead-overlay-a4-v2.png',
+      './node_modules/@fontsource/caladea/files/caladea-latin-400-normal.woff',
+      './node_modules/@fontsource/caladea/files/caladea-latin-700-normal.woff',
     ],
   },
   async headers() {

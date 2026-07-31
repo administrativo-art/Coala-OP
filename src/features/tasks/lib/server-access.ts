@@ -1,6 +1,7 @@
 import { type ServerUserContext } from "@/lib/auth-server";
 import { type PermissionSet, type Task } from "@/types";
 import { getFeatureFlags } from "@/lib/feature-flags";
+import { canAccessAnyUnit, canAccessUnit, resolveUnitAccess } from "@/lib/unit-access";
 
 type TaskPermissionLevel = "view" | "manage";
 
@@ -11,13 +12,11 @@ function asStringArray(value: unknown) {
     .filter(Boolean);
 }
 
-export function getUserTaskUnitIds(userDoc: Record<string, unknown>) {
-  return Array.from(
-    new Set([
-      ...asStringArray(userDoc.unitIds),
-      ...asStringArray(userDoc.assignedKioskIds),
-    ])
-  );
+export function getUserTaskUnitIds(
+  userDoc: Record<string, unknown>,
+  isDefaultAdmin = false
+) {
+  return resolveUnitAccess(userDoc, { isDefaultAdmin }).unitIds;
 }
 
 function getUserRoleIds(context: Pick<ServerUserContext, "userDoc" | "profileId">) {
@@ -119,7 +118,7 @@ function hasIntegratedTaskAccess(context: ServerUserContext, task: Task & Record
 }
 
 export function isTaskAssignedToContext(
-  context: Pick<ServerUserContext, "userDoc" | "profileId">,
+  context: Pick<ServerUserContext, "userDoc" | "profileId" | "isDefaultAdmin">,
   task: Pick<Task, "assigneeType" | "assigneeId"> & Record<string, unknown>
 ) {
   const userId = context.userDoc.id;
@@ -131,13 +130,17 @@ export function isTaskAssignedToContext(
   if (assigneeType === "profile") return assigneeId === context.profileId;
   if (assigneeType === "role") return getUserRoleIds(context).includes(assigneeId);
   if (assigneeType === "team") return getUserTeamIds(context).includes(assigneeId);
-  if (assigneeType === "unit") return getUserTaskUnitIds(context.userDoc as unknown as Record<string, unknown>).includes(assigneeId);
+  if (assigneeType === "unit") {
+    return canAccessUnit(context.userDoc, assigneeId, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    });
+  }
 
   return false;
 }
 
 export function isTaskApprovalTurnForContext(
-  context: Pick<ServerUserContext, "userDoc" | "profileId">,
+  context: Pick<ServerUserContext, "userDoc" | "profileId" | "isDefaultAdmin">,
   task: Pick<Task, "status" | "approverType" | "approverId"> & Record<string, unknown>
 ) {
   if (task.status !== "awaiting_approval") return false;
@@ -150,7 +153,11 @@ export function isTaskApprovalTurnForContext(
   if (approverType === "profile") return approverId === context.profileId;
   if (approverType === "role") return getUserRoleIds(context).includes(approverId);
   if (approverType === "team") return getUserTeamIds(context).includes(approverId);
-  if (approverType === "unit") return getUserTaskUnitIds(context.userDoc as unknown as Record<string, unknown>).includes(approverId);
+  if (approverType === "unit") {
+    return canAccessUnit(context.userDoc, approverId, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    });
+  }
 
   return false;
 }
@@ -163,6 +170,14 @@ export function canViewTask(context: ServerUserContext, task: Task & Record<stri
         ? task.workspaceId
         : null;
   if (workspaceId && workspaceId !== context.workspace_id) return false;
+
+  const relatedUnitIds = taskUnitIds(task);
+  if (
+    relatedUnitIds.length > 0 &&
+    !canAccessAnyUnit(context.userDoc, relatedUnitIds, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    })
+  ) return false;
 
   if (hasIntegratedTaskAccess(context, task)) return true;
   if (context.isDefaultAdmin || context.permissions.tasks.manage) return true;
@@ -179,9 +194,7 @@ export function canViewTask(context: ServerUserContext, task: Task & Record<stri
   if (context.profileId && watchers.profiles.includes(context.profileId)) return true;
   if (watchers.roles.some((roleId) => getUserRoleIds(context).includes(roleId))) return true;
 
-  const userUnitIds = getUserTaskUnitIds(context.userDoc as unknown as Record<string, unknown>);
-  const relatedUnitIds = taskUnitIds(task);
-  if (relatedUnitIds.some((unitId) => userUnitIds.includes(unitId))) return true;
+  if (relatedUnitIds.length > 0) return true;
 
   return false;
 }
@@ -194,6 +207,14 @@ export function canActOnTask(context: ServerUserContext, task: Task & Record<str
         ? task.workspaceId
         : null;
   if (workspaceId && workspaceId !== context.workspace_id) return false;
+
+  const relatedUnitIds = taskUnitIds(task);
+  if (
+    relatedUnitIds.length > 0 &&
+    !canAccessAnyUnit(context.userDoc, relatedUnitIds, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    })
+  ) return false;
 
   if (hasIntegratedTaskAccess(context, task)) return true;
   if (context.isDefaultAdmin || context.permissions.tasks.manage) return true;

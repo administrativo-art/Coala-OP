@@ -54,34 +54,6 @@ async function loadUniformLetterhead() {
   ));
 }
 
-export async function renderUniformSystemTemplatePreview(type: UniformTransactionType) {
-  const letterhead = await loadUniformLetterhead();
-  const returnedItems: SignedUniformTermItem[] = [
-    { productName: "Camiseta polo", quantity: 1, condition: "usado", apparelType: "Piquê Coala", apparelColor: "Preta", apparelSize: "M", stockDisposition: "retorna_estoque" },
-    { productName: "Avental operacional", quantity: 1, condition: "danificado", apparelType: "Linha Frente", apparelColor: "Rosa", apparelSize: "Único", stockDisposition: "descartar" },
-    { productName: "Boné trucker", quantity: 1, condition: "danificado", apparelType: "Aba curva", apparelColor: "Azul", apparelSize: "Único", stockDisposition: "descartar" },
-  ];
-  const deliveredItems: SignedUniformTermItem[] = [
-    { productName: "Camiseta polo", quantity: 2, condition: "novo", apparelType: "Piquê Coala", apparelColor: "Preta", apparelSize: "M" },
-    { productName: "Avental operacional", quantity: 1, condition: "novo", apparelType: "Linha Frente", apparelColor: "Rosa", apparelSize: "Único" },
-    { productName: "Boné trucker", quantity: 1, condition: "novo", apparelType: "Aba curva", apparelColor: "Azul", apparelSize: "Único" },
-  ];
-  const pdf = await renderToBuffer(
-    <SignedUniformMovementTermDocument
-      type={type}
-      protocol="GERADO AUTOMATICAMENTE"
-      collaboratorName="Nome do colaborador"
-      collaboratorDocument="***.***.***-**"
-      registeredByName="Responsável/RH"
-      occurredAt="dd/mm/aaaa"
-      outgoingItems={type === "return" ? [] : deliveredItems}
-      incomingItems={type === "delivery" ? [] : type === "return" ? returnedItems.slice(0, 2) : returnedItems}
-      letterheadDataUri={`data:image/png;base64,${letterhead.toString("base64")}`}
-    />,
-  );
-  return Buffer.from(pdf);
-}
-
 export async function createAndStoreUniformTerm(input: {
   transactionId: string;
   type: UniformTransactionType;

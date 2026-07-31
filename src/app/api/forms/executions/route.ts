@@ -9,7 +9,7 @@ import {
 import {
   assertFormExecutionAccess,
   assertFormPermission,
-  getUserFormUnitIds,
+  getUserFormUnitAccess,
 } from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
@@ -123,10 +123,15 @@ export async function GET(request: NextRequest) {
     const limit = Number(searchParams.get("limit") ?? "50");
 
     if (assignedToMe) {
+      const unitAccess = getUserFormUnitAccess(
+        context.userDoc as unknown as Record<string, unknown>,
+        context.isDefaultAdmin
+      );
       const executions = await listFormExecutionsForAssignee({
         workspaceId: context.workspace_id,
         userId: context.userDoc.id,
-        unitIds: getUserFormUnitIds(context.userDoc as unknown as Record<string, unknown>),
+        unitIds: unitAccess.unitIds,
+        allUnits: unitAccess.allUnits,
         limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 100,
       });
       return NextResponse.json({ executions });
@@ -191,6 +196,16 @@ export async function POST(request: NextRequest) {
     }
 
     assertFormPermission(user.permissions, user.isDefaultAdmin, template.form_project_id, "operate");
+    const unitAccess = getUserFormUnitAccess(
+      user.userDoc as unknown as Record<string, unknown>,
+      user.isDefaultAdmin
+    );
+    if (!unitAccess.allUnits && !unitAccess.unitIds.includes(body.unit_id)) {
+      return NextResponse.json(
+        { error: "A unidade selecionada está fora do seu escopo de acesso." },
+        { status: 403 }
+      );
+    }
 
     const now = new Date();
     const ref = checklistDbAdmin.collection("form_executions").doc();

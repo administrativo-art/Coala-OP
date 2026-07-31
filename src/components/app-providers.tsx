@@ -37,6 +37,7 @@ import { SalesReportProvider } from '@/components/sales-report-provider';
 import { DPProvider } from '@/components/dp-provider';
 import { AssetsProvider } from '@/components/assets-provider';
 import { Toaster } from "@/components/ui/toaster";
+import { ProfileComplianceGate } from "@/components/profile-compliance-gate";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -72,6 +73,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <ProfilesProvider>
         <AuthProvider>
+          <ProfileComplianceGate>
             <KiosksProvider>
               <LocationsProvider>
                 <CompanySettingsProvider>
@@ -137,6 +139,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                 </CompanySettingsProvider>
               </LocationsProvider>
             </KiosksProvider>
+          </ProfileComplianceGate>
         </AuthProvider>
       </ProfilesProvider>
       <Toaster />

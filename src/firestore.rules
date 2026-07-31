@@ -101,7 +101,14 @@ service cloud.firestore {
       allow update: if isAuth() && (
         isAdmin() ||
         getPerms().settings.manageUsers == true ||
-        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['profileId']))
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'profileId',
+          'assignedKioskIds',
+          'unitIds',
+          'responsibleUnitIds',
+          'unitAccessScope',
+          'unitAccessUnitIds'
+        ]))
       ) && request.resource.data.username is string
         && request.resource.data.username.size() >= 3;
       allow delete: if isAuth() && (isAdmin() || getPerms().settings.manageUsers == true);

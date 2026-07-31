@@ -18,7 +18,8 @@ import type {
   TaskCompletionResult,
   TaskLifecycleState,
 } from "@/features/forms/analytics/task-model";
-import { canViewTask } from "@/features/tasks/lib/server-access";
+import { canActOnTask, canViewTask } from "@/features/tasks/lib/server-access";
+import { canAccessUnit } from "@/lib/unit-access";
 import {
   type LegacyTaskOriginType,
   type Task,
@@ -1049,6 +1050,22 @@ export async function updateTaskDocument(params: {
 
   const data = snap.data() as FirestoreRecord;
   assertTaskWorkspace(data, params.context);
+  const currentTask = adaptTaskDoc(params.taskId, data);
+  if (!canViewTask(params.context, { ...data, ...currentTask })) {
+    const error = new Error("Tarefa fora do seu escopo de acesso.");
+    (error as Error & { code?: number }).code = 403;
+    throw error;
+  }
+  if (
+    typeof params.updates.unitId === "string" &&
+    !canAccessUnit(params.context.userDoc, params.updates.unitId, {
+      isDefaultAdmin: params.context.isDefaultAdmin,
+    })
+  ) {
+    const error = new Error("A unidade da tarefa está fora do seu escopo de acesso.");
+    (error as Error & { code?: number }).code = 403;
+    throw error;
+  }
   const origin = normalizeOrigin(data.origin);
   if (
     params.updates.status &&
@@ -1249,6 +1266,11 @@ export async function updateTaskStatus(params: {
   }
 
   const currentTask = adaptTaskDoc(params.taskId, data);
+  if (!canActOnTask(params.context, { ...data, ...currentTask })) {
+    const error = new Error("Sem permissão para atuar nesta tarefa ou unidade.");
+    (error as Error & { code?: number }).code = 403;
+    throw error;
+  }
   const projectId =
     typeof data.project_id === "string"
       ? data.project_id
@@ -1339,6 +1361,13 @@ export async function deleteTaskDocument(params: {
     (error as Error & { code?: number }).code = 404;
     throw error;
   }
-  assertTaskWorkspace((snap.data() ?? {}) as FirestoreRecord, params.context);
+  const data = (snap.data() ?? {}) as FirestoreRecord;
+  assertTaskWorkspace(data, params.context);
+  const currentTask = adaptTaskDoc(params.taskId, data);
+  if (!canViewTask(params.context, { ...data, ...currentTask })) {
+    const error = new Error("Tarefa fora do seu escopo de acesso.");
+    (error as Error & { code?: number }).code = 403;
+    throw error;
+  }
   await ref.delete();
 }

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncRepositionTaskSafely } from "@/features/reposition/lib/task-sync";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
+import { canAccessAnyUnit, canAccessUnit } from "@/lib/unit-access";
 import { type RepositionActivity } from "@/types";
 
 export const runtime = "nodejs";
@@ -24,12 +25,21 @@ function canReceiveActivity(
   context: Awaited<ReturnType<typeof requireUser>>,
   activity: RepositionActivity
 ) {
-  if (canManage(context)) return true;
   if (!context.permissions?.reposition?.receive) return false;
+  return canAccessUnit(context.userDoc, activity.kioskDestinationId, {
+    isDefaultAdmin: context.isDefaultAdmin,
+  });
+}
 
-  const assignedKioskIds = context.userDoc.assignedKioskIds ?? [];
-  const unitIds = context.userDoc.unitIds ?? [];
-  return assignedKioskIds.includes(activity.kioskDestinationId) || unitIds.includes(activity.kioskDestinationId);
+function canAccessActivity(
+  context: Awaited<ReturnType<typeof requireUser>>,
+  activity: Pick<RepositionActivity, "kioskOriginId" | "kioskDestinationId">
+) {
+  return canAccessAnyUnit(
+    context.userDoc,
+    [activity.kioskOriginId, activity.kioskDestinationId],
+    { isDefaultAdmin: context.isDefaultAdmin }
+  );
 }
 
 function isReceiptUpdate(body: Partial<RepositionActivity>) {
@@ -101,6 +111,13 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
       ...(snap.data() as Omit<RepositionActivity, "id">),
     } as RepositionActivity;
 
+    if (!canAccessActivity(context, currentActivity)) {
+      return NextResponse.json(
+        { error: "Reposição fora do seu escopo de unidades." },
+        { status: 403 }
+      );
+    }
+
     const hasManagePermission = canManage(context);
     const isAllowed =
       hasManagePermission ||
@@ -121,6 +138,19 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
           receiptNotes: body.receiptNotes,
           receiptSignature: body.receiptSignature,
         };
+
+    const nextOriginId = allowedBody.kioskOriginId ?? currentActivity.kioskOriginId;
+    const nextDestinationId = allowedBody.kioskDestinationId ?? currentActivity.kioskDestinationId;
+    if (
+      hasManagePermission &&
+      (!canAccessUnit(context.userDoc, nextOriginId, { isDefaultAdmin: context.isDefaultAdmin }) ||
+        !canAccessUnit(context.userDoc, nextDestinationId, { isDefaultAdmin: context.isDefaultAdmin }))
+    ) {
+      return NextResponse.json(
+        { error: "A origem e o destino precisam estar dentro do seu escopo de unidades." },
+        { status: 403 }
+      );
+    }
 
     const updateData = cleanUndefined({
       ...allowedBody,
@@ -186,6 +216,12 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
       id: snap.id,
       ...(snap.data() as Omit<RepositionActivity, "id">),
     };
+    if (!canAccessActivity(context, current)) {
+      return NextResponse.json(
+        { error: "Reposição fora do seu escopo de unidades." },
+        { status: 403 }
+      );
+    }
     if (current.status === "Concluído" || current.status === "Cancelada") {
       return NextResponse.json({ activity: current });
     }

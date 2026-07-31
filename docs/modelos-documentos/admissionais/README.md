@@ -13,7 +13,7 @@ preparadas por scripts determinísticos e validadas por renderização.
 - Consentimento de imagem e voz: **solicitação independente**
 - Vale-transporte: **dois modelos alternativos e versionados**
 - Estado técnico: **implementado**
-- Estado de publicação: **bloqueado por revisão jurídica e homologação do RH**
+- Estado de publicação: **bloqueado até a homologação do RH**
 
 Os modelos continuam com estado `draft` no catálogo do sistema. Essa trava é
 intencional: impede o uso oficial antes da aprovação do conteúdo e da assinatura
@@ -23,7 +23,7 @@ intencional: impede o uso oficial antes da aprovação do conteúdo e da assinat
 
 | Ordem | Arquivo v2 | SHA-256 | Assinatura |
 |---:|---|---|---|
-| 1 | `01-contrato-experiencia-v2.docx` | `6cddfc54a23a17964493f94c71f8af52b89d17ef953db9b7acdb5c836fbff53d` | Pacote |
+| 1 | `01-contrato-experiencia-v2.docx` | `0b0ce20b71e53ad9fd5576a52bcbfb57dfdfc6f678f82a9cb8cc7f646437da52` | Pacote |
 | 2 | `02-banco-horas-v2.docx` | `cff1a19adbca0847db5337182e503340edeb590b8786a238c6249be957fe0b32` | Pacote |
 | 3 | `03-termo-lgpd-v2.docx` | `70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265` | Pacote |
 | 4 | `04-imagem-voz-v2.docx` | `a3d20c516afa510c6aa9d58ae359827490b76289643f7508932fce61d8c42381` | Independente |
@@ -31,8 +31,11 @@ intencional: impede o uso oficial antes da aprovação do conteúdo e da assinat
 | 6A | `06-vale-transporte-solicitacao-v2.docx` | `cd643a4caf7c088e98af1dc6908cac7d2005163a795f323df1fcd8450fca53bb` | Pacote |
 | 6B | `06-vale-transporte-renuncia-v2.docx` | `3ea7e9e3ddbfa2a4ffefe780efbd03677984131e4fdf3ca8437aa81fc3a1a6de` | Pacote |
 | 7 | `07-confidencialidade-v2.docx` | `56306e646b241ab3b0bb93c804dc3cf549a833efb583bf990c9a18c8ba275f80` | Pacote |
-| 8 | `08-ponto-eletronico-v2.docx` | `eba3f36cf5ca9c5effb72c36cfc05f3487b192f5ff9206c0bc604f66235e3f5a` | Pacote |
-| 9 | `09-termo-encerramento-v2.docx` | `1b4a98f7a9fba99d61ab07ffde24584b52516fb53bd0379d101216923d05b030` | Alvo final |
+| 8 | `09-termo-encerramento-v2.docx` | `1b4a98f7a9fba99d61ab07ffde24584b52516fb53bd0379d101216923d05b030` | Alvo final |
+
+O antigo `08-ponto-eletronico-v2.docx` foi retirado do kit operacional em
+30/07/2026. O arquivo permanece somente como registro histórico e não é
+oferecido para geração nem incorporado ao pacote admissional.
 
 O termo de encerramento recebe a lista real dos componentes e suas páginas. A
 modalidade de vale-transporte é escolhida a partir da decisão vigente; quando a
@@ -86,6 +89,16 @@ O primeiro dia de trabalho conta como dia 1. As datas finais são calculadas pel
 sistema e impressas por extenso. A regra possui testes para virada de mês, ano e
 ano bissexto.
 
+O contrato usa CPF e endereço na qualificação, sem PIS/NIT. O salário possui uma
+única origem (`integration.monthly_salary`) e o formatador gera, no mesmo campo,
+o valor numérico e por extenso. Escala, CBO, horário e local de trabalho vêm dos
+cadastros de cargo e lotação; os dados da convenção coletiva vêm da CCT vigente
+da unidade. Ausências nessas fontes bloqueiam o documento antes da geração.
+
+ASO, entrega de EPI e treinamentos permanecem como evidências operacionais
+separadas. O contrato registra as obrigações gerais de saúde e segurança sem
+declarar como recebido algo que dependa desses comprovantes.
+
 ## Integridade das fontes
 
 As versões `v1` são a fonte histórica imutável. As versões `v2` são reproduzíveis
@@ -106,8 +119,8 @@ determinística, com hash da fonte e contagem exata de ocorrências.
 
 Antes de trocar os modelos para `published`:
 
-1. concluir a revisão jurídica dos textos, do consentimento separado, das duas
-   modalidades de vale-transporte e da assinatura única;
+1. homologar com o RH os textos, o consentimento separado, as duas modalidades
+   de vale-transporte e a assinatura única;
 2. homologar visualmente Carlito como substituta métrica de Calibri;
 3. implantar o Gotenberg reprodutível e executar o canário remoto dos modelos;
 4. validar as duas bandas inferiores reservadas para marca e rastreabilidade;

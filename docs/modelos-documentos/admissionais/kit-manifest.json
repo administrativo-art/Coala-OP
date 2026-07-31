@@ -74,16 +74,8 @@
       "signatureScope": "bundle"
     },
     {
-      "id": "electronic_time_tracking_awareness",
-      "order": 8,
-      "name": "Termo de Ciência - Registro Eletrônico de Ponto",
-      "file": "08-ponto-eletronico-v2.docx",
-      "selectableByHr": true,
-      "signatureScope": "bundle"
-    },
-    {
       "id": "admission_bundle_closing_term",
-      "order": 9,
+      "order": 8,
       "name": "Termo de Encerramento, Ciência e Assinatura",
       "file": "09-termo-encerramento-v2.docx",
       "selectableByHr": false,

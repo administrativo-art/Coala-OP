@@ -174,9 +174,9 @@ npm run build
 npm run validate:documents
 ```
 
-Validação local de 28/07/2026: 11/11 modelos convertidos, todos em A4, todas as
-fontes incorporadas e todos dentro da área segura. O fallback do LibreOffice usa
-perfil isolado por conversão para não compartilhar locks nem estado de falha.
+Validação de 30/07/2026: a conversão é feita exclusivamente pelo Gotenberg
+remoto. A aplicação não chama o LibreOffice instalado no computador do usuário;
+indisponibilidade do conversor apenas degrada a prévia para DOCX.
 
 Depois da implantação do Gotenberg:
 

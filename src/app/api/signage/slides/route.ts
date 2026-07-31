@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
     const slides = snapshot.docs
       .map(doc => normalizeSlide(doc.id, doc.data()))
-      .filter(slide => access.isAdmin || slide.kioskIds.some(kioskId => access.allowedKioskIds.includes(kioskId)));
+      .filter(slide => access.allUnits || slide.kioskIds.some(kioskId => access.allowedKioskIds.includes(kioskId)));
 
     return NextResponse.json({ slides });
   } catch (error) {
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       isActive: normalizedPayload.isActive === true,
     });
 
-    const kioskIds = sanitizeKioskIds(parsed.kioskIds, access.allowedKioskIds, access.isAdmin);
+    const kioskIds = sanitizeKioskIds(parsed.kioskIds, access.allowedKioskIds, access.allUnits);
     if (!kioskIds.length) {
       return NextResponse.json({ error: 'Selecione ao menos um quiosque permitido.' }, { status: 400 });
     }

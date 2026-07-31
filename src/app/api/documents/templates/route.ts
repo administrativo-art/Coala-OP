@@ -29,7 +29,12 @@ export async function GET(request: NextRequest) {
     const snap = await dbAdmin.collection(COLLECTION).get();
     const storedTemplates = snap.docs
       .filter((doc) => !doc.get("deletedAt"))
-      .map((doc): Record<string, unknown> & { id: string } => ({ id: doc.id, ...serializedObject(doc.data()) }));
+      .map((doc): Record<string, unknown> & { id: string } => ({
+        id: doc.id,
+        ...serializedObject(doc.data()),
+        previewUrl: `/api/documents/templates/${doc.id}/preview`,
+        downloadUrl: `/api/documents/templates/${doc.id}/source`,
+      }));
     const systemTemplates = await effectiveSystemDocumentTemplates(SYSTEM_DOCUMENT_TEMPLATES);
     const templates = [...systemTemplates, ...storedTemplates]
       .sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")));
@@ -52,6 +57,7 @@ export async function POST(request: NextRequest) {
       name,
       category,
       status: "draft",
+      preparationStatus: "ai_mapping",
       version: 1,
       content: null,
       variables: [],

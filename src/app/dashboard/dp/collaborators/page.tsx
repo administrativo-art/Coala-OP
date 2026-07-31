@@ -31,6 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { UserManagement } from '@/components/user-management';
 import { formatPersonName } from '@/lib/person-name';
+import { canAccessUserByUnit, filterUnitsByAccess } from '@/lib/unit-access';
 
 const COLLABORATOR_GRID = 'minmax(220px,2fr) 1.3fr 1fr 1fr 110px 110px 90px';
 
@@ -211,7 +212,7 @@ function CollaboratorCard({
 }
 
 export default function DPCollaboratorsPage() {
-  const { permissions, activeUsers, terminatedUsers, user: currentUser } = useAuth();
+  const { permissions, activeUsers, terminatedUsers, user: currentUser, isDefaultAdmin } = useAuth();
   const { shiftDefinitions, shiftDefsLoading, units } = useDPBootstrap();
   const router = useRouter();
   const ownProfileOnly = permissions.dp?.collaborators?.ownProfileOnly === true;
@@ -223,7 +224,16 @@ export default function DPCollaboratorsPage() {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('cards');
   const [newUserOpen, setNewUserOpen] = useState(false);
 
-  const allUsers = useMemo(() => [...activeUsers, ...terminatedUsers], [activeUsers, terminatedUsers]);
+  const allUsers = useMemo(() => {
+    if (!currentUser) return [];
+    return [...activeUsers, ...terminatedUsers].filter((candidate) =>
+      candidate.id === currentUser.id || canAccessUserByUnit(currentUser, candidate, { isDefaultAdmin })
+    );
+  }, [activeUsers, currentUser, isDefaultAdmin, terminatedUsers]);
+  const visibleActiveCount = useMemo(
+    () => allUsers.filter((candidate) => candidate.isActive !== false).length,
+    [allUsers],
+  );
 
   const roleOptions = useMemo(() => {
     return Array.from(new Set(allUsers.map((user) => user.jobRoleName).filter(Boolean) as string[]))
@@ -231,7 +241,12 @@ export default function DPCollaboratorsPage() {
   }, [allUsers]);
 
   const unitNameById = useMemo(() => new Map(units.map((unit) => [unit.id, unit.name])), [units]);
-  const activeUnits = useMemo(() => activeOperationalUnits(units), [units]);
+  const activeUnits = useMemo(
+    () => currentUser
+      ? filterUnitsByAccess(activeOperationalUnits(units), currentUser, { isDefaultAdmin })
+      : [],
+    [currentUser, isDefaultAdmin, units],
+  );
   const shiftNameById = useMemo(() => new Map(shiftDefinitions.map((shift) => [shift.id, shift.name])), [shiftDefinitions]);
 
   const filtered = useMemo(() => {
@@ -248,6 +263,7 @@ export default function DPCollaboratorsPage() {
         user.username,
         user.email,
         user.jobRoleName,
+        user.hrEmployeeId,
         user.registrationIdBizneo,
         user.registrationIdPdv,
       ].filter(Boolean).some((value) => String(value).toLowerCase().includes(q));
@@ -282,7 +298,7 @@ export default function DPCollaboratorsPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <HeaderMetric label="ativos" value={activeUsers.length} tone="active" />
+          <HeaderMetric label="ativos" value={visibleActiveCount} tone="active" />
           {permissions.settings.manageUsers ? (
             <Button
               type="button"

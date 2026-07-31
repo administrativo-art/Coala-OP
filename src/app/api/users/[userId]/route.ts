@@ -5,6 +5,8 @@ import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-d
 import { recordTransportVoucherDecision } from "@/features/hr/lib/transport-voucher-decision.server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
+import { canDelegateUnitAccess } from "@/lib/unit-access";
+import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 
 const MANAGE_USERS_ONLY_FIELDS = new Set([
   "profileId",
@@ -14,6 +16,16 @@ const MANAGE_USERS_ONLY_FIELDS = new Set([
   "terminationCause",
   "terminationNotes",
   "terminationDate",
+  "unitAccessScope",
+  "unitAccessUnitIds",
+]);
+
+const UNIT_ASSIGNMENT_FIELDS = new Set([
+  "unitId",
+  "unitIds",
+  "assignedKioskIds",
+  "unitAccessScope",
+  "unitAccessUnitIds",
 ]);
 
 const DEFAULT_ADMIN_ONLY_FIELDS = new Set([
@@ -27,6 +39,9 @@ const SERVER_ONLY_FIELDS = new Set([
   "passwordChangedAt",
   "createdAt",
   "updatedAt",
+  "hrEmployeeId",
+  "personRecordType",
+  "profileCompliance",
 ]);
 
 const COLLABORATOR_CORE_FIELDS = new Set([
@@ -37,6 +52,8 @@ const COLLABORATOR_CORE_FIELDS = new Set([
   "unitIds",
   "assignedKioskIds",
   "responsibleUnitIds",
+  "unitAccessScope",
+  "unitAccessUnitIds",
   "shiftDefinitionId",
   "operational",
   "operacional",
@@ -116,6 +133,13 @@ export async function PATCH(
     const userRef = dbAdmin.collection("users").doc(userId);
     const existingUserSnap = await userRef.get();
     const existingUser = existingUserSnap.data() ?? {};
+    if (!existingUserSnap.exists) {
+      return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
+    }
+    await assertEmployeeUnitAccess(actor, userId);
+    const unitAssignmentChanged = Object.keys(payload).some((field) =>
+      UNIT_ASSIGNMENT_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
+    );
 
     const restrictedFields = Object.keys(payload).filter((field) =>
       MANAGE_USERS_ONLY_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
@@ -145,6 +169,20 @@ export async function PATCH(
         syncProfile: true,
       });
       Object.assign(payload, collaboratorCore.userPatch);
+    }
+
+    if (
+      unitAssignmentChanged &&
+      !canDelegateUnitAccess(
+        actor.userDoc,
+        { ...existingUser, ...payload },
+        { isDefaultAdmin: actor.isDefaultAdmin },
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Você não pode atribuir unidades ou um escopo maior que o seu próprio." },
+        { status: 403 },
+      );
     }
 
     if (

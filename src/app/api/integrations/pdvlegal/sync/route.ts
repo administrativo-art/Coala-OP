@@ -3,6 +3,7 @@ import { syncDayAdmin } from '@/lib/integrations/pdv-legal-admin';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { resolvePdvFilialId } from '@/lib/kiosk-identifiers';
 import { requireUser, type ServerUserContext } from '@/lib/auth-server';
+import { filterUnitsByAccess } from '@/lib/unit-access';
 
 /**
  * Endpoint para sincronização AUTÔNOMA do PDV Legal.
@@ -50,12 +51,10 @@ export async function GET(req: NextRequest) {
       return pdvId ? { ...k, pdvFilialId: pdvId } : null;
     }).filter(Boolean) as any[];
 
-    if (userContext && !userContext.isDefaultAdmin) {
-      const allowedKioskIds = new Set([
-        ...(userContext.userDoc.assignedKioskIds ?? []),
-        ...(userContext.userDoc.unitIds ?? []),
-      ]);
-      validKiosks = validKiosks.filter((kiosk) => allowedKioskIds.has(kiosk.id));
+    if (userContext) {
+      validKiosks = filterUnitsByAccess(validKiosks, userContext.userDoc, {
+        isDefaultAdmin: userContext.isDefaultAdmin,
+      });
     }
 
     if (kioskId && !validKiosks.some((kiosk) => kiosk.id === kioskId)) {

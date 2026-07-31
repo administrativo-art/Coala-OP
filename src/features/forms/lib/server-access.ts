@@ -2,6 +2,7 @@ import { type PermissionSet } from "@/types";
 import { type FormExecution, type FormProject } from "@/types/forms";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { getFeatureFlags } from "@/lib/feature-flags";
+import { canAccessUnit, resolveUnitAccess } from "@/lib/unit-access";
 
 type ProjectPermissionLevel = "view" | "operate" | "manage";
 export type FormAnalyticsPermission =
@@ -149,23 +150,30 @@ export function assertFormAnalyticsPermission(
   throw new Error("Sem permissão para gerenciar analytics de formulários.");
 }
 
-export function getUserFormUnitIds(userDoc: Record<string, unknown>) {
-  const unitIds = Array.isArray(userDoc.unitIds) ? userDoc.unitIds : [];
-  const assignedKioskIds = Array.isArray(userDoc.assignedKioskIds) ? userDoc.assignedKioskIds : [];
-  return Array.from(
-    new Set(
-      [...unitIds, ...assignedKioskIds]
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-    )
-  );
+export function getUserFormUnitAccess(
+  userDoc: Record<string, unknown>,
+  isDefaultAdmin = false
+) {
+  return resolveUnitAccess(userDoc, { isDefaultAdmin });
+}
+
+export function getUserFormUnitIds(
+  userDoc: Record<string, unknown>,
+  isDefaultAdmin = false
+) {
+  return getUserFormUnitAccess(userDoc, isDefaultAdmin).unitIds;
 }
 
 export function isExecutionAvailableToUserUnit(params: {
   execution: Pick<FormExecution, "assigned_user_id" | "unit_id" | "collaborator_user_ids">;
   userId: string;
   userDoc: Record<string, unknown>;
+  isDefaultAdmin?: boolean;
 }) {
+  if (!canAccessUnit(params.userDoc, params.execution.unit_id, {
+    isDefaultAdmin: params.isDefaultAdmin,
+  })) return false;
+
   if (params.execution.assigned_user_id === params.userId) return true;
   if (params.execution.collaborator_user_ids?.includes(params.userId)) return true;
 
@@ -175,7 +183,7 @@ export function isExecutionAvailableToUserUnit(params: {
     params.execution.assigned_user_id === "unit_pool";
   if (!isUnitPool) return false;
 
-  return getUserFormUnitIds(params.userDoc).includes(params.execution.unit_id);
+  return true;
 }
 
 export function assertFormExecutionAccess(params: {
@@ -191,6 +199,12 @@ export function assertFormExecutionAccess(params: {
     throw new Error("Execução não encontrada neste workspace.");
   }
 
+  if (!canAccessUnit(params.userDoc, params.execution.unit_id, {
+    isDefaultAdmin: params.isDefaultAdmin,
+  })) {
+    throw new Error("Execução fora do seu escopo de unidades.");
+  }
+
   if (params.isDefaultAdmin) return;
 
   if (
@@ -199,6 +213,7 @@ export function assertFormExecutionAccess(params: {
       execution: params.execution,
       userId: params.userId,
       userDoc: params.userDoc,
+      isDefaultAdmin: params.isDefaultAdmin,
     })
   ) {
     return;

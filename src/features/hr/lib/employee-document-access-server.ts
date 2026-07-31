@@ -1,5 +1,8 @@
 import type { HrAccess } from "@/features/hr/lib/server-access";
+import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { canAccessUserByUnit } from "@/lib/unit-access";
+import { isOwnHrEmployeeId } from "@/lib/hr/person-link";
 import {
   normalizeDocumentVisibilityConfig,
   subjectFromPermissions,
@@ -27,6 +30,59 @@ export type EmployeeDocumentAccessSettings = {
   roleIds: string[];
   functionIds: string[];
 };
+
+type UnitScopedAccess = Pick<HrAccess, "decoded" | "isDefaultAdmin" | "userDoc">;
+
+export async function assertEmployeeUnitAccess(access: UnitScopedAccess, employeeId: string) {
+  const normalizedEmployeeId = employeeId.trim();
+  if (!normalizedEmployeeId) throw new Error("Colaborador não informado.");
+  if (
+    normalizedEmployeeId === access.decoded.uid ||
+    isOwnHrEmployeeId(access.userDoc, normalizedEmployeeId)
+  ) return;
+
+  let employeeSnap = await dbAdmin.collection("users").doc(normalizedEmployeeId).get();
+  if (!employeeSnap.exists) {
+    const byHrEmployee = await dbAdmin.collection("users")
+      .where("hrEmployeeId", "==", normalizedEmployeeId)
+      .limit(2)
+      .get();
+    if (byHrEmployee.size > 1) throw new Error("Vínculo pessoal ambíguo.");
+    if (!byHrEmployee.empty) employeeSnap = byHrEmployee.docs[0];
+  }
+  if (!employeeSnap.exists) {
+    const byBizneo = await dbAdmin.collection("users")
+      .where("registrationIdBizneo", "==", normalizedEmployeeId)
+      .limit(2)
+      .get();
+    if (byBizneo.size > 1) throw new Error("Vínculo pessoal ambíguo.");
+    if (!byBizneo.empty) employeeSnap = byBizneo.docs[0];
+  }
+  if (!employeeSnap.exists) throw new Error("Colaborador não encontrado.");
+
+  if (!canAccessUserByUnit(
+    access.userDoc,
+    employeeSnap.data() ?? {},
+    { isDefaultAdmin: access.isDefaultAdmin },
+  )) {
+    throw new Error("Você não possui acesso à unidade deste colaborador.");
+  }
+}
+
+export async function loadVisibleEmployeeIds(access: HrAccess) {
+  const directorySnap = await dbAdmin.collection("users").get();
+  return new Set(directorySnap.docs
+    .filter((employeeSnap) =>
+      employeeSnap.id === access.userDoc.id ||
+      employeeSnap.id === access.decoded.uid ||
+      canAccessUserByUnit(
+        access.userDoc,
+        employeeSnap.data() ?? {},
+        { isDefaultAdmin: access.isDefaultAdmin },
+      )
+    )
+    .map((employeeSnap) => employeeSnap.id));
+}
 
 export async function loadEmployeeDocumentAccessSettings(access: HrAccess): Promise<EmployeeDocumentAccessSettings> {
   const [fieldMapSnap, cacheSnap] = await Promise.all([

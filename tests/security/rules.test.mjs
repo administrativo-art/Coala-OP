@@ -116,6 +116,18 @@ function profile(overrides = {}) {
   };
 }
 
+function compliantUser(profileId) {
+  return {
+    profileId,
+    profileCompliance: {
+      status: "complete",
+      policyVersion: 1,
+      lastConfirmedAt: new Date(),
+      nextReviewAt: new Date("2099-01-01T03:00:00.000Z"),
+    },
+  };
+}
+
 test("Firestore principal bloqueia escalação e preserva operações autorizadas", async () => {
   const env = await initializeTestEnvironment({
     projectId: "demo-security-main",
@@ -141,11 +153,20 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
         setDoc(doc(db, "profiles/asset-viewer"), profile({
           assets: { view: true, viewHistory: true },
         })),
-        setDoc(doc(db, "users/basic-user"), { profileId: "basic" }),
-        setDoc(doc(db, "users/profile-manager"), { profileId: "profile-manager" }),
-        setDoc(doc(db, "users/stock-operator"), { profileId: "stock-operator" }),
-        setDoc(doc(db, "users/asset-viewer"), { profileId: "asset-viewer" }),
-        setDoc(doc(db, "users/other-user"), { profileId: "basic" }),
+        setDoc(doc(db, "users/basic-user"), compliantUser("basic")),
+        setDoc(doc(db, "users/profile-manager"), compliantUser("profile-manager")),
+        setDoc(doc(db, "users/stock-operator"), compliantUser("stock-operator")),
+        setDoc(doc(db, "users/asset-viewer"), compliantUser("asset-viewer")),
+        setDoc(doc(db, "users/other-user"), compliantUser("basic")),
+        setDoc(doc(db, "users/admin-user"), compliantUser("basic")),
+        setDoc(doc(db, "users/pending-user"), {
+          profileId: "stock-operator",
+          profileCompliance: {
+            status: "pending",
+            policyVersion: 1,
+            nextReviewAt: new Date("2099-01-01T03:00:00.000Z"),
+          },
+        }),
         setDoc(doc(db, "assets/asset-1"), { name: "Notebook" }),
         setDoc(doc(db, "lots/lot-1"), {
           kioskId: "kiosk-1",
@@ -172,9 +193,13 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
     const manager = env.authenticatedContext("profile-manager");
     const stockOperator = env.authenticatedContext("stock-operator");
     const assetViewer = env.authenticatedContext("asset-viewer");
+    const pending = env.authenticatedContext("pending-user");
     const admin = env.authenticatedContext("admin-user", { isDefaultAdmin: true });
 
     await assertFails(getDoc(doc(basic.firestore(), "users/other-user")));
+    await assertSucceeds(getDoc(doc(pending.firestore(), "users/pending-user")));
+    await assertSucceeds(getDoc(doc(pending.firestore(), "profiles/stock-operator")));
+    await assertFails(getDoc(doc(pending.firestore(), "lots/lot-1")));
     await assertFails(setDoc(doc(basic.firestore(), "users/basic-user"), { profileId: "profile-manager" }, { merge: true }));
     await assertSucceeds(getDoc(doc(stockOperator.firestore(), "lots/lot-1")));
     await assertFails(updateDoc(doc(stockOperator.firestore(), "lots/uniform-lot"), {
@@ -397,6 +422,17 @@ test("RH isola unidades, auditoria e recrutamento direto", async () => {
           rh_role: "manager",
           unit_id: "unit-a",
           bizneo_employee_id: "employee-a",
+          profile_compliance_status: "complete",
+          profile_compliance_policy_version: 1,
+          profile_compliance_next_review_at: new Date("2099-01-01T00:00:00.000Z"),
+        }),
+        setDoc(doc(db, "rh_access_cache/pending-manager"), {
+          rh_role: "manager",
+          unit_id: "unit-a",
+          bizneo_employee_id: "employee-a",
+          profile_compliance_status: "pending",
+          profile_compliance_policy_version: 1,
+          profile_compliance_next_review_at: new Date("2099-01-01T00:00:00.000Z"),
         }),
         setDoc(doc(db, "employees/employee-a"), { unit_id: "unit-a" }),
         setDoc(doc(db, "employees/employee-b"), { unit_id: "unit-b" }),
@@ -408,11 +444,14 @@ test("RH isola unidades, auditoria e recrutamento direto", async () => {
     });
 
     const manager = env.authenticatedContext("manager");
+    const pendingManager = env.authenticatedContext("pending-manager");
     const anonymous = env.unauthenticatedContext();
     await assertSucceeds(getDoc(doc(manager.firestore(), "employees/employee-a")));
     await assertFails(getDoc(doc(manager.firestore(), "employees/employee-b")));
     await assertSucceeds(getDoc(doc(manager.firestore(), "audit_log/a")));
     await assertFails(getDoc(doc(manager.firestore(), "audit_log/b")));
+    await assertFails(getDoc(doc(pendingManager.firestore(), "employees/employee-a")));
+    await assertFails(getDoc(doc(pendingManager.firestore(), "audit_log/a")));
     await assertFails(getDoc(doc(manager.firestore(), "candidates/candidate-1")));
     await assertFails(getDoc(doc(anonymous.firestore(), "jobOpenings/paused")));
   } finally {

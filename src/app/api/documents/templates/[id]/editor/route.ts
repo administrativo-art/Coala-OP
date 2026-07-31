@@ -3,16 +3,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
-import { extractDocxVariables, generateDocx, replaceDocxTextWithVariable } from "@/features/hr/documents/docx-generator";
+import { extractDocxVariables, generateDocx, replaceDocxText, replaceDocxTextWithVariable } from "@/features/hr/documents/docx-generator";
 import { validateDocxForLetterhead } from "@/features/hr/documents/docx-template-validation";
 import { normalizeFieldMapping, pendingPlaceholders } from "@/features/hr/documents/field-mapping";
+import { buildDocumentTemplateDemoData } from "@/features/hr/documents/document-template-demo-data";
 import {
   DOCUMENT_VARIABLE_SCHEMA_VERSION,
-  DOCUMENT_VARIABLES,
   isDocumentVariableKey,
-  type DocumentVariableCatalogEntry,
 } from "@/features/hr/integration/document-variables";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
+import {
+  documentTemplateEditBlockMessage,
+  isDocumentTemplateContentEditable,
+} from "@/features/hr/documents/document-template-governance";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 
@@ -20,65 +23,15 @@ export const runtime = "nodejs";
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 type EditorMapping = { text: string; variableKey: string };
+type EditorTextReplacement = { text: string; replacement: string };
 
 function error(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-function setPath(root: Record<string, unknown>, path: string, value: unknown) {
-  const parts = path.split(".");
-  let cursor = root;
-  parts.forEach((part, index) => {
-    if (index === parts.length - 1) cursor[part] = value;
-    else {
-      const existing = cursor[part];
-      cursor[part] = existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
-      cursor = cursor[part] as Record<string, unknown>;
-    }
-  });
-}
-
-function demoValue(entry: DocumentVariableCatalogEntry) {
-  const exact: Record<string, unknown> = {
-    "employee.name": "Sara Ferreira Coelho",
-    "employee.cpf": "123.456.789-00",
-    "employee.rg": "1234567",
-    "employee.email": "sara.ferreira@exemplo.com",
-    "integration.employer_name": "CT Sorvetes LTDA",
-    "integration.employer_cnpj": "14.276.603/0001-25",
-    "integration.employer_address": "Av. Exemplo, 100 · São Luís/MA · CEP 65000-000",
-    "integration.job_function": "Atendente de balcão",
-    "integration.job_role": "Atendimento",
-    "integration.monthly_salary": "R$ 1.787,30",
-    "integration.expected_admission_date": "25/07/2026",
-    "integration.probation_first_end_date": "08/09/2026",
-    "integration.probation_final_end_date": "23/10/2026",
-    "integration.image_voice_authorized_mark": "X",
-  };
-  if (exact[entry.key] !== undefined) return exact[entry.key];
-  if (entry.format === "date_br") return "25/07/2026";
-  if (entry.format === "currency_br") return "R$ 1.787,30";
-  if (entry.format === "cpf") return "123.456.789-00";
-  if (entry.format === "cnpj") return "14.276.603/0001-25";
-  if (entry.format === "phone_br") return "(98) 98888-7777";
-  if (entry.format === "boolean_br") return "Sim";
-  if (entry.format === "checkbox_mark") return "X";
-  if (entry.format === "number_br") return "1";
-  if (entry.format === "repeatable") return [];
-  return `[Exemplo: ${entry.label}]`;
-}
-
-function demoData(variableKeys: string[]) {
-  const data: Record<string, unknown> = {};
-  variableKeys.forEach((key) => {
-    const entry = DOCUMENT_VARIABLES.find((candidate) => candidate.key === key);
-    if (entry) setPath(data, key, demoValue(entry));
-  });
-  return data;
-}
-
 function parseMappings(value: unknown): EditorMapping[] {
-  if (!Array.isArray(value) || !value.length) throw new Error("Marque ao menos um termo no documento.");
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("As marcações de variáveis são inválidas.");
   if (value.length > 80) throw new Error("Cada edição pode possuir até 80 marcações.");
   const seen = new Set<string>();
   return value.map((item) => {
@@ -95,11 +48,40 @@ function parseMappings(value: unknown): EditorMapping[] {
   }).sort((left, right) => right.text.length - left.text.length);
 }
 
-function applyMappings(source: Buffer, mappings: EditorMapping[]) {
+function parseTextReplacements(value: unknown): EditorTextReplacement[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("As alterações de texto são inválidas.");
+  if (value.length > 80) throw new Error("Cada edição pode possuir até 80 alterações de texto.");
+  const seen = new Set<string>();
+  return value.map((item) => {
+    const record = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+    const text = typeof record.text === "string" ? record.text.trim() : "";
+    const replacement = typeof record.replacement === "string" ? record.replacement.trim() : "";
+    if (!text || text.length > 500 || !replacement || replacement.length > 2_000) {
+      throw new Error("Uma das alterações de texto é inválida.");
+    }
+    if (text.includes("{{") || text.includes("}}") || replacement.includes("{{") || replacement.includes("}}")) {
+      throw new Error("Use a vinculação de variável para trabalhar com placeholders.");
+    }
+    const normalized = text.toLocaleLowerCase("pt-BR");
+    if (seen.has(normalized)) throw new Error(`O trecho “${text}” foi editado mais de uma vez.`);
+    seen.add(normalized);
+    return { text, replacement };
+  }).sort((left, right) => right.text.length - left.text.length);
+}
+
+function applyChanges(source: Buffer, textReplacements: EditorTextReplacement[], mappings: EditorMapping[]) {
   let buffer = source;
   let replacements = 0;
+  textReplacements.forEach((edit) => {
+    const result = replaceDocxText(buffer, edit.text, edit.replacement);
+    if (result.replacements === 0) throw new Error(`O trecho “${edit.text}” não foi encontrado no DOCX.`);
+    buffer = result.buffer;
+    replacements += result.replacements;
+  });
   mappings.forEach((mapping) => {
     const result = replaceDocxTextWithVariable(buffer, mapping.text, mapping.variableKey);
+    if (result.replacements === 0) throw new Error(`O trecho “${mapping.text}” não foi encontrado no DOCX.`);
     buffer = result.buffer;
     replacements += result.replacements;
   });
@@ -110,6 +92,17 @@ async function sourceFor(id: string) {
   const reference = dbAdmin.collection("companyDocumentTemplates").doc(id);
   const document = await reference.get();
   if (!document.exists || document.get("deletedAt")) throw new Error("Modelo não encontrado.");
+  if (!isDocumentTemplateContentEditable({
+    officialCandidate: document.get("officialCandidate") === true,
+    status: document.get("status"),
+    workflowStatus: document.get("workflowStatus"),
+  })) {
+    throw new Error(documentTemplateEditBlockMessage({
+      officialCandidate: document.get("officialCandidate") === true,
+      status: document.get("status"),
+      workflowStatus: document.get("workflowStatus"),
+    }));
+  }
   const storagePath = document.get("storagePath");
   if (typeof storagePath !== "string" || !storagePath) throw new Error("Envie o arquivo DOCX antes de abrir o editor.");
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
@@ -142,11 +135,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const action = body.action === "finalize" ? "finalize" : "test";
     const access = await assertFormalizationAccess(
       request,
-      action === "finalize" ? "templates.publish" : "templates.manage",
+      "templates.manage",
     );
     const mappings = parseMappings(body.mappings);
+    const textReplacements = parseTextReplacements(body.textReplacements);
     const { reference, document, bucket, source } = await sourceFor(id);
-    const marked = applyMappings(source, mappings);
+    if (action === "finalize" && document.get("officialCandidate") !== true) {
+      await assertFormalizationAccess(request, "templates.publish");
+    }
+    const marked = applyChanges(source, textReplacements, mappings);
     const variables = extractDocxVariables(marked.buffer);
     const missingWrittenVariables = mappings
       .map((mapping) => mapping.variableKey)
@@ -156,7 +153,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     if (action === "test") {
-      const preview = generateDocx(marked.buffer, demoData(variables));
+      const preview = generateDocx(marked.buffer, buildDocumentTemplateDemoData({
+        variables,
+        fieldMapping: normalizeFieldMapping(document.get("fieldMapping"), variables),
+      }));
+      await reference.update({
+        preparationStatus: "visual_test",
+        visualTestStartedAt: Timestamp.now(),
+        visualTestStartedBy: access.decoded.uid,
+        visualTestStartedByName: access.actorName,
+      });
       return new NextResponse(new Uint8Array(preview), {
         headers: {
           "Content-Type": DOCX_MIME,
@@ -183,7 +189,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       },
     });
     const update = {
-      status: "draft",
+      status: document.get("officialCandidate") === true ? "draft" : "published",
+      preparationStatus: document.get("officialCandidate") === true
+        ? "ready_for_rh_approval"
+        : "available",
+      ...(document.get("officialCandidate") === true ? {
+        workflowStatus: "technical_validation",
+        workflowNote: null,
+      } : {}),
       version,
       storagePath,
       size: marked.buffer.length,
@@ -194,6 +207,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       unknownVariables: pending,
       letterheadProfileId: templateValidation.profileId,
       templateValidation,
+      fieldPreparationTestedAt: now,
+      fieldPreparationTestedBy: access.decoded.uid,
+      fieldPreparationTestedByName: access.actorName,
+      sourceIntegrity: null,
+      contentUpdatedAt: now,
+      contentUpdatedBy: access.decoded.uid,
+      contentUpdatedByName: access.actorName,
       updatedAt: now,
       updatedBy: access.decoded.uid,
       updatedByName: access.actorName,
@@ -204,6 +224,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       sourceVersion,
       storagePath,
       mappings,
+      textReplacements,
       replacements: marked.replacements,
       createdAt: now,
       createdBy: access.decoded.uid,

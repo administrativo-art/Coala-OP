@@ -11,6 +11,7 @@ import { applyLegacyFormalizationFallbacks } from "@/lib/hr-formalization-permis
 import { dbAdmin } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/verify-auth";
 import { WORKSPACE_ID } from "@/lib/workspace";
+import { requiresProfileCompliance } from "@/features/hr/profile-compliance-access.server";
 
 function mergeRecursive(
   target: Record<string, unknown>,
@@ -103,7 +104,7 @@ export type ServerUserContext = {
 };
 
 export async function requireUser(req: NextRequest): Promise<ServerUserContext> {
-  const decoded = await verifyAuth(req);
+  const decoded = await verifyAuth(req, { enforceProfileCompliance: false });
   if (!decoded.uid) {
     throw new Error("Usuário inválido.");
   }
@@ -114,6 +115,9 @@ export async function requireUser(req: NextRequest): Promise<ServerUserContext> 
   }
 
   const userData = userSnap.data() ?? {};
+  if (requiresProfileCompliance(userData, req)) {
+    throw new Error("Atualização cadastral obrigatória pendente.");
+  }
   const isTokenDefaultAdmin = decoded.isDefaultAdmin === true;
   const profileId =
     typeof userData.profileId === "string" && userData.profileId

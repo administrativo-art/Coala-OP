@@ -2,7 +2,7 @@ import { DEFAULT_COMPLEMENTARY_FIELDS } from "@/features/rh/lib/default-field-ma
 import type { FieldMapEntry, FieldType, FieldVisibility } from "@/types/rh";
 
 export const DOCUMENT_VARIABLE_SCHEMA_VERSION = "coala-documents-v2" as const;
-export const DOCUMENT_VARIABLE_COUNT = 97 as const;
+export const DOCUMENT_VARIABLE_COUNT = 110 as const;
 
 export type DocumentVariableSource =
   | "field_value"
@@ -110,7 +110,6 @@ const EMPLOYEE_FALLBACKS: Record<string, DocumentVariableResolutionStep[]> = {
   ],
   "employee.phone": [{ source: "user_record", path: "phone" }],
   "employee.personal_email": [
-    { source: "employee_record", path: "email" },
     { source: "user_record", path: "email" },
   ],
   "employee.birth_date": [{ source: "user_record", path: "birthDate" }],
@@ -271,6 +270,141 @@ const ONBOARDING_VARIABLES: DocumentVariableCatalogEntry[] = [
     repeatable: null,
     resolution: [{ source: "onboarding", path: "consentimento_imagem_voz.autorizado" }],
   },
+  {
+    key: "integration.job_cbo",
+    placeholder: "{{integration.job_cbo}}",
+    label: "CBO do cargo",
+    section: "Integração - cargo e lotação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.jobCbo" }],
+  },
+  {
+    key: "integration.work_scale",
+    placeholder: "{{integration.work_scale}}",
+    label: "Escala contratual",
+    section: "Integração - cargo e lotação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.workScale" }],
+  },
+  {
+    key: "integration.work_hours",
+    placeholder: "{{integration.work_hours}}",
+    label: "Horário contratual",
+    section: "Integração - cargo e lotação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.workHours" }],
+  },
+  {
+    key: "integration.weekly_hours",
+    placeholder: "{{integration.weekly_hours}}",
+    label: "Jornada semanal em horas",
+    section: "Integração - cargo e lotação",
+    fieldType: "number",
+    format: "number_br",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.weeklyHours" }],
+  },
+  {
+    key: "integration.workplace_address",
+    placeholder: "{{integration.workplace_address}}",
+    label: "Endereço do local de trabalho",
+    section: "Integração - cargo e lotação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.workplaceAddress" }],
+  },
+  {
+    key: "integration.cct_registry",
+    placeholder: "{{integration.cct_registry}}",
+    label: "Número de registro da CCT no MTE",
+    section: "Integração - convenção coletiva",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.cct.registryNumber" }],
+  },
+  {
+    key: "integration.cct_validity",
+    placeholder: "{{integration.cct_validity}}",
+    label: "Vigência da CCT",
+    section: "Integração - convenção coletiva",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.cct.validity" }],
+  },
+  {
+    key: "integration.union_employees",
+    placeholder: "{{integration.union_employees}}",
+    label: "Sindicato profissional da CCT",
+    section: "Integração - convenção coletiva",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.cct.employeeUnion" }],
+  },
+  {
+    key: "integration.union_employers",
+    placeholder: "{{integration.union_employers}}",
+    label: "Sindicato patronal da CCT",
+    section: "Integração - convenção coletiva",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "computed", path: "employment.cct.employerUnion" }],
+  },
 ];
 
 function fieldFormat(key: string, field: FieldMapEntry): DocumentVariableFormat {
@@ -306,7 +440,7 @@ function fieldResolution(key: string): DocumentVariableResolutionStep[] {
 }
 
 function isSensitive(field: FieldMapEntry) {
-  return field.lgpd?.category === "sensitive" || field.visibility === "confidential";
+  return field.lgpd?.category === "sensitive" || field.visibility !== "public";
 }
 
 function buildCatalogEntry(key: string, field: FieldMapEntry): DocumentVariableCatalogEntry {

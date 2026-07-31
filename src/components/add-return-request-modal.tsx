@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { canAccessUnit } from '@/lib/unit-access';
 
 const returnRequestSchema = z.object({
   tipo: z.enum(['devolucao', 'bonificacao'], { required_error: 'Selecione o tipo.' }),
@@ -41,7 +42,7 @@ interface AddReturnRequestModalProps {
 export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestModalProps) {
   const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { addReturnRequest, loading: addingRequest } = useReturnRequests();
-  const { user } = useAuth();
+  const { user, isDefaultAdmin } = useAuth();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   
   const form = useForm<ReturnRequestFormValues>({
@@ -60,9 +61,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
   const availableLots = useMemo(() => {
     if (!selectedInsumoId || lotsLoading || !user) return [];
 
-    const userVisibleLots = user.username === 'master' 
-        ? lots 
-        : lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
+    const userVisibleLots = lots.filter((lot) => canAccessUnit(user, lot.kioskId, { isDefaultAdmin }));
 
     const productLots = userVisibleLots.filter(lot => lot.productId === selectedInsumoId && lot.quantity > 0);
     
@@ -81,7 +80,7 @@ export function AddReturnRequestModal({ open, onOpenChange }: AddReturnRequestMo
     });
 
     return Array.from(uniqueLotsMap.values());
-  }, [selectedInsumoId, lots, user, lotsLoading]);
+  }, [isDefaultAdmin, selectedInsumoId, lots, user, lotsLoading]);
 
   useEffect(() => {
     if(selectedInsumoId) {

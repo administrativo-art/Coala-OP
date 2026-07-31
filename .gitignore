@@ -57,3 +57,9 @@ relatorios/
 
 # Snapshots locais de dados de producao (nao versionar)
 backups/
+
+# Artefatos locais de renderização e conciliação (não versionar)
+/output/inter/
+/output/render/
+/output/rendered/
+/tmp/pdfs/

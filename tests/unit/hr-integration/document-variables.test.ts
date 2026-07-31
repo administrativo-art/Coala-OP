@@ -10,9 +10,9 @@ import {
 } from "../../../src/features/hr/integration/document-variables";
 
 describe("catálogo de variáveis documentais", () => {
-  test("mantém exatamente as 97 variáveis do contrato v2", () => {
+  test("mantém exatamente as 110 variáveis do contrato v2", () => {
     assert.equal(DOCUMENT_VARIABLES.length, DOCUMENT_VARIABLE_COUNT);
-    assert.equal(Object.keys(DOCUMENT_VARIABLE_CATALOG).length, 97);
+    assert.equal(Object.keys(DOCUMENT_VARIABLE_CATALOG).length, 110);
     assert.ok(getDocumentVariable("employee.name"));
     assert.ok(getDocumentVariable("system.documents.email"));
   });
@@ -39,6 +39,7 @@ describe("catálogo de variáveis documentais", () => {
   });
 
   test("mantém resumos sistêmicos com fonte computada operacional", () => {
+    assert.deepEqual(getDocumentVariable("integration.job_cbo")?.resolution, [{ source: "computed", path: "employment.jobCbo" }]);
     assert.deepEqual(getDocumentVariable("system.uniforms.summary")?.resolution, [{ source: "computed", path: "uniforms.summary" }]);
     assert.deepEqual(getDocumentVariable("system.vacations.summary")?.resolution, [{ source: "computed", path: "vacations.summary" }]);
     assert.deepEqual(getDocumentVariable("system.aso.summary")?.resolution, [{ source: "computed", path: "aso.summary" }]);

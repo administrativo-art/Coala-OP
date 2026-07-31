@@ -20,6 +20,11 @@ export const MANUAL_FIELD_FORMATS = [
   "number_br",
   "boolean_br",
   "select",
+  "cbo",
+  "cpf",
+  "cnpj",
+  "cep",
+  "time_br",
 ] as const;
 export type ManualFieldFormat = (typeof MANUAL_FIELD_FORMATS)[number];
 
@@ -31,12 +36,19 @@ export const MANUAL_FIELD_FORMAT_LABELS: Record<ManualFieldFormat, string> = {
   number_br: "Número",
   boolean_br: "Sim/Não",
   select: "Lista de opções",
+  cbo: "CBO",
+  cpf: "CPF",
+  cnpj: "CNPJ",
+  cep: "CEP",
+  time_br: "Horário",
 };
 
 export type SystemFieldBinding = {
   kind: "system";
   key: string;
   formatter?: DocumentOutputFormatter;
+  /** Campos mapeados são obrigatórios por padrão; use false apenas para blocos opcionais. */
+  required?: boolean;
 };
 export type ManualFieldBinding = {
   kind: "manual";
@@ -71,6 +83,7 @@ export function normalizeFieldMapping(input: unknown, variables: string[]): Temp
           kind: "system",
           key: raw.key,
           ...(formatter && formatter !== "source" ? { formatter } : {}),
+          ...(raw.required === false ? { required: false } : {}),
         };
       }
       continue;
@@ -159,6 +172,25 @@ export function formatManualValue(value: unknown, format: ManualFieldFormat): st
       if (value === false || value === "false" || value === "Não" || value === "nao" || value === "não") return "Não";
       return "";
     }
+    case "cbo": {
+      const digits = String(value).replace(/\D/g, "");
+      return digits.length === 6
+        ? `CBO\u00A0${digits.slice(0, 4)}-${digits.slice(4)}`
+        : "";
+    }
+    case "cpf":
+      return formatDocumentVariableValue(value, "cpf");
+    case "cnpj":
+      return formatDocumentVariableValue(value, "cnpj");
+    case "cep": {
+      const digits = String(value).replace(/\D/g, "");
+      return digits.length === 8 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : "";
+    }
+    case "time_br": {
+      const text = String(value).trim();
+      if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(text)) return "";
+      return text;
+    }
     case "multiline":
     case "select":
     case "text":
@@ -183,6 +215,8 @@ export type ApplyFieldMappingResult = {
   data: Record<string, unknown>;
   /** Labels dos campos manuais obrigatórios sem valor. */
   missingManual: string[];
+  /** Placeholders ligados ao sistema que não foram resolvidos. */
+  missingSystem: string[];
 };
 
 /**
@@ -199,17 +233,24 @@ export function applyFieldMapping(params: {
 }): ApplyFieldMappingResult {
   const data = params.data;
   const missingManual: string[] = [];
+  const missingSystem: string[] = [];
   for (const [placeholder, binding] of Object.entries(params.mapping)) {
     if (binding.kind === "system") {
       const sourceValue = binding.formatter
         ? params.rawFlat?.[binding.key] ?? params.flat[binding.key]
         : params.flat[binding.key];
+      const formatted = binding.formatter
+        ? formatDocumentOutput(sourceValue, binding.formatter)
+        : sourceValue ?? "";
+      const empty = formatted === null
+        || formatted === undefined
+        || formatted === ""
+        || (Array.isArray(formatted) && formatted.length === 0);
+      if (binding.required !== false && empty) missingSystem.push(placeholder);
       setPath(
         data,
         placeholder,
-        binding.formatter
-          ? formatDocumentOutput(sourceValue, binding.formatter)
-          : sourceValue ?? "",
+        formatted,
       );
       continue;
     }
@@ -218,5 +259,5 @@ export function applyFieldMapping(params: {
     if (binding.required && !formatted) missingManual.push(binding.label);
     setPath(data, placeholder, formatted);
   }
-  return { data, missingManual };
+  return { data, missingManual, missingSystem };
 }
