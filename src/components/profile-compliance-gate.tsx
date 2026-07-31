@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Check, ChevronLeft, ChevronRight, LogOut, ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -9,6 +9,11 @@ import type {
   ProfileComplianceFormValues,
   ProfileComplianceStatus,
 } from "@/features/hr/profile-compliance";
+import {
+  cepDigits,
+  formatBrazilianCep,
+  lookupProfileAddressByCep,
+} from "@/features/hr/profile-compliance-cep";
 
 type CompliancePayload = {
   status: ProfileComplianceStatus;
@@ -71,6 +76,9 @@ export function ProfileComplianceGate({ children }: { children: React.ReactNode 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cepLookup, setCepLookup] = useState<{ status: "idle" | "loading" | "success" | "error"; message?: string }>({ status: "idle" });
+  const cepRequestRef = useRef(0);
+  const lastCepLookupRef = useRef("");
 
   useEffect(() => {
     if (authLoading || !firebaseUser || !user) {
@@ -106,6 +114,55 @@ export function ProfileComplianceGate({ children }: { children: React.ReactNode 
   const update = <K extends keyof ProfileComplianceFormValues>(key: K, value: ProfileComplianceFormValues[K]) => {
     setValues((current) => ({ ...current, [key]: value }));
   };
+
+  const lookupCep = useCallback(async (zipcode: string) => {
+    const digits = cepDigits(zipcode);
+    if (digits.length !== 8 || lastCepLookupRef.current === digits) return;
+
+    lastCepLookupRef.current = digits;
+    const requestId = ++cepRequestRef.current;
+    setCepLookup({ status: "loading" });
+    try {
+      const address = await lookupProfileAddressByCep(digits);
+      if (requestId !== cepRequestRef.current) return;
+      setValues((current) => {
+        if (cepDigits(current.addressZipcode) !== digits) return current;
+        return {
+          ...current,
+          addressZipcode: address.zipcode,
+          addressStreet: address.street,
+          addressNeighborhood: address.neighborhood,
+          addressCity: address.city,
+          addressState: address.state,
+        };
+      });
+      setCepLookup({ status: "success", message: "Endereço preenchido pelo CEP. Confira e informe o número." });
+    } catch (lookupError) {
+      if (requestId !== cepRequestRef.current) return;
+      setCepLookup({
+        status: "error",
+        message: `${lookupError instanceof Error ? lookupError.message : "Não foi possível consultar o CEP."} Preencha o endereço manualmente.`,
+      });
+    }
+  }, []);
+
+  const updateZipcode = (value: string) => {
+    const formatted = formatBrazilianCep(value);
+    const digits = cepDigits(formatted);
+    if (lastCepLookupRef.current !== digits) {
+      cepRequestRef.current += 1;
+      lastCepLookupRef.current = "";
+      setCepLookup({ status: "idle" });
+    }
+    update("addressZipcode", formatted);
+    if (digits.length === 8) void lookupCep(formatted);
+  };
+
+  useEffect(() => {
+    if (!payload || step !== 1) return;
+    const needsAddress = !values.addressStreet || !values.addressNeighborhood || !values.addressCity || !values.addressState;
+    if (needsAddress && cepDigits(values.addressZipcode).length === 8) void lookupCep(values.addressZipcode);
+  }, [lookupCep, payload, step, values.addressCity, values.addressNeighborhood, values.addressState, values.addressStreet, values.addressZipcode]);
 
   const summary = useMemo(() => [
     ["E-mail de acesso", values.accessEmail],
@@ -191,7 +248,21 @@ export function ProfileComplianceGate({ children }: { children: React.ReactNode 
                   </div> : null}
 
                   {step === 1 ? <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="CEP"><input value={values.addressZipcode} onChange={(event) => update("addressZipcode", event.target.value)} placeholder="00000-000" className={inputClass} /></Field>
+                    <Field label="CEP">
+                      <input
+                        value={values.addressZipcode}
+                        onChange={(event) => updateZipcode(event.target.value)}
+                        onBlur={() => void lookupCep(values.addressZipcode)}
+                        inputMode="numeric"
+                        autoComplete="postal-code"
+                        maxLength={9}
+                        placeholder="00000-000"
+                        className={inputClass}
+                      />
+                      {cepLookup.status === "loading" ? <span className="text-xs font-normal text-slate-500">Buscando endereço…</span> : null}
+                      {cepLookup.status === "success" ? <span className="text-xs font-normal text-emerald-700">{cepLookup.message}</span> : null}
+                      {cepLookup.status === "error" ? <span className="text-xs font-normal text-amber-700">{cepLookup.message}</span> : null}
+                    </Field>
                     <Field label="Logradouro"><input value={values.addressStreet} onChange={(event) => update("addressStreet", event.target.value)} className={inputClass} /></Field>
                     <Field label="Número"><input value={values.addressNumber} disabled={values.addressNoNumber} onChange={(event) => update("addressNumber", event.target.value)} className={inputClass} /><span className="flex items-center gap-2 text-xs font-normal"><input type="checkbox" checked={values.addressNoNumber} onChange={(event) => update("addressNoNumber", event.target.checked)} /> Endereço sem número</span></Field>
                     <Field label="Bairro"><input value={values.addressNeighborhood} onChange={(event) => update("addressNeighborhood", event.target.value)} className={inputClass} /></Field>
