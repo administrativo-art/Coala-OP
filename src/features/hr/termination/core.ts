@@ -60,6 +60,36 @@ const STEP_DEFINITIONS: Array<Pick<TerminationStep, "id" | "label" | "lane" | "o
   { id: "closure", label: "Fechamento do desligamento", lane: "closure", owner: "hr", required: true },
 ];
 
+const EMPLOYEE_RESIGNATION_STEP_DEFINITIONS: Array<Pick<TerminationStep, "id" | "label" | "lane" | "owner" | "required">> = [
+  { id: "request_received", label: "Pedido recebido", lane: "request", owner: "employee", required: true },
+  { id: "letter_review", label: "Conferência da carta", lane: "request", owner: "hr", required: true },
+  { id: "identity_signature", label: "Identidade e formalização", lane: "request", owner: "employee", required: true },
+  { id: "notice_decision", label: "Aviso-prévio e datas", lane: "notice", owner: "hr", required: true },
+  { id: "accountant", label: "Contabilidade", lane: "accountant", owner: "accountant", required: true },
+  { id: "signatures", label: "Assinaturas rescisórias", lane: "documents", owner: "employee", required: true },
+  { id: "termination_payment", label: "Pagamento da rescisão", lane: "payment", owner: "finance", required: true },
+  { id: "employee_delivery", label: "Entrega final ao colaborador", lane: "delivery", owner: "hr", required: true },
+  { id: "access_revocation", label: "Encerramentos internos e acessos", lane: "operational", owner: "hr", required: true },
+  { id: "operational", label: "Encerramentos internos", lane: "operational", owner: "hr", required: true },
+  { id: "closure", label: "Finalização total pelo RH", lane: "closure", owner: "hr", required: true },
+  { id: "uniform_return", label: "Uniformes", lane: "operational", owner: "manager", required: false },
+  { id: "aso", label: "ASO demissional", lane: "aso", owner: "hr", required: false },
+];
+
+const EMPLOYER_DISMISSAL_STEP_DEFINITIONS: Array<Pick<TerminationStep, "id" | "label" | "lane" | "owner" | "required">> = [
+  { id: "request_validation_notice", label: "Definição e comunicação do desligamento", lane: "request", owner: "hr", required: true },
+  { id: "accountant", label: "Contabilidade", lane: "accountant", owner: "accountant", required: true },
+  { id: "document_audit", label: "Revisão dos documentos", lane: "documents", owner: "hr", required: true },
+  { id: "signatures", label: "Assinaturas rescisórias", lane: "documents", owner: "employee", required: true },
+  { id: "termination_payment", label: "Pagamento da rescisão", lane: "payment", owner: "finance", required: true },
+  { id: "employee_delivery", label: "Conclusão com a colaboradora", lane: "delivery", owner: "hr", required: true },
+  { id: "access_revocation", label: "Encerramento dos acessos", lane: "operational", owner: "hr", required: true },
+  { id: "operational", label: "Encerramentos internos", lane: "operational", owner: "hr", required: true },
+  { id: "closure", label: "Finalização total pelo RH", lane: "closure", owner: "hr", required: true },
+  { id: "uniform_return", label: "Uniformes", lane: "operational", owner: "manager", required: false },
+  { id: "aso", label: "ASO demissional", lane: "aso", owner: "hr", required: false },
+];
+
 export function createInitialTerminationSteps(now: string): TerminationStep[] {
   return STEP_DEFINITIONS.map((step) => ({
     ...step,
@@ -68,9 +98,45 @@ export function createInitialTerminationSteps(now: string): TerminationStep[] {
   }));
 }
 
+export function createEmployeeResignationSteps(now: string): TerminationStep[] {
+  return EMPLOYEE_RESIGNATION_STEP_DEFINITIONS.map((step) => ({
+    ...step,
+    status: step.id === "request_received"
+      ? "completed"
+      : ["letter_review", "uniform_return", "aso"].includes(step.id)
+        ? "in_progress"
+        : "pending",
+    ...(step.id === "request_received" ? { startedAt: now, completedAt: now, completedBy: "employee" } : {}),
+    ...(["letter_review", "uniform_return", "aso"].includes(step.id) ? { startedAt: now } : {}),
+    ...(step.id === "uniform_return" ? { note: "Controle paralelo disponível desde o envio da carta." } : {}),
+    ...(step.id === "aso" ? { note: "Controle paralelo disponível desde o envio da carta." } : {}),
+  }));
+}
+
+export function createEmployerDismissalSteps(now: string, contractEndDate: string, paymentDueDate: string): TerminationStep[] {
+  const contractReached = now.slice(0, 10) >= contractEndDate;
+  return EMPLOYER_DISMISSAL_STEP_DEFINITIONS.map((step) => {
+    const parallel = step.id === "uniform_return" || step.id === "aso";
+    const communication = step.id === "request_validation_notice";
+    return {
+      ...step,
+      status: communication ? "waiting_external" : parallel ? "in_progress" : step.id === "accountant" ? "blocked" : step.id === "access_revocation" ? contractReached ? "in_progress" : "blocked" : "pending",
+      ...((communication || parallel || (step.id === "access_revocation" && contractReached)) ? { startedAt: now } : {}),
+      ...(["accountant", "document_audit", "signatures", "termination_payment", "aso"].includes(step.id) ? { dueAt: paymentDueDate } : {}),
+      ...(step.id === "uniform_return" ? { dueAt: contractEndDate, note: "Controle paralelo disponível desde a confirmação da comunicação presencial." } : {}),
+      ...(step.id === "aso" ? { note: "Controle paralelo disponível desde a confirmação da comunicação presencial." } : {}),
+      ...(communication ? { note: "Comunicação presencial registrada. Aguardando assinatura do comunicado oficial." } : {}),
+      ...(step.id === "accountant" ? { blockedReason: "Aguardando assinatura do comunicado ou formalização da recusa." } : {}),
+      ...(step.id === "access_revocation" ? { dueAt: contractEndDate, blockedReason: contractReached ? null : `Aguardando o término do contrato em ${contractEndDate}.` } : {}),
+    } as TerminationStep;
+  });
+}
+
 function unifyRequestValidationNotice(
-  process: Pick<CltTerminationProcess, "steps" | "notice" | "createdAt">,
+  process: Pick<CltTerminationProcess, "steps" | "notice" | "createdAt" | "dismissalCommunication">,
 ) {
+  if (process.steps.some((step) => step.id === "request_received")) return process.steps;
+  if (process.dismissalCommunication) return process.steps;
   const legacyIds = new Set<TerminationStepId>([
     "employee_request",
     "identity_signature",
@@ -139,9 +205,9 @@ export function calculateTerminationHealth(
 }
 
 export function summarizeTermination(steps: TerminationStep[]) {
-  const active = steps.filter((step) => ["in_progress", "waiting_external", "blocked"].includes(step.status));
+  const active = steps.filter((step) => step.required && ["in_progress", "waiting_external", "blocked"].includes(step.status));
   if (active.length) return active.slice(0, 3).map((step) => step.label).join(" · ");
-  return steps.find((step) => step.status === "pending")?.label ?? "Aguardando fechamento";
+  return steps.find((step) => step.required && step.status === "pending")?.label ?? "Aguardando fechamento";
 }
 
 export function applyAccountantReadiness<T extends CltTerminationProcess>(process: T, now = new Date().toISOString()): T {
@@ -149,13 +215,22 @@ export function applyAccountantReadiness<T extends CltTerminationProcess>(proces
   if (!accountantStep || ["completed", "waived", "cancelled", "waiting_external"].includes(accountantStep.status)) return process;
 
   const noticeReady = Boolean(process.notice);
+  const employeeResignation = process.processType === "clt_employee_resignation";
+  const guidedEmployerDismissal = process.processType === "clt_hr_termination"
+    && process.terminationReason === "Dispensa sem justa causa"
+    && Boolean(process.dismissalCommunication);
+  const dismissalCommunicationFormalized = ["signed", "refusal_formalized"].includes(
+    process.dismissalCommunication?.officialNoticeStatus ?? "",
+  );
   const asoReady = process.steps.some((step) => step.id === "aso" && step.status === "completed")
     || ["approved", "completed"].includes(String(process.asoWorkflow?.status ?? ""));
-  const ready = noticeReady && asoReady;
+  const ready = noticeReady && (employeeResignation || (guidedEmployerDismissal && dismissalCommunicationFormalized) || (!guidedEmployerDismissal && asoReady));
   const progressedAccountant = ["sent", "documents_received", "correction_requested", "approved"].includes(process.accountant?.status ?? "");
   if (progressedAccountant) return process;
 
-  const blockedReason = !noticeReady && !asoReady
+  const blockedReason = guidedEmployerDismissal && !dismissalCommunicationFormalized
+    ? "Aguardando assinatura do comunicado ou formalização da recusa."
+    : !noticeReady && !asoReady && !employeeResignation
     ? "Aguardando definição do aviso-prévio e conclusão do ASO."
     : !noticeReady
       ? "Aguardando definição do aviso-prévio."
@@ -164,7 +239,11 @@ export function applyAccountantReadiness<T extends CltTerminationProcess>(proces
     status: "in_progress",
     startedAt: accountantStep.startedAt ?? now,
     blockedReason: null,
-    note: "Aviso-prévio definido e ASO aprovado. Envio à contabilidade liberado.",
+    note: employeeResignation
+      ? "Aviso-prévio definido. Envio à contabilidade liberado."
+      : guidedEmployerDismissal
+        ? "Comunicado formalizado. Envio à contabilidade liberado; ASO e uniformes seguem em paralelo."
+        : "Aviso-prévio definido e ASO aprovado. Envio à contabilidade liberado.",
   } : {
     status: "blocked",
     blockedReason,
@@ -217,7 +296,42 @@ export function recalculateTermination<T extends CltTerminationProcess>(process:
     healthPlan: { status: "pending" as const },
     coalaOne: { status: "scheduled" as const },
   };
-  const readyProcess = applyAccountantReadiness({ ...process, steps, accessRevocation }, now.toISOString());
+  let normalizedProcess = { ...process, steps, accessRevocation } as T;
+  const guidedEmployeeFlow = process.processType === "clt_employee_resignation" && steps.some((step) => step.id === "request_received");
+  const guidedEmployerFlow = process.processType === "clt_hr_termination"
+    && process.terminationReason === "Dispensa sem justa causa"
+    && Boolean(process.dismissalCommunication)
+    && steps.some((step) => step.id === "termination_payment");
+  if (guidedEmployeeFlow || guidedEmployerFlow) {
+    const paymentStatus = process.payment?.status ?? "not_started";
+    if (paymentStatus === "paid") {
+      steps = patchStep(steps, "termination_payment", { status: "completed", completedAt: process.payment?.paidAt ?? now.toISOString(), completedBy: "system:inter", blockedReason: null, note: "Pagamento confirmado e comprovante disponível." });
+    } else if (paymentStatus === "not_applicable") {
+      steps = patchStep(steps, "termination_payment", { status: "waived", completedAt: process.accountant?.approvedAt ?? now.toISOString(), completedBy: process.accountant?.approvedBy ?? "system", blockedReason: null, note: "Sem valor líquido a pagar." });
+    } else if (["awaiting_financial_authorization", "ready_to_submit", "submitting", "awaiting_bank_approval", "processing"].includes(paymentStatus)) {
+      steps = patchStep(steps, "termination_payment", { status: "waiting_external", startedAt: process.payment?.createdAt ?? now.toISOString(), dueAt: process.payment?.dueAt ?? null, blockedReason: null });
+    } else if (["configuration_required", "failed", "rejected", "approval_expired"].includes(paymentStatus)) {
+      steps = patchStep(steps, "termination_payment", { status: "blocked", dueAt: process.payment?.dueAt ?? null, blockedReason: process.payment?.lastError ?? "O pagamento precisa de atenção." });
+    }
+    const signaturesDone = ["completed", "waived"].includes(steps.find((step) => step.id === "signatures")?.status ?? "");
+    const paymentDone = ["completed", "waived"].includes(steps.find((step) => step.id === "termination_payment")?.status ?? "");
+    if (signaturesDone && paymentDone && !["sent", "completed"].includes(process.employeeCompletion?.status ?? "")) {
+      steps = patchStep(steps, "employee_delivery", { status: "in_progress", startedAt: now.toISOString(), blockedReason: null, note: "Assinaturas e pagamento concluídos. Pacote final pronto para envio." });
+      normalizedProcess = { ...normalizedProcess, employeeCompletion: { ...(process.employeeCompletion ?? { status: "not_started" }), status: "ready" } } as T;
+    }
+    if (["sent", "completed"].includes(process.employeeCompletion?.status ?? "")) {
+      steps = patchStep(steps, "employee_delivery", { status: "completed", completedAt: process.employeeCompletion?.completedAt ?? process.employeeCompletion?.sentAt ?? now.toISOString(), completedBy: "system:email", note: "Pacote final disponibilizado ao colaborador." });
+      if (steps.find((step) => step.id === "operational")?.status === "pending") {
+        steps = patchStep(steps, "operational", { status: "in_progress", startedAt: now.toISOString(), note: "Desligamento concluído com o colaborador. Finalize os controles internos." });
+      }
+    }
+    const asoStatus = String(process.asoWorkflow?.status ?? "");
+    if (["approved", "completed"].includes(asoStatus)) {
+      steps = patchStep(steps, "aso", { status: "completed", completedAt: String(process.asoWorkflow?.reviewedAt ?? now.toISOString()), completedBy: String(process.asoWorkflow?.reviewedBy ?? "system"), blockedReason: null, note: "ASO demissional aprovado." });
+    }
+    normalizedProcess = { ...normalizedProcess, steps } as T;
+  }
+  const readyProcess = applyAccountantReadiness(normalizedProcess, now.toISOString());
   const progress = calculateTerminationProgress(readyProcess.steps);
   const health = calculateTerminationHealth(readyProcess, now);
   const nextDueAt = readyProcess.steps

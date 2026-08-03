@@ -5,7 +5,7 @@ export type BankPaymentRequestStatus =
   | "awaiting_bank_approval" | "processing" | "paid" | "rejected"
   | "approval_expired" | "failed" | "cancelled";
 
-export type BankPaymentSourceType = "aso" | "generated_receipt";
+export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination";
 
 export type BankPaymentRequest = {
   id: string;

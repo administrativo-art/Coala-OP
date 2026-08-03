@@ -18,9 +18,10 @@ import { logAction } from '@/lib/log-action';
 import { requiredOnboardingIntegrationsResolved } from '@/lib/hr/onboarding-integrations';
 import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-documents';
 import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
+import { setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
 import { extendOnboardingPublicLink, onboardingPublicLinkExtensionUsed } from '@/lib/hr/onboarding-public-link';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
-import type { OnboardingDocument, OnboardingProcess, OnboardingStageId } from '@/types';
+import type { OnboardingDocument, OnboardingProcess, OnboardingStageId, PjOnboardingWorkflow } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -316,6 +317,112 @@ async function getOrCreateAuthUser(email: string, displayName: string) {
   }
 }
 
+async function createPjUserFromOnboarding(params: {
+  processId: string;
+  process: Record<string, unknown>;
+  actorId: string;
+  actorName: string;
+  actorEmail: string | null;
+  baseUrl: string;
+}) {
+  const workflow = params.process.pjWorkflow && typeof params.process.pjWorkflow === 'object' && !Array.isArray(params.process.pjWorkflow)
+    ? params.process.pjWorkflow as PjOnboardingWorkflow
+    : null;
+  if (!workflow) throw new Error('O fluxo PJ está incompleto.');
+  if (workflow.finance?.status !== 'approved' || workflow.access?.status !== 'configured') {
+    throw new Error('Aprovação financeira e configuração dos acessos são obrigatórias antes da criação do usuário.');
+  }
+  const name = asString(workflow.access.userName);
+  const cpf = String(workflow.access.userCpf ?? '').replace(/\D/g, '');
+  const profileId = asString(workflow.access.profileId);
+  const unitIds = Array.isArray(workflow.access.unitIds) ? workflow.access.unitIds.filter(Boolean) : [];
+  const email = normalizeEmail(workflow.provider.email ?? params.process.candidateEmail);
+  if (!name || cpf.length !== 11 || !profileId || !unitIds.length || !email) {
+    throw new Error('Revise nome, CPF, e-mail, perfil e unidades do acesso.');
+  }
+  const [profileDocument, ...unitDocuments] = await Promise.all([
+    dbAdmin.collection('profiles').doc(profileId).get(),
+    ...unitIds.map(unitId => dbAdmin.collection('dp_units').doc(unitId).get()),
+  ]);
+  if (!profileDocument.exists || profileDocument.get('isDefaultAdmin') === true) throw new Error('Perfil de acesso inválido para a prestadora.');
+  if (unitDocuments.some(document => !document.exists || document.get('isArchived') === true)) throw new Error('Uma das unidades de acesso não está disponível.');
+
+  const authResult = await getOrCreateAuthUser(email, name);
+  const authUser = authResult.user;
+  if (!authResult.created) {
+    const existing = await dbAdmin.collection('users').doc(authUser.uid).get();
+    const existingSource = asString(existing.get('source'));
+    const existingOnboardingId = asString(existing.get('onboardingId'));
+    if (existing.exists && existingSource !== 'recruitment_onboarding' && existingOnboardingId !== params.processId) {
+      throw new Error('Já existe um usuário com este e-mail. Revise o cadastro antes de criar o acesso.');
+    }
+  }
+  await authAdmin.setCustomUserClaims(authUser.uid, { profileId, isDefaultAdmin: false });
+  const now = new Date().toISOString();
+  const startTimestamp = timestampFromDateString(workflow.terms.contractStartDate);
+  await dbAdmin.collection('users').doc(authUser.uid).set({
+    username: name,
+    email,
+    cpf,
+    hrEmployeeId: authUser.uid,
+    personRecordType: 'pj',
+    employmentRelationshipType: 'pj',
+    profileId,
+    unitId: unitIds[0],
+    unitIds,
+    assignedKioskIds: unitIds,
+    isActive: true,
+    admissionDate: startTimestamp,
+    mustChangePassword: true,
+    providerCnpj: workflow.provider.cnpj,
+    providerLegalName: workflow.provider.legalName,
+    source: 'recruitment_onboarding',
+    recruitmentCandidateId: asString(params.process.candidateId),
+    onboardingId: params.processId,
+    profileCompliance: {
+      status: 'pending', policyVersion: 1, missingFields: [], invalidFields: [],
+      evaluatedAt: null, completedAt: null, lastConfirmedAt: null, nextReviewAt: null,
+    },
+    updatedAt: now,
+    createdAt: now,
+  }, { merge: true });
+  await hrDbAdmin.collection('employees').doc(authUser.uid).set({
+    auth_uid: authUser.uid,
+    source_user_id: authUser.uid,
+    source: 'recruitment_onboarding',
+    name,
+    email,
+    access_email: email,
+    cpf,
+    person_record_type: 'pj',
+    employment_relationship_type: 'pj',
+    provider_cnpj: workflow.provider.cnpj,
+    provider_legal_name: workflow.provider.legalName,
+    status: 'active',
+    unit_id: unitIds[0],
+    unit_ids: unitIds,
+    profile_id: profileId,
+    profile_completion: 0,
+    synced_at: startTimestamp,
+    created_at: startTimestamp,
+    updated_at: startTimestamp,
+  }, { merge: true });
+  const firstAccessLink = await createFirstAccessLink({
+    userId: authUser.uid,
+    onboardingId: params.processId,
+    baseUrl: params.baseUrl,
+    createdBy: params.actorId,
+    createdByEmail: params.actorEmail,
+  });
+  return {
+    userId: authUser.uid,
+    employeeId: authUser.uid,
+    firstAccessLink,
+    promotedDocuments: { documents: Array.isArray(params.process.documents) ? params.process.documents : [], promotedCount: 0, duplicateCount: 0, promotedDocumentIds: [] },
+    promotedSignedDocumentIds: [] as string[],
+  };
+}
+
 async function createCollaboratorFromOnboarding(params: {
   processId: string;
   process: Record<string, unknown>;
@@ -324,6 +431,9 @@ async function createCollaboratorFromOnboarding(params: {
   actorEmail: string | null;
   baseUrl: string;
 }) {
+  if (params.process.employmentRelationshipType === 'pj') {
+    return createPjUserFromOnboarding(params);
+  }
   const publicAnswers = asRecord(params.process.publicFormAnswers);
   const name = answerString(publicAnswers, 'fullName') || asString(params.process.candidateName) || 'Novo colaborador';
   const email = normalizeEmail(params.process.candidateEmail);
@@ -726,10 +836,21 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.publicTokenExtendedAt = now;
     update.publicTokenExtendedBy = access.decoded.uid;
   } else if (action === 'create_collaborator') {
-    if (process.currentStage !== 'formalization_validation' && process.status !== 'ready_to_create_user') {
+    const isPj = process.employmentRelationshipType === 'pj';
+    const pjWorkflow = process.pjWorkflow && typeof process.pjWorkflow === 'object' && !Array.isArray(process.pjWorkflow)
+      ? process.pjWorkflow as PjOnboardingWorkflow
+      : null;
+    if (isPj) {
+      if (process.currentStage !== 'integration' || pjWorkflow?.currentStep !== 'access_configuration') {
+        return jsonError('Conclua a aprovação financeira antes de criar o acesso da prestadora.', 400);
+      }
+      if (pjWorkflow.finance?.status !== 'approved' || pjWorkflow.access?.status !== 'configured') {
+        return jsonError('Aprovação financeira e configuração dos acessos são obrigatórias.', 400);
+      }
+    } else if (process.currentStage !== 'formalization_validation' && process.status !== 'ready_to_create_user') {
       return jsonError('Valide a formalização antes de criar o colaborador.', 400);
     }
-    if (!asRecord(process.finalizationSettings) || Object.keys(asRecord(process.finalizationSettings)).length === 0) {
+    if (!isPj && (!asRecord(process.finalizationSettings) || Object.keys(asRecord(process.finalizationSettings)).length === 0)) {
       return jsonError('Salve a validação final antes de criar o colaborador.', 400);
     }
     if (asString(process.collaboratorUserId)) {
@@ -759,11 +880,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       completedAt: now,
       completedBy: access.decoded.uid,
     };
-    update.status = 'awaiting_first_access';
-    update.currentStage = 'formalization_validation';
+    update.status = isPj ? 'active' : 'awaiting_first_access';
+    update.currentStage = isPj ? 'integration' : 'formalization_validation';
     update.publicToken = null;
     update.publicTokenClosedAt = now;
-    update.integrationAlerts = await verifyAccessIntegrations({ process, collaboratorUserId: created.userId, now });
+    update.integrationAlerts = isPj ? [] : await verifyAccessIntegrations({ process, collaboratorUserId: created.userId, now });
     update.firstAccess = {
       status: 'pending',
       tokenId: created.firstAccessLink.tokenId,
@@ -783,6 +904,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         lastError: null,
       },
     };
+    if (isPj && pjWorkflow) {
+      update.pjWorkflow = setPjWorkflowStep({
+        ...pjWorkflow,
+        access: { ...pjWorkflow.access, status: 'invitation_sent' },
+      }, 'provider_activation', now, access.decoded.uid);
+    }
     responseFirstAccessUrl = created.firstAccessLink.url;
     const integrationSnapshot = integrationTemplateVersionSchema.safeParse(
       asRecord(asRecord(process.integrationV2).snapshot)
@@ -905,7 +1032,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       actionUrl: firstAccessEmail.url,
       expiresAt: firstAccessEmail.expiresAt,
       variables: {
-        'employee.name': asString(process.candidateName),
+        'employee.name': process.employmentRelationshipType === 'pj'
+          ? asString((process.pjWorkflow as PjOnboardingWorkflow | undefined)?.access?.userName)
+          : asString(process.candidateName),
         'employee.personal_email': normalizeEmail(process.candidateEmail),
         'system.role.job_role': asString(process.jobRoleName),
         'system.role.functions': asString(process.functionName),

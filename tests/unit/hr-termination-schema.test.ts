@@ -9,8 +9,25 @@ test("contrato de criação gerenciada aceita desligamento CLT válido", () => {
     employeeId: "employee-1",
     terminationDate: "2026-08-01",
     terminationReason: "Dispensa sem justa causa",
+    terminationInternalReason: "Reorganização interna da operação.",
+    communicationConfirmed: true,
+    communicationAt: "2026-08-01T17:00:00.000Z",
+    communicationLocation: "Sala administrativa",
+    communicationParticipants: ["Gestora da unidade"],
+    noticeType: "indemnified",
   });
   assert.equal(result.employeeId, "employee-1");
+});
+
+test("dispensa sem justa causa exige confirmação da comunicação presencial", () => {
+  const result = managedTerminationCreateSchema.safeParse({
+    source: "hr_manual",
+    employeeId: "employee-1",
+    terminationDate: "2026-08-01",
+    terminationReason: "Dispensa sem justa causa",
+  });
+  assert.equal(result.success, false);
+  if (!result.success) assert.match(result.error.issues.map((issue) => issue.message).join(" "), /comunicada presencialmente/);
 });
 
 test("contrato exige subtipo na dispensa por justa causa", () => {

@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
     if (previousWebhookAt && new Date(previousWebhookAt).getTime() > new Date(eventAt).getTime()) continue;
 
     const onboardingId = typeof data.onboardingId === "string" ? data.onboardingId : "";
+    const terminationId = typeof data.terminationId === "string" ? data.terminationId : "";
     const lastError = deliveryStatus ? eventErrorMessage(event, deliveryStatus) : null;
     await communication.ref.set({
       ...(deliveryStatus ? { status: deliveryStatus } : {}),
@@ -122,6 +123,21 @@ export async function POST(request: NextRequest) {
       ...(engagementStatus === "clicked" ? { clickedAt: eventAt } : {}),
       ...(deliveryStatus && isDeliveryFailure(deliveryStatus) ? { failedAt: eventAt, lastError } : {}),
     }, { merge: true });
+
+    if (terminationId && ["termination_employee_completion", "termination_internal_reservations"].includes(String(data.category))) {
+      const prefix = data.category === "termination_employee_completion"
+        ? "employeeCompletion.communication"
+        : "internalClosure.communication";
+      const patch: Record<string, unknown> = {
+        [`${prefix}.providerId`]: emailId,
+      };
+      if (deliveryStatus) patch[`${prefix}.status`] = deliveryStatus;
+      if (deliveryStatus === "delivered") patch[`${prefix}.deliveredAt`] = eventAt;
+      if (engagementStatus === "opened") patch[`${prefix}.openedAt`] = eventAt;
+      if (engagementStatus === "clicked") patch[`${prefix}.clickedAt`] = eventAt;
+      if (deliveryStatus && isDeliveryFailure(deliveryStatus)) patch[`${prefix}.lastError`] = lastError;
+      await hrDbAdmin.collection("terminationProcesses").doc(terminationId).update({ ...patch, updatedAt: new Date().toISOString() });
+    }
 
     if (onboardingId && (data.category === "aso_clinic_request" || data.category === "aso_candidate_notice")) {
       const processRef = hrDbAdmin.collection("onboardingProcesses").doc(onboardingId);

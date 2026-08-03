@@ -12,6 +12,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const process = await getTermination((await params).id);
     if (!process) return NextResponse.json({ error: "Desligamento não encontrado." }, { status: 404 });
     await assertTerminationVisible(context, process);
+    if (request.nextUrl.searchParams.get("paymentProof") === "1") {
+      if (!process.payment?.proofStoragePath) return NextResponse.json({ error: "Comprovante ainda não disponível." }, { status: 404 });
+      const [buffer] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(process.payment.proofStoragePath).download();
+      return new NextResponse(new Uint8Array(buffer), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="comprovante-${process.request.protocol}.pdf"`, "Cache-Control": "private, no-store" } });
+    }
     const document = process.documents.find((item) => item.id === request.nextUrl.searchParams.get("documentId"));
     if (!document) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
     if (process.employeeId === context.userDoc.id && document.visibility !== "employee") return NextResponse.json({ error: "Sem acesso ao documento." }, { status: 403 });

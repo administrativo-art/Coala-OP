@@ -12,7 +12,7 @@ import { adminApp } from '@/lib/firebase-admin';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
-import { createPaymentRequest, refreshPaymentRequest, submitPaymentRequest } from '@/features/financial/payment-requests/service.server';
+import { createPaymentRequest, refreshPaymentRequest } from '@/features/financial/payment-requests/service.server';
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
 import { getTermination, saveTermination } from '@/features/hr/termination/server';
 import { applyAccountantReadiness, patchStep } from '@/features/hr/termination/core';
@@ -141,12 +141,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       sourceType: 'aso', sourceId: id, beneficiaryReference: { sourceType: 'entity', sourceId: clinicEntityId },
       amount, description: text(clinicSnapshot.get('defaultPaymentDescription'), 140) || `Pagamento de ASO ${process.asoExamType === 'dismissal' ? 'demissional' : 'admissional'}`,
     }, actor);
-    if (payment.status === 'ready_to_submit' || payment.status === 'failed') payment = await submitPaymentRequest(payment.id, actor);
     const clinicName = payment.beneficiarySnapshot.name;
     const clinicEmail = email(clinicSnapshot.get('schedulingEmail'));
     await Promise.all([
       processRef.set({ asoWorkflow: { ...workflow, status: 'guide_validated', clinicEntityId, paymentRequestId: payment.id, paymentStatus: payment.status, clinic: { ...record(workflow.clinic), name: clinicName, email: clinicEmail }, updatedAt: now }, updatedAt: now }, { merge: true }),
       addEvent(id, 'ASO_PAYMENT_REQUESTED', access, { paymentRequestId: payment.id, clinicEntityId, amount, paymentStatus: payment.status }),
+      hrDbAdmin.collection('hrNotifications').doc(`aso_payment_${id}`).set({
+        type: 'aso_payment_authorization', status: 'pending', onboardingId: id, terminationId: text(process.sourceTerminationId) || null,
+        title: `Pagamento de ASO — ${text(process.candidateName, 180) || 'colaborador'}`,
+        message: `Autorize o PIX de ${amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para ${clinicName}. Após a autorização, o sistema enviará automaticamente ao Banco Inter.`,
+        channels: ['in_app'], recipient: { strategy: 'financial_pool' }, createdAt: now, updatedAt: now,
+      }, { merge: true }),
     ]);
     return NextResponse.json({ ok: true, payment });
   }
@@ -154,7 +159,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (action === 'refresh_payment') {
     const paymentRequestId = text(workflow.paymentRequestId, 180);
     if (!paymentRequestId) return NextResponse.json({ error: 'O pagamento do ASO ainda não foi solicitado.' }, { status: 409 });
-    const payment = await refreshPaymentRequest(paymentRequestId, { uid: access.decoded.uid, email: access.decoded.email ?? null, name: access.actorName });
+    let payment = await getPaymentRequest(paymentRequestId);
+    if (payment.interRequestId && ['awaiting_bank_approval', 'processing', 'failed', 'rejected', 'approval_expired', 'paid'].includes(payment.status)) {
+      payment = await refreshPaymentRequest(paymentRequestId, { uid: access.decoded.uid, email: access.decoded.email ?? null, name: access.actorName });
+    }
     await processRef.set({ asoWorkflow: { ...workflow, paymentStatus: payment.status, paymentProofStoragePath: payment.proofStoragePath ?? null, paymentConfirmedAt: payment.paidAt ?? null, updatedAt: now }, updatedAt: now }, { merge: true });
     await addEvent(id, 'ASO_PAYMENT_REFRESHED', access, { paymentRequestId, paymentStatus: payment.status });
     return NextResponse.json({ ok: true, payment });

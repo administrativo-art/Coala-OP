@@ -23,7 +23,7 @@ export async function createPaymentRequest(input: {
   if (!beneficiary.validated) throw new Error("O favorecido ainda não foi validado.");
   const now = new Date().toISOString();
   const ref = paymentRequestRef(randomUUID());
-  const status: BankPaymentRequestStatus = input.sourceType === "aso" ? "ready_to_submit" : "awaiting_financial_authorization";
+  const status: BankPaymentRequestStatus = "awaiting_financial_authorization";
   const request: BankPaymentRequest = {
     id: ref.id,
     ...input,
@@ -45,7 +45,11 @@ export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
   const now = new Date().toISOString();
   const request = await transitionPaymentRequest(id, ["awaiting_financial_authorization"], "ready_to_submit", { authorizedAt: now, authorizedBy: actor.uid });
   await addPaymentEvent(id, "FINANCIAL_AUTHORIZATION_GRANTED", actor);
-  return request;
+  if (request.sourceType === "aso" || request.sourceType === "termination") {
+    const notificationId = request.sourceType === "aso" ? `aso_payment_${request.sourceId}` : `termination_payment_${request.sourceId}`;
+    await hrDbAdmin.collection("hrNotifications").doc(notificationId).set({ status: "completed", authorizedAt: now, authorizedBy: actor.uid, updatedAt: now }, { merge: true });
+  }
+  return request.sourceType === "termination" || request.sourceType === "aso" ? submitPaymentRequest(id, actor) : request;
 }
 
 function safeBankError(error: unknown) {
@@ -81,6 +85,22 @@ async function completeSource(request: BankPaymentRequest) {
   if (request.sourceType === "aso") {
     await hrDbAdmin.collection("onboardingProcesses").doc(request.sourceId).set({
       asoWorkflow: { paymentRequestId: request.id, paymentStatus: "paid", paymentProofStoragePath: request.proofStoragePath, paymentConfirmedAt: request.paidAt },
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return;
+  }
+  if (request.sourceType === "termination") {
+    await hrDbAdmin.collection("terminationProcesses").doc(request.sourceId).set({
+      payment: {
+        status: "paid",
+        requestId: request.id,
+        amount: request.amount,
+        paidAt: request.paidAt ?? null,
+        proofStoragePath: request.proofStoragePath ?? null,
+        maskedDestination: request.beneficiarySnapshot.maskedPaymentDestination,
+        lastError: null,
+      },
+      lastActivityAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }, { merge: true });
     return;

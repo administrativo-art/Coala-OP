@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
 import { terminationFetch } from "./client";
+import { EmployeeResignationDetail } from "./employee-resignation-detail";
 import type {
   CltTerminationProcess,
   TerminationEvent,
@@ -292,7 +293,7 @@ export function TerminationDetailPage({ id }: { id: string }) {
     const submittedDate = belemDateOnly(data.process.request.submittedAt);
     setCommunicationDate(submittedDate);
     setContractEndDate(submittedDate);
-    if (data.process.hrValidation?.status === "confirmed") {
+    if (data.process.hrValidation?.status === "confirmed" || data.process.processType === "clt_employee_resignation") {
       const aso = await terminationFetch<{ workflow: AsoWorkflow }>(
         firebaseUser,
         `/api/hr/onboarding/${id}/aso-workflow`,
@@ -329,6 +330,14 @@ export function TerminationDetailPage({ id }: { id: string }) {
   );
 
   if (!process) return <div className="p-8 text-muted-foreground">{error ?? "Carregando..."}</div>;
+
+  if (process.processType === "clt_employee_resignation" || (
+    process.processType === "clt_hr_termination"
+    && process.terminationReason === "Dispensa sem justa causa"
+    && Boolean(process.dismissalCommunication)
+  )) {
+    return <EmployeeResignationDetail process={process} events={events} asoWorkflow={asoWorkflow} busy={busy} error={error} onAction={action} />;
+  }
 
   const asoStep = stepsById.get("aso")!;
   const uniformReturnStep = stepsById.get("uniform_return")!;

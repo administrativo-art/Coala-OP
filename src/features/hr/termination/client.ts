@@ -18,6 +18,12 @@ export function createManagedTerminationProcess(
     terminationReason: EmploymentTerminationReason;
     terminationCause?: string;
     terminationNotes?: string;
+    terminationInternalReason?: string;
+    communicationConfirmed?: boolean;
+    communicationAt?: string;
+    communicationLocation?: string;
+    communicationParticipants?: string[];
+    noticeType?: "worked" | "indemnified";
   },
 ) {
   return terminationFetch<{ process: CltTerminationProcess; reused: boolean }>(

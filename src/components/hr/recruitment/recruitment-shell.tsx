@@ -12,6 +12,8 @@ import { IntegrationSubfieldEditor, IntegrationTemplateManager } from '@/feature
 import type { IntegrationTemplateMetadataClient } from '@/features/hr/integration/client';
 import { simulateIntegrationTemplate } from '@/features/hr/integration/engine';
 import { IntegrationRulesPanel } from '@/features/hr/integration/IntegrationRulePanels';
+import { PjOnboardingDetailPanel } from '@/features/hr/onboarding-pj/detail-panel';
+import { PJ_ONBOARDING_STEP_LABELS, PJ_ONBOARDING_STEP_ORDER } from '@/features/hr/onboarding-pj/core';
 import type { IntegrationBlock, IntegrationRule, IntegrationStage, IntegrationSubfield, IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import type {
   Candidate,
@@ -73,7 +75,6 @@ import {
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { formatPersonName } from '@/lib/person-name';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
-import { EMPLOYMENT_RELATIONSHIP_TYPES } from '@/lib/hr/employment-relationship';
 import {
   onboardingPublicLinkExpiresAt,
   onboardingPublicLinkExpired,
@@ -7066,6 +7067,162 @@ function OnboardingFinalizationControls({
   );
 }
 
+type PjStartScopeItem = { id: string; front: string; deliverable: string };
+
+function PjOnboardingStartForm({
+  units,
+  getToken,
+  onBack,
+  onClose,
+  onCreated,
+}: {
+  units: DPUnit[];
+  getToken: () => Promise<string>;
+  onBack: () => void;
+  onClose: () => void;
+  onCreated: (process: OnboardingProcess) => void;
+}) {
+  const [providerCnpj, setProviderCnpj] = useState('');
+  const [providerLegalName, setProviderLegalName] = useState('');
+  const [providerTradeName, setProviderTradeName] = useState('');
+  const [candidateEmail, setCandidateEmail] = useState('');
+  const [employerUnitId, setEmployerUnitId] = useState('');
+  const [contractStartDate, setContractStartDate] = useState('');
+  const [termType, setTermType] = useState<'fixed' | 'indefinite'>('indefinite');
+  const [contractEndDate, setContractEndDate] = useState('');
+  const [monthlyValue, setMonthlyValue] = useState('');
+  const [paymentDay, setPaymentDay] = useState('');
+  const [serviceItems, setServiceItems] = useState<PjStartScopeItem[]>([
+    { id: crypto.randomUUID(), front: '', deliverable: '' },
+  ]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const employerUnits = useMemo(
+    () => units.filter(unit => unit.isArchived !== true && CnpjValidator.validate(unit.cnpj ?? '').valid),
+    [units],
+  );
+
+  function patchService(id: string, key: 'front' | 'deliverable', value: string) {
+    setServiceItems(current => current.map(item => item.id === id ? { ...item, [key]: value } : item));
+  }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const numericValue = Number(monthlyValue.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, ''));
+      const result = await apiFetch('/api/hr/onboarding', getToken, {
+        method: 'POST',
+        body: JSON.stringify({
+          employmentRelationshipType: 'pj',
+          providerCnpj,
+          providerLegalName,
+          providerTradeName: providerTradeName || null,
+          candidateEmail: candidateEmail.trim().toLowerCase(),
+          employerUnitId,
+          contractStartDate,
+          termType,
+          contractEndDate: termType === 'fixed' ? contractEndDate : null,
+          monthlyValue: numericValue,
+          paymentDay: Number(paymentDay),
+          serviceItems,
+        }),
+      });
+      if (!result?.process) throw new Error('Integração criada, mas a resposta veio incompleta.');
+      onCreated(result.process as OnboardingProcess);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Falha ao iniciar a integração PJ.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="flex items-center justify-between rounded-xl border border-violet-100 bg-violet-50 px-3 py-2.5">
+          <div>
+            <p className="text-xs font-black text-violet-900">Integração de prestadora PJ</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-violet-700">O contrato é único e a nota fiscal será obrigatória.</p>
+          </div>
+          <button type="button" onClick={onBack} className="text-xs font-black text-violet-700">Trocar vínculo</button>
+        </div>
+
+        <section className="rounded-xl border border-slate-200 p-4">
+          <p className="text-xs font-black uppercase tracking-wide text-slate-500">Empresa prestadora</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="text-xs font-bold text-slate-700">CNPJ
+              <input value={providerCnpj} onChange={event => setProviderCnpj(CnpjValidator.format(event.target.value))} required className="mt-1 h-9 w-full rounded-lg border px-3 text-xs" placeholder="00.000.000/0000-00" />
+            </label>
+            <label className="text-xs font-bold text-slate-700">Razão social
+              <input value={providerLegalName} onChange={event => setProviderLegalName(event.target.value)} required className="mt-1 h-9 w-full rounded-lg border px-3 text-xs" />
+            </label>
+            <label className="text-xs font-bold text-slate-700">Nome fantasia <span className="font-semibold text-slate-400">(opcional)</span>
+              <input value={providerTradeName} onChange={event => setProviderTradeName(event.target.value)} className="mt-1 h-9 w-full rounded-lg border px-3 text-xs" />
+            </label>
+            <label className="text-xs font-bold text-slate-700">E-mail da prestadora
+              <input type="email" value={candidateEmail} onChange={event => setCandidateEmail(event.target.value)} required className="mt-1 h-9 w-full rounded-lg border px-3 text-xs" />
+              <span className="mt-1 block text-[10px] font-semibold leading-relaxed text-slate-500">Será usado no cadastro, contrato, assinatura e acessos.</span>
+            </label>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 p-4">
+          <p className="text-xs font-black uppercase tracking-wide text-slate-500">Condições da contratação</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="text-xs font-bold text-slate-700 md:col-span-2">Empresa contratante
+              <select value={employerUnitId} onChange={event => setEmployerUnitId(event.target.value)} required className="mt-1 h-9 w-full rounded-lg border bg-white px-3 text-xs">
+                <option value="">Selecione a empresa</option>
+                {employerUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-bold text-slate-700">Data de início
+              <input type="date" value={contractStartDate} onChange={event => setContractStartDate(event.target.value)} required className="mt-1 h-9 w-full rounded-lg border px-3 text-xs" />
+            </label>
+            <label className="text-xs font-bold text-slate-700">Prazo
+              <select value={termType} onChange={event => setTermType(event.target.value as 'fixed' | 'indefinite')} className="mt-1 h-9 w-full rounded-lg border bg-white px-3 text-xs">
+                <option value="indefinite">Indeterminado</option>
+                <option value="fixed">Determinado</option>
+              </select>
+            </label>
+            {termType === 'fixed' ? <label className="text-xs font-bold text-slate-700">Data de término
+              <input type="date" value={contractEndDate} onChange={event => setContractEndDate(event.target.value)} required className="mt-1 h-9 w-full rounded-lg border px-3 text-xs" />
+            </label> : null}
+            <label className="text-xs font-bold text-slate-700">Valor mensal
+              <input value={monthlyValue} onChange={event => setMonthlyValue(event.target.value)} required inputMode="decimal" className="mt-1 h-9 w-full rounded-lg border px-3 text-xs" placeholder="R$ 0,00" />
+            </label>
+            <label className="text-xs font-bold text-slate-700">Dia do pagamento
+              <input type="number" min={1} max={31} value={paymentDay} onChange={event => setPaymentDay(event.target.value)} required className="mt-1 h-9 w-full rounded-lg border px-3 text-xs" placeholder="Ex.: 10" />
+            </label>
+          </div>
+          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-800">A apresentação da nota fiscal será obrigatória para todos os pagamentos.</p>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div><p className="text-xs font-black uppercase tracking-wide text-slate-500">Escopo e entregáveis</p><p className="mt-1 text-[11px] font-semibold text-slate-500">Os itens preencherão o Anexo I do contrato.</p></div>
+            <button type="button" onClick={() => setServiceItems(current => [...current, { id: crypto.randomUUID(), front: '', deliverable: '' }])} className="inline-flex h-8 items-center gap-1 rounded-lg bg-violet-100 px-3 text-[11px] font-black text-violet-800"><Plus className="h-3.5 w-3.5" />Adicionar</button>
+          </div>
+          <div className="mt-3 space-y-2">
+            {serviceItems.map((item, index) => <div key={item.id} className="grid gap-2 rounded-xl border bg-slate-50 p-3 md:grid-cols-[42px_1fr_1.4fr_34px]">
+              <span className="pt-2 text-xs font-black text-slate-400">1.{index + 1}</span>
+              <input value={item.front} onChange={event => patchService(item.id, 'front', event.target.value)} required className="h-9 rounded-lg border bg-white px-3 text-xs" placeholder="Frente" />
+              <textarea value={item.deliverable} onChange={event => patchService(item.id, 'deliverable', event.target.value)} required rows={2} className="min-h-9 rounded-lg border bg-white px-3 py-2 text-xs" placeholder="Entregável" />
+              <button type="button" disabled={serviceItems.length === 1} onClick={() => setServiceItems(current => current.filter(entry => entry.id !== item.id))} className="grid h-9 place-items-center text-rose-500 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
+            </div>)}
+          </div>
+        </section>
+        {error ? <ErrorLine msg={error} /> : null}
+      </div>
+      <div className="flex justify-end gap-2 border-t px-4 py-3">
+        <button type="button" onClick={onClose} className="h-9 rounded-lg border px-4 text-xs font-bold text-slate-600">Cancelar</button>
+        <button type="submit" disabled={submitting} className="inline-flex h-9 items-center gap-2 rounded-lg bg-violet-700 px-4 text-xs font-black text-white disabled:opacity-60">{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Criar e enviar convite</button>
+      </div>
+    </form>
+  );
+}
+
 function StartOnboardingModal({
   roles,
   jobFunctions,
@@ -7091,7 +7248,7 @@ function StartOnboardingModal({
   const [candidateEmail, setCandidateEmail] = useState('');
   const [jobRoleId, setJobRoleId] = useState('');
   const [functionId, setFunctionId] = useState('');
-  const [employmentRelationshipType, setEmploymentRelationshipType] = useState('');
+  const [employmentRelationshipType, setEmploymentRelationshipType] = useState<'' | 'clt' | 'pj'>('');
   const [unitId, setUnitId] = useState('');
   const [employerUnitId, setEmployerUnitId] = useState('');
   const [expectedAdmissionDate, setExpectedAdmissionDate] = useState('');
@@ -7232,7 +7389,22 @@ function StartOnboardingModal({
           </button>
         </div>
 
-        {!integrationMode ? (
+        {!employmentRelationshipType ? (
+          <div className="grid gap-4 p-5 md:grid-cols-2">
+            <button type="button" onClick={() => setEmploymentRelationshipType('clt')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-pink-300 hover:bg-pink-50/40">
+              <Users className="h-7 w-7 text-pink-600" />
+              <span className="mt-3 block text-base font-black text-slate-950">CLT</span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500">Admissão trabalhista com documentos, ASO e contabilidade.</span>
+            </button>
+            <button type="button" onClick={() => setEmploymentRelationshipType('pj')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-violet-300 hover:bg-violet-50/40">
+              <Briefcase className="h-7 w-7 text-violet-700" />
+              <span className="mt-3 block text-base font-black text-slate-950">Pessoa jurídica (PJ)</span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500">Contratação de empresa prestadora com contrato e cadastro fiscal próprios.</span>
+            </button>
+          </div>
+        ) : employmentRelationshipType === 'pj' ? (
+          <PjOnboardingStartForm units={units} getToken={getToken} onBack={() => setEmploymentRelationshipType('')} onClose={onClose} onCreated={onCreated} />
+        ) : !integrationMode ? (
           <div className="grid gap-4 p-5 md:grid-cols-2">
             <button type="button" onClick={() => setIntegrationMode('import')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-pink-300 hover:bg-pink-50/40">
               <FolderOpen className="h-7 w-7 text-pink-600" />
@@ -7311,23 +7483,10 @@ function StartOnboardingModal({
             </label>
           </div>
 
-          <label className="block text-sm font-semibold text-slate-700">
-            Tipo de vínculo <span className="text-rose-500">*</span>
-            <select
-              value={employmentRelationshipType}
-              onChange={event => setEmploymentRelationshipType(event.target.value)}
-              required
-              className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Selecione o vínculo</option>
-              {EMPLOYMENT_RELATIONSHIP_TYPES.map(item => (
-                <option key={item.value} value={item.value}>{item.label}</option>
-              ))}
-            </select>
-            <span className="mt-1 block text-xs font-medium text-slate-500">
-              Nesta entrega, CLT e PJ já possuem motivos de encerramento próprios.
-            </span>
-          </label>
+          <div className="flex items-center justify-between rounded-lg border border-pink-100 bg-pink-50 px-3 py-2 text-xs font-bold text-pink-800">
+            <span>Vínculo: CLT</span>
+            <button type="button" onClick={() => { setEmploymentRelationshipType(''); setIntegrationMode(null); }} className="font-black">Trocar</button>
+          </div>
 
           <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
             <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Acesso ao PDV Legal</p>
@@ -8571,9 +8730,15 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               const processStages = consolidatedOnboardingStages(process);
               const currentStage = processStages.find(stage => stage.id === process.currentStage);
               const locatedStageIndex = processStages.findIndex(stage => stage.id === process.currentStage);
+              const isPj = process.employmentRelationshipType === 'pj' && Boolean(process.pjWorkflow);
+              const pjCurrentIndex = process.pjWorkflow ? PJ_ONBOARDING_STEP_ORDER.indexOf(process.pjWorkflow.currentStep) : -1;
+              const progressSteps = isPj ? PJ_ONBOARDING_STEP_ORDER : processStages.map(stage => stage.id);
               const currentStageIndex = process.status === 'completed'
-                ? Math.max(processStages.length - 1, 0)
-                : Math.max(0, locatedStageIndex);
+                ? Math.max(progressSteps.length - 1, 0)
+                : Math.max(0, isPj ? pjCurrentIndex : locatedStageIndex);
+              const currentStageLabel = isPj && process.pjWorkflow
+                ? PJ_ONBOARDING_STEP_LABELS[process.pjWorkflow.currentStep]
+                : currentStage?.label ?? 'Formalização';
               const formReceived = !!process.publicFormSubmittedAt;
               const color = colorForProcess(process.id);
               return (
@@ -8610,12 +8775,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
                   <div className="mt-3.5 rounded-xl border border-slate-100 bg-slate-50 p-3">
                     <div className="truncate text-[13px] font-bold text-slate-700">
-                      {process.jobRoleName ?? 'Cargo não informado'}
-                      {process.functionName ? ` · ${process.functionName}` : ''}
+                      {isPj ? 'Prestadora de serviços · PJ' : process.jobRoleName ?? 'Cargo não informado'}
+                      {!isPj && process.functionName ? ` · ${process.functionName}` : ''}
                     </div>
                     <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-400">
                       <MapPin className="h-3.5 w-3.5" />
-                      {process.unitName ?? 'Unidade não definida'}
+                      {isPj ? process.employerUnitName ?? 'Contratante não definida' : process.unitName ?? 'Unidade não definida'}
                     </div>
                   </div>
 
@@ -8625,7 +8790,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       <span className="text-xs font-bold text-slate-700">
                         {consolidatedDocumentPhaseId(process.currentStage) === 'documents'
                           ? 'Formalização · Dados e documentos'
-                          : currentStage?.label ?? 'Formalização'}
+                          : currentStageLabel}
                       </span>
                     </span>
                     <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">
@@ -8636,19 +8801,19 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <div className="mt-3">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[10.5px] font-black uppercase tracking-wide text-slate-400">Progresso do processo</span>
-                      <span className="text-xs font-black text-pink-600">Fase {currentStageIndex + 1} de {processStages.length}</span>
+                      <span className="text-xs font-black text-pink-600">Fase {currentStageIndex + 1} de {progressSteps.length}</span>
                     </div>
                     <div
                       className="mt-2 grid gap-1"
-                      style={{ gridTemplateColumns: `repeat(${Math.max(processStages.length, 1)}, minmax(0, 1fr))` }}
+                      style={{ gridTemplateColumns: `repeat(${Math.max(progressSteps.length, 1)}, minmax(0, 1fr))` }}
                       role="img"
                       aria-label={process.status === 'completed'
-                        ? `${processStages.length} fases concluídas`
-                        : `${currentStageIndex} fases concluídas, fase ${currentStageIndex + 1} em andamento, ${Math.max(processStages.length - currentStageIndex - 1, 0)} futuras`}
+                        ? `${progressSteps.length} fases concluídas`
+                        : `${currentStageIndex} fases concluídas, fase ${currentStageIndex + 1} em andamento, ${Math.max(progressSteps.length - currentStageIndex - 1, 0)} futuras`}
                     >
-                      {processStages.map((stage, stageIndex) => (
+                      {progressSteps.map((stage, stageIndex) => (
                         <span
-                          key={stage.id}
+                          key={typeof stage === 'string' ? stage : String(stage)}
                           className={`h-1.5 rounded-full ${
                             process.status === 'completed' || stageIndex < currentStageIndex
                               ? 'bg-emerald-500'
@@ -8699,6 +8864,23 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
           />
         )}
       </div>
+    );
+  }
+
+  if (selectedProcess.employmentRelationshipType === 'pj') {
+    return (
+      <PjOnboardingDetailPanel
+        process={selectedProcess}
+        units={units}
+        canManage={canManage}
+        getToken={getToken}
+        onRefresh={onRefresh}
+        onBack={() => {
+          setView('grid');
+          setSelectedId(null);
+          setPhaseId(null);
+        }}
+      />
     );
   }
 
@@ -9299,11 +9481,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                               <option value="">Selecione a clínica</option>
                               {asoClinics.map(clinic => <option key={clinic.id} value={clinic.id} disabled={!clinic.paymentProfile?.configured || !clinic.paymentProfile?.validated}>{clinic.entity?.name ?? 'Clínica'} · {Number(clinic.asoPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}{!clinic.paymentProfile?.validated ? ' · Pix pendente' : ''}</option>)}
                             </select>
-                            <div className="flex h-9 items-center rounded-lg border bg-slate-50 px-3 text-xs font-bold text-slate-600">{selectedProcess.asoWorkflow.paymentStatus === 'paid' ? 'Pagamento confirmado' : selectedProcess.asoWorkflow.paymentStatus === 'awaiting_bank_approval' ? 'Aguardando aprovação no Banco Inter' : selectedProcess.asoWorkflow.paymentStatus === 'processing' ? 'Processando no banco' : selectedProcess.asoWorkflow.paymentStatus === 'failed' ? 'Falha no envio bancário' : selectedProcess.asoWorkflow.paymentRequestId ? 'Pagamento solicitado' : 'Pagamento ainda não solicitado'}</div>
+                            <div className="flex h-9 items-center rounded-lg border bg-slate-50 px-3 text-xs font-bold text-slate-600">{selectedProcess.asoWorkflow.paymentStatus === 'paid' ? 'Pagamento confirmado' : selectedProcess.asoWorkflow.paymentStatus === 'awaiting_financial_authorization' ? 'Aguardando autorização do financeiro' : selectedProcess.asoWorkflow.paymentStatus === 'awaiting_bank_approval' ? 'Aguardando aprovação no Banco Inter' : selectedProcess.asoWorkflow.paymentStatus === 'processing' ? 'Processando no banco' : selectedProcess.asoWorkflow.paymentStatus === 'failed' ? 'Falha no envio bancário' : selectedProcess.asoWorkflow.paymentRequestId ? 'Pagamento solicitado' : 'Pagamento ainda não solicitado'}</div>
                           </div>
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            {canManageAso && !selectedProcess.asoWorkflow.paymentRequestId ? <button type="button" disabled={!!asoActionBusy || !asoClinicEntityId} onClick={() => void asoAction('request_payment', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-xs font-black text-white disabled:opacity-50"><Wallet className="h-3.5 w-3.5"/>{asoActionBusy === 'request_payment' ? 'Enviando ao banco...' : 'Pagar ASO via Banco Inter'}</button> : null}
-                            {canManageAso && ['awaiting_bank_approval', 'processing'].includes(selectedProcess.asoWorkflow.paymentStatus ?? '') ? <button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('refresh_payment')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-800 disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5"/>{asoActionBusy === 'refresh_payment' ? 'Consultando...' : 'Atualizar pagamento'}</button> : null}
+                            {canManageAso && !selectedProcess.asoWorkflow.paymentRequestId ? <button type="button" disabled={!!asoActionBusy || !asoClinicEntityId} onClick={() => void asoAction('request_payment', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-xs font-black text-white disabled:opacity-50"><Wallet className="h-3.5 w-3.5"/>{asoActionBusy === 'request_payment' ? 'Solicitando...' : 'Solicitar pagamento ao financeiro'}</button> : null}
+                            {canManageAso && selectedProcess.asoWorkflow.paymentRequestId && selectedProcess.asoWorkflow.paymentStatus !== 'paid' ? <button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('refresh_payment')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-800 disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5"/>{asoActionBusy === 'refresh_payment' ? 'Consultando...' : 'Atualizar pagamento'}</button> : null}
                             {canManageAso ? <button type="button" disabled={!!asoActionBusy || selectedProcess.asoWorkflow.paymentStatus !== 'paid'} onClick={() => void asoAction('send_clinic_email')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-xs font-black text-white disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{asoActionBusy === 'send_clinic_email' ? 'Enviando...' : selectedProcess.asoWorkflow.clinic?.sentAt ? 'Reenviar e-mail com anexos' : 'Enviar e-mail com 3 anexos'}</button> : null}
                             {selectedProcess.asoWorkflow.clinic?.emailStatus ? <span className="text-[11px] font-bold text-slate-600">E-mail: {selectedProcess.asoWorkflow.clinic.emailStatus}{selectedProcess.asoWorkflow.clinic.openedAt ? ' · abertura detectada' : ''}</span> : null}
                           </div>

@@ -280,7 +280,6 @@ const SEARCH_ITEMS: { label: string; href: string; section: string }[] = [
   { label: "Gestão de preços", href: "/dashboard/pricing", section: "Departamento comercial" },
   { label: "Painel DP", href: "/dashboard/dp", section: "Departamento pessoal" },
   { label: "Acompanhamento de processos", href: "/dashboard/processes", section: "Gestão" },
-  { label: "Pedir demissão", href: "/dashboard/resignation", section: "Departamento pessoal" },
   { label: "Integração", href: "/dashboard/hr/recruitment/integration", section: "Gestão do colaborador" },
   { label: "Escalas de trabalho", href: "/dashboard/dp/schedules", section: "Gestão do colaborador" },
   { label: "Férias da equipe", href: "/dashboard/dp/ferias", section: "Gestão do colaborador" },

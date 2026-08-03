@@ -16,11 +16,14 @@ import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { fetchPdvLegalFiliais, fetchPdvLegalProfiles } from '@/lib/integrations/pdv-legal-admin';
+import { createPjOnboardingWorkflow, sanitizePjServiceItems } from '@/features/hr/onboarding-pj/core';
 import {
   applyOnboardingSignatureMode,
   instantiateOnboardingDocuments,
   mergeOnboardingDocumentModels,
   mergeOnboardingStageModels,
+  PJ_ONBOARDING_DOCUMENTS,
+  PJ_ONBOARDING_STAGES,
 } from '@/lib/recruitment-onboarding';
 
 export const runtime = 'nodejs';
@@ -69,6 +72,163 @@ function normalizeEmail(value: unknown) {
 
 function createPublicToken() {
   return randomUUID().replace(/-/g, '');
+}
+
+async function createPjOnboarding(params: {
+  input: Record<string, unknown>;
+  access: NonNullable<Awaited<ReturnType<typeof assertFormalizationAccess>>>;
+}) {
+  const providerCnpj = CnpjValidator.clean(asString(params.input.providerCnpj) ?? '');
+  const providerLegalName = asString(params.input.providerLegalName);
+  const providerTradeName = asString(params.input.providerTradeName);
+  const providerEmail = normalizeEmail(params.input.candidateEmail);
+  const employerUnitId = asString(params.input.employerUnitId);
+  const contractStartDate = asDateString(params.input.contractStartDate);
+  const termType = params.input.termType === 'fixed' ? 'fixed' : params.input.termType === 'indefinite' ? 'indefinite' : null;
+  const contractEndDate = asDateString(params.input.contractEndDate);
+  const monthlyValue = asNumber(params.input.monthlyValue);
+  const paymentDay = asNumber(params.input.paymentDay);
+  const serviceItems = sanitizePjServiceItems(params.input.serviceItems);
+
+  if (!CnpjValidator.validate(providerCnpj).valid) return jsonError('Informe um CNPJ válido para a prestadora.');
+  if (!providerLegalName) return jsonError('Informe a razão social da prestadora.');
+  if (!providerEmail || !providerEmail.includes('@')) return jsonError('Informe o e-mail único da prestadora.');
+  if (!employerUnitId) return jsonError('Selecione a empresa contratante.');
+  if (!contractStartDate) return jsonError('Informe a data de início da prestação.');
+  if (!termType) return jsonError('Informe se o prazo é determinado ou indeterminado.');
+  if (termType === 'fixed' && (!contractEndDate || contractEndDate < contractStartDate)) {
+    return jsonError('Informe uma data de término igual ou posterior à data de início.');
+  }
+  if (monthlyValue === null || monthlyValue <= 0) return jsonError('Informe um valor mensal maior que zero.');
+  if (paymentDay === null || !Number.isInteger(paymentDay) || paymentDay < 1 || paymentDay > 31) {
+    return jsonError('Informe um dia de pagamento entre 1 e 31.');
+  }
+  if (!serviceItems.length || serviceItems.some(item => !item.front || !item.deliverable)) {
+    return jsonError('Informe ao menos uma frente com seu respectivo entregável.');
+  }
+
+  const employerUnitDoc = await dbAdmin.collection('dp_units').doc(employerUnitId).get();
+  if (!employerUnitDoc.exists || employerUnitDoc.data()?.isArchived === true) {
+    return jsonError('A empresa contratante selecionada não está disponível.', 404);
+  }
+  const employerCnpj = CnpjValidator.clean(asString(employerUnitDoc.data()?.cnpj) ?? '');
+  if (!CnpjValidator.validate(employerCnpj).valid) {
+    return jsonError('A empresa contratante selecionada não possui um CNPJ válido.', 400);
+  }
+
+  const existing = await hrDbAdmin.collection('onboardingProcesses')
+    .where('providerCnpj', '==', providerCnpj)
+    .get();
+  const duplicate = existing.docs.find(document => !['cancelled', 'completed'].includes(String(document.get('status') ?? '')));
+  if (duplicate) return jsonError('Já existe uma integração em andamento para este CNPJ.', 409);
+
+  const now = new Date().toISOString();
+  const publicToken = createPublicToken();
+  const publicLinkWindow = createOnboardingPublicLinkWindow(new Date(now));
+  const onboardingRef = hrDbAdmin.collection('onboardingProcesses').doc();
+  const integrationSnapshot: IntegrationTemplateVersion = {
+    schemaVersion: 'coala-integration-v1',
+    templateId: `pj_${onboardingRef.id}`,
+    version: 1,
+    name: `Integração PJ · ${providerLegalName}`,
+    roleId: 'pj-contracting',
+    functionId: null,
+    createdAt: now,
+    createdBy: params.access.decoded.uid,
+    publishedAt: null,
+    ...blankIntegrationTemplateContent(),
+  };
+  const pjWorkflow = createPjOnboardingWorkflow({
+    cnpj: providerCnpj,
+    legalName: providerLegalName,
+    tradeName: providerTradeName,
+    email: providerEmail,
+    contractStartDate,
+    termType,
+    contractEndDate,
+    monthlyValue,
+    paymentDay,
+    serviceItems,
+    now,
+    actorId: params.access.decoded.uid,
+  });
+
+  await onboardingRef.set({
+    candidateId: `pj_${onboardingRef.id}`,
+    candidateName: providerLegalName,
+    candidateEmail: providerEmail,
+    providerCnpj,
+    providerLegalName,
+    providerTradeName: providerTradeName ?? null,
+    applicationId: null,
+    jobOpeningId: null,
+    jobRoleId: null,
+    jobRoleName: 'Prestadora de serviços',
+    functionId: null,
+    functionName: null,
+    employmentRelationshipType: 'pj',
+    employerUnitId: employerUnitDoc.id,
+    employerUnitName: asString(employerUnitDoc.data()?.name),
+    employerCnpj,
+    employerAddress: asString(employerUnitDoc.data()?.address),
+    expectedAdmissionDate: contractStartDate,
+    generateSignatureDocuments: true,
+    source: 'manual',
+    integrationV2: createIntegrationExecution({ mode: 'blank', snapshot: integrationSnapshot, now }),
+    probationV2: null,
+    pjWorkflow,
+    publicToken,
+    ...publicLinkWindow,
+    status: 'collecting_documents',
+    currentStage: 'documents',
+    stages: PJ_ONBOARDING_STAGES,
+    documents: instantiateOnboardingDocuments(PJ_ONBOARDING_DOCUMENTS),
+    integrationAlerts: [],
+    approvedAt: now,
+    approvedBy: params.access.decoded.uid,
+    approvedByEmail: params.access.decoded.email ?? null,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await logAction({
+    user_id: params.access.decoded.uid,
+    username: params.access.decoded.email ?? null,
+    module: 'recruitment.onboarding',
+    action: 'onboarding_pj_created',
+    metadata: {
+      target_type: 'onboarding',
+      target_id: onboardingRef.id,
+      target_name: providerLegalName,
+      provider_cnpj: providerCnpj,
+      employer_unit_id: employerUnitDoc.id,
+      employer_cnpj: employerCnpj,
+    },
+    ttl_days: 365,
+  });
+
+  await sendTrackedIntegrationCommunication({
+    onboardingId: onboardingRef.id,
+    event: 'formalization_started',
+    template: integrationSnapshot,
+    recipient: providerEmail,
+    actionUrl: `https://vagas.coalashakes.com/onboarding/${encodeURIComponent(publicToken)}`,
+    expiresAt: publicLinkWindow.publicTokenExpiresAt,
+    variables: {
+      'employee.name': providerLegalName,
+      'employee.personal_email': providerEmail,
+      'system.role.job_role': 'Prestadora de serviços',
+      'system.role.functions': 'Cadastro da empresa prestadora',
+      'system.schedule.units': asString(employerUnitDoc.data()?.name),
+      'system.schedule.shift': null,
+      'integration.expected_admission_date': contractStartDate,
+    },
+  });
+
+  const saved = await onboardingRef.get();
+  return NextResponse.json({
+    process: { id: saved.id, ...((serializeHrValue(saved.data()) as Record<string, unknown>) ?? {}) },
+  }, { status: 201 });
 }
 
 function redactOnboardingProcess(
@@ -168,6 +328,10 @@ export async function POST(request: NextRequest) {
   const requestedTemplateVersion = asNumber(input.integrationTemplateVersion);
   const requiresPdvAccess = asBoolean(input.requiresPdvAccess);
   const pdvProfileId = asString(input.pdvProfileId);
+
+  if (employmentRelationshipType === 'pj') {
+    return createPjOnboarding({ input, access });
+  }
 
   if (!candidateName) return jsonError('Informe o nome da pessoa em integração.');
   if (!candidateEmail || !candidateEmail.includes('@')) return jsonError('Informe um e-mail válido.');

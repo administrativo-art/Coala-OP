@@ -28,6 +28,8 @@ import {
   publicImageVoiceConsentTerm,
 } from '@/lib/hr/image-voice-consent';
 import type { OnboardingDocument } from '@/types';
+import type { PjOnboardingWorkflow } from '@/types';
+import { pjRequiredRegistrationFieldsMissing, setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -142,6 +144,32 @@ function sanitizePublicAnswers(rawAnswers: Record<string, unknown>) {
     educationInstitution: trimText(rawAnswers.educationInstitution, 160),
     educationEndDate: cleanIsoDate(rawAnswers.educationEndDate),
     notes: trimText(rawAnswers.notes, 1000),
+  };
+}
+
+function sanitizePjPublicAnswers(raw: Record<string, unknown>) {
+  const bankMethod = cleanChoice(raw.bankMethod, ['pix', 'bank']);
+  const authoritySource = cleanChoice(raw.authoritySource, ['social_contract', 'power_of_attorney']);
+  return {
+    companyAddress: trimText(raw.companyAddress, 500),
+    companyPhone: trimText(raw.companyPhone, 30),
+    municipalRegistration: trimText(raw.municipalRegistration, 80),
+    stateRegistration: trimText(raw.stateRegistration, 80),
+    representativeName: trimText(raw.representativeName, 160),
+    representativeCpf: trimText(raw.representativeCpf, 20).replace(/\D/g, '').slice(0, 11),
+    representativeQualification: trimText(raw.representativeQualification, 240),
+    authoritySource,
+    bankMethod,
+    bankHolderName: trimText(raw.bankHolderName, 160),
+    bankHolderDocument: trimText(raw.bankHolderDocument, 24).replace(/\D/g, '').slice(0, 14),
+    pixKey: bankMethod === 'pix' ? trimText(raw.pixKey, 200) : '',
+    bankName: bankMethod === 'bank' ? trimText(raw.bankName, 120) : '',
+    bankAgency: bankMethod === 'bank' ? trimText(raw.bankAgency, 40) : '',
+    bankAccount: bankMethod === 'bank' ? trimText(raw.bankAccount, 80) : '',
+    notes: trimText(raw.notes, 1000),
+    dataAccuracyConfirmed: raw.dataAccuracyConfirmed === true,
+    representationAuthorityConfirmed: raw.representationAuthorityConfirmed === true,
+    invoiceAcknowledged: raw.invoiceAcknowledged === true,
   };
 }
 
@@ -431,9 +459,10 @@ async function getOnboardingByToken(token: string) {
 }
 
 function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
-  const documents = withUniversalDocuments(
-    Array.isArray(data.documents) ? data.documents as OnboardingDocument[] : []
-  );
+  const processDocuments = Array.isArray(data.documents) ? data.documents as OnboardingDocument[] : [];
+  const documents = data.employmentRelationshipType === 'pj'
+    ? processDocuments
+    : withUniversalDocuments(processDocuments);
   return {
     id,
     candidateName: data.candidateName ?? null,
@@ -441,6 +470,12 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
     jobRoleName: data.jobRoleName ?? null,
     functionName: data.functionName ?? null,
     unitName: data.unitName ?? null,
+    employmentRelationshipType: data.employmentRelationshipType ?? null,
+    providerCnpj: data.providerCnpj ?? null,
+    providerLegalName: data.providerLegalName ?? null,
+    providerTradeName: data.providerTradeName ?? null,
+    employerUnitName: data.employerUnitName ?? null,
+    pjWorkflow: data.pjWorkflow ?? null,
     status: data.status ?? null,
     currentStage: data.currentStage ?? null,
     documents: documents.map(document => ({
@@ -522,6 +557,112 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
 
   if (JSON.stringify(rawAnswers).length > 12_000 || JSON.stringify(rawDocuments).length > 20_000) {
     return jsonError('Informações acima do limite permitido.');
+  }
+
+  if (data.employmentRelationshipType === 'pj') {
+    const publicFormAnswers = sanitizePjPublicAnswers(rawAnswers);
+    const missing = pjRequiredRegistrationFieldsMissing(publicFormAnswers);
+    if (publicFormAnswers.representativeCpf.length !== 11) missing.push('CPF válido do representante legal');
+    if (![11, 14].includes(publicFormAnswers.bankHolderDocument.length)) missing.push('CPF ou CNPJ válido do titular');
+    if (!publicFormAnswers.authoritySource) missing.push('Origem dos poderes de representação');
+    if (!publicFormAnswers.dataAccuracyConfirmed) missing.push('Declaração de veracidade dos dados');
+    if (!publicFormAnswers.representationAuthorityConfirmed) missing.push('Declaração de poderes de representação');
+    if (!publicFormAnswers.invoiceAcknowledged) missing.push('Ciência da obrigatoriedade da nota fiscal');
+    if (missing.length) return jsonError(`Preencha os campos obrigatórios: ${Array.from(new Set(missing)).join(', ')}.`);
+
+    const notice = publicPrivacyNotice();
+    const acceptanceInput = input.privacyAcceptance && typeof input.privacyAcceptance === 'object' && !Array.isArray(input.privacyAcceptance)
+      ? input.privacyAcceptance as Record<string, unknown>
+      : {};
+    const noticeMatches = trimText(acceptanceInput.noticeVersion, 80) === notice.version
+      && trimText(acceptanceInput.noticeHash, 128) === notice.hash;
+    if (!noticeMatches || acceptanceInput.acknowledged !== true) {
+      return jsonError('Leia e confirme o Aviso de Privacidade para enviar o cadastro.');
+    }
+
+    const documents = (Array.isArray(data.documents) ? data.documents as OnboardingDocument[] : [])
+      .map(document => document.id === 'power_of_attorney'
+        ? { ...document, required: publicFormAnswers.authoritySource === 'power_of_attorney' }
+        : document);
+    const blocked = Object.keys(rawDocuments).find(documentId => {
+      const current = documents.find(document => document.id === documentId);
+      return current ? !canCandidateUploadDocument(current) : true;
+    });
+    if (blocked) return jsonError('Documento já enviado ou não reconhecido. O RH precisa liberá-lo para substituição.', 403);
+    const nextDocuments = documents.map(document => {
+      const submitted = rawDocuments[document.id];
+      if (!submitted || typeof submitted !== 'object' || Array.isArray(submitted)) return document;
+      const submittedData = submitted as Record<string, unknown>;
+      const fileUrl = isAllowedStorageUrl(submittedData.fileUrl) ? submittedData.fileUrl : null;
+      if (!fileUrl) return document;
+      return {
+        ...document,
+        status: 'received' as const,
+        fileUrl,
+        filePath: trimText(submittedData.filePath, 700) || document.filePath || null,
+        fileHashSha256: /^[a-f0-9]{64}$/i.test(trimText(submittedData.sha256, 64))
+          ? trimText(submittedData.sha256, 64).toLowerCase()
+          : document.fileHashSha256 ?? null,
+        receivedAt: now,
+        approvedAt: null,
+        updatedAt: now,
+      };
+    });
+    if (!requiredDocumentsSubmitted(nextDocuments)) {
+      return jsonError('Anexe todos os documentos obrigatórios antes de enviar o cadastro.');
+    }
+
+    const protocol = createSubmissionProtocol(new Date(now));
+    const privacyNoticeSnapshotId = await ensurePrivacyNoticeSnapshot(notice, now);
+    const previousAcceptance = data.publicPrivacyAcceptance && typeof data.publicPrivacyAcceptance === 'object'
+      ? data.publicPrivacyAcceptance as Record<string, unknown>
+      : {};
+    const publicPrivacyAcceptance = {
+      noticeVersion: notice.version,
+      noticeHash: notice.hash,
+      noticeTitle: notice.title,
+      noticeSummary: notice.summary,
+      noticeText: notice.text,
+      acknowledgementText: notice.acknowledgementText,
+      confirmationNote: notice.confirmationNote,
+      acknowledged: true,
+      firstAcceptedAt: previousAcceptance.noticeVersion === notice.version ? previousAcceptance.firstAcceptedAt ?? now : now,
+      lastConfirmedAt: now,
+      privacyNoticeSnapshotId,
+      lastProtocol: protocol,
+    };
+    const workflow = data.pjWorkflow as PjOnboardingWorkflow;
+    const nextWorkflow = setPjWorkflowStep({
+      ...workflow,
+      currentStep: 'provider_registration',
+      steps: {
+        ...workflow.steps,
+        provider_registration: { ...workflow.steps.provider_registration, status: 'active' },
+      },
+    }, 'registration_review', now, 'provider');
+    await doc.ref.set({
+      documents: nextDocuments,
+      publicFormAnswers,
+      publicFormSubmittedAt: data.publicFormSubmittedAt ?? now,
+      publicFormLastSubmittedAt: now,
+      publicPrivacyAcceptance,
+      pjWorkflow: nextWorkflow,
+      currentStage: 'document_review',
+      status: 'reviewing_documents',
+      updatedAt: now,
+    }, { merge: true });
+    await doc.ref.collection('audit').add({
+      action: 'PJ_PROVIDER_REGISTRATION_SUBMITTED',
+      protocol,
+      tokenHash: sha256(cleanToken),
+      submittedDocumentIds: Object.keys(rawDocuments),
+      privacyNoticeVersion: notice.version,
+      privacyNoticeHash: notice.hash,
+      ...clientEvidence(request),
+      at: now,
+    });
+    const saved = await doc.ref.get();
+    return NextResponse.json(publicPayload(saved.id, serializeHrValue(saved.data()) as FirebaseFirestore.DocumentData));
   }
 
   let publicFormAnswers = sanitizePublicAnswers(rawAnswers);

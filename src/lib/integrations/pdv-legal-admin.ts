@@ -383,7 +383,7 @@ export async function getAccessToken() {
 /**
  * Busca cupons exaustivamente (Paginado) no servidor.
  */
-async function fetchAllCouponsForDay(accessToken: string, date: string, filialId: string) {
+export async function fetchAllCouponsForDay(accessToken: string, date: string, filialId: string) {
   const { COD_EMPRESA, API_TOKEN } = getEnv();
   console.log(`[PDV Legal] Iniciando coleta: ${date} (Filial: ${filialId})`);
 

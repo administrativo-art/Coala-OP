@@ -1260,6 +1260,117 @@ export type OnboardingAccessProvisioningState = {
   };
 };
 
+export type PjOnboardingStepId =
+  | 'contract_definition'
+  | 'provider_registration'
+  | 'registration_review'
+  | 'contract_preparation'
+  | 'contract_signature'
+  | 'financial_registration'
+  | 'access_configuration'
+  | 'provider_activation';
+
+export type PjOnboardingStepStatus = 'pending' | 'active' | 'completed' | 'correction_required';
+
+export type PjServiceScopeItem = {
+  id: string;
+  front: string;
+  deliverable: string;
+  order: number;
+};
+
+export type PjOnboardingWorkflow = {
+  version: 1;
+  currentStep: PjOnboardingStepId;
+  steps: Record<PjOnboardingStepId, {
+    status: PjOnboardingStepStatus;
+    completedAt?: string | null;
+    completedBy?: string | null;
+    note?: string | null;
+  }>;
+  provider: {
+    cnpj: string;
+    legalName: string;
+    tradeName?: string | null;
+    email: string;
+  };
+  terms: {
+    contractStartDate: string;
+    termType: 'fixed' | 'indefinite';
+    contractEndDate?: string | null;
+    monthlyValue: number;
+    paymentDay: number;
+    invoiceRequired: true;
+    serviceItems: PjServiceScopeItem[];
+  };
+  review?: {
+    status?: 'pending' | 'approved' | 'correction_required';
+    issues?: Array<{
+      id: string;
+      target: string;
+      message: string;
+      resolvedAt?: string | null;
+    }>;
+    reviewedAt?: string | null;
+    reviewedBy?: string | null;
+  };
+  contract?: {
+    status?: 'not_generated' | 'draft' | 'approved' | 'sent' | 'signed' | 'rejected' | 'failed';
+    version?: number;
+    storagePath?: string | null;
+    signedStoragePath?: string | null;
+    hashSha256?: string | null;
+    generatedAt?: string | null;
+    generatedBy?: string | null;
+    approvedAt?: string | null;
+    approvedBy?: string | null;
+    signatureRequestId?: string | null;
+    providerDocumentId?: string | null;
+    providerSignatures?: unknown[];
+    sentAt?: string | null;
+    signedAt?: string | null;
+    lastError?: string | null;
+    contractorRepresentative?: {
+      name?: string | null;
+      email?: string | null;
+      role?: string | null;
+      qualification?: string | null;
+      cpf?: string | null;
+      professionalId?: string | null;
+    };
+    signatureCity?: string | null;
+    forumCity?: string | null;
+  };
+  finance?: {
+    status?: 'pending' | 'submitted' | 'correction_required' | 'approved';
+    submittedAt?: string | null;
+    submittedBy?: string | null;
+    reviewedAt?: string | null;
+    reviewedBy?: string | null;
+    note?: string | null;
+  };
+  access?: {
+    status?: 'pending' | 'configured' | 'invitation_sent' | 'completed';
+    userName?: string | null;
+    userCpf?: string | null;
+    profileId?: string | null;
+    profileName?: string | null;
+    unitIds?: string[];
+    unitNames?: string[];
+    pdvRequired?: boolean;
+    pdvUnitId?: string | null;
+    pdvUnitName?: string | null;
+    pdvFilialId?: string | null;
+    pdvFilialName?: string | null;
+    pdvProfileId?: string | null;
+    pdvProfileName?: string | null;
+    configuredAt?: string | null;
+    configuredBy?: string | null;
+  };
+  activatedAt?: string | null;
+  activatedBy?: string | null;
+};
+
 export type OnboardingPrivacyAcceptance = {
   noticeVersion: string;
   noticeHash: string;
@@ -1476,6 +1587,7 @@ export type OnboardingProcess = {
     completionRequestedAt?: string | null;
   };
   probationV2?: import('@/features/hr/integration/probation-process').ProbationProcessState;
+  pjWorkflow?: PjOnboardingWorkflow | null;
   trainingItems?: OnboardingTrainingItem[];
   approvedAt?: string | null;
   approvedBy?: string | null;

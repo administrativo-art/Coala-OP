@@ -3,6 +3,7 @@
 import React, { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, FileUp, Loader2, Paperclip, Send, X } from "lucide-react";
+import { PjPublicOnboardingForm } from '@/features/hr/onboarding-pj/public-form';
 
 type PublicOnboardingDocument = {
   id: string;
@@ -22,6 +23,21 @@ type PublicOnboarding = {
   jobRoleName?: string | null;
   functionName?: string | null;
   unitName?: string | null;
+  employmentRelationshipType?: 'clt' | 'pj' | 'internship' | null;
+  providerCnpj?: string | null;
+  providerLegalName?: string | null;
+  providerTradeName?: string | null;
+  employerUnitName?: string | null;
+  pjWorkflow?: {
+    terms?: {
+      contractStartDate?: string;
+      termType?: 'fixed' | 'indefinite';
+      contractEndDate?: string | null;
+      monthlyValue?: number;
+      paymentDay?: number;
+      serviceItems?: Array<{ id: string; front: string; deliverable: string; order: number }>;
+    };
+  } | null;
   status?: string | null;
   documents?: PublicOnboardingDocument[];
   publicFormAnswers?: Record<string, unknown>;
@@ -584,6 +600,10 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
         </Link>
       </div>
     );
+  }
+
+  if (data.employmentRelationshipType === 'pj') {
+    return <PjPublicOnboardingForm token={token} data={data} expired={linkExpired} onUpdated={updated => setData(updated as PublicOnboarding)} />;
   }
 
   return (

@@ -10,6 +10,7 @@ import {
   Clock,
   Eye,
   EyeOff,
+  FilePenLine,
   FileText,
   Globe2,
   IdCard,
@@ -139,7 +140,13 @@ type TerminationPayload = {
   terminationReason: EmploymentTerminationReason;
   terminationCause?: string;
   terminationNotes?: string;
+  terminationInternalReason?: string;
   terminationDate: string;
+  communicationConfirmed?: boolean;
+  communicationAt?: string;
+  communicationLocation?: string;
+  communicationParticipants?: string[];
+  noticeType?: "worked" | "indemnified";
 };
 
 const RH_SECTION_LABELS: Record<string, string> = {
@@ -2027,12 +2034,19 @@ function TerminationDialog({
   const [terminationReason, setTerminationReason] = useState<EmploymentTerminationReason | "">("");
   const [terminationCause, setTerminationCause] = useState("");
   const [terminationNotes, setTerminationNotes] = useState("");
+  const [terminationInternalReason, setTerminationInternalReason] = useState("");
+  const [communicationAt, setCommunicationAt] = useState(() => format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [communicationLocation, setCommunicationLocation] = useState("");
+  const [communicationParticipants, setCommunicationParticipants] = useState("");
+  const [communicationConfirmed, setCommunicationConfirmed] = useState(false);
+  const [noticeType, setNoticeType] = useState<"worked" | "indemnified">("indemnified");
   const [message, setMessage] = useState<string | null>(null);
   const needsSubtype = requiresTerminationSubtype(terminationReason);
   const relationshipType = user.employmentRelationshipType;
   const availableReasons = terminationReasonsForRelationship(relationshipType);
   const copy = terminationCopyForRelationship(relationshipType);
   const terminationAvailable = relationshipType === "clt" || relationshipType === "pj";
+  const isWithoutCause = terminationReason === "Dispensa sem justa causa";
 
   useEffect(() => {
     if (!open) return;
@@ -2040,6 +2054,12 @@ function TerminationDialog({
     setTerminationReason("");
     setTerminationCause("");
     setTerminationNotes("");
+    setTerminationInternalReason("");
+    setCommunicationAt(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+    setCommunicationLocation("");
+    setCommunicationParticipants("");
+    setCommunicationConfirmed(false);
+    setNoticeType("indemnified");
     setMessage(null);
   }, [open]);
 
@@ -2069,6 +2089,10 @@ function TerminationDialog({
       setMessage("Selecione o subtipo da justa causa.");
       return;
     }
+    if (isWithoutCause && (!communicationAt || !communicationLocation.trim() || !communicationConfirmed || terminationInternalReason.trim().length < 3)) {
+      setMessage("Preencha a comunicação presencial, o motivo interno e confirme que a colaboradora já foi comunicada.");
+      return;
+    }
 
     setMessage(null);
     await onConfirm({
@@ -2076,12 +2100,20 @@ function TerminationDialog({
       terminationReason,
       terminationCause: needsSubtype ? terminationCause : undefined,
       terminationNotes: terminationNotes.trim() || undefined,
+      terminationInternalReason: isWithoutCause ? terminationInternalReason.trim() : undefined,
+      communicationConfirmed: isWithoutCause ? communicationConfirmed : undefined,
+      communicationAt: isWithoutCause ? new Date(communicationAt).toISOString() : undefined,
+      communicationLocation: isWithoutCause ? communicationLocation.trim() : undefined,
+      communicationParticipants: isWithoutCause
+        ? communicationParticipants.split(/[,\n]/).map((value) => value.trim()).filter(Boolean)
+        : undefined,
+      noticeType: isWithoutCause ? noticeType : undefined,
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !saving && onOpenChange(nextOpen)}>
-      <DialogContent className="rounded-xl p-4 sm:max-w-lg">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-xl p-4 sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>
           <DialogDescription>
@@ -2092,7 +2124,7 @@ function TerminationDialog({
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
           <div className="grid gap-2.5 sm:grid-cols-2">
             <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
-              {copy.dateLabel}
+              {isWithoutCause ? "Último dia de trabalho" : copy.dateLabel}
               <input
                 type="date"
                 value={terminationDate}
@@ -2135,8 +2167,49 @@ function TerminationDialog({
             </label>
           ) : null}
 
+          {isWithoutCause ? (
+            <div className="space-y-4 rounded-xl border border-pink-100 bg-pink-50/40 p-4">
+              <div>
+                <p className="text-sm font-black text-[#1d1d26]">Comunicação presencial</p>
+                <p className="mt-1 text-xs font-semibold text-[#777784]">Registre a conversa que já aconteceu. A comunicação oficial será gerada para assinatura após a abertura.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+                  Data e hora da comunicação
+                  <input type="datetime-local" value={communicationAt} onChange={(event) => setCommunicationAt(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                </label>
+                <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+                  Local
+                  <input value={communicationLocation} onChange={(event) => setCommunicationLocation(event.target.value)} placeholder="Ex.: sala administrativa" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                </label>
+                <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+                  Aviso-prévio
+                  <select value={noticeType} onChange={(event) => setNoticeType(event.target.value as "worked" | "indemnified")} className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]">
+                    <option value="indemnified">Indenizado</option>
+                    <option value="worked">Trabalhado</option>
+                  </select>
+                </label>
+                <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
+                  Outros participantes
+                  <input value={communicationParticipants} onChange={(event) => setCommunicationParticipants(event.target.value)} placeholder="Separe os nomes por vírgula" className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]" />
+                </label>
+              </div>
+              <label className="flex items-start gap-3 rounded-xl border border-pink-200 bg-white p-3 text-sm font-bold text-slate-800">
+                <input type="checkbox" checked={communicationConfirmed} onChange={(event) => setCommunicationConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[#df2f78]" />
+                <span>Confirmo que a colaboradora já foi comunicada presencialmente sobre seu desligamento.</span>
+              </label>
+            </div>
+          ) : null}
+
+          {isWithoutCause ? (
+            <label className="block text-xs font-black uppercase tracking-wide text-[#777784]">
+              Motivo interno e confidencial
+              <Textarea value={terminationInternalReason} onChange={(event) => setTerminationInternalReason(event.target.value)} placeholder="Obrigatório. Esta informação não será exibida no comunicado da colaboradora." className="mt-1 min-h-16 rounded-lg border-[#dedfe4] text-xs font-semibold" />
+            </label>
+          ) : null}
+
           <label className="block text-xs font-black uppercase tracking-wide text-[#777784]">
-            Observações
+            {isWithoutCause ? "Observações internas" : "Observações"}
             <Textarea
               value={terminationNotes}
               onChange={(event) => setTerminationNotes(event.target.value)}
@@ -2434,6 +2507,12 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const canTerminateCollaborator = Boolean(
     !isTerminated && (permissions.settings?.manageUsers === true || permissions.dp?.collaborators?.terminate === true)
   );
+  const isOwnProfile = Boolean(
+    currentUser?.id === collaborator.id || firebaseUser?.uid === collaborator.id
+  );
+  const canRequestOwnResignation = Boolean(
+    isOwnProfile && !isTerminated && collaborator.employmentRelationshipType === "clt"
+  );
 
   async function confirmTermination(payload: TerminationPayload) {
     if (!canTerminateCollaborator || terminationSaving || !firebaseUser) return;
@@ -2445,6 +2524,12 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
         terminationReason: payload.terminationReason,
         terminationCause: payload.terminationCause,
         terminationNotes: payload.terminationNotes,
+        terminationInternalReason: payload.terminationInternalReason,
+        communicationConfirmed: payload.communicationConfirmed,
+        communicationAt: payload.communicationAt,
+        communicationLocation: payload.communicationLocation,
+        communicationParticipants: payload.communicationParticipants,
+        noticeType: payload.noticeType,
       });
       setTerminationDialogOpen(false);
       toast({
@@ -2855,13 +2940,15 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-60 rounded-lg p-1.5">
                   <div className="space-y-1">
-                    <Link
-                      href={`/dashboard/dp/collaborators/${user.id}/edit`}
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
-                    >
-                      <Pencil className="h-4 w-4 text-[#df2f78]" />
-                      Editar dados
-                    </Link>
+                    {canManageSystemFieldVisibility ? (
+                      <Link
+                        href={`/dashboard/dp/collaborators/${user.id}/edit`}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+                      >
+                        <Pencil className="h-4 w-4 text-[#df2f78]" />
+                        Editar dados
+                      </Link>
+                    ) : null}
                     {canManageSystemFieldVisibility ? (
                       <Link
                         href="/dashboard/settings?department=pessoal&tab=profile-fields"
@@ -2885,6 +2972,15 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
                       <ImageIcon className="h-4 w-4 text-[#df2f78]" />
                       Consentimento de imagem e voz
                     </Link>
+                    {canRequestOwnResignation ? (
+                      <Link
+                        href="/dashboard/resignation"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-50"
+                      >
+                        <FilePenLine className="h-4 w-4 text-rose-600" />
+                        Pedir demissão
+                      </Link>
+                    ) : null}
                     {canTerminateCollaborator ? (
                       <button
                         type="button"

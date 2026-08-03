@@ -7,6 +7,7 @@ import {
   terminationContext,
 } from "@/features/hr/termination/server";
 import { managedTerminationCreateSchema } from "@/features/hr/termination/schemas";
+import { handwrittenLetterWasConfirmed } from "@/features/hr/termination/resignation-guide";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,11 +39,16 @@ export async function POST(request: NextRequest) {
     const data = await request.formData();
     const file = data.get("letter");
     if (!(file instanceof File)) throw new Error("Anexe a carta assinada.");
+    const handwrittenLetterConfirmed = handwrittenLetterWasConfirmed(data.get("handwrittenConfirmed"));
+    if (!handwrittenLetterConfirmed) {
+      throw new Error("Confirme que a carta foi escrita à mão, datada e assinada.");
+    }
     const preference = data.get("noticePreference") === "work" ? "work" : "request_waiver";
     const result = await createEmployeeResignationRequest({
       context,
       file,
       noticePreference: preference,
+      handwrittenLetterConfirmed,
       desiredLastDay: typeof data.get("desiredLastDay") === "string" ? String(data.get("desiredLastDay")) || null : null,
       notes: typeof data.get("notes") === "string" ? String(data.get("notes")) || null : null,
       appBaseUrl: request.nextUrl.origin,

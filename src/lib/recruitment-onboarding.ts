@@ -32,6 +32,16 @@ export const DEFAULT_ONBOARDING_STAGES: OnboardingStage[] = [
   { id: 'done', label: 'Finalizado', order: 7, required: true, dueDays: null },
 ];
 
+export const PJ_ONBOARDING_STAGES: OnboardingStage[] = [
+  { id: 'documents', label: 'Cadastro da empresa prestadora', order: 0, required: true, dueDays: 3 },
+  { id: 'document_review', label: 'Conferência cadastral pelo RH', order: 1, required: true, dueDays: 2 },
+  { id: 'signature_preparation', label: 'Preparação e revisão do contrato', order: 2, required: true, dueDays: null },
+  { id: 'signature', label: 'Assinaturas do contrato', order: 3, required: true, dueDays: null },
+  { id: 'formalization_validation', label: 'Cadastro financeiro e fiscal', order: 4, required: true, dueDays: null },
+  { id: 'integration', label: 'Configuração de acessos', order: 5, required: true, dueDays: null },
+  { id: 'done', label: 'Prestadora ativada', order: 6, required: true, dueDays: null },
+];
+
 export const DEFAULT_ONBOARDING_DOCUMENTS: OnboardingDocumentTemplate[] = [
   {
     id: 'identity_document',
@@ -96,6 +106,41 @@ export const DEFAULT_ONBOARDING_DOCUMENTS: OnboardingDocumentTemplate[] = [
     description: 'Obrigatória somente se você possui CNH e não usou a CNH como documento de identificação.',
     required: false,
     order: 7,
+  },
+];
+
+export const PJ_ONBOARDING_DOCUMENTS: OnboardingDocumentTemplate[] = [
+  {
+    id: 'company_formation_document',
+    label: 'Contrato social, requerimento de empresário ou CCMEI',
+    documentTypeCode: 'PJ_FORMATION_DOCUMENT',
+    description: 'Envie o documento constitutivo vigente da empresa prestadora.',
+    required: true,
+    order: 0,
+  },
+  {
+    id: 'legal_representative_document',
+    label: 'Documento do representante legal',
+    documentTypeCode: 'PJ_REPRESENTATIVE_ID',
+    description: 'Envie RG, CIN ou CNH do representante informado no cadastro.',
+    required: true,
+    order: 1,
+  },
+  {
+    id: 'bank_proof',
+    label: 'Comprovante bancário da empresa',
+    documentTypeCode: 'PJ_BANK_PROOF',
+    description: 'O documento deve identificar a titularidade e os dados para pagamento.',
+    required: true,
+    order: 2,
+  },
+  {
+    id: 'power_of_attorney',
+    label: 'Procuração',
+    documentTypeCode: 'PJ_POWER_OF_ATTORNEY',
+    description: 'Envie somente quando a assinatura não decorrer diretamente do contrato social.',
+    required: false,
+    order: 3,
   },
 ];
 
