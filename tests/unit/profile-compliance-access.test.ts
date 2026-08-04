@@ -16,7 +16,7 @@ test("libera somente as rotas mínimas durante a atualização obrigatória", ()
   assert.equal(requestAllowsIncompleteProfile(new NextRequest("https://coala.test/api/financial/data")), false);
 });
 
-test("não concede exceção a administrador e exige confirmação no trimestre atual", () => {
+test("mantém o acesso de um cadastro completo sem exigir reconfirmação trimestral", () => {
   const confirmedNow = {
     profileCompliance: {
       status: "complete",
@@ -24,7 +24,6 @@ test("não concede exceção a administrador e exige confirmação no trimestre 
       lastConfirmedAt: "2026-07-01T03:00:00.000Z",
     },
   };
-  assert.equal(hasCurrentProfileCompliance(confirmedNow, new Date("2026-09-30T23:59:00.000Z")), true);
-  assert.equal(hasCurrentProfileCompliance(confirmedNow, new Date("2026-10-01T03:00:00.000Z")), false);
-  assert.equal(hasCurrentProfileCompliance({ isDefaultAdmin: true }, new Date("2026-07-31T12:00:00.000Z")), false);
+  assert.equal(hasCurrentProfileCompliance(confirmedNow), true);
+  assert.equal(hasCurrentProfileCompliance({ isDefaultAdmin: true }), false);
 });

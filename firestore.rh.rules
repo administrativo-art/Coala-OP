@@ -28,8 +28,7 @@ service cloud.firestore {
       let cache = rhCache();
       return isAuth()
           && cache.get('profile_compliance_status', 'pending') == 'complete'
-          && cache.get('profile_compliance_policy_version', 0) == 1
-          && cache.get('profile_compliance_next_review_at', timestamp.date(1970, 1, 1)) > request.time;
+          && cache.get('profile_compliance_policy_version', 0) == 1;
     }
 
     function isAdmin()   { return hasCurrentProfileCompliance() && (isDefaultAdmin() || rhRole() == 'admin'); }

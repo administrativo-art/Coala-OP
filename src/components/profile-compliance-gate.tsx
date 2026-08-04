@@ -10,6 +10,7 @@ import type {
   ProfileComplianceFormValues,
   ProfileComplianceStatus,
 } from "@/features/hr/profile-compliance";
+import { PROFILE_COMPLIANCE_POLICY_VERSION } from "@/features/hr/profile-compliance";
 import {
   cepDigits,
   formatBrazilianCep,
@@ -196,7 +197,9 @@ export function ProfileComplianceGate({ children }: { children: React.ReactNode 
   };
 
   if (authLoading || !firebaseUser || !user) return <>{children}</>;
-  if (payload?.status === "complete" && !payload.reviewDue) return <>{children}</>;
+  const storedProfileIsComplete = user.profileCompliance?.status === "complete"
+    && user.profileCompliance.policyVersion === PROFILE_COMPLIANCE_POLICY_VERSION;
+  if ((!payload && storedProfileIsComplete) || payload?.complete) return <>{children}</>;
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 sm:px-6">
@@ -208,7 +211,7 @@ export function ProfileComplianceGate({ children }: { children: React.ReactNode 
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600">Atualização obrigatória</p>
                 <h1 className="text-xl font-black">Confirme seus dados cadastrais</h1>
-                <p className="text-sm text-slate-500">Necessário para acessar o Coala One e renovado trimestralmente.</p>
+                <p className="text-sm text-slate-500">Necessário somente quando houver dados obrigatórios ausentes ou inválidos.</p>
               </div>
             </div>
             <button type="button" onClick={() => void logout()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50">
@@ -285,7 +288,7 @@ export function ProfileComplianceGate({ children }: { children: React.ReactNode 
                   {step === 4 ? <div className="space-y-3">
                     <p className="text-sm text-slate-600">Confira os dados abaixo. Ao confirmar, você declara que as informações estão atualizadas.</p>
                     {summary.map(([label, value]) => <div key={label} className="grid gap-1 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:grid-cols-[180px_1fr]"><span className="text-xs font-bold uppercase text-slate-500">{label}</span><span className="break-all text-sm font-semibold">{value}</span></div>)}
-                    <p className="rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">A próxima confirmação será solicitada no início do próximo trimestre.</p>
+                    <p className="rounded-xl bg-emerald-50 px-4 py-3 text-xs text-emerald-800">Após confirmar, esta etapa só será solicitada novamente se houver alguma pendência cadastral.</p>
                   </div> : null}
 
                   {error ? <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</p> : null}

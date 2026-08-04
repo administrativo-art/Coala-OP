@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  hasExplicitPdvItemCancellation,
+  isPdvCouponMarkedCancelled,
+  pdvCouponItems,
+  pdvCouponTimestamp,
+} from "@/lib/integrations/pdv-coupon-ingestion";
 
 /**
  * Camada de parsing defensivo do cupom do PDV Legal para o motor de
@@ -96,17 +102,13 @@ export function parsePdvCoupons(raw: unknown): ParsePdvCouponsResult {
       "usuarioRecebimentoId",
       "usuarioRecebimento_Id",
     );
-    const timestamp = pickString(row, "dtrecebimento", "dtabertura", "DtRecebimento", "DtAbertura");
-    const isCancelled =
-      pickBoolean(row, "iscancelado", "IsCancelado") || pickString(row, "status", "Status") === "CANCELADO";
+    const timestamp = pdvCouponTimestamp(row);
+    const isCancelled = isPdvCouponMarkedCancelled(row);
     const isStorned = pickBoolean(row, "isestornado", "IsEstornado");
     const totalAmount = pickNumber(row, "valortotal", "ValorTotal");
 
-    const rawItems = pickArray(row, "itens", "Itens");
-    const hasExplicitItemCancellation = rawItems.some((item) => {
-      if (!item || typeof item !== "object") return false;
-      return pickBoolean(item as Record<string, unknown>, "iscancelado", "IsCancelado");
-    });
+    const rawItems = pdvCouponItems(row);
+    const hasExplicitItemCancellation = hasExplicitPdvItemCancellation(row);
 
     const rawPayments = pickArray(row, "formaPgtos", "FormaPgtos", "formapgtos");
     const paymentRows: ParsedFormaPagamento[] = rawPayments.flatMap((entry) => {

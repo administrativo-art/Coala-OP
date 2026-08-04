@@ -123,7 +123,7 @@ function compliantUser(profileId) {
       status: "complete",
       policyVersion: 1,
       lastConfirmedAt: new Date(),
-      nextReviewAt: new Date("2099-01-01T03:00:00.000Z"),
+      nextReviewAt: new Date("2000-01-01T03:00:00.000Z"),
     },
   };
 }
@@ -408,6 +408,111 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
   }
 });
 
+test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backend", async () => {
+  const env = await initializeTestEnvironment({
+    projectId: "demo-security-cash-closures",
+    firestore: { rules: rules.financial },
+  });
+
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      const financialPermissions = {
+        view: true,
+        cashClosures: { view: true, edit: true, approve: false, reopen: false, resync: false },
+        cashDeposits: { view: true, issue: false, cancel: false, adjust: false },
+      };
+      await Promise.all([
+        setDoc(doc(db, "users/cash-operator"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: financialPermissions,
+          unitAccessScope: "linked",
+          unitIds: ["tirirical"],
+          assignedKioskIds: [],
+          unitAccessUnitIds: [],
+        }),
+        setDoc(doc(db, "users/other-unit"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: financialPermissions,
+          unitAccessScope: "linked",
+          unitIds: ["joao-paulo"],
+          assignedKioskIds: [],
+          unitAccessUnitIds: [],
+        }),
+        setDoc(doc(db, "cashClosures/tirirical_2026-07-07"), {
+          kioskId: "tirirical",
+          status: "draft",
+          expectedTotalCents: 10000,
+        }),
+        setDoc(doc(db, "cashClosures/tirirical_2026-07-07/lines/10_cash"), {
+          kioskId: "tirirical",
+          expectedCents: 10000,
+          countedCents: null,
+          note: null,
+          status: "pending",
+          differenceCents: null,
+        }),
+        setDoc(doc(db, "cashClosures/tirirical_2026-07-06"), {
+          kioskId: "tirirical",
+          status: "approved",
+          expectedTotalCents: 10000,
+        }),
+        setDoc(doc(db, "cashClosures/tirirical_2026-07-06/lines/10_cash"), {
+          kioskId: "tirirical",
+          expectedCents: 10000,
+          countedCents: 10000,
+          note: null,
+          status: "matched",
+          differenceCents: 0,
+        }),
+        setDoc(doc(db, "cashDepositBatches/batch-1"), {
+          kioskId: "tirirical",
+          status: "open",
+          totalCents: 10000,
+        }),
+      ]);
+    });
+
+    const operator = env.authenticatedContext("cash-operator");
+    const outsider = env.authenticatedContext("other-unit");
+    await assertSucceeds(getDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07")));
+    await assertFails(getDoc(doc(outsider.firestore(), "cashClosures/tirirical_2026-07-07")));
+    await assertSucceeds(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/lines/10_cash"), {
+      countedCents: 9900,
+      note: "Falta conferida",
+    }));
+    await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/lines/10_cash"), {
+      expectedCents: 1,
+    }));
+    await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07"), {
+      status: "approved",
+    }));
+    await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-06/lines/10_cash"), {
+      countedCents: 1,
+    }));
+    await assertSucceeds(getDoc(doc(operator.firestore(), "cashDepositBatches/batch-1")));
+    await assertFails(updateDoc(doc(operator.firestore(), "cashDepositBatches/batch-1"), {
+      status: "paid",
+    }));
+    await assertFails(setDoc(doc(operator.firestore(), "interCobrancas/forged"), {
+      statusInterno: "paid",
+    }));
+    await assertFails(setDoc(doc(operator.firestore(), "interCobrancaEvents/forged"), {
+      kind: "webhook",
+    }));
+    await assertFails(setDoc(doc(operator.firestore(), "interWebhookRawEvents/forged"), {
+      rawBody: "[]",
+    }));
+    await assertFails(setDoc(doc(operator.firestore(), "cashDepositReconciliationRuns/forged"), {
+      status: "success",
+    }));
+  } finally {
+    await env.cleanup();
+  }
+});
+
 test("RH isola unidades, auditoria e recrutamento direto", async () => {
   const env = await initializeTestEnvironment({
     projectId: "demo-security-rh",
@@ -424,7 +529,7 @@ test("RH isola unidades, auditoria e recrutamento direto", async () => {
           bizneo_employee_id: "employee-a",
           profile_compliance_status: "complete",
           profile_compliance_policy_version: 1,
-          profile_compliance_next_review_at: new Date("2099-01-01T00:00:00.000Z"),
+          profile_compliance_next_review_at: new Date("2000-01-01T00:00:00.000Z"),
         }),
         setDoc(doc(db, "rh_access_cache/pending-manager"), {
           rh_role: "manager",

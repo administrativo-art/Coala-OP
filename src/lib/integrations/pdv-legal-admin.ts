@@ -1,6 +1,7 @@
 import { dbAdmin } from '@/lib/firebase-admin';
 import { type SalesReport, type SalesReportItem, type ConsumptionReport, type ConsumptionAnalysisItem, type ProductSimulation, type ProductSimulationItem, type BaseProduct } from '@/types';
 import { convertValue } from '@/lib/conversion';
+import { isPdvCouponFullyCancelled, isPdvItemCancelled, pdvCouponItems } from '@/lib/integrations/pdv-coupon-ingestion';
 
 function requireEnv(name: string): string {
   const val = process.env[name];
@@ -469,16 +470,10 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   const unmappedSkuMap: Record<string, { sku: string; name: string; count: number }> = {};
 
   for (const coupon of coupons) {
-    const rawItems = coupon.Itens || coupon.itens;
-    if (!rawItems || !Array.isArray(rawItems)) { diag.couponsWithoutItems++; continue; }
+    const rawItems = pdvCouponItems(coupon);
+    if (rawItems.length === 0) { diag.couponsWithoutItems++; continue; }
 
-    const isCupomCancelado = coupon.iscancelado || coupon.status === 'CANCELADO';
-
-    // Verifica se é um "Cancelamento Total Preguiçoso" da API:
-    // O cupom está cancelado, mas a API esqueceu de marcar os itens dentro dele como cancelados.
-    const hasAnyItemExplicitlyCancelled = rawItems.some(item => item.iscancelado === true);
-
-    if (isCupomCancelado && !hasAnyItemExplicitlyCancelled) {
+    if (isPdvCouponFullyCancelled(coupon)) {
        // Se o cupom está cancelado E NENHUM item dentro dele diz que foi cancelado,
        // assumimos que foi um cancelamento total da venda e ignoramos o cupom inteiro.
        diag.couponsCancelled++;
@@ -492,7 +487,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     for (const item of rawItems) {
       diag.itemsSeen++;
       // IGNORA O ITEM APENAS SE ELE, INDIVIDUALMENTE, ESTIVER MARCADO COMO CANCELADO
-      if (item.iscancelado) { diag.itemsCancelled++; continue; }
+      if (isPdvItemCancelled(item)) { diag.itemsCancelled++; continue; }
 
       const possibleSkus = [
           item.codigoVenda,

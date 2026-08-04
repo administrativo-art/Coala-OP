@@ -1,0 +1,112 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { buildCashClosureFromPdv } from "../../src/features/financial/cash-closures/build-cash-closure";
+import {
+  cashClosureId,
+  cashClosureLineId,
+  mergeBuiltClosureForPersistence,
+  recalculateCountedLine,
+} from "../../src/features/financial/cash-closures/persistence";
+
+const context = {
+  workspaceId: "ws1",
+  kioskId: "tirirical",
+  kioskName: "Tirirical",
+  pdvFilialId: "17343",
+  date: "2026-07-07",
+};
+
+function build(amount: number) {
+  return buildCashClosureFromPdv([
+    {
+      codcupom: "1",
+      usuariorecebimento_id: "10",
+      dtrecebimento: "2026-07-07 12:00:00",
+      valortotal: amount,
+      itens: [],
+      formaPgtos: [{ nome: "DINHEIRO", valortotal: amount }],
+    },
+  ], context);
+}
+
+test("IDs de fechamento e linha são determinísticos", () => {
+  assert.equal(cashClosureId("tirirical", "2026-07-07"), "tirirical_2026-07-07");
+  assert.equal(cashClosureLineId("10", "cash"), "10_cash");
+});
+
+test("ressincronização atualiza esperado e preserva contado e observação", () => {
+  const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
+  const countedLine = recalculateCountedLine(
+    first.lines[0],
+    9_500,
+    "Falta conferida",
+    "user-1",
+    "2026-07-08T11:00:00.000Z",
+  );
+  const second = mergeBuiltClosureForPersistence({
+    built: build(101),
+    existingClosure: first.closure,
+    existingLines: [countedLine],
+    now: "2026-07-08T12:00:00.000Z",
+  });
+
+  assert.equal(second.lines.length, 1);
+  assert.equal(second.lines[0].expectedCents, 10_100);
+  assert.equal(second.lines[0].countedCents, 9_500);
+  assert.equal(second.lines[0].differenceCents, -600);
+  assert.equal(second.lines[0].note, "Falta conferida");
+  assert.equal(second.lines[0].status, "divergent");
+});
+
+test("duas sincronizações com a mesma fonte não duplicam linhas", () => {
+  const built = build(100);
+  const first = mergeBuiltClosureForPersistence({ built, now: "2026-07-08T10:00:00.000Z" });
+  const second = mergeBuiltClosureForPersistence({
+    built,
+    existingClosure: first.closure,
+    existingLines: first.lines,
+    now: "2026-07-08T10:00:00.000Z",
+  });
+
+  assert.equal(second.sourceChanged, false);
+  assert.equal(second.lines.length, 1);
+  assert.deepEqual(second.lines, first.lines);
+  assert.deepEqual(second.deletedLineIds, []);
+});
+
+test("linha removida do PDV só é apagada quando ainda não foi contada", () => {
+  const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
+  const emptyBuilt = buildCashClosureFromPdv([], context);
+  const uncounted = mergeBuiltClosureForPersistence({
+    built: emptyBuilt,
+    existingClosure: first.closure,
+    existingLines: first.lines,
+    now: "2026-07-08T11:00:00.000Z",
+  });
+  assert.deepEqual(uncounted.deletedLineIds, ["10_cash"]);
+  assert.equal(uncounted.lines.length, 0);
+
+  const countedLine = recalculateCountedLine(first.lines[0], 10_000, null, "user-1", "2026-07-08T10:30:00.000Z");
+  const counted = mergeBuiltClosureForPersistence({
+    built: emptyBuilt,
+    existingClosure: first.closure,
+    existingLines: [countedLine],
+    now: "2026-07-08T11:00:00.000Z",
+  });
+  assert.equal(counted.lines.length, 1);
+  assert.equal(counted.lines[0].expectedCents, 0);
+  assert.equal(counted.lines[0].differenceCents, 10_000);
+});
+
+test("mudança de fonte após aprovação é sinalizada", () => {
+  const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
+  const second = mergeBuiltClosureForPersistence({
+    built: build(101),
+    existingClosure: { ...first.closure, status: "approved" },
+    existingLines: first.lines,
+    now: "2026-07-08T11:00:00.000Z",
+  });
+  assert.equal(second.closure.status, "approved");
+  assert.equal(second.closure.pdvChangedAfterApproval, true);
+});

@@ -17,7 +17,7 @@ import {
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
-  Files, Building2, FileStack
+  Files, Building2, FileStack, Banknote
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -246,6 +246,16 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
           { label: "Favorecidos", href: "/dashboard/financial/beneficiaries", icon: Users, show: permissions.financial?.beneficiaries?.view },
           { label: "Pagamentos bancários", href: "/dashboard/financial/payment-requests", icon: Wallet, show: permissions.financial?.paymentRequests?.view },
+          {
+            label: "Controle de caixa",
+            href: "__group:cash-control",
+            icon: Banknote,
+            show: permissions.financial?.cashClosures?.view || permissions.financial?.cashDeposits?.view,
+            children: [
+              { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures", icon: Wallet, show: permissions.financial?.cashClosures?.view },
+              { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
+            ],
+          },
           { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view },
           { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", icon: DollarSign, show: permissions.financial?.financialFlow },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },

@@ -6,6 +6,7 @@
  * Uso:
  *   node --import tsx scripts/validate-cash-closure.mts <kioskId> <yyyy-mm-dd>
  *   node --import tsx scripts/validate-cash-closure.mts tirirical 2026-07-07
+ *   node --import tsx scripts/validate-cash-closure.mts all 2026-07-29,2026-07-30
  *
  * Sem argumentos, roda para tirirical e joao-paulo no dia de ontem.
  */
@@ -73,14 +74,16 @@ async function validateOne(kioskId: string, date: string, operatorNameById: Reco
 
 async function main() {
   const [, , kioskArg, dateArg] = process.argv;
-  const date = dateArg ?? yesterdayIsoDate();
-  const kioskIds = kioskArg ? [kioskArg] : Object.keys(FALLBACK_PDV_FILIAL_IDS);
+  const dates = (dateArg ?? yesterdayIsoDate()).split(",").map(value => value.trim()).filter(Boolean);
+  const kioskIds = kioskArg && kioskArg !== "all" ? [kioskArg] : Object.keys(FALLBACK_PDV_FILIAL_IDS);
 
   const users = await fetchPdvLegalUsers();
   const operatorNameById = Object.fromEntries(users.map((user) => [user.id, user.name]));
 
-  for (const kioskId of kioskIds) {
-    await validateOne(kioskId, date, operatorNameById);
+  for (const date of dates) {
+    for (const kioskId of kioskIds) {
+      await validateOne(kioskId, date, operatorNameById);
+    }
   }
 }
 

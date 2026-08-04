@@ -14,6 +14,10 @@ const DATE_KEY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+export function todayInClosureTimezone(now = new Date()) {
+  return DATE_KEY_FORMATTER.format(now);
+}
+
 const HAS_EXPLICIT_OFFSET = /[Zz]$|[+-]\d{2}:?\d{2}$/;
 const NAIVE_DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/;
 

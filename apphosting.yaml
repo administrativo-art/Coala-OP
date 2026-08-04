@@ -46,7 +46,25 @@ env:
   - variable: INTER_ACCOUNT_NUMBER
     secret: INTER_ACCOUNT_NUMBER
   - variable: INTER_ENVIRONMENT
-    value: "sandbox"
+    value: "production"
+  - variable: INTER_COBRANCA_ENVIRONMENT
+    value: "production"
+  - variable: INTER_COBRANCA_PAYER_JSON
+    secret: INTER_COBRANCA_PAYER_JSON
+  - variable: INTER_COBRANCA_DUE_BUSINESS_DAYS
+    value: "2"
+  - variable: INTER_COBRANCA_NUM_DIAS_AGENDA
+    value: "30"
+  - variable: INTER_COBRANCA_MIN_CENTS
+    value: "250"
+  - variable: INTER_COBRANCA_BANK_ACCOUNT_ID
+    value: "PoulVqBxvW6XNgLEeoob"
+  - variable: CASH_CLOSURE_JOB_SECRET
+    secret: CASH_CLOSURE_JOB_SECRET
+  - variable: CASH_CLOSURE_SENIOR_DIVERGENCE_CENTS
+    value: "1000"
+  - variable: CASH_DEPOSIT_RECONCILIATION_SECRET
+    secret: CASH_DEPOSIT_RECONCILIATION_SECRET
   - variable: RESEND_FORMALIZATION_FROM
     value: "RH Coala Shakes <formalizacao@coalashakes.com>"
   - variable: RESEND_ACCESS_FROM

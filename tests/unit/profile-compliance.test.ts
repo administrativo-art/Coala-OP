@@ -36,6 +36,21 @@ test("aplica os mesmos campos obrigatórios sem considerar cargo ou perfil", () 
   assert.deepEqual(result.missingFields, []);
 });
 
+test("cadastro preenchido continua completo mesmo quando a revisão trimestral está vencida", () => {
+  const result = evaluateProfileCompliance({
+    user: {
+      email: "diretor@empresa.com",
+      phone: "(98) 99999-8888",
+      birthDate: "1980-01-10",
+    },
+    fieldValues: completeFields,
+    reviewDue: true,
+  });
+  assert.equal(result.complete, true);
+  assert.deepEqual(result.missingFields, []);
+  assert.deepEqual(result.invalidFields, []);
+});
+
 test("lista campos ausentes e rejeita um segundo e-mail armazenado no RH", () => {
   const result = evaluateProfileCompliance({
     user: { email: "", phone: "", birthDate: null },

@@ -751,6 +751,8 @@ export type PermissionSet = {
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
     beneficiaries: { view: boolean; viewMaskedPaymentData: boolean; managePaymentData: boolean; };
     paymentRequests: { view: boolean; create: boolean; authorize: boolean; submit: boolean; refresh: boolean; viewProof: boolean; };
+    cashClosures: { view: boolean; edit: boolean; approve: boolean; reopen: boolean; resync: boolean; };
+    cashDeposits: { view: boolean; issue: boolean; cancel: boolean; adjust: boolean; };
     interIntegration: { manage: boolean; };
     settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; manageExpenseDescriptions: boolean; };
   };
@@ -2678,6 +2680,8 @@ export const defaultGuestPermissions: PermissionSet = {
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
       beneficiaries: { view: false, viewMaskedPaymentData: false, managePaymentData: false },
       paymentRequests: { view: false, create: false, authorize: false, submit: false, refresh: false, viewProof: false },
+      cashClosures: { view: false, edit: false, approve: false, reopen: false, resync: false },
+      cashDeposits: { view: false, issue: false, cancel: false, adjust: false },
       interIntegration: { manage: false },
       settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false, manageExpenseDescriptions: false },
     },
@@ -2781,6 +2785,8 @@ export const defaultAdminPermissions: PermissionSet = {
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
       beneficiaries: { view: true, viewMaskedPaymentData: true, managePaymentData: true },
       paymentRequests: { view: true, create: true, authorize: true, submit: true, refresh: true, viewProof: true },
+      cashClosures: { view: true, edit: true, approve: true, reopen: true, resync: true },
+      cashDeposits: { view: true, issue: true, cancel: true, adjust: true },
       interIntegration: { manage: true },
       settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true, manageExpenseDescriptions: true },
     },

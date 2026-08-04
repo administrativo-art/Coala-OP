@@ -1,9 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import {
-  isProfileReviewDue,
-  PROFILE_COMPLIANCE_POLICY_VERSION,
-} from "@/features/hr/profile-compliance";
+import { PROFILE_COMPLIANCE_POLICY_VERSION } from "@/features/hr/profile-compliance";
 
 const INCOMPLETE_PROFILE_ALLOWED_PATHS = [
   "/api/profile-compliance",
@@ -27,16 +24,12 @@ export function requestAllowsIncompleteProfile(request: NextRequest) {
   return false;
 }
 
-export function hasCurrentProfileCompliance(
-  userData: Record<string, unknown>,
-  date = new Date(),
-) {
+export function hasCurrentProfileCompliance(userData: Record<string, unknown>) {
   const compliance = userData.profileCompliance && typeof userData.profileCompliance === "object"
     ? userData.profileCompliance as Record<string, unknown>
     : {};
   return compliance.status === "complete"
-    && compliance.policyVersion === PROFILE_COMPLIANCE_POLICY_VERSION
-    && !isProfileReviewDue(compliance.lastConfirmedAt, date);
+    && compliance.policyVersion === PROFILE_COMPLIANCE_POLICY_VERSION;
 }
 
 export function requiresProfileCompliance(

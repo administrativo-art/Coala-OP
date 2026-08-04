@@ -89,6 +89,40 @@ service cloud.firestore {
         || (hasFinancialClaims() && financialClaims().dre == true);
     }
 
+    function canViewCashClosures() {
+      return isFinancialAdmin()
+        || (hasUserDoc() && hasFinancialAccess()
+          && userData().permissions.get('cashClosures', {}).get('view', false) == true)
+        || (hasFinancialClaims()
+          && financialClaims().get('cashClosures', {}).get('view', false) == true);
+    }
+
+    function canEditCashClosures() {
+      return isFinancialAdmin()
+        || (hasUserDoc() && hasFinancialAccess()
+          && userData().permissions.get('cashClosures', {}).get('edit', false) == true)
+        || (hasFinancialClaims()
+          && financialClaims().get('cashClosures', {}).get('edit', false) == true);
+    }
+
+    function canViewCashDeposits() {
+      return isFinancialAdmin()
+        || (hasUserDoc() && hasFinancialAccess()
+          && userData().permissions.get('cashDeposits', {}).get('view', false) == true)
+        || (hasFinancialClaims()
+          && financialClaims().get('cashDeposits', {}).get('view', false) == true);
+    }
+
+    function canAccessKiosk(kioskId) {
+      return isFinancialAdmin()
+        || (hasUserDoc() && (
+          userData().get('unitAccessScope', 'linked') == 'all'
+          || kioskId in userData().get('unitAccessUnitIds', [])
+          || kioskId in userData().get('unitIds', [])
+          || kioskId in userData().get('assignedKioskIds', [])
+        ));
+    }
+
     function canViewSettings() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.settings.view == true)
         || (hasFinancialClaims() && financialClaims().settings.view == true);
@@ -244,6 +278,69 @@ service cloud.firestore {
       match /events/{eventId} {
         allow read, write: if false;
       }
+    }
+
+    match /cashClosures/{closureId} {
+      allow read: if canViewCashClosures() && canAccessKiosk(resource.data.kioskId);
+      allow create, update, delete: if false;
+
+      match /lines/{lineId} {
+        allow read: if canViewCashClosures()
+          && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId);
+        allow update: if canEditCashClosures()
+          && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId)
+          && get(/databases/$(database)/documents/cashClosures/$(closureId)).data.status == 'draft'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['countedCents', 'note'])
+          && (request.resource.data.countedCents == null
+            || (request.resource.data.countedCents is int && request.resource.data.countedCents >= 0))
+          && (request.resource.data.note == null || request.resource.data.note is string);
+        allow create, delete: if false;
+      }
+    }
+
+    match /cashClosureUnitSummaries/{summaryId} {
+      allow read: if canViewCashClosures() && canAccessKiosk(resource.data.kioskId);
+      allow write: if false;
+    }
+
+    match /cashClosureMonthlySummaries/{summaryId} {
+      allow read: if canViewCashClosures() && canAccessKiosk(resource.data.kioskId);
+      allow write: if false;
+    }
+
+    match /cashClosureAuditLogs/{logId} {
+      allow read, write: if false;
+    }
+
+    match /cashDepositBatches/{batchId} {
+      allow read: if canViewCashDeposits() && canAccessKiosk(resource.data.kioskId);
+      allow write: if false;
+
+      match /items/{itemId} {
+        allow read: if canViewCashDeposits()
+          && canAccessKiosk(get(/databases/$(database)/documents/cashDepositBatches/$(batchId)).data.kioskId);
+        allow write: if false;
+      }
+    }
+
+    match /cashDepositAdjustments/{adjustmentId} {
+      allow read, write: if false;
+    }
+
+    match /interCobrancas/{cobrancaId} {
+      allow read, write: if false;
+    }
+
+    match /interCobrancaEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /interWebhookRawEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /cashDepositReconciliationRuns/{runId} {
+      allow read, write: if false;
     }
   }
 }

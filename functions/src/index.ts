@@ -16,6 +16,10 @@ export { onFieldUpdate } from './rh/field-update.js';
 export { scheduledDateAlerts, scheduledProfileCompletion } from './rh/automations.js';
 export { onTermination, lgpdScheduledCleanup } from './rh/termination.js';
 export { checkFieldMapConsistency } from './rh/propagation.js';
+export { cashClosureDailySync } from './cash-closure-jobs.js';
+export { cashClosureLineWritten, cashClosureSummaryWritten, cashClosureSummaryReinforcement } from './cash-closure-summaries.js';
+export { interCobrancaReconciliation } from './inter-cobranca-jobs.js';
+export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-job.js';
 
 setGlobalOptions({ maxInstances: 10 });
 

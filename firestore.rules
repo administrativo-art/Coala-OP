@@ -15,9 +15,7 @@ service cloud.firestore {
         ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('profileCompliance', {})
         : {};
       return compliance.get('status', '') == 'complete'
-        && compliance.get('policyVersion', 0) == 1
-        && compliance.get('nextReviewAt', null) is timestamp
-        && compliance.get('nextReviewAt', null) > request.time;
+        && compliance.get('policyVersion', 0) == 1;
     }
 
     function isAuth() {

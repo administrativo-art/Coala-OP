@@ -165,6 +165,12 @@ export function canReadFinancialPath(
       );
     case "bankPaymentRequests":
       return permissions.paymentRequests?.view === true;
+    case "cashClosures":
+    case "cashClosureUnitSummaries":
+    case "cashClosureMonthlySummaries":
+      return permissions.cashClosures?.view === true;
+    case "cashDepositBatches":
+      return permissions.cashDeposits?.view === true;
     case "transactions":
       return (
         permissions.cashFlow.view ||
