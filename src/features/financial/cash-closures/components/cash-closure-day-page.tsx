@@ -32,9 +32,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "../money";
+import { formatClosureMonthLabel } from "../date";
 import type { CashClosure, CashClosureLine, CashClosureWithLines } from "../types";
 import { cashDepositBatchReferenceFromId } from "../../cash-deposits/references";
 import { CentsInput } from "./cents-input";
+import { CashControlNavigation } from "./cash-control-navigation";
 
 type Props = { kioskId: string; date: string };
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -52,8 +54,8 @@ const DEPOSIT_STATUS_LABEL: Record<CashClosure["cashDeposit"]["status"], string>
   not_eligible: "Sem dinheiro elegível",
   not_allocated: "Aguardando alocação",
   allocated: "Alocado",
-  issued: "Cobrança emitida",
-  paid: "Pago",
+  issued: "Boleto emitido",
+  paid: "Depositado",
   adjusted: "Ajustado",
 };
 
@@ -89,6 +91,9 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
   const [reason, setReason] = useState("");
   const latestData = useRef<CashClosureWithLines | null>(null);
   const closureId = `${kioskId}_${date}`;
+  const [dateYear, dateMonth] = date.split("-").map(Number);
+  const monthLabel = formatClosureMonthLabel(dateYear, dateMonth);
+  const monthHref = `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}/${dateYear}/${String(dateMonth).padStart(2, "0")}`;
 
   useEffect(() => {
     latestData.current = data;
@@ -303,18 +308,19 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     </CardContent></Card>;
   }
 
-  return <div className="space-y-5">
+  return <div className="w-full max-w-none space-y-4">
+    <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: data.closure.kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel, href: monthHref }, { label: date.split("-").reverse().join("/") }]} />
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold tracking-tight">{data.closure.kioskName}</h1><Badge variant={data.closure.status === "approved" ? "default" : "outline"}>{STATUS_LABEL[data.closure.status]}</Badge></div>
-        <p className="text-sm text-muted-foreground">Fechamento de {date.split("-").reverse().join("/")} · filial PDV {data.closure.pdvFilialId}</p>
+        <div className="flex flex-wrap items-center gap-2.5"><h1 className="text-[26px] font-black tracking-tight">{data.closure.kioskName}</h1><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11.5px] font-extrabold", data.closure.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ["pending_review", "reopened"].includes(data.closure.status) ? "border-amber-200 bg-amber-50 text-amber-800" : "border-stone-200 bg-stone-100 text-zinc-500")}>{STATUS_LABEL[data.closure.status]}</Badge></div>
+        <p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">Fechamento de {date.split("-").reverse().join("/")} · Filial PDV {data.closure.pdvFilialId}</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {permissions.financial.cashClosures.resync && <Button variant="outline" onClick={() => void sync()} disabled={!!working}><RefreshCw className="mr-2 h-4 w-4" />Ressincronizar</Button>}
-        {editable && <Button variant="outline" onClick={() => void save()} disabled={saveState === "saving" || !!working}><Save className="mr-2 h-4 w-4" />Salvar</Button>}
-        {editable && <Button onClick={() => void submit()} disabled={!!working}><Send className="mr-2 h-4 w-4" />Finalizar</Button>}
-        {permissions.financial.cashClosures.approve && ["pending_review", "reopened"].includes(data.closure.status) && <Button onClick={() => setReasonAction("approve")}><CheckCircle2 className="mr-2 h-4 w-4" />Aprovar</Button>}
-        {permissions.financial.cashClosures.reopen && ["pending_review", "approved"].includes(data.closure.status) && <Button variant="outline" onClick={() => setReasonAction("reopen")}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</Button>}
+        {permissions.financial.cashClosures.resync && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void sync()} disabled={!!working}><RefreshCw className="mr-2 h-4 w-4" />Ressincronizar</Button>}
+        {editable && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void save()} disabled={saveState === "saving" || !!working}><Save className="mr-2 h-4 w-4" />Salvar</Button>}
+        {editable && <Button className="h-10 rounded-xl bg-pink-600 px-4 font-extrabold text-white hover:bg-pink-700" onClick={() => void submit()} disabled={!!working}><Send className="mr-2 h-4 w-4" />Finalizar</Button>}
+        {permissions.financial.cashClosures.approve && ["pending_review", "reopened"].includes(data.closure.status) && <Button className="h-10 rounded-xl bg-emerald-700 px-4 font-extrabold hover:bg-emerald-800" onClick={() => setReasonAction("approve")}><CheckCircle2 className="mr-2 h-4 w-4" />Aprovar</Button>}
+        {permissions.financial.cashClosures.reopen && ["pending_review", "approved"].includes(data.closure.status) && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => setReasonAction("reopen")}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</Button>}
       </div>
     </div>
 
@@ -326,10 +332,10 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       {data.closure.pdvChangedAfterApproval && <span className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700">O PDV mudou após a aprovação</span>}
     </div>
 
-    {data.closure.source.unknownPaymentNames.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><strong>Formas não mapeadas:</strong> {data.closure.source.unknownPaymentNames.join(", ")}</div>}
-    {requiresSeniorApproval && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><strong>Aprovação sênior necessária.</strong> Há uma linha com divergência acima de {formatBRL(seniorDivergenceCents)}; a aprovação exige também permissão de reabertura.</div>}
+    {data.closure.source.unknownPaymentNames.length > 0 && <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900"><strong>Formas não mapeadas:</strong> {data.closure.source.unknownPaymentNames.join(", ")}</div>}
+    {requiresSeniorApproval && <div className="flex items-start gap-3 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] leading-5 text-rose-900"><AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0" /><span><strong>Aprovação sênior necessária.</strong> Há uma linha com divergência acima de {formatBRL(seniorDivergenceCents)}; a aprovação exige também permissão de reabertura.</span></div>}
     {data.closure.cashDeposit.manualSplitRequired && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><div><strong>Dinheiro acima de R$ 5.000,00.</strong><p>O fechamento tem {formatBRL(data.closure.cashDeposit.eligibleCents)} e precisa ser dividido manualmente em partes de até R$ 5.000,00.</p></div>{permissions.financial?.cashDeposits?.adjust && <Button variant="outline" onClick={() => void splitOversizedDeposit()} disabled={!!working}>{working === "split-deposit" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar divisão sugerida</Button>}</div>}
-    {data.closure.status === "approved" && <Card>
+    {data.closure.status === "approved" && <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]">
       <CardHeader className="pb-3"><CardTitle className="text-base">Referência do depósito</CardTitle></CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -347,16 +353,17 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       const counted = group.lines.reduce((total, line) => total + (line.countedCents ?? 0), 0);
       const pending = group.lines.some((line) => line.countedCents === null);
       const difference = group.lines.reduce((total, line) => total + (line.differenceCents ?? 0), 0);
-      return <Card key={group.key}>
-        <CardHeader className="pb-3"><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="text-base">{group.name}</CardTitle><div className="text-sm tabular-nums"><span className="text-muted-foreground">PDV {formatBRL(expected)} · Físico {formatBRL(counted)} · </span><strong className={resultText(pending ? null : difference).className}>{resultText(pending ? null : difference).label}</strong></div></div></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="hidden grid-cols-[minmax(180px,1fr)_140px_160px_150px] gap-3 border-b pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid"><span>Canal</span><span className="text-right">PDV</span><span className="text-right">Físico</span><span>Resultado</span></div>
+      const initials = group.name.split(" ").slice(0, 2).map((part) => part[0]).join("");
+      return <Card key={group.key} className="overflow-hidden rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]">
+        <CardHeader className="border-b border-stone-100 px-[18px] py-3.5"><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="flex items-center gap-2.5 text-[15px] font-black"><span className="grid h-7 w-7 place-items-center rounded-[9px] bg-pink-100 text-xs font-black text-pink-600">{initials}</span>{group.name}</CardTitle><div className="font-mono text-[12.5px]"><span className="text-zinc-400">PDV {formatBRL(expected)} · Conferido {pending && counted === 0 ? "—" : formatBRL(counted)} · </span><strong className={resultText(pending ? null : difference).className}>{resultText(pending ? null : difference).label}</strong></div></div></CardHeader>
+        <CardContent className="space-y-0 px-[18px] pb-3.5 pt-1.5">
+          <div className="hidden grid-cols-[minmax(180px,1fr)_140px_160px_150px] gap-3 border-b border-stone-100 px-0.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide text-zinc-400 md:grid"><span>Canal</span><span className="text-right">PDV</span><span className="text-right">Conferido</span><span>Resultado</span></div>
           {group.lines.map((line) => {
             const result = resultText(line.differenceCents);
-            return <div key={line.id} className={cn("grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(180px,1fr)_140px_160px_150px] md:items-center", line.differenceCents !== null && line.differenceCents !== 0 && "border-amber-200 bg-amber-50/40")}>
+            return <div key={line.id} className={cn("grid gap-3 border-b border-stone-100 px-0.5 py-2.5 last:border-b-0 md:grid-cols-[minmax(180px,1fr)_140px_160px_150px] md:items-center", line.differenceCents !== null && line.differenceCents !== 0 && "rounded-xl bg-amber-50/60 px-2")}>
               <div className="flex items-center gap-2 font-semibold">{channelName(line)}{line.channel === "cash" && <Popover><PopoverTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7"><Info className="h-4 w-4" /><span className="sr-only">Ver composição do dinheiro</span></Button></PopoverTrigger><PopoverContent align="start" className="space-y-2 text-sm"><p className="font-semibold">Composição do dinheiro</p><div className="flex justify-between"><span>Recebido</span><strong>{formatBRL(line.metadata.grossCashCents ?? line.expectedCents)}</strong></div><div className="flex justify-between"><span>Troco</span><strong>- {formatBRL(line.metadata.changeCents ?? 0)}</strong></div><div className="flex justify-between border-t pt-2"><span>Líquido esperado</span><strong>{formatBRL(line.expectedCents)}</strong></div></PopoverContent></Popover>}</div>
               <div className="text-right font-mono text-sm">{formatBRL(line.expectedCents)}</div>
-              <CentsInput value={line.countedCents} onChange={(value) => updateLine(line.id, { countedCents: value })} disabled={!editable} ariaLabel={`Valor físico de ${channelName(line)} para ${group.name}`} />
+              <CentsInput value={line.countedCents} onChange={(value) => updateLine(line.id, { countedCents: value })} disabled={!editable} ariaLabel={`Valor conferido de ${channelName(line)} para ${group.name}`} className="h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]" />
               <strong className={cn("text-sm", result.className)}>{result.label}</strong>
               {line.differenceCents !== null && line.differenceCents !== 0 && <div className="md:col-span-4"><Textarea value={line.note ?? ""} onChange={(event) => updateLine(line.id, { note: event.target.value })} disabled={!editable} placeholder="Observação obrigatória para esta divergência" className="min-h-20" /></div>}
             </div>;
@@ -365,16 +372,16 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       </Card>;
     })}
 
-    <Card className="sticky bottom-3 border-slate-300 shadow-lg"><CardContent className="grid gap-4 p-4 sm:grid-cols-5">
-      <div><p className="text-xs text-muted-foreground">PDV</p><p className="font-bold tabular-nums">{formatBRL(liveSummary.expected)}</p></div>
-      <div><p className="text-xs text-muted-foreground">Físico</p><p className="font-bold tabular-nums">{formatBRL(liveSummary.counted)}</p></div>
-      <div><p className="text-xs text-muted-foreground">Diferença</p><p className={cn("font-bold tabular-nums", resultText(liveSummary.pending ? null : liveSummary.difference).className)}>{liveSummary.pending ? "—" : formatBRL(liveSummary.difference)}</p></div>
-      <div><p className="text-xs text-muted-foreground">Pendentes</p><p className="font-bold">{liveSummary.pending}</p></div>
-      <div><p className="text-xs text-muted-foreground">Divergentes</p><p className="font-bold">{liveSummary.divergent}</p></div>
+    <Card className="sticky bottom-3 border-0 bg-zinc-900 text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid gap-4 p-4 px-5 sm:grid-cols-5">
+      <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Total PDV</p><p className="mt-0.5 font-mono text-[17px] font-extrabold">{formatBRL(liveSummary.expected)}</p></div>
+      <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Total conferido</p><p className="mt-0.5 font-mono text-[17px] font-extrabold">{liveSummary.pending > 0 && liveSummary.counted === 0 ? "—" : formatBRL(liveSummary.counted)}</p></div>
+      <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Diferença</p><p className={cn("mt-0.5 font-mono text-[17px] font-extrabold", liveSummary.pending ? "text-amber-300" : resultText(liveSummary.difference).className)}>{liveSummary.pending ? "—" : formatBRL(liveSummary.difference)}</p></div>
+      <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Pendentes</p><p className="mt-0.5 font-mono text-[17px] font-extrabold text-amber-300">{liveSummary.pending}</p></div>
+      <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Divergentes</p><p className="mt-0.5 font-mono text-[17px] font-extrabold text-rose-300">{liveSummary.divergent}</p></div>
     </CardContent></Card>
 
     <Dialog open={reasonAction !== null} onOpenChange={(open) => { if (!open) { setReasonAction(null); setReason(""); } }}>
-      <DialogContent>
+      <DialogContent className="rounded-[20px] sm:max-w-[460px]">
         <DialogHeader><DialogTitle>{reasonAction === "approve" ? "Aprovar fechamento" : "Reabrir fechamento"}</DialogTitle><DialogDescription>{reasonAction === "approve" ? "Registre o parecer usado na aprovação." : "A reabertura volta a permitir alterações e exige justificativa."}</DialogDescription></DialogHeader>
         <Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Motivo obrigatório" />
         <DialogFooter><Button variant="outline" onClick={() => setReasonAction(null)}>Cancelar</Button><Button onClick={() => void runReasonAction()} disabled={reason.trim().length < 3 || !!working}>{working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar</Button></DialogFooter>

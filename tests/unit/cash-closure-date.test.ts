@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { closureDateFromIso } from "../../src/features/financial/cash-closures/date";
+import { closureDateFromIso, formatClosureMonthLabel } from "../../src/features/financial/cash-closures/date";
+
+test("mês é exibido com capitalização natural em português", () => {
+  assert.equal(formatClosureMonthLabel(2026, 8), "Agosto de 2026");
+});
 
 test("timestamp local do PDV (sem offset) vira o dia correto sem conversão de fuso", () => {
   assert.equal(closureDateFromIso("2026-07-07 23:50:00"), "2026-07-07");

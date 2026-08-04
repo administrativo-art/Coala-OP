@@ -2,30 +2,33 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, CircleAlert, Clock3, Loader2, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleAlert, Clock3, Loader2, RefreshCw } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CashControlNavigation } from "./cash-control-navigation";
 import { formatBRL } from "../money";
-import { todayInClosureTimezone } from "../date";
+import { formatClosureMonthLabel, todayInClosureTimezone } from "../date";
 import type { CashClosure } from "../types";
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 function statusInfo(closure: CashClosure | undefined) {
-  if (!closure) return { label: "Não sincronizado", className: "bg-slate-50 text-slate-500", icon: Clock3 };
-  if (closure.status === "approved") return { label: "Aprovado", className: "bg-emerald-50 text-emerald-800", icon: CheckCircle2 };
-  if (closure.status === "sync_error") return { label: "Erro de sync", className: "bg-rose-50 text-rose-800", icon: CircleAlert };
-  if (closure.divergentLineCount > 0) return { label: "Divergente", className: "bg-rose-50 text-rose-800", icon: CircleAlert };
-  return { label: closure.status === "pending_review" ? "Em revisão" : closure.status === "reopened" ? "Reaberto" : "Rascunho", className: "bg-amber-50 text-amber-800", icon: Clock3 };
+  if (!closure) return { label: "Não sincronizado", className: "border-stone-200 bg-stone-50 text-zinc-400", icon: Clock3 };
+  if (closure.status === "sync_error") return { label: "Erro de sincronização", className: "border-rose-200 bg-rose-50 text-rose-800", icon: CircleAlert };
+  const icon = closure.status === "approved" ? CheckCircle2 : closure.status === "pending_review" ? Clock3 : CircleAlert;
+  if (closure.pendingLineCount > 0) return { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-900", icon };
+  if (closure.differenceTotalCents !== 0) return { label: closure.differenceTotalCents < 0 ? `Falta ${formatBRL(Math.abs(closure.differenceTotalCents))}` : `Sobra ${formatBRL(closure.differenceTotalCents)}`, className: "border-rose-200 bg-rose-50 text-rose-800", icon };
+  return { label: "Bateu", className: "border-emerald-200 bg-emerald-50 text-emerald-800", icon };
 }
 
 export function CashClosureCalendarPage({ kioskId, year, month }: { kioskId: string; year: number; month: number }) {
   const { firebaseUser, permissions } = useAuth();
+  const { kiosks } = useKiosks();
   const { toast } = useToast();
   const [closures, setClosures] = useState<CashClosure[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,20 +67,44 @@ export function CashClosureCalendarPage({ kioskId, year, month }: { kioskId: str
     paid: closures.filter((item) => item.cashDeposit.status === "paid").reduce((sum, item) => sum + item.cashDeposit.eligibleCents, 0),
   }), [closures]);
   const today = todayInClosureTimezone();
-  const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
+  const monthLabel = formatClosureMonthLabel(year, month);
+  const kiosk = kiosks.find((item) => item.id === kioskId);
+  const kioskName = kiosk?.name
+    ?? closures[0]?.kioskName
+    ?? kioskId;
+  const hasPendingConference = closures.some((closure) =>
+    closure.pendingLineCount > 0 || ["draft", "pending_review", "reopened"].includes(closure.status),
+  );
 
   if (!permissions.financial?.cashClosures?.view) return null;
-  return <div className="space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><Button asChild size="icon" variant="outline"><Link href={`/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}`}><ArrowLeft className="h-4 w-4" /></Link></Button><div><h1 className="text-2xl font-bold capitalize">{monthLabel}</h1><p className="text-sm text-muted-foreground">{kioskId}</p></div></div><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div>
-    <div className="grid gap-3 lg:grid-cols-2"><Card><CardContent className="grid grid-cols-3 gap-3 p-4"><div><p className="text-xs text-muted-foreground">PDV</p><strong>{formatBRL(totals.expected)}</strong></div><div><p className="text-xs text-muted-foreground">Físico</p><strong>{formatBRL(totals.counted)}</strong></div><div><p className="text-xs text-muted-foreground">Diferença</p><strong>{formatBRL(totals.difference)}</strong></div></CardContent></Card><Card><CardContent className="grid grid-cols-4 gap-3 p-4"><div><p className="text-xs text-muted-foreground">Dinheiro</p><strong>{formatBRL(totals.cash)}</strong></div><div><p className="text-xs text-muted-foreground">Alocado</p><strong>{formatBRL(totals.allocated)}</strong></div><div><p className="text-xs text-muted-foreground">Emitido</p><strong>{formatBRL(totals.issued)}</strong></div><div><p className="text-xs text-muted-foreground">Pago</p><strong>{formatBRL(totals.paid)}</strong></div></CardContent></Card></div>
-    {loading ? <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : <Card><CardContent className="p-3 sm:p-5"><div className="grid grid-cols-7 gap-1">{WEEKDAYS.map((day) => <div key={day} className="p-2 text-center text-xs font-semibold text-muted-foreground">{day}</div>)}{days.map((day, index) => {
+  return <div className="w-full max-w-none space-y-4">
+    <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel }]} />
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[26px] font-black tracking-tight">{monthLabel}</h1><p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">{kioskName}</p></div><Button variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div>
+    <div className="grid gap-3 lg:grid-cols-[1fr_1.35fr]">
+      <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]"><CardContent className="grid grid-cols-3 gap-2.5 p-3.5 px-4">{[
+        ["Vendas no PDV", formatBRL(totals.expected), ""],
+        ["Conferido", hasPendingConference && totals.counted === 0 ? "—" : formatBRL(totals.counted), ""],
+        ["Diferença", hasPendingConference ? "Pendente" : formatBRL(totals.difference), hasPendingConference ? "text-amber-700" : totals.difference === 0 ? "text-emerald-700" : "text-rose-700"],
+      ].map(([label, value, valueClass]) => <div key={label} className="min-w-0 text-center"><p className="truncate text-[11px] font-bold text-zinc-400">{label}</p><strong className={cn("block truncate font-mono text-[15px]", valueClass)}>{value}</strong></div>)}</CardContent></Card>
+      <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]"><CardContent className="grid grid-cols-2 gap-2.5 p-3.5 px-4 sm:grid-cols-4">{[
+        ["Dinheiro", formatBRL(totals.cash), ""],
+        ["Em depósito", formatBRL(totals.allocated), ""],
+        ["Boleto emitido", formatBRL(totals.issued), ""],
+        ["Depositado", formatBRL(totals.paid), "text-emerald-700"],
+      ].map(([label, value, valueClass]) => <div key={label} className="min-w-0 text-center"><p className="truncate text-[11px] font-bold text-zinc-400">{label}</p><strong className={cn("block truncate font-mono text-[15px]", valueClass)}>{value}</strong></div>)}</CardContent></Card>
+    </div>
+    {loading ? <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : <Card className="rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]"><CardContent className="p-3 sm:p-4"><div className="grid grid-cols-7 gap-1.5">{WEEKDAYS.map((day) => <div key={day} className="px-1 py-1 text-center text-[11px] font-extrabold uppercase tracking-wide text-zinc-400">{day}</div>)}{days.map((day, index) => {
       if (day === null) return <div key={`empty-${index}`} />;
       const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       const closure = byDate.get(date);
       const future = date > today;
       const info = statusInfo(closure);
       const Icon = info.icon;
-      return <Link key={date} aria-disabled={future} href={future ? "#" : `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}/${year}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`} className={cn("min-h-28 rounded-lg border p-2 transition-colors sm:min-h-32", future ? "pointer-events-none bg-slate-50 opacity-40" : "hover:border-primary/50", info.className)}><div className="flex items-center justify-between"><strong>{day}</strong><Icon className="h-3.5 w-3.5" /></div><Badge variant="outline" className="mt-2 max-w-full truncate text-[10px]">{info.label}</Badge>{closure && <div className="mt-2 space-y-1 text-[11px]"><p>PDV <strong>{formatBRL(closure.expectedTotalCents)}</strong></p>{closure.pendingLineCount > 0 ? <p>{closure.pendingLineCount} linha(s) pendente(s)</p> : <p>Dif. <strong>{formatBRL(closure.differenceTotalCents)}</strong></p>}{closure.cashDeposit.batchId && <p className="truncate">Bloco {closure.cashDeposit.batchId}</p>}</div>}</Link>;
-    })}</div></CardContent></Card>}
+      return <Link key={date} aria-disabled={future} href={future ? "#" : `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}/${year}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`} className={cn("flex min-h-24 flex-col rounded-xl border px-2.5 py-2 text-left transition-colors", future ? "pointer-events-none border-stone-200 bg-stone-100 text-stone-300" : "hover:brightness-[.98]", info.className)}><div className="flex items-center justify-between"><strong className="text-sm">{day}</strong>{!future && <Icon className="h-3.5 w-3.5" />}</div>{closure && <div className="mt-auto pt-1.5 text-[10.5px] leading-4"><p><span className="text-[9px] font-bold opacity-70">PDV</span> <strong className="font-mono">{formatBRL(closure.expectedTotalCents)}</strong></p><p className="truncate font-mono font-extrabold">{info.label}</p></div>}{!closure && !future && <p className="mt-auto truncate pt-1.5 text-[10px] font-bold">{info.label}</p>}</Link>;
+    })}</div><div className="mt-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-stone-100 pt-3 text-[11px] font-semibold text-zinc-500"><strong className="text-zinc-400">Cor = conciliação:</strong><Legend color="border-emerald-200 bg-emerald-50" label="Bateu" /><Legend color="border-rose-200 bg-rose-50" label="Divergência" /><Legend color="border-amber-200 bg-amber-50" label="Pendente" /><span className="hidden h-3.5 w-px bg-stone-200 sm:block" /><strong className="text-zinc-400">Ícone = fluxo:</strong><span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-700" />Aprovado</span><span className="flex items-center gap-1"><Clock3 className="h-3 w-3 text-amber-700" />Em revisão</span><span className="flex items-center gap-1"><CircleAlert className="h-3 w-3 text-zinc-500" />Rascunho</span></div></CardContent></Card>}
   </div>;
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return <span className="flex items-center gap-1.5"><span className={cn("h-2.5 w-3.5 rounded-[3px] border", color)} />{label}</span>;
 }

@@ -14,8 +14,19 @@ const DATE_KEY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+const MONTH_YEAR_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "UTC",
+  month: "long",
+  year: "numeric",
+});
+
 export function todayInClosureTimezone(now = new Date()) {
   return DATE_KEY_FORMATTER.format(now);
+}
+
+export function formatClosureMonthLabel(year: number, month: number) {
+  const label = MONTH_YEAR_FORMATTER.format(new Date(Date.UTC(year, month - 1, 1)));
+  return `${label.charAt(0).toLocaleUpperCase("pt-BR")}${label.slice(1)}`;
 }
 
 const HAS_EXPLICIT_OFFSET = /[Zz]$|[+-]\d{2}:?\d{2}$/;
