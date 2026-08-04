@@ -37,7 +37,7 @@ Cobrança com CPF fictício fornecido pela própria documentação do sandbox:
 - pagamento simulado por boleto: HTTP 204;
 - consulta ativa posterior: `situacao = RECEBIDO` e `origemRecebimento = BOLETO`.
 
-Consequência: o pagador de produção deve ser uma pessoa física definida pelo financeiro e fornecida por configuração segura; não será hardcoded no código.
+Consequência: o sandbox comprovou o fluxo com pessoa física. Para produção, o financeiro definiu uma entidade institucional por CNPJ, resolvida pelo cadastro canônico; a primeira emissão continuará manual para validar a aceitação desse pagador no convênio produtivo.
 
 ## B4. Valor mínimo
 
@@ -129,7 +129,7 @@ Consequência: o backend deve extrair `pdf`, decodificar base64 e responder ao n
 - `MIN_BOLETO_CENTS = 250`.
 - `numDiasAgenda = 30` por default configurável.
 - vencimento: D+2 dias úteis por default configurável.
-- pagador: pessoa física configurada por segredo/variável de ambiente; a emissão fica indisponível se a configuração estiver incompleta.
+- pagador: entidade institucional referenciada por CNPJ e resolvida no cadastro canônico de Entidades; a emissão fica indisponível se o cadastro estiver incompleto.
 - nenhuma emissão bancária será automática.
 - ao confirmar `RECEBIDO` em produção, o sistema registra uma única movimentação
   `transfer_in` na conta Banco Inter, em reais e também com `amountCents` para

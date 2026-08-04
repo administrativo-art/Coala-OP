@@ -30,6 +30,7 @@ import {
   type InterCobrancaEvent,
 } from "./inter-cobranca";
 import type { CashDepositBatch } from "./types";
+import { resolveConfiguredInterCobrancaPayer } from "./payer.server";
 
 const BATCHES = "cashDepositBatches";
 const COBRANCAS = "interCobrancas";
@@ -115,6 +116,7 @@ async function prepareIssue(input: {
   actor: CashClosureActor;
 }) {
   const settings = getInterCobrancaSettings();
+  const payer = await resolveConfiguredInterCobrancaPayer();
   const batchRef = financialDbAdmin.collection(BATCHES).doc(input.batchId);
   return financialDbAdmin.runTransaction(async (transaction) => {
     const batchSnapshot = await transaction.get(batchRef);
@@ -142,7 +144,7 @@ async function prepareIssue(input: {
     const issueInput = buildInterCobrancaIssueInput({
       batch,
       attempt,
-      payer: settings.payer,
+      payer,
       dueBusinessDays: settings.dueBusinessDays,
       numDiasAgenda: settings.numDiasAgenda,
       holidays: settings.holidays,

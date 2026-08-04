@@ -49,8 +49,8 @@ env:
     value: "production"
   - variable: INTER_COBRANCA_ENVIRONMENT
     value: "production"
-  - variable: INTER_COBRANCA_PAYER_JSON
-    secret: INTER_COBRANCA_PAYER_JSON
+  - variable: INTER_COBRANCA_PAYER_CNPJ
+    value: "14276603000125"
   - variable: INTER_COBRANCA_DUE_BUSINESS_DAYS
     value: "2"
   - variable: INTER_COBRANCA_NUM_DIAS_AGENDA

@@ -9,6 +9,8 @@ import {
   parseInterMoneyToCents,
 } from "../../src/features/financial/cash-deposits/inter-cobranca";
 import type { CashDepositBatch } from "../../src/features/financial/cash-deposits/types";
+import { interCobrancaPayerFromCompany } from "../../src/features/financial/cash-deposits/payer";
+import type { NormalizedCompanyData } from "../../src/lib/company/company-lookup-types";
 
 function batch(totalCents = 250): CashDepositBatch {
   return {
@@ -57,6 +59,42 @@ const payer = {
   uf: "MG",
   cep: "30110000",
 };
+
+test("resolve o pagador institucional pelo cadastro canônico da entidade", () => {
+  const company: NormalizedCompanyData = {
+    id: "ct-sorvetes",
+    cnpj: "14276603000125",
+    razao_social: "C T SORVETES LTDA",
+    nome_fantasia: "C T Sorvetes",
+    situacao_cadastral: "ATIVA",
+    data_abertura: "",
+    natureza_juridica: "",
+    cnae_principal_codigo: "",
+    cnae_principal_descricao: "",
+    cnaes_secundarios: [],
+    inscricao_estadual: "",
+    contribuinte_icms: "nao_informado",
+    situacao_inscricao_estadual: "nao_consultada",
+    cep: "65075440",
+    logradouro: "Avenida Coronel Colares Moreira",
+    numero: "1",
+    complemento: "QD 121 1 ANDAR EDIFICIO ADRIANA",
+    bairro: "Jardim Renascença",
+    cidade: "São Luís",
+    uf: "MA",
+    telefone: "",
+    email: "",
+    tipo_empresa: "",
+    origem_dados: "internal",
+    data_ultima_consulta: "",
+    observacoes: "",
+  };
+  const resolved = interCobrancaPayerFromCompany(company);
+  assert.equal(resolved.cpfCnpj, "14276603000125");
+  assert.equal(resolved.tipoPessoa, "JURIDICA");
+  assert.equal(resolved.nome, "C T SORVETES LTDA");
+  assert.equal(resolved.cep, "65075440");
+});
 
 test("seuNumero é determinístico, único por tentativa e respeita 15 caracteres", () => {
   const first = deterministicSeuNumero({ kioskId: "joao-paulo", periodEndDate: "2026-08-02", batchSequence: 12, attempt: 1 });

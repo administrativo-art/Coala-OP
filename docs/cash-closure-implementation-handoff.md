@@ -25,8 +25,9 @@ Escopo implementado: Fases 1 a 8 do plano operacional, sem rollout.
 
 O rollout ficou intencionalmente fora deste trabalho. Antes de publicar:
 
-1. Definir o pagador pessoa física de produção em
-   `INTER_COBRANCA_PAYER_JSON`.
+1. Confirmar o pagador institucional de produção referenciado por
+   `INTER_COBRANCA_PAYER_CNPJ`; os demais dados são resolvidos pelo cadastro de
+   Entidades.
 2. Criar/configurar os segredos de jobs e webhook já referenciados em
    `apphosting.yaml`.
 3. Configurar os parâmetros das Functions:

@@ -30,7 +30,7 @@ export type InterCobrancaPayer = {
 
 export type InterCobrancaSettings = {
   environment: InterEnvironment;
-  payer: InterCobrancaPayer;
+  payerCnpj: string;
   dueBusinessDays: number;
   numDiasAgenda: number;
   minimumCents: number;
@@ -93,70 +93,18 @@ function integerSetting(name: string, fallback: number, minimum: number, maximum
   return value;
 }
 
-function payerFromEnvironment(): InterCobrancaPayer {
-  const raw = required("INTER_COBRANCA_PAYER_JSON");
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    throw new Error("A configuração INTER_COBRANCA_PAYER_JSON não contém JSON válido.");
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("A configuração INTER_COBRANCA_PAYER_JSON é inválida.");
-  }
-  const source = value as Record<string, unknown>;
-  const requiredStrings = [
-    "cpfCnpj",
-    "tipoPessoa",
-    "nome",
-    "endereco",
-    "numero",
-    "bairro",
-    "cidade",
-    "uf",
-    "cep",
-  ] as const;
-  for (const key of requiredStrings) {
-    if (typeof source[key] !== "string" || !source[key].trim()) {
-      throw new Error(`O pagador Inter não informou ${key}.`);
-    }
-  }
-  const tipoPessoa = String(source.tipoPessoa).toUpperCase();
-  if (tipoPessoa !== "FISICA" && tipoPessoa !== "JURIDICA") {
-    throw new Error("O tipoPessoa do pagador Inter deve ser FISICA ou JURIDICA.");
-  }
-  const cpfCnpj = String(source.cpfCnpj).replace(/\D/g, "");
-  if ((tipoPessoa === "FISICA" && cpfCnpj.length !== 11) || (tipoPessoa === "JURIDICA" && cpfCnpj.length !== 14)) {
-    throw new Error("O CPF/CNPJ configurado para o pagador Inter é inválido.");
-  }
-  const optional = (key: string) => typeof source[key] === "string" && source[key].trim()
-    ? source[key].trim()
-    : undefined;
-  return {
-    cpfCnpj,
-    tipoPessoa,
-    nome: String(source.nome).trim(),
-    endereco: String(source.endereco).trim(),
-    numero: String(source.numero).trim(),
-    bairro: String(source.bairro).trim(),
-    cidade: String(source.cidade).trim(),
-    uf: String(source.uf).trim().toUpperCase(),
-    cep: String(source.cep).replace(/\D/g, ""),
-    complemento: optional("complemento"),
-    email: optional("email"),
-    ddd: optional("ddd")?.replace(/\D/g, ""),
-    telefone: optional("telefone")?.replace(/\D/g, ""),
-  };
-}
-
 export function getInterCobrancaEnvironment(): InterEnvironment {
   return environmentFrom(process.env.INTER_COBRANCA_ENVIRONMENT, "sandbox");
 }
 
 export function getInterCobrancaSettings(): InterCobrancaSettings {
+  const payerCnpj = required("INTER_COBRANCA_PAYER_CNPJ").replace(/\D/g, "");
+  if (payerCnpj.length !== 14) {
+    throw new Error("O CNPJ do pagador institucional da Cobrança Inter é inválido.");
+  }
   return {
     environment: getInterCobrancaEnvironment(),
-    payer: payerFromEnvironment(),
+    payerCnpj,
     dueBusinessDays: integerSetting("INTER_COBRANCA_DUE_BUSINESS_DAYS", 2, 0, 30),
     numDiasAgenda: integerSetting("INTER_COBRANCA_NUM_DIAS_AGENDA", 30, 0, 60),
     minimumCents: integerSetting("INTER_COBRANCA_MIN_CENTS", 250, 250, 500_000),
@@ -185,11 +133,9 @@ export function isInterConfigured(environmentOverride?: InterEnvironment) {
 export function interCobrancaReadiness() {
   const environment = getInterCobrancaEnvironment();
   const credentialsConfigured = isInterConfigured(environment);
-  const payerConfigured = Boolean(process.env.INTER_COBRANCA_PAYER_JSON?.trim());
   const ledger = getInterCobrancaLedgerSettings();
   let reason: string | null = null;
   if (!credentialsConfigured) reason = `Credenciais ${environment} da Cobrança Inter não configuradas.`;
-  else if (!payerConfigured) reason = "Pagador da Cobrança Inter ainda não configurado.";
   else if (ledger.enabled && !ledger.bankAccountId) reason = "Conta bancária de destino da Cobrança Inter não configurada.";
   else {
     try {
