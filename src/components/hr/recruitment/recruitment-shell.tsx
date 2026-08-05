@@ -9177,14 +9177,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               }`}>
                 {linkActive ? formatOnboardingLinkRemaining(selectedProcess, linkClock) : 'Prazo expirado'}
               </span>
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${
-                selectedProcess.expectedAdmissionDate
-                  ? 'bg-violet-50 text-violet-700'
-                  : 'bg-amber-50 text-amber-700'
-              }`}>
-                <Calendar className="h-3 w-3" />
-                Admissão prevista · {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
-              </span>
             </div>
             <div className="mt-3.5 flex items-center gap-3">
               <span
@@ -9196,6 +9188,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               <div className="min-w-0">
                 <h2 className="text-xl font-black tracking-tight text-slate-900">{selectedProcess.candidateName ?? 'Candidato sem nome'}</h2>
                 <p className="mt-0.5 text-[13.5px] font-medium text-slate-500">{selectedProcess.candidateEmail ?? 'E-mail não informado'}</p>
+                <p className={`mt-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${
+                  selectedProcess.expectedAdmissionDate
+                    ? 'bg-violet-50 text-violet-700'
+                    : 'bg-amber-50 text-amber-700'
+                }`}>
+                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  Admissão prevista: {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
+                </p>
               </div>
             </div>
             <p className="mt-3 text-[13.5px] font-bold text-slate-600">
