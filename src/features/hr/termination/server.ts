@@ -43,6 +43,7 @@ import { terminationReasonsForRelationship } from "@/lib/hr/employment-relations
 import { recalculateEmploymentEndRetention } from "@/features/hr/documents/document-retention.server";
 import { createPaymentRequest, refreshPaymentRequest } from "@/features/financial/payment-requests/service.server";
 import { getPaymentRequest } from "@/features/financial/payment-requests/repository.server";
+import { resolveCompanyProcessContact } from "@/lib/company/company-process-contact.server";
 
 const COLLECTION = "terminationProcesses";
 const PROJECTION_COLLECTION = "processProjections";
@@ -294,6 +295,7 @@ export async function createManagedTermination(params: {
   const processId = randomUUID();
   const protocol = processProtocol(new Date(now));
   const unit = await loadUnit(target);
+  const accountantContact = relationship === "clt" ? await resolveCompanyProcessContact("termination") : null;
   const identity = await loadExpectedIdentity(target.id).catch(() => null);
   const legalPaymentDueDate = calculateMaterialDeadline(params.input.terminationDate);
   const guidedEmployerDismissal = relationship === "clt" && params.input.terminationReason === "Dispensa sem justa causa";
@@ -391,7 +393,10 @@ export async function createManagedTermination(params: {
       decidedAt: now,
       decidedBy: params.context.userDoc.id,
     },
-    accountant: { status: relationship === "clt" ? "not_started" : "ready_to_send" },
+    accountant: {
+      status: relationship === "clt" ? "not_started" : "ready_to_send",
+      recipientEmail: accountantContact?.email ?? null,
+    },
     payment: guidedEmployerDismissal ? { status: "not_started", dueAt: legalPaymentDueDate } : null,
     employeeCompletion: guidedEmployerDismissal ? { status: "not_started" } : null,
     internalClosure: guidedEmployerDismissal ? { status: "pending" } : null,
@@ -519,6 +524,7 @@ export async function createEmployeeResignationRequest(params: {
   const cpf = String(identity?.cpf ?? "").replace(/\D/g, "");
   if (cpf.length !== 11) throw new Error("O CPF do colaborador precisa estar validado no cadastro do RH.");
   const unit = await loadUnit(user);
+  const accountantContact = await resolveCompanyProcessContact("termination");
   const nowDate = new Date();
   const now = nowDate.toISOString();
   const processId = randomUUID();
@@ -567,7 +573,7 @@ export async function createEmployeeResignationRequest(params: {
       identityStatus: "not_requested",
       letterVersion: 1,
     },
-    accountant: { status: "not_started" },
+    accountant: { status: "not_started", recipientEmail: accountantContact?.email ?? null },
     payment: { status: "not_started" },
     employeeCompletion: { status: "not_started" },
     internalClosure: { status: "pending" },
@@ -1587,7 +1593,8 @@ export async function completeTermination(params: { context: ServerUserContext; 
 export async function sendTerminationToAccountant(params: { context: ServerUserContext; id: string; recipientEmail: string; appBaseUrl: string }) {
   const process = await requireManagedProcess(params.context, params.id);
   if (!process.notice) throw new Error("Defina o aviso-prévio antes do envio à contabilidade.");
-  const recipient = params.recipientEmail.trim().toLowerCase();
+  const configuredContact = await resolveCompanyProcessContact("termination");
+  const recipient = params.recipientEmail.trim().toLowerCase() || configuredContact?.email || "";
   if (!recipient.includes("@")) throw new Error("Informe um e-mail válido da contabilidade.");
   const token = randomBytes(32).toString("base64url");
   const tokenHash = createHash("sha256").update(token).digest("hex");

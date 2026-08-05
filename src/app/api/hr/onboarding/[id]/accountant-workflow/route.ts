@@ -12,6 +12,7 @@ import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { applyOnboardingSignatureMode, normalizeOnboardingStages } from '@/lib/recruitment-onboarding';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
+import { resolveCompanyProcessContact } from '@/lib/company/company-process-contact.server';
 import type { OnboardingDocument, OnboardingProcess, OnboardingStageId } from '@/types';
 
 export const runtime = 'nodejs';
@@ -99,7 +100,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (action === 'send_email') {
-    const recipient = email(body.accountantEmail);
+    const configuredContact = await resolveCompanyProcessContact('onboarding');
+    const recipient = email(body.accountantEmail) || configuredContact?.email || '';
     if (!recipient) return NextResponse.json({ error: 'Informe um e-mail válido do contador.' }, { status: 400 });
     if (!Array.isArray(body.selectedDocumentIds)) return NextResponse.json({ error: 'Confirme quais documentos do candidato devem compor o e-mail.' }, { status: 400 });
     const selectedDocumentIds: string[] = [...new Set<string>((body.selectedDocumentIds as unknown[]).map((value) => text(value, 180)).filter(Boolean))].slice(0, 120);

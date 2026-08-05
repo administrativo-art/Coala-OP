@@ -50,6 +50,12 @@ const entitySchema = z.object({
   contact: z.object({
     phone: z.string().optional(),
     email: z.string().email('E-mail inválido.').or(z.literal('')).optional(),
+    emails: z.array(z.object({
+      id: z.string().min(1),
+      department: z.string().trim().min(1, 'Informe o setor.'),
+      email: z.string().trim().email('E-mail setorial inválido.'),
+      purposes: z.array(z.enum(['onboarding', 'termination', 'aso'])).optional(),
+    })).optional(),
   }),
   responsible: z.string().optional(),
   documentSignatoryUserId: z.string().optional(),
@@ -111,7 +117,7 @@ const emptyEntityFormValues: EntityFormValues = {
     nickname: '',
     document: '',
     address: { zipCode: '', street: '', number: '', complement: '', neighborhood: '', city: '', state: '' },
-    contact: { phone: '', email: '' },
+    contact: { phone: '', email: '', emails: [] },
     responsible: '',
     documentSignatoryUserId: '',
     documentSignatoryName: '',
@@ -170,6 +176,12 @@ function getEntityFormValues(entity: Entity | null): EntityFormValues {
         contact: {
             phone: entity.contact?.phone ?? legacyEntity.phone ?? '',
             email: entity.contact?.email ?? legacyEntity.email ?? '',
+            emails: (entity.contact?.emails ?? []).map((entry, index) => ({
+                id: entry.id || `department-email-${index + 1}`,
+                department: entry.department ?? '',
+                email: entry.email ?? '',
+                purposes: entry.purposes ?? [],
+            })),
         },
         responsible: entity.responsible ?? '',
         documentSignatoryUserId: entity.documentSignatoryUserId ?? '',
@@ -257,6 +269,12 @@ function entityPayloadFromForm(values: EntityFormValues): Omit<Entity, 'id'> & R
         contact: {
             phone: values.contact?.phone,
             email: values.contact?.email,
+            emails: (values.contact?.emails ?? []).map((entry) => ({
+                id: entry.id,
+                department: entry.department.trim(),
+                email: entry.email.trim().toLowerCase(),
+                purposes: entry.purposes ?? [],
+            })),
         },
         responsible: values.responsible,
         documentSignatoryUserId: values.type === 'pessoa_juridica'
@@ -391,6 +409,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     const documentWatch = form.watch('document');
     const cleanCnpjWatch = entityType === 'pessoa_juridica' ? CnpjValidator.clean(documentWatch ?? '') : '';
     const imageUrlWatch = form.watch('imageUrl');
+    const departmentEmails = form.watch('contact.emails') ?? [];
     const isPF = entityType === 'pessoa_fisica';
     const initials = (nameWatch || '')
         .split(/\s+/)
@@ -419,6 +438,26 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     };
     const handleBack = () => setCurrentStep((s) => Math.max(1, s - 1));
     const onInvalid = () => setCurrentStep(1);
+
+    const addDepartmentEmail = () => {
+        form.setValue('contact.emails', [
+            ...departmentEmails,
+            { id: crypto.randomUUID(), department: '', email: '', purposes: [] },
+        ], { shouldDirty: true });
+    };
+
+    const removeDepartmentEmail = (id: string) => {
+        form.setValue('contact.emails', departmentEmails.filter((entry) => entry.id !== id), { shouldDirty: true });
+    };
+
+    const toggleDepartmentEmailPurpose = (index: number, purpose: 'onboarding' | 'termination' | 'aso', checked: boolean) => {
+        const current = departmentEmails[index];
+        if (!current) return;
+        const purposes = new Set(current.purposes ?? []);
+        if (checked) purposes.add(purpose);
+        else purposes.delete(purpose);
+        form.setValue(`contact.emails.${index}.purposes`, [...purposes], { shouldDirty: true });
+    };
 
     const handleZipCodeBlur = async (zipCode: string) => {
         const numericZipCode = zipCode.replace(/\D/g, '');
@@ -904,9 +943,58 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                     {currentStep === 2 && (
                                         <div className="space-y-5">
                                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                <FormField control={form.control} name="contact.email" render={({ field }) => (<FormItem><FormLabel>E-mail</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
+                                                <FormField control={form.control} name="contact.email" render={({ field }) => (<FormItem><FormLabel>E-mail principal</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
                                                 <FormField control={form.control} name="contact.phone" render={({ field }) => (<FormItem><FormLabel>Telefone / WhatsApp</FormLabel><FormControl><Input {...field} value={field.value ?? ''}/></FormControl><FormMessage /></FormItem>)}/>
                                             </div>
+
+                                            {entityType === 'pessoa_juridica' ? (
+                                                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                                        <div>
+                                                            <p className="text-sm font-bold text-slate-900">E-mails por setor</p>
+                                                            <p className="mt-1 text-xs text-slate-500">Cadastre quantos contatos forem necessários e indique em quais processos cada um será sugerido.</p>
+                                                        </div>
+                                                        <Button type="button" size="sm" variant="outline" onClick={addDepartmentEmail}>
+                                                            <Plus className="mr-1.5 h-3.5 w-3.5" />Adicionar e-mail
+                                                        </Button>
+                                                    </div>
+                                                    <div className="mt-4 space-y-3">
+                                                        {departmentEmails.map((entry, index) => (
+                                                            <div key={entry.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                                                                <div className="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_36px]">
+                                                                    <label className="space-y-2 text-sm font-medium">
+                                                                        <span>Setor</span>
+                                                                        <Input {...form.register(`contact.emails.${index}.department` as const)} placeholder="Ex.: Pessoal" />
+                                                                        {form.formState.errors.contact?.emails?.[index]?.department?.message ? <span className="block text-sm font-medium text-destructive">{form.formState.errors.contact.emails[index]?.department?.message}</span> : null}
+                                                                    </label>
+                                                                    <label className="space-y-2 text-sm font-medium">
+                                                                        <span>E-mail</span>
+                                                                        <Input type="email" {...form.register(`contact.emails.${index}.email` as const)} placeholder="setor@empresa.com.br" />
+                                                                        {form.formState.errors.contact?.emails?.[index]?.email?.message ? <span className="block text-sm font-medium text-destructive">{form.formState.errors.contact.emails[index]?.email?.message}</span> : null}
+                                                                    </label>
+                                                                    <button type="button" onClick={() => removeDepartmentEmail(entry.id)} className="mt-7 grid h-9 w-9 place-items-center rounded-lg text-rose-500 hover:bg-rose-50" aria-label="Remover e-mail setorial">
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </button>
+                                                                </div>
+                                                                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-600">
+                                                                    <span className="text-slate-400">Usar em:</span>
+                                                                    {([
+                                                                        ['onboarding', 'Integração'],
+                                                                        ['termination', 'Desligamento'],
+                                                                        ['aso', 'ASO'],
+                                                                    ] as const).map(([purpose, label]) => (
+                                                                        <label key={purpose} className="flex items-center gap-1.5">
+                                                                            <input type="checkbox" checked={(entry.purposes ?? []).includes(purpose)} onChange={(event) => toggleDepartmentEmailPurpose(index, purpose, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-pink-600" />
+                                                                            {label}
+                                                                        </label>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        {departmentEmails.length === 0 ? <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">Nenhum e-mail setorial cadastrado.</p> : null}
+                                                    </div>
+                                                </div>
+                                            ) : null}
 
                                             <Separator />
 
@@ -1174,8 +1262,9 @@ export function EntityManagement() {
                                     <TableCell>
                                         <div className="space-y-0.5 text-[11px] text-[#777784]">
                                             {entity.contact?.email ? <p className="flex items-center gap-1"><Mail className="h-3 w-3" />{entity.contact.email}</p> : null}
+                                            {(entity.contact?.emails ?? []).slice(0, 2).map((entry) => <p key={entry.id} className="flex items-center gap-1"><Mail className="h-3 w-3" /><span className="font-semibold">{entry.department}:</span> {entry.email}</p>)}
                                             {entity.contact?.phone ? <p className="flex items-center gap-1"><Phone className="h-3 w-3" />{entity.contact.phone}</p> : null}
-                                            {!entity.contact?.email && !entity.contact?.phone ? '-' : null}
+                                            {!entity.contact?.email && !entity.contact?.phone && !(entity.contact?.emails?.length) ? '-' : null}
                                         </div>
                                     </TableCell>
                                     <TableCell>

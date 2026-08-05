@@ -28,6 +28,8 @@
     "migrate:financial": "node scripts/migrate-financial.mjs",
     "migrate:cash-closure-permissions": "node --import tsx scripts/migrate-cash-closure-permissions.mts",
     "migrate:cash-deposit-inter": "node --import tsx scripts/migrate-cash-deposit-inter-fields.mts",
+    "migrate:central-pdv-links": "node --import tsx scripts/migrate-central-pdv-unit-links.mts",
+    "migrate:company-contacts": "node --import tsx scripts/migrate-company-department-contacts.mts",
     "migrate:onboarding-v2": "node scripts/migrate-onboarding-templates-v2.mjs",
     "migrate:user-unit-access": "node scripts/migrate-user-unit-access-scope.mjs",
     "migrate:standard-person-links": "node scripts/migrate-standard-person-links.mjs",

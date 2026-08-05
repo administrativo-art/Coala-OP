@@ -32,6 +32,10 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
     const { unitId } = await contextArg.params;
     const body = await readJsonObject(request);
     const update: Record<string, unknown> = { updatedAt: new Date() };
+    const unitRef = dbAdmin.collection("dp_units").doc(unitId);
+    const currentSnapshot = await unitRef.get();
+    if (!currentSnapshot.exists) throw new Error("Unidade não encontrada.");
+    const current = currentSnapshot.data() ?? {};
 
     if (Object.prototype.hasOwnProperty.call(body, "name")) {
       update.name = requiredString(body, "name", "Nome da unidade");
@@ -63,7 +67,26 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
       if (externalSource) update.externalSource = externalSource;
     }
 
-    await dbAdmin.collection("dp_units").doc(unitId).update(update);
+    const nextExternalSource = Object.prototype.hasOwnProperty.call(update, "externalSource")
+      ? update.externalSource
+      : current.externalSource;
+    const nextExternalId = Object.prototype.hasOwnProperty.call(body, "externalId")
+      ? (typeof body.externalId === "string" ? body.externalId.trim() : "")
+      : typeof current.externalId === "string" ? current.externalId.trim() : "";
+    const nextPdvFilialId = Object.prototype.hasOwnProperty.call(body, "pdvFilialId")
+      ? (typeof body.pdvFilialId === "string" ? body.pdvFilialId.trim() : "")
+      : typeof current.pdvFilialId === "string" ? current.pdvFilialId.trim() : "";
+
+    const batch = dbAdmin.batch();
+    batch.update(unitRef, update);
+    if (nextExternalSource === "kiosk" && nextExternalId) {
+      batch.set(dbAdmin.collection("kiosks").doc(nextExternalId), {
+        pdvFilialId: nextPdvFilialId || null,
+        pdvLinkManagedByUnitId: unitId,
+        pdvLinkSyncedAt: update.updatedAt,
+      }, { merge: true });
+    }
+    await batch.commit();
 
     return NextResponse.json({ ok: true });
   } catch (error) {

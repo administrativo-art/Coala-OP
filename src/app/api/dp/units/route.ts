@@ -52,7 +52,16 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     });
 
-    await ref.set(payload);
+    const batch = dbAdmin.batch();
+    batch.set(ref, payload);
+    if (payload.externalSource === "kiosk" && payload.externalId) {
+      batch.set(dbAdmin.collection("kiosks").doc(String(payload.externalId)), {
+        pdvFilialId: payload.pdvFilialId ?? null,
+        pdvLinkManagedByUnitId: ref.id,
+        pdvLinkSyncedAt: now,
+      }, { merge: true });
+    }
+    await batch.commit();
 
     return NextResponse.json({ unit: { id: ref.id, ...payload } }, { status: 201 });
   } catch (error) {

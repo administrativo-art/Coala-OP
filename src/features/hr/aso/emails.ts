@@ -3,7 +3,7 @@ import { renderEmailIconBox } from "@/lib/email/email-icon";
 export const MEDCLINIC_CANDIDATE_LOCATION = {
   name: 'MedClinic',
   address: 'Av. Getúlio Vargas, 43 · Monte Castelo',
-  city: 'São Luís/MA · CEP 65020-300',
+  city: 'São Luís/MA · CEP 65030-005',
   reference: 'Em frente ao SENAI',
   mapsUrl: 'https://maps.app.goo.gl/XMrzpX7e8x54HP939',
 } as const;

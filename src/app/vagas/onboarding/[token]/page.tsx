@@ -672,23 +672,23 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
             <ol className="mt-3 space-y-3 text-sm leading-relaxed text-white/70">
               <li className="flex gap-2.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-black text-white">1</span>
-                <span><strong className="text-white">Anexar</strong> apenas seleciona o arquivo. Antes de concluir, você ainda pode removê-lo ou trocá-lo.</span>
+                <span><strong className="text-white">Anexe os documentos</strong><span className="mt-0.5 block">Ao anexar um arquivo, ele ficará apenas selecionado. Antes de concluir o envio, você poderá removê-lo ou substituí-lo.</span></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-black text-white">2</span>
-                <span>Ao clicar em <strong className="text-white">Enviar onboarding</strong>, os dados e arquivos são enviados ao RH. Os documentos ficam imediatamente bloqueados e não podem ser trocados até a análise do RH.</span>
+                <span><strong className="text-white">Envie as informações</strong><span className="mt-0.5 block">Ao clicar em Enviar informações, seus dados e documentos serão enviados ao RH. Após o envio, os arquivos ficarão bloqueados e não poderão ser alterados durante a análise.</span></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-black text-white">3</span>
-                <span>O link é válido por <strong className="text-white">72 horas</strong>. Enquanto houver prazo, os dados textuais podem ser corrigidos e enviados novamente. Prazo atual: <strong className="text-white">{formatRemainingTime(data.publicTokenExpiresAt, clockNow)}</strong>.</span>
+                <span><strong className="text-white">Acompanhe o prazo</strong><span className="mt-0.5 block">Este link ficará disponível por 72 horas. Enquanto o prazo estiver ativo, você poderá corrigir os dados do formulário e enviá-los novamente.</span></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-black text-white">4</span>
-                <span>O RH analisará os documentos. Se algum for reprovado, somente esse arquivo será liberado para substituição.</span>
+                <span><strong className="text-white">Aguarde a análise do RH</strong><span className="mt-0.5 block">O RH analisará os documentos enviados. Caso algum deles seja reprovado, somente esse arquivo será liberado para substituição.</span></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-black text-white">5</span>
-                <span>O RH pode conceder <strong className="text-white">uma única prorrogação de 24 horas</strong>. A prorrogação mantém os dados e arquivos já enviados e não desbloqueia documentos. Depois do prazo, o formulário fica indisponível.</span>
+                <span><strong className="text-white">Prorrogação do prazo</strong><span className="mt-0.5 block">O RH poderá conceder uma única prorrogação de 24 horas. Os dados e documentos já enviados serão mantidos, mas os arquivos bloqueados não serão liberados para alteração. Após o encerramento do prazo, o formulário ficará indisponível.</span></span>
               </li>
             </ol>
           </div>
@@ -1199,7 +1199,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
               aria-label="Tela de consentimento opcional para uso de imagem e voz"
               className="mt-7 rounded-[22px] border-2 border-[#EE6FA8]/25 bg-[#EE6FA8]/[0.06] p-5"
             >
-              <p className="text-xs font-bold uppercase tracking-wider text-[#EE6FA8]">Tela opcional</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-[#EE6FA8]">Imagem e voz</p>
               <h3 className="mt-1 text-base font-extrabold">{data.imageVoiceConsentTerm.title}</h3>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-[#5B4C5B]">
                 {data.imageVoiceConsentTerm.explanation}
@@ -1247,6 +1247,23 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
             </div>
           )}
 
+          <section className="mt-6 rounded-[22px] border border-[#2A1F2A]/10 bg-white/75 p-4">
+            <h3 className="text-sm font-extrabold">Para enviar o onboarding</h3>
+            <div className="mt-3 grid gap-2 text-xs font-semibold leading-relaxed text-[#5B4C5B]">
+              <p>• Preencha todos os campos obrigatórios marcados com *.</p>
+              <p>• Anexe todos os documentos obrigatórios marcados com *.</p>
+              <p className={allergyAcknowledged ? "text-emerald-700" : "text-amber-800"}>
+                {allergyAcknowledged ? "✓" : "•"} Confirme a ciência sobre alergias e restrições alimentares.
+              </p>
+              <p className={privacyAcknowledged ? "text-emerald-700" : "text-amber-800"}>
+                {privacyAcknowledged ? "✓" : "•"} Confirme a ciência do Aviso de Privacidade.
+              </p>
+            </div>
+            <p className="mt-3 rounded-xl bg-[#EE6FA8]/[0.08] px-3 py-2 text-[11px] font-semibold leading-relaxed text-[#5B4C5B]">
+              A autorização de uso de imagem e voz é opcional e não impede o envio.
+            </p>
+          </section>
+
           <button
             type="submit"
             disabled={submitting || linkExpired || !privacyAcknowledged || !allergyAcknowledged}
@@ -1259,7 +1276,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                 ? "Prazo encerrado"
                 : submitted
                   ? "Enviar novamente"
-                  : "Enviar onboarding"}
+                  : "Enviar informações"}
           </button>
         </form>
       </main>

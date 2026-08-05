@@ -1503,6 +1503,10 @@ export type OnboardingProcess = {
   };
   accountantWorkflow?: {
     status?: 'pending' | 'form_generated' | 'form_validated' | 'email_sent' | 'registry_received' | 'completed';
+    suggestedRecipientEmail?: string | null;
+    suggestedRecipientDepartment?: string | null;
+    suggestedRecipientCompanyId?: string | null;
+    suggestedRecipientCompanyName?: string | null;
     latestFormId?: string | null;
     latestFormHashSha256?: string | null;
     latestFormGeneratedAt?: string | null;
@@ -2084,6 +2088,12 @@ export type Entity = {
   contact?: {
     phone?: string;
     email?: string;
+    emails?: Array<{
+      id: string;
+      department: string;
+      email: string;
+      purposes?: Array<'onboarding' | 'termination' | 'aso'>;
+    }>;
   };
   responsible?: string; // Only for pessoa_juridica
   documentSignatoryUserId?: string;

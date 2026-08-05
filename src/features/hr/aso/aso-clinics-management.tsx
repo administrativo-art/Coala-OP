@@ -50,7 +50,10 @@ type ClinicEntity = {
   name: string;
   fantasyName?: string;
   document?: string;
-  contact?: { email?: string };
+  contact?: {
+    email?: string;
+    emails?: Array<{ department?: string; email?: string; purposes?: string[] }>;
+  };
   address?: {
     street?: string; number?: string; complement?: string; neighborhood?: string;
     city?: string; state?: string; zipCode?: string;
@@ -76,10 +79,11 @@ function formForEntity(entity: ClinicEntity, clinic?: Clinic): FormState {
       mapsUrl: clinic.address?.mapsUrl ?? "",
     };
   }
+  const asoEmail = entity.contact?.emails?.find((entry) => entry.purposes?.includes("aso"))?.email;
   return {
     ...EMPTY,
     entityId: entity.id,
-    schedulingEmail: entity.contact?.email ?? "",
+    schedulingEmail: asoEmail ?? entity.contact?.email ?? "",
     street: entity.address?.street ?? "",
     number: entity.address?.number ?? "",
     complement: entity.address?.complement ?? "",

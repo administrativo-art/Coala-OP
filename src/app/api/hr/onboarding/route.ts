@@ -13,6 +13,7 @@ import { blankIntegrationTemplateContent, getIntegrationTemplate, getIntegration
 import type { IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
+import { resolveCompanyProcessContact } from '@/lib/company/company-process-contact.server';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { fetchPdvLegalFiliais, fetchPdvLegalProfiles } from '@/lib/integrations/pdv-legal-admin';
@@ -320,8 +321,7 @@ export async function POST(request: NextRequest) {
   const operational = asBoolean(input.operational);
   const participatesInGoals = asBoolean(input.participatesInGoals);
   const loginRestrictionEnabled = asBoolean(input.loginRestrictionEnabled);
-  const needsTransportVoucher = asBoolean(input.needsTransportVoucher);
-  const transportVoucherValue = needsTransportVoucher ? asNumber(input.transportVoucherValue) : null;
+  const transportVoucherValue = asNumber(input.transportVoucherValue);
   const generateSignatureDocuments = asBoolean(input.generateSignatureDocuments);
   const integrationMode = input.integrationMode === 'import' ? 'import' : 'blank';
   const integrationTemplateId = asString(input.integrationTemplateId);
@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
   }
   if (!employerUnitId) return jsonError('Selecione o CNPJ responsável pela contratação.');
   if (integrationMode === 'import' && !integrationTemplateId) return jsonError('Selecione o modelo que será importado.');
-  if (needsTransportVoucher && (transportVoucherValue === null || transportVoucherValue < 0)) {
+  if (transportVoucherValue === null || transportVoucherValue < 0) {
     return jsonError('Informe o valor diário do vale-transporte.');
   }
   if (requiresPdvAccess && !unitId) return jsonError('Selecione a unidade para liberar o PDV Legal.');
@@ -429,6 +429,7 @@ export async function POST(request: NextRequest) {
 
   const nowDate = new Date();
   const now = nowDate.toISOString();
+  const accountantContact = await resolveCompanyProcessContact('onboarding');
   const publicToken = createPublicToken();
   const publicLinkWindow = createOnboardingPublicLinkWindow(nowDate);
   const onboardingRef = hrDbAdmin.collection('onboardingProcesses').doc();
@@ -492,9 +493,15 @@ export async function POST(request: NextRequest) {
       operational,
       participatesInGoals,
       loginRestrictionEnabled,
-      needsTransportVoucher,
       transportVoucherValue,
       shiftDefinitionId: shiftDefinitionDoc?.exists ? shiftDefinitionDoc.id : null,
+    },
+    accountantWorkflow: {
+      status: 'pending',
+      suggestedRecipientEmail: accountantContact?.email ?? null,
+      suggestedRecipientDepartment: accountantContact?.department ?? null,
+      suggestedRecipientCompanyId: accountantContact?.entityId ?? null,
+      suggestedRecipientCompanyName: accountantContact?.companyName ?? null,
     },
     pdvAccess,
     source: 'manual',

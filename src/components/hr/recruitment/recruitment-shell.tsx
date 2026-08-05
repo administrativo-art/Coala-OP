@@ -6900,7 +6900,7 @@ function getFinalizationDraft(process: OnboardingProcess | null): OnboardingFina
       participatesInGoals: false,
       loginRestrictionEnabled: false,
       needsTransportVoucher: false,
-      transportVoucherValue: null,
+      transportVoucherValue: 8.4,
       shiftDefinitionId: '',
     };
   }
@@ -6910,7 +6910,7 @@ function getFinalizationDraft(process: OnboardingProcess | null): OnboardingFina
     participatesInGoals: settings.participatesInGoals ?? false,
     loginRestrictionEnabled: settings.loginRestrictionEnabled ?? false,
     needsTransportVoucher: settings.needsTransportVoucher ?? onboardingAnswerYes(process.publicFormAnswers, 'wantsTransportVoucher'),
-    transportVoucherValue: settings.transportVoucherValue ?? null,
+    transportVoucherValue: settings.transportVoucherValue ?? 8.4,
     shiftDefinitionId: settings.shiftDefinitionId ?? process.shiftDefinitionId ?? '',
   };
 }
@@ -6932,6 +6932,8 @@ function OnboardingFinalizationControls({
   unitId,
   disabled = false,
   compact = false,
+  transportVoucherMode = 'editable',
+  transportVoucherAnswered = true,
 }: {
   value: OnboardingFinalizationSettings;
   onChange: React.Dispatch<React.SetStateAction<OnboardingFinalizationSettings>>;
@@ -6939,6 +6941,8 @@ function OnboardingFinalizationControls({
   unitId?: string | null;
   disabled?: boolean;
   compact?: boolean;
+  transportVoucherMode?: 'editable' | 'initial' | 'summary';
+  transportVoucherAnswered?: boolean;
 }) {
   const [transportVoucherDraft, setTransportVoucherDraft] = useState(() =>
     value.transportVoucherValue == null
@@ -6983,7 +6987,9 @@ function OnboardingFinalizationControls({
           ['operational', 'Operacional', 'Entra em escala e rotinas operacionais.'],
           ['participatesInGoals', 'Participa de metas', 'Pode entrar nos acompanhamentos de metas.'],
           ['loginRestrictionEnabled', 'Login por escala', 'Acesso passa a respeitar a escala montada.'],
-          ['needsTransportVoucher', 'Vale-transporte', 'Usa valor diario por dia trabalhado.'],
+          ...(transportVoucherMode === 'editable'
+            ? [['needsTransportVoucher', 'Vale-transporte', 'Usa valor diário por dia trabalhado.']]
+            : []),
         ].map(([key, label, helper]) => (
           <label key={key} className="flex min-h-[76px] cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
             <input
@@ -7008,12 +7014,29 @@ function OnboardingFinalizationControls({
             </span>
           </label>
         ))}
+        {transportVoucherMode !== 'editable' ? (
+          <div className="flex min-h-[76px] items-start gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <div className="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full border border-pink-300 bg-pink-50 text-[9px] font-black text-pink-600">
+              VT
+            </div>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-slate-900">Vale-transporte</span>
+              <span className="mt-0.5 block text-xs leading-snug text-slate-500">
+                {transportVoucherMode === 'initial'
+                  ? 'A colaboradora responderá se deseja receber no link da integração.'
+                  : transportVoucherAnswered
+                    ? `Resposta da colaboradora: ${value.needsTransportVoucher ? 'Sim' : 'Não'}.`
+                    : 'Aguardando a resposta da colaboradora.'}
+              </span>
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      <div className={compact && value.needsTransportVoucher ? "grid gap-3 sm:grid-cols-2" : "space-y-3"}>
-        {value.needsTransportVoucher ? (
+      <div className={compact && (transportVoucherMode !== 'editable' || value.needsTransportVoucher) ? "grid gap-3 sm:grid-cols-2" : "space-y-3"}>
+        {transportVoucherMode !== 'editable' || value.needsTransportVoucher ? (
           <label className="block text-sm font-semibold text-slate-700">
-            Valor diário do VT
+            Valor diário do VT definido pelo RH
             <input
               type="text"
               value={transportVoucherDraft}
@@ -7038,7 +7061,7 @@ function OnboardingFinalizationControls({
                   currency: 'BRL',
                 }));
               }}
-              disabled={disabled}
+              disabled={disabled || transportVoucherMode === 'summary'}
               inputMode="decimal"
               className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
               placeholder="R$ 0,00"
@@ -7244,6 +7267,7 @@ function StartOnboardingModal({
   const [integrationTemplateId, setIntegrationTemplateId] = useState('');
   const [compatibleTemplates, setCompatibleTemplates] = useState<IntegrationTemplateMetadataClient[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [formStep, setFormStep] = useState<1 | 2>(1);
   const [candidateName, setCandidateName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
   const [jobRoleId, setJobRoleId] = useState('');
@@ -7291,24 +7315,78 @@ function StartOnboardingModal({
   }, [availableFunctions, functionId]);
 
   useEffect(() => {
-    if (integrationMode !== 'import' || !jobRoleId || !functionId) {
+    if (integrationMode !== 'import') {
       setCompatibleTemplates([]);
       setIntegrationTemplateId('');
       return;
     }
     let active = true;
     setLoadingTemplates(true);
-    void apiFetch(`/api/hr/integration-templates?roleId=${encodeURIComponent(jobRoleId)}&functionId=${encodeURIComponent(functionId)}&compatibleOnly=true`, getToken)
+    void apiFetch('/api/hr/integration-templates?status=published', getToken)
       .then(payload => {
         if (!active) return;
         const templates = Array.isArray(payload?.templates) ? payload.templates as IntegrationTemplateMetadataClient[] : [];
-        setCompatibleTemplates(templates);
-        setIntegrationTemplateId(current => templates.some(item => item.id === current) ? current : templates[0]?.id ?? '');
+        setCompatibleTemplates(templates.sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.name.localeCompare(right.name)));
       })
       .catch(caught => active && setError(caught instanceof Error ? caught.message : 'Falha ao carregar modelos.'))
       .finally(() => active && setLoadingTemplates(false));
     return () => { active = false; };
-  }, [functionId, getToken, integrationMode, jobRoleId]);
+  }, [getToken, integrationMode]);
+
+  const selectedIntegrationTemplate = useMemo(
+    () => compatibleTemplates.find(template => template.id === integrationTemplateId) ?? null,
+    [compatibleTemplates, integrationTemplateId],
+  );
+
+  function selectIntegrationTemplate(template: IntegrationTemplateMetadataClient) {
+    setIntegrationTemplateId(template.id);
+    setJobRoleId(template.roleId);
+    setFunctionId(template.functionId ?? '');
+    setFormStep(1);
+    setError(null);
+  }
+
+  function resetIntegrationMode() {
+    setIntegrationMode(null);
+    setIntegrationTemplateId('');
+    setJobRoleId('');
+    setFunctionId('');
+    setFormStep(1);
+    setError(null);
+  }
+
+  function continueToAccessStep() {
+    const normalizedCandidateName = formatPersonName(candidateName);
+    const normalizedCandidateEmail = candidateEmail.trim().toLowerCase();
+    setCandidateName(normalizedCandidateName);
+    setCandidateEmail(normalizedCandidateEmail);
+    setError(null);
+    if (!normalizedCandidateName) {
+      setError('Informe o nome da pessoa em integração.');
+      return;
+    }
+    if (!normalizedCandidateEmail || !normalizedCandidateEmail.includes('@')) {
+      setError('Informe um e-mail válido.');
+      return;
+    }
+    if (!jobRoleId) {
+      setError('Selecione o cargo da integração.');
+      return;
+    }
+    if (!functionId) {
+      setError('Selecione a função da integração.');
+      return;
+    }
+    if (!unitId) {
+      setError('Selecione a unidade onde a pessoa trabalhará.');
+      return;
+    }
+    if (!employerUnitId) {
+      setError('Selecione o CNPJ responsável pela contratação.');
+      return;
+    }
+    setFormStep(2);
+  }
 
   useEffect(() => {
     if (!requiresPdvAccess) return;
@@ -7350,8 +7428,7 @@ function StartOnboardingModal({
           operational: finalizationSettings.operational ?? false,
           participatesInGoals: finalizationSettings.participatesInGoals ?? false,
           loginRestrictionEnabled: finalizationSettings.loginRestrictionEnabled ?? false,
-          needsTransportVoucher: finalizationSettings.needsTransportVoucher ?? false,
-          transportVoucherValue: finalizationSettings.needsTransportVoucher ? finalizationSettings.transportVoucherValue ?? null : null,
+          transportVoucherValue: finalizationSettings.transportVoucherValue ?? null,
           generateSignatureDocuments,
           integrationMode,
           integrationTemplateId: integrationMode === 'import' ? integrationTemplateId : null,
@@ -7409,7 +7486,7 @@ function StartOnboardingModal({
             <button type="button" onClick={() => setIntegrationMode('import')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-pink-300 hover:bg-pink-50/40">
               <FolderOpen className="h-7 w-7 text-pink-600" />
               <span className="mt-3 block text-base font-black text-slate-950">Importar modelo</span>
-              <span className="mt-1 block text-xs leading-relaxed text-slate-500">Use a versão publicada compatível com o cargo e a função. O processo manterá um snapshot imutável.</span>
+              <span className="mt-1 block text-xs leading-relaxed text-slate-500">Escolha primeiro um modelo publicado. Cargo e função serão preenchidos por ele.</span>
             </button>
             <button type="button" onClick={() => setIntegrationMode('blank')} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-indigo-300 hover:bg-indigo-50/40">
               <Plus className="h-7 w-7 text-indigo-600" />
@@ -7417,225 +7494,192 @@ function StartOnboardingModal({
               <span className="mt-1 block text-xs leading-relaxed text-slate-500">Comece do zero somente para esta situação. Nenhum modelo existente será alterado.</span>
             </button>
           </div>
-        ) : <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 lg:grid-cols-2">
-            <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-            <span className="text-xs font-bold text-slate-700">{integrationMode === 'import' ? 'Importando um modelo publicado' : 'Integração avulsa, criada do zero'}</span>
-            <button type="button" onClick={() => setIntegrationMode(null)} className="text-xs font-black text-pink-600">Trocar</button>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="block text-sm font-semibold text-slate-700">
-              Nome da pessoa
-              <input
-                value={candidateName}
-                onChange={event => setCandidateName(event.target.value)}
-                onBlur={event => setCandidateName(formatPersonName(event.target.value))}
-                required
-                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                placeholder="Nome completo"
-              />
-              <span className="mt-1.5 block text-xs font-medium leading-snug text-slate-500">
-                Use nome completo com iniciais maiúsculas. Ex.: Maria Joana Barbosa Pereira.
-              </span>
-            </label>
-            <label className="block text-sm font-semibold text-slate-700">
-              E-mail para envio
-              <input
-                type="email"
-                value={candidateEmail}
-                onChange={event => setCandidateEmail(event.target.value)}
-                onBlur={event => setCandidateEmail(event.target.value.trim().toLowerCase())}
-                required
-                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                placeholder="nome@email.com"
-              />
-            </label>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="block text-sm font-semibold text-slate-700">
-              Cargo
-              <select
-                value={jobRoleId}
-                onChange={event => setJobRoleId(event.target.value)}
-                required
-                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-              >
-                <option value="">Selecione o cargo</option>
-                {activeRoles.map(role => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm font-semibold text-slate-700">
-              Função
-              <select
-                value={functionId}
-                onChange={event => setFunctionId(event.target.value)}
-                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-              >
-                <option value="">Selecione a função</option>
-                {availableFunctions.map(item => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-pink-100 bg-pink-50 px-3 py-2 text-xs font-bold text-pink-800">
-            <span>Vínculo: CLT</span>
-            <button type="button" onClick={() => { setEmploymentRelationshipType(''); setIntegrationMode(null); }} className="font-black">Trocar</button>
-          </div>
-
-          <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Acesso ao PDV Legal</p>
-            <div className="mt-2 flex gap-4 text-xs font-bold text-slate-700">
-              <label className="flex items-center gap-2">
-                <input type="radio" name="pdvAccess" checked={!requiresPdvAccess} onChange={() => { setRequiresPdvAccess(false); setPdvProfileId(''); }} />
-                Não
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="radio" name="pdvAccess" checked={requiresPdvAccess} onChange={() => setRequiresPdvAccess(true)} />
-                Sim
-              </label>
-            </div>
-            {requiresPdvAccess ? (
-              <div className="mt-3 space-y-2">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Perfil de acesso
-                  <select
-                    value={pdvProfileId}
-                    onChange={event => setPdvProfileId(event.target.value)}
-                    required
-                    disabled={loadingPdvProfiles}
-                    className="mt-1 h-9 w-full rounded-lg border border-blue-200 bg-white px-2.5 text-xs"
-                  >
-                    <option value="">{loadingPdvProfiles ? 'Sincronizando perfis...' : 'Selecione o perfil do PDV'}</option>
-                    {pdvProfiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-                  </select>
-                </label>
-                <p className="text-[11px] font-semibold text-blue-700">
-                  {unitId
-                    ? activeUnits.find(unit => unit.id === unitId)?.pdvFilialId
-                      ? `A filial será a vinculada à unidade ${activeUnits.find(unit => unit.id === unitId)?.name}.`
-                      : 'Esta unidade ainda não possui filial do PDV vinculada.'
-                    : 'Selecione uma unidade para determinar a filial do PDV.'}
-                </p>
+        ) : integrationMode === 'import' && !integrationTemplateId ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-black text-slate-950">Escolha o modelo de integração</p>
+                  <p className="mt-1 text-xs text-slate-500">O modelo define o cargo, a função e as etapas que serão aplicadas.</p>
+                </div>
+                <button type="button" onClick={resetIntegrationMode} className="text-xs font-black text-pink-600">Voltar</button>
               </div>
-            ) : null}
-          </div>
 
-          <label className="block text-sm font-semibold text-slate-700">
-            Unidade
-            <select
-              value={unitId}
-              onChange={event => setUnitId(event.target.value)}
-              className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Sem unidade definida</option>
-              {activeUnits.map(unit => (
-                <option key={unit.id} value={unit.id}>{unit.name}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block text-sm font-semibold text-slate-700">
-            CNPJ responsável pela contratação <span className="text-rose-500">*</span>
-            <select
-              value={employerUnitId}
-              onChange={event => setEmployerUnitId(event.target.value)}
-              required
-              className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Selecione a empresa responsável</option>
-              {employerUnits.map(unit => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}
-                </option>
-              ))}
-            </select>
-            <span className="mt-1 block text-xs font-medium text-slate-500">
-              Pode ser diferente da unidade onde a pessoa trabalhará.
-            </span>
-          </label>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="block text-sm font-semibold text-slate-700">
-              Data prevista de admissão
-              <input
-                type="date"
-                value={expectedAdmissionDate}
-                onChange={event => setExpectedAdmissionDate(event.target.value)}
-                className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-              />
-            </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={generateSignatureDocuments}
-                  onChange={event => setGenerateSignatureDocuments(event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-pink-600"
-                />
-                <span>
-                  <span className="block text-sm font-bold text-slate-900">Gerar documentos</span>
-                  <span className="block text-xs text-slate-500">Inclui etapas de geração e assinatura.</span>
-                </span>
-              </label>
-          </div>
-
+              {loadingTemplates ? (
+                <div className="mt-5 flex items-center justify-center gap-2 rounded-xl border border-dashed py-10 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando modelos publicados...
+                </div>
+              ) : compatibleTemplates.length > 0 ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {compatibleTemplates.map(template => {
+                    const roleName = activeRoles.find(role => role.id === template.roleId)?.name ?? 'Cargo não encontrado';
+                    const functionName = template.functionId
+                      ? jobFunctions.find(item => item.id === template.functionId)?.name ?? 'Função não encontrada'
+                      : 'Função será escolhida na próxima etapa';
+                    return (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => selectIntegrationTemplate(template)}
+                        className="rounded-xl border-2 border-slate-200 p-4 text-left transition hover:border-pink-300 hover:bg-pink-50/40"
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-black text-slate-950">{template.name}</span>
+                          {template.isDefault ? <span className="rounded-full bg-pink-100 px-2 py-1 text-[10px] font-black text-pink-700">Padrão</span> : null}
+                        </span>
+                        <span className="mt-2 block text-xs font-semibold text-slate-600">{roleName} · {functionName}</span>
+                        <span className="mt-1 block text-[11px] text-slate-400">Versão publicada {template.currentVersion}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-5 text-center">
+                  <p className="text-sm font-bold text-amber-900">Nenhum modelo publicado disponível.</p>
+                  <p className="mt-1 text-xs text-amber-700">Publique um modelo ou inicie uma integração criada do zero.</p>
+                  <button type="button" onClick={() => setIntegrationMode('blank')} className="mt-4 h-9 rounded-lg bg-slate-950 px-4 text-xs font-black text-white">Criar do zero</button>
+                </div>
+              )}
+              {error ? <div className="mt-4"><ErrorLine msg={error} /></div> : null}
             </div>
-
-            <div className="space-y-3">
-          {integrationMode === 'import' ? (
-            <label className="block rounded-lg border border-pink-100 bg-pink-50/50 p-3 text-sm font-semibold text-slate-700">
-              Modelo de integração
-              <select value={integrationTemplateId} onChange={event => setIntegrationTemplateId(event.target.value)} required disabled={!jobRoleId || !functionId || loadingTemplates} className="mt-1.5 h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-900">
-                <option value="">{loadingTemplates ? 'Carregando modelos...' : jobRoleId && functionId ? 'Selecione um modelo' : 'Selecione cargo e função primeiro'}</option>
-                {compatibleTemplates.map(template => <option key={template.id} value={template.id}>{template.name} · v{template.currentVersion}{template.isDefault ? ' · padrão' : ''}</option>)}
-              </select>
-              {!loadingTemplates && jobRoleId && functionId && compatibleTemplates.length === 0 ? <span className="mt-1 block text-xs text-amber-700">Não há modelo publicado compatível. Volte e escolha “Nova integração” ou publique um modelo.</span> : null}
-            </label>
-          ) : null}
-          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Comportamento no sistema</p>
-            <OnboardingFinalizationControls
-              value={finalizationSettings}
-              onChange={setFinalizationSettings}
-              shiftDefinitions={shiftDefinitions}
-              unitId={unitId}
-              compact
-            />
           </div>
-
-          <div className="flex items-start gap-2.5 rounded-xl border border-pink-200 bg-pink-50 px-3.5 py-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-pink-600" />
-            <span className="text-xs font-semibold leading-snug text-pink-700">
-              O modelo de etapas e documentos é aplicado automaticamente a partir do cargo e função. O link do candidato será válido por 72 horas e poderá receber uma única prorrogação de 24 horas pelo RH.
-            </span>
-          </div>
-
-          {error ? <ErrorLine msg={error} /> : null}
-
+        ) : <form onSubmit={formStep === 1 ? event => { event.preventDefault(); continueToAccessStep(); } : handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="border-b border-slate-100 px-5 py-3">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <button type="button" onClick={() => setFormStep(1)} className={`flex items-center gap-2 text-left ${formStep === 1 ? 'text-pink-700' : 'text-slate-500'}`}>
+                <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${formStep === 1 ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-500'}`}>1</span>
+                <span><span className="block text-xs font-black">Identificação</span><span className="hidden text-[10px] font-medium sm:block">Pessoa, cargo e vínculo</span></span>
+              </button>
+              <span className="h-px w-10 bg-slate-200 sm:w-20" />
+              <div className={`flex items-center justify-end gap-2 text-left ${formStep === 2 ? 'text-pink-700' : 'text-slate-400'}`}>
+                <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${formStep === 2 ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-400'}`}>2</span>
+                <span><span className="block text-xs font-black">Acessos e comportamento</span><span className="hidden text-[10px] font-medium sm:block">Sistema, PDV e benefícios</span></span>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-white px-4 py-3 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-600 hover:bg-slate-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || (integrationMode === 'import' && !integrationTemplateId) || (requiresPdvAccess && (!unitId || !pdvProfileId || !activeUnits.find(unit => unit.id === unitId)?.pdvFilialId))}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              Iniciar integração
-            </button>
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            {formStep === 1 ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <span className="block text-xs font-black text-slate-800">{integrationMode === 'import' ? selectedIntegrationTemplate?.name ?? 'Modelo publicado' : 'Integração criada do zero'}</span>
+                    {integrationMode === 'import' ? <span className="mt-0.5 block text-[11px] text-slate-500">Cargo e função definidos pelo modelo selecionado.</span> : null}
+                  </div>
+                  <button type="button" onClick={integrationMode === 'import' ? () => { setIntegrationTemplateId(''); setFormStep(1); setError(null); } : resetIntegrationMode} className="shrink-0 text-xs font-black text-pink-600">{integrationMode === 'import' ? 'Trocar modelo' : 'Trocar'}</button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Nome da pessoa
+                    <input value={candidateName} onChange={event => setCandidateName(event.target.value)} onBlur={event => setCandidateName(formatPersonName(event.target.value))} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="Nome completo" />
+                    <span className="mt-1.5 block text-xs font-medium leading-snug text-slate-500">Use o nome completo com iniciais maiúsculas.</span>
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    E-mail para envio
+                    <input type="email" value={candidateEmail} onChange={event => setCandidateEmail(event.target.value)} onBlur={event => setCandidateEmail(event.target.value.trim().toLowerCase())} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" placeholder="nome@email.com" />
+                  </label>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Cargo
+                    <select value={jobRoleId} onChange={event => setJobRoleId(event.target.value)} required disabled={integrationMode === 'import'} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-600">
+                      <option value="">Selecione o cargo</option>
+                      {activeRoles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Função
+                    <select value={functionId} onChange={event => setFunctionId(event.target.value)} required disabled={integrationMode === 'import' && Boolean(selectedIntegrationTemplate?.functionId)} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-600">
+                      <option value="">Selecione a função</option>
+                      {availableFunctions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-pink-100 bg-pink-50 px-3 py-2.5 text-xs font-bold text-pink-800">
+                  <span>Vínculo: CLT</span>
+                  <button type="button" onClick={() => { setEmploymentRelationshipType(''); resetIntegrationMode(); }} className="font-black">Trocar</button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Unidade <span className="text-rose-500">*</span>
+                    <select value={unitId} onChange={event => setUnitId(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
+                      <option value="">Selecione a unidade</option>
+                      {activeUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    CNPJ responsável pela contratação <span className="text-rose-500">*</span>
+                    <select value={employerUnitId} onChange={event => setEmployerUnitId(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
+                      <option value="">Selecione a empresa responsável</option>
+                      {employerUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</option>)}
+                    </select>
+                    <span className="mt-1.5 block text-xs font-medium text-slate-500">Pode ser diferente da unidade onde a pessoa trabalhará.</span>
+                  </label>
+                </div>
+
+                <label className="block max-w-sm text-sm font-semibold text-slate-700">
+                  Data prevista de admissão
+                  <input type="date" value={expectedAdmissionDate} onChange={event => setExpectedAdmissionDate(event.target.value)} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
+                </label>
+                {error ? <ErrorLine msg={error} /> : null}
+              </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Acesso ao PDV Legal</p>
+                    <div className="mt-3 flex gap-5 text-sm font-bold text-slate-700">
+                      <label className="flex items-center gap-2"><input type="radio" name="pdvAccess" checked={!requiresPdvAccess} onChange={() => { setRequiresPdvAccess(false); setPdvProfileId(''); }} />Não</label>
+                      <label className="flex items-center gap-2"><input type="radio" name="pdvAccess" checked={requiresPdvAccess} onChange={() => setRequiresPdvAccess(true)} />Sim</label>
+                    </div>
+                    {requiresPdvAccess ? (
+                      <div className="mt-3 space-y-2">
+                        <label className="block text-sm font-semibold text-slate-700">
+                          Perfil de acesso
+                          <select value={pdvProfileId} onChange={event => setPdvProfileId(event.target.value)} required disabled={loadingPdvProfiles} className="mt-1.5 h-10 w-full rounded-xl border border-blue-200 bg-white px-3 text-sm">
+                            <option value="">{loadingPdvProfiles ? 'Sincronizando perfis...' : 'Selecione o perfil do PDV'}</option>
+                            {pdvProfiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+                          </select>
+                        </label>
+                        <p className="text-xs font-semibold text-blue-700">{activeUnits.find(unit => unit.id === unitId)?.pdvFilialId ? `Filial vinculada à unidade ${activeUnits.find(unit => unit.id === unitId)?.name}.` : 'Esta unidade ainda não possui filial do PDV vinculada.'}</p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <input type="checkbox" checked={generateSignatureDocuments} onChange={event => setGenerateSignatureDocuments(event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-pink-600" />
+                    <span><span className="block text-sm font-bold text-slate-900">Gerar documentos</span><span className="block text-xs text-slate-500">Inclui as etapas de geração e assinatura.</span></span>
+                  </label>
+
+                  <div className="flex items-start gap-2.5 rounded-xl border border-pink-200 bg-pink-50 px-3.5 py-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-pink-600" />
+                    <span className="text-xs font-semibold leading-snug text-pink-700">O link será válido por 72 horas e poderá receber uma única prorrogação de 24 horas pelo RH.</span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Comportamento no sistema</p>
+                  <OnboardingFinalizationControls value={finalizationSettings} onChange={setFinalizationSettings} shiftDefinitions={shiftDefinitions} unitId={unitId} compact transportVoucherMode="initial" />
+                </div>
+                {error ? <div className="lg:col-span-2"><ErrorLine msg={error} /></div> : null}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-white px-5 py-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={onClose} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
+            {formStep === 2 ? <button type="button" onClick={() => { setFormStep(1); setError(null); }} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">Voltar</button> : null}
+            {formStep === 1 ? (
+              <button type="submit" className="inline-flex h-9 items-center justify-center rounded-lg bg-pink-600 px-4 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700">Continuar</button>
+            ) : (
+              <button type="submit" disabled={submitting || finalizationSettings.transportVoucherValue == null || (requiresPdvAccess && (!pdvProfileId || !activeUnits.find(unit => unit.id === unitId)?.pdvFilialId))} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-4 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60">
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}Iniciar integração
+              </button>
+            )}
           </div>
         </form>}
       </div>
@@ -8191,9 +8235,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }, [canViewAso, getToken, view]);
 
   useEffect(() => {
-    setAccountantEmail(selectedProcess?.accountantWorkflow?.email?.recipient ?? '');
+    setAccountantEmail(selectedProcess?.accountantWorkflow?.email?.recipient ?? selectedProcess?.accountantWorkflow?.suggestedRecipientEmail ?? '');
     setAccountantSelectedDocumentIds(selectedProcess?.accountantWorkflow?.selectedDocumentIds ?? []);
-  }, [selectedProcess?.id, selectedProcess?.accountantWorkflow?.email?.recipient, selectedProcess?.accountantWorkflow?.selectedDocumentIds]);
+  }, [selectedProcess?.id, selectedProcess?.accountantWorkflow?.email?.recipient, selectedProcess?.accountantWorkflow?.selectedDocumentIds, selectedProcess?.accountantWorkflow?.suggestedRecipientEmail]);
 
   useEffect(() => {
     if (selectedProcess?.currentStage === 'document_review' && phaseId === 'documents') {
@@ -9694,6 +9738,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       <input value={accountantEmail} onChange={event => setAccountantEmail(event.target.value)} type="email" placeholder="E-mail do contador" className="h-9 min-w-0 flex-1 rounded-lg border px-3 text-xs font-semibold" />
                       {canManageAccountant ? <button type="button" disabled={!!accountantActionBusy || !accountantEmail} onClick={() => void accountantAction('send_email', { accountantEmail, selectedDocumentIds: accountantSelectedDocumentIds })} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{accountantActionBusy === 'send_email' ? 'Enviando...' : selectedProcess.accountantWorkflow?.email?.sentAt ? 'Reenviar pacote' : 'Enviar ao contador'}</button> : null}
                     </div>
+                    {selectedProcess.accountantWorkflow?.suggestedRecipientEmail ? <p className="mt-2 text-[11px] font-semibold text-violet-700">Contato sugerido pelo cadastro: {selectedProcess.accountantWorkflow.suggestedRecipientDepartment ?? 'Setor'} · {selectedProcess.accountantWorkflow.suggestedRecipientCompanyName ?? 'Empresa'}.</p> : null}
                     {selectedProcess.accountantWorkflow?.email?.sentAt ? <p className="mt-2 text-[11px] font-bold text-slate-600">E-mail: {selectedProcess.accountantWorkflow.email.status ?? 'accepted'}{selectedProcess.accountantWorkflow.email.deliveredAt ? ' · entregue' : ''}{selectedProcess.accountantWorkflow.email.openedAt ? ' · aberto' : ''}{selectedProcess.accountantWorkflow.email.clickedAt ? ' · link acessado' : ''}.</p> : null}
                     {selectedProcess.accountantWorkflow?.package?.attachmentCount ? <p className="mt-1 text-[11px] font-semibold text-slate-500">Último pacote: {selectedProcess.accountantWorkflow.package.attachmentCount} anexos, com {selectedProcess.accountantWorkflow.package.selectedDocumentIds?.length ?? 0} selecionados pelo RH.</p> : null}
                   </div>
@@ -9716,7 +9761,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <div>
                     <p className="text-xs font-black uppercase tracking-wide text-slate-500">Configurações finais do colaborador</p>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
-                      Salva VT, turno, operação, metas e regra de acesso. Isso não finaliza a integração.
+                      Confirma a resposta de VT e salva turno, operação, metas e regra de acesso. Isso não finaliza a integração.
                     </p>
                   </div>
                   {finalizationSaved ? (
@@ -9731,6 +9776,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   shiftDefinitions={shiftDefinitions}
                   unitId={selectedProcess.unitId}
                   disabled={!canActOnCurrentPhase || userCreated}
+                  transportVoucherMode="summary"
+                  transportVoucherAnswered={selectedProcess.publicFormAnswers?.wantsTransportVoucher === 'yes' || selectedProcess.publicFormAnswers?.wantsTransportVoucher === 'no'}
                 />
                 {canManage && !userCreated ? (
                   <button
