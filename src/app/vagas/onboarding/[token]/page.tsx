@@ -766,24 +766,10 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
             </section>
 
             <section className="rounded-[22px] border border-[#2A1F2A]/10 bg-[#F4ECD8]/60 p-4">
-              <h3 className="mb-3 text-sm font-extrabold">Banco</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold">Banco</label>
-                  <input value={answers.bankName} onChange={set("bankName")} className="fld" placeholder="Ex.: Nubank, Caixa, Banco do Brasil" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold">Agência</label>
-                  <input value={answers.bankAgency} onChange={set("bankAgency")} className="fld" placeholder="Ex.: 0001" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold">Conta</label>
-                  <input value={answers.bankAccount} onChange={set("bankAccount")} className="fld" placeholder="Conta com dígito" />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold">Chave Pix</label>
-                  <input value={answers.pixKey} onChange={set("pixKey")} className="fld" placeholder="CPF, e-mail, telefone ou chave aleatória" />
-                </div>
+              <h3 className="mb-3 text-sm font-extrabold">PIX</h3>
+              <div className="max-w-xl">
+                <label className="mb-1.5 block text-xs font-bold">Chave PIX</label>
+                <input value={answers.pixKey} onChange={set("pixKey")} className="fld" placeholder="CPF, e-mail, telefone ou chave aleatória" />
               </div>
             </section>
 

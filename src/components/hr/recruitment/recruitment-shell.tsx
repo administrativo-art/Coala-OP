@@ -6712,11 +6712,11 @@ const ONBOARDING_DOCUMENT_STATUS_LABELS: Record<OnboardingDocument['status'], st
 const ONBOARDING_STAGE_DETAILS: Record<OnboardingStageId, { owner: string; focus: string }> = {
   documents: {
     owner: 'Candidato + RH',
-    focus: 'Dados do candidato e anexos obrigatórios',
+    focus: 'Dados do candidato, anexos obrigatórios e ASO admissional',
   },
   document_review: {
     owner: 'Candidato + RH',
-    focus: 'Dados do candidato, anexos e aprovação dos documentos',
+    focus: 'Conferência dos dados, aprovação dos documentos e conclusão do ASO admissional',
   },
   accountant: {
     owner: 'RH + Contador',
@@ -6784,7 +6784,7 @@ function consolidatedOnboardingStages(process: OnboardingProcess) {
   return stages
     .filter(stage => stage.id !== (visibleDocumentStage === 'documents' ? 'document_review' : 'documents'))
     .map(stage => stage.id === visibleDocumentStage
-      ? { ...stage, label: 'Formalização · Dados e documentos' }
+      ? { ...stage, label: 'Formalização · Dados, documentos e ASO' }
       : stage);
 }
 
@@ -6847,6 +6847,11 @@ function formatOnboardingDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Não informado';
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatOnboardingDateOnly(value?: string | null) {
+  const match = value?.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : 'Não informada';
 }
 
 function formatOnboardingLinkRemaining(process: OnboardingProcess, now: number) {
@@ -9039,10 +9044,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     ['Identificação', readOnboardingChoice(answers, 'identityDocumentType', { identity: 'RG / CIN', cnh: 'CNH' })],
     ['Possui CNH?', readOnboardingChoice(answers, 'hasCnh', { yes: 'Sim', no: 'Não' })],
     ['Vale-transporte', readOnboardingChoice(answers, 'wantsTransportVoucher', { yes: 'Sim', no: 'Não' })],
-    ['Banco', readOnboardingAnswer(answers, 'bankName')],
-    ['Agência', readOnboardingAnswer(answers, 'bankAgency')],
-    ['Conta', readOnboardingAnswer(answers, 'bankAccount')],
-    ['Pix', readOnboardingAnswer(answers, 'pixKey')],
+    ['PIX', readOnboardingAnswer(answers, 'pixKey')],
     ['Uniforme', [
       readOnboardingAnswer(answers, 'uniformShirtSize'),
       readOnboardingAnswer(answers, 'uniformPantsSize'),
@@ -9174,6 +9176,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 linkActive ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'
               }`}>
                 {linkActive ? formatOnboardingLinkRemaining(selectedProcess, linkClock) : 'Prazo expirado'}
+              </span>
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${
+                selectedProcess.expectedAdmissionDate
+                  ? 'bg-violet-50 text-violet-700'
+                  : 'bg-amber-50 text-amber-700'
+              }`}>
+                <Calendar className="h-3 w-3" />
+                Admissão prevista · {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
               </span>
             </div>
             <div className="mt-3.5 flex items-center gap-3">
@@ -9402,14 +9412,23 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             </div>
 
             {isFuturePhase ? (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
-                Esta etapa ainda não está liberada. Conclua os requisitos das etapas anteriores para habilitar ações aqui.
+              <div role="alert" className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-amber-950 shadow-sm">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700">
+                  <AlertTriangle className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-wide">Etapa bloqueada</p>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-amber-800">
+                    Esta etapa ainda não está liberada. Conclua os requisitos das etapas anteriores para habilitar as ações.
+                  </p>
+                </div>
               </div>
             ) : null}
 
             {/* COLETA */}
             {activeKind === 'coleta' && (
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 flex flex-col gap-4">
+                <section className="order-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2.5">
                   <p className="text-xs font-black uppercase tracking-wide text-slate-500">Dados fornecidos pelo candidato</p>
                   <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
@@ -9426,14 +9445,15 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </div>
                   ))}
                 </div>
+                </section>
 
-                {canViewAso ? <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4">
+                {canViewAso ? <div className="order-3 rounded-2xl border border-cyan-300 bg-cyan-50/70 p-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[10.5px] font-black uppercase tracking-wide text-cyan-700">ASO admissional · fluxo paralelo</p>
+                      <p className="text-[10.5px] font-black uppercase tracking-wide text-cyan-700">ASO admissional · etapa obrigatória</p>
                       <h4 className="mt-1 text-sm font-black text-slate-900">Guia de encaminhamento MedClinic</h4>
                       <p className="mt-1 max-w-xl text-xs font-semibold leading-relaxed text-slate-600">
-                        Admissional e exames conforme o PCMSO marcados. Pagamento PIX, setor Geral e atendimento a definir pela clínica.
+                        Parte fixa da primeira etapa. O Contador só será liberado após a aprovação do ASO e de toda a documentação obrigatória.
                       </p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
@@ -9558,6 +9578,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   ) : null}
                 </div> : null}
 
+                <section className="order-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-xs font-black uppercase tracking-wide text-slate-500">Documentação obrigatória</p>
                 <div className="space-y-2">
                   {(selectedProcess.documents ?? []).map(document => (
@@ -9569,8 +9590,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </p>
                   )}
                 </div>
+                </section>
 
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5">
+                <div className="order-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm">
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-black text-slate-900">Link do formulário público</div>
                     <div className={`mt-0.5 text-xs font-bold ${linkActive ? 'text-blue-600' : 'text-slate-400'}`}>
