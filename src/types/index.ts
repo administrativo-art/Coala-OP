@@ -1425,6 +1425,9 @@ export type OnboardingProcess = {
   shiftDefinitionId?: string | null;
   shiftDefinitionName?: string | null;
   expectedAdmissionDate?: string | null;
+  expectedAdmissionDateUpdatedAt?: string | null;
+  expectedAdmissionDateUpdatedBy?: string | null;
+  expectedAdmissionDateUpdatedByEmail?: string | null;
   generateSignatureDocuments?: boolean;
   collaboratorUserId?: string | null;
   employeeId?: string | null;
@@ -1600,6 +1603,11 @@ export type OnboardingProcess = {
   createdAt: string;
   updatedAt: string;
   completedAt?: string | null;
+  cancelledAt?: string | null;
+  cancelledAtStage?: OnboardingStageId | null;
+  cancelledBy?: string | null;
+  cancelledByEmail?: string | null;
+  cancelReason?: string | null;
 };
 
 export type Candidate = {

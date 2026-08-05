@@ -21,6 +21,12 @@ import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/featu
 import { setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
 import { extendOnboardingPublicLink, onboardingPublicLinkExtensionUsed } from '@/lib/hr/onboarding-public-link';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
+import {
+  canUpdateExpectedAdmissionDate,
+  normalizeOnboardingCancellationReason,
+  normalizeOnboardingDateOnly,
+  ONBOARDING_CANCELLATION_REASON_MIN_LENGTH,
+} from '@/features/hr/onboarding-lifecycle';
 import type { OnboardingDocument, OnboardingProcess, OnboardingStageId, PjOnboardingWorkflow } from '@/types';
 
 export const runtime = 'nodejs';
@@ -689,6 +695,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (!snap.exists) return jsonError('Onboarding não encontrado.', 404);
 
   const process = snap.data() ?? {};
+  if (process.status === 'cancelled') {
+    return jsonError('Esta integração foi encerrada e está disponível somente para consulta.', 409);
+  }
   const now = new Date().toISOString();
   let firstAccessEmail: {
     url: string;
@@ -700,7 +709,19 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   let responseFirstAccessUrl: string | null = null;
   let changedDocumentsCount: number | null = null;
 
-  if (action === 'set_employer_unit') {
+  if (action === 'update_expected_admission_date') {
+    if (!canUpdateExpectedAdmissionDate(process as OnboardingProcess)) {
+      return jsonError('A data prevista só pode ser alterada até a conclusão da primeira etapa.', 409);
+    }
+    const expectedAdmissionDate = normalizeOnboardingDateOnly(body.expectedAdmissionDate);
+    if (!expectedAdmissionDate) {
+      return jsonError('Informe uma data prevista para admissão válida.');
+    }
+    update.expectedAdmissionDate = expectedAdmissionDate;
+    update.expectedAdmissionDateUpdatedAt = now;
+    update.expectedAdmissionDateUpdatedBy = access.decoded.uid;
+    update.expectedAdmissionDateUpdatedByEmail = access.decoded.email ?? null;
+  } else if (action === 'set_employer_unit') {
     const employerUnitId = asString(body.employerUnitId);
     if (!employerUnitId) return jsonError('Selecione o CNPJ responsável pela contratação.');
     const employerUnitDoc = await dbAdmin.collection('dp_units').doc(employerUnitId).get();
@@ -1001,7 +1022,23 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.currentStage = 'done';
     update.completedAt = now;
   } else if (action === 'cancel') {
+    if (process.status === 'completed') {
+      return jsonError('Uma integração concluída não pode ser encerrada sem finalização.', 409);
+    }
+    if (process.status === 'cancelled') {
+      return jsonError('Esta integração já foi encerrada.', 409);
+    }
+    const reason = normalizeOnboardingCancellationReason(body.reason);
+    if (!reason) {
+      return jsonError(`Detalhe o motivo do encerramento com pelo menos ${ONBOARDING_CANCELLATION_REASON_MIN_LENGTH} caracteres.`);
+    }
     update.status = 'cancelled';
+    update.cancelReason = reason;
+    update.cancelledAt = now;
+    update.cancelledAtStage = asString(process.currentStage);
+    update.cancelledBy = access.decoded.uid;
+    update.cancelledByEmail = access.decoded.email ?? null;
+    update.publicTokenClosedAt = now;
   } else {
     return jsonError('Ação inválida.');
   }

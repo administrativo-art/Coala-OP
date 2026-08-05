@@ -6697,7 +6697,7 @@ const ONBOARDING_STATUS_LABELS: Record<OnboardingProcess['status'], string> = {
   awaiting_first_access: 'Aguardando primeiro acesso',
   active: 'Em andamento',
   completed: 'Finalizado',
-  cancelled: 'Cancelado',
+  cancelled: 'Encerrada',
 };
 
 const ONBOARDING_DOCUMENT_STATUS_LABELS: Record<OnboardingDocument['status'], string> = {
@@ -8078,7 +8078,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 }) {
   const [search, setSearch] = useState('');
   const [phaseFilter, setPhaseFilter] = useState<string>('all');
-  const [processStateFilter, setProcessStateFilter] = useState<'active' | 'completed'>('active');
+  const [processStateFilter, setProcessStateFilter] = useState<'active' | 'completed' | 'cancelled'>('active');
   const [view, setView] = useState<'grid' | 'detail'>('grid');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phaseId, setPhaseId] = useState<OnboardingStageId | 'training' | null>(null);
@@ -8099,23 +8099,22 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const [accountantActionBusy, setAccountantActionBusy] = useState<string | null>(null);
   const [accountantEmail, setAccountantEmail] = useState('');
   const [accountantSelectedDocumentIds, setAccountantSelectedDocumentIds] = useState<string[]>([]);
+  const [expectedAdmissionDateDraft, setExpectedAdmissionDateDraft] = useState('');
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReasonDraft, setCancelReasonDraft] = useState('');
 
   useEffect(() => {
     const timer = window.setInterval(() => setLinkClock(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const nonCancelledProcesses = useMemo(
-    () => processes.filter(process => process.status !== 'cancelled'),
-    [processes]
-  );
   const activeProcesses = useMemo(
-    () => nonCancelledProcesses.filter(process => (
-      processStateFilter === 'completed'
-        ? process.status === 'completed'
-        : process.status !== 'completed'
-    )),
-    [nonCancelledProcesses, processStateFilter]
+    () => processes.filter(process => {
+      if (processStateFilter === 'completed') return process.status === 'completed';
+      if (processStateFilter === 'cancelled') return process.status === 'cancelled';
+      return process.status !== 'completed' && process.status !== 'cancelled';
+    }),
+    [processes, processStateFilter]
   );
   // Distinct current phases present across active processes, for the "Todas as fases" filter.
   const phaseOptions = useMemo(() => {
@@ -8125,7 +8124,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       if (!stageId) return;
       const consolidatedId = consolidatedDocumentPhaseId(stageId) ?? stageId;
       const label = consolidatedId === 'documents'
-        ? 'Formalização · Dados e documentos'
+        ? 'Formalização · Dados, documentos e ASO'
         : (process.stages ?? []).find(stage => stage.id === stageId)?.label ?? stageId;
       if (!map.has(consolidatedId)) map.set(consolidatedId, label);
     });
@@ -8140,6 +8139,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       process.jobRoleName,
       process.functionName,
       process.unitName,
+      process.cancelReason,
     ].filter(Boolean).join(' ').toLowerCase();
     return !search || text.includes(search.toLowerCase());
   }), [activeProcesses, search, phaseFilter]);
@@ -8219,6 +8219,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   ]);
 
   useEffect(() => {
+    setExpectedAdmissionDateDraft(selectedProcess?.expectedAdmissionDate?.slice(0, 10) ?? '');
+  }, [selectedProcess?.id, selectedProcess?.expectedAdmissionDate]);
+
+  useEffect(() => {
     setAsoClinicEntityId(selectedProcess?.asoWorkflow?.clinicEntityId ?? '');
     setAsoAppointmentDraft({
       date: selectedProcess?.asoWorkflow?.appointment?.date ?? '',
@@ -8266,6 +8270,28 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     } finally {
       setUpdating(null);
     }
+  }
+
+  async function saveExpectedAdmissionDate(process: OnboardingProcess) {
+    if (!expectedAdmissionDateDraft || expectedAdmissionDateDraft === process.expectedAdmissionDate?.slice(0, 10)) return;
+    await patchProcess(process.id, {
+      action: 'update_expected_admission_date',
+      expectedAdmissionDate: expectedAdmissionDateDraft,
+    });
+  }
+
+  async function cancelOnboardingProcess(process: OnboardingProcess) {
+    const reason = cancelReasonDraft.trim();
+    if (reason.length < 10) return;
+    const result = await patchProcess(process.id, { action: 'cancel', reason });
+    if (!result) return;
+    setShowCancelModal(false);
+    setCancelReasonDraft('');
+    setView('grid');
+    setSelectedId(null);
+    setPhaseId(null);
+    setPhaseFilter('all');
+    setProcessStateFilter('cancelled');
   }
 
   async function generateAsoGuide(process: OnboardingProcess) {
@@ -8674,15 +8700,21 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div className="min-w-0">
             <span className="text-[11px] font-black uppercase tracking-[0.09em] text-pink-600">
-              {processStateFilter === 'completed' ? 'Histórico' : 'Integração'}
+              {processStateFilter === 'active' ? 'Integração' : 'Histórico'}
             </span>
             <h1 className="mt-0.5 text-lg font-black tracking-tight text-slate-900">
-              {processStateFilter === 'completed' ? 'Integrações concluídas' : 'Candidatos em formalização'}
+              {processStateFilter === 'completed'
+                ? 'Integrações concluídas'
+                : processStateFilter === 'cancelled'
+                  ? 'Integrações encerradas'
+                  : 'Candidatos em formalização'}
             </h1>
             <p className="mt-1 max-w-xl text-xs font-medium text-slate-500">
               {processStateFilter === 'completed'
                 ? `${activeProcesses.length} processo${activeProcesses.length === 1 ? '' : 's'} finalizado${activeProcesses.length === 1 ? '' : 's'}. Consulte a linha do tempo e os registros de auditoria.`
-                : `${activeProcesses.length} pessoa${activeProcesses.length === 1 ? '' : 's'} em processo. Selecione um card para abrir a linha do tempo e conduzir cada fase da integração.`}
+                : processStateFilter === 'cancelled'
+                  ? `${activeProcesses.length} processo${activeProcesses.length === 1 ? '' : 's'} encerrado${activeProcesses.length === 1 ? '' : 's'} sem finalização. Consulte o motivo, a etapa e os registros de auditoria.`
+                  : `${activeProcesses.length} pessoa${activeProcesses.length === 1 ? '' : 's'} em processo. Selecione um card para abrir a linha do tempo e conduzir cada fase da integração.`}
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
@@ -8723,13 +8755,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             <select
               value={processStateFilter}
               onChange={event => {
-                setProcessStateFilter(event.target.value as 'active' | 'completed');
+                setProcessStateFilter(event.target.value as 'active' | 'completed' | 'cancelled');
                 setPhaseFilter('all');
               }}
               className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
             >
               <option value="active">Em andamento</option>
               <option value="completed">Concluídas</option>
+              <option value="cancelled">Encerradas</option>
             </select>
             <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
@@ -8766,7 +8799,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 ? 'Nenhum candidato corresponde à busca.'
                 : processStateFilter === 'completed'
                   ? 'Nenhuma integração concluída.'
-                  : 'Nenhuma integração em andamento.'}
+                  : processStateFilter === 'cancelled'
+                    ? 'Nenhuma integração encerrada.'
+                    : 'Nenhuma integração em andamento.'}
             </p>
             {!search && processStateFilter === 'active' && (
               <p className="mt-1 text-xs text-slate-400">Use “Nova integração” para iniciar uma formalização.</p>
@@ -8816,9 +8851,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       <div className="mt-0.5 truncate text-xs font-medium text-slate-500">{process.candidateEmail ?? 'E-mail não informado'}</div>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
-                      formReceived ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                      process.status === 'cancelled'
+                        ? 'bg-rose-50 text-rose-700'
+                        : formReceived ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                     }`}>
-                      {formReceived ? 'Recebido' : 'Aguardando'}
+                      {process.status === 'cancelled' ? 'Encerrada' : formReceived ? 'Recebido' : 'Aguardando'}
                     </span>
                   </div>
 
@@ -8838,7 +8875,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       <span className="h-2 w-2 rounded-full bg-pink-600" />
                       <span className="text-xs font-bold text-slate-700">
                         {consolidatedDocumentPhaseId(process.currentStage) === 'documents'
-                          ? 'Formalização · Dados e documentos'
+                          ? 'Formalização · Dados, documentos e ASO'
                           : currentStageLabel}
                       </span>
                     </span>
@@ -8874,6 +8911,19 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       ))}
                     </div>
                   </div>
+
+                  {process.status === 'cancelled' ? (
+                    <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50/70 px-3 py-2.5">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-rose-600">Motivo do encerramento</p>
+                      <p className="mt-1 line-clamp-2 text-xs font-semibold leading-relaxed text-rose-900">
+                        {process.cancelReason ?? 'Motivo não registrado.'}
+                      </p>
+                      <p className="mt-1.5 text-[10.5px] font-bold text-rose-500">
+                        {process.cancelledAt ? `Encerrada em ${formatOnboardingDate(process.cancelledAt)}` : 'Data não registrada'}
+                        {process.cancelledByEmail ? ` · por ${process.cancelledByEmail}` : ''}
+                      </p>
+                    </div>
+                  ) : null}
 
                   <div className="mt-3 flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
@@ -8916,20 +8966,98 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     );
   }
 
+  const canCancelSelectedProcess = canManage &&
+    selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+  const cancellationStage = consolidatedDocumentPhaseId(selectedProcess.currentStage) === 'documents'
+    ? 'Formalização · Dados, documentos e ASO'
+    : consolidatedOnboardingStages(selectedProcess).find(stage => stage.id === selectedProcess.currentStage)?.label
+      ?? selectedProcess.currentStage
+      ?? 'Etapa não informada';
+  const cancellationModal = showCancelModal ? (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-[2px]">
+      <div role="dialog" aria-modal="true" aria-labelledby="cancel-onboarding-title" className="w-full max-w-lg overflow-hidden rounded-3xl border border-rose-100 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.1em] text-rose-600">Encerramento sem finalização</p>
+            <h2 id="cancel-onboarding-title" className="mt-1 text-xl font-black text-slate-950">Encerrar integração</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">{selectedProcess.candidateName ?? 'Candidato'} · {cancellationStage}</p>
+          </div>
+          <button type="button" onClick={() => setShowCancelModal(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Fechar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="space-y-4 px-6 py-5">
+          <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <p className="text-xs font-semibold leading-relaxed">O processo sairá da lista ativa, o link público será fechado e o registro ficará disponível em <strong>Encerradas</strong>, somente para consulta.</p>
+          </div>
+          <label className="block">
+            <span className="text-sm font-black text-slate-800">Motivo detalhado <span className="text-rose-600">*</span></span>
+            <textarea
+              autoFocus
+              value={cancelReasonDraft}
+              onChange={event => setCancelReasonDraft(event.target.value.slice(0, 2000))}
+              rows={5}
+              placeholder="Explique por que esta integração está sendo encerrada sem chegar à finalização."
+              className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
+            />
+            <span className={`mt-1.5 flex justify-between text-[11px] font-bold ${cancelReasonDraft.trim().length > 0 && cancelReasonDraft.trim().length < 10 ? 'text-rose-600' : 'text-slate-400'}`}>
+              <span>{cancelReasonDraft.trim().length < 10 ? 'Informe pelo menos 10 caracteres.' : 'O motivo ficará no histórico do processo.'}</span>
+              <span>{cancelReasonDraft.length}/2000</span>
+            </span>
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-6 py-4">
+          <button type="button" onClick={() => setShowCancelModal(false)} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 hover:bg-slate-50">Voltar</button>
+          <button
+            type="button"
+            disabled={cancelReasonDraft.trim().length < 10 || updating === `${selectedProcess.id}:cancel`}
+            onClick={() => void cancelOnboardingProcess(selectedProcess)}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-rose-600 px-4 text-sm font-black text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {updating === `${selectedProcess.id}:cancel` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+            Confirmar encerramento
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   if (selectedProcess.employmentRelationshipType === 'pj') {
     return (
-      <PjOnboardingDetailPanel
-        process={selectedProcess}
-        units={units}
-        canManage={canManage}
-        getToken={getToken}
-        onRefresh={onRefresh}
-        onBack={() => {
-          setView('grid');
-          setSelectedId(null);
-          setPhaseId(null);
-        }}
-      />
+      <div className="space-y-3">
+        {canCancelSelectedProcess ? (
+          <div className="flex justify-end">
+            <button type="button" onClick={() => { setCancelReasonDraft(''); setShowCancelModal(true); }} className="inline-flex h-9 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3.5 text-xs font-black text-rose-700 hover:bg-rose-50">
+              <Archive className="h-4 w-4" /> Encerrar integração
+            </button>
+          </div>
+        ) : null}
+        {selectedProcess.status === 'cancelled' ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3.5">
+            <p className="text-xs font-black uppercase tracking-wide text-rose-700">Integração encerrada sem finalização</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed text-rose-950">{selectedProcess.cancelReason ?? 'Motivo não registrado.'}</p>
+            <p className="mt-2 text-[11px] font-bold text-rose-600">
+              {selectedProcess.cancelledAt ? `Encerrada em ${formatOnboardingDate(selectedProcess.cancelledAt)}` : 'Data não registrada'}
+              {selectedProcess.cancelledByEmail ? ` · por ${selectedProcess.cancelledByEmail}` : ''}
+              {` · etapa: ${cancellationStage}`}
+            </p>
+          </div>
+        ) : null}
+        <PjOnboardingDetailPanel
+          process={selectedProcess}
+          units={units}
+          canManage={canManage && selectedProcess.status !== 'cancelled' && selectedProcess.status !== 'completed'}
+          getToken={getToken}
+          onRefresh={onRefresh}
+          onBack={() => {
+            setView('grid');
+            setSelectedId(null);
+            setPhaseId(null);
+          }}
+        />
+        {cancellationModal}
+      </div>
     );
   }
 
@@ -8971,6 +9099,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       ? 'experiencia' as const
       : (activePhaseId ? ONBOARDING_STAGE_KIND[activePhaseId as OnboardingStageId] : 'generico');
   const accent = colorForProcess(selectedProcess.id);
+  const processIsReadOnly = selectedProcess.status === 'completed' || selectedProcess.status === 'cancelled';
+  const canManageAsoProcess = canManageAso && !processIsReadOnly;
+  const canManageAccountantProcess = canManageAccountant && !processIsReadOnly;
+  const canGenerateDocumentsProcess = canGenerateDocuments && !processIsReadOnly;
 
   const linkActive = processLinkActive(selectedProcess);
   const publicLink = linkActive && selectedProcess.publicToken
@@ -8987,6 +9119,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const canCreateCollaborator = canManage && !userCreated && readyToCreate &&
     selectedProcess.status !== 'cancelled' && selectedProcess.status !== 'completed';
   const canComplete = canManage && userCreated && integrationsResolved &&
+    selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+  const canEditExpectedAdmissionDate = canManage &&
+    ['documents', 'document_review'].includes(selectedProcess.currentStage ?? 'documents') &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const deliveryStatus = selectedProcess.accessProvisioning?.email?.status ?? 'not_sent';
   const emailDelivered = deliveryStatus === 'delivered';
@@ -9037,7 +9172,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const selectedSignatureDocuments = (signatureWorkflow?.documents ?? []).filter(document => document.selected);
   const signatureDocumentsReadyToSend = selectedSignatureDocuments.filter(document => document.status === 'ready_to_send');
-  const signatureSelectionEditable = canGenerateDocuments && canActOnSignaturePhase && activePhaseId === 'signature_preparation' &&
+  const signatureSelectionEditable = canGenerateDocumentsProcess && canActOnSignaturePhase && activePhaseId === 'signature_preparation' &&
     !selectedSignatureDocuments.some(document => ['sent', 'viewed', 'partially_signed', 'signed', 'archived'].includes(document.status));
 
   const formRows: Array<[string, string]> = [
@@ -9156,14 +9291,26 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden" style={{ animation: 'none' }}>
-      <button
-        type="button"
-        onClick={() => setView('grid')}
-        className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[13px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Voltar aos candidatos
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setView('grid')}
+          className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[13px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar aos candidatos
+        </button>
+        {canCancelSelectedProcess ? (
+          <button
+            type="button"
+            onClick={() => { setCancelReasonDraft(''); setShowCancelModal(true); }}
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3.5 text-[12.5px] font-black text-rose-700 hover:bg-rose-50"
+          >
+            <Archive className="h-4 w-4" />
+            Encerrar integração
+          </button>
+        ) : null}
+      </div>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_8px_30px_-14px_rgba(15,23,42,0.2)]">
         <div className="flex flex-wrap items-start justify-between gap-5 border-b border-slate-100 p-6">
@@ -9175,7 +9322,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               <span className={`rounded-full px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${
                 linkActive ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'
               }`}>
-                {linkActive ? formatOnboardingLinkRemaining(selectedProcess, linkClock) : 'Prazo expirado'}
+                {linkActive
+                  ? formatOnboardingLinkRemaining(selectedProcess, linkClock)
+                  : selectedProcess.status === 'cancelled' ? 'Link encerrado' : 'Prazo expirado'}
               </span>
             </div>
             <div className="mt-3.5 flex items-center gap-3">
@@ -9188,14 +9337,39 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               <div className="min-w-0">
                 <h2 className="text-xl font-black tracking-tight text-slate-900">{selectedProcess.candidateName ?? 'Candidato sem nome'}</h2>
                 <p className="mt-0.5 text-[13.5px] font-medium text-slate-500">{selectedProcess.candidateEmail ?? 'E-mail não informado'}</p>
-                <p className={`mt-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${
-                  selectedProcess.expectedAdmissionDate
-                    ? 'bg-violet-50 text-violet-700'
-                    : 'bg-amber-50 text-amber-700'
-                }`}>
-                  <Calendar className="h-3.5 w-3.5 shrink-0" />
-                  Admissão prevista: {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
-                </p>
+                {canEditExpectedAdmissionDate ? (
+                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                    <label className="min-w-[235px] rounded-xl border border-violet-100 bg-violet-50 px-3 py-2">
+                      <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-violet-700">
+                        <Calendar className="h-3.5 w-3.5 shrink-0" /> Admissão prevista
+                      </span>
+                      <input
+                        type="date"
+                        value={expectedAdmissionDateDraft}
+                        onChange={event => setExpectedAdmissionDateDraft(event.target.value)}
+                        className="mt-1 h-8 w-full rounded-lg border border-violet-100 bg-white px-2 text-xs font-black text-slate-800 outline-none focus:border-violet-400"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={!expectedAdmissionDateDraft || expectedAdmissionDateDraft === selectedProcess.expectedAdmissionDate?.slice(0, 10) || updating === `${selectedProcess.id}:update_expected_admission_date`}
+                      onClick={() => void saveExpectedAdmissionDate(selectedProcess)}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-violet-700 px-3 text-xs font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {updating === `${selectedProcess.id}:update_expected_admission_date` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      Salvar data
+                    </button>
+                  </div>
+                ) : (
+                  <p className={`mt-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${
+                    selectedProcess.expectedAdmissionDate
+                      ? 'bg-violet-50 text-violet-700'
+                      : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    <Calendar className="h-3.5 w-3.5 shrink-0" />
+                    Admissão prevista: {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
+                  </p>
+                )}
               </div>
             </div>
             <p className="mt-3 text-[13.5px] font-bold text-slate-600">
@@ -9222,10 +9396,30 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
         {error && <div className="px-6 pt-4"><ErrorLine msg={error} /></div>}
 
+        {selectedProcess.status === 'cancelled' ? (
+          <div className="px-6 pt-4">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3.5">
+              <div className="flex items-start gap-3">
+                <Archive className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-wide text-rose-700">Integração encerrada sem finalização</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold leading-relaxed text-rose-950">{selectedProcess.cancelReason ?? 'Motivo não registrado.'}</p>
+                  <p className="mt-2 text-[11px] font-bold text-rose-600">
+                    {selectedProcess.cancelledAt ? `Encerrada em ${formatOnboardingDate(selectedProcess.cancelledAt)}` : 'Data não registrada'}
+                    {selectedProcess.cancelledByEmail ? ` · por ${selectedProcess.cancelledByEmail}` : ''}
+                    {` · etapa: ${cancellationStage}`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-start gap-5 p-6">
           {/* timeline */}
           <aside className="min-w-[260px] flex-[1_1_290px] rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="mb-3.5 text-[11px] font-black uppercase tracking-wide text-slate-500">Linha do tempo · fases</p>
+            <p className="text-[11px] font-black uppercase tracking-wide text-slate-600">Etapas da integração</p>
+            <p className="mb-3.5 mt-4 text-[10px] font-black uppercase tracking-wide text-slate-400">Formalização e acessos</p>
             <div className="space-y-1">
               {visibleStages.map((stage, index, stages) => {
                 const state = stageState(selectedProcess, stage.id);
@@ -9464,10 +9658,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       {selectedProcess.asoWorkflow?.latestGuideId ? 'Guia gerada' : 'Pendente'}
                     </span>
                   </div>
-                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                  <div className="mt-3 grid gap-2 text-xs md:grid-cols-[minmax(0,1.65fr)_minmax(180px,0.85fr)]">
                     <div className="rounded-xl border border-white/80 bg-white/75 px-3 py-2.5">
                       <span className="block text-[10px] font-black uppercase text-slate-400">CNPJ responsável</span>
-                      {canManageAso ? (
+                      {canManageAsoProcess ? (
                         <select
                           value={selectedProcess.employerUnitId ?? ''}
                           disabled={updating === `${selectedProcess.id}:set_employer_unit`}
@@ -9479,7 +9673,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                               });
                             }
                           }}
-                          className="mt-1 h-8 w-full rounded-lg border border-cyan-100 bg-white px-2 text-[11px] font-bold text-slate-700 outline-none focus:border-cyan-500"
+                          className="mt-1 h-9 w-full min-w-0 rounded-lg border border-cyan-100 bg-white px-2.5 text-[11.5px] font-bold text-slate-700 outline-none focus:border-cyan-500"
                         >
                           <option value="">Selecione o CNPJ responsável</option>
                           {availableEmployerUnits.map(unit => (
@@ -9507,7 +9701,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       </span>
                     </div>
                   </div>
-                  {canManageAso ? (
+                  {canManageAsoProcess ? (
                     <button
                       type="button"
                       disabled={asoGuideBusy || !selectedProcess.employerCnpj || !selectedProcess.publicFormSubmittedAt}
@@ -9532,7 +9726,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         <button type="button" onClick={() => void openAsoAsset('guide')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 text-xs font-black text-cyan-800"><Eye className="h-3.5 w-3.5"/>Abrir guia</button>
                         {selectedProcess.asoWorkflow.guideValidation?.documentId === selectedProcess.asoWorkflow.latestGuideId ? (
                           <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-100 px-3 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Versão validada</span>
-                        ) : canManageAso ? (
+                        ) : canManageAsoProcess ? (
                           <button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('validate_guide')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{asoActionBusy === 'validate_guide' ? 'Validando...' : 'Validar para envio'}</button>
                         ) : null}
                       </div>
@@ -9548,9 +9742,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                             <div className="flex h-9 items-center rounded-lg border bg-slate-50 px-3 text-xs font-bold text-slate-600">{selectedProcess.asoWorkflow.paymentStatus === 'paid' ? 'Pagamento confirmado' : selectedProcess.asoWorkflow.paymentStatus === 'awaiting_financial_authorization' ? 'Aguardando autorização do financeiro' : selectedProcess.asoWorkflow.paymentStatus === 'awaiting_bank_approval' ? 'Aguardando aprovação no Banco Inter' : selectedProcess.asoWorkflow.paymentStatus === 'processing' ? 'Processando no banco' : selectedProcess.asoWorkflow.paymentStatus === 'failed' ? 'Falha no envio bancário' : selectedProcess.asoWorkflow.paymentRequestId ? 'Pagamento solicitado' : 'Pagamento ainda não solicitado'}</div>
                           </div>
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            {canManageAso && !selectedProcess.asoWorkflow.paymentRequestId ? <button type="button" disabled={!!asoActionBusy || !asoClinicEntityId} onClick={() => void asoAction('request_payment', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-xs font-black text-white disabled:opacity-50"><Wallet className="h-3.5 w-3.5"/>{asoActionBusy === 'request_payment' ? 'Solicitando...' : 'Solicitar pagamento ao financeiro'}</button> : null}
-                            {canManageAso && selectedProcess.asoWorkflow.paymentRequestId && selectedProcess.asoWorkflow.paymentStatus !== 'paid' ? <button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('refresh_payment')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-800 disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5"/>{asoActionBusy === 'refresh_payment' ? 'Consultando...' : 'Atualizar pagamento'}</button> : null}
-                            {canManageAso ? <button type="button" disabled={!!asoActionBusy || selectedProcess.asoWorkflow.paymentStatus !== 'paid'} onClick={() => void asoAction('send_clinic_email')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-xs font-black text-white disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{asoActionBusy === 'send_clinic_email' ? 'Enviando...' : selectedProcess.asoWorkflow.clinic?.sentAt ? 'Reenviar e-mail com anexos' : 'Enviar e-mail com 3 anexos'}</button> : null}
+                            {canManageAsoProcess && !selectedProcess.asoWorkflow.paymentRequestId ? <button type="button" disabled={!!asoActionBusy || !asoClinicEntityId} onClick={() => void asoAction('request_payment', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-xs font-black text-white disabled:opacity-50"><Wallet className="h-3.5 w-3.5"/>{asoActionBusy === 'request_payment' ? 'Solicitando...' : 'Solicitar pagamento ao financeiro'}</button> : null}
+                            {canManageAsoProcess && selectedProcess.asoWorkflow.paymentRequestId && selectedProcess.asoWorkflow.paymentStatus !== 'paid' ? <button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('refresh_payment')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-800 disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5"/>{asoActionBusy === 'refresh_payment' ? 'Consultando...' : 'Atualizar pagamento'}</button> : null}
+                            {canManageAsoProcess ? <button type="button" disabled={!!asoActionBusy || selectedProcess.asoWorkflow.paymentStatus !== 'paid'} onClick={() => void asoAction('send_clinic_email')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-xs font-black text-white disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{asoActionBusy === 'send_clinic_email' ? 'Enviando...' : selectedProcess.asoWorkflow.clinic?.sentAt ? 'Reenviar e-mail com anexos' : 'Enviar e-mail com 3 anexos'}</button> : null}
                             {selectedProcess.asoWorkflow.clinic?.emailStatus ? <span className="text-[11px] font-bold text-slate-600">E-mail: {selectedProcess.asoWorkflow.clinic.emailStatus}{selectedProcess.asoWorkflow.clinic.openedAt ? ' · abertura detectada' : ''}</span> : null}
                           </div>
                           <p className="mt-2 text-[10.5px] font-semibold text-slate-500">O valor e o Pix vêm do cadastro da clínica. O e-mail só é liberado após confirmação bancária e inclui contrato social, comprovante e guia.</p>
@@ -9567,13 +9761,13 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                             <input value={asoAppointmentDraft.location} onChange={event => setAsoAppointmentDraft(current => ({ ...current, location: event.target.value }))} placeholder="Local completo do exame" className="h-9 rounded-lg border px-3 text-xs sm:col-span-2" />
                             <textarea value={asoAppointmentDraft.instructions} onChange={event => setAsoAppointmentDraft(current => ({ ...current, instructions: event.target.value }))} placeholder="Orientações adicionais" className="min-h-16 rounded-lg border p-3 text-xs sm:col-span-2" />
                           </div>
-                          {canManageAso ? <div className="mt-2 flex flex-wrap gap-2"><button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('register_clinic_response', asoAppointmentDraft)} className="h-9 rounded-lg border border-violet-200 bg-violet-50 px-3 text-xs font-black text-violet-700">Registrar retorno manual</button><button type="button" disabled={!!asoActionBusy || !asoAppointmentDraft.date || !asoAppointmentDraft.time || !asoAppointmentDraft.location} onClick={() => void asoAction('confirm_appointment', asoAppointmentDraft)} className="h-9 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'confirm_appointment' ? 'Enviando aviso...' : 'Confirmar e avisar candidato'}</button></div> : null}
+                          {canManageAsoProcess ? <div className="mt-2 flex flex-wrap gap-2"><button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('register_clinic_response', asoAppointmentDraft)} className="h-9 rounded-lg border border-violet-200 bg-violet-50 px-3 text-xs font-black text-violet-700">Registrar retorno manual</button><button type="button" disabled={!!asoActionBusy || !asoAppointmentDraft.date || !asoAppointmentDraft.time || !asoAppointmentDraft.location} onClick={() => void asoAction('confirm_appointment', asoAppointmentDraft)} className="h-9 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'confirm_appointment' ? 'Enviando aviso...' : 'Confirmar e avisar candidato'}</button></div> : null}
                         </div>
                       ) : null}
 
                       {selectedProcess.asoWorkflow.candidateNotification?.sentAt ? <div className="rounded-xl bg-pink-50 p-3 text-xs font-semibold text-pink-800"><b>Candidato avisado.</b> Envio do ASO liberado no dia do exame. E-mail: {selectedProcess.asoWorkflow.candidateNotification.emailStatus ?? 'accepted'}{selectedProcess.asoWorkflow.candidateNotification.openedAt ? ' · abertura detectada' : ''}.</div> : null}
 
-                      {selectedProcess.asoWorkflow.asoDocument?.storagePath ? <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3"><p className="text-xs font-black text-emerald-800">ASO recebido do candidato</p><p className="mt-1 text-[11px] text-emerald-700">{selectedProcess.asoWorkflow.asoDocument.fileName} · situação: {selectedProcess.asoWorkflow.asoDocument.status}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => void openAsoAsset('aso')} className="h-9 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-700">Abrir ASO</button>{canManageAso && selectedProcess.asoWorkflow.asoDocument.status !== 'approved' ? <><button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('review_aso', { decision: 'approved' })} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar ASO</button><button type="button" disabled={!!asoActionBusy} onClick={() => { const reason = window.prompt('Motivo da rejeição:'); if (reason) void asoAction('review_aso', { decision: 'rejected', reason }); }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Rejeitar</button></> : null}</div></div> : null}
+                      {selectedProcess.asoWorkflow.asoDocument?.storagePath ? <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3"><p className="text-xs font-black text-emerald-800">ASO recebido do candidato</p><p className="mt-1 text-[11px] text-emerald-700">{selectedProcess.asoWorkflow.asoDocument.fileName} · situação: {selectedProcess.asoWorkflow.asoDocument.status}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => void openAsoAsset('aso')} className="h-9 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-700">Abrir ASO</button>{canManageAsoProcess && selectedProcess.asoWorkflow.asoDocument.status !== 'approved' ? <><button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('review_aso', { decision: 'approved' })} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar ASO</button><button type="button" disabled={!!asoActionBusy} onClick={() => { const reason = window.prompt('Motivo da rejeição:'); if (reason) void asoAction('review_aso', { decision: 'rejected', reason }); }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Rejeitar</button></> : null}</div></div> : null}
                     </div>
                   ) : null}
                 </div> : null}
@@ -9726,9 +9920,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">1. Formulário da contabilidade</p>
                   <p className="mt-1 text-xs font-semibold text-slate-600">O sistema popula os dados, gera um PDF timbrado e preserva cada versão para auditoria.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {canManageAccountant ? <button type="button" disabled={!!accountantActionBusy || !accountantPrerequisitesReady} onClick={() => void generateAccountantForm(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-700 px-3 text-xs font-black text-white disabled:opacity-50">{accountantActionBusy === 'generate_form' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <FileText className="h-3.5 w-3.5"/>}{selectedProcess.accountantWorkflow?.latestFormId ? 'Gerar nova versão' : 'Gerar formulário em PDF'}</button> : null}
+                    {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantPrerequisitesReady} onClick={() => void generateAccountantForm(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-700 px-3 text-xs font-black text-white disabled:opacity-50">{accountantActionBusy === 'generate_form' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <FileText className="h-3.5 w-3.5"/>}{selectedProcess.accountantWorkflow?.latestFormId ? 'Gerar nova versão' : 'Gerar formulário em PDF'}</button> : null}
                     {selectedProcess.accountantWorkflow?.latestFormId ? <button type="button" onClick={() => void openAccountantAsset('form')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700"><Eye className="h-3.5 w-3.5"/>Abrir formulário</button> : null}
-                    {selectedProcess.accountantWorkflow?.latestFormId && selectedProcess.accountantWorkflow.formValidation?.documentId !== selectedProcess.accountantWorkflow.latestFormId && canManageAccountant ? <button type="button" disabled={!!accountantActionBusy} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar versão'}</button> : null}
+                    {selectedProcess.accountantWorkflow?.latestFormId && selectedProcess.accountantWorkflow.formValidation?.documentId !== selectedProcess.accountantWorkflow.latestFormId && canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar versão'}</button> : null}
                     {selectedProcess.accountantWorkflow?.latestFormId && selectedProcess.accountantWorkflow.formValidation?.documentId === selectedProcess.accountantWorkflow.latestFormId ? <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-100 px-3 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Versão validada</span> : null}
                   </div>
                 </div>
@@ -9745,7 +9939,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         const checked = accountantSelectedDocumentIds.includes(document.id);
                         const approved = document.status === 'approved';
                         return <label key={document.id} className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 transition ${approved ? 'cursor-pointer' : 'cursor-not-allowed opacity-65'} ${checked ? 'border-cyan-400 bg-white text-slate-900' : 'border-slate-200 bg-white/70 text-slate-600'}`}>
-                          <input type="checkbox" checked={checked && approved} disabled={!canManageAccountant || !!accountantActionBusy || !approved} onChange={event => setAccountantSelectedDocumentIds(current => event.target.checked ? [...new Set([...current, document.id])] : current.filter(id => id !== document.id))} className="mt-0.5 h-4 w-4 accent-cyan-700" />
+                          <input type="checkbox" checked={checked && approved} disabled={!canManageAccountantProcess || !!accountantActionBusy || !approved} onChange={event => setAccountantSelectedDocumentIds(current => event.target.checked ? [...new Set([...current, document.id])] : current.filter(id => id !== document.id))} className="mt-0.5 h-4 w-4 accent-cyan-700" />
                           <span className="min-w-0"><span className="block text-xs font-black">{document.label}</span><span className={`mt-0.5 block text-[10px] font-bold ${approved ? 'text-emerald-700' : 'text-amber-700'}`}>{approved ? 'Aprovado · arquivo auditável disponível' : 'Aguardando aprovação do RH'}</span></span>
                         </label>;
                       })}
@@ -9758,7 +9952,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <p className="mt-1 text-xs font-semibold text-slate-600">O e-mail levará os 2 anexos fixos e somente os documentos marcados acima. O contador receberá também o link exclusivo para devolver a Ficha de Registro de Empregado.</p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <input value={accountantEmail} onChange={event => setAccountantEmail(event.target.value)} type="email" placeholder="E-mail do contador" className="h-9 min-w-0 flex-1 rounded-lg border px-3 text-xs font-semibold" />
-                      {canManageAccountant ? <button type="button" disabled={!!accountantActionBusy || !accountantEmail} onClick={() => void accountantAction('send_email', { accountantEmail, selectedDocumentIds: accountantSelectedDocumentIds })} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{accountantActionBusy === 'send_email' ? 'Enviando...' : selectedProcess.accountantWorkflow?.email?.sentAt ? 'Reenviar pacote' : 'Enviar ao contador'}</button> : null}
+                      {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantEmail} onClick={() => void accountantAction('send_email', { accountantEmail, selectedDocumentIds: accountantSelectedDocumentIds })} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{accountantActionBusy === 'send_email' ? 'Enviando...' : selectedProcess.accountantWorkflow?.email?.sentAt ? 'Reenviar pacote' : 'Enviar ao contador'}</button> : null}
                     </div>
                     {selectedProcess.accountantWorkflow?.suggestedRecipientEmail ? <p className="mt-2 text-[11px] font-semibold text-violet-700">Contato sugerido pelo cadastro: {selectedProcess.accountantWorkflow.suggestedRecipientDepartment ?? 'Setor'} · {selectedProcess.accountantWorkflow.suggestedRecipientCompanyName ?? 'Empresa'}.</p> : null}
                     {selectedProcess.accountantWorkflow?.email?.sentAt ? <p className="mt-2 text-[11px] font-bold text-slate-600">E-mail: {selectedProcess.accountantWorkflow.email.status ?? 'accepted'}{selectedProcess.accountantWorkflow.email.deliveredAt ? ' · entregue' : ''}{selectedProcess.accountantWorkflow.email.openedAt ? ' · aberto' : ''}{selectedProcess.accountantWorkflow.email.clickedAt ? ' · link acessado' : ''}.</p> : null}
@@ -9771,7 +9965,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <p className="mt-1 text-sm font-black text-slate-900">Ficha recebida da contabilidade</p>
                   <p className="mt-1 text-xs font-semibold text-slate-600">{selectedProcess.accountantWorkflow.registryDocument.fileName} · situação: {selectedProcess.accountantWorkflow.registryDocument.status}</p>
                   {selectedProcess.accountantWorkflow.registryDocument.rejectionReason ? <p className="mt-2 rounded-lg bg-rose-100 p-2 text-xs font-bold text-rose-700">Motivo: {selectedProcess.accountantWorkflow.registryDocument.rejectionReason}</p> : null}
-                  <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void openAccountantAsset('registry')} className="h-9 rounded-lg border border-pink-200 bg-white px-3 text-xs font-black text-pink-700">Abrir ficha</button>{canManageAccountant && selectedProcess.accountantWorkflow.registryDocument.status !== 'approved' ? <><button type="button" disabled={!!accountantActionBusy} onClick={() => void accountantAction('review_registry', { decision: 'approved' })} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar ficha</button><button type="button" disabled={!!accountantActionBusy} onClick={() => { const reason = window.prompt('Motivo da rejeição:'); if (reason) void accountantAction('review_registry', { decision: 'rejected', reason }); }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Rejeitar</button></> : null}</div>
+                  <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void openAccountantAsset('registry')} className="h-9 rounded-lg border border-pink-200 bg-white px-3 text-xs font-black text-pink-700">Abrir ficha</button>{canManageAccountantProcess && selectedProcess.accountantWorkflow.registryDocument.status !== 'approved' ? <><button type="button" disabled={!!accountantActionBusy} onClick={() => void accountantAction('review_registry', { decision: 'approved' })} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar ficha</button><button type="button" disabled={!!accountantActionBusy} onClick={() => { const reason = window.prompt('Motivo da rejeição:'); if (reason) void accountantAction('review_registry', { decision: 'rejected', reason }); }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Rejeitar</button></> : null}</div>
                 </div> : selectedProcess.accountantWorkflow?.email?.sentAt ? <div className="rounded-xl border border-dashed border-pink-200 bg-pink-50/40 p-4 text-xs font-semibold text-pink-800">Aguardando o contador enviar a Ficha de Registro de Empregado pelo link exclusivo.</div> : null}
               </div>
             )}
@@ -10096,7 +10290,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         </p>
                       ) : null}
                     </div>
-                    {canGenerateDocuments ? (
+                    {canGenerateDocumentsProcess ? (
                       <button
                         type="button"
                         disabled={!signatureSelectionEditable || selectedSignatureTemplateIds.length === 0 || !!signatureBusy}
@@ -10228,7 +10422,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <ProbationV2Panel
                     process={selectedProcess}
                     getToken={getToken}
-                    canManage={canManage}
+                    canManage={canManage && !processIsReadOnly}
                     onRefresh={onRefresh}
                   />
                 </div>
@@ -10251,7 +10445,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 <TrainingPanel
                   process={selectedProcess}
                   getToken={getToken}
-                  canManage={canManage}
+                  canManage={canManage && !processIsReadOnly}
                   onRefresh={onRefresh}
                 />
               </div>
@@ -10275,6 +10469,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
           }}
         />
       )}
+      {cancellationModal}
     </div>
   );
 }
