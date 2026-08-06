@@ -21,7 +21,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
-        <link rel="apple-touch-icon" href="/icons/Icon PWM (192 x 192 px).png" />
+        <link rel="apple-touch-icon" href="/icons/coala-shakes-192.png" />
       </head>
       <body className="font-sans antialiased">
         <AppProviders>
