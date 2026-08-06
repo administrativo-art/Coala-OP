@@ -1,11 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
 import { createAsoToken, formatAsoAppointment, isoAfterDays } from '@/features/hr/aso/workflow';
-import { candidateAsoEmailContent, clinicAsoEmailContent, renderCandidateAsoAppointmentEmail, renderClinicAsoRequestEmail } from '@/features/hr/aso/emails';
+import { candidateAsoEmailContent, candidateAsoProcessStartedEmailContent, clinicAsoEmailContent, renderCandidateAsoAppointmentEmail, renderCandidateAsoProcessStartedEmail, renderClinicAsoRequestEmail } from '@/features/hr/aso/emails';
 import { selectLatestSocialContract, type CompanyDocumentMetadata } from '@/features/hr/aso/company-document-selection';
 import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
 import { adminApp } from '@/lib/firebase-admin';
@@ -16,6 +16,9 @@ import { createPaymentRequest, refreshPaymentRequest } from '@/features/financia
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
 import { getTermination, saveTermination } from '@/features/hr/termination/server';
 import { applyAccountantReadiness, patchStep } from '@/features/hr/termination/core';
+import { CnpjValidator } from '@/lib/company/cnpj-validator';
+import { missingAccountantPrerequisites } from '@/features/hr/accountant/workflow';
+import type { OnboardingDocument } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,6 +64,63 @@ async function latestSocialContract() {
     contentHash?: unknown;
   }>;
   return selectLatestSocialContract(documents);
+}
+
+async function buildAsoRequestSnapshot(process: Record<string, unknown>, clinicEntityId: string) {
+  if (!process.publicFormSubmittedAt) throw new Error('A candidata ainda não enviou o formulário da integração.');
+  const answers = record(process.publicFormAnswers);
+  const [clinicSnapshot, entitySnapshot, employerUnitSnapshot] = await Promise.all([
+    hrDbAdmin.collection('asoClinicConfigs').doc(clinicEntityId).get(),
+    dbAdmin.collection('entities').doc(clinicEntityId).get(),
+    text(process.employerUnitId) ? dbAdmin.collection('dp_units').doc(text(process.employerUnitId)).get() : Promise.resolve(null),
+  ]);
+  if (!clinicSnapshot.exists || clinicSnapshot.get('active') === false) throw new Error('A clínica selecionada está ausente ou inativa.');
+  if (!entitySnapshot.exists || entitySnapshot.get('status') === 'inactive') throw new Error('O cadastro da clínica não está disponível.');
+  const clinicEmail = email(clinicSnapshot.get('schedulingEmail'));
+  const clinicPrice = Number(clinicSnapshot.get('asoPrice'));
+  const candidateEmail = email(process.candidateEmail);
+  const companyCnpj = CnpjValidator.clean(text(process.employerCnpj, 30));
+  const employerUnit = employerUnitSnapshot?.data() ?? {};
+  const snapshot = {
+    candidateName: text(process.candidateName, 240),
+    candidateEmail,
+    candidateCpf: text(answers.cpf, 24),
+    jobFunction: text(process.functionName, 240) || text(process.jobRoleName, 240),
+    expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
+    examType: process.asoExamType === 'dismissal' ? 'dismissal' : 'admission',
+    companyName: text(process.employerUnitName, 240) || text(process.unitName, 240),
+    companyCnpj,
+    companyAddress: text(process.employerAddress, 600) || text(employerUnit.address, 600),
+    companyContacts: text(process.asoCompanyContacts, 500) || (companyCnpj === '14276603000125'
+      ? '(99) 9-8111-1119 (Tiago Brasil) ou (98) 9-8809-0880 (Cesar Thimótheo)'
+      : 'Contato do RH não informado'),
+    clinicEntityId,
+    clinicName: text(entitySnapshot.get('name'), 240) || text(entitySnapshot.get('razao_social'), 240) || 'Clínica',
+    clinicEmail,
+    clinicPrice,
+  } as const;
+  const missing = [
+    !snapshot.candidateName ? 'nome da candidata' : null,
+    !snapshot.candidateEmail ? 'e-mail da candidata' : null,
+    !snapshot.candidateCpf ? 'CPF da candidata' : null,
+    !snapshot.jobFunction ? 'cargo ou função' : null,
+    !CnpjValidator.validate(snapshot.companyCnpj).valid ? 'CNPJ responsável válido' : null,
+    !snapshot.companyName ? 'empresa responsável' : null,
+    !snapshot.companyAddress ? 'endereço da empresa' : null,
+    !snapshot.clinicEmail ? 'e-mail de agendamento da clínica' : null,
+    !Number.isFinite(snapshot.clinicPrice) || snapshot.clinicPrice <= 0 ? 'valor do ASO na clínica' : null,
+  ].filter((value): value is string => Boolean(value));
+  if (missing.length) throw new Error(`Complete a solicitação antes de validar. Falta: ${missing.join('; ')}.`);
+  const fingerprint = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+  return { ...snapshot, fingerprint };
+}
+
+function emailWasAccepted(status: unknown, providerId: unknown) {
+  return Boolean(text(providerId, 300)) && ['accepted', 'delivered', 'delayed'].includes(text(status, 40));
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
 }
 
 async function fileResponse(storagePath: string, fileName: string, mimeType: string) {
@@ -109,6 +169,295 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const body = await request.json().catch(() => ({}));
   const action = text(body.action, 80);
   const now = new Date().toISOString();
+
+  if (action === 'validate_request') {
+    const clinicEntityId = text(body.clinicEntityId, 180) || text(workflow.clinicEntityId, 180);
+    if (!clinicEntityId) return NextResponse.json({ error: 'Selecione a clínica responsável pelo ASO.' }, { status: 409 });
+    try {
+      const current = await buildAsoRequestSnapshot(process, clinicEntityId);
+      const requestValidation = {
+        id: randomUUID(),
+        ...current,
+        validatedAt: now,
+        validatedBy: access.decoded.uid,
+        validatedByEmail: access.decoded.email ?? null,
+      };
+      await Promise.all([
+        processRef.set({
+          asoWorkflow: {
+            ...workflow,
+            status: 'request_validated',
+            clinicEntityId,
+            clinic: {
+              ...record(workflow.clinic),
+              name: current.clinicName,
+              email: current.clinicEmail,
+            },
+            requestValidation,
+            updatedAt: now,
+          },
+          updatedAt: now,
+        }, { merge: true }),
+        addEvent(id, 'ASO_REQUEST_VALIDATED', access, {
+          requestValidationId: requestValidation.id,
+          fingerprint: requestValidation.fingerprint,
+          clinicEntityId,
+        }),
+      ]);
+      return NextResponse.json({ ok: true, requestValidation });
+    } catch (error) {
+      return NextResponse.json({ error: errorMessage(error, 'Não foi possível validar a solicitação do ASO.') }, { status: 409 });
+    }
+  }
+
+  if (action === 'start_process') {
+    if (process.status === 'cancelled' || process.status === 'completed') {
+      return NextResponse.json({ error: 'Esta integração não permite iniciar o processo do ASO.' }, { status: 409 });
+    }
+    const requestValidation = record(workflow.requestValidation);
+    const clinicEntityId = text(requestValidation.clinicEntityId, 180) || text(workflow.clinicEntityId, 180);
+    if (!clinicEntityId || !text(requestValidation.fingerprint, 128)) {
+      return NextResponse.json({ error: 'Valide a solicitação antes de iniciar o processo do ASO.' }, { status: 409 });
+    }
+
+    let currentRequest: Awaited<ReturnType<typeof buildAsoRequestSnapshot>>;
+    try {
+      currentRequest = await buildAsoRequestSnapshot(process, clinicEntityId);
+    } catch (error) {
+      return NextResponse.json({ error: errorMessage(error, 'A solicitação precisa ser validada novamente.') }, { status: 409 });
+    }
+    if (currentRequest.fingerprint !== text(requestValidation.fingerprint, 128)) {
+      return NextResponse.json({ error: 'Os dados da solicitação mudaram após a validação. Valide novamente antes de iniciar.' }, { status: 409 });
+    }
+
+    const actor = { uid: access.decoded.uid, email: access.decoded.email ?? null, name: access.actorName };
+    let payment;
+    try {
+      const clinicConfig = await hrDbAdmin.collection('asoClinicConfigs').doc(clinicEntityId).get();
+      payment = await createPaymentRequest({
+        sourceType: 'aso',
+        sourceId: id,
+        beneficiaryReference: { sourceType: 'entity', sourceId: clinicEntityId },
+        amount: currentRequest.clinicPrice,
+        description: text(clinicConfig.get('defaultPaymentDescription'), 140)
+          || `Pagamento de ASO ${currentRequest.examType === 'dismissal' ? 'demissional' : 'admissional'}`,
+      }, actor);
+    } catch (error) {
+      return NextResponse.json({ error: errorMessage(error, 'Não foi possível criar a solicitação de pagamento do ASO.') }, { status: 409 });
+    }
+
+    await hrDbAdmin.collection('hrNotifications').doc(`aso_payment_${id}`).set({
+      type: 'aso_payment_authorization',
+      status: payment.status === 'awaiting_financial_authorization' ? 'pending' : 'completed',
+      onboardingId: id,
+      terminationId: text(process.sourceTerminationId) || null,
+      title: `Pagamento de ASO — ${currentRequest.candidateName}`,
+      message: `Autorize o PIX de ${payment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para ${payment.beneficiarySnapshot.name}. Após a autorização, o sistema enviará automaticamente ao Banco Inter.`,
+      channels: ['in_app'],
+      recipient: { strategy: 'financial_pool' },
+      createdAt: now,
+      updatedAt: now,
+    }, { merge: true });
+
+    const clinicCommunicationRef = hrDbAdmin.collection('emailCommunications').doc(`aso_clinic_start_${id}`);
+    const clinicCommunicationSnapshot = await clinicCommunicationRef.get();
+    let clinicEmailResult = {
+      recipient: currentRequest.clinicEmail,
+      recipientName: currentRequest.clinicName,
+      purpose: 'Solicitação de agendamento do ASO',
+      status: text(clinicCommunicationSnapshot.get('status'), 40) || 'pending',
+      providerId: text(clinicCommunicationSnapshot.get('providerId'), 300) || null,
+      error: null as string | null,
+    };
+    if (!emailWasAccepted(clinicCommunicationSnapshot.get('status'), clinicCommunicationSnapshot.get('providerId'))) {
+      const replyToken = createAsoToken();
+      const replyUrl = `${PUBLIC_URL}/aso/clinica/${replyToken.token}`;
+      const socialContract = await latestSocialContract();
+      let contractAttachment: { filename: string; content: string; contentType: string } | null = null;
+      if (socialContract) {
+        try {
+          const [contents] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(text(socialContract.storagePath, 1500)).download();
+          contractAttachment = { filename: 'Contrato social.pdf', content: contents.toString('base64'), contentType: 'application/pdf' };
+        } catch {
+          contractAttachment = null;
+        }
+      }
+      const attachmentDescriptions = contractAttachment ? [{ label: 'Contrato social', fileName: contractAttachment.filename }] : [];
+      const clinicContent = clinicAsoEmailContent({
+        candidateName: currentRequest.candidateName,
+        candidateCpf: currentRequest.candidateCpf,
+        jobFunction: currentRequest.jobFunction,
+        companyName: currentRequest.companyName,
+        companyCnpj: CnpjValidator.format(currentRequest.companyCnpj),
+        companyAddress: currentRequest.companyAddress,
+        companyContacts: currentRequest.companyContacts,
+        attachments: attachmentDescriptions,
+        examType: currentRequest.examType,
+      });
+      await Promise.all([
+        processRef.set({ asoClinicTokenHash: replyToken.hash, asoClinicTokenExpiresAt: isoAfterDays(30), updatedAt: now }, { merge: true }),
+        clinicCommunicationRef.set({
+          onboardingId: id,
+          event: 'aso_clinic_request',
+          category: 'aso_clinic_request',
+          recipient: currentRequest.clinicEmail,
+          subject: clinicContent.subject,
+          status: 'pending',
+          requestValidationId: text(requestValidation.id, 180) || null,
+          socialContractDocumentId: socialContract?.id ?? null,
+          createdAt: clinicCommunicationSnapshot.get('createdAt') ?? now,
+          updatedAt: now,
+        }, { merge: true }),
+      ]);
+      try {
+        const result = await sendEmail({
+          from: EMAIL_SENDERS.formalization,
+          to: currentRequest.clinicEmail,
+          ...(process.env.ASO_INBOUND_DOMAIN?.trim() ? { replyTo: `aso+${replyToken.token}@${process.env.ASO_INBOUND_DOMAIN.trim()}` } : {}),
+          subject: clinicContent.subject,
+          html: renderClinicAsoRequestEmail({
+            candidateName: currentRequest.candidateName,
+            candidateCpf: currentRequest.candidateCpf,
+            jobFunction: currentRequest.jobFunction,
+            companyName: currentRequest.companyName,
+            companyCnpj: CnpjValidator.format(currentRequest.companyCnpj),
+            companyAddress: currentRequest.companyAddress,
+            companyContacts: currentRequest.companyContacts,
+            attachments: attachmentDescriptions,
+            replyUrl,
+            examType: currentRequest.examType,
+          }),
+          text: `${clinicContent.text}\n\nInforme o agendamento: ${replyUrl}`,
+          ...(contractAttachment ? { attachments: [contractAttachment] } : {}),
+          tags: [{ name: 'category', value: 'aso_clinic_request' }, { name: 'onboarding_id', value: id.slice(0, 256) }],
+        });
+        clinicEmailResult = { ...clinicEmailResult, status: 'accepted', providerId: result.id };
+        await Promise.all([
+          clinicCommunicationRef.set({ status: 'accepted', providerId: result.id, acceptedAt: now, updatedAt: now }, { merge: true }),
+          ...(socialContract ? [
+            socialContract.ref.set({ accessCount: FieldValue.increment(1), lastAccessedAt: Timestamp.now() }, { merge: true }),
+            socialContract.ref.collection('audit').add({ action: 'DOCUMENT_ATTACHED_TO_ASO_EMAIL', actorId: access.decoded.uid, actorName: access.actorName, onboardingId: id, providerId: result.id, at: Timestamp.now() }),
+          ] : []),
+        ]);
+      } catch (error) {
+        const message = errorMessage(error, 'Falha no envio à clínica.');
+        clinicEmailResult = { ...clinicEmailResult, status: 'failed', error: message };
+        await clinicCommunicationRef.set({ status: 'failed', lastError: message, updatedAt: now }, { merge: true });
+      }
+    }
+
+    const candidateCommunicationRef = hrDbAdmin.collection('emailCommunications').doc(`aso_candidate_start_${id}`);
+    const candidateCommunicationSnapshot = await candidateCommunicationRef.get();
+    let candidateEmailResult = {
+      recipient: currentRequest.candidateEmail,
+      recipientName: currentRequest.candidateName,
+      purpose: 'Aviso de início do processo do ASO',
+      status: text(candidateCommunicationSnapshot.get('status'), 40) || 'pending',
+      providerId: text(candidateCommunicationSnapshot.get('providerId'), 300) || null,
+      error: null as string | null,
+    };
+    if (!emailWasAccepted(candidateCommunicationSnapshot.get('status'), candidateCommunicationSnapshot.get('providerId'))) {
+      const candidateContent = candidateAsoProcessStartedEmailContent({
+        candidateName: currentRequest.candidateName,
+        clinicName: currentRequest.clinicName,
+        examType: currentRequest.examType,
+      });
+      await candidateCommunicationRef.set({
+        onboardingId: id,
+        event: 'aso_candidate_process_started',
+        category: 'aso_candidate_process_started',
+        recipient: currentRequest.candidateEmail,
+        subject: candidateContent.subject,
+        status: 'pending',
+        createdAt: candidateCommunicationSnapshot.get('createdAt') ?? now,
+        updatedAt: now,
+      }, { merge: true });
+      try {
+        const result = await sendEmail({
+          from: EMAIL_SENDERS.formalization,
+          to: currentRequest.candidateEmail,
+          subject: candidateContent.subject,
+          html: renderCandidateAsoProcessStartedEmail({
+            candidateName: currentRequest.candidateName,
+            clinicName: currentRequest.clinicName,
+            examType: currentRequest.examType,
+          }),
+          text: candidateContent.text,
+          tags: [{ name: 'category', value: 'aso_candidate_process_started' }, { name: 'onboarding_id', value: id.slice(0, 256) }],
+        });
+        candidateEmailResult = { ...candidateEmailResult, status: 'accepted', providerId: result.id };
+        await candidateCommunicationRef.set({ status: 'accepted', providerId: result.id, acceptedAt: now, updatedAt: now }, { merge: true });
+      } catch (error) {
+        const message = errorMessage(error, 'Falha no aviso à candidata.');
+        candidateEmailResult = { ...candidateEmailResult, status: 'failed', error: message };
+        await candidateCommunicationRef.set({ status: 'failed', lastError: message, updatedAt: now }, { merge: true });
+      }
+    }
+
+    const latestProcessSnapshot = await processRef.get();
+    const latestWorkflow = record(latestProcessSnapshot.get('asoWorkflow'));
+    const startedAt = text(latestWorkflow.startedAt, 40) || text(workflow.startedAt, 40) || now;
+    const nextWorkflow = {
+      ...latestWorkflow,
+      status: text(latestWorkflow.startedAt) && text(latestWorkflow.status) ? latestWorkflow.status : 'process_started',
+      startedAt,
+      startedBy: text(latestWorkflow.startedBy) || text(workflow.startedBy) || access.decoded.uid,
+      startedByEmail: latestWorkflow.startedByEmail ?? workflow.startedByEmail ?? access.decoded.email ?? null,
+      clinicEntityId,
+      requestValidation,
+      paymentRequestId: payment.id,
+      paymentStatus: payment.status,
+      appointmentStatus: latestWorkflow.appointmentStatus ?? workflow.appointmentStatus ?? 'awaiting_clinic',
+      clinic: {
+        ...record(latestWorkflow.clinic),
+        name: currentRequest.clinicName,
+        email: currentRequest.clinicEmail,
+        communicationId: clinicCommunicationRef.id,
+        providerId: clinicEmailResult.providerId,
+        emailStatus: clinicEmailResult.status,
+        ...(!clinicEmailResult.error ? { sentAt: record(latestWorkflow.clinic).sentAt ?? record(workflow.clinic).sentAt ?? now, lastError: null } : { lastError: clinicEmailResult.error }),
+      },
+      candidateStartNotification: {
+        ...record(latestWorkflow.candidateStartNotification),
+        communicationId: candidateCommunicationRef.id,
+        providerId: candidateEmailResult.providerId,
+        emailStatus: candidateEmailResult.status,
+        ...(!candidateEmailResult.error ? { sentAt: record(latestWorkflow.candidateStartNotification).sentAt ?? record(workflow.candidateStartNotification).sentAt ?? now, lastError: null } : { lastError: candidateEmailResult.error }),
+      },
+      updatedAt: now,
+    };
+    const paymentMessage = payment.status === 'awaiting_financial_authorization'
+      ? 'Solicitação enviada ao Financeiro. Após a autorização, o PIX seguirá automaticamente pelo Banco Inter.'
+      : payment.status === 'paid'
+        ? 'PIX confirmado pelo Banco Inter.'
+        : 'A solicitação de PIX já está em processamento no fluxo do Banco Inter.';
+    const result = {
+      emails: [clinicEmailResult, candidateEmailResult],
+      payment: {
+        amount: payment.amount,
+        beneficiary: payment.beneficiarySnapshot.name,
+        maskedDestination: payment.beneficiarySnapshot.maskedPaymentDestination,
+        status: payment.status,
+        message: paymentMessage,
+      },
+    };
+    await Promise.all([
+      processRef.set({ asoWorkflow: nextWorkflow, updatedAt: now }, { merge: true }),
+      addEvent(id, text(workflow.startedAt) || text(latestWorkflow.startedAt) ? 'ASO_PROCESS_RETRIED' : 'ASO_PROCESS_STARTED', access, {
+        clinicEmailStatus: clinicEmailResult.status,
+        candidateEmailStatus: candidateEmailResult.status,
+        paymentRequestId: payment.id,
+        paymentStatus: payment.status,
+      }),
+    ]);
+    return NextResponse.json({
+      ok: clinicEmailResult.status !== 'failed' && candidateEmailResult.status !== 'failed',
+      result,
+      ...(clinicEmailResult.status === 'failed' || candidateEmailResult.status === 'failed'
+        ? { warning: 'O processo foi iniciado, mas existe um envio de e-mail pendente. Use “Tentar envios pendentes” após corrigir a falha.' }
+        : {}),
+    });
+  }
 
   if (action === 'validate_guide') {
     const guide = await latestGuide(id, workflow);
@@ -330,8 +679,19 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!['approved', 'rejected'].includes(decision)) return NextResponse.json({ error: 'Decisão inválida.' }, { status: 400 });
     const reason = text(body.reason, 2000);
     if (decision === 'rejected' && reason.length < 3) return NextResponse.json({ error: 'Informe o motivo da rejeição.' }, { status: 400 });
+    const advancedToAccountant = decision === 'approved'
+      && process.processKind !== 'termination_aso'
+      && missingAccountantPrerequisites({
+        documents: Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [],
+        asoApproved: true,
+        expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
+      }).length === 0;
     await Promise.all([
-      processRef.set({ asoWorkflow: { ...workflow, status: decision === 'approved' ? 'completed' : 'aso_received', asoDocument: { ...aso, status: decision, reviewedAt: now, reviewedBy: access.decoded.uid, rejectionReason: decision === 'rejected' ? reason : null }, updatedAt: now }, updatedAt: now }, { merge: true }),
+      processRef.set({
+        asoWorkflow: { ...workflow, status: decision === 'approved' ? 'completed' : 'aso_received', asoDocument: { ...aso, status: decision, reviewedAt: now, reviewedBy: access.decoded.uid, rejectionReason: decision === 'rejected' ? reason : null }, updatedAt: now },
+        ...(advancedToAccountant ? { currentStage: 'accountant', status: 'accountant_pending' } : {}),
+        updatedAt: now,
+      }, { merge: true }),
       addEvent(id, decision === 'approved' ? 'ASO_APPROVED' : 'ASO_REJECTED', access, { reason: reason || null }),
     ]);
     if (process.processKind === 'termination_aso') {
@@ -349,7 +709,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         }, now));
       }
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, advancedToAccountant });
   }
 
   return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 });

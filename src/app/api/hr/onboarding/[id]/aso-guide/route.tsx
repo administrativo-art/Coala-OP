@@ -19,6 +19,10 @@ function text(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function safeFilePart(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'colaborador';
 }
@@ -103,14 +107,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     generatedByEmail: access.decoded.email ?? null,
   };
   await processRef.collection('generatedDocuments').doc(generatedId).set(record);
+  const workflow = recordValue(process.asoWorkflow);
   await processRef.set({
     asoWorkflow: {
-      status: 'guide_generated',
+      ...workflow,
+      status: workflow.status ?? 'guide_generated',
       latestGuideId: generatedId,
       latestGuideHashSha256: hashSha256,
       latestGuideGeneratedAt: now,
-      guideValidation: null,
-      appointmentStatus: 'not_requested',
       updatedAt: now,
     },
     updatedAt: now,

@@ -27,6 +27,7 @@ import {
   normalizeOnboardingDateOnly,
   ONBOARDING_CANCELLATION_REASON_MIN_LENGTH,
 } from '@/features/hr/onboarding-lifecycle';
+import { missingAccountantPrerequisites } from '@/features/hr/accountant/workflow';
 import type { OnboardingDocument, OnboardingProcess, OnboardingStageId, PjOnboardingWorkflow } from '@/types';
 
 export const runtime = 'nodejs';
@@ -1041,6 +1042,20 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.publicTokenClosedAt = now;
   } else {
     return jsonError('Ação inválida.');
+  }
+
+  if ((action === 'document_status' || action === 'document_status_bulk') && Array.isArray(update.documents)) {
+    const asoWorkflow = asRecord(process.asoWorkflow);
+    const asoDocument = asRecord(asoWorkflow.asoDocument);
+    const missing = missingAccountantPrerequisites({
+      documents: update.documents as OnboardingDocument[],
+      asoApproved: asoDocument.status === 'approved',
+      expectedAdmissionDate: asString(process.expectedAdmissionDate),
+    });
+    if (missing.length === 0) {
+      update.currentStage = 'accountant';
+      update.status = 'accountant_pending';
+    }
   }
 
   await ref.set(update, { merge: true });

@@ -139,11 +139,15 @@ export async function POST(request: NextRequest) {
       await hrDbAdmin.collection("terminationProcesses").doc(terminationId).update({ ...patch, updatedAt: new Date().toISOString() });
     }
 
-    if (onboardingId && (data.category === "aso_clinic_request" || data.category === "aso_candidate_notice")) {
+    if (onboardingId && ["aso_clinic_request", "aso_candidate_process_started", "aso_candidate_notice"].includes(String(data.category))) {
       const processRef = hrDbAdmin.collection("onboardingProcesses").doc(onboardingId);
       const processSnapshot = await processRef.get(); const process = processSnapshot.data() ?? {};
       const workflow = process.asoWorkflow && typeof process.asoWorkflow === "object" ? process.asoWorkflow as Record<string, unknown> : {};
-      const key = data.category === "aso_clinic_request" ? "clinic" : "candidateNotification";
+      const key = data.category === "aso_clinic_request"
+        ? "clinic"
+        : data.category === "aso_candidate_process_started"
+          ? "candidateStartNotification"
+          : "candidateNotification";
       const current = workflow[key] && typeof workflow[key] === "object" ? workflow[key] as Record<string, unknown> : {};
       await processRef.set({ asoWorkflow: { ...workflow, [key]: { ...current, ...(deliveryStatus ? { emailStatus: deliveryStatus } : {}), ...(deliveryStatus === "delivered" ? { deliveredAt: eventAt } : {}), ...(engagementStatus === "opened" ? { openedAt: eventAt } : {}), ...(deliveryStatus && isDeliveryFailure(deliveryStatus) ? { lastError } : {}) }, updatedAt: eventAt }, updatedAt: eventAt }, { merge: true });
     }

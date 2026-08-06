@@ -19,8 +19,36 @@ function escapeHtml(value: string) {
     .replaceAll("'", '&#039;');
 }
 
+export function candidateAsoProcessStartedEmailContent(input: {
+  candidateName: string;
+  clinicName: string;
+  examType?: 'admission' | 'dismissal';
+}) {
+  const examLabel = input.examType === 'dismissal' ? 'demissional' : 'admissional';
+  const message = [
+    `Olá, ${input.candidateName}.`,
+    '',
+    `O RH iniciou a solicitação do seu exame ${examLabel} junto à ${input.clinicName}.`,
+    'Assim que a clínica informar a data e o horário, você receberá um novo e-mail com o agendamento e as orientações para o exame.',
+  ].join('\n');
+  return {
+    subject: `Seu exame ${examLabel} foi solicitado`,
+    text: message,
+  };
+}
+
+export function renderCandidateAsoProcessStartedEmail(input: {
+  candidateName: string;
+  clinicName: string;
+  examType?: 'admission' | 'dismissal';
+}) {
+  const examLabel = input.examType === 'dismissal' ? 'demissional' : 'admissional';
+  return `<!doctype html><html lang="pt-BR"><body style="margin:0;background:#eee8f3;font-family:Arial,sans-serif;color:#202137"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:28px 12px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#fff;border-radius:24px;overflow:hidden"><tr><td style="padding:24px 30px;border-bottom:1px solid #eee9ee"><div style="font-size:11px;font-weight:900;letter-spacing:1.2px;color:#d92778">COALA SHAKES · ASO</div></td></tr><tr><td style="padding:30px"><h1 style="margin:0;font-size:22px;line-height:1.3">Olá, ${escapeHtml(input.candidateName)}.</h1><p style="margin:15px 0 0;font-size:14px;line-height:1.65;color:#596079">O RH iniciou a solicitação do seu exame <strong style="color:#202137">${escapeHtml(examLabel)}</strong> junto à <strong style="color:#202137">${escapeHtml(input.clinicName)}</strong>.</p><div style="margin-top:20px;padding:17px 18px;border-radius:16px;background:#e9f8fc;border:1px solid #b8e5ef;font-size:13px;line-height:1.6;color:#24566a"><strong>Próximo passo</strong><br />Assim que a clínica informar a data e o horário, você receberá um novo e-mail com o agendamento, o local e as orientações para o exame.</div></td></tr><tr><td style="padding:17px 30px 22px;border-top:1px solid #eee9ee;font-size:10px;line-height:1.6;color:#918999">Mensagem automática do processo de formalização.</td></tr></table></td></tr></table></body></html>`;
+}
+
 export function clinicAsoEmailContent(input: {
   candidateName: string;
+  candidateCpf?: string | null;
   jobFunction: string;
   companyName: string;
   companyCnpj: string;
@@ -34,7 +62,7 @@ export function clinicAsoEmailContent(input: {
   const message = [
     'Prezados, boa tarde.',
     '',
-    'Gostaria de agendar um exame para uma colaboradora.',
+    'Gostaria de agendar um exame para uma colaboradora. Os dados da solicitação seguem abaixo.',
     '',
     'Exame:',
     '',
@@ -46,11 +74,8 @@ export function clinicAsoEmailContent(input: {
     '',
     'Colaboradores:',
     '',
-    `• ${input.candidateName}, ${input.jobFunction};`,
-    '',
-    'Anexos:',
-    '',
-    attachmentLines,
+    `• ${input.candidateName}, ${input.jobFunction}${input.candidateCpf ? `, CPF ${input.candidateCpf}` : ''};`,
+    ...(attachmentLines ? ['', 'Anexos:', '', attachmentLines] : []),
   ].join('\n');
   return {
     subject: `ASO ${input.examType === 'dismissal' ? 'demissional' : 'admissional'} - Solicitação - ${input.candidateName}`,
@@ -63,6 +88,7 @@ export function clinicAsoEmailContent(input: {
 
 export function renderClinicAsoRequestEmail(input: {
   candidateName: string;
+  candidateCpf?: string | null;
   jobFunction: string;
   companyName: string;
   companyCnpj: string;
@@ -106,7 +132,7 @@ export function renderClinicAsoRequestEmail(input: {
           </tr>
           <tr><td style="padding:29px 32px 0">
             <h1 style="margin:0;font-size:20px;line-height:1.3;color:#202137">Prezados, boa tarde.</h1>
-            <p style="margin:12px 0 0;font-size:12px;line-height:1.65;color:#596079">Gostaria de agendar um exame para um(a) colaborador(a). Seguem os dados e os documentos em anexo.</p>
+            <p style="margin:12px 0 0;font-size:12px;line-height:1.65;color:#596079">Gostaria de agendar um exame para um(a) colaborador(a). Os dados da solicitação seguem abaixo.</p>
           </td></tr>
           <tr><td style="padding:22px 32px 0">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #b8e5ef;border-radius:17px;background:#e3f7fb">
@@ -132,15 +158,15 @@ export function renderClinicAsoRequestEmail(input: {
                 <td width="32" align="center" valign="top" style="padding-top:17px">${renderEmailIconBox({ src: "https://op.coalashakes.com/email/icons/user-round-pink.png", iconSize: 14, boxSize: 28, background: "#fff0f6", radius: 9 })}</td>
                 <td style="padding:17px 0 0 8px">
                   <div style="font-size:9px;font-weight:900;letter-spacing:1.1px;color:#e72d87">COLABORADOR(A)</div>
-                  <div style="margin-top:5px;font-size:12px;line-height:1.5;color:#3b4054"><strong style="color:#202137">${escapeHtml(input.candidateName)}</strong> · ${escapeHtml(input.jobFunction)}</div>
+                  <div style="margin-top:5px;font-size:12px;line-height:1.5;color:#3b4054"><strong style="color:#202137">${escapeHtml(input.candidateName)}</strong> · ${escapeHtml(input.jobFunction)}${input.candidateCpf ? `<br />CPF ${escapeHtml(input.candidateCpf)}` : ''}</div>
                 </td>
               </tr>
             </table>
           </td></tr>
-          <tr><td style="padding:22px 32px 0">
+          ${input.attachments.length ? `<tr><td style="padding:22px 32px 0">
             <div style="margin-bottom:10px;font-size:9px;font-weight:900;letter-spacing:1.1px;color:#83899d">ANEXOS · ${input.attachments.length} ARQUIVOS</div>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0">${attachmentRows}</table>
-          </td></tr>
+          </td></tr>` : ''}
           <tr><td style="padding:24px 32px 28px">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fff1f7;border:1px solid #f7c8dc;border-radius:17px">
               <tr><td style="padding:19px 20px">

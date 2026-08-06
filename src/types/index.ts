@@ -1442,7 +1442,7 @@ export type OnboardingProcess = {
   publicFormLastSubmittedAt?: string | null;
   publicPrivacyAcceptance?: OnboardingPrivacyAcceptance | null;
   asoWorkflow?: {
-    status?: 'pending' | 'guide_generated' | 'guide_validated' | 'email_sent' | 'clinic_response_received' | 'appointment_pending_review' | 'appointment_confirmed' | 'candidate_notified' | 'awaiting_exam' | 'aso_received' | 'aso_under_review' | 'completed';
+    status?: 'pending' | 'request_validated' | 'process_started' | 'guide_generated' | 'guide_validated' | 'email_sent' | 'clinic_response_received' | 'appointment_pending_review' | 'appointment_confirmed' | 'candidate_notified' | 'awaiting_exam' | 'aso_received' | 'aso_under_review' | 'completed';
     latestGuideId?: string | null;
     latestGuideHashSha256?: string | null;
     latestGuideGeneratedAt?: string | null;
@@ -1451,10 +1451,34 @@ export type OnboardingProcess = {
     paymentStatus?: 'draft' | 'awaiting_financial_authorization' | 'ready_to_submit' | 'submitting' | 'awaiting_bank_approval' | 'processing' | 'paid' | 'rejected' | 'approval_expired' | 'failed' | 'cancelled' | null;
     paymentProofStoragePath?: string | null;
     paymentConfirmedAt?: string | null;
+    startedAt?: string | null;
+    startedBy?: string | null;
+    startedByEmail?: string | null;
     appointmentStatus?: 'not_requested' | 'awaiting_clinic' | 'confirmed';
     appointmentAt?: string | null;
     guideValidation?: {
       documentId?: string | null;
+      validatedAt?: string | null;
+      validatedBy?: string | null;
+      validatedByEmail?: string | null;
+    } | null;
+    requestValidation?: {
+      id?: string | null;
+      fingerprint?: string | null;
+      candidateName?: string | null;
+      candidateEmail?: string | null;
+      candidateCpf?: string | null;
+      jobFunction?: string | null;
+      expectedAdmissionDate?: string | null;
+      examType?: 'admission' | 'dismissal';
+      companyName?: string | null;
+      companyCnpj?: string | null;
+      companyAddress?: string | null;
+      companyContacts?: string | null;
+      clinicEntityId?: string | null;
+      clinicName?: string | null;
+      clinicEmail?: string | null;
+      clinicPrice?: number | null;
       validatedAt?: string | null;
       validatedBy?: string | null;
       validatedByEmail?: string | null;
@@ -1490,6 +1514,15 @@ export type OnboardingProcess = {
       deliveredAt?: string | null;
       openedAt?: string | null;
       uploadExpiresAt?: string | null;
+    } | null;
+    candidateStartNotification?: {
+      communicationId?: string | null;
+      providerId?: string | null;
+      emailStatus?: string | null;
+      sentAt?: string | null;
+      deliveredAt?: string | null;
+      openedAt?: string | null;
+      lastError?: string | null;
     } | null;
     asoDocument?: {
       fileName?: string | null;

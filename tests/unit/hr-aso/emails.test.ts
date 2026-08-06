@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { candidateAsoEmailContent, clinicAsoEmailContent } from '../../../src/features/hr/aso/emails';
+import { candidateAsoEmailContent, candidateAsoProcessStartedEmailContent, clinicAsoEmailContent, renderCandidateAsoProcessStartedEmail, renderClinicAsoRequestEmail } from '../../../src/features/hr/aso/emails';
 import { renderCoalaEmail } from '../../../src/lib/email/template';
 
 test('e-mail da clínica usa dados dinâmicos e não repete o assunto como título', () => {
@@ -32,4 +32,35 @@ test('e-mail do candidato contém endereço, mapa e link exclusivo do ASO', () =
   const locationHtml = renderCoalaEmail({ message: content.message, highlightBlock: { text: content.locationBlock, tone: 'green', action: { label: 'Abrir localização', url: content.mapsUrl } } });
   assert.match(locationHtml, /background:#ecfdf5/);
   assert.match(locationHtml, /border:1px solid #86efac/);
+});
+
+test('início do ASO avisa a colaboradora sem antecipar um agendamento', () => {
+  const content = candidateAsoProcessStartedEmailContent({ candidateName: 'Maria Silva', clinicName: 'MedClinic' });
+  assert.match(content.subject, /exame admissional foi solicitado/i);
+  assert.match(content.text, /RH iniciou a solicitação/i);
+  assert.match(content.text, /novo e-mail com o agendamento/i);
+  assert.doesNotMatch(content.text, /agendado para/i);
+  const html = renderCandidateAsoProcessStartedEmail({ candidateName: '<Maria>', clinicName: 'MedClinic' });
+  assert.match(html, /&lt;Maria&gt;/);
+  assert.doesNotMatch(html, /coala-email-logo|<img/i);
+});
+
+test('solicitação da clínica funciona sem guia em PDF e inclui o CPF no corpo', () => {
+  const input = {
+    candidateName: 'Maria Silva',
+    candidateCpf: '123.456.789-00',
+    jobFunction: 'Atendente',
+    companyName: 'CT Sorvetes LTDA',
+    companyCnpj: '14.276.603/0001-25',
+    companyAddress: 'Rua Osíres, 24',
+    companyContacts: 'Tiago Brasil',
+    attachments: [],
+  };
+  const content = clinicAsoEmailContent(input);
+  assert.match(content.message, /CPF 123\.456\.789-00/);
+  assert.doesNotMatch(content.message, /Anexos:/);
+  const html = renderClinicAsoRequestEmail({ ...input, replyUrl: 'https://exemplo/aso/clinica/token' });
+  assert.match(html, /CPF 123\.456\.789-00/);
+  assert.doesNotMatch(html, /ANEXOS · 0/);
+  assert.match(html, /Informar data e horário/);
 });
