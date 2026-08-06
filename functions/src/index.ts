@@ -19,6 +19,7 @@ export { checkFieldMapConsistency } from './rh/propagation.js';
 export { cashClosureDailySync } from './cash-closure-jobs.js';
 export { cashClosureLineWritten, cashClosureSummaryWritten, cashClosureSummaryReinforcement } from './cash-closure-summaries.js';
 export { interCobrancaReconciliation } from './inter-cobranca-jobs.js';
+export { interPaymentReconciliation } from './inter-payment-jobs.js';
 export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-job.js';
 
 setGlobalOptions({ maxInstances: 10 });
