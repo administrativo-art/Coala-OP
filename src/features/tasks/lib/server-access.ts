@@ -87,19 +87,25 @@ function isStockCountApprovalTask(task: Task & Record<string, unknown>) {
   return getLegacyOriginType(task) === "stock_count_approval";
 }
 
+function isStockCountOwner(
+  context: Pick<ServerUserContext, "userDoc">,
+  task: Task & Record<string, unknown>,
+) {
+  const ownerIds = new Set([
+    task.assigneeType === "user" ? String(task.assigneeId || "") : "",
+    task.assignee_type === "user" ? String(task.assignee_id || "") : "",
+    String(task.createdByUserId ?? task.created_by_user_id ?? ""),
+    ...taskWatcherIds(task).users,
+  ].filter(Boolean));
+  return ownerIds.has(context.userDoc.id);
+}
+
 function isReturnRequestTask(task: Task & Record<string, unknown>) {
   return getLegacyOriginType(task) === "return_request";
 }
 
 function isItemAdditionRequestTask(task: Task & Record<string, unknown>) {
   return getLegacyOriginType(task) === "item_addition_request";
-}
-
-function hasStockCountApprovalAccess(context: ServerUserContext) {
-  return (
-    context.permissions.stock.stockCount.approve ||
-    context.permissions.stock.audit.approve
-  );
 }
 
 function hasReturnRequestAccess(context: ServerUserContext) {
@@ -111,7 +117,6 @@ function hasItemAdditionRequestAccess(context: ServerUserContext) {
 }
 
 function hasIntegratedTaskAccess(context: ServerUserContext, task: Task & Record<string, unknown>) {
-  if (isStockCountApprovalTask(task)) return hasStockCountApprovalAccess(context);
   if (isReturnRequestTask(task)) return hasReturnRequestAccess(context);
   if (isItemAdditionRequestTask(task)) return hasItemAdditionRequestAccess(context);
   return false;
@@ -179,6 +184,9 @@ export function canViewTask(context: ServerUserContext, task: Task & Record<stri
     })
   ) return false;
 
+  if (isStockCountApprovalTask(task)) {
+    return context.isDefaultAdmin || context.permissions.tasks.manage || isStockCountOwner(context, task);
+  }
   if (hasIntegratedTaskAccess(context, task)) return true;
   if (context.isDefaultAdmin || context.permissions.tasks.manage) return true;
   if (!context.permissions.tasks.view) return false;
@@ -216,6 +224,9 @@ export function canActOnTask(context: ServerUserContext, task: Task & Record<str
     })
   ) return false;
 
+  if (isStockCountApprovalTask(task)) {
+    return isStockCountOwner(context, task);
+  }
   if (hasIntegratedTaskAccess(context, task)) return true;
   if (context.isDefaultAdmin || context.permissions.tasks.manage) return true;
   if (!context.permissions.tasks.view) return false;

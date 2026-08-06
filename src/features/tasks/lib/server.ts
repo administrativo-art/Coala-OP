@@ -129,6 +129,10 @@ function normalizeOrigin(value: unknown): TaskOrigin {
   return { kind: "manual" };
 }
 
+function isStockCountOrigin(origin: TaskOrigin) {
+  return origin.kind === "legacy" && origin.type === "stock_count_approval";
+}
+
 function normalizeHistory(value: unknown): TaskHistoryItem[] {
   if (!Array.isArray(value)) return [];
 
@@ -1069,6 +1073,15 @@ export async function updateTaskDocument(params: {
   const origin = normalizeOrigin(data.origin);
   if (
     params.updates.status &&
+    isStockCountOrigin(origin) &&
+    params.allowOriginStatusChange !== true
+  ) {
+    const error = new Error("Conclua a contagem pela tela de estoque.");
+    (error as Error & { code?: number }).code = 409;
+    throw error;
+  }
+  if (
+    params.updates.status &&
     origin.kind !== "manual" &&
     origin.kind !== "legacy" &&
     params.allowOriginStatusChange !== true
@@ -1157,6 +1170,12 @@ export async function updateTaskDocument(params: {
   if (typeof params.updates.requiresApproval === "boolean") {
     nextData.requiresApproval = params.updates.requiresApproval;
     nextData.requires_approval = params.updates.requiresApproval;
+    if (!params.updates.requiresApproval) {
+      nextData.approverType = FieldValue.delete();
+      nextData.approver_type = FieldValue.delete();
+      nextData.approverId = FieldValue.delete();
+      nextData.approver_id = FieldValue.delete();
+    }
   }
   if (typeof params.updates.approverType === "string") {
     nextData.approverType = params.updates.approverType;
@@ -1255,6 +1274,11 @@ export async function updateTaskStatus(params: {
   const data = snap.data() as FirestoreRecord;
   assertTaskWorkspace(data, params.context);
   const origin = normalizeOrigin(data.origin);
+  if (isStockCountOrigin(origin) && params.allowOriginStatusChange !== true) {
+    const error = new Error("Conclua a contagem pela tela de estoque.");
+    (error as Error & { code?: number }).code = 409;
+    throw error;
+  }
   if (
     origin.kind !== "manual" &&
     origin.kind !== "legacy" &&

@@ -90,9 +90,13 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
             },
             body: JSON.stringify(updates),
         });
-        if (!response.ok) throw new Error('Falha ao atualizar sessão de auditoria.');
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(payload?.error ?? 'Falha ao atualizar sessão de auditoria.');
+        }
     } catch(error) {
         console.error("Error updating audit session:", error);
+        throw error;
     }
   }, [firebaseUser]);
 
@@ -104,12 +108,16 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` },
         });
-        if (!response.ok) throw new Error('Falha ao deletar sessão de auditoria.');
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(payload?.error ?? 'Falha ao deletar sessão de auditoria.');
+        }
         if (activeSession?.id === sessionId) {
             setActiveSession(null);
         }
     } catch (error) {
       console.error("Error deleting audit session:", error);
+      throw error;
     }
   }, [activeSession, firebaseUser]);
 

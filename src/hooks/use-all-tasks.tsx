@@ -8,7 +8,7 @@ import { useTasks } from './use-tasks';
 import { useReposition } from './use-reposition';
 import { useReturnRequests } from './use-return-requests';
 import { useStockAudit } from './use-stock-audit';
-import { ClipboardCheck, Truck, ShieldAlert, ListOrdered, ListTodo, History } from 'lucide-react';
+import { ClipboardCheck, Truck, ShieldAlert, ListTodo, History } from 'lucide-react';
 import { type Task, type RepositionActivity } from '@/types';
 import { canAccessUnit, resolveUnitAccess } from '@/lib/unit-access';
 
@@ -68,7 +68,7 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
   const { auditSessions, loading: auditLoading } = useStockAudit();
 
   const shouldLoadTasks = !!user;
-  const shouldLoadAudit = !!user && !!permissions.stock.stockCount.approve;
+  const shouldLoadAudit = !!user && !!permissions.stock.stockCount.perform;
   const shouldLoadReturns = !!user && !!permissions.stock.returns.updateStatus;
   const unitAccess = useMemo(
     () => user ? resolveUnitAccess(user, { isDefaultAdmin }) : null,
@@ -87,6 +87,15 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     || (shouldLoadReposition && repositionLoading)
     || (shouldLoadReturns && returnsLoading)
     || (shouldLoadAudit && auditLoading);
+
+  const myOpenCountSessions = useMemo(
+    () => user
+      ? auditSessions.filter(
+          (session) => session.status === 'pending_review' && session.auditedBy?.userId === user.id,
+        )
+      : [],
+    [auditSessions, user],
+  );
 
   const allTasks: Task[] = useMemo(() => {
     if (loading || !user) return [];
@@ -109,27 +118,6 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     const coveredTaskIds = new Set(
       tasks.map((task) => task.id)
     );
-
-    if (permissions.stock.stockCount.approve) {
-        auditSessions.forEach(session => {
-            if (
-              coveredLegacyOrigins.has(`stock_count_approval:${session.id}`) ||
-              (session.taskId && coveredTaskIds.has(session.taskId))
-            ) {
-              return;
-            }
-            if (session.status === 'pending_review') {
-                allLegacyTasks.push({
-                    id: `count-${session.id}`,
-                    type: 'Contagem',
-                    title: `Contagem de ${session.kioskName}`,
-                    description: `Enviada por ${session.auditedBy.username} com ${session.items.filter(i => i.finalQuantity !== i.systemQuantity).length} divergência(s).`,
-                    link: '/dashboard/stock/count',
-                    icon: ListOrdered
-                });
-            }
-        });
-    }
 
     repositionActivities.forEach((activity: RepositionActivity) => {
         // Recebimento saiu daqui: virou `pendingReceipts` (abaixo), pois é
@@ -181,10 +169,13 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     }
     
     return allLegacyTasks;
-  }, [user, permissions, auditSessions, repositionActivities, returnRequests, tasks, loading]);
+  }, [user, permissions, repositionActivities, returnRequests, tasks, loading]);
 
   const taskNotifications: LegacyTask[] = useMemo(() => {
     const newTaskNotifications = allTasks
+      .filter((task) =>
+        task.origin.kind !== 'legacy' || task.origin.type !== 'stock_count_approval'
+      )
       .filter((task) =>
         task.status === 'pending' ||
         task.status === 'reopened' ||
@@ -272,9 +263,9 @@ export const AllTasksProvider = ({ children }: { children: React.ReactNode }) =>
     taskNotifications,
     pendingReceipts,
     completedReceipts,
-    pendingTaskCount: taskNotifications.length + pendingReceipts.length,
+    pendingTaskCount: taskNotifications.length + pendingReceipts.length + myOpenCountSessions.length,
     loading
-  }), [allTasks, legacyTasks, taskNotifications, pendingReceipts, completedReceipts, loading]);
+  }), [allTasks, legacyTasks, taskNotifications, pendingReceipts, completedReceipts, loading, myOpenCountSessions.length]);
 
   return <AllTasksContext.Provider value={value}>{children}</AllTasksContext.Provider>;
 };

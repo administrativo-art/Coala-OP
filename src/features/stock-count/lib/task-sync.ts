@@ -8,8 +8,6 @@ import {
 } from "@/features/tasks/lib/server";
 import { type StockAuditSession, type Task } from "@/types";
 
-export const STOCK_COUNT_APPROVER_ASSIGNEE_ID = "__stock_count_approver__";
-
 const STOCK_TASK_PROJECT_SLUG = "stock";
 const STOCK_COUNT_TASK_SUBPROJECT_SLUG = "stock-count";
 const STOCK_COUNT_TASK_ORIGIN_LINK = "/dashboard/stock/count";
@@ -39,8 +37,8 @@ function buildDescription(session: StockAuditSession) {
   return [
     `Unidade: ${session.kioskName}`,
     `Responsável pela contagem: ${session.auditedBy?.username ?? "Não informado"}`,
-    `Status operacional: ${session.status}`,
-    `${totalItems} ${totalItems === 1 ? "item contado" : "itens contados"}.`,
+    `Status: ${session.status === "completed" ? "Concluída" : "Em aberto"}`,
+    `${totalItems} ${totalItems === 1 ? "item na contagem" : "itens na contagem"}.`,
     `${divergenceCount} ${divergenceCount === 1 ? "divergência encontrada" : "divergências encontradas"}.`,
     itemSummary ? `\nDivergências:\n${itemSummary}` : "",
   ]
@@ -48,9 +46,10 @@ function buildDescription(session: StockAuditSession) {
     .join("\n");
 }
 
-function buildTaskPatch(session: StockAuditSession, projectId: string, subprojectId: string): Partial<Task> {
+export function buildStockCountTaskPatch(session: StockAuditSession, projectId: string, subprojectId: string): Partial<Task> {
   const divergenceCount = countDivergences(session);
   const watcherUserIds = unique([session.auditedBy?.userId]);
+  const ownerUserId = session.auditedBy?.userId;
 
   if (session.status === "completed") {
     return {
@@ -60,16 +59,14 @@ function buildTaskPatch(session: StockAuditSession, projectId: string, subprojec
       title: `Contagem concluída: ${session.kioskName}`,
       description: buildDescription(session),
       status: "completed",
-      assigneeType: "role",
-      assigneeId: STOCK_COUNT_APPROVER_ASSIGNEE_ID,
-      requiresApproval: true,
-      approverType: "role",
-      approverId: STOCK_COUNT_APPROVER_ASSIGNEE_ID,
+      assigneeType: "user",
+      assigneeId: ownerUserId,
+      requiresApproval: false,
       unitId: session.kioskId,
       unitName: session.kioskName,
       priority: divergenceCount > 0 ? "high" : "normal",
       watcherUserIds,
-      visibilityScope: "unit",
+      visibilityScope: "assignee_and_watchers",
       originLink: STOCK_COUNT_TASK_ORIGIN_LINK,
       createdByUserId: session.auditedBy?.userId,
       createdByUsername: session.auditedBy?.username,
@@ -80,19 +77,17 @@ function buildTaskPatch(session: StockAuditSession, projectId: string, subprojec
     projectId,
     subprojectId,
     subprojectName: "Contagem de estoque",
-    title: `Aprovar contagem: ${session.kioskName}`,
+    title: `Concluir contagem: ${session.kioskName}`,
     description: buildDescription(session),
-    status: "awaiting_approval",
-    assigneeType: "role",
-    assigneeId: STOCK_COUNT_APPROVER_ASSIGNEE_ID,
-    requiresApproval: true,
-    approverType: "role",
-    approverId: STOCK_COUNT_APPROVER_ASSIGNEE_ID,
+    status: "pending",
+    assigneeType: "user",
+    assigneeId: ownerUserId,
+    requiresApproval: false,
     unitId: session.kioskId,
     unitName: session.kioskName,
     priority: divergenceCount > 0 ? "high" : "normal",
     watcherUserIds,
-    visibilityScope: "unit",
+    visibilityScope: "assignee_and_watchers",
     originLink: STOCK_COUNT_TASK_ORIGIN_LINK,
     createdByUserId: session.auditedBy?.userId,
     createdByUsername: session.auditedBy?.username,
@@ -128,7 +123,7 @@ export async function syncStockCountTask(params: {
     name: "Contagem de estoque",
     description: "Quadro de tarefas geradas por sessões de contagem de estoque.",
   });
-  const patch = buildTaskPatch(params.session, projectId, subprojectId);
+  const patch = buildStockCountTaskPatch(params.session, projectId, subprojectId);
   const existingTaskId =
     params.session.taskId ?? (await findExistingStockCountTaskId(params.session.id));
 
@@ -158,7 +153,7 @@ export async function syncStockCountTask(params: {
   const task = await createManualTask({
     context: params.context,
     input: {
-      title: patch.title || `Aprovar contagem: ${params.session.kioskName}`,
+      title: patch.title || `Concluir contagem: ${params.session.kioskName}`,
       description: patch.description,
       assigneeType: patch.assigneeType,
       assigneeId: patch.assigneeId,

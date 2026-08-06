@@ -6,6 +6,10 @@ import {
   cancelStockCountTaskSafely,
   syncStockCountTaskSafely,
 } from '@/features/stock-count/lib/task-sync';
+import {
+  completeStockCountSession,
+  isStockCountOwner,
+} from '@/features/stock-count/lib/finalize';
 import { type StockAuditSession } from '@/types';
 
 export const runtime = 'nodejs';
@@ -119,6 +123,12 @@ function permissionError() {
   return jsonError('Sem permissão para esta operação.', 403);
 }
 
+function errorStatus(error: unknown, fallback = 400) {
+  return typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'number'
+    ? error.code
+    : fallback;
+}
+
 function normalizeEntityDocument(value: unknown) {
   return typeof value === 'string' ? value.replace(/\D/g, '') : '';
 }
@@ -198,8 +208,25 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     }
   }
 
+  const stockAuditPayload = resource === 'stock-audit'
+    ? {
+        kioskId: String(body.kioskId ?? '').trim(),
+        kioskName: String(body.kioskName ?? '').trim(),
+        status: 'pending_review',
+        auditedBy: {
+          userId: userContext.userDoc.id,
+          username: userContext.userDoc.username,
+        },
+        startedAt: new Date().toISOString(),
+        items: Array.isArray(body.items) ? body.items : [],
+      }
+    : body;
+  if (resource === 'stock-audit' && (!stockAuditPayload.kioskId || !stockAuditPayload.kioskName || stockAuditPayload.items.length === 0)) {
+    return jsonError('Unidade e itens da contagem são obrigatórios.');
+  }
+
   const ref = await dbAdmin.collection(collectionName).add({
-    ...body,
+    ...stockAuditPayload,
     ...(resource === 'entities' && normalizedEntityDocument
       ? { documentNormalized: normalizedEntityDocument }
       : {}),
@@ -240,6 +267,53 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   const collectionName = collectionMap[resource];
   if (!collectionName || !id) return jsonError('Recurso ou ID inválido.', 404);
 
+  if (resource === 'stock-audit') {
+    const existingSnap = await dbAdmin.collection(collectionName).doc(id).get();
+    if (!existingSnap.exists) return jsonError('Sessão de contagem não encontrada.', 404);
+    const existingSession = {
+      id: existingSnap.id,
+      ...(existingSnap.data() ?? {}),
+    } as StockAuditSession;
+    if (!isStockCountOwner(userContext, existingSession)) {
+      return jsonError('Somente a pessoa que iniciou a contagem pode alterá-la ou concluí-la.', 403);
+    }
+
+    if (body.status === 'completed') {
+      try {
+        const result = await completeStockCountSession({
+          context: userContext,
+          sessionId: id,
+          items: body.items,
+        });
+        await syncStockCountTaskSafely({
+          context: userContext,
+          session: result.session,
+          label: 'complete',
+        });
+        return NextResponse.json({ ok: true, alreadyCompleted: result.alreadyCompleted });
+      } catch (error) {
+        return jsonError(
+          error instanceof Error ? error.message : 'Não foi possível concluir a contagem.',
+          errorStatus(error),
+        );
+      }
+    }
+
+    if (!Array.isArray(body.items)) return jsonError('Os itens da contagem são obrigatórios.');
+    await dbAdmin.collection(collectionName).doc(id).update({
+      items: body.items,
+      updatedAt: new Date().toISOString(),
+      updatedBy: userContext.userDoc.id,
+    });
+    const updatedSnap = await dbAdmin.collection(collectionName).doc(id).get();
+    await syncStockCountTaskSafely({
+      context: userContext,
+      session: { id: updatedSnap.id, ...(updatedSnap.data() ?? {}) } as StockAuditSession,
+      label: 'update',
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   let normalizedEntityDocument = '';
   if (resource === 'entities') {
     try {
@@ -276,17 +350,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     await dbAdmin.collection(collectionName).doc(id).update(updatePayload);
   }
 
-  if (resource === 'stock-audit') {
-    const updatedSnap = await dbAdmin.collection(collectionName).doc(id).get();
-    if (updatedSnap.exists) {
-      await syncStockCountTaskSafely({
-        context: userContext,
-        session: { id: updatedSnap.id, ...(updatedSnap.data() ?? {}) } as StockAuditSession,
-        label: 'update',
-      });
-    }
-  }
-
   return NextResponse.json({ ok: true });
 }
 
@@ -313,6 +376,17 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     resource === 'stock-audit'
       ? await dbAdmin.collection(collectionName).doc(id).get()
       : null;
+
+  if (resource === 'stock-audit') {
+    if (!existingSnap?.exists) return jsonError('Sessão de contagem não encontrada.', 404);
+    const existingSession = {
+      id: existingSnap.id,
+      ...(existingSnap.data() ?? {}),
+    } as StockAuditSession;
+    if (!isStockCountOwner(userContext, existingSession)) {
+      return jsonError('Somente a pessoa que iniciou a contagem pode cancelá-la.', 403);
+    }
+  }
 
   if (resource === 'entities') {
     await dbAdmin.collection(collectionName).doc(id).set({

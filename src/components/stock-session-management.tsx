@@ -418,7 +418,6 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
   const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading: auditLoading } = useStockAudit();
-  const { adjustLotQuantity } = useExpiryProducts();
   const { requests: itemAdditionRequests } = useItemAddition();
   const { toast } = useToast();
 
@@ -428,7 +427,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
 
   const pendingAudits = useMemo(() => auditSessions.filter(s =>
     s.status === 'pending_review' &&
-    Boolean(user) && canAccessUnit(user!, s.kioskId, { isDefaultAdmin })
+    Boolean(user) && s.auditedBy?.userId === user!.id && canAccessUnit(user!, s.kioskId, { isDefaultAdmin })
   ), [auditSessions, isDefaultAdmin, user]);
 
   const countableKiosks = useMemo(
@@ -529,7 +528,6 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   const handleFinalize = async (items: StockAuditItem[]) => {
     if (!activeSession || !user) return;
     try {
-        await adjustLotQuantity({ ...activeSession, items }, user);
         await updateAuditSession(activeSession.id, {
             items, status: 'completed', completedAt: new Date().toISOString(),
         });
@@ -562,7 +560,6 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
   }
 
   const canPerform = permissions.stock.stockCount.perform;
-  const canReview = permissions.stock.stockCount.perform || permissions.stock.stockCount.approve;
 
   return (
     <>
@@ -571,7 +568,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Contagem de estoque</h1>
-            <p className="text-sm text-muted-foreground">Inicie uma nova contagem ou conclua uma sessão salva para revisão.</p>
+            <p className="text-sm text-muted-foreground">Inicie uma nova contagem ou continue uma sessão que você deixou em aberto.</p>
           </div>
           <div className="flex gap-2">
             {showExportButton && (
@@ -589,7 +586,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
         {/* Metric cards */}
         <div className="grid gap-4 sm:grid-cols-3">
           {[
-            { icon: ClipboardList, value: pendingAudits.length, label: 'Sessões em aberto', detail: `${pendingAudits.length} aguardando revisão`, tone: 'text-indigo-600 bg-indigo-50' },
+            { icon: ClipboardList, value: pendingAudits.length, label: 'Minhas contagens abertas', detail: `${pendingAudits.length} para continuar`, tone: 'text-indigo-600 bg-indigo-50' },
             { icon: PackagePlus, value: pendingRequests.length, label: 'Solicitações de insumo', detail: 'Aguardando o administrador', tone: 'text-amber-600 bg-amber-50' },
             { icon: Store, value: countableKiosks.length, label: 'Quiosques ativos', detail: 'Disponíveis para contar', tone: 'text-emerald-600 bg-emerald-50' },
           ].map((m) => (
@@ -633,13 +630,11 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="truncate font-semibold">{s.kioskName}</p>
-                        <Badge variant="outline" className="border-emerald-300 text-emerald-700">Pronta p/ revisão</Badge>
+                        <Badge variant="outline" className="border-amber-300 text-amber-700">Em aberto</Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">{s.auditedBy.username} · {format(parseISO(s.startedAt), 'dd/MM · HH:mm')}</p>
                     </div>
-                    {canReview && (
-                      <Button size="sm" className="bg-indigo-500 hover:bg-indigo-600" onClick={() => setActiveSession(s)}>Revisar</Button>
-                    )}
+                    <Button size="sm" className="bg-indigo-500 hover:bg-indigo-600" onClick={() => setActiveSession(s)}>Continuar</Button>
                   </div>
                 ))
               )}
@@ -675,7 +670,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
             </Link>
 
             <p className="rounded-lg bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-              Contagens com divergência seguem para <span className="font-medium text-foreground">aprovação do administrador</span>, que ajusta o estoque ao concluir.
+              A pessoa que inicia a contagem permanece responsável por ela. Ao concluir, o sistema registra as divergências e ajusta o estoque automaticamente.
             </p>
           </div>
         </div>

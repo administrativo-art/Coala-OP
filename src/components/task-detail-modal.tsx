@@ -9,7 +9,7 @@ import { type Task, type TaskHistoryItem, type TaskOrigin, type ReturnRequestSta
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2, ShoppingCart, Trash2 } from 'lucide-react';
+import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListOrdered, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2, ShoppingCart, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { canAccessUnit } from '@/lib/unit-access';
 import { useTasks } from '@/hooks/use-tasks';
@@ -133,6 +133,8 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     }
     return task.legacyLink ?? null;
   }, [task]);
+
+  const isStockCountTask = task?.origin.kind === 'legacy' && task.origin.type === 'stock_count_approval';
 
   if (!task || !profiles) return null;
 
@@ -271,10 +273,17 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
         </div>
 
         <DialogFooter className="pt-4 border-t flex justify-between w-full">
-          <Button variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4" /> Excluir Tarefa
-          </Button>
-          {isMyTurn ? (
+          {isStockCountTask ? <span /> : (
+            <Button variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
+              <Trash2 className="mr-2 h-4 w-4" /> Excluir Tarefa
+            </Button>
+          )}
+          {isStockCountTask && originLink ? (
+            <Button variant="outline" onClick={() => router.push(originLink)}>
+              <ListOrdered className="mr-2" />
+              Abrir contagem
+            </Button>
+          ) : isMyTurn ? (
             <div className="space-y-2">
               {task.status === 'awaiting_approval' ? (
                 <div className="flex justify-end gap-2">

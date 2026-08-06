@@ -625,7 +625,7 @@ function CountSummary({ session }: { session: StockAuditSession }) {
 
   const total = session.items.length;
   const counted = touched.size;
-  const canSubmit = total > 0 && counted === total && !saving;
+  const canSubmit = total > 0 && counted === total && !saving && !saved;
   const expirySummary = useMemo(() => getStockExpirySummary(session.items), [session.items]);
 
   const adjust = (item: StockAuditItem, delta: number) => {
@@ -643,10 +643,14 @@ function CountSummary({ session }: { session: StockAuditSession }) {
         ...item,
         finalQuantity: quantities[itemKey(item)] ?? item.finalQuantity ?? 0,
       }));
-      await updateAuditSession(session.id, { items: updatedItems });
+      await updateAuditSession(session.id, {
+        items: updatedItems,
+        status: "completed",
+        completedAt: new Date().toISOString(),
+      });
       setSaved(true);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Falha ao enviar a contagem.");
+      setSaveError(error instanceof Error ? error.message : "Falha ao concluir a contagem.");
     } finally {
       setSaving(false);
     }
@@ -730,11 +734,11 @@ function CountSummary({ session }: { session: StockAuditSession }) {
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          {saved ? "Contagem enviada com sucesso." : `Conte todos os itens para enviar (${counted}/${total}).`}
+          {saved ? "Contagem concluída e estoque atualizado." : `Conte todos os itens para concluir (${counted}/${total}).`}
         </p>
         <Button onClick={submit} disabled={!canSubmit} className="bg-indigo-600 text-white hover:bg-indigo-700">
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {saved ? "Enviado" : "Enviar contagem"}
+          {saved ? "Concluída" : "Concluir contagem"}
         </Button>
       </div>
     </div>
@@ -747,7 +751,7 @@ function CountTimelineAction({ session, isLast }: { session: StockAuditSession; 
       type="count"
       time="—"
       dot="bg-amber-500"
-      statusLabel="Pendente"
+      statusLabel="Em aberto"
       statusClass="text-amber-600"
       title={`Contagem · ${session.kioskName}`}
       meta={`${session.items.length} ${session.items.length === 1 ? "item" : "itens"}`}
@@ -755,13 +759,13 @@ function CountTimelineAction({ session, isLast }: { session: StockAuditSession; 
         <Dialog>
           <DialogTrigger asChild>
             <Button size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700">
-              Contar
+              Continuar
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[86vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Contagem direcionada</DialogTitle>
-              <DialogDescription>Conte apenas os itens da sua sessão e envie quando completar a lista.</DialogDescription>
+              <DialogTitle>Concluir contagem</DialogTitle>
+              <DialogDescription>Confira todos os itens da sua sessão. Ao concluir, o estoque será atualizado e a pendência sairá do seu painel.</DialogDescription>
             </DialogHeader>
             <CountSummary session={session} />
           </DialogContent>
