@@ -7,6 +7,10 @@ runConfig:
   maxInstances: 1
 
 env:
+  - variable: NODE_OPTIONS
+    value: "--max-old-space-size=4096"
+    availability:
+      - BUILD
   - variable: BIZNEO_TOKEN
     secret: BIZNEO_TOKEN
   - variable: PDVLEGAL_COD_EMPRESA
