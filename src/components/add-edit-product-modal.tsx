@@ -23,9 +23,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine, Search, Database, AlertTriangle, ListChecks, Save } from 'lucide-react';
+import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Link2, ScanLine, Search, Database, AlertTriangle, ListChecks, Save, X } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
@@ -245,6 +247,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [highestStepPosition, setHighestStepPosition] = useState(0);
+    const [operationalCategoryOpen, setOperationalCategoryOpen] = useState(false);
+    const [baseProductOpen, setBaseProductOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
     const nutritionalTableFileInputRef = useRef<HTMLInputElement>(null);
@@ -424,6 +428,8 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             setBarcodeLookup(null);
             setSelectedLookupProduct(null);
             setBarcodeLookupError(null);
+            setOperationalCategoryOpen(false);
+            setBaseProductOpen(false);
         }
     }, [open, productToEdit, form]);
 
@@ -1105,16 +1111,50 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <FormLabel>Categoria do item <span className="text-rose-500">*</span></FormLabel>
                                                             <span className="text-xs text-muted-foreground">define o fluxo de compra</span>
                                                         </div>
-                                                        <Select onValueChange={(value) => handleOperationalCategoryChange(value, field.onChange)} value={field.value}>
-                                                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger></FormControl>
-                                                            <SelectContent>
-                                                                {activeCategories.map((category) => (
-                                                                    <SelectItem key={category.id} value={category.id}>
-                                                                        {category.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                        <Popover modal open={operationalCategoryOpen} onOpenChange={setOperationalCategoryOpen}>
+                                                            <PopoverTrigger asChild>
+                                                                <FormControl>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        role="combobox"
+                                                                        aria-expanded={operationalCategoryOpen}
+                                                                        className="w-full justify-between font-normal"
+                                                                    >
+                                                                        <span className={cn('truncate', !selectedOperationalCategory && 'text-muted-foreground')}>
+                                                                            {selectedOperationalCategory?.name || 'Selecione a categoria do item...'}
+                                                                        </span>
+                                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                    </Button>
+                                                                </FormControl>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent
+                                                                align="start"
+                                                                className="z-[70] w-[var(--radix-popover-trigger-width)] p-0"
+                                                            >
+                                                                <Command>
+                                                                    <CommandInput placeholder="Buscar categoria..." />
+                                                                    <CommandList>
+                                                                        <CommandEmpty>Nenhuma categoria encontrada.</CommandEmpty>
+                                                                        <CommandGroup>
+                                                                            {activeCategories.map((category) => (
+                                                                                <CommandItem
+                                                                                    key={category.id}
+                                                                                    value={`${category.name} ${normalizeAlias(category.name)} ${category.slug || ''}`}
+                                                                                    onSelect={() => {
+                                                                                        handleOperationalCategoryChange(category.id, field.onChange);
+                                                                                        setOperationalCategoryOpen(false);
+                                                                                    }}
+                                                                                >
+                                                                                    <Check className={cn('mr-2 h-4 w-4', field.value === category.id ? 'opacity-100' : 'opacity-0')} />
+                                                                                    <span className="truncate">{category.name}</span>
+                                                                                </CommandItem>
+                                                                            ))}
+                                                                        </CommandGroup>
+                                                                    </CommandList>
+                                                                </Command>
+                                                            </PopoverContent>
+                                                        </Popover>
                                                         {selectedOperationalCategory?.destination === 'asset' ? (
                                                             <FormDescription>
                                                                 Esta categoria entra no fluxo de patrimônio: nas compras, cada unidade recebida pode gerar um bem patrimonial individual.
@@ -1130,17 +1170,67 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <span className="text-xs text-muted-foreground">agrupa e converte o estoque</span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <Select onValueChange={(value) => handleBaseProductChange(value, field.onChange)} value={field.value || ''}>
-                                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar..."/></SelectTrigger></FormControl>
-                                                                <SelectContent>
-                                                                    {groupedBaseProducts.map(([groupName, items]) => (
-                                                                        <SelectGroup key={groupName}>
-                                                                            <SelectLabel>{groupName}</SelectLabel>
-                                                                            {items.map(ap => (<SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>))}
-                                                                        </SelectGroup>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
+                                                            <Popover modal open={baseProductOpen} onOpenChange={setBaseProductOpen}>
+                                                                <PopoverTrigger asChild>
+                                                                    <FormControl>
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="outline"
+                                                                            role="combobox"
+                                                                            aria-expanded={baseProductOpen}
+                                                                            className="min-w-0 flex-1 justify-between font-normal"
+                                                                        >
+                                                                            <span className={cn('truncate', !linkedBaseProduct && 'text-muted-foreground')}>
+                                                                                {linkedBaseProduct?.name || 'Selecione para agrupar...'}
+                                                                            </span>
+                                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                        </Button>
+                                                                    </FormControl>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent
+                                                                    align="start"
+                                                                    className="z-[70] w-[var(--radix-popover-trigger-width)] p-0"
+                                                                >
+                                                                    <Command>
+                                                                        <CommandInput placeholder="Buscar insumo base..." />
+                                                                        <CommandList>
+                                                                            <CommandEmpty>Nenhum insumo base encontrado.</CommandEmpty>
+                                                                            {field.value ? (
+                                                                                <CommandGroup>
+                                                                                    <CommandItem
+                                                                                        value="sem insumo base limpar desvincular"
+                                                                                        onSelect={() => {
+                                                                                            handleBaseProductChange('', field.onChange);
+                                                                                            setBaseProductOpen(false);
+                                                                                        }}
+                                                                                    >
+                                                                                        <X className="mr-2 h-4 w-4" />
+                                                                                        Sem insumo base
+                                                                                    </CommandItem>
+                                                                                </CommandGroup>
+                                                                            ) : null}
+                                                                            {groupedBaseProducts.map(([groupName, items]) => (
+                                                                                <CommandGroup key={groupName} heading={groupName}>
+                                                                                    {items.map((baseProduct) => (
+                                                                                        <CommandItem
+                                                                                            key={baseProduct.id}
+                                                                                            value={`${baseProduct.name} ${normalizeAlias(baseProduct.name)} ${baseProduct.unit} ${groupName} ${normalizeAlias(groupName)}`}
+                                                                                            onSelect={() => {
+                                                                                                handleBaseProductChange(baseProduct.id, field.onChange);
+                                                                                                setBaseProductOpen(false);
+                                                                                            }}
+                                                                                        >
+                                                                                            <Check className={cn('mr-2 h-4 w-4', field.value === baseProduct.id ? 'opacity-100' : 'opacity-0')} />
+                                                                                            <span className="min-w-0 flex-1 truncate">{baseProduct.name}</span>
+                                                                                            <span className="ml-2 shrink-0 text-xs text-muted-foreground">{baseProduct.unit}</span>
+                                                                                        </CommandItem>
+                                                                                    ))}
+                                                                                </CommandGroup>
+                                                                            ))}
+                                                                        </CommandList>
+                                                                    </Command>
+                                                                </PopoverContent>
+                                                            </Popover>
                                                             <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}><Settings className="h-4 w-4"/></Button>
                                                         </div>
                                                         <FormMessage />
