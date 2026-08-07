@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -17,6 +17,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useBaseProducts } from "@/hooks/use-base-products";
 import { useEntities } from "@/hooks/use-entities";
 import { useProducts } from "@/hooks/use-products";
+import {
+  getSettingsTabStructureKey,
+  preserveSettingsTabSelection,
+  resolveRequestedSettingsTab,
+} from "@/lib/settings-tab-selection";
 
 const ItemManagement = dynamic(
   () => import("@/components/item-management").then((m) => m.ItemManagement),
@@ -443,40 +448,35 @@ function DepartmentSubtabs({
   emptyLabel: string;
   requestedValue?: string | null;
 }) {
-  const resolveTab = useCallback(
-    (value?: string | null) => {
-      if (!tabs.length) return null;
-      if (value) {
-        for (const tab of tabs) {
-          if (tab.value === value) {
-            return { group: tab, leaf: tab.children?.[0] ?? tab };
-          }
-          const child = tab.children?.find((item) => item.value === value);
-          if (child) {
-            return { group: tab, leaf: child };
-          }
-        }
-      }
-      const group = tabs[0];
-      return { group, leaf: group.children?.[0] ?? group };
-    },
-    [tabs]
-  );
-
-  const defaultMatch = resolveTab(requestedValue);
-  const [activeSubTab, setActiveSubTab] = useState(defaultMatch?.group.value ?? "");
-  const [activeLeafTab, setActiveLeafTab] = useState(defaultMatch?.leaf.value ?? "");
+  const tabStructureKey = getSettingsTabStructureKey(tabs);
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const defaultMatch = resolveRequestedSettingsTab(tabs, requestedValue);
+  const [activeSubTab, setActiveSubTab] = useState(defaultMatch?.groupValue ?? "");
+  const [activeLeafTab, setActiveLeafTab] = useState(defaultMatch?.leafValue ?? "");
 
   useEffect(() => {
-    const match = resolveTab(requestedValue);
-    if (match) {
-      setActiveSubTab(match.group.value);
-      setActiveLeafTab(match.leaf.value);
+    if (!requestedValue) return;
+    const match = resolveRequestedSettingsTab(tabsRef.current, requestedValue);
+    if (!match) return;
+    setActiveSubTab(match.groupValue);
+    setActiveLeafTab(match.leafValue);
+  }, [requestedValue, tabStructureKey]);
+
+  useEffect(() => {
+    const selection = preserveSettingsTabSelection(
+      tabsRef.current,
+      activeSubTab,
+      activeLeafTab
+    );
+    if (!selection) {
+      setActiveSubTab("");
+      setActiveLeafTab("");
       return;
     }
-    setActiveSubTab("");
-    setActiveLeafTab("");
-  }, [requestedValue, resolveTab]);
+    if (selection.groupValue !== activeSubTab) setActiveSubTab(selection.groupValue);
+    if (selection.leafValue !== activeLeafTab) setActiveLeafTab(selection.leafValue);
+  }, [activeLeafTab, activeSubTab, tabStructureKey]);
 
   if (!tabs.length) {
     return <EmptySection label={emptyLabel} />;
@@ -869,6 +869,9 @@ export default function SettingsPage() {
       emptyLabel: "Financeiro",
     },
   ];
+  const departmentStructureKey = getSettingsTabStructureKey(departmentTabs);
+  const departmentTabsRef = useRef(departmentTabs);
+  departmentTabsRef.current = departmentTabs;
 
   const requestedDepartment = searchParams.get("department");
   const requestedTab = searchParams.get("tab");
@@ -886,19 +889,20 @@ export default function SettingsPage() {
   );
 
   useEffect(() => {
-    if (!departmentTabs.some((tab) => tab.value === activeDepartment)) {
-      setActiveDepartment(departmentTabs[0]?.value ?? "operacional");
+    const currentTabs = departmentTabsRef.current;
+    if (!currentTabs.some((tab) => tab.value === activeDepartment)) {
+      setActiveDepartment(currentTabs[0]?.value ?? "operacional");
     }
-  }, [activeDepartment, departmentTabs]);
+  }, [activeDepartment, departmentStructureKey]);
 
   useEffect(() => {
     if (
       requestedDepartment &&
-      departmentTabs.some((tab) => tab.value === requestedDepartment)
+      departmentTabsRef.current.some((tab) => tab.value === requestedDepartment)
     ) {
       setActiveDepartment(requestedDepartment);
     }
-  }, [requestedDepartment, departmentTabs]);
+  }, [requestedDepartment, departmentStructureKey]);
 
   const activeDepartmentTab =
     departmentTabs.find((tab) => tab.value === activeDepartment) ?? departmentTabs[0];
