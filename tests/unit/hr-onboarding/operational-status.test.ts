@@ -105,3 +105,20 @@ test('ordenação por prioridade coloca bloqueados antes de ações do RH', () =
   });
   assert.deepEqual(sortOnboardingProcesses([action, blocked], 'priority', NOW).map(item => item.id), ['blocked', 'action']);
 });
+
+test('modelo configurável não substitui o fluxo operacional da ficha', () => {
+  const integrationV2 = {
+    currentStageId: 'etapa_modelo',
+    currentStageStartedAt: '2026-07-01T12:00:00.000Z',
+    stageStatuses: { etapa_modelo: 'active' },
+    actionResults: { acao: { status: 'failed', executedAt: NOW.toISOString(), error: 'Falha do modelo' } },
+    snapshot: { stages: [{ id: 'etapa_modelo', label: 'Etapa do modelo', order: 0 }] },
+  } as unknown as NonNullable<OnboardingProcess['integrationV2']>;
+  const item = process({ integrationV2 });
+  const progress = onboardingProgress(item);
+  const status = resolveOnboardingOperationalStatus(item, NOW);
+
+  assert.equal(progress.label, 'Formalização · Dados, documentos e ASO');
+  assert.equal(progress.total, 2);
+  assert.equal(status.health, 'waiting_person');
+});

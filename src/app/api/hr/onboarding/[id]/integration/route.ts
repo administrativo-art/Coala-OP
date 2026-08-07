@@ -144,11 +144,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       simulation = simulateIntegrationTemplate(next.snapshot, { answers: next.answers, uploads: next.uploads, context: processContext });
     }
   }
+  // O roteiro configurável guarda campos e automações do modelo, mas não é a
+  // máquina de estados do onboarding. A conclusão oficial pertence ao fluxo
+  // operacional (ASO, contador, assinaturas e acessos).
   const update: Record<string, unknown> = { integrationV2: next, updatedAt: now };
-  if (next.currentStageId === null && (next.completionRequestedAt || action === "advance")) {
-    update.status = "completed";
-    update.completedAt = now;
-  }
   await reference.update(update);
   return NextResponse.json({
     execution: serializeHrValue(next),

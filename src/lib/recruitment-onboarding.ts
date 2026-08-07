@@ -92,20 +92,12 @@ export const DEFAULT_ONBOARDING_DOCUMENTS: OnboardingDocumentTemplate[] = [
     order: 5,
   },
   {
-    id: 'aso_admission',
-    label: 'ASO admissional',
-    documentTypeCode: 'ASO_ADMISSION',
-    description: 'Envie o atestado de saúde ocupacional admissional com a data de realização do exame visível.',
-    required: true,
-    order: 6,
-  },
-  {
     id: 'cnh',
     label: 'CNH',
     documentTypeCode: 'PERSONAL_ID',
     description: 'Obrigatória somente se você possui CNH e não usou a CNH como documento de identificação.',
     required: false,
-    order: 7,
+    order: 6,
   },
 ];
 
@@ -278,11 +270,11 @@ export function mergeOnboardingDocumentModels(
     else merged.push(doc);
   }
 
-  return normalizeOnboardingDocumentTemplates(merged).map((document) =>
-    document.id === 'profile_photo'
+  return normalizeOnboardingDocumentTemplates(merged)
+    .filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION')
+    .map((document) => document.id === 'profile_photo'
       ? { ...document, documentTypeCode: 'PROFILE_PHOTO', required: true }
-      : document
-  );
+      : document);
 }
 
 export function instantiateOnboardingDocuments(

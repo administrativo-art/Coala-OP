@@ -1483,6 +1483,12 @@ export type OnboardingProcess = {
       validatedBy?: string | null;
       validatedByEmail?: string | null;
     } | null;
+    formDataValidation?: {
+      submissionAt?: string | null;
+      validatedAt?: string | null;
+      validatedBy?: string | null;
+      validatedByEmail?: string | null;
+    } | null;
     clinic?: {
       email?: string | null;
       name?: string | null;

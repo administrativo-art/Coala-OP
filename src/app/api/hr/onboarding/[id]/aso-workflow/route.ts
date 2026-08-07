@@ -4,7 +4,7 @@ import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/fi
 import { getStorage } from 'firebase-admin/storage';
 
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
-import { createAsoToken, formatAsoAppointment, isoAfterDays } from '@/features/hr/aso/workflow';
+import { createAsoToken, formatAsoAppointment, isoAfterDays, missingAsoEmailPrerequisites } from '@/features/hr/aso/workflow';
 import { candidateAsoEmailContent, candidateAsoProcessStartedEmailContent, clinicAsoEmailContent, renderCandidateAsoAppointmentEmail, renderCandidateAsoProcessStartedEmail, renderClinicAsoRequestEmail } from '@/features/hr/aso/emails';
 import { selectLatestSocialContract, type CompanyDocumentMetadata } from '@/features/hr/aso/company-document-selection';
 import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
@@ -119,6 +119,10 @@ function emailWasAccepted(status: unknown, providerId: unknown) {
   return Boolean(text(providerId, 300)) && ['accepted', 'delivered', 'delayed'].includes(text(status, 40));
 }
 
+function formSubmissionMarker(process: Record<string, unknown>) {
+  return text(process.publicFormLastSubmittedAt, 40) || text(process.publicFormSubmittedAt, 40);
+}
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message.trim() ? error.message : fallback;
 }
@@ -173,6 +177,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (action === 'validate_request') {
     const clinicEntityId = text(body.clinicEntityId, 180) || text(workflow.clinicEntityId, 180);
     if (!clinicEntityId) return NextResponse.json({ error: 'Selecione a clínica responsável pelo ASO.' }, { status: 409 });
+    if (text(workflow.paymentRequestId, 180) && clinicEntityId !== text(workflow.clinicEntityId, 180)) {
+      return NextResponse.json({ error: 'A clínica não pode ser alterada depois que o PIX foi enviado para pagamento.' }, { status: 409 });
+    }
     try {
       const current = await buildAsoRequestSnapshot(process, clinicEntityId);
       const requestValidation = {
@@ -210,6 +217,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
   }
 
+  if (action === 'confirm_form_data') {
+    const submissionAt = formSubmissionMarker(process);
+    if (!submissionAt) return NextResponse.json({ error: 'A candidata ainda não enviou o formulário da integração.' }, { status: 409 });
+    const formDataValidation = {
+      submissionAt,
+      validatedAt: now,
+      validatedBy: access.decoded.uid,
+      validatedByEmail: access.decoded.email ?? null,
+    };
+    await Promise.all([
+      processRef.set({ asoWorkflow: { ...workflow, formDataValidation, updatedAt: now }, updatedAt: now }, { merge: true }),
+      addEvent(id, 'ASO_FORM_DATA_VALIDATED', access, { submissionAt }),
+    ]);
+    return NextResponse.json({ ok: true, formDataValidation });
+  }
+
   if (action === 'start_process') {
     if (process.status === 'cancelled' || process.status === 'completed') {
       return NextResponse.json({ error: 'Esta integração não permite iniciar o processo do ASO.' }, { status: 409 });
@@ -230,34 +253,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return NextResponse.json({ error: 'Os dados da solicitação mudaram após a validação. Valide novamente antes de iniciar.' }, { status: 409 });
     }
 
-    const actor = { uid: access.decoded.uid, email: access.decoded.email ?? null, name: access.actorName };
+    const paymentRequestId = text(workflow.paymentRequestId, 180);
+    if (!paymentRequestId) {
+      return NextResponse.json({ error: 'Envie o PIX para pagamento antes de liberar os e-mails do ASO.' }, { status: 409 });
+    }
     let payment;
     try {
-      const clinicConfig = await hrDbAdmin.collection('asoClinicConfigs').doc(clinicEntityId).get();
-      payment = await createPaymentRequest({
-        sourceType: 'aso',
-        sourceId: id,
-        beneficiaryReference: { sourceType: 'entity', sourceId: clinicEntityId },
-        amount: currentRequest.clinicPrice,
-        description: text(clinicConfig.get('defaultPaymentDescription'), 140)
-          || `Pagamento de ASO ${currentRequest.examType === 'dismissal' ? 'demissional' : 'admissional'}`,
-      }, actor);
+      payment = await getPaymentRequest(paymentRequestId);
     } catch (error) {
-      return NextResponse.json({ error: errorMessage(error, 'Não foi possível criar a solicitação de pagamento do ASO.') }, { status: 409 });
+      return NextResponse.json({ error: errorMessage(error, 'Não foi possível consultar o pagamento do ASO.') }, { status: 409 });
     }
-
-    await hrDbAdmin.collection('hrNotifications').doc(`aso_payment_${id}`).set({
-      type: 'aso_payment_authorization',
-      status: payment.status === 'awaiting_financial_authorization' ? 'pending' : 'completed',
-      onboardingId: id,
-      terminationId: text(process.sourceTerminationId) || null,
-      title: `Pagamento de ASO — ${currentRequest.candidateName}`,
-      message: `Autorize o PIX de ${payment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para ${payment.beneficiarySnapshot.name}. Após a autorização, o sistema enviará automaticamente ao Banco Inter.`,
-      channels: ['in_app'],
-      recipient: { strategy: 'financial_pool' },
-      createdAt: now,
-      updatedAt: now,
-    }, { merge: true });
+    if (Math.abs(Number(payment.amount) - currentRequest.clinicPrice) > 0.005) {
+      return NextResponse.json({ error: 'O valor da clínica mudou depois da criação do PIX. Revise o cadastro antes de continuar.' }, { status: 409 });
+    }
+    const submissionAt = formSubmissionMarker(process);
+    const formDataValidation = record(workflow.formDataValidation);
+    const missing = missingAsoEmailPrerequisites({
+      documents: Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [],
+      expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
+      formDataConfirmed: Boolean(submissionAt && text(formDataValidation.submissionAt, 40) === submissionAt),
+      paymentPaid: payment.status === 'paid' && Boolean(payment.proofStoragePath),
+    });
+    if (missing.length > 0) {
+      return NextResponse.json({ error: `Conclua os pré-requisitos antes de enviar os e-mails: ${missing.join('; ')}.` }, { status: 409 });
+    }
 
     const clinicCommunicationRef = hrDbAdmin.collection('emailCommunications').doc(`aso_clinic_start_${id}`);
     const clinicCommunicationSnapshot = await clinicCommunicationRef.get();
@@ -273,16 +292,27 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       const replyToken = createAsoToken();
       const replyUrl = `${PUBLIC_URL}/aso/clinica/${replyToken.token}`;
       const socialContract = await latestSocialContract();
+      const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
+      let paymentProofContents: Buffer;
+      try {
+        [paymentProofContents] = await bucket.file(payment.proofStoragePath!).download();
+      } catch {
+        return NextResponse.json({ error: 'O pagamento foi confirmado, mas o comprovante ainda não está disponível para o envio.' }, { status: 409 });
+      }
+      const paymentAttachment = { filename: 'Comprovante de pagamento.pdf', content: paymentProofContents.toString('base64'), contentType: 'application/pdf' };
       let contractAttachment: { filename: string; content: string; contentType: string } | null = null;
       if (socialContract) {
         try {
-          const [contents] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(text(socialContract.storagePath, 1500)).download();
+          const [contents] = await bucket.file(text(socialContract.storagePath, 1500)).download();
           contractAttachment = { filename: 'Contrato social.pdf', content: contents.toString('base64'), contentType: 'application/pdf' };
         } catch {
           contractAttachment = null;
         }
       }
-      const attachmentDescriptions = contractAttachment ? [{ label: 'Contrato social', fileName: contractAttachment.filename }] : [];
+      const attachmentDescriptions = [
+        ...(contractAttachment ? [{ label: 'Contrato social', fileName: contractAttachment.filename }] : []),
+        { label: 'Comprovante de pagamento', fileName: paymentAttachment.filename },
+      ];
       const clinicContent = clinicAsoEmailContent({
         candidateName: currentRequest.candidateName,
         candidateCpf: currentRequest.candidateCpf,
@@ -328,7 +358,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
             examType: currentRequest.examType,
           }),
           text: `${clinicContent.text}\n\nInforme o agendamento: ${replyUrl}`,
-          ...(contractAttachment ? { attachments: [contractAttachment] } : {}),
+          attachments: [...(contractAttachment ? [contractAttachment] : []), paymentAttachment],
           tags: [{ name: 'category', value: 'aso_clinic_request' }, { name: 'onboarding_id', value: id.slice(0, 256) }],
         });
         clinicEmailResult = { ...clinicEmailResult, status: 'accepted', providerId: result.id };
@@ -472,31 +502,35 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (action === 'request_payment') {
-    const guide = await latestGuide(id, workflow);
-    const validation = record(workflow.guideValidation);
-    if (!guide || text(validation.documentId) !== guide.id) return NextResponse.json({ error: 'Valide a versão atual da guia antes de solicitar o pagamento.' }, { status: 409 });
-    let clinicEntityId = text(body.clinicEntityId, 180) || text(workflow.clinicEntityId, 180);
-    if (!clinicEntityId) {
-      const activeClinics = await hrDbAdmin.collection('asoClinicConfigs').where('active', '==', true).limit(2).get();
-      if (activeClinics.size !== 1) return NextResponse.json({ error: 'Selecione a clínica responsável pelo ASO.' }, { status: 409 });
-      clinicEntityId = activeClinics.docs[0].id;
+    const requestValidation = record(workflow.requestValidation);
+    const clinicEntityId = text(requestValidation.clinicEntityId, 180) || text(workflow.clinicEntityId, 180);
+    if (!clinicEntityId || !text(requestValidation.fingerprint, 128)) {
+      return NextResponse.json({ error: 'Valide a solicitação antes de enviar o PIX para pagamento.' }, { status: 409 });
+    }
+    let currentRequest: Awaited<ReturnType<typeof buildAsoRequestSnapshot>>;
+    try {
+      currentRequest = await buildAsoRequestSnapshot(process, clinicEntityId);
+    } catch (error) {
+      return NextResponse.json({ error: errorMessage(error, 'A solicitação precisa ser validada novamente.') }, { status: 409 });
+    }
+    if (currentRequest.fingerprint !== text(requestValidation.fingerprint, 128)) {
+      return NextResponse.json({ error: 'Os dados da solicitação mudaram. Valide novamente antes de enviar o PIX para pagamento.' }, { status: 409 });
     }
     const clinicSnapshot = await hrDbAdmin.collection('asoClinicConfigs').doc(clinicEntityId).get();
     if (!clinicSnapshot.exists || clinicSnapshot.get('active') === false) return NextResponse.json({ error: 'A clínica selecionada está ausente ou inativa.' }, { status: 409 });
-    const amount = Number(clinicSnapshot.get('asoPrice'));
-    if (!Number.isFinite(amount) || amount <= 0) return NextResponse.json({ error: 'O valor do ASO não está configurado para a clínica.' }, { status: 409 });
+    const amount = currentRequest.clinicPrice;
     const actor = { uid: access.decoded.uid, email: access.decoded.email ?? null, name: access.actorName };
-    let payment = await createPaymentRequest({
+    const payment = await createPaymentRequest({
       sourceType: 'aso', sourceId: id, beneficiaryReference: { sourceType: 'entity', sourceId: clinicEntityId },
       amount, description: text(clinicSnapshot.get('defaultPaymentDescription'), 140) || `Pagamento de ASO ${process.asoExamType === 'dismissal' ? 'demissional' : 'admissional'}`,
     }, actor);
     const clinicName = payment.beneficiarySnapshot.name;
     const clinicEmail = email(clinicSnapshot.get('schedulingEmail'));
     await Promise.all([
-      processRef.set({ asoWorkflow: { ...workflow, status: 'guide_validated', clinicEntityId, paymentRequestId: payment.id, paymentStatus: payment.status, clinic: { ...record(workflow.clinic), name: clinicName, email: clinicEmail }, updatedAt: now }, updatedAt: now }, { merge: true }),
+      processRef.set({ asoWorkflow: { ...workflow, status: 'request_validated', clinicEntityId, paymentRequestId: payment.id, paymentStatus: payment.status, paymentProofStoragePath: payment.proofStoragePath ?? null, paymentConfirmedAt: payment.paidAt ?? null, clinic: { ...record(workflow.clinic), name: clinicName, email: clinicEmail }, updatedAt: now }, updatedAt: now }, { merge: true }),
       addEvent(id, 'ASO_PAYMENT_REQUESTED', access, { paymentRequestId: payment.id, clinicEntityId, amount, paymentStatus: payment.status }),
       hrDbAdmin.collection('hrNotifications').doc(`aso_payment_${id}`).set({
-        type: 'aso_payment_authorization', status: 'pending', onboardingId: id, terminationId: text(process.sourceTerminationId) || null,
+        type: 'aso_payment_authorization', status: payment.status === 'paid' ? 'completed' : 'pending', onboardingId: id, terminationId: text(process.sourceTerminationId) || null,
         title: `Pagamento de ASO — ${text(process.candidateName, 180) || 'colaborador'}`,
         message: `Autorize o PIX de ${amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para ${clinicName}. Após a autorização, o sistema enviará automaticamente ao Banco Inter.`,
         channels: ['in_app'], recipient: { strategy: 'financial_pool' }, createdAt: now, updatedAt: now,
@@ -522,6 +556,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!paymentRequestId) return NextResponse.json({ error: 'Solicite e confirme o pagamento do ASO antes do envio à clínica.' }, { status: 409 });
     const payment = await getPaymentRequest(paymentRequestId);
     if (payment.status !== 'paid' || !payment.proofStoragePath) return NextResponse.json({ error: 'O e-mail só será liberado após o Banco Inter confirmar o pagamento e o comprovante estar disponível.' }, { status: 409 });
+    const submissionAt = formSubmissionMarker(process);
+    const formDataValidation = record(workflow.formDataValidation);
+    const missing = missingAsoEmailPrerequisites({
+      documents: Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [],
+      expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
+      formDataConfirmed: Boolean(submissionAt && text(formDataValidation.submissionAt, 40) === submissionAt),
+      paymentPaid: true,
+    });
+    if (missing.length > 0) return NextResponse.json({ error: `Conclua os pré-requisitos antes de enviar o e-mail: ${missing.join('; ')}.` }, { status: 409 });
     const clinicEntityId = text(workflow.clinicEntityId, 180);
     const clinicConfig = clinicEntityId ? await hrDbAdmin.collection('asoClinicConfigs').doc(clinicEntityId).get() : null;
     const clinicEmail = email(clinicConfig?.get('schedulingEmail'));

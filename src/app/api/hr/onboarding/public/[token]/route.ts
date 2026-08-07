@@ -215,11 +215,11 @@ function withUniversalDocuments(documents: OnboardingDocument[]) {
   return mergeExpectedDocuments(
     documents,
     instantiateOnboardingDocuments(DEFAULT_ONBOARDING_DOCUMENTS, documents)
-  ).map((document) =>
-    document.id === 'profile_photo'
-      ? { ...document, documentTypeCode: 'PROFILE_PHOTO', required: true }
-      : document
-  );
+  ).map((document) => {
+    if (document.id === 'profile_photo') return { ...document, documentTypeCode: 'PROFILE_PHOTO', required: true };
+    if (document.id === 'aso_admission' || document.documentTypeCode === 'ASO_ADMISSION') return { ...document, required: false };
+    return document;
+  });
 }
 
 function canCandidateUploadDocument(document: OnboardingDocument) {
@@ -478,7 +478,7 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
     pjWorkflow: data.pjWorkflow ?? null,
     status: data.status ?? null,
     currentStage: data.currentStage ?? null,
-    documents: documents.map(document => ({
+    documents: documents.filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION').map(document => ({
       id: document.id,
       label: document.label,
       description: document.description ?? null,

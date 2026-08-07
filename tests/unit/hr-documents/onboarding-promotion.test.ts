@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 import { onboardingDocumentTypeCode } from "../../../src/lib/hr/onboarding-document-classification";
-import { mergeOnboardingDocumentModels } from "../../../src/lib/recruitment-onboarding";
+import { DEFAULT_ONBOARDING_DOCUMENTS, mergeOnboardingDocumentModels } from "../../../src/lib/recruitment-onboarding";
 
 describe("classificação de documentos da integração", () => {
   test("mapeia documentos universais antigos sem documentTypeCode", () => {
@@ -25,5 +25,14 @@ describe("classificação de documentos da integração", () => {
     assert.ok(photo);
     assert.equal(photo.required, true);
     assert.equal(photo.documentTypeCode, "PROFILE_PHOTO");
+  });
+
+  test("mantém o ASO no fluxo dedicado, fora dos documentos iniciais", () => {
+    assert.equal(DEFAULT_ONBOARDING_DOCUMENTS.some((document) => document.documentTypeCode === "ASO_ADMISSION"), false);
+
+    const documents = mergeOnboardingDocumentModels([
+      { id: "aso_admission", label: "ASO admissional", documentTypeCode: "ASO_ADMISSION", required: true },
+    ]);
+    assert.equal(documents.some((document) => document.documentTypeCode === "ASO_ADMISSION"), false);
   });
 });

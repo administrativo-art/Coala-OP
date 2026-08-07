@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
+import type { OnboardingDocument } from '@/types';
+
 export function createAsoToken() {
   const token = randomBytes(32).toString('base64url');
   return { token, hash: hashAsoToken(token) };
@@ -35,4 +37,28 @@ export function formatAsoAppointment(date: string, time: string) {
   return new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Belem', day: '2-digit', month: '2-digit', year: 'numeric',
   }).format(instant) + ` às ${time}`;
+}
+
+export function missingAsoEmailPrerequisites(input: {
+  documents: OnboardingDocument[];
+  expectedAdmissionDate?: string | null;
+  formDataConfirmed: boolean;
+  paymentPaid: boolean;
+}) {
+  const missing: string[] = [];
+  const requiredDocuments = input.documents.filter(document => (
+    document.required !== false
+    && document.id !== 'aso_admission'
+    && document.documentTypeCode !== 'ASO_ADMISSION'
+  ));
+  if (requiredDocuments.some(document => document.status !== 'approved')) {
+    missing.push('aprovação de todos os documentos obrigatórios');
+  }
+  if (requiredDocuments.some(document => document.status === 'approved' && (!document.filePath || !document.filePath.trim()))) {
+    missing.push('arquivo auditável dos documentos aprovados');
+  }
+  if (!input.formDataConfirmed) missing.push('conferência dos dados do formulário');
+  if (!input.expectedAdmissionDate) missing.push('data de admissão');
+  if (!input.paymentPaid) missing.push('confirmação do pagamento do ASO');
+  return missing;
 }

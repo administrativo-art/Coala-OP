@@ -1,5 +1,6 @@
 import type { OnboardingDocument, OnboardingProcess, PjOnboardingStepId } from '@/types';
 import { PJ_ONBOARDING_STEP_LABELS, PJ_ONBOARDING_STEP_ORDER } from '@/features/hr/onboarding-pj/core';
+import { DEFAULT_ONBOARDING_STAGES } from '@/lib/recruitment-onboarding';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -97,7 +98,11 @@ function daysSince(value: string | null, now: Date) {
 }
 
 function requiredDocuments(process: OnboardingProcess) {
-  return (process.documents ?? []).filter(document => document.required !== false);
+  return (process.documents ?? []).filter(document => (
+    document.required !== false
+    && document.id !== 'aso_admission'
+    && document.documentTypeCode !== 'ASO_ADMISSION'
+  ));
 }
 
 function documentHasFile(document: OnboardingDocument) {
@@ -116,9 +121,7 @@ function baseStatus(
   status: Omit<OnboardingOperationalStatus, 'stageStartedAt' | 'daysInStage' | 'overdueDays'>,
   now: Date,
 ): OnboardingOperationalStatus {
-  const customStageStartedAt = process.integrationV2?.currentStageStartedAt;
   const stageStartedAt = process.currentStageStartedAt
-    ?? customStageStartedAt
     ?? process.updatedAt
     ?? process.createdAt
     ?? null;
@@ -244,10 +247,6 @@ function resolvePjStatus(process: OnboardingProcess, now: Date) {
   return status(process, 'on_track', stepLabel, 'Processo PJ em andamento.', 'system', now);
 }
 
-function customIntegrationFailure(process: OnboardingProcess) {
-  return Object.values(process.integrationV2?.actionResults ?? {}).find(result => result.status === 'failed');
-}
-
 function resolveCltStatus(process: OnboardingProcess, now: Date) {
   const required = requiredDocuments(process);
   const missingRequired = required.filter(document => !documentHasFile(document));
@@ -257,14 +256,12 @@ function resolveCltStatus(process: OnboardingProcess, now: Date) {
   const accountant = process.accountantWorkflow;
   const signatures = signatureDocuments(process);
   const signatureFailure = signatures.find(document => ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(document.status ?? ''));
-  const customFailure = customIntegrationFailure(process);
 
   if (onboardingPublicLinkIsExpired(process, now) && !process.publicFormSubmittedAt) {
     return status(process, 'blocked', 'Link de formalização expirado', 'O RH precisa prorrogar ou reabrir o acesso da pessoa.', 'rh', now);
   }
   if (
     signatureFailure
-    || customFailure
     || failedCommunication(aso?.clinic?.emailStatus)
     || failedCommunication(aso?.candidateStartNotification?.emailStatus)
     || ['failed', 'rejected', 'approval_expired'].includes(aso?.paymentStatus ?? '')
@@ -277,7 +274,6 @@ function resolveCltStatus(process: OnboardingProcess, now: Date) {
       'blocked',
       'Processo precisa de correção',
       signatureFailure?.lastError
-        ?? customFailure?.error
         ?? accountant?.email?.lastError
         ?? process.accessProvisioning?.email?.lastError
         ?? process.pdvAccess?.lastError
@@ -351,10 +347,6 @@ function resolveCltStatus(process: OnboardingProcess, now: Date) {
     if ((process.integrationAlerts ?? []).some(alert => alert.status !== 'resolved')) {
       return status(process, 'hr_action', 'Sincronizar acessos e integrações', 'Bizneo, PDV ou verificações operacionais ainda estão pendentes.', 'rh', now);
     }
-    if (process.integrationV2?.currentStageId) {
-      const customStage = process.integrationV2.snapshot.stages.find(item => item.id === process.integrationV2?.currentStageId);
-      return status(process, 'hr_action', customStage?.label ?? 'Concluir roteiro configurável', 'Há uma etapa do modelo de integração aguardando execução.', 'rh', now);
-    }
     return status(process, 'hr_action', 'Finalizar integração', 'Os requisitos principais foram concluídos.', 'rh', now);
   }
   return status(process, 'on_track', 'Processo em andamento', 'A integração está seguindo o fluxo previsto.', 'system', now);
@@ -427,30 +419,7 @@ export function onboardingProgress(process: OnboardingProcess) {
     };
   }
 
-  if (process.integrationV2 && process.integrationV2.snapshot.stages.length > 0 && (process.stages?.length ?? 0) === 0) {
-    const stages = [...process.integrationV2.snapshot.stages].sort((left, right) => left.order - right.order);
-    const visible = stages.filter(stage => process.integrationV2?.stageStatuses[stage.id] !== 'skipped');
-    const currentIndex = visible.findIndex(stage => stage.id === process.integrationV2?.currentStageId);
-    const completed = visible.filter(stage => process.integrationV2?.stageStatuses[stage.id] === 'completed').length;
-    const current = process.integrationV2.currentStageId ? Math.max(1, currentIndex + 1) : Math.max(completed, visible.length);
-    const currentStage = visible.find(stage => stage.id === process.integrationV2?.currentStageId);
-    return {
-      current,
-      total: visible.length,
-      label: currentStage?.label ?? 'Roteiro configurável concluído',
-      steps: visible.map(stage => ({
-        id: stage.id,
-        label: stage.label,
-        state: process.integrationV2?.stageStatuses[stage.id] === 'completed'
-          ? 'done' as const
-          : stage.id === process.integrationV2?.currentStageId
-            ? 'active' as const
-            : 'pending' as const,
-      })),
-    };
-  }
-
-  const stages = [...(process.stages ?? [])]
+  const stages = [...((process.stages?.length ?? 0) > 0 ? process.stages! : DEFAULT_ONBOARDING_STAGES)]
     .sort((left, right) => left.order - right.order)
     .filter((stage, index, all) => stage.id !== 'document_review' || !all.some(item => item.id === 'documents'));
   const normalizedCurrent = process.currentStage === 'document_review' ? 'documents' : process.currentStage;
