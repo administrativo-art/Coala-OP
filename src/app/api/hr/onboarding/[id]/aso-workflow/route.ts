@@ -689,7 +689,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     await Promise.all([
       processRef.set({
         asoWorkflow: { ...workflow, status: decision === 'approved' ? 'completed' : 'aso_received', asoDocument: { ...aso, status: decision, reviewedAt: now, reviewedBy: access.decoded.uid, rejectionReason: decision === 'rejected' ? reason : null }, updatedAt: now },
-        ...(advancedToAccountant ? { currentStage: 'accountant', status: 'accountant_pending' } : {}),
+        ...(advancedToAccountant ? { currentStage: 'accountant', currentStageStartedAt: now, status: 'accountant_pending' } : {}),
         updatedAt: now,
       }, { merge: true }),
       addEvent(id, decision === 'approved' ? 'ASO_APPROVED' : 'ASO_REJECTED', access, { reason: reason || null }),

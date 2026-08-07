@@ -42,6 +42,10 @@ const DPOrgChart = dynamic(
   () => import("@/components/dp/dp-org-chart").then((m) => m.DPOrgChart),
   { ssr: false }
 );
+const AccessProfilesSettings = dynamic(
+  () => import("@/components/access-profiles-settings").then((m) => m.AccessProfilesSettings),
+  { ssr: false }
+);
 const DPLoginAccessDiagnostic = dynamic(
   () => import("@/components/dp/dp-login-access-diagnostic").then((m) => m.DPLoginAccessDiagnostic),
   { ssr: false }
@@ -609,6 +613,13 @@ export default function SettingsPage() {
       content: <DPOrgChart />,
     },
     {
+      value: "access-profiles",
+      label: "Perfis de acesso",
+      title: "Perfis de acesso",
+      description: "Crie e edite os perfis de permissão aplicados aos colaboradores.",
+      content: <AccessProfilesSettings canEdit={!!permissions.settings.manageProfiles} />,
+    },
+    {
       value: "login-access",
       label: "Acesso por escala",
       title: "Acesso por escala",
@@ -683,6 +694,9 @@ export default function SettingsPage() {
         permissions.dp?.collaborators?.terminate
       );
     }
+    if (tab.value === "access-profiles") {
+      return !!permissions.settings.manageProfiles;
+    }
     if (tab.value === "login-access") {
       return !!(
         permissions.settings.manageUsers ||
@@ -743,7 +757,7 @@ export default function SettingsPage() {
       title: "Equipe e organograma",
       description: "Gerencie cargos, funções e a estrutura organizacional.",
       content: null,
-      children: pickPersonalTabs(["roles", "organogram"]),
+      children: pickPersonalTabs(["roles", "organogram", "access-profiles"]),
     },
     {
       value: "collaborator-profile",

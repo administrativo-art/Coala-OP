@@ -10,6 +10,7 @@ export type IntegrationProcessExecution = {
   uploads: Record<string, unknown>;
   stageStatuses: Record<string, "pending" | "active" | "completed" | "skipped">;
   currentStageId: string | null;
+  currentStageStartedAt?: string | null;
   startedAt: string;
   updatedAt: string;
   assignees?: Record<string, { strategy: string; referenceId?: string; resolvedId?: string; resolvedType?: string }>;
@@ -35,6 +36,7 @@ export function createIntegrationExecution(params: {
     uploads: {},
     stageStatuses: Object.fromEntries(orderedStages.map((stage, index) => [stage.id, index === 0 ? "active" : "pending"])),
     currentStageId: firstStageId,
+    currentStageStartedAt: firstStageId ? params.now : null,
     startedAt: params.now,
     updatedAt: params.now,
     assignees: {},
@@ -61,7 +63,19 @@ export function updateIntegrationExecution(
     ? orderedVisibleStages.find((stage) => statuses[stage.id] !== "completed")?.id ?? null
     : execution.currentStageId;
   if (currentStageId && statuses[currentStageId] !== "completed") statuses[currentStageId] = "active";
-  return { ...execution, answers, uploads, stageStatuses: statuses, currentStageId, updatedAt: now };
+  return {
+    ...execution,
+    answers,
+    uploads,
+    stageStatuses: statuses,
+    currentStageId,
+    currentStageStartedAt: currentStageId === execution.currentStageId
+      ? execution.currentStageStartedAt ?? execution.startedAt
+      : currentStageId
+        ? now
+        : null,
+    updatedAt: now,
+  };
 }
 
 export function advanceIntegrationExecution(execution: IntegrationProcessExecution, now: string) {
@@ -75,5 +89,11 @@ export function advanceIntegrationExecution(execution: IntegrationProcessExecuti
   if (execution.currentStageId) statuses[execution.currentStageId] = "completed";
   const next = visible.slice(currentIndex + 1).find((stage) => statuses[stage.id] !== "completed");
   if (next) statuses[next.id] = "active";
-  return { ...execution, stageStatuses: statuses, currentStageId: next?.id ?? null, updatedAt: now };
+  return {
+    ...execution,
+    stageStatuses: statuses,
+    currentStageId: next?.id ?? null,
+    currentStageStartedAt: next ? now : null,
+    updatedAt: now,
+  };
 }

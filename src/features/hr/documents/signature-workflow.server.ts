@@ -703,7 +703,8 @@ export async function sendSignatureDocuments(params: {
       .map(record)
       .some((stage) => stage.id === "signature");
     if (hasSignatureStage) {
-      await process.ref.set({ currentStage: "signature", status: "contract_pending", updatedAt: new Date().toISOString() }, { merge: true });
+      const stageStartedAt = new Date().toISOString();
+      await process.ref.set({ currentStage: "signature", currentStageStartedAt: stageStartedAt, status: "contract_pending", updatedAt: stageStartedAt }, { merge: true });
     }
   }
   return listSignatureWorkflow(params.onboardingId);
@@ -1154,15 +1155,17 @@ export async function advanceOnboardingAfterSignatures(onboardingId: string) {
   const currentStage = text(process.data.currentStage);
   if (currentStage !== "signature" && currentStage !== "signature_preparation") return false;
   const nextStage = nextLegacyStage(process.data, "signature") ?? nextLegacyStage(process.data, currentStage);
+  const stageStartedAt = new Date().toISOString();
   await process.ref.set({
     currentStage: nextStage ?? currentStage,
+    ...(nextStage && nextStage !== currentStage ? { currentStageStartedAt: stageStartedAt } : {}),
     status: onboardingStatusForStage(nextStage),
     signatureWorkflow: {
       status: "completed",
       total: selected.length,
       completedAt: new Date().toISOString(),
     },
-    updatedAt: new Date().toISOString(),
+    updatedAt: stageStartedAt,
   }, { merge: true });
   return true;
 }

@@ -13,7 +13,7 @@ export interface ProductsContextType {
   products: Product[];
   loading: boolean;
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
-  updateProduct: (updatedProduct: Product) => Promise<void>;
+  updateProduct: (updatedProduct: Pick<Product, 'id'> & Partial<Omit<Product, 'id'>>) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
   deleteMultipleProducts: (productIds: string[]) => Promise<void>;
   getProductFullName: (product: Product | null | undefined) => string;
@@ -148,7 +148,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     if (!response.ok) throw new Error('Falha ao adicionar produto.');
   }, [firebaseUser]);
 
-  const updateProduct = useCallback(async (updatedProduct: Product) => {
+  const updateProduct = useCallback(async (updatedProduct: Pick<Product, 'id'> & Partial<Omit<Product, 'id'>>) => {
     if (!firebaseUser) throw new Error('Usuário não autenticado.');
     const { id, ...dataToUpdate } = updatedProduct;
     const token = await firebaseUser.getIdToken();

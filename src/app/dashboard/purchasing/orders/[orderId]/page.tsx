@@ -228,6 +228,7 @@ export default function PurchaseOrderPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [installmentPlanOpen, setInstallmentPlanOpen] = useState(false);
   const [itemsEditOpen, setItemsEditOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [syncingExpense, setSyncingExpense] = useState(false);
@@ -605,9 +606,14 @@ export default function PurchaseOrderPage() {
                           size="sm"
                           variant="outline"
                           className="mt-1 border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
-                          onClick={() =>
-                            unregisteredStockItems.length > 0 ? setItemsEditOpen(true) : openEdit()
-                          }
+                          onClick={() => {
+                            if (unregisteredStockItems.length > 0) {
+                              setEditingItemId(unregisteredStockItems[0]?.id ?? null);
+                              setItemsEditOpen(true);
+                            } else {
+                              openEdit();
+                            }
+                          }}
                         >
                           <Pencil className="mr-2 h-3.5 w-3.5" />
                           {unregisteredStockItems.length > 0 ? 'Revisar itens' : 'Completar dados'}
@@ -770,9 +776,16 @@ export default function PurchaseOrderPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   {isCreated && canEdit && (
-                    <Button variant="ghost" size="sm" onClick={() => setItemsEditOpen(true)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditingItemId(null);
+                        setItemsEditOpen(true);
+                      }}
+                    >
                       <Pencil className="mr-2 h-3 w-3" />
-                      Editar itens
+                      Gerenciar itens
                     </Button>
                   )}
                   <span className="text-sm text-muted-foreground">{items.length} item(ns)</span>
@@ -831,9 +844,25 @@ export default function PurchaseOrderPage() {
                               )}
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
+                          <div className="flex shrink-0 items-start gap-3">
+                            {isCreated && canEdit ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingItemId(item.id);
+                                  setItemsEditOpen(true);
+                                }}
+                              >
+                                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                                Editar
+                              </Button>
+                            ) : null}
+                            <div className="text-right">
                             <p className="text-sm text-muted-foreground">Subtotal</p>
                             <p className="font-semibold">{fmt(item.totalOrdered)}</p>
+                            </div>
                           </div>
                         </div>
                         {item.notes && (
@@ -1346,9 +1375,13 @@ export default function PurchaseOrderPage() {
         <ManageOrderItemsModal
           orderId={params.orderId}
           initialItems={items}
+          initialItemId={editingItemId}
           deliveryFee={order?.deliveryFee ?? 0}
           open={itemsEditOpen}
-          onOpenChange={setItemsEditOpen}
+          onOpenChange={(nextOpen) => {
+            setItemsEditOpen(nextOpen);
+            if (!nextOpen) setEditingItemId(null);
+          }}
           onSuccess={() => {
             fetchOrderItems(params.orderId).then(setItems);
           }}

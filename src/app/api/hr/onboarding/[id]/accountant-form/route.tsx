@@ -135,7 +135,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     processRef.collection('generatedDocuments').doc(generatedId).set(generated),
     processRef.set({
       stages: applyOnboardingSignatureMode(normalizeOnboardingStages(process.stages), process.generateSignatureDocuments === true),
-      currentStage: 'accountant', status: 'accountant_pending',
+      currentStage: 'accountant',
+      ...(process.currentStage === 'accountant' ? {} : { currentStageStartedAt: now }),
+      status: 'accountant_pending',
       accountantWorkflow: { ...previousWorkflow, status: 'form_generated', latestFormId: generatedId, latestFormHashSha256: hashSha256, latestFormGeneratedAt: now, formValidation: null, formData: { monthlySalary }, updatedAt: now }, updatedAt: now,
     }, { merge: true }),
     processRef.collection('accountantEvents').doc(randomUUID()).set({ type: 'ACCOUNTANT_FORM_GENERATED', at: now, actorId: access.decoded.uid, actorEmail: access.decoded.email ?? null, documentId: generatedId, hashSha256 }),

@@ -820,6 +820,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return jsonError('Confirme a sincronização do Bizneo e do PDV Legal antes de avançar.', 409);
     }
     update.currentStage = currentStage;
+    if (currentStage !== process.currentStage) update.currentStageStartedAt = now;
     update.status = nextStatusForStage(currentStage);
   } else if (action === 'save_finalization') {
     if (process.currentStage !== 'formalization_validation') {
@@ -904,6 +905,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     };
     update.status = isPj ? 'active' : 'awaiting_first_access';
     update.currentStage = isPj ? 'integration' : 'formalization_validation';
+    if ((isPj ? 'integration' : 'formalization_validation') !== process.currentStage) {
+      update.currentStageStartedAt = now;
+    }
     update.publicToken = null;
     update.publicTokenClosedAt = now;
     update.integrationAlerts = isPj ? [] : await verifyAccessIntegrations({ process, collaboratorUserId: created.userId, now });
@@ -1021,6 +1025,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
     update.status = 'completed';
     update.currentStage = 'done';
+    update.currentStageStartedAt = now;
     update.completedAt = now;
   } else if (action === 'cancel') {
     if (process.status === 'completed') {
@@ -1054,6 +1059,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     });
     if (missing.length === 0) {
       update.currentStage = 'accountant';
+      if (process.currentStage !== 'accountant') update.currentStageStartedAt = now;
       update.status = 'accountant_pending';
     }
   }

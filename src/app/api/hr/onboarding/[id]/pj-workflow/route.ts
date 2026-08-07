@@ -217,6 +217,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         Object.assign(update, { publicToken, ...createOnboardingPublicLinkWindow(new Date(now)), publicTokenClosedAt: null });
       }
       update.currentStage = 'documents';
+      if (process.currentStage !== 'documents') update.currentStageStartedAt = now;
       update.status = 'collecting_documents';
       await sendTrackedIntegrationCommunication({
         onboardingId: id,
@@ -248,6 +249,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         review: { status: 'approved', issues: [], reviewedAt: now, reviewedBy: access.decoded.uid },
       }, 'contract_preparation', now, access.decoded.uid);
       update.currentStage = 'signature_preparation';
+      if (process.currentStage !== 'signature_preparation') update.currentStageStartedAt = now;
       update.status = 'contract_pending';
     } else if (action === 'save_contract_settings') {
       if (workflow.currentStep !== 'contract_preparation') throw new Error('O contrato só pode ser preparado na etapa 4.');
@@ -300,6 +302,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         contract: { ...workflow.contract, status: 'approved', approvedAt: now, approvedBy: access.decoded.uid },
       }, 'contract_signature', now, access.decoded.uid);
       update.currentStage = 'signature';
+      if (process.currentStage !== 'signature') update.currentStageStartedAt = now;
     } else if (action === 'send_contract') {
       if (workflow.currentStep !== 'contract_signature' || workflow.contract?.status !== 'approved' || !workflow.contract.storagePath) {
         throw new Error('A minuta precisa estar aprovada antes do envio.');
@@ -352,6 +355,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           contract: { ...workflow.contract, status: 'signed', signedStoragePath, signedAt: now, lastError: null },
         }, 'financial_registration', now, 'system:autentique');
         update.currentStage = 'formalization_validation';
+        if (process.currentStage !== 'formalization_validation') update.currentStageStartedAt = now;
         update.status = 'ready_to_create_user';
       } else {
         nextWorkflow.contract = { ...workflow.contract, lastError: null };
@@ -380,6 +384,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         finance: { ...workflow.finance, status: 'approved', reviewedAt: now, reviewedBy: access.decoded.uid, note: text(body.note, 2000) || workflow.finance?.note || null },
       }, 'access_configuration', now, access.decoded.uid);
       update.currentStage = 'integration';
+      if (process.currentStage !== 'integration') update.currentStageStartedAt = now;
       update.status = 'active';
     } else if (action === 'save_access') {
       if (workflow.currentStep !== 'access_configuration') throw new Error('Os acessos só podem ser configurados na etapa 7.');
@@ -428,6 +433,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       };
       update.status = 'completed';
       update.currentStage = 'done';
+      update.currentStageStartedAt = now;
       update.completedAt = now;
       update.publicToken = null;
       update.publicTokenClosedAt = now;

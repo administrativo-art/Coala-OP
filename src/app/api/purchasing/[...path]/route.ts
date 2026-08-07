@@ -1988,6 +1988,96 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     return NextResponse.json({ ok: true });
   }
 
+  if (resource === 'orders' && id && child === 'items' && childId) {
+    const orderRef = dbAdmin.collection('purchase_orders').doc(id);
+    const itemRef = orderRef.collection('items').doc(childId);
+    const [orderSnap, itemSnap, itemsSnap] = await Promise.all([
+      orderRef.get(),
+      itemRef.get(),
+      orderRef.collection('items').get(),
+    ]);
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    if (!itemSnap.exists) return jsonError('Item do pedido não encontrado.', 404);
+
+    const currentOrder = orderSnap.data()!;
+    const currentItem = itemSnap.data() ?? {};
+    const nextItem = { ...currentItem, ...body };
+    const quantity = Number(nextItem.quantityOrdered ?? 0);
+    const unitPrice = Number(nextItem.unitPriceOrdered ?? 0);
+    const discount = Number(nextItem.discountOrdered ?? 0);
+    if (quantity <= 0 || unitPrice <= 0) {
+      return jsonError('Quantidade e preço unitário devem ser maiores que zero.');
+    }
+
+    const totalOrdered = purchaseLineNetTotal({
+      quantityOrdered: quantity,
+      unitPriceOrdered: unitPrice,
+      discountOrdered: discount,
+    });
+    const netUnitPriceOrdered = purchaseLineEffectiveUnitPrice({
+      quantityOrdered: quantity,
+      unitPriceOrdered: unitPrice,
+      discountOrdered: discount,
+      totalOrdered,
+    });
+    const treatmentFields = purchaseItemTreatmentFields(nextItem);
+    const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
+    const nextTotalEstimated = Math.max(
+      itemsSnap.docs.reduce((sum, itemDocument) => {
+        if (itemDocument.id === childId) return sum + totalOrdered;
+        return sum + purchaseLineNetTotal(itemDocument.data());
+      }, 0) + Number(currentOrder.deliveryFee ?? 0),
+      0,
+    );
+
+    const batch = dbAdmin.batch();
+    batch.update(itemRef, {
+      baseItemId: nextItem.baseItemId || '',
+      productId: nextItem.productId ?? null,
+      itemName: nextItem.itemName ?? null,
+      operationalCategoryId: nextItem.operationalCategoryId ?? null,
+      operationalCategoryName: nextItem.operationalCategoryName ?? null,
+      itemDestination,
+      unit: nextItem.unit || '',
+      purchaseUnitType: nextItem.purchaseUnitType ?? 'content',
+      purchaseUnitLabel: nextItem.purchaseUnitLabel ?? (nextItem.unit || ''),
+      quantityOrdered: quantity,
+      unitPriceOrdered: unitPrice,
+      netUnitPriceOrdered,
+      discountOrdered: discount,
+      totalOrdered,
+      quotationItemId: nextItem.quotationItemId ?? null,
+      entryType: itemDestination,
+      ...treatmentFields,
+      notes: nextItem.notes ?? null,
+    });
+    batch.update(orderRef, { totalEstimated: nextTotalEstimated, updatedAt: now });
+    await batch.commit();
+
+    const financialSnap = await dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', id)
+      .get();
+    if (!financialSnap.empty) {
+      const deliveryFee = Number(currentOrder.deliveryFee ?? 0);
+      await Promise.all(
+        financialSnap.docs.map((financialDoc) =>
+          financialDoc.ref.set(
+            {
+              amountEstimated: nextTotalEstimated,
+              goodsAmountEstimated: Math.max(nextTotalEstimated - deliveryFee, 0),
+              freightAmountEstimated: deliveryFee,
+              updatedAt: now,
+            },
+            { merge: true },
+          ),
+        ),
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
   if (resource === 'orders' && id && !child) {
     const orderRef = dbAdmin.collection('purchase_orders').doc(id);
     const orderSnap = await orderRef.get();

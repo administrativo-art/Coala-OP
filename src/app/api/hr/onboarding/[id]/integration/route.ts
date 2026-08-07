@@ -94,7 +94,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         ? current.currentStageId
         : [...content.stages].sort((left, right) => left.order - right.order)[0]?.id ?? null;
       if (currentStageId && stageStatuses[currentStageId] !== "completed") stageStatuses[currentStageId] = "active";
-      next = { ...current, snapshot: { ...current.snapshot, ...content }, stageStatuses, currentStageId, updatedAt: now };
+      next = {
+        ...current,
+        snapshot: { ...current.snapshot, ...content },
+        stageStatuses,
+        currentStageId,
+        currentStageStartedAt: currentStageId === current.currentStageId
+          ? current.currentStageStartedAt ?? current.startedAt
+          : currentStageId
+            ? now
+            : null,
+        updatedAt: now,
+      };
     } else if (action === "advance") next = advanceIntegrationExecution(current, now);
     else next = updateIntegrationExecution(current, { answers: record(body.answers), uploads: record(body.uploads) }, now);
   } catch (caught) {

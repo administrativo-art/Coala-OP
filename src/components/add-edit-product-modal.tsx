@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useFieldArray, useForm, type DefaultValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine, Search, Database, AlertTriangle, ListChecks } from 'lucide-react';
+import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine, Search, Database, AlertTriangle, ListChecks, Save } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
@@ -44,6 +44,18 @@ const PhotoCaptureModal = dynamic(
   { ssr: false }
 );
 
+const requiredPositiveNumber = (requiredMessage: string, positiveMessage: string) =>
+    z.preprocess(
+        (value) => {
+            if (value === '' || value === null || value === undefined) return undefined;
+            return typeof value === 'number' ? value : Number(value);
+        },
+        z.number({
+            required_error: requiredMessage,
+            invalid_type_error: requiredMessage,
+        }).finite(requiredMessage).min(0.001, positiveMessage),
+    );
+
 const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
   brand: z.string().optional(),
@@ -53,7 +65,10 @@ const productFormSchema = z.object({
   imageUrl: z.string().optional(),
   packageType: z.string().min(1, 'O tipo de embalagem é obrigatório.'),
   category: z.enum(unitCategories),
-  packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
+  packageSize: requiredPositiveNumber(
+    'Informe a quantidade da embalagem.',
+    'A quantidade da embalagem deve ser maior que zero.',
+  ),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
   notes: z.string().optional(),
   baseProductId: z.string().optional(),
@@ -157,6 +172,23 @@ function makeInstructionSection(name = 'Lavagem') {
     };
 }
 
+function createEmptyProductFormValues(): DefaultValues<ProductFormValues> {
+    return {
+        baseName: '', brand: '', barcode: '', imageUrl: '',
+        ncm: '', cest: '',
+        packageType: '',
+        category: 'Massa', packageSize: undefined, unit: 'g',
+        notes: '', baseProductId: '',
+        operationalCategoryId: '',
+        apparelSize: '', apparelColor: '',
+        uniformCareInstructions: [makeInstructionSection()],
+        defaultCountingUnit: 'package',
+        enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
+        enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
+        nutritionalTableImageUrl: '', compositionImageUrl: '',
+    };
+}
+
 function normalizeUniformCareInstructions(value: ProductFormValues['uniformCareInstructions']) {
     return (value ?? [])
         .map((section) => ({
@@ -212,6 +244,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const [barcodeLookupLoading, setBarcodeLookupLoading] = useState(false);
     const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [highestStepPosition, setHighestStepPosition] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
     const nutritionalTableFileInputRef = useRef<HTMLInputElement>(null);
@@ -219,20 +252,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
-        defaultValues: {
-            baseName: '', brand: '', barcode: '', imageUrl: '',
-            ncm: '', cest: '',
-            packageType: '',
-            category: 'Massa', packageSize: undefined, unit: 'g',
-            notes: '', baseProductId: '',
-            operationalCategoryId: '',
-            apparelSize: '', apparelColor: '',
-            uniformCareInstructions: [makeInstructionSection()],
-            defaultCountingUnit: 'package',
-            enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
-            enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
-            nutritionalTableImageUrl: '', compositionImageUrl: '',
-        }
+        defaultValues: createEmptyProductFormValues(),
     });
 
     const {
@@ -343,6 +363,16 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
     };
 
+    const handleBaseProductChange = (value: string, onChange: (value: string) => void) => {
+        const nextValue = value || '';
+        onChange(nextValue);
+        const selectedBaseProduct = baseProducts.find((baseProduct) => baseProduct.id === nextValue);
+        if (!selectedBaseProduct) return;
+
+        handleCategoryChange(selectedBaseProduct.category);
+        form.setValue('unit', selectedBaseProduct.unit, { shouldDirty: true, shouldValidate: true });
+    };
+
     useEffect(() => {
         if (!wizardSteps.some((step) => step.id === currentStep)) {
             setCurrentStep(wizardSteps[wizardSteps.length - 1]?.id ?? 1);
@@ -352,6 +382,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     useEffect(() => {
         if (open) {
             setCurrentStep(1);
+            setHighestStepPosition(0);
             if (productToEdit) {
                  form.reset({
                     baseName: productToEdit.baseName,
@@ -386,20 +417,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 });
                 setAliases(productToEdit.aliases ?? []);
             } else {
-                form.reset({
-                    baseName: '', brand: '', barcode: '', imageUrl: '',
-                    ncm: '', cest: '',
-                    packageType: '',
-                    category: 'Massa', packageSize: undefined, unit: 'g',
-                    notes: '', baseProductId: '',
-                    operationalCategoryId: '',
-                    apparelSize: '', apparelColor: '',
-                    uniformCareInstructions: [makeInstructionSection()],
-                    defaultCountingUnit: 'package',
-                    enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
-                    enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
-                    nutritionalTableImageUrl: '', compositionImageUrl: '',
-                });
+                form.reset(createEmptyProductFormValues());
                 setAliases([]);
             }
             setAliasInput('');
@@ -532,12 +550,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
     };
 
-    const onSubmit = async (values: ProductFormValues) => {
-
-
+    const buildProductData = (values: ProductFormValues): Omit<Product, 'id'> => {
         const uniformCareInstructions = normalizeUniformCareInstructions(values.uniformCareInstructions);
 
-        const productData: Omit<Product, 'id'> = {
+        return {
             operationalCategoryId: values.operationalCategoryId,
             operationalCategoryName: activeCategories.find((category) => category.id === values.operationalCategoryId)?.name,
             operationalDestination: activeCategories.find((category) => category.id === values.operationalCategoryId)?.destination,
@@ -592,12 +608,13 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             detectedAllergens: showNutritionStep ? productToEdit?.detectedAllergens : undefined,
             aliases: aliases.length > 0 ? aliases : undefined,
         };
+    };
 
+    const createProduct = async (values: ProductFormValues) => {
+        const productData = buildProductData(values);
         setIsSaving(true);
         try {
-            if (productToEdit) {
-                await updateProduct({ ...productToEdit, ...productData });
-            } else if (barcodeLookup?.internalProduct?.id) {
+            if (barcodeLookup?.internalProduct?.id) {
                 if (!firebaseUser) throw new Error('Usuario nao autenticado.');
                 const token = await firebaseUser.getIdToken();
                 const response = await fetch(`/api/products/${barcodeLookup.internalProduct.id}`, {
@@ -628,6 +645,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             } else {
                 await addProduct(productData);
             }
+            toast({ title: 'Insumo cadastrado', description: 'O cadastro foi salvo com sucesso.' });
             onOpenChange(false);
         } catch (error) {
             toast({
@@ -638,6 +656,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const onSubmit = async (values: ProductFormValues) => {
+        if (productToEdit) return;
+        await createProduct(values);
     };
 
     const fieldStep: Partial<Record<keyof ProductFormValues, number>> = {
@@ -662,12 +685,143 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         5: [],
     };
 
+    const buildEditPayload = (
+        step: number,
+        values: ProductFormValues,
+    ): Partial<Omit<Product, 'id'>> => {
+        const selectedCategory = activeCategories.find((category) => category.id === values.operationalCategoryId);
+
+        if (step === 1) {
+            const lookupFields: Partial<Omit<Product, 'id'>> = selectedLookupProduct
+                ? {
+                    description: selectedLookupProduct.descricao,
+                    externalCategory: selectedLookupProduct.categoria,
+                    ingredients: selectedLookupProduct.ingredientes,
+                    nutritionFacts: selectedLookupProduct.informacoes_nutricionais,
+                    dataSource: selectedLookupProduct.origem_dados,
+                    confidence: selectedLookupProduct.confianca,
+                    lastBarcodeLookupAt: selectedLookupProduct.data_consulta,
+                    descricao: selectedLookupProduct.descricao,
+                    ingredientes: selectedLookupProduct.ingredientes,
+                    informacoes_nutricionais: selectedLookupProduct.informacoes_nutricionais,
+                    origem_dados: selectedLookupProduct.origem_dados,
+                    confianca: selectedLookupProduct.confianca,
+                    data_consulta: selectedLookupProduct.data_consulta,
+                }
+                : {};
+            const dirtyFields = form.formState.dirtyFields;
+            const packageSize = Number(values.packageSize);
+
+            return {
+                operationalCategoryId: values.operationalCategoryId,
+                operationalCategoryName: selectedCategory?.name,
+                operationalDestination: selectedCategory?.destination,
+                baseName: values.baseName,
+                brand: values.brand ?? '',
+                barcode: values.barcode ?? '',
+                gtin: values.barcode ?? '',
+                imageUrl: values.imageUrl ?? '',
+                ncm: values.ncm ?? '',
+                cest: values.cest ?? '',
+                codigo_barras: values.barcode ?? '',
+                nome: values.baseName,
+                marca: values.brand ?? '',
+                categoria_id: values.operationalCategoryId,
+                imagem_url: values.imageUrl ?? '',
+                notes: values.notes ?? '',
+                baseProductId: values.baseProductId ?? '',
+                apparelSize: isApparel ? values.apparelSize ?? '' : '',
+                apparelColor: isApparel ? values.apparelColor ?? '' : '',
+                ...(dirtyFields.category ? { category: values.category } : {}),
+                ...(dirtyFields.unit ? { unit: values.unit, unidade_medida: values.unit } : {}),
+                ...(dirtyFields.packageType ? { packageType: values.packageType as PackageType } : {}),
+                ...(dirtyFields.packageSize && Number.isFinite(packageSize)
+                    ? { packageSize, quantidade: packageSize }
+                    : {}),
+                ...(dirtyFields.defaultCountingUnit ? { defaultCountingUnit: values.defaultCountingUnit } : {}),
+                ...lookupFields,
+            };
+        }
+
+        if (step === 2) {
+            return { aliases };
+        }
+
+        if (step === 3) {
+            const packageSize = Number(values.packageSize);
+            return {
+                packageType: values.packageType as PackageType,
+                category: values.category,
+                packageSize,
+                unit: values.unit,
+                quantidade: packageSize,
+                unidade_medida: values.unit,
+                defaultCountingUnit: values.defaultCountingUnit,
+                multiplo_caixa: values.enableLogistics ? Number(values.multiplo_caixa) : 0,
+                rotulo_caixa: values.enableLogistics ? values.rotulo_caixa ?? '' : '',
+                countingInstruction: values.enableCountingInstruction ? values.countingInstruction ?? '' : '',
+                countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl ?? '' : '',
+            };
+        }
+
+        if (step === 4) {
+            return { uniformCareInstructions: normalizeUniformCareInstructions(values.uniformCareInstructions) };
+        }
+
+        if (step === 5) {
+            return {
+                nutritionalTableImageUrl: values.nutritionalTableImageUrl ?? '',
+                compositionImageUrl: values.compositionImageUrl ?? '',
+            };
+        }
+
+        return {};
+    };
+
+    const handleSaveEditStep = async () => {
+        if (!productToEdit) return;
+
+        const currentStepIsValid = await form.trigger(stepFields[currentStep]);
+        if (!currentStepIsValid) {
+            toast({
+                variant: 'destructive',
+                title: 'Revise esta etapa',
+                description: 'Preencha os campos obrigatórios destacados antes de salvar.',
+            });
+            return;
+        }
+
+        const values = form.getValues();
+        setIsSaving(true);
+        try {
+            await updateProduct({
+                id: productToEdit.id,
+                ...buildEditPayload(currentStep, values),
+            });
+            toast({
+                title: 'Alterações salvas',
+                description: `A etapa “${currentStepMeta.label}” foi atualizada.`,
+            });
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Falha ao salvar alterações',
+                description: error instanceof Error ? error.message : 'Tente novamente.',
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const handleNext = async () => {
-        const valid = await form.trigger(stepFields[currentStep]);
+        const valid = productToEdit ? true : await form.trigger(stepFields[currentStep]);
         if (valid) {
             const currentIndex = wizardSteps.findIndex((step) => step.id === currentStep);
             const nextStep = wizardSteps[currentIndex + 1];
-            if (nextStep) setCurrentStep(nextStep.id);
+            if (nextStep) {
+                setHighestStepPosition((position) => Math.max(position, currentIndex + 1));
+                setCurrentStep(nextStep.id);
+            }
         }
     };
     const handleBack = () => {
@@ -703,7 +857,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const editingTitle = productToEdit
         ? `Editar insumo${linkedBaseProduct ? ' derivado' : ''}`
         : 'Adicionar novo insumo';
-    const subtitle = productToEdit ? getProductFullName(productToEdit) : 'Preencha os detalhes do insumo nas etapas abaixo.';
+    const subtitle = productToEdit
+        ? getProductFullName(productToEdit)
+        : 'Preencha os detalhes do insumo nas etapas abaixo.';
 
     return (
         <>
@@ -735,7 +891,14 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     </DialogHeader>
 
                     <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
+                    <form
+                        onSubmit={productToEdit
+                            ? (event) => {
+                                event.preventDefault();
+                                void handleSaveEditStep();
+                            }
+                            : form.handleSubmit(onSubmit, onInvalid)}
+                    >
                         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
                             {/* Stepper sidebar */}
                             <aside className="border-r bg-muted/40 px-5 py-6">
@@ -747,14 +910,17 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     {wizardSteps.map((step, index) => {
                                         const isActive = step.id === currentStep;
                                         const isDone = index < currentStepPosition;
+                                        const isLocked = !productToEdit && index > highestStepPosition;
                                         return (
                                             <button
                                                 key={step.id}
                                                 type="button"
+                                                disabled={isLocked}
                                                 onClick={() => setCurrentStep(step.id)}
                                                 className={cn(
                                                     'flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm transition-colors',
                                                     isActive ? 'font-semibold text-foreground' : 'text-muted-foreground hover:bg-muted',
+                                                    isLocked && 'cursor-not-allowed opacity-50 hover:bg-transparent',
                                                 )}
                                             >
                                                 <span className={cn(
@@ -964,7 +1130,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <span className="text-xs text-muted-foreground">agrupa e converte o estoque</span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
+                                                            <Select onValueChange={(value) => handleBaseProductChange(value, field.onChange)} value={field.value || ''}>
                                                                 <FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar..."/></SelectTrigger></FormControl>
                                                                 <SelectContent>
                                                                     {groupedBaseProducts.map(([groupName, items]) => (
@@ -1458,7 +1624,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
                         {/* Footer */}
                         <DialogFooter className="flex flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
-                            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                                {productToEdit ? 'Fechar' : 'Cancelar'}
+                            </Button>
                             <div className="hidden flex-col items-center text-center sm:flex">
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStepPosition + 1} de {wizardSteps.length}</span>
                                 <span className="text-sm font-medium">{currentStepMeta.label}</span>
@@ -1468,12 +1636,24 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <Button type="button" variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" /> Voltar</Button>
                                 )}
                                 {currentStepPosition < wizardSteps.length - 1 ? (
-                                    <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
-                                ) : (
-                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600" disabled={isSaving}>
-                                        {isSaving ? 'Salvando' : productToEdit ? 'Salvar alterações' : 'Adicionar insumo'}
+                                    <Button type="button" variant="outline" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
+                                ) : null}
+                                {productToEdit ? (
+                                    <Button
+                                        type="button"
+                                        className="bg-indigo-500 hover:bg-indigo-600"
+                                        disabled={isSaving}
+                                        onClick={() => void handleSaveEditStep()}
+                                    >
+                                        <Save className="mr-1.5 h-4 w-4" />
+                                        {isSaving ? 'Salvando' : 'Salvar alterações'}
                                     </Button>
-                                )}
+                                ) : currentStepPosition === wizardSteps.length - 1 ? (
+                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600" disabled={isSaving}>
+                                        <Save className="mr-1.5 h-4 w-4" />
+                                        {isSaving ? 'Salvando' : 'Adicionar insumo'}
+                                    </Button>
+                                ) : null}
                             </div>
                         </DialogFooter>
                     </form>

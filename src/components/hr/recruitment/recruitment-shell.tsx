@@ -13,7 +13,6 @@ import type { IntegrationTemplateMetadataClient } from '@/features/hr/integratio
 import { simulateIntegrationTemplate } from '@/features/hr/integration/engine';
 import { IntegrationRulesPanel } from '@/features/hr/integration/IntegrationRulePanels';
 import { PjOnboardingDetailPanel } from '@/features/hr/onboarding-pj/detail-panel';
-import { PJ_ONBOARDING_STEP_LABELS, PJ_ONBOARDING_STEP_ORDER } from '@/features/hr/onboarding-pj/core';
 import type { IntegrationBlock, IntegrationRule, IntegrationStage, IntegrationSubfield, IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import type {
   Candidate,
@@ -75,6 +74,14 @@ import {
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { formatPersonName } from '@/lib/person-name';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
+import {
+  ONBOARDING_HEALTH_META,
+  onboardingProgress,
+  resolveOnboardingOperationalStatus,
+  sortOnboardingProcesses,
+  type OnboardingHealth,
+  type OnboardingSortMode,
+} from '@/features/hr/onboarding/operational-status';
 import {
   onboardingPublicLinkExpiresAt,
   onboardingPublicLinkExpired,
@@ -7868,7 +7875,10 @@ function IntegrationV2Runner({ process, getToken, canManage, onRefresh }: { proc
   const simulation = useMemo(() => execution ? simulateIntegrationTemplate(execution.snapshot, { answers, uploads }) : null, [answers, execution, uploads]);
   if (!execution || !simulation) return null;
   const activeExecution = execution;
-  const stage = activeExecution.snapshot.stages.find(item => item.id === activeExecution.currentStageId) ?? null;
+  const orderedStages = [...activeExecution.snapshot.stages]
+    .filter(item => activeExecution.stageStatuses[item.id] !== 'skipped')
+    .sort((left, right) => left.order - right.order);
+  const stage = orderedStages.find(item => item.id === activeExecution.currentStageId) ?? null;
   const blocks = activeExecution.snapshot.blocks.filter(block => block.stageId === stage?.id && simulation.visibleBlockIds.includes(block.id)).sort((a, b) => a.order - b.order);
 
   async function persist(action: 'save' | 'advance', nextUploads = uploads) {
@@ -8002,7 +8012,115 @@ function IntegrationV2Runner({ process, getToken, canManage, onRefresh }: { proc
     return <input disabled={!canManage || block.readOnly} type={inputType} value={String(value ?? '')} onChange={event => setAnswers(current => ({ ...current, [block.id]: inputType === 'number' ? (event.target.value === '' ? '' : Number(event.target.value)) : event.target.value }))} placeholder={block.placeholder} className={base} />;
   }
 
-  return <section className="mx-6 mt-5 rounded-2xl border-2 border-indigo-100 bg-indigo-50/30 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Fluxo configurável · {execution.mode === 'import' ? `snapshot v${execution.templateVersion}` : 'avulso'}</p><h3 className="mt-1 text-base font-black text-slate-950">{stage?.label ?? 'Fluxo concluído'}</h3><p className="text-xs text-slate-500">{execution.snapshot.name}</p></div><div className="flex flex-wrap gap-2">{canManage && execution.mode === 'blank' ? <button type="button" disabled={!!busy} onClick={openInstanceEditor} className="inline-flex h-9 items-center gap-1 rounded-lg border border-indigo-200 bg-white px-3 text-xs font-black text-indigo-700"><Pencil className="h-3.5 w-3.5" />Editar avulso</button> : null}{canManage ? <button type="button" disabled={!!busy} onClick={() => void persist('save')} className="h-9 rounded-lg border bg-white px-3 text-xs font-black">Salvar respostas</button> : null}{canManage && stage ? <button type="button" disabled={!!busy} onClick={() => void persist('advance')} className="inline-flex h-9 items-center gap-1 rounded-lg bg-indigo-600 px-3 text-xs font-black text-white">Avançar <ArrowRight className="h-3.5 w-3.5" /></button> : null}</div></div>{error ? <div className="mt-3"><ErrorLine msg={error} /></div> : null}<div className="mt-4 grid gap-3 md:grid-cols-2">{blocks.map(block => <div key={block.id} className="relative rounded-xl border bg-white p-3 text-xs font-bold text-slate-700"><span className="mb-1.5 block pr-6">{block.label}{simulation.requiredBlockIds.includes(block.id) ? <b className="text-rose-500"> *</b> : null}</span>{field(block)}{block.helpText ? <span className="mt-1 block font-medium text-slate-400">{block.helpText}</span> : null}</div>)}{stage && !blocks.length ? <p className="col-span-full text-sm text-slate-500">Esta etapa não possui campos visíveis.</p> : null}</div>{instanceDraft ? <IntegrationInstanceEditor draft={instanceDraft} disabled={!canManage} saving={busy === 'configure'} onChange={setInstanceDraft} onClose={() => setInstanceDraft(null)} onSave={() => void saveInstanceEditor()} /> : null}</section>;
+  return (
+    <section className="mx-6 mt-5 overflow-hidden rounded-2xl border border-indigo-200 bg-indigo-50/30 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-indigo-100 bg-white/80 p-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
+            Roteiro configurável · {execution.mode === 'import' ? `modelo v${execution.templateVersion}` : 'avulso'}
+          </p>
+          <h3 className="mt-1 text-base font-black text-slate-950">{stage?.label ?? 'Roteiro concluído'}</h3>
+          <p className="mt-0.5 text-xs font-semibold text-slate-500">{execution.snapshot.name}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canManage && execution.mode === 'blank' ? (
+            <button type="button" disabled={!!busy} onClick={openInstanceEditor} className="inline-flex h-9 items-center gap-1 rounded-lg border border-indigo-200 bg-white px-3 text-xs font-black text-indigo-700">
+              <Pencil className="h-3.5 w-3.5" /> Editar avulso
+            </button>
+          ) : null}
+          {canManage ? (
+            <button type="button" disabled={!!busy} onClick={() => void persist('save')} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 disabled:opacity-50">
+              {busy === 'save' ? 'Salvando...' : 'Salvar respostas'}
+            </button>
+          ) : null}
+          {canManage && stage ? (
+            <button type="button" disabled={!!busy || simulation.blockedReasons.length > 0} onClick={() => void persist('advance')} className="inline-flex h-9 items-center gap-1 rounded-lg bg-indigo-600 px-3 text-xs font-black text-white disabled:opacity-50">
+              {busy === 'advance' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Avançar <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {orderedStages.length > 0 ? (
+        <div className="border-b border-indigo-100 bg-white/60 px-4 py-3">
+          <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${orderedStages.length}, minmax(0, 1fr))` }}>
+            {orderedStages.map(item => {
+              const state = activeExecution.stageStatuses[item.id];
+              return (
+                <span
+                  key={item.id}
+                  className={`h-1.5 rounded-full ${state === 'completed' ? 'bg-emerald-500' : state === 'active' ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                  title={`${item.label}: ${state === 'completed' ? 'concluída' : state === 'active' ? 'atual' : 'pendente'}`}
+                />
+              );
+            })}
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3 text-[10.5px] font-bold text-slate-500">
+            <span>{orderedStages.filter(item => activeExecution.stageStatuses[item.id] === 'completed').length} de {orderedStages.length} concluídas</span>
+            {stage?.dueDays ? <span>Prazo da etapa: {stage.dueDays}d</span> : null}
+          </div>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {orderedStages.map((item, index) => {
+              const state = activeExecution.stageStatuses[item.id];
+              return (
+                <div key={item.id} className={`flex min-w-[150px] items-center gap-2 rounded-xl border px-3 py-2 ${
+                  state === 'completed'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                    : state === 'active'
+                      ? 'border-indigo-200 bg-indigo-50 text-indigo-800'
+                      : 'border-slate-200 bg-white text-slate-400'
+                }`}>
+                  <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${
+                    state === 'completed' ? 'bg-emerald-500 text-white' : state === 'active' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    {state === 'completed' ? <CheckCircle2 className="h-3.5 w-3.5" /> : index + 1}
+                  </span>
+                  <span className="line-clamp-2 text-[10.5px] font-black leading-snug">{item.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="p-4">
+        {simulation.blockedReasons.length > 0 ? (
+          <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{simulation.blockedReasons.join(' ')}</span>
+          </div>
+        ) : null}
+        {error ? <div className="mb-3"><ErrorLine msg={error} /></div> : null}
+        <div className="grid gap-3 md:grid-cols-2">
+          {blocks.map(block => (
+            <div key={block.id} className="relative rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700 shadow-sm">
+              <span className="mb-1.5 block pr-6">{block.label}{simulation.requiredBlockIds.includes(block.id) ? <b className="text-rose-500"> *</b> : null}</span>
+              {field(block)}
+              {block.helpText ? <span className="mt-1 block font-medium text-slate-400">{block.helpText}</span> : null}
+            </div>
+          ))}
+          {stage && !blocks.length ? (
+            <p className="col-span-full rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">Esta etapa não possui campos visíveis.</p>
+          ) : null}
+          {!stage ? (
+            <p className="col-span-full rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-800">Todas as etapas do roteiro configurável foram concluídas.</p>
+          ) : null}
+        </div>
+      </div>
+
+      {instanceDraft ? (
+        <IntegrationInstanceEditor
+          draft={instanceDraft}
+          disabled={!canManage}
+          saving={busy === 'configure'}
+          onChange={setInstanceDraft}
+          onClose={() => setInstanceDraft(null)}
+          onSave={() => void saveInstanceEditor()}
+        />
+      ) : null}
+    </section>
+  );
 }
 
 function ProbationV2Panel({ process, getToken, canManage, onRefresh }: { process: OnboardingProcess; getToken: () => Promise<string>; canManage: boolean; onRefresh: () => void }) {
@@ -8127,6 +8245,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 }) {
   const [search, setSearch] = useState('');
   const [phaseFilter, setPhaseFilter] = useState<string>('all');
+  const [healthFilter, setHealthFilter] = useState<'all' | OnboardingHealth>('all');
+  const [onboardingSortMode, setOnboardingSortMode] = useState<OnboardingSortMode>('priority');
   const [processStateFilter, setProcessStateFilter] = useState<'active' | 'completed' | 'cancelled'>('active');
   const [view, setView] = useState<'grid' | 'detail'>('grid');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -8183,18 +8303,25 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
   }, [activeProcesses]);
 
-  const filtered = useMemo(() => activeProcesses.filter(process => {
-    if (phaseFilter !== 'all' && consolidatedDocumentPhaseId(process.currentStage) !== phaseFilter) return false;
-    const text = [
-      process.candidateName,
-      process.candidateEmail,
-      process.jobRoleName,
-      process.functionName,
-      process.unitName,
-      process.cancelReason,
-    ].filter(Boolean).join(' ').toLowerCase();
-    return !search || text.includes(search.toLowerCase());
-  }), [activeProcesses, search, phaseFilter]);
+  const filtered = useMemo(() => {
+    const now = new Date(linkClock);
+    const matching = activeProcesses.filter(process => {
+      if (phaseFilter !== 'all' && consolidatedDocumentPhaseId(process.currentStage) !== phaseFilter) return false;
+      if (healthFilter !== 'all' && resolveOnboardingOperationalStatus(process, now).health !== healthFilter) return false;
+      const text = [
+        process.candidateName,
+        process.candidateEmail,
+        process.jobRoleName,
+        process.functionName,
+        process.unitName,
+        process.employerUnitName,
+        process.cancelReason,
+        process.integrationV2?.snapshot.name,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return !search || text.includes(search.toLowerCase());
+    });
+    return sortOnboardingProcesses(matching, onboardingSortMode, now);
+  }, [activeProcesses, search, phaseFilter, healthFilter, onboardingSortMode, linkClock]);
   const selectedProcess = useMemo(
     () => activeProcesses.find(process => process.id === selectedId) ?? null,
     [activeProcesses, selectedId]
@@ -8827,6 +8954,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               onChange={event => {
                 setProcessStateFilter(event.target.value as 'active' | 'completed' | 'cancelled');
                 setPhaseFilter('all');
+                setHealthFilter('all');
               }}
               className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
             >
@@ -8849,6 +8977,38 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             </select>
             <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
+          {processStateFilter === 'active' ? (
+            <div className="relative min-w-[175px]">
+              <select
+                value={healthFilter}
+                onChange={event => setHealthFilter(event.target.value as 'all' | OnboardingHealth)}
+                className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
+                aria-label="Filtrar por situação operacional"
+              >
+                <option value="all">Todas as situações</option>
+                <option value="overdue">Atrasados</option>
+                <option value="blocked">Bloqueados</option>
+                <option value="hr_action">Ação do RH</option>
+                <option value="waiting_person">Aguardando pessoa</option>
+                <option value="on_track">Em dia</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+          ) : null}
+          <div className="relative min-w-[200px]">
+            <select
+              value={onboardingSortMode}
+              onChange={event => setOnboardingSortMode(event.target.value as OnboardingSortMode)}
+              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
+              aria-label="Ordenar integrações"
+            >
+              <option value="priority">Prioridade operacional</option>
+              <option value="admission">Admissão mais próxima</option>
+              <option value="stalled">Parado há mais tempo</option>
+              <option value="name">Nome</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
           <button
             type="button"
             onClick={onRefresh}
@@ -8858,6 +9018,25 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             <RotateCw className="h-4 w-4" />
           </button>
         </div>
+
+        {processStateFilter === 'active' ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm" aria-label="Legenda das situações operacionais">
+            <span className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Situação</span>
+            {(['on_track', 'waiting_person', 'hr_action', 'blocked', 'overdue'] as OnboardingHealth[]).map(health => (
+              <button
+                key={health}
+                type="button"
+                onClick={() => setHealthFilter(current => current === health ? 'all' : health)}
+                className={`inline-flex items-center gap-1.5 text-[11.5px] font-bold transition ${
+                  healthFilter === health ? ONBOARDING_HEALTH_META[health].textClass : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span className={`h-2.5 w-2.5 rounded-full ${ONBOARDING_HEALTH_META[health].dotClass}`} />
+                {ONBOARDING_HEALTH_META[health].label}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {error && <ErrorLine msg={error} />}
 
@@ -8880,20 +9059,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
         ) : (
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
             {filtered.map(process => {
-              const progress = processDocProgress(process);
-              const processStages = consolidatedOnboardingStages(process);
-              const currentStage = processStages.find(stage => stage.id === process.currentStage);
-              const locatedStageIndex = processStages.findIndex(stage => stage.id === process.currentStage);
+              const documentProgress = processDocProgress(process);
+              const processProgress = onboardingProgress(process);
+              const operationalStatus = resolveOnboardingOperationalStatus(process, new Date(linkClock));
+              const healthMeta = ONBOARDING_HEALTH_META[operationalStatus.health];
               const isPj = process.employmentRelationshipType === 'pj' && Boolean(process.pjWorkflow);
-              const pjCurrentIndex = process.pjWorkflow ? PJ_ONBOARDING_STEP_ORDER.indexOf(process.pjWorkflow.currentStep) : -1;
-              const progressSteps = isPj ? PJ_ONBOARDING_STEP_ORDER : processStages.map(stage => stage.id);
-              const currentStageIndex = process.status === 'completed'
-                ? Math.max(progressSteps.length - 1, 0)
-                : Math.max(0, isPj ? pjCurrentIndex : locatedStageIndex);
-              const currentStageLabel = isPj && process.pjWorkflow
-                ? PJ_ONBOARDING_STEP_LABELS[process.pjWorkflow.currentStep]
-                : currentStage?.label ?? 'Formalização';
-              const formReceived = !!process.publicFormSubmittedAt;
               const color = colorForProcess(process.id);
               return (
                 <article
@@ -8907,7 +9077,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   }}
                   role="button"
                   tabIndex={0}
-                  className="group flex w-full flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md"
+                  className={`group flex w-full flex-col rounded-2xl border border-l-4 border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md ${healthMeta.borderClass}`}
                 >
                   <div className="flex items-center gap-3">
                     <span
@@ -8920,12 +9090,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       <div className="truncate text-[15px] font-black text-slate-900">{process.candidateName ?? 'Candidato sem nome'}</div>
                       <div className="mt-0.5 truncate text-xs font-medium text-slate-500">{process.candidateEmail ?? 'E-mail não informado'}</div>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
-                      process.status === 'cancelled'
-                        ? 'bg-rose-50 text-rose-700'
-                        : formReceived ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      {process.status === 'cancelled' ? 'Encerrada' : formReceived ? 'Recebido' : 'Aguardando'}
+                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[9.5px] font-black uppercase tracking-wide ${healthMeta.badgeClass}`}>
+                      {healthMeta.label}
                     </span>
                   </div>
 
@@ -8940,46 +9106,56 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </div>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-pink-600" />
-                      <span className="text-xs font-bold text-slate-700">
-                        {consolidatedDocumentPhaseId(process.currentStage) === 'documents'
-                          ? 'Formalização · Dados, documentos e ASO'
-                          : currentStageLabel}
-                      </span>
-                    </span>
-                    <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">
-                      {progress.received}/{progress.total} docs
-                    </span>
+                  <div className={`mt-3 rounded-xl border px-3 py-3 ${healthMeta.badgeClass}`}>
+                    <div className="flex items-start gap-2.5">
+                      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${healthMeta.dotClass}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12.5px] font-black leading-snug">{operationalStatus.headline}</p>
+                        <p className="mt-1 line-clamp-2 text-[10.5px] font-semibold leading-relaxed opacity-80">{operationalStatus.detail}</p>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="mt-3">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10.5px] font-black uppercase tracking-wide text-slate-400">Progresso do processo</span>
-                      <span className="text-xs font-black text-pink-600">Fase {currentStageIndex + 1} de {progressSteps.length}</span>
+                      <span className="min-w-0 truncate text-[10.5px] font-black uppercase tracking-wide text-slate-400">{processProgress.label}</span>
+                      <span className="shrink-0 text-xs font-black text-pink-600">Fase {processProgress.current} de {processProgress.total}</span>
                     </div>
                     <div
                       className="mt-2 grid gap-1"
-                      style={{ gridTemplateColumns: `repeat(${Math.max(progressSteps.length, 1)}, minmax(0, 1fr))` }}
+                      style={{ gridTemplateColumns: `repeat(${Math.max(processProgress.total, 1)}, minmax(0, 1fr))` }}
                       role="img"
-                      aria-label={process.status === 'completed'
-                        ? `${progressSteps.length} fases concluídas`
-                        : `${currentStageIndex} fases concluídas, fase ${currentStageIndex + 1} em andamento, ${Math.max(progressSteps.length - currentStageIndex - 1, 0)} futuras`}
+                      aria-label={`${processProgress.current} de ${processProgress.total} fases`}
                     >
-                      {progressSteps.map((stage, stageIndex) => (
+                      {processProgress.steps.map(stage => (
                         <span
-                          key={typeof stage === 'string' ? stage : String(stage)}
+                          key={stage.id}
                           className={`h-1.5 rounded-full ${
-                            process.status === 'completed' || stageIndex < currentStageIndex
+                            stage.state === 'done'
                               ? 'bg-emerald-500'
-                              : stageIndex === currentStageIndex
+                              : stage.state === 'active'
                                 ? 'bg-pink-600'
                                 : 'bg-slate-200'
                           }`}
                         />
                       ))}
                     </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[10.5px] font-bold text-slate-500">
+                    <span className="rounded-lg bg-slate-100 px-2.5 py-1">{documentProgress.received}/{documentProgress.total} docs</span>
+                    {process.integrationV2 ? (
+                      <span className="rounded-lg bg-indigo-50 px-2.5 py-1 text-indigo-700">
+                        {process.integrationV2.currentStageId
+                          ? `Roteiro: ${process.integrationV2.snapshot.stages.find(item => item.id === process.integrationV2?.currentStageId)?.label ?? 'em andamento'}`
+                          : process.integrationV2.mode === 'import'
+                            ? `Modelo v${process.integrationV2.templateVersion} concluído`
+                            : 'Fluxo avulso concluído'}
+                      </span>
+                    ) : null}
+                    {operationalStatus.daysInStage > 0 ? (
+                      <span className="rounded-lg bg-slate-50 px-2.5 py-1">{operationalStatus.daysInStage}d nesta etapa</span>
+                    ) : null}
                   </div>
 
                   {process.status === 'cancelled' ? (
@@ -9267,6 +9443,41 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const signatureDocumentsReadyToSend = selectedSignatureDocuments.filter(document => document.status === 'ready_to_send');
   const signatureSelectionEditable = canGenerateDocumentsProcess && canActOnSignaturePhase && activePhaseId === 'signature_preparation' &&
     !selectedSignatureDocuments.some(document => ['sent', 'viewed', 'partially_signed', 'signed', 'archived'].includes(document.status));
+  let selectedOperationalStatus = resolveOnboardingOperationalStatus(selectedProcess, new Date(linkClock));
+  if (selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled' && signatureWorkflow && ['signature_preparation', 'signature'].includes(selectedProcess.currentStage ?? '')) {
+    const selectedDocuments = signatureWorkflow.documents.filter(document => document.selected);
+    const failedDocument = selectedDocuments.find(document => ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(document.status));
+    const allSigned = selectedDocuments.length > 0 && selectedDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status));
+    const sent = selectedDocuments.some(document => ['sent', 'viewed', 'partially_signed'].includes(document.status));
+    const readyToSend = selectedDocuments.some(document => document.status === 'ready_to_send');
+    if (failedDocument) {
+      selectedOperationalStatus = {
+        ...selectedOperationalStatus,
+        health: 'blocked',
+        label: ONBOARDING_HEALTH_META.blocked.label,
+        headline: 'Documento de assinatura precisa de correção',
+        detail: failedDocument.lastError ?? `${failedDocument.documentName ?? failedDocument.templateName} está com falha.`,
+        responsible: 'rh',
+        priority: 100,
+      };
+    } else if (!allSigned && sent) {
+      selectedOperationalStatus = {
+        ...selectedOperationalStatus,
+        ...(selectedOperationalStatus.health === 'overdue' ? {} : { health: 'waiting_person' as const, label: ONBOARDING_HEALTH_META.waiting_person.label, priority: 60 }),
+        headline: 'Aguardando assinaturas',
+        detail: 'Os documentos foram enviados e ainda não estão totalmente assinados.',
+        responsible: 'person',
+      };
+    } else if (readyToSend) {
+      selectedOperationalStatus = {
+        ...selectedOperationalStatus,
+        headline: 'Enviar documentos para assinatura',
+        detail: 'A revisão foi concluída e os documentos estão prontos para envio.',
+        responsible: 'rh',
+      };
+    }
+  }
+  const selectedHealthMeta = ONBOARDING_HEALTH_META[selectedOperationalStatus.health];
 
   const formRows: Array<[string, string]> = [
     ['Identificação', readOnboardingChoice(answers, 'identityDocumentType', { identity: 'RG / CIN', cnh: 'CNH' })],
@@ -9422,6 +9633,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               <span className="rounded-full bg-slate-100 px-3 py-1 text-[10.5px] font-black uppercase tracking-wide text-slate-600">
                 {ONBOARDING_STATUS_LABELS[selectedProcess.status] ?? selectedProcess.status}
               </span>
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${selectedHealthMeta.badgeClass}`}>
+                <span className={`h-2 w-2 rounded-full ${selectedHealthMeta.dotClass}`} />
+                {selectedHealthMeta.label}
+              </span>
               <span className={`rounded-full px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${
                 linkActive ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'
               }`}>
@@ -9491,6 +9706,48 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               </div>
             </div>
           </div>
+        ) : null}
+
+        <div className="px-6 pt-4">
+          <section className={`rounded-2xl border p-4 ${selectedHealthMeta.badgeClass}`} aria-labelledby="onboarding-next-action-title">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${selectedHealthMeta.dotClass}`} />
+                <div className="min-w-0">
+                  <p id="onboarding-next-action-title" className="text-[10px] font-black uppercase tracking-[0.09em] opacity-70">O que falta para avançar</p>
+                  <h3 className="mt-1 text-sm font-black">{selectedOperationalStatus.headline}</h3>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed opacity-80">{selectedOperationalStatus.detail}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[10.5px] font-black">
+                {selectedOperationalStatus.responsible !== 'none' ? (
+                  <span className="rounded-lg border border-current/20 bg-white/70 px-2.5 py-1.5">
+                    Responsável: {selectedOperationalStatus.responsible === 'rh'
+                      ? 'RH'
+                      : selectedOperationalStatus.responsible === 'person'
+                        ? 'Pessoa'
+                        : selectedOperationalStatus.responsible === 'third_party'
+                          ? 'Terceiro'
+                          : 'Sistema'}
+                  </span>
+                ) : null}
+                {selectedOperationalStatus.daysInStage > 0 ? (
+                  <span className="rounded-lg border border-current/20 bg-white/70 px-2.5 py-1.5">
+                    {selectedOperationalStatus.daysInStage}d na etapa
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {selectedProcess.integrationV2 ? (
+          <IntegrationV2Runner
+            process={selectedProcess}
+            getToken={getToken}
+            canManage={canManage && !processIsReadOnly}
+            onRefresh={onRefresh}
+          />
         ) : null}
 
         <div className="flex flex-wrap items-start gap-5 p-6">

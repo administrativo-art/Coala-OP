@@ -125,11 +125,24 @@ export type OrderEdits = {
   }>;
 };
 
+type OrderItemBaseEdits = NonNullable<OrderEdits['items']>[number];
+export type OrderItemEdits = Omit<
+  OrderItemBaseEdits,
+  'productId' | 'itemName' | 'operationalCategoryId' | 'operationalCategoryName' | 'notes'
+> & {
+  productId?: string | null;
+  itemName?: string | null;
+  operationalCategoryId?: string | null;
+  operationalCategoryName?: string | null;
+  notes?: string | null;
+};
+
 export interface PurchaseOrderContextType {
   orders: PurchaseOrder[];
   loading: boolean;
   createPurchase: (payload: CreatePurchasePayload) => Promise<string | null>;
   updateOrder: (orderId: string, edits: OrderEdits) => Promise<void>;
+  updateOrderItem: (orderId: string, itemId: string, edits: OrderItemEdits) => Promise<void>;
   confirmOrder: (orderId: string) => Promise<void>;
   markReceivedElsewhere: (orderId: string, notes?: string) => Promise<void>;
   cancelOrder: (orderId: string, reason: string) => Promise<void>;
@@ -218,6 +231,28 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.error || 'Falha ao atualizar o pedido.');
+      }
+    },
+    [firebaseUser],
+  );
+
+  const updateOrderItem = useCallback(
+    async (orderId: string, itemId: string, edits: OrderItemEdits) => {
+      if (!firebaseUser) throw new Error('Usuário não autenticado.');
+
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/purchasing/orders/${orderId}/items/${itemId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(edits),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao atualizar o item do pedido.');
       }
     },
     [firebaseUser],
@@ -338,12 +373,13 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
       loading,
       createPurchase,
       updateOrder,
+      updateOrderItem,
       confirmOrder,
       markReceivedElsewhere,
       cancelOrder,
       fetchOrderItems,
     }),
-    [orders, loading, createPurchase, updateOrder, confirmOrder, markReceivedElsewhere, cancelOrder, fetchOrderItems],
+    [orders, loading, createPurchase, updateOrder, updateOrderItem, confirmOrder, markReceivedElsewhere, cancelOrder, fetchOrderItems],
   );
 
   return <PurchaseOrderContext.Provider value={value}>{children}</PurchaseOrderContext.Provider>;

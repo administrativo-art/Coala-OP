@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from 'react';
-import { Check, ChevronsUpDown, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Plus, Trash2, X } from 'lucide-react';
 
 import {
   Dialog,
@@ -49,6 +49,7 @@ import { cn } from '@/lib/utils';
 type DraftItem = {
   key: string;
   id?: string;
+  quotationItemId?: string;
   isRegistered: boolean;
   productId: string;
   baseItemId: string;
@@ -76,6 +77,7 @@ type DraftItem = {
 interface Props {
   orderId: string;
   initialItems: PurchaseOrderItem[];
+  initialItemId?: string | null;
   deliveryFee?: number;
   open: boolean;
   onOpenChange: (value: boolean) => void;
@@ -323,18 +325,18 @@ function AssetLinkField({
   );
 }
 
-export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, open, onOpenChange, onSuccess }: Props) {
+export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = null, deliveryFee = 0, open, onOpenChange, onSuccess }: Props) {
   const { products, getProductFullName, updateProduct } = useProducts();
   const { activeCategories } = useOperationalItemCategories();
   const { assets } = useAssets();
-  const { updateOrder } = usePurchaseOrders();
+  const { updateOrder, updateOrderItem } = usePurchaseOrders();
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [activeItemKey, setActiveItemKey] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setItems(
-        initialItems.map((item) => {
+      const nextItems = initialItems.map((item) => {
           const product = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
           const productLabel = product ? getProductFullName(product) : '';
           const aliasCandidate = item.itemName?.trim() ?? '';
@@ -354,6 +356,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
           return {
             key: item.id,
             id: item.id,
+            quotationItemId: item.quotationItemId,
             isRegistered: !!(item.productId || item.baseItemId),
             productId: item.productId ?? '',
             baseItemId: item.baseItemId,
@@ -377,10 +380,15 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
             aliasCandidate,
             linkAlias: !!aliasCandidate && shouldLinkAlias(aliasCandidate, product, productLabel),
           };
-        }),
+        });
+      setItems(nextItems);
+      setActiveItemKey(
+        nextItems.some((item) => item.key === initialItemId)
+          ? String(initialItemId)
+          : nextItems[0]?.key ?? '',
       );
     }
-  }, [activeCategories, open, initialItems, products]);
+  }, [activeCategories, open, initialItemId, initialItems, products]);
 
   const updateItem = (key: string, patch: Partial<DraftItem>) => {
     setItems((prev) =>
@@ -511,7 +519,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
 
   const orderEstimatedTotal = goodsNetTotal + deliveryFee;
 
-  const validItems = items.filter((item) => {
+  const isItemValid = (item: DraftItem) => {
     const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
     const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(item.itemTreatment);
     const canUseManualItem =
@@ -527,14 +535,65 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
     const hasRequiredCategory = skipsOperationalEntry || !!category;
     const hasRequiredUnit = skipsOperationalEntry ? item.unit.trim().length > 0 : true;
     return hasRequiredCategory && hasItem && hasRequiredUnit && item.quantityOrdered > 0 && item.unitPriceOrdered > 0;
+  };
+
+  const validItems = items.filter(isItemValid);
+  const activeItemIndex = items.findIndex((item) => item.key === activeItemKey);
+  const activeItem = activeItemIndex >= 0 ? items[activeItemIndex] : undefined;
+  const singleItemMode = Boolean(initialItemId);
+  const canSave = singleItemMode
+    ? Boolean(activeItem && activeItem.id && isItemValid(activeItem))
+    : items.length > 0 && validItems.length === items.length;
+
+  const serializeItem = (item: DraftItem) => ({
+    baseItemId: item.baseItemId,
+    productId: item.productId || undefined,
+    itemName: item.itemName || undefined,
+    operationalCategoryId: item.operationalCategoryId || undefined,
+    operationalCategoryName: item.operationalCategoryName,
+    itemDestination: item.entryType,
+    quotationItemId: item.quotationItemId,
+    unit: item.unit,
+    purchaseUnitType: item.purchaseUnitType,
+    purchaseUnitLabel: item.unit,
+    quantityOrdered: item.quantityOrdered,
+    unitPriceOrdered: calculateUnitPriceFromGross(item.lineGrossOrdered, item.quantityOrdered),
+    discountOrdered: item.discountOrdered,
+    entryType: item.entryType,
+    itemTreatment: item.itemTreatment,
+    linkedAssetId: item.linkedAssetId ?? null,
+    linkedAssetCode: item.linkedAssetCode ?? null,
+    linkedAssetName: item.linkedAssetName ?? null,
+    componentAction: item.componentAction ?? null,
+    notes: item.notes || undefined,
   });
 
+  const getItemLabel = (item: DraftItem, index: number) =>
+    item.itemName.trim() || item.aliasCandidate.trim() || `Item ${index + 1}`;
+
+  const handleAddItem = () => {
+    const item = newDraftItem();
+    setItems((current) => [...current, item]);
+    setActiveItemKey(item.key);
+  };
+
+  const handleRemoveItem = (key: string) => {
+    setItems((current) => {
+      const currentIndex = current.findIndex((item) => item.key === key);
+      const nextItems = current.filter((item) => item.key !== key);
+      const nextActiveItem = nextItems[Math.min(Math.max(currentIndex, 0), nextItems.length - 1)];
+      setActiveItemKey(nextActiveItem?.key ?? '');
+      return nextItems;
+    });
+  };
+
   const handleSave = async () => {
-    if (validItems.length === 0) return;
+    if (!canSave || !activeItem) return;
     setSubmitting(true);
     try {
+      const aliasCandidates = singleItemMode ? [activeItem] : items;
       const aliasUpdates = new Map<string, { product: Product; aliases: string[] }>();
-      validItems
+      aliasCandidates
         .filter((item) => item.linkAlias && item.productId && item.aliasCandidate.trim())
         .forEach((item) => {
           const product = products.find((entry) => entry.id === item.productId);
@@ -547,33 +606,22 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
           aliasUpdates.set(product.id, current);
         });
 
-      await updateOrder(orderId, {
-        items: validItems.map((item) => ({
-          baseItemId: item.baseItemId,
-          productId: item.productId || undefined,
-          itemName: item.itemName || undefined,
-          operationalCategoryId: item.operationalCategoryId || undefined,
-          operationalCategoryName: item.operationalCategoryName,
-          itemDestination: item.entryType,
-          unit: item.unit,
-          purchaseUnitType: item.purchaseUnitType,
-          purchaseUnitLabel: item.unit,
-          quantityOrdered: item.quantityOrdered,
-          unitPriceOrdered: calculateUnitPriceFromGross(item.lineGrossOrdered, item.quantityOrdered),
-          discountOrdered: item.discountOrdered,
-          entryType: item.entryType,
-          itemTreatment: item.itemTreatment,
-          linkedAssetId: item.linkedAssetId ?? null,
-          linkedAssetCode: item.linkedAssetCode ?? null,
-          linkedAssetName: item.linkedAssetName ?? null,
-          componentAction: item.componentAction ?? null,
-          notes: item.notes || undefined,
-        })),
-      });
+      if (singleItemMode && activeItem.id) {
+        await updateOrderItem(orderId, activeItem.id, {
+          ...serializeItem(activeItem),
+          productId: activeItem.productId || null,
+          itemName: activeItem.itemName || null,
+          operationalCategoryId: activeItem.operationalCategoryId || null,
+          operationalCategoryName: activeItem.operationalCategoryName ?? null,
+          notes: activeItem.notes || null,
+        });
+      } else {
+        await updateOrder(orderId, { items: items.map(serializeItem) });
+      }
       await Promise.all(
         [...aliasUpdates.values()].map(({ product, aliases }) =>
           updateProduct({
-            ...product,
+            id: product.id,
             aliases: [...(product.aliases ?? []), ...aliases],
           }),
         ),
@@ -591,22 +639,71 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] w-[min(96vw,760px)] overflow-y-auto sm:max-w-none">
         <DialogHeader>
-          <DialogTitle>Gerenciar itens do pedido</DialogTitle>
+          <DialogTitle>{singleItemMode ? 'Editar insumo do pedido' : 'Gerenciar itens do pedido'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-muted-foreground">
-              Apenas itens com quantidade e preço serão salvos.
-            </p>
-            <Button type="button" variant="outline" size="sm" onClick={() => setItems((prev) => [...prev, newDraftItem()])}>
-              <Plus className="mr-2 h-4 w-4" />
-              Adicionar item
-            </Button>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {activeItem ? getItemLabel(activeItem, activeItemIndex) : 'Nenhum item selecionado'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {singleItemMode
+                    ? 'Apenas este item será atualizado.'
+                    : 'Edite um item por vez. Quantidade e preço são obrigatórios.'}
+                </p>
+              </div>
+              {!singleItemMode ? (
+                <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar item
+                </Button>
+              ) : null}
+            </div>
+
+            {!singleItemMode && items.length > 0 ? (
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={activeItemIndex <= 0}
+                  onClick={() => setActiveItemKey(items[activeItemIndex - 1]?.key ?? activeItemKey)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Select value={activeItemKey} onValueChange={setActiveItemKey}>
+                  <SelectTrigger className="flex-1 bg-background">
+                    <SelectValue placeholder="Selecione um item" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map((item, index) => (
+                      <SelectItem key={item.key} value={item.key}>
+                        {index + 1}. {getItemLabel(item, index)}{isItemValid(item) ? '' : ' — revisar'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={activeItemIndex < 0 || activeItemIndex >= items.length - 1}
+                  onClick={() => setActiveItemKey(items[activeItemIndex + 1]?.key ?? activeItemKey)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <span className="min-w-16 text-center text-xs text-muted-foreground">
+                  {activeItemIndex + 1} de {items.length}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-3">
-            {items.map((item) => {
+            {activeItem ? [activeItem].map((item) => {
               const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
               const categoryDestination = selectedCategory?.destination;
               const selectedRawProduct = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
@@ -677,15 +774,17 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
                       <div className="hidden sm:block" />
                     )}
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setItems((prev) => prev.filter((current) => current.key !== item.key))}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {!singleItemMode ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => handleRemoveItem(item.key)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">
@@ -900,7 +999,11 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
                 </div>
               </div>
             );
-            })}
+            }) : (
+              <p className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+                Nenhum item disponível para edição.
+              </p>
+            )}
           </div>
         </div>
 
@@ -921,9 +1024,9 @@ export function ManageOrderItemsModal({ orderId, initialItems, deliveryFee = 0, 
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={submitting || validItems.length === 0}>
+            <Button onClick={handleSave} disabled={submitting || !canSave}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar alterações
+              {singleItemMode ? 'Salvar este item' : 'Salvar alterações'}
             </Button>
           </div>
         </DialogFooter>

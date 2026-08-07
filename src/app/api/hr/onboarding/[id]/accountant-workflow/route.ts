@@ -178,7 +178,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       const stages = applyOnboardingSignatureMode(normalizeOnboardingStages(process.stages), process.generateSignatureDocuments === true);
       const accountantIndex = stages.findIndex((stage) => stage.id === 'accountant'); const next = stages[accountantIndex + 1] ?? stages.find((stage) => stage.id === 'done')!;
       await Promise.all([
-        processRef.set({ stages, currentStage: next.id, status: nextStatus(next.id), accountantWorkflow: { ...workflow, status: 'completed', registryDocument: reviewedRegistry, updatedAt: now }, updatedAt: now }, { merge: true }),
+        processRef.set({ stages, currentStage: next.id, currentStageStartedAt: now, status: nextStatus(next.id), accountantWorkflow: { ...workflow, status: 'completed', registryDocument: reviewedRegistry, updatedAt: now }, updatedAt: now }, { merge: true }),
         addEvent(id, 'ACCOUNTANT_REGISTRY_APPROVED', access, { versionId: text(registry.versionId), nextStage: next.id }),
       ]);
     } else {

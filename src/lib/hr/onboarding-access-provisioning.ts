@@ -57,6 +57,7 @@ export async function maybeAdvanceAfterFirstAccess(onboardingId: string) {
     transaction.set(ref, {
       status: "active",
       currentStage: "integration",
+      currentStageStartedAt: completedAt,
       formalizationCompletedAt: completedAt,
       accessProvisioning: {
         ...accessProvisioning,

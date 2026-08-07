@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 
 import { PJ_ONBOARDING_STEP_LABELS, PJ_ONBOARDING_STEP_ORDER } from '@/features/hr/onboarding-pj/core';
+import { ONBOARDING_HEALTH_META, resolveOnboardingOperationalStatus } from '@/features/hr/onboarding/operational-status';
 import type { DPUnit, OnboardingDocument, OnboardingProcess, PjOnboardingStepId } from '@/types';
 
 type CatalogItem = { id: string; name: string };
@@ -135,6 +136,9 @@ export function PjOnboardingDetailPanel({
 
   const documents = (process.documents ?? []) as OnboardingDocument[];
   const currentIndex = PJ_ONBOARDING_STEP_ORDER.indexOf(workflow.currentStep);
+  const completedSteps = PJ_ONBOARDING_STEP_ORDER.filter(step => stepState(process, step) === 'completed').length;
+  const operationalStatus = resolveOnboardingOperationalStatus(process);
+  const healthMeta = ONBOARDING_HEALTH_META[operationalStatus.health];
   const canOpenStep = (step: PjOnboardingStepId) => PJ_ONBOARDING_STEP_ORDER.indexOf(step) <= currentIndex || stepState(process, step) === 'completed';
 
   function Card({ children }: { children: React.ReactNode }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">{children}</div>; }
@@ -236,7 +240,25 @@ export function PjOnboardingDetailPanel({
   }
 
   return <div className="w-full space-y-4">
-    <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={onBack} className={SECONDARY}><ArrowLeft className="h-4 w-4" />Voltar às integrações</button><div className="text-right"><p className="text-sm font-black text-slate-950">{workflow.provider.legalName}</p><p className="text-xs font-semibold text-slate-500">PJ · {cpfCnpj(workflow.provider.cnpj)} · {workflow.provider.email}</p></div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={onBack} className={SECONDARY}><ArrowLeft className="h-4 w-4" />Voltar às integrações</button><span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px] font-black uppercase tracking-wide ${healthMeta.badgeClass}`}><span className={`h-2 w-2 rounded-full ${healthMeta.dotClass}`} />{healthMeta.label}</span></div>
+    <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_8px_30px_-14px_rgba(15,23,42,0.2)]">
+      <div className="flex flex-wrap items-start justify-between gap-5 p-5 sm:p-6">
+        <div className="flex min-w-0 items-start gap-3.5">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-violet-700 text-white"><Building2 className="h-5 w-5" /></span>
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.1em] text-violet-700">Integração de prestadora · PJ</p><h1 className="mt-1 text-xl font-black tracking-tight text-slate-950">{workflow.provider.legalName}</h1><p className="mt-1 break-all text-xs font-semibold text-slate-500">{cpfCnpj(workflow.provider.cnpj)} · {workflow.provider.email}</p><p className="mt-2 text-xs font-bold text-slate-600">Contratante: {process.employerUnitName ?? 'Não definida'} · início {date(workflow.terms.contractStartDate)}</p></div>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center"><p className="text-[9px] font-black uppercase text-slate-400">Concluídas</p><p className="mt-1 text-lg font-black text-emerald-600">{completedSteps}</p></div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center"><p className="text-[9px] font-black uppercase text-slate-400">Etapa</p><p className="mt-1 text-lg font-black text-violet-700">{Math.max(1, currentIndex + 1)}/8</p></div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-center"><p className="text-[9px] font-black uppercase text-slate-400">Documentos</p><p className="mt-1 text-lg font-black text-slate-800">{documents.filter(item => Boolean(item.fileUrl || item.filePath)).length}/{documents.length}</p></div>
+        </div>
+      </div>
+      <div className="border-t border-slate-100 px-5 py-4 sm:px-6">
+        <div className={`rounded-2xl border p-4 ${healthMeta.badgeClass}`}>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${healthMeta.dotClass}`} /><div><p className="text-[10px] font-black uppercase tracking-[0.08em] opacity-70">O que falta para avançar</p><p className="mt-1 text-sm font-black">{operationalStatus.headline}</p><p className="mt-1 text-xs font-semibold leading-relaxed opacity-80">{operationalStatus.detail}</p></div></div>{operationalStatus.daysInStage > 0 ? <span className="rounded-lg border border-current/20 bg-white/70 px-2.5 py-1.5 text-[10.5px] font-black">{operationalStatus.daysInStage}d na etapa</span> : null}</div>
+        </div>
+      </div>
+    </section>
     <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
       <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"><div className="mb-3 rounded-xl bg-violet-700 p-3 text-white"><div className="flex items-center gap-2"><Building2 className="h-4 w-4" /><span className="text-[10px] font-black uppercase tracking-wider">Integração PJ</span></div><p className="mt-2 text-xs font-semibold opacity-85">Oito etapas, sem rotinas trabalhistas de CLT.</p></div><nav className="space-y-1">{PJ_ONBOARDING_STEP_ORDER.map((step, index) => {
         const state = stepState(process, step); const selected = selectedStep === step; const enabled = canOpenStep(step);

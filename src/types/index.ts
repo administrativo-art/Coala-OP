@@ -1601,6 +1601,7 @@ export type OnboardingProcess = {
   };
   status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'accountant_pending' | 'contract_pending' | 'ready_to_create_user' | 'awaiting_first_access' | 'active' | 'completed' | 'cancelled';
   currentStage?: OnboardingStageId;
+  currentStageStartedAt?: string | null;
   stages?: OnboardingStage[];
   documents?: OnboardingDocument[];
   integrationAlerts?: Array<{
@@ -1621,6 +1622,7 @@ export type OnboardingProcess = {
     uploads: Record<string, unknown>;
     stageStatuses: Record<string, 'pending' | 'active' | 'completed' | 'skipped'>;
     currentStageId: string | null;
+    currentStageStartedAt?: string | null;
     startedAt: string;
     updatedAt: string;
     assignees?: Record<string, { strategy: string; referenceId?: string; resolvedId?: string; resolvedType?: string }>;

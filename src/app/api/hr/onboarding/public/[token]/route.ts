@@ -648,6 +648,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       publicPrivacyAcceptance,
       pjWorkflow: nextWorkflow,
       currentStage: 'document_review',
+      currentStageStartedAt: data.currentStage === 'document_review'
+        ? data.currentStageStartedAt ?? now
+        : now,
       status: 'reviewing_documents',
       updatedAt: now,
     }, { merge: true });
@@ -834,6 +837,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     currentStage: shouldMoveToReview
       ? 'document_review'
       : data.currentStage ?? 'documents',
+    currentStageStartedAt: shouldMoveToReview
+      ? now
+      : data.currentStageStartedAt ?? data.createdAt ?? now,
     status: shouldMoveToReview && (data.status === 'collecting_documents' || data.status === 'pending_setup')
       ? 'reviewing_documents'
       : data.status === 'pending_setup'

@@ -6,6 +6,7 @@ import {
   ArrowRight,
   AlertTriangle,
   Bell,
+  BookOpen,
   CalendarDays,
   CheckCircle2,
   CheckSquare,
@@ -13,11 +14,13 @@ import {
   Clock,
   FileText,
   Flag,
+  FolderOpen,
   ListOrdered,
   Loader2,
   MapPin,
   Minus,
   Plus,
+  UserRound,
 } from "lucide-react";
 import {
   eachDayOfInterval,
@@ -44,6 +47,7 @@ import {
   type GoalDistributionSnapshot,
 } from "@/lib/goals-distribution";
 import { calculateTieredGoalBonus, formatCurrencyBRL } from "@/lib/goal-methods";
+import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
 import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from "@/lib/stock-expiry-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1394,11 +1398,45 @@ function SidebarComunicados({ showMockup }: { showMockup?: boolean }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Quick access                                                               */
+/* -------------------------------------------------------------------------- */
+
+function QuickAccessCard({
+  href,
+  icon,
+  title,
+  description,
+  tone,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  tone: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex min-h-24 items-center gap-3 rounded-2xl border bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"
+    >
+      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">{title}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{description}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+    </Link>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Panel                                                                      */
 /* -------------------------------------------------------------------------- */
 
 function CollaboratorDashboardPanelInner() {
-  const { firebaseUser, user } = useAuth();
+  const { firebaseUser, user, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { taskNotifications, pendingReceipts, completedReceipts } = useAllTasks();
   const { activities: repositionActivities, updateRepositionActivity } = useReposition();
@@ -1424,6 +1462,7 @@ function CollaboratorDashboardPanelInner() {
     () => canPreviewCollaboratorMockups(user ?? {}, firebaseUser),
     [firebaseUser?.displayName, firebaseUser?.email, user?.email, user?.username]
   );
+  const canAccessOwnProfile = Boolean(user?.id && permissions.dp?.collaborators?.view);
 
   useEffect(() => {
     let cancelled = false;
@@ -1836,6 +1875,42 @@ function CollaboratorDashboardPanelInner() {
               </div>
             ) : null}
           </div>
+
+          {/* Acessos rápidos */}
+          {(canViewTechnicalSheets(permissions) || canAccessOwnProfile) ? (
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Acessos rápidos</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {canViewTechnicalSheets(permissions) ? (
+                  <QuickAccessCard
+                    href="/dashboard/commercial"
+                    icon={<BookOpen className="h-5 w-5" />}
+                    title="Ficha técnica"
+                    description="Produtos e modos de preparo"
+                    tone="bg-pink-50 text-pink-600"
+                  />
+                ) : null}
+                {canAccessOwnProfile ? (
+                  <QuickAccessCard
+                    href={`/dashboard/dp/collaborators/${user!.id}`}
+                    icon={<UserRound className="h-5 w-5" />}
+                    title="Meu perfil"
+                    description="Dados pessoais e benefícios"
+                    tone="bg-sky-50 text-sky-600"
+                  />
+                ) : null}
+                {canAccessOwnProfile ? (
+                  <QuickAccessCard
+                    href={`/dashboard/dp/collaborators/${user!.id}/documents`}
+                    icon={<FolderOpen className="h-5 w-5" />}
+                    title="Meus documentos"
+                    description="Contracheques, termos e recibos"
+                    tone="bg-emerald-50 text-emerald-600"
+                  />
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
           {/* Linha do dia */}
           <div className="space-y-4">

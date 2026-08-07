@@ -19,6 +19,7 @@ describe("execução da integração", () => {
     execution = updateIntegrationExecution(execution, { answers: { name: "Maria" } }, "2026-01-01T00:01:00.000Z");
     const advanced = advanceIntegrationExecution(execution, "2026-01-01T00:02:00.000Z");
     assert.equal(advanced.currentStageId, "two");
+    assert.equal(advanced.currentStageStartedAt, "2026-01-01T00:02:00.000Z");
     assert.equal(advanced.templateVersion, 3);
   });
 
