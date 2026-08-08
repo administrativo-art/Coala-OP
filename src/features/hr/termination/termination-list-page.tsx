@@ -20,14 +20,21 @@ const healthLabel = {
 };
 
 const CARD_PHASES: Array<{ label: string; stepIds: TerminationStepId[] }> = [
-  { label: "Pedido, identidade, validação e aviso-prévio", stepIds: ["request_validation_notice"] },
-  { label: "Devolução de uniformes", stepIds: ["uniform_return"] },
-  { label: "ASO demissional", stepIds: ["aso"] },
+  { label: "Abertura, comunicação e aviso-prévio", stepIds: ["request_validation_notice"] },
   { label: "Contabilidade", stepIds: ["accountant"] },
   { label: "Auditoria e assinaturas", stepIds: ["document_audit", "signatures"] },
   { label: "Bloqueio de acessos", stepIds: ["access_revocation"] },
   { label: "Pagamento e encerramento", stepIds: ["legal_obligations", "operational"] },
   { label: "Fechamento", stepIds: ["closure"] },
+];
+
+const EMPLOYER_CARD_PHASES: Array<{ label: string; stepIds: TerminationStepId[] }> = [
+  { label: "Definição e comunicação", stepIds: ["request_validation_notice"] },
+  { label: "Contabilidade e revisão", stepIds: ["accountant", "document_audit"] },
+  { label: "Assinaturas rescisórias", stepIds: ["signatures"] },
+  { label: "Conclusão com a colaboradora", stepIds: ["termination_payment", "employee_delivery"] },
+  { label: "Encerramentos internos e acessos", stepIds: ["access_revocation", "operational"] },
+  { label: "Finalização total", stepIds: ["closure"] },
 ];
 
 const RESIGNATION_CARD_PHASES: Array<{ label: string; stepIds: TerminationStepId[] }> = [
@@ -46,7 +53,14 @@ const TERMINAL_STATUSES = new Set(["completed", "waived", "cancelled"]);
 const CARD_COLORS = ["#db2777", "#7c3aed", "#2563eb", "#0d9488", "#d97706", "#c026d3"];
 
 function phaseData(process: CltTerminationProcess) {
-  const definitions = process.processType === "clt_employee_resignation" ? RESIGNATION_CARD_PHASES : CARD_PHASES;
+  const guidedEmployerDismissal = process.processType === "clt_hr_termination"
+    && process.terminationReason === "Dispensa sem justa causa"
+    && Boolean(process.dismissalCommunication);
+  const definitions = process.processType === "clt_employee_resignation"
+    ? RESIGNATION_CARD_PHASES
+    : guidedEmployerDismissal
+      ? EMPLOYER_CARD_PHASES
+      : CARD_PHASES;
   const phases = definitions.map((phase) => ({
     ...phase,
     steps: phase.stepIds.map((stepId) => process.steps.find((step) => step.id === stepId)).filter(Boolean),
@@ -70,6 +84,14 @@ function statusLabelForCard(status?: string | null) {
   if (["awaiting_financial_authorization", "ready_to_submit", "submitting", "awaiting_bank_approval", "processing"].includes(status ?? "")) return "em andamento";
   if (["failed", "rejected", "configuration_required"].includes(status ?? "")) return "atenção";
   return "aguardando etapa 5";
+}
+
+function controlStatusForCard(status?: string | null) {
+  if (status === "completed") return "concluído";
+  if (status === "waived") return "ressalva";
+  if (status === "blocked") return "atenção";
+  if (["in_progress", "waiting_external"].includes(status ?? "")) return "em andamento";
+  return "pendente";
 }
 
 export function TerminationListPage() {
@@ -157,11 +179,11 @@ export function TerminationListPage() {
                   <span className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">{completedSteps}/{phases.length} etapas</span>
                 </div>
 
-                {item.processType === "clt_employee_resignation" ? (
+                {item.employmentRelationshipType === "clt" ? (
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-bold">
-                    <span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">Uniformes: {item.steps.find((step) => step.id === "uniform_return")?.status === "completed" ? "ok" : "paralelo"}</span>
-                    <span className="rounded-full bg-sky-50 px-2 py-1 text-sky-700">ASO: {item.steps.find((step) => step.id === "aso")?.status === "completed" ? "ok" : "paralelo"}</span>
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Pagamento: {statusLabelForCard(item.payment?.status)}</span>
+                    <span className="rounded-full bg-violet-50 px-2 py-1 text-violet-700">Uniformes: {controlStatusForCard(item.steps.find((step) => step.id === "uniform_return")?.status)}</span>
+                    <span className="rounded-full bg-sky-50 px-2 py-1 text-sky-700">ASO: {controlStatusForCard(item.steps.find((step) => step.id === "aso")?.status)}</span>
+                    {item.payment ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">Pagamento: {statusLabelForCard(item.payment.status)}</span> : null}
                   </div>
                 ) : null}
 

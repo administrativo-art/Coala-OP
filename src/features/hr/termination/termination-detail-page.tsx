@@ -21,9 +21,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
 import { terminationFetch } from "./client";
 import { EmployeeResignationDetail } from "./employee-resignation-detail";
+import {
+  TerminationAsoCard,
+  TerminationUniformCard,
+  type TerminationAsoWorkflow,
+} from "./parallel-control-cards";
 import type {
   CltTerminationProcess,
   TerminationEvent,
@@ -31,15 +35,6 @@ import type {
   TerminationStepId,
   TerminationStepStatus,
 } from "./types";
-
-type AsoWorkflow = {
-  status?: string;
-  latestGuideId?: string;
-  paymentStatus?: string;
-  clinic?: { sentAt?: string };
-  appointmentStatus?: string;
-  asoDocument?: { storagePath?: string; status?: string };
-};
 
 type PhaseStatus = "completed" | "active" | "blocked" | "upcoming";
 
@@ -49,9 +44,7 @@ const PHASES: Array<{
   description: string;
   stepIds: TerminationStepId[];
 }> = [
-  { id: "request", title: "Pedido, identidade, validação e aviso-prévio", description: "Carta, identidade, validação do RH e definição do aviso-prévio em uma única etapa.", stepIds: ["request_validation_notice"] },
-  { id: "uniforms", title: "Devolução de uniformes", description: "Registre as devoluções no controle de uniformes e valide que nenhuma peça permanece em posse.", stepIds: ["uniform_return"] },
-  { id: "aso", title: "ASO demissional", description: "Guia, pagamento, clínica, agendamento, recebimento e aprovação.", stepIds: ["aso"] },
+  { id: "request", title: "Abertura, comunicação e aviso-prévio", description: "Carta, identidade, validação do RH, comunicação e definição do aviso-prévio.", stepIds: ["request_validation_notice"] },
   { id: "accountant", title: "Contabilidade", description: "Liberada somente depois do aviso definido e do ASO aprovado.", stepIds: ["accountant"] },
   { id: "documents", title: "Auditoria e assinaturas", description: "Revisão dos documentos e assinatura das partes.", stepIds: ["document_audit", "signatures"] },
   { id: "access", title: "Bloqueio de acessos", description: "Revogação do PDV, Bizneo e plano de saúde.", stepIds: ["access_revocation"] },
@@ -271,7 +264,7 @@ export function TerminationDetailPage({ id }: { id: string }) {
   const { firebaseUser } = useAuth();
   const [process, setProcess] = useState<CltTerminationProcess | null>(null);
   const [events, setEvents] = useState<TerminationEvent[]>([]);
-  const [asoWorkflow, setAsoWorkflow] = useState<AsoWorkflow>({});
+  const [asoWorkflow, setAsoWorkflow] = useState<TerminationAsoWorkflow>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [decision, setDecision] = useState("worked");
@@ -294,7 +287,7 @@ export function TerminationDetailPage({ id }: { id: string }) {
     setCommunicationDate(submittedDate);
     setContractEndDate(submittedDate);
     if (data.process.hrValidation?.status === "confirmed" || data.process.processType === "clt_employee_resignation") {
-      const aso = await terminationFetch<{ workflow: AsoWorkflow }>(
+      const aso = await terminationFetch<{ workflow: TerminationAsoWorkflow }>(
         firebaseUser,
         `/api/hr/onboarding/${id}/aso-workflow`,
       ).catch(() => ({ workflow: {} }));
@@ -350,7 +343,8 @@ export function TerminationDetailPage({ id }: { id: string }) {
   }));
   const defaultPhase = rawPhases.find((phase) => phaseStatus(phase.steps) === "active")
     ?? rawPhases.find((phase) => phaseStatus(phase.steps) === "blocked")
-    ?? rawPhases[0];
+    ?? rawPhases.find((phase) => phaseStatus(phase.steps) === "upcoming")
+    ?? rawPhases[rawPhases.length - 1];
   const selectedPhase = rawPhases.find((phase) => phase.id === selectedPhaseId) ?? defaultPhase;
   const selectedStatus = phaseStatus(selectedPhase.steps);
   const selectedBlockedReason = selectedPhase.steps.find((step) => step.blockedReason)?.blockedReason;
@@ -365,6 +359,9 @@ export function TerminationDetailPage({ id }: { id: string }) {
     : identityConfirmed
       ? "in_progress"
       : "pending";
+  const nextPrimaryStep = defaultPhase.steps.find((step) => !TERMINAL_STEP_STATUSES.includes(step.status)) ?? defaultPhase.steps[0];
+  const nextActionLabel = process.status === "completed" ? "Processo concluído" : defaultPhase.title;
+  const nextActionOwner = nextPrimaryStep ? ownerLabel(nextPrimaryStep.owner) : "RH";
 
   const noticeContent = process.notice ? (
     <div className="flex items-center gap-3 border-t border-slate-100 px-4 py-4">
@@ -478,57 +475,6 @@ export function TerminationDetailPage({ id }: { id: string }) {
         </div>
         {noticeContent}
       </div>
-    );
-  } else if (selectedPhase.id === "uniforms") {
-    selectedContent = (
-      <>
-        <div className="rounded-xl border bg-white p-4">
-          <CollaboratorUniforms
-            collaborator={{
-              id: process.employeeId,
-              username: process.employeeName,
-              email: process.employeeEmail,
-            }}
-            mode="return-only"
-            onPossessionChange={setPendingUniformPieces}
-          />
-        </div>
-        <div className={`rounded-xl border p-4 text-sm ${
-          pendingUniformPieces === 0
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-            : "border-amber-200 bg-amber-50 text-amber-900"
-        }`}>
-          {pendingUniformPieces === null
-            ? "Carregando situação dos uniformes..."
-            : pendingUniformPieces === 0
-              ? "Nenhuma peça permanece em posse. Valide para concluir esta etapa."
-              : `${pendingUniformPieces} peça(s) ainda precisam ser devolvidas antes da validação.`}
-        </div>
-        <Button
-          disabled={busy || selectedStatus === "upcoming" || pendingUniformPieces !== 0 || uniformReturnStep.status === "completed"}
-          onClick={() => action({ action: "sync_uniform_return" })}
-        >
-          {uniformReturnStep.status === "completed" ? "Devolução validada" : "Validar devolução"}
-        </Button>
-      </>
-    );
-  } else if (selectedPhase.id === "aso") {
-    selectedContent = (
-      <>
-        <div className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2">
-          <MiniStep label="Guia gerada" done={Boolean(asoWorkflow.latestGuideId)} active={!asoWorkflow.latestGuideId && asoStep.status === "in_progress"} />
-          <MiniStep label="Pagamento confirmado" done={asoWorkflow.paymentStatus === "paid"} active={Boolean(asoWorkflow.latestGuideId) && asoWorkflow.paymentStatus !== "paid"} />
-          <MiniStep label="Enviado à clínica" done={Boolean(asoWorkflow.clinic?.sentAt)} />
-          <MiniStep label="Agendamento confirmado" done={asoWorkflow.appointmentStatus === "confirmed"} />
-          <MiniStep label="ASO recebido" done={Boolean(asoWorkflow.asoDocument?.storagePath)} />
-          <MiniStep label="ASO aprovado pelo RH" done={asoStep.status === "completed"} blocked={asoStep.status === "blocked"} />
-        </div>
-        {process.hrValidation?.status === "confirmed" && process.employmentRelationshipType === "clt" ? (
-          <Button asChild variant="outline">
-            <Link href={`/dashboard/hr/recruitment/integration?process=${process.id}`}>Abrir operação do ASO</Link>
-          </Button>
-        ) : null}
-      </>
     );
   } else if (selectedPhase.id === "accountant") {
     selectedContent = (
@@ -742,13 +688,58 @@ export function TerminationDetailPage({ id }: { id: string }) {
             </div>
           </div>
 
-          {process.notice ? (
-            <div className="grid gap-2 border-t border-[#eeece6] bg-[#fbfaf7] px-5 py-3 text-xs font-semibold text-slate-500 sm:grid-cols-3 sm:px-7">
-              <span className="inline-flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-slate-400" /> Comunicação: <b className="text-slate-700">{dateLabel(process.notice.communicationDate)}</b></span>
-              <span>Término: <b className="text-slate-700">{dateLabel(process.notice.contractEndDate)}</b></span>
-              <span>Pagamento até: <b className="text-slate-700">{dateLabel(process.notice.legalPaymentDueDate)}</b></span>
+          <div className="grid gap-px border-t border-[#eeece6] bg-[#eeece6] sm:grid-cols-2 xl:grid-cols-4">
+            <div className="bg-[#fbfaf7] px-5 py-4 sm:px-7 xl:px-5">
+              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Tipo de desligamento</p>
+              <p className="mt-1.5 text-xs font-extrabold text-slate-700">{process.terminationReason ?? "Encerramento contratual"}</p>
             </div>
-          ) : null}
+            <div className="bg-[#fbfaf7] px-5 py-4 xl:px-5">
+              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Último dia do contrato</p>
+              <p className="mt-1.5 inline-flex items-center gap-2 text-xs font-extrabold text-slate-700">
+                <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
+                {dateLabel(process.notice?.contractEndDate ?? process.request.desiredLastDay)}
+              </p>
+            </div>
+            <div className="bg-[#fbfaf7] px-5 py-4 xl:px-5">
+              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Próxima ação</p>
+              <p className="mt-1.5 text-xs font-extrabold text-slate-700">{nextActionLabel}</p>
+            </div>
+            <div className="bg-[#fbfaf7] px-5 py-4 sm:px-7 xl:px-5">
+              <p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Responsável</p>
+              <span className={`mt-1.5 inline-flex rounded-md border px-2 py-1 text-[10px] font-extrabold ${ownerChipStyle(nextActionOwner)}`}>
+                {nextActionOwner}
+              </span>
+            </div>
+          </div>
+
+          <div className="border-t border-[#eeece6] px-5 py-6 sm:px-7">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.11em] text-pink-600">Controles paralelos</p>
+                <h2 className="mt-1.5 text-lg font-black text-slate-950">ASO e devoluções acompanham todo o processo</h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Podem avançar sem esconder ou interromper as etapas principais do desligamento.</p>
+              </div>
+              {process.notice?.legalPaymentDueDate ? (
+                <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-[10px] font-black text-amber-700">
+                  Prazo de referência: {dateLabel(process.notice.legalPaymentDueDate)}
+                </Badge>
+              ) : null}
+            </div>
+            <div className={`grid gap-4 ${process.employmentRelationshipType === "clt" ? "lg:grid-cols-2" : ""}`}>
+              <TerminationUniformCard
+                collaborator={{ id: process.employeeId, username: process.employeeName, email: process.employeeEmail }}
+                step={uniformReturnStep}
+                pendingPieces={pendingUniformPieces}
+                busy={busy}
+                description="Devolução e validação disponíveis desde a abertura."
+                onPossessionChange={setPendingUniformPieces}
+                onValidate={() => action({ action: "sync_uniform_return" })}
+              />
+              {process.employmentRelationshipType === "clt" ? (
+                <TerminationAsoCard processId={process.id} workflow={asoWorkflow} step={asoStep} />
+              ) : null}
+            </div>
+          </div>
 
           <div className="grid border-t border-[#eeece6] xl:grid-cols-[292px_minmax(0,1fr)]">
             <aside className="border-b border-[#eeece6] bg-[#fbfaf7] px-4 py-5 xl:border-b-0 xl:border-r xl:px-5 xl:py-6">

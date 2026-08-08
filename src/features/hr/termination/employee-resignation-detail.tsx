@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ArrowLeft,
+  CalendarDays,
   CheckCircle2,
   Circle,
   Clock3,
@@ -17,12 +18,9 @@ import {
   MailCheck,
   RefreshCw,
   Send,
-  Shirt,
-  Stethoscope,
   WalletCards,
 } from "lucide-react";
 
-import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,17 +29,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import type { CltTerminationProcess, TerminationDocument, TerminationEvent, TerminationStep, TerminationStepId } from "./types";
-
-type AsoWorkflow = {
-  status?: string;
-  latestGuideId?: string;
-  paymentStatus?: string;
-  clinic?: { sentAt?: string };
-  appointmentStatus?: string;
-  appointment?: { date?: string; time?: string; status?: string };
-  appointmentAt?: string;
-  asoDocument?: { storagePath?: string; status?: string };
-};
+import {
+  TerminationAsoCard,
+  TerminationUniformCard,
+  type TerminationAsoWorkflow,
+} from "./parallel-control-cards";
 
 type ReviewDraft = {
   decision: "approved" | "correction_required";
@@ -68,7 +60,6 @@ const EMPLOYER_DISMISSAL_STAGES: Array<{ id: string; title: string; description:
   { id: "signatures", title: "Assinaturas rescisórias", description: "Envio dos documentos aprovados para as assinaturas aplicáveis.", stepIds: ["signatures"] },
   { id: "delivery", title: "Conclusão com a colaboradora", description: "Documentos finais e comprovante, depois das assinaturas e do pagamento.", stepIds: ["termination_payment", "employee_delivery"] },
   { id: "operations", title: "Encerramentos internos e acessos", description: "Bloqueio de acessos, escalas, benefícios e demais controles internos.", stepIds: ["access_revocation", "operational"] },
-  { id: "controls", title: "Conferência de ASO e uniformes", description: "Revisão dos dois controles paralelos antes do fechamento total.", stepIds: ["aso", "uniform_return"] },
   { id: "closure", title: "Finalização total pelo RH", description: "Fechamento interno, inclusive com ressalvas documentadas de ASO e uniformes.", stepIds: ["closure"] },
 ];
 
@@ -129,6 +120,28 @@ function statusLabel(status?: string | null) {
   return labels[String(status)] ?? String(status ?? "Pendente");
 }
 
+function ownerLabel(owner?: TerminationStep["owner"]) {
+  if (owner === "employee") return "Colaborador";
+  if (owner === "finance") return "Financeiro";
+  if (owner === "accountant") return "Contabilidade";
+  if (owner === "clinic") return "Clínica";
+  if (owner === "manager") return "Gestor";
+  if (owner === "system") return "Sistema";
+  if (owner === "employer") return "Empresa";
+  return "RH";
+}
+
+function healthLabel(health: CltTerminationProcess["health"]) {
+  return {
+    on_track: "No prazo",
+    attention: "Atenção",
+    overdue: "Atrasado",
+    blocked: "Bloqueado",
+    completed: "Concluído",
+    cancelled: "Cancelado",
+  }[health];
+}
+
 function StatusIcon({ state }: { state: "completed" | "blocked" | "active" | "pending" }) {
   if (state === "completed") return <CheckCircle2 className="h-5 w-5 text-emerald-600" />;
   if (state === "blocked") return <LockKeyhole className="h-5 w-5 text-amber-600" />;
@@ -150,7 +163,7 @@ export function EmployeeResignationDetail({
 }: {
   process: CltTerminationProcess;
   events: TerminationEvent[];
-  asoWorkflow: AsoWorkflow;
+  asoWorkflow: TerminationAsoWorkflow;
   busy: boolean;
   error: string | null;
   onAction: (body: Record<string, unknown>) => Promise<void>;
@@ -181,7 +194,10 @@ export function EmployeeResignationDetail({
   const isEmployerDismissal = process.processType === "clt_hr_termination" && process.terminationReason === "Dispensa sem justa causa" && Boolean(process.dismissalCommunication);
   const stageDefinitions = isEmployerDismissal ? EMPLOYER_DISMISSAL_STAGES : MAIN_STAGES;
   const stages = stageDefinitions.map((stage) => ({ ...stage, steps: stage.stepIds.map((id) => stepsById.get(id)).filter((step): step is TerminationStep => Boolean(step)) }));
-  const defaultStage = stages.find((stage) => stageState(stage.steps) === "active") ?? stages.find((stage) => stageState(stage.steps) === "blocked") ?? stages[0];
+  const defaultStage = stages.find((stage) => stageState(stage.steps) === "active")
+    ?? stages.find((stage) => stageState(stage.steps) === "blocked")
+    ?? stages.find((stage) => stageState(stage.steps) === "pending")
+    ?? stages[stages.length - 1];
   const selectedStage = stages.find((stage) => stage.id === selectedStageId) ?? defaultStage;
   const letter = process.documents.find((document) => document.type === "resignation_letter" && document.isCurrent !== false);
   const dismissalNotice = process.documents.find((document) => document.type === "dismissal_notice" && document.isCurrent !== false);
@@ -279,8 +295,6 @@ export function EmployeeResignationDetail({
     const contractReached = Boolean(process.notice && new Date().toISOString().slice(0, 10) >= process.notice.contractEndDate);
     const accessRows = [{ target: "pdv", label: "PDV Legal", status: process.accessRevocation?.pdv.status }, { target: "bizneo", label: "Bizneo", status: process.accessRevocation?.bizneo.status }, { target: "healthPlan", label: "Plano de saúde", status: process.accessRevocation?.healthPlan.status }] as const;
     content = <div className="space-y-4"><div className="space-y-2 rounded-xl border bg-white p-4">{accessRows.map((row) => <div key={row.target} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"><div><p className="font-black">{row.label}</p><p className="text-xs text-slate-500">{statusLabel(row.status)}</p></div>{!["completed", "not_applicable"].includes(row.status ?? "") ? <Button variant="outline" size="sm" disabled={busy || !employeeDone || !contractReached} onClick={() => void onAction({ action: "revoke_access", target: row.target })}>{row.target === "pdv" ? "Remover pela API" : "Confirmar encerramento"}</Button> : <CheckCircle2 className="h-5 w-5 text-emerald-600" />}</div>)}</div><div className="space-y-3 rounded-xl border bg-white p-4"><label className="flex items-center gap-3 text-sm font-bold"><Checkbox checked={scheduleRemoved} onCheckedChange={(checked) => setScheduleRemoved(checked === true)} />Retirado das escalas</label><label className="flex items-center gap-3 text-sm font-bold"><Checkbox checked={benefitsClosed} onCheckedChange={(checked) => setBenefitsClosed(checked === true)} />Benefícios aplicáveis encerrados</label><label className="flex items-center gap-3 text-sm font-bold"><Checkbox checked={assetsReturned} onCheckedChange={(checked) => setAssetsReturned(checked === true)} />Outros bens e materiais devolvidos ou tratados</label><Textarea value={operationNotes} onChange={(event) => setOperationNotes(event.target.value)} placeholder="Observações internas" /><Button disabled={busy || !employeeDone || !accessDone || operationsDone} onClick={() => void onAction({ action: "complete_operations", scheduleRemoved, benefitsClosed, assetsReturned, notes: operationNotes })}>{operationsDone ? "Encerramentos concluídos" : "Concluir encerramentos internos"}</Button></div></div>;
-  } else if (selectedStage.id === "controls") {
-    content = <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border bg-white p-4"><div className="flex items-center gap-3"><Shirt className="h-5 w-5 text-violet-600" /><div><p className="font-black">Uniformes</p><p className="text-sm text-slate-500">{uniformStep?.status === "completed" ? "Devolução validada." : pendingUniformPieces === null ? "Carregando controle..." : `${pendingUniformPieces} peça(s) ainda registrada(s) em posse.`}</p></div></div><Button className="mt-4" variant="outline" disabled={busy || pendingUniformPieces !== 0 || uniformStep?.status === "completed"} onClick={() => void onAction({ action: "sync_uniform_return" })}>{uniformStep?.status === "completed" ? "Devolução validada" : "Validar devolução"}</Button></div><div className="rounded-xl border bg-white p-4"><div className="flex items-center gap-3"><Stethoscope className="h-5 w-5 text-sky-600" /><div><p className="font-black">ASO demissional</p><p className="text-sm text-slate-500">Situação: {statusLabel(asoStep?.status)}</p></div></div><Button asChild className="mt-4" variant="outline"><Link href={`/dashboard/hr/recruitment/integration?process=${process.id}`}><ExternalLink className="h-4 w-4" />Abrir operação do ASO</Link></Button></div></div><div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm font-semibold text-sky-900">Pendências destes controles não reabrem a relação com a colaboradora. Elas serão tratadas no fechamento total, com possibilidade de ressalva formal.</div></div>;
   } else if (selectedStage.id === "closure") {
     const asoComplete = ["completed", "waived"].includes(asoStep?.status ?? "");
     const uniformComplete = ["completed", "waived"].includes(uniformStep?.status ?? "") || pendingUniformPieces === 0;
@@ -288,17 +302,80 @@ export function EmployeeResignationDetail({
   }
 
   const completedMain = stages.filter((stage) => stageState(stage.steps) === "completed").length;
+  const nextPrimaryStep = defaultStage.steps.find((step) => !terminalStatuses.has(step.status)) ?? defaultStage.steps[0];
+  const nextActionLabel = process.status === "completed" ? "Processo concluído" : defaultStage.title;
+  const nextActionOwner = ownerLabel(nextPrimaryStep?.owner);
   return (
     <div className="min-h-full bg-[#f0eee9] px-4 py-5 text-slate-950 sm:px-7 sm:py-7">
       <div className="mx-auto max-w-[1380px] space-y-5">
         <div className="flex flex-wrap items-center gap-3"><Button asChild variant="outline" className="rounded-xl bg-white"><Link href="/dashboard/dp/terminations"><ArrowLeft className="h-4 w-4" />Voltar</Link></Button><Badge className="bg-pink-100 text-pink-700 hover:bg-pink-100">{isEmployerDismissal ? "Dispensa sem justa causa" : "Pedido de demissão"}</Badge><span className="ml-auto font-mono text-xs text-slate-400">{process.request.protocol}</span></div>
         {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{error}</div> : null}
-        <section className="rounded-[24px] border bg-white p-5 shadow-sm sm:p-7"><div className="flex flex-wrap items-start justify-between gap-5"><div><p className="text-xs font-black uppercase tracking-[0.1em] text-pink-600">{isEmployerDismissal ? "Desligamento CLT iniciado pela empresa" : "Desligamento CLT solicitado pelo colaborador"}</p><h1 className="mt-2 text-2xl font-black">{process.employeeName}</h1><p className="mt-1 text-sm font-medium text-slate-500">{process.jobRoleName ?? "Cargo não informado"} · {process.unitName ?? "Unidade não informada"}</p></div><div className="text-right"><p className="text-3xl font-black text-pink-600">{completedMain}/{stages.length}</p><p className="text-xs font-bold text-slate-400">etapas principais</p></div></div></section>
+        <section className="overflow-hidden rounded-[24px] border bg-white shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-5 p-5 sm:p-7">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-black uppercase tracking-[0.1em] text-pink-600">
+                  {isEmployerDismissal ? "Desligamento CLT iniciado pela empresa" : "Desligamento CLT solicitado pelo colaborador"}
+                </p>
+                <Badge variant="outline" className={`rounded-full text-[10px] font-black ${
+                  process.health === "on_track" || process.health === "completed"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : process.health === "overdue" || process.health === "blocked"
+                      ? "border-rose-200 bg-rose-50 text-rose-700"
+                      : "border-amber-200 bg-amber-50 text-amber-700"
+                }`}>
+                  {healthLabel(process.health)}
+                </Badge>
+              </div>
+              <h1 className="mt-2 text-2xl font-black">{process.employeeName}</h1>
+              <p className="mt-1 text-sm font-medium text-slate-500">{process.jobRoleName ?? "Cargo não informado"} · {process.unitName ?? "Unidade não informada"}</p>
+            </div>
+            <div className="w-full max-w-[250px]">
+              <div className="flex items-end justify-between gap-3">
+                <div><p className="text-3xl font-black text-pink-600">{process.progress}%</p><p className="text-xs font-bold text-slate-400">progresso geral</p></div>
+                <div className="text-right"><p className="text-lg font-black text-slate-700">{completedMain}/{stages.length}</p><p className="text-[10px] font-bold text-slate-400">etapas principais</p></div>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-pink-600 transition-[width]" style={{ width: `${Math.max(0, Math.min(process.progress, 100))}%` }} />
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-px border-t bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Tipo</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{process.terminationReason ?? (isEmployerDismissal ? "Dispensa sem justa causa" : "Pedido de demissão")}</p></div>
+            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Último dia</p><p className="mt-1.5 inline-flex items-center gap-2 text-xs font-extrabold text-slate-700"><CalendarDays className="h-3.5 w-3.5 text-slate-400" />{dateLabel(process.notice?.contractEndDate ?? process.request.desiredLastDay)}</p></div>
+            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Próxima ação</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{nextActionLabel}</p></div>
+            <div className="bg-[#fbfaf7] px-5 py-4"><p className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">Responsável</p><p className="mt-1.5 text-xs font-extrabold text-slate-700">{nextActionOwner}</p></div>
+          </div>
+        </section>
 
-        <section className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2"><Shirt className="h-5 w-5 text-violet-600" /><p className="font-black">Uniformes · paralelo</p></div><p className="mt-1 text-xs text-slate-500">Disponível desde {isEmployerDismissal ? "a comunicação presencial" : "a carta"} e não bloqueia a conclusão com o colaborador.</p><div className="mt-3"><CollaboratorUniforms collaborator={{ id: process.employeeId, username: process.employeeName, email: process.employeeEmail }} mode="return-only" onPossessionChange={setPendingUniformPieces} /></div><Button className="mt-3" size="sm" variant="outline" disabled={busy || pendingUniformPieces !== 0 || uniformStep?.status === "completed"} onClick={() => void onAction({ action: "sync_uniform_return" })}>{uniformStep?.status === "completed" ? "Devolução validada" : pendingUniformPieces === null ? "Carregando..." : `Validar devolução (${pendingUniformPieces} pendente(s))`}</Button></div>
-          <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2"><Stethoscope className="h-5 w-5 text-sky-600" /><p className="font-black">ASO demissional · paralelo</p></div><p className="mt-1 text-xs text-slate-500">Guia, pagamento, comprovante, clínica, agendamento e aprovação seguem no fluxo já existente.</p><div className="mt-3 space-y-2 text-sm"><p>Guia: <b>{asoWorkflow.latestGuideId ? "gerada" : "aguardando"}</b></p><p>Pagamento: <b>{statusLabel(asoWorkflow.paymentStatus)}</b></p><p>Clínica: <b>{asoWorkflow.clinic?.sentAt ? "acionada" : "aguardando"}</b></p><p>ASO: <b>{statusLabel(asoStep?.status)}</b></p></div><Button asChild className="mt-4" size="sm" variant="outline"><Link href={`/dashboard/hr/recruitment/integration?process=${process.id}`}><ExternalLink className="h-4 w-4" />Abrir operação do ASO</Link></Button></div>
-          <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2"><WalletCards className="h-5 w-5 text-emerald-600" /><p className="font-black">Pagamento · paralelo após etapa {isEmployerDismissal ? "2" : "5"}</p></div><p className="mt-1 text-xs text-slate-500">O financeiro autoriza e o sistema envia automaticamente ao Inter.</p><div className="mt-4"><InfoRow label="Situação" value={statusLabel(process.payment?.status)} /><div className="mt-2"><InfoRow label="Valor e prazo" value={`${money(process.payment?.amount)} · ${dateLabel(process.payment?.dueAt)}`} /></div></div>{process.payment?.lastError ? <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-800">{process.payment.lastError}</p> : null}<div className="mt-3 flex flex-wrap gap-2">{process.payment?.requestId ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void onAction({ action: "sync_payment" })}><RefreshCw className="h-4 w-4" />Atualizar</Button> : process.payment?.status === "configuration_required" ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void onAction({ action: "prepare_payment" })}><RefreshCw className="h-4 w-4" />Tentar novamente</Button> : null}{process.payment?.proofStoragePath ? <Button size="sm" variant="outline" onClick={() => void openAsset("paymentProof=1")}><Download className="h-4 w-4" />Comprovante</Button> : null}</div></div>
+        <section className="space-y-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.11em] text-pink-600">Controles paralelos</p>
+            <h2 className="mt-1.5 text-lg font-black text-slate-950">ASO, uniformes e pagamento avançam junto das etapas principais</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">Cada card mostra a situação atual e a próxima ação disponível.</p>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-3">
+            <TerminationUniformCard
+              collaborator={{ id: process.employeeId, username: process.employeeName, email: process.employeeEmail }}
+              step={uniformStep}
+              pendingPieces={pendingUniformPieces}
+              busy={busy}
+              description={`Disponível desde ${isEmployerDismissal ? "a comunicação presencial" : "o envio da carta"}.`}
+              onPossessionChange={setPendingUniformPieces}
+              onValidate={() => onAction({ action: "sync_uniform_return" })}
+            />
+            <TerminationAsoCard processId={process.id} workflow={asoWorkflow} step={asoStep} />
+            <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm">
+              <div className="border-b border-emerald-100 bg-emerald-50/60 p-4">
+                <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><WalletCards className="h-5 w-5" /></span><div><p className="font-black">Pagamento rescisório</p><p className="mt-0.5 text-xs font-semibold text-slate-500">Disponível após a aprovação da contabilidade.</p></div></div>
+              </div>
+              <div className="flex flex-1 flex-col p-4">
+                <div className="grid gap-2"><InfoRow label="Situação" value={statusLabel(process.payment?.status)} /><InfoRow label="Valor e prazo" value={`${money(process.payment?.amount)} · ${dateLabel(process.payment?.dueAt)}`} /></div>
+                {process.payment?.lastError ? <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-800">{process.payment.lastError}</p> : null}
+                <div className="mt-auto flex flex-wrap gap-2 pt-4">{process.payment?.requestId ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void onAction({ action: "sync_payment" })}><RefreshCw className="h-4 w-4" />Atualizar</Button> : process.payment?.status === "configuration_required" ? <Button size="sm" variant="outline" disabled={busy} onClick={() => void onAction({ action: "prepare_payment" })}><RefreshCw className="h-4 w-4" />Tentar novamente</Button> : null}{process.payment?.proofStoragePath ? <Button size="sm" variant="outline" onClick={() => void openAsset("paymentProof=1")}><Download className="h-4 w-4" />Comprovante</Button> : null}</div>
+              </div>
+            </article>
+          </div>
         </section>
 
         <section className="grid overflow-hidden rounded-[24px] border bg-white shadow-sm xl:grid-cols-[310px_minmax(0,1fr)]">
