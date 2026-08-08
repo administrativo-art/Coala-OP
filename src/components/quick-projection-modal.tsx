@@ -173,20 +173,20 @@ Projeção para ${baseProduct.name}:
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Projeção Rápida: {baseProduct.name}</DialogTitle>
-          <DialogDescription>
+        <DialogHeader className="pr-8 text-center sm:text-center">
+          <DialogTitle className="text-center">Projeção Rápida: {baseProduct.name}</DialogTitle>
+          <DialogDescription className="text-center">
             Análise de compra baseada na média de consumo da Matriz.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
             <Card className="bg-muted/50">
-                <CardContent className="p-3 grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Estoque atual: <strong>{formatNumber(projection.totalStock)} {baseProduct.unit}</strong></span></div>
-                    <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Média diária: <strong>{formatNumber(projection.dailyAvg)} {baseProduct.unit}</strong></span></div>
-                    <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Cobertura: <strong>{isFinite(projection.daysOfCoverage) ? `${projection.daysOfCoverage} dias` : 'N/A'}</strong></span></div>
-                    <div className="flex items-center gap-2"><Info className="h-4 w-4 text-primary"/><span>Lead Time: <strong>{projection.leadTime || 0} dias</strong></span></div>
+                <CardContent className="grid grid-cols-2 place-items-center gap-3 p-3 text-center text-sm">
+                    <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Estoque atual: <strong>{formatNumber(projection.totalStock)} {baseProduct.unit}</strong></span></div>
+                    <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Média diária: <strong>{formatNumber(projection.dailyAvg)} {baseProduct.unit}</strong></span></div>
+                    <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Cobertura: <strong>{isFinite(projection.daysOfCoverage) ? `${projection.daysOfCoverage} dias` : 'N/A'}</strong></span></div>
+                    <div className="flex w-full items-center justify-center gap-2"><Info className="h-4 w-4 shrink-0 text-primary"/><span>Lead Time: <strong>{projection.leadTime || 0} dias</strong></span></div>
                 </CardContent>
             </Card>
 
