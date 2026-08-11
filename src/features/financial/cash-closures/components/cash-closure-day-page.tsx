@@ -106,6 +106,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
   const [reasonAction, setReasonAction] = useState<"approve" | "reopen" | null>(null);
   const [reason, setReason] = useState("");
   const latestData = useRef<CashClosureWithLines | null>(null);
+  const intervalBackfillAttempted = useRef(false);
   const closureId = `${kioskId}_${date}`;
   const [dateYear, dateMonth] = date.split("-").map(Number);
   const monthLabel = formatClosureMonthLabel(dateYear, dateMonth);
@@ -205,7 +206,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     setSaveState("dirty");
   }
 
-  async function sync() {
+  const sync = useCallback(async () => {
     setWorking("sync");
     try {
       const payload = await api("/api/financial/cash-closures/sync", {
@@ -220,7 +221,22 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     } finally {
       setWorking(null);
     }
-  }
+  }, [api, date, kioskId, toast]);
+
+  useEffect(() => {
+    const needsIntervalBackfill =
+      !!data &&
+      ["draft", "reopened"].includes(data.closure.status) &&
+      data.lines.length > 0 &&
+      data.lines.some((line) => !line.metadata.firstCouponAt || !line.metadata.lastCouponAt);
+    if (
+      !needsIntervalBackfill ||
+      !permissions.financial?.cashClosures?.resync ||
+      intervalBackfillAttempted.current
+    ) return;
+    intervalBackfillAttempted.current = true;
+    void sync();
+  }, [data, permissions.financial?.cashClosures?.resync, sync]);
 
   async function submit() {
     setWorking("submit");
@@ -295,6 +311,9 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       expected: lines.reduce((total, line) => total + line.expectedCents, 0),
       counted: lines.reduce((total, line) => total + (line.countedCents ?? 0), 0),
       difference: lines.reduce((total, line) => total + (line.differenceCents ?? 0), 0),
+      pendingAmount: lines
+        .filter((line) => line.countedCents === null)
+        .reduce((total, line) => total + line.expectedCents, 0),
       pending: lines.filter((line) => line.countedCents === null).length,
       divergent: lines.filter((line) => line.differenceCents !== null && line.differenceCents !== 0).length,
     };
@@ -372,7 +391,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       const initials = group.name.split(" ").slice(0, 2).map((part) => part[0]).join("");
       const interval = operatorInterval(group.lines);
       return <Card key={group.key} className="overflow-hidden rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]">
-        <CardHeader className="border-b border-stone-100 px-[18px] py-3.5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-3"><CardTitle className="flex items-center gap-2.5 text-[15px] font-black"><span className="grid h-7 w-7 place-items-center rounded-[9px] bg-pink-100 text-xs font-black text-pink-600">{initials}</span>{group.name}</CardTitle>{interval && <span className="text-[11.5px] font-semibold text-zinc-400">{interval}</span>}</div><div className="font-mono text-[12.5px]"><span className="text-zinc-400">PDV {formatBRL(expected)} · Conferido {pending && counted === 0 ? "—" : formatBRL(counted)} · </span><strong className={resultText(pending ? null : difference).className}>{resultText(pending ? null : difference).label}</strong></div></div></CardHeader>
+        <CardHeader className="border-b border-stone-100 px-[18px] py-3.5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-3"><CardTitle className="flex items-center gap-2.5 text-[15px] font-black"><span className="grid h-7 w-7 place-items-center rounded-[9px] bg-pink-100 text-xs font-black text-pink-600">{initials}</span>{group.name}</CardTitle>{interval && <span className="text-[11.5px] font-semibold text-zinc-400">{interval}</span>}</div><div className="font-mono text-[12.5px]"><span className="text-zinc-400">PDV {formatBRL(expected)} · Conferido {pending && counted === 0 ? "—" : formatBRL(counted)} · </span><strong className={resultText(pending ? null : difference).className}>{pending ? `Pendente ${formatBRL(expected - counted)}` : resultText(difference).label}</strong></div></div></CardHeader>
         <CardContent className="space-y-0 px-[18px] pb-3.5 pt-1.5">
           <div className="hidden grid-cols-[minmax(180px,1fr)_140px_160px_150px] gap-3 border-b border-stone-100 px-0.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide text-zinc-400 md:grid"><span>Canal</span><span className="text-right">PDV</span><span className="text-right">Conferido</span><span>Resultado</span></div>
           {group.lines.map((line) => {
@@ -392,7 +411,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     <Card className="sticky bottom-3 border-0 bg-zinc-900 text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid gap-4 p-4 px-5 sm:grid-cols-5">
       <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Total PDV</p><p className="mt-0.5 font-mono text-[17px] font-extrabold">{formatBRL(liveSummary.expected)}</p></div>
       <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Total conferido</p><p className="mt-0.5 font-mono text-[17px] font-extrabold">{liveSummary.pending > 0 && liveSummary.counted === 0 ? "—" : formatBRL(liveSummary.counted)}</p></div>
-      <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Diferença</p><p className={cn("mt-0.5 font-mono text-[17px] font-extrabold", liveSummary.pending ? "text-amber-300" : resultText(liveSummary.difference).className)}>{liveSummary.pending ? "—" : formatBRL(liveSummary.difference)}</p></div>
+      <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Diferença</p><p className={cn("mt-0.5 font-mono text-[17px] font-extrabold", liveSummary.pending ? "text-amber-300" : resultText(liveSummary.difference).className)}>{liveSummary.pending ? `Pendente ${formatBRL(liveSummary.pendingAmount)}` : formatBRL(liveSummary.difference)}</p></div>
       <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Pendentes</p><p className="mt-0.5 font-mono text-[17px] font-extrabold text-amber-300">{liveSummary.pending}</p></div>
       <div><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Divergentes</p><p className="mt-0.5 font-mono text-[17px] font-extrabold text-rose-300">{liveSummary.divergent}</p></div>
     </CardContent></Card>

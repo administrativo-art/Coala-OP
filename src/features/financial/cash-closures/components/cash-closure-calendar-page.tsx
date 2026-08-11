@@ -66,6 +66,7 @@ export function CashClosureCalendarPage({ kioskId, year, month }: { kioskId: str
     issued: closures.filter((item) => ["issued", "paid"].includes(item.cashDeposit.status)).reduce((sum, item) => sum + item.cashDeposit.eligibleCents, 0),
     paid: closures.filter((item) => item.cashDeposit.status === "paid").reduce((sum, item) => sum + item.cashDeposit.eligibleCents, 0),
   }), [closures]);
+  const pendingAmount = Math.max(totals.expected - totals.counted, 0);
   const today = todayInClosureTimezone();
   const monthLabel = formatClosureMonthLabel(year, month);
   const kiosk = kiosks.find((item) => item.id === kioskId);
@@ -84,7 +85,7 @@ export function CashClosureCalendarPage({ kioskId, year, month }: { kioskId: str
       <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]"><CardContent className="grid grid-cols-3 gap-2.5 p-3.5 px-4">{[
         ["Vendas no PDV", formatBRL(totals.expected), ""],
         ["Conferido", hasPendingConference && totals.counted === 0 ? "—" : formatBRL(totals.counted), ""],
-        ["Diferença", hasPendingConference ? "Pendente" : formatBRL(totals.difference), hasPendingConference ? "text-amber-700" : totals.difference === 0 ? "text-emerald-700" : "text-rose-700"],
+        ["Diferença", hasPendingConference ? `Pendente ${formatBRL(pendingAmount)}` : formatBRL(totals.difference), hasPendingConference ? "text-amber-700" : totals.difference === 0 ? "text-emerald-700" : "text-rose-700"],
       ].map(([label, value, valueClass]) => <div key={label} className="min-w-0 text-center"><p className="truncate text-[11px] font-bold text-zinc-400">{label}</p><strong className={cn("block truncate font-mono text-[15px]", valueClass)}>{value}</strong></div>)}</CardContent></Card>
       <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]"><CardContent className="grid grid-cols-2 gap-2.5 p-3.5 px-4 sm:grid-cols-4">{[
         ["Dinheiro", formatBRL(totals.cash), ""],

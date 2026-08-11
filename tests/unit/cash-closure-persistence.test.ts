@@ -7,6 +7,7 @@ import {
   cashClosureLineId,
   mergeBuiltClosureForPersistence,
   recalculateCountedLine,
+  withPdvAutomaticClosureTotals,
 } from "../../src/features/financial/cash-closures/persistence";
 
 const context = {
@@ -141,4 +142,25 @@ test("ressincronização replica o esperado do Pix no valor conferido", () => {
   assert.equal(second.lines[0].countedCents, 10_100);
   assert.equal(second.lines[0].differenceCents, 0);
   assert.equal(second.lines[0].countedBy, "system:pdv");
+});
+
+test("resumo legado projeta Pix e cartões como conferidos sem contar dinheiro pendente", () => {
+  const closure = mergeBuiltClosureForPersistence({
+    built: buildPix(100),
+    now: "2026-07-08T10:00:00.000Z",
+  }).closure;
+  const legacy = {
+    ...closure,
+    countedTotalCents: 0,
+    differenceTotalCents: -10_000,
+    countedByChannelCents: { ...closure.countedByChannelCents, pix: 0 },
+    differenceByChannelCents: { ...closure.differenceByChannelCents, pix: -10_000 },
+  };
+
+  const projected = withPdvAutomaticClosureTotals(legacy);
+  assert.equal(projected.countedTotalCents, 10_000);
+  assert.equal(projected.differenceTotalCents, 0);
+  assert.equal(projected.countedByChannelCents.pix, 10_000);
+  assert.equal(projected.differenceByChannelCents.pix, 0);
+  assert.equal(projected.countedCashCents, 0);
 });

@@ -2,6 +2,7 @@ import "server-only";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { CASH_CLOSURE_TIMEZONE } from "./date";
+import { withPdvAutomaticClosureTotals } from "./persistence";
 import type { CashClosure, CashClosureMonthlySummary, CashClosureUnitSummary } from "./types";
 
 const MONTHLY = "cashClosureMonthlySummaries";
@@ -34,7 +35,7 @@ function summaryFromClosures(input: {
   month: number;
   now: string;
 }): CashClosureMonthlySummary {
-  const { closures } = input;
+  const closures = input.closures.map(withPdvAutomaticClosureTotals);
   return {
     id: input.id,
     workspaceId: input.workspaceId,

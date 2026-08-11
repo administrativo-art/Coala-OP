@@ -27,6 +27,41 @@ export function emptyChannelTotals(): CashClosureChannelTotals {
   return Object.fromEntries(CASH_CLOSURE_CHANNELS.map((channel) => [channel, 0])) as CashClosureChannelTotals;
 }
 
+export function withPdvAutomaticClosureTotals(closure: CashClosure): CashClosure {
+  const automaticChannels = CASH_CLOSURE_CHANNELS.filter(isPdvAutoCountedChannel);
+  const previousAutomaticCounted = automaticChannels.reduce(
+    (total, channel) => total + closure.countedByChannelCents[channel],
+    0,
+  );
+  const previousAutomaticDifference = automaticChannels.reduce(
+    (total, channel) => total + closure.differenceByChannelCents[channel],
+    0,
+  );
+  const expectedAutomatic = automaticChannels.reduce(
+    (total, channel) => total + closure.expectedByChannelCents[channel],
+    0,
+  );
+
+  return {
+    ...closure,
+    countedTotalCents: closure.countedTotalCents - previousAutomaticCounted + expectedAutomatic,
+    differenceTotalCents: closure.differenceTotalCents - previousAutomaticDifference,
+    pendingLineCount: closure.expectedTotalCents === expectedAutomatic ? 0 : closure.pendingLineCount,
+    countedByChannelCents: {
+      ...closure.countedByChannelCents,
+      pix: closure.expectedByChannelCents.pix,
+      debit_card: closure.expectedByChannelCents.debit_card,
+      credit_card: closure.expectedByChannelCents.credit_card,
+    },
+    differenceByChannelCents: {
+      ...closure.differenceByChannelCents,
+      pix: 0,
+      debit_card: 0,
+      credit_card: 0,
+    },
+  };
+}
+
 function lineStatus(countedCents: number | null, differenceCents: number | null): CashClosureLineStatus {
   if (countedCents === null || differenceCents === null) return "pending";
   return differenceCents === 0 ? "matched" : "divergent";

@@ -11,6 +11,7 @@ import {
   mergeBuiltClosureForPersistence,
   recalculateCountedLine,
   recomputeCashClosureFromLines,
+  withPdvAutomaticClosureTotals,
 } from "./persistence";
 import { assertCashClosureTransition, canEditCashClosure } from "./state-machine";
 import { refreshCashClosureSummaries } from "./summaries.server";
@@ -116,7 +117,7 @@ export async function listCashClosures(input: {
   if (input.status) query = query.where("status", "==", input.status);
   query = query.orderBy("date", "desc").limit(Math.min(Math.max(input.limit ?? 400, 1), 1000));
   const snapshot = await query.get();
-  return snapshot.docs.map((document) => snapshotValue<CashClosure>(document));
+  return snapshot.docs.map((document) => withPdvAutomaticClosureTotals(snapshotValue<CashClosure>(document)));
 }
 
 export async function listCashClosureAuditLogs(workspaceId: string, closureId: string, limit = 200) {
