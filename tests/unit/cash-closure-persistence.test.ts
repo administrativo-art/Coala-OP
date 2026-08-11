@@ -30,6 +30,19 @@ function build(amount: number) {
   ], context);
 }
 
+function buildPix(amount: number) {
+  return buildCashClosureFromPdv([
+    {
+      codcupom: "pix-1",
+      usuariorecebimento_id: "10",
+      dtrecebimento: "2026-07-07 12:00:00",
+      valortotal: amount,
+      itens: [],
+      formaPgtos: [{ nome: "PIX", valortotal: amount }],
+    },
+  ], context);
+}
+
 test("IDs de fechamento e linha são determinísticos", () => {
   assert.equal(cashClosureId("tirirical", "2026-07-07"), "tirirical_2026-07-07");
   assert.equal(cashClosureLineId("10", "cash"), "10_cash");
@@ -109,4 +122,23 @@ test("mudança de fonte após aprovação é sinalizada", () => {
   });
   assert.equal(second.closure.status, "approved");
   assert.equal(second.closure.pdvChangedAfterApproval, true);
+});
+
+test("ressincronização replica o esperado do Pix no valor conferido", () => {
+  const first = mergeBuiltClosureForPersistence({ built: buildPix(100), now: "2026-07-08T10:00:00.000Z" });
+  assert.equal(first.lines[0].countedCents, 10_000);
+  assert.equal(first.lines[0].differenceCents, 0);
+  assert.equal(first.lines[0].status, "matched");
+  assert.equal(first.lines[0].countedBy, "system:pdv");
+
+  const second = mergeBuiltClosureForPersistence({
+    built: buildPix(101),
+    existingClosure: first.closure,
+    existingLines: [{ ...first.lines[0], countedCents: 9_500, countedBy: "user-1" }],
+    now: "2026-07-08T11:00:00.000Z",
+  });
+  assert.equal(second.lines[0].expectedCents, 10_100);
+  assert.equal(second.lines[0].countedCents, 10_100);
+  assert.equal(second.lines[0].differenceCents, 0);
+  assert.equal(second.lines[0].countedBy, "system:pdv");
 });

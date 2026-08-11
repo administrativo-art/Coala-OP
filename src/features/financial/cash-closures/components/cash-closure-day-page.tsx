@@ -32,8 +32,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "../money";
-import { formatClosureMonthLabel } from "../date";
+import { formatClosureMonthLabel, formatClosureTime } from "../date";
 import type { CashClosure, CashClosureLine, CashClosureWithLines } from "../types";
+import { isPdvAutoCountedChannel } from "../channel-normalization";
 import { cashDepositBatchReferenceFromId } from "../../cash-deposits/references";
 import { CentsInput } from "./cents-input";
 import { CashControlNavigation } from "./cash-control-navigation";
@@ -79,6 +80,21 @@ function channelName(line: CashClosureLine) {
   return labels[line.channel];
 }
 
+function operatorInterval(lines: CashClosureLine[]) {
+  const firstCouponAt = lines.find((line) => line.metadata.firstCouponAt)?.metadata.firstCouponAt;
+  const lastCouponAt = lines.find((line) => line.metadata.lastCouponAt)?.metadata.lastCouponAt;
+  if (!firstCouponAt || !lastCouponAt) return null;
+  const first = formatClosureTime(firstCouponAt);
+  const last = formatClosureTime(lastCouponAt);
+  return first && last ? `Apurado das ${first} às ${last}` : null;
+}
+
+function withPdvAutomaticCounts(lines: CashClosureLine[]) {
+  return lines.map((line) => isPdvAutoCountedChannel(line.channel)
+    ? { ...line, countedCents: line.expectedCents, differenceCents: 0, status: "matched" as const }
+    : line);
+}
+
 export function CashClosureDayPage({ kioskId, date }: Props) {
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
@@ -121,7 +137,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     setLoading(true);
     try {
       const payload = await api(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`);
-      setData({ closure: payload.closure, lines: payload.lines });
+      setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
       setSeniorDivergenceCents(payload.settings?.seniorDivergenceCents ?? 1_000);
       setSaveState("idle");
     } catch (error) {
@@ -150,7 +166,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
           lines: current.lines.map((line) => ({ id: line.id, countedCents: line.countedCents, note: line.note })),
         }),
       });
-      setData({ closure: payload.closure, lines: payload.lines });
+      setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
       setSaveState("saved");
     } catch (error) {
       setSaveState("error");
@@ -196,7 +212,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
         method: "POST",
         body: JSON.stringify({ kioskId, date }),
       });
-      setData({ closure: payload.closure, lines: payload.lines });
+      setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
       setSaveState("idle");
       toast({ title: payload.created ? "Fechamento criado a partir do PDV." : "Fechamento ressincronizado." });
     } catch (error) {
@@ -313,7 +329,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <div className="flex flex-wrap items-center gap-2.5"><h1 className="text-[26px] font-black tracking-tight">{data.closure.kioskName}</h1><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11.5px] font-extrabold", data.closure.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ["pending_review", "reopened"].includes(data.closure.status) ? "border-amber-200 bg-amber-50 text-amber-800" : "border-stone-200 bg-stone-100 text-zinc-500")}>{STATUS_LABEL[data.closure.status]}</Badge></div>
-        <p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">Fechamento de {date.split("-").reverse().join("/")} · Filial PDV {data.closure.pdvFilialId}</p>
+        <p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">Fechamento de {date.split("-").reverse().join("/")}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {permissions.financial.cashClosures.resync && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void sync()} disabled={!!working}><RefreshCw className="mr-2 h-4 w-4" />Ressincronizar</Button>}
@@ -354,8 +370,9 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       const pending = group.lines.some((line) => line.countedCents === null);
       const difference = group.lines.reduce((total, line) => total + (line.differenceCents ?? 0), 0);
       const initials = group.name.split(" ").slice(0, 2).map((part) => part[0]).join("");
+      const interval = operatorInterval(group.lines);
       return <Card key={group.key} className="overflow-hidden rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]">
-        <CardHeader className="border-b border-stone-100 px-[18px] py-3.5"><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="flex items-center gap-2.5 text-[15px] font-black"><span className="grid h-7 w-7 place-items-center rounded-[9px] bg-pink-100 text-xs font-black text-pink-600">{initials}</span>{group.name}</CardTitle><div className="font-mono text-[12.5px]"><span className="text-zinc-400">PDV {formatBRL(expected)} · Conferido {pending && counted === 0 ? "—" : formatBRL(counted)} · </span><strong className={resultText(pending ? null : difference).className}>{resultText(pending ? null : difference).label}</strong></div></div></CardHeader>
+        <CardHeader className="border-b border-stone-100 px-[18px] py-3.5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-3"><CardTitle className="flex items-center gap-2.5 text-[15px] font-black"><span className="grid h-7 w-7 place-items-center rounded-[9px] bg-pink-100 text-xs font-black text-pink-600">{initials}</span>{group.name}</CardTitle>{interval && <span className="text-[11.5px] font-semibold text-zinc-400">{interval}</span>}</div><div className="font-mono text-[12.5px]"><span className="text-zinc-400">PDV {formatBRL(expected)} · Conferido {pending && counted === 0 ? "—" : formatBRL(counted)} · </span><strong className={resultText(pending ? null : difference).className}>{resultText(pending ? null : difference).label}</strong></div></div></CardHeader>
         <CardContent className="space-y-0 px-[18px] pb-3.5 pt-1.5">
           <div className="hidden grid-cols-[minmax(180px,1fr)_140px_160px_150px] gap-3 border-b border-stone-100 px-0.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide text-zinc-400 md:grid"><span>Canal</span><span className="text-right">PDV</span><span className="text-right">Conferido</span><span>Resultado</span></div>
           {group.lines.map((line) => {
@@ -363,7 +380,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
             return <div key={line.id} className={cn("grid gap-3 border-b border-stone-100 px-0.5 py-2.5 last:border-b-0 md:grid-cols-[minmax(180px,1fr)_140px_160px_150px] md:items-center", line.differenceCents !== null && line.differenceCents !== 0 && "rounded-xl bg-amber-50/60 px-2")}>
               <div className="flex items-center gap-2 font-semibold">{channelName(line)}{line.channel === "cash" && <Popover><PopoverTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7"><Info className="h-4 w-4" /><span className="sr-only">Ver composição do dinheiro</span></Button></PopoverTrigger><PopoverContent align="start" className="space-y-2 text-sm"><p className="font-semibold">Composição do dinheiro</p><div className="flex justify-between"><span>Recebido</span><strong>{formatBRL(line.metadata.grossCashCents ?? line.expectedCents)}</strong></div><div className="flex justify-between"><span>Troco</span><strong>- {formatBRL(line.metadata.changeCents ?? 0)}</strong></div><div className="flex justify-between border-t pt-2"><span>Líquido esperado</span><strong>{formatBRL(line.expectedCents)}</strong></div></PopoverContent></Popover>}</div>
               <div className="text-right font-mono text-sm">{formatBRL(line.expectedCents)}</div>
-              <CentsInput value={line.countedCents} onChange={(value) => updateLine(line.id, { countedCents: value })} disabled={!editable} ariaLabel={`Valor conferido de ${channelName(line)} para ${group.name}`} className="h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]" />
+              <CentsInput value={line.countedCents} onChange={(value) => updateLine(line.id, { countedCents: value })} disabled={!editable || isPdvAutoCountedChannel(line.channel)} ariaLabel={`Valor conferido de ${channelName(line)} para ${group.name}`} className="h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]" />
               <strong className={cn("text-sm", result.className)}>{result.label}</strong>
               {line.differenceCents !== null && line.differenceCents !== 0 && <div className="md:col-span-4"><Textarea value={line.note ?? ""} onChange={(event) => updateLine(line.id, { note: event.target.value })} disabled={!editable} placeholder="Observação obrigatória para esta divergência" className="min-h-20" /></div>}
             </div>;

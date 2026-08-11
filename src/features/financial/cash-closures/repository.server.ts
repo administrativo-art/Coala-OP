@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { Transaction } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { isPdvAutoCountedChannel } from "./channel-normalization";
 import {
   cashClosureId,
   emptyChannelTotals,
@@ -310,12 +311,21 @@ export async function saveCashClosureDraft(
       const update = updateById.get(current.id);
       if (!update) return current;
       updateById.delete(current.id);
-      if (update.countedCents !== null && (!Number.isSafeInteger(update.countedCents) || update.countedCents < 0)) {
+      const countedCents = isPdvAutoCountedChannel(current.channel)
+        ? current.expectedCents
+        : update.countedCents;
+      if (countedCents !== null && (!Number.isSafeInteger(countedCents) || countedCents < 0)) {
         throw new Error(`Valor contado inválido na linha ${current.id}.`);
       }
       const normalizedNote = update.note?.trim() || null;
-      if (current.countedCents === update.countedCents && current.note === normalizedNote) return current;
-      const next = recalculateCountedLine(current, update.countedCents, update.note, actor.userId, now);
+      if (current.countedCents === countedCents && current.note === normalizedNote) return current;
+      const next = recalculateCountedLine(
+        current,
+        countedCents,
+        update.note,
+        isPdvAutoCountedChannel(current.channel) ? "system:pdv" : actor.userId,
+        now,
+      );
       transaction.set(document.ref, next);
       if (current.countedCents !== next.countedCents) {
         writeAudit(transaction, {
@@ -362,14 +372,40 @@ export async function submitCashClosure(id: string, actor: CashClosureActor) {
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
     const closure = snapshotValue<CashClosure>(closureSnapshot);
     assertCashClosureTransition(closure.status, "pending_review");
-    const lines = lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document));
+    const now = new Date().toISOString();
+    const lines = lineSnapshot.docs.map((document) => {
+      const current = snapshotValue<CashClosureLine>(document);
+      if (!isPdvAutoCountedChannel(current.channel) || (
+        current.countedCents === current.expectedCents &&
+        current.differenceCents === 0 &&
+        current.status === "matched"
+      )) return current;
+      const next = recalculateCountedLine(
+        current,
+        current.expectedCents,
+        current.note,
+        "system:pdv",
+        now,
+      );
+      transaction.set(document.ref, next);
+      writeAudit(transaction, {
+        workspaceId: closure.workspaceId,
+        closureId: id,
+        lineId: current.id,
+        action: "counted_amount_updated",
+        actor,
+        createdAt: now,
+        previousValue: current.countedCents,
+        newValue: next.countedCents,
+      });
+      return next;
+    });
     if (lines.some((line) => line.countedCents === null)) {
-      throw new Error("Preencha o valor físico de todas as linhas antes de finalizar.");
+      throw new Error("Preencha o dinheiro e os demais valores manuais antes de finalizar.");
     }
     if (lines.some((line) => line.differenceCents !== 0 && !line.note?.trim())) {
       throw new Error("Toda divergência precisa de uma observação antes da finalização.");
     }
-    const now = new Date().toISOString();
     const next: CashClosure = {
       ...recomputeCashClosureFromLines(closure, lines, now),
       status: "pending_review",

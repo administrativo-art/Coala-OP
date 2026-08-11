@@ -1,5 +1,9 @@
-import { type CashClosureChannel, normalizeChannel } from "./channel-normalization";
-import { closureDateFromIso } from "./date";
+import {
+  isPdvAutoCountedChannel,
+  type CashClosureChannel,
+  normalizeChannel,
+} from "./channel-normalization";
+import { closureDateFromIso, compareClosureTimestamps } from "./date";
 import { sumCents, toCents } from "./money";
 import { type ParsedCoupon, parsePdvCoupons } from "./pdv-coupon-parser";
 import type {
@@ -21,6 +25,11 @@ type OperatorChannelAccumulator = {
   changeCents: number;
   paymentRowCount: number;
   rawPaymentNames: Set<string>;
+};
+
+type OperatorInterval = {
+  firstCouponAt: string;
+  lastCouponAt: string;
 };
 
 function accumulatorKey(operatorId: string, channel: CashClosureChannel): string {
@@ -57,6 +66,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
   const rawPaymentNames = new Set<string>();
   const unknownPaymentNames = new Set<string>();
   const accumulators = new Map<string, OperatorChannelAccumulator>();
+  const operatorIntervals = new Map<string, OperatorInterval>();
   const expectedByChannelCents: Partial<Record<CashClosureChannel, number>> = {};
 
   const source: CashClosureSource = {
@@ -97,6 +107,20 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
     const operatorName = ctx.operatorNameById?.[operatorId] ?? (coupon.operatorId ? operatorId : "Operador não identificado");
     if (!coupon.operatorId) {
       pushCapped(integrityWarnings, `Cupom ${coupon.couponId}: sem usuariorecebimento_id, agrupado em "unknown".`);
+    }
+
+    if (coupon.paymentRows.length > 0) {
+      const currentInterval = operatorIntervals.get(operatorId);
+      operatorIntervals.set(operatorId, {
+        firstCouponAt:
+          !currentInterval || compareClosureTimestamps(coupon.timestamp, currentInterval.firstCouponAt) < 0
+            ? coupon.timestamp
+            : currentInterval.firstCouponAt,
+        lastCouponAt:
+          !currentInterval || compareClosureTimestamps(coupon.timestamp, currentInterval.lastCouponAt) > 0
+            ? coupon.timestamp
+            : currentInterval.lastCouponAt,
+      });
     }
 
     let couponNetCents = 0;
@@ -160,22 +184,29 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
       (a, b) =>
         a.operatorName.localeCompare(b.operatorName, "pt-BR") || a.channel.localeCompare(b.channel),
     )
-    .map((acc) => ({
-      operatorId: acc.operatorId,
-      operatorName: acc.operatorName,
-      channel: acc.channel,
-      channelLabel: acc.channelLabel,
-      expectedAmountCents: acc.expectedAmountCents,
-      countedAmountCents: null,
-      differenceAmountCents: null,
-      status: "pending",
-      rawPaymentNames: Array.from(acc.rawPaymentNames),
-      metadata:
-        acc.channel === "cash"
-          ? { grossCashCents: acc.grossCashCents, changeCents: acc.changeCents, paymentRowCount: acc.paymentRowCount }
-          : { paymentRowCount: acc.paymentRowCount },
-      note: null,
-    }));
+    .map((acc) => {
+      const automaticallyCounted = isPdvAutoCountedChannel(acc.channel);
+      const interval = operatorIntervals.get(acc.operatorId);
+      return {
+        operatorId: acc.operatorId,
+        operatorName: acc.operatorName,
+        channel: acc.channel,
+        channelLabel: acc.channelLabel,
+        expectedAmountCents: acc.expectedAmountCents,
+        countedAmountCents: automaticallyCounted ? acc.expectedAmountCents : null,
+        differenceAmountCents: automaticallyCounted ? 0 : null,
+        status: automaticallyCounted ? "matched" as const : "pending" as const,
+        rawPaymentNames: Array.from(acc.rawPaymentNames),
+        metadata: {
+          ...(acc.channel === "cash"
+            ? { grossCashCents: acc.grossCashCents, changeCents: acc.changeCents }
+            : {}),
+          paymentRowCount: acc.paymentRowCount,
+          ...(interval ?? {}),
+        },
+        note: null,
+      };
+    });
 
   const [year, month, day] = ctx.date.split("-").map(Number);
   const operatorCount = new Set(lines.map((line) => line.operatorId)).size;

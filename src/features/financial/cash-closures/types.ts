@@ -42,6 +42,8 @@ export type CashClosureLineMetadata = {
   grossCashCents?: number;
   changeCents?: number;
   paymentRowCount?: number;
+  firstCouponAt?: string;
+  lastCouponAt?: string;
 };
 
 export type BuiltCashClosureLine = {
@@ -60,8 +62,8 @@ export type BuiltCashClosureLine = {
 
 /**
  * Saída do motor de fechamento (Fase 1, sem persistência). Cobre apenas o
- * lado "esperado" (PDV) — `countedAmountCents`/status de aprovação nascem
- * `null`/`draft` e são preenchidos nas fases de UI e aprovação (3 e 4).
+ * lado "esperado" (PDV). Pix e cartões também nascem conferidos pelo próprio
+ * PDV; dinheiro e demais canais continuam pendentes para conferência humana.
  */
 export type BuiltCashClosure = {
   workspaceId: string;

@@ -31,6 +31,53 @@ export function formatClosureMonthLabel(year: number, month: number) {
 
 const HAS_EXPLICIT_OFFSET = /[Zz]$|[+-]\d{2}:?\d{2}$/;
 const NAIVE_DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/;
+const NAIVE_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/;
+
+const TIME_FORMATTER = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: CASH_CLOSURE_TIMEZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const TIMESTAMP_KEY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: CASH_CLOSURE_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function closureTimestampKey(raw: string) {
+  const trimmed = raw.trim();
+  if (HAS_EXPLICIT_OFFSET.test(trimmed)) {
+    const instant = new Date(trimmed);
+    if (Number.isNaN(instant.getTime())) return null;
+    const parts = TIMESTAMP_KEY_FORMATTER.formatToParts(instant);
+    const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${value.year}${value.month}${value.day}${value.hour}${value.minute}${value.second}`;
+  }
+
+  const match = trimmed.match(NAIVE_DATE_TIME);
+  return match ? `${match[1]}${match[2]}${match[3]}${match[4]}${match[5]}${match[6] ?? "00"}` : null;
+}
+
+export function compareClosureTimestamps(left: string, right: string) {
+  return (closureTimestampKey(left) ?? left).localeCompare(closureTimestampKey(right) ?? right);
+}
+
+export function formatClosureTime(raw: string) {
+  const trimmed = raw.trim();
+  if (HAS_EXPLICIT_OFFSET.test(trimmed)) {
+    const instant = new Date(trimmed);
+    return Number.isNaN(instant.getTime()) ? null : TIME_FORMATTER.format(instant);
+  }
+  const match = trimmed.match(NAIVE_DATE_TIME);
+  return match ? `${match[4]}:${match[5]}` : null;
+}
 
 export function closureDateFromIso(raw: string): string {
   const trimmed = raw.trim();

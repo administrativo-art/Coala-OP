@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { CashClosureChannel } from "./channel-normalization";
+import { isPdvAutoCountedChannel, type CashClosureChannel } from "./channel-normalization";
 import {
   CASH_CLOSURE_CHANNELS,
   type BuiltCashClosure,
@@ -42,7 +42,11 @@ function normalizedSourceHash(built: BuiltCashClosure) {
         operatorName: line.operatorName,
         expectedCents: line.expectedAmountCents,
         rawPaymentNames: [...line.rawPaymentNames].sort(),
-        metadata: line.metadata,
+        metadata: {
+          grossCashCents: line.metadata.grossCashCents,
+          changeCents: line.metadata.changeCents,
+          paymentRowCount: line.metadata.paymentRowCount,
+        },
       }))
       .sort((left, right) => left.id.localeCompare(right.id)),
     source: {
@@ -61,8 +65,15 @@ function builtLineToPersistent(
   now: string,
 ): CashClosureLine {
   const id = cashClosureLineId(line.operatorId, line.channel);
-  const countedCents = existing?.countedCents ?? null;
+  const automaticallyCounted = isPdvAutoCountedChannel(line.channel);
+  const countedCents = automaticallyCounted
+    ? line.expectedAmountCents
+    : existing?.countedCents ?? line.countedAmountCents;
   const differenceCents = countedCents === null ? null : countedCents - line.expectedAmountCents;
+  const automaticCountIsCurrent =
+    automaticallyCounted &&
+    existing?.countedCents === countedCents &&
+    existing.countedBy === "system:pdv";
   const comparable = {
     operatorName: line.operatorName,
     channelLabel: line.channelLabel,
@@ -73,8 +84,12 @@ function builtLineToPersistent(
     rawPaymentNames: [...line.rawPaymentNames].sort(),
     metadata: line.metadata,
     note: existing?.note ?? null,
-    countedBy: existing?.countedBy ?? null,
-    countedAt: existing?.countedAt ?? null,
+    countedBy: automaticallyCounted ? "system:pdv" : existing?.countedBy ?? null,
+    countedAt: automaticallyCounted
+      ? automaticCountIsCurrent
+        ? existing?.countedAt ?? now
+        : now
+      : existing?.countedAt ?? null,
   };
   const existingComparable = existing
     ? {

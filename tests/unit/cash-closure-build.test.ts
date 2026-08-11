@@ -162,3 +162,32 @@ test("soma das linhas === expectedTotalCents, sem drift de centavos", () => {
   assert.equal(lineSum, closure.expectedTotalCents);
   assert.equal(closure.expectedTotalCents, 36800 + 3030);
 });
+
+test("Pix e cartões são conferidos automaticamente e guardam o intervalo do operador", () => {
+  const closure = buildCashClosureFromPdv(
+    [
+      coupon({
+        codcupom: "10",
+        dtrecebimento: "2026-07-07 08:05:00",
+        valortotal: 40,
+        formaPgtos: [{ nome: "PIX", valortotal: 40 }],
+      }),
+      coupon({
+        codcupom: "11",
+        dtrecebimento: "2026-07-07 18:42:00",
+        valortotal: 60,
+        formaPgtos: [{ nome: "CARTAO CREDITO", valortotal: 60 }],
+      }),
+    ],
+    BASE_CTX,
+  );
+
+  assert.equal(closure.lines.length, 2);
+  for (const line of closure.lines) {
+    assert.equal(line.countedAmountCents, line.expectedAmountCents);
+    assert.equal(line.differenceAmountCents, 0);
+    assert.equal(line.status, "matched");
+    assert.equal(line.metadata.firstCouponAt, "2026-07-07 08:05:00");
+    assert.equal(line.metadata.lastCouponAt, "2026-07-07 18:42:00");
+  }
+});

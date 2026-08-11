@@ -13,6 +13,16 @@ export type CashClosureChannel =
   | "signed_account"
   | "other";
 
+const PDV_AUTO_COUNTED_CHANNELS = new Set<CashClosureChannel>([
+  "pix",
+  "debit_card",
+  "credit_card",
+]);
+
+export function isPdvAutoCountedChannel(channel: CashClosureChannel) {
+  return PDV_AUTO_COUNTED_CHANNELS.has(channel);
+}
+
 export type ChannelNormalizationResult = {
   channel: CashClosureChannel;
   label: string;
