@@ -184,6 +184,8 @@ test("Pix e cartões são conferidos automaticamente e guardam o intervalo do op
 
   assert.equal(closure.lines.length, 2);
   for (const line of closure.lines) {
+    assert.equal(line.reportedAmountCents, line.expectedAmountCents);
+    assert.equal(line.reportedDifferenceAmountCents, 0);
     assert.equal(line.countedAmountCents, line.expectedAmountCents);
     assert.equal(line.differenceAmountCents, 0);
     assert.equal(line.status, "matched");

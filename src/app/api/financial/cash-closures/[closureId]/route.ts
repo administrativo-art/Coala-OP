@@ -6,7 +6,11 @@ import {
   cashClosureActor,
   cashClosureSeniorDivergenceCents,
 } from "@/features/financial/cash-closures/access.server";
-import { getCashClosure, saveCashClosureDraft } from "@/features/financial/cash-closures/repository.server";
+import {
+  getCashClosure,
+  saveCashClosureConference,
+  saveCashClosureDraft,
+} from "@/features/financial/cash-closures/repository.server";
 import { saveCashClosureDraftSchema } from "@/features/financial/cash-closures/schemas";
 
 export const runtime = "nodejs";
@@ -38,8 +42,13 @@ export async function GET(request: NextRequest, routeContext: RouteContext) {
 
 export async function PATCH(request: NextRequest, routeContext: RouteContext) {
   try {
-    const { context, closureId } = await loadAuthorized(request, routeContext, "edit");
+    const { context, closureId, result } = await loadAuthorized(request, routeContext, "view");
     const input = saveCashClosureDraftSchema.parse(await request.json());
+    if (result.closure.status === "pending_review") {
+      assertCashClosureAccess(context, "approve", result.closure.kioskId);
+      return NextResponse.json(await saveCashClosureConference(closureId, input.lines, cashClosureActor(context)));
+    }
+    assertCashClosureAccess(context, "edit", result.closure.kioskId);
     return NextResponse.json(await saveCashClosureDraft(closureId, input.lines, cashClosureActor(context)));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao salvar fechamento.";

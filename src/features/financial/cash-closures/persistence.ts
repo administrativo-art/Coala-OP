@@ -28,43 +28,96 @@ export function emptyChannelTotals(): CashClosureChannelTotals {
 }
 
 export function withPdvAutomaticClosureTotals(closure: CashClosure): CashClosure {
+  const empty = emptyChannelTotals();
+  const expectedByChannelCents = { ...empty, ...(closure.expectedByChannelCents ?? {}) };
+  const legacy = closure.reportedTotalCents === undefined;
+  const legacyReportedByChannel = { ...empty, ...(closure.countedByChannelCents ?? {}) };
+  const legacyFinanceByChannel = closure.status === "approved"
+    ? legacyReportedByChannel
+    : { ...empty };
+  const reportedByChannelCents = legacy
+    ? legacyReportedByChannel
+    : { ...empty, ...(closure.reportedByChannelCents ?? {}) };
+  const countedByChannelCents = legacy
+    ? legacyFinanceByChannel
+    : { ...empty, ...(closure.countedByChannelCents ?? {}) };
+  const reportedDifferenceByChannelCents = legacy
+    ? Object.fromEntries(CASH_CLOSURE_CHANNELS.map((channel) => [
+        channel,
+        reportedByChannelCents[channel] - expectedByChannelCents[channel],
+      ])) as CashClosureChannelTotals
+    : { ...empty, ...(closure.reportedDifferenceByChannelCents ?? {}) };
+  const differenceByChannelCents = legacy && closure.status !== "approved"
+    ? { ...empty }
+    : { ...empty, ...(closure.differenceByChannelCents ?? {}) };
   const automaticChannels = CASH_CLOSURE_CHANNELS.filter(isPdvAutoCountedChannel);
-  const previousAutomaticCounted = automaticChannels.reduce(
-    (total, channel) => total + closure.countedByChannelCents[channel],
-    0,
-  );
-  const previousAutomaticDifference = automaticChannels.reduce(
-    (total, channel) => total + closure.differenceByChannelCents[channel],
-    0,
-  );
-  const expectedAutomatic = automaticChannels.reduce(
-    (total, channel) => total + closure.expectedByChannelCents[channel],
-    0,
-  );
+  for (const channel of automaticChannels) {
+    reportedByChannelCents[channel] = expectedByChannelCents[channel];
+    countedByChannelCents[channel] = expectedByChannelCents[channel];
+    reportedDifferenceByChannelCents[channel] = 0;
+    differenceByChannelCents[channel] = 0;
+  }
+
+  const sum = (totals: CashClosureChannelTotals) =>
+    CASH_CLOSURE_CHANNELS.reduce((total, channel) => total + totals[channel], 0);
+  const manualExpected = CASH_CLOSURE_CHANNELS
+    .filter((channel) => !isPdvAutoCountedChannel(channel))
+    .reduce((total, channel) => total + expectedByChannelCents[channel], 0);
 
   return {
     ...closure,
-    countedTotalCents: closure.countedTotalCents - previousAutomaticCounted + expectedAutomatic,
-    differenceTotalCents: closure.differenceTotalCents - previousAutomaticDifference,
-    pendingLineCount: closure.expectedTotalCents === expectedAutomatic ? 0 : closure.pendingLineCount,
-    countedByChannelCents: {
-      ...closure.countedByChannelCents,
-      pix: closure.expectedByChannelCents.pix,
-      debit_card: closure.expectedByChannelCents.debit_card,
-      credit_card: closure.expectedByChannelCents.credit_card,
-    },
-    differenceByChannelCents: {
-      ...closure.differenceByChannelCents,
-      pix: 0,
-      debit_card: 0,
-      credit_card: 0,
-    },
+    expectedByChannelCents,
+    reportedByChannelCents,
+    countedByChannelCents,
+    reportedDifferenceByChannelCents,
+    differenceByChannelCents,
+    reportedTotalCents: sum(reportedByChannelCents),
+    countedTotalCents: sum(countedByChannelCents),
+    reportedDifferenceTotalCents: sum(reportedDifferenceByChannelCents),
+    differenceTotalCents: sum(differenceByChannelCents),
+    reportedCashCents: reportedByChannelCents.cash,
+    countedCashCents: countedByChannelCents.cash,
+    unreportedLineCount: closure.unreportedLineCount ?? closure.pendingLineCount ?? (manualExpected > 0 ? 1 : 0),
+    reportedDivergentLineCount: closure.reportedDivergentLineCount ?? closure.divergentLineCount ?? 0,
+    reportedMatchedLineCount: closure.reportedMatchedLineCount ?? closure.matchedLineCount ?? 0,
+    pendingLineCount: legacy && closure.status !== "approved"
+      ? (manualExpected > 0 ? Math.max(closure.pendingLineCount ?? 0, 1) : 0)
+      : closure.pendingLineCount ?? 0,
   };
 }
 
 function lineStatus(countedCents: number | null, differenceCents: number | null): CashClosureLineStatus {
   if (countedCents === null || differenceCents === null) return "pending";
   return differenceCents === 0 ? "matched" : "divergent";
+}
+
+function normalizeExistingLine(line: CashClosureLine, closureStatus: CashClosure["status"]): CashClosureLine {
+  const automatic = isPdvAutoCountedChannel(line.channel);
+  const legacy = line.reportedCents === undefined;
+  const reportedCents = automatic ? line.expectedCents : legacy ? line.countedCents : line.reportedCents;
+  const countedCents = automatic
+    ? line.expectedCents
+    : legacy && closureStatus !== "approved"
+      ? null
+      : line.countedCents;
+  const reportedDifferenceCents = reportedCents === null ? null : reportedCents - line.expectedCents;
+  const differenceCents = countedCents === null ? null : countedCents - line.expectedCents;
+  return {
+    ...line,
+    reportedCents,
+    reportedDifferenceCents,
+    countedCents,
+    conferenceDifferenceCents:
+      countedCents === null || reportedCents === null ? null : countedCents - reportedCents,
+    differenceCents,
+    status: lineStatus(countedCents, differenceCents),
+    reportedNote: automatic ? null : legacy ? line.note ?? null : line.reportedNote ?? null,
+    note: automatic ? null : legacy && closureStatus !== "approved" ? null : line.note ?? null,
+    reportedBy: automatic ? "system:pdv" : legacy ? line.countedBy ?? null : line.reportedBy ?? null,
+    reportedAt: automatic ? line.reportedAt ?? line.countedAt ?? line.updatedAt : legacy ? line.countedAt ?? null : line.reportedAt ?? null,
+    countedBy: automatic ? "system:pdv" : countedCents === null ? null : line.countedBy ?? null,
+    countedAt: automatic ? line.countedAt ?? line.updatedAt : countedCents === null ? null : line.countedAt ?? null,
+  };
 }
 
 function normalizedSourceHash(built: BuiltCashClosure) {
@@ -101,9 +154,13 @@ function builtLineToPersistent(
 ): CashClosureLine {
   const id = cashClosureLineId(line.operatorId, line.channel);
   const automaticallyCounted = isPdvAutoCountedChannel(line.channel);
+  const reportedCents = automaticallyCounted
+    ? line.expectedAmountCents
+    : existing?.reportedCents ?? line.reportedAmountCents;
   const countedCents = automaticallyCounted
     ? line.expectedAmountCents
     : existing?.countedCents ?? line.countedAmountCents;
+  const reportedDifferenceCents = reportedCents === null ? null : reportedCents - line.expectedAmountCents;
   const differenceCents = countedCents === null ? null : countedCents - line.expectedAmountCents;
   const automaticCountIsCurrent =
     automaticallyCounted &&
@@ -113,12 +170,21 @@ function builtLineToPersistent(
     operatorName: line.operatorName,
     channelLabel: line.channelLabel,
     expectedCents: line.expectedAmountCents,
+    reportedCents,
+    reportedDifferenceCents,
     countedCents,
+    conferenceDifferenceCents:
+      countedCents === null || reportedCents === null ? null : countedCents - reportedCents,
     differenceCents,
     status: lineStatus(countedCents, differenceCents),
     rawPaymentNames: [...line.rawPaymentNames].sort(),
     metadata: line.metadata,
+    reportedNote: existing?.reportedNote ?? null,
     note: existing?.note ?? null,
+    reportedBy: automaticallyCounted ? "system:pdv" : existing?.reportedBy ?? null,
+    reportedAt: automaticallyCounted
+      ? existing?.reportedAt ?? existing?.countedAt ?? now
+      : existing?.reportedAt ?? null,
     countedBy: automaticallyCounted ? "system:pdv" : existing?.countedBy ?? null,
     countedAt: automaticallyCounted
       ? automaticCountIsCurrent
@@ -131,12 +197,18 @@ function builtLineToPersistent(
         operatorName: existing.operatorName,
         channelLabel: existing.channelLabel,
         expectedCents: existing.expectedCents,
+        reportedCents: existing.reportedCents,
+        reportedDifferenceCents: existing.reportedDifferenceCents,
         countedCents: existing.countedCents,
+        conferenceDifferenceCents: existing.conferenceDifferenceCents,
         differenceCents: existing.differenceCents,
         status: existing.status,
         rawPaymentNames: [...existing.rawPaymentNames].sort(),
         metadata: existing.metadata,
+        reportedNote: existing.reportedNote,
         note: existing.note,
+        reportedBy: existing.reportedBy,
+        reportedAt: existing.reportedAt,
         countedBy: existing.countedBy,
         countedAt: existing.countedAt,
       }
@@ -156,10 +228,16 @@ function builtLineToPersistent(
 }
 
 function staleCountedLine(existing: CashClosureLine, now: string): CashClosureLine {
+  const reportedDifferenceCents = existing.reportedCents === null ? null : existing.reportedCents;
   const differenceCents = existing.countedCents === null ? null : existing.countedCents;
   return {
     ...existing,
     expectedCents: 0,
+    reportedDifferenceCents,
+    conferenceDifferenceCents:
+      existing.countedCents === null || existing.reportedCents === null
+        ? null
+        : existing.countedCents - existing.reportedCents,
     differenceCents,
     status: lineStatus(existing.countedCents, differenceCents),
     updatedAt:
@@ -171,19 +249,38 @@ function staleCountedLine(existing: CashClosureLine, now: string): CashClosureLi
 
 function aggregateLines(lines: CashClosureLine[]) {
   const expectedByChannelCents = emptyChannelTotals();
+  const reportedByChannelCents = emptyChannelTotals();
   const countedByChannelCents = emptyChannelTotals();
+  const reportedDifferenceByChannelCents = emptyChannelTotals();
   const differenceByChannelCents = emptyChannelTotals();
 
   let expectedTotalCents = 0;
+  let reportedTotalCents = 0;
   let countedTotalCents = 0;
+  let reportedDifferenceTotalCents = 0;
   let differenceTotalCents = 0;
+  let unreportedLineCount = 0;
   let pendingLineCount = 0;
+  let reportedDivergentLineCount = 0;
   let divergentLineCount = 0;
+  let reportedMatchedLineCount = 0;
   let matchedLineCount = 0;
 
   for (const line of lines) {
     expectedByChannelCents[line.channel] += line.expectedCents;
     expectedTotalCents += line.expectedCents;
+    if (line.reportedCents === null) {
+      unreportedLineCount++;
+    } else {
+      reportedByChannelCents[line.channel] += line.reportedCents;
+      reportedTotalCents += line.reportedCents;
+    }
+    if (line.reportedDifferenceCents !== null) {
+      reportedDifferenceByChannelCents[line.channel] += line.reportedDifferenceCents;
+      reportedDifferenceTotalCents += line.reportedDifferenceCents;
+      if (line.reportedDifferenceCents === 0) reportedMatchedLineCount++;
+      else reportedDivergentLineCount++;
+    }
     if (line.countedCents === null) {
       pendingLineCount++;
     } else {
@@ -200,15 +297,23 @@ function aggregateLines(lines: CashClosureLine[]) {
 
   return {
     expectedTotalCents,
+    reportedTotalCents,
     countedTotalCents,
+    reportedDifferenceTotalCents,
     differenceTotalCents,
     expectedByChannelCents,
+    reportedByChannelCents,
     countedByChannelCents,
+    reportedDifferenceByChannelCents,
     differenceByChannelCents,
     expectedCashCents: expectedByChannelCents.cash,
+    reportedCashCents: reportedByChannelCents.cash,
     countedCashCents: countedByChannelCents.cash,
+    unreportedLineCount,
     pendingLineCount,
+    reportedDivergentLineCount,
     divergentLineCount,
+    reportedMatchedLineCount,
     matchedLineCount,
   };
 }
@@ -227,16 +332,20 @@ export function mergeBuiltClosureForPersistence(input: {
   now: string;
 }): MergeCashClosureResult {
   const { built, existingClosure, existingLines = [], now } = input;
-  const existingById = new Map(existingLines.map((line) => [line.id, line]));
+  const normalizedExistingLines = existingLines.map((line) =>
+    normalizeExistingLine(line, existingClosure?.status ?? "draft"),
+  );
+  const existingById = new Map(normalizedExistingLines.map((line) => [line.id, line]));
   const nextLines = built.lines.map((line) => {
     const id = cashClosureLineId(line.operatorId, line.channel);
+    const existing = existingById.get(id);
     existingById.delete(id);
-    return builtLineToPersistent(built, line, existingLines.find((item) => item.id === id), now);
+    return builtLineToPersistent(built, line, existing, now);
   });
 
   const deletedLineIds: string[] = [];
   for (const stale of existingById.values()) {
-    if (stale.countedCents === null) deletedLineIds.push(stale.id);
+    if (stale.reportedCents === null && stale.countedCents === null) deletedLineIds.push(stale.id);
     else nextLines.push(staleCountedLine(stale, now));
   }
   nextLines.sort(
@@ -305,6 +414,38 @@ export function recomputeCashClosureFromLines(closure: CashClosure, lines: CashC
   };
 }
 
+export function normalizeCashClosureWithLines(
+  closure: CashClosure,
+  lines: CashClosureLine[],
+): { closure: CashClosure; lines: CashClosureLine[] } {
+  const normalizedLines = lines.map((line) => normalizeExistingLine(line, closure.status));
+  return {
+    closure: recomputeCashClosureFromLines(withPdvAutomaticClosureTotals(closure), normalizedLines, closure.updatedAt),
+    lines: normalizedLines,
+  };
+}
+
+export function recalculateReportedLine(
+  line: CashClosureLine,
+  reportedCents: number | null,
+  reportedNote: string | null,
+  actorId: string,
+  now: string,
+): CashClosureLine {
+  const reportedDifferenceCents = reportedCents === null ? null : reportedCents - line.expectedCents;
+  return {
+    ...line,
+    reportedCents,
+    reportedDifferenceCents,
+    conferenceDifferenceCents:
+      line.countedCents === null || reportedCents === null ? null : line.countedCents - reportedCents,
+    reportedNote: reportedNote?.trim() || null,
+    reportedBy: reportedCents === null ? null : actorId,
+    reportedAt: reportedCents === null ? null : now,
+    updatedAt: now,
+  };
+}
+
 export function recalculateCountedLine(
   line: CashClosureLine,
   countedCents: number | null,
@@ -316,6 +457,8 @@ export function recalculateCountedLine(
   return {
     ...line,
     countedCents,
+    conferenceDifferenceCents:
+      countedCents === null || line.reportedCents === null ? null : countedCents - line.reportedCents,
     differenceCents,
     status: lineStatus(countedCents, differenceCents),
     note: note?.trim() || null,

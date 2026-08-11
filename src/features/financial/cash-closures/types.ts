@@ -52,6 +52,8 @@ export type BuiltCashClosureLine = {
   channel: CashClosureChannel;
   channelLabel: string;
   expectedAmountCents: number;
+  reportedAmountCents: number | null;
+  reportedDifferenceAmountCents: number | null;
   countedAmountCents: number | null;
   differenceAmountCents: number | null;
   status: CashClosureLineStatus;
@@ -62,8 +64,8 @@ export type BuiltCashClosureLine = {
 
 /**
  * Saída do motor de fechamento (Fase 1, sem persistência). Cobre apenas o
- * lado "esperado" (PDV). Pix e cartões também nascem conferidos pelo próprio
- * PDV; dinheiro e demais canais continuam pendentes para conferência humana.
+ * lado "esperado" (PDV). Pix e cartões também nascem informados e conferidos
+ * pelo próprio PDV; dinheiro e demais canais aguardam Caixa e Financeiro.
  */
 export type BuiltCashClosure = {
   workspaceId: string;
@@ -125,17 +127,25 @@ export type CashClosure = {
   day: number;
   status: CashClosureStatus;
   expectedTotalCents: number;
+  reportedTotalCents: number;
   countedTotalCents: number;
+  reportedDifferenceTotalCents: number;
   differenceTotalCents: number;
   expectedCashCents: number;
+  reportedCashCents: number;
   countedCashCents: number;
   cashDepositEligibleCents: number;
   expectedByChannelCents: CashClosureChannelTotals;
+  reportedByChannelCents: CashClosureChannelTotals;
   countedByChannelCents: CashClosureChannelTotals;
+  reportedDifferenceByChannelCents: CashClosureChannelTotals;
   differenceByChannelCents: CashClosureChannelTotals;
   operatorCount: number;
+  unreportedLineCount: number;
   pendingLineCount: number;
+  reportedDivergentLineCount: number;
   divergentLineCount: number;
+  reportedMatchedLineCount: number;
   matchedLineCount: number;
   source: CashClosureSource;
   sourceHash: string;
@@ -167,12 +177,18 @@ export type CashClosureLine = {
   channel: CashClosureChannel;
   channelLabel: string;
   expectedCents: number;
+  reportedCents: number | null;
+  reportedDifferenceCents: number | null;
   countedCents: number | null;
+  conferenceDifferenceCents: number | null;
   differenceCents: number | null;
   status: CashClosureLineStatus;
   rawPaymentNames: string[];
   metadata: CashClosureLineMetadata;
+  reportedNote: string | null;
   note: string | null;
+  reportedBy: string | null;
+  reportedAt: string | null;
   countedBy: string | null;
   countedAt: string | null;
   updatedAt: string;
@@ -181,6 +197,8 @@ export type CashClosureLine = {
 export type CashClosureAuditAction =
   | "created_from_pdv"
   | "pdv_resynced"
+  | "reported_amount_updated"
+  | "reported_note_updated"
   | "counted_amount_updated"
   | "note_updated"
   | "submitted"
@@ -214,8 +232,10 @@ export type CashClosureActor = {
 
 export type CashClosureDraftLineInput = {
   id: string;
-  countedCents: number | null;
-  note: string | null;
+  reportedCents?: number | null;
+  countedCents?: number | null;
+  reportedNote?: string | null;
+  note?: string | null;
 };
 
 export type CashClosureWithLines = {

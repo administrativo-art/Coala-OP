@@ -16,8 +16,10 @@ export const syncCashClosureSchema = z.object({
 export const saveCashClosureDraftSchema = z.object({
   lines: z.array(z.object({
     id: z.string().trim().min(1).max(300),
-    countedCents: z.number().int().safe().min(0).nullable(),
-    note: z.string().trim().max(1000).nullable(),
+    reportedCents: z.number().int().safe().min(0).nullable().optional(),
+    countedCents: z.number().int().safe().min(0).nullable().optional(),
+    reportedNote: z.string().trim().max(1000).nullable().optional(),
+    note: z.string().trim().max(1000).nullable().optional(),
   })).max(500),
 });
 

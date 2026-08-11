@@ -9,7 +9,9 @@ import {
   cashClosureId,
   emptyChannelTotals,
   mergeBuiltClosureForPersistence,
+  normalizeCashClosureWithLines,
   recalculateCountedLine,
+  recalculateReportedLine,
   recomputeCashClosureFromLines,
   withPdvAutomaticClosureTotals,
 } from "./persistence";
@@ -85,15 +87,15 @@ export async function getCashClosure(id: string): Promise<CashClosureWithLines |
     ref.collection("lines").get(),
   ]);
   if (!closureSnapshot.exists) return null;
-  return {
-    closure: snapshotValue<CashClosure>(closureSnapshot),
-    lines: lineSnapshot.docs
+  return normalizeCashClosureWithLines(
+    snapshotValue<CashClosure>(closureSnapshot),
+    lineSnapshot.docs
       .map((document) => snapshotValue<CashClosureLine>(document))
       .sort(
         (left, right) =>
           left.operatorName.localeCompare(right.operatorName, "pt-BR") || left.channel.localeCompare(right.channel),
       ),
-  };
+  );
 }
 
 export async function getCashClosureByDate(kioskId: string, date: string) {
@@ -243,17 +245,25 @@ export async function recordCashClosureSyncError(input: {
       day,
       status: "sync_error",
       expectedTotalCents: 0,
+      reportedTotalCents: 0,
       countedTotalCents: 0,
+      reportedDifferenceTotalCents: 0,
       differenceTotalCents: 0,
       expectedCashCents: 0,
+      reportedCashCents: 0,
       countedCashCents: 0,
       cashDepositEligibleCents: 0,
       expectedByChannelCents: { ...channelTotals },
+      reportedByChannelCents: { ...channelTotals },
       countedByChannelCents: { ...channelTotals },
+      reportedDifferenceByChannelCents: { ...channelTotals },
       differenceByChannelCents: { ...channelTotals },
       operatorCount: 0,
+      unreportedLineCount: 0,
       pendingLineCount: 0,
+      reportedDivergentLineCount: 0,
       divergentLineCount: 0,
+      reportedMatchedLineCount: 0,
       matchedLineCount: 0,
       source: emptySource(input.error),
       sourceHash: "",
@@ -299,7 +309,12 @@ export async function saveCashClosureDraft(
       transaction.get(ref.collection("lines")),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
-    const closure = snapshotValue<CashClosure>(closureSnapshot);
+    const rawClosure = snapshotValue<CashClosure>(closureSnapshot);
+    const normalized = normalizeCashClosureWithLines(
+      rawClosure,
+      lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
+    );
+    const closure = normalized.closure;
     if (!canEditCashClosure(closure.status)) {
       throw new Error("Somente fechamentos em rascunho ou reabertos podem ser editados.");
     }
@@ -307,49 +322,54 @@ export async function saveCashClosureDraft(
     const updateById = new Map(updates.map((update) => [update.id, update]));
     if (updateById.size !== updates.length) throw new Error("Há linhas duplicadas no payload.");
     const now = new Date().toISOString();
+    const normalizedById = new Map(normalized.lines.map((line) => [line.id, line]));
     const nextLines = lineSnapshot.docs.map((document) => {
-      const current = snapshotValue<CashClosureLine>(document);
+      const current = normalizedById.get(document.id)!;
       const update = updateById.get(current.id);
       if (!update) return current;
       updateById.delete(current.id);
-      const countedCents = isPdvAutoCountedChannel(current.channel)
+      const reportedCents = isPdvAutoCountedChannel(current.channel)
         ? current.expectedCents
-        : update.countedCents;
-      if (countedCents !== null && (!Number.isSafeInteger(countedCents) || countedCents < 0)) {
-        throw new Error(`Valor contado inválido na linha ${current.id}.`);
+        : update.reportedCents !== undefined ? update.reportedCents : update.countedCents ?? null;
+      if (reportedCents !== null && (!Number.isSafeInteger(reportedCents) || reportedCents < 0)) {
+        throw new Error(`Valor informado inválido na linha ${current.id}.`);
       }
-      const normalizedNote = update.note?.trim() || null;
-      if (current.countedCents === countedCents && current.note === normalizedNote) return current;
-      const next = recalculateCountedLine(
+      const reportedNote = update.reportedNote !== undefined ? update.reportedNote : update.note ?? null;
+      const normalizedNote = reportedNote?.trim() || null;
+      if (current.reportedCents === reportedCents && current.reportedNote === normalizedNote) return current;
+      let next = recalculateReportedLine(
         current,
-        countedCents,
-        update.note,
+        reportedCents,
+        reportedNote,
         isPdvAutoCountedChannel(current.channel) ? "system:pdv" : actor.userId,
         now,
       );
+      if (isPdvAutoCountedChannel(current.channel)) {
+        next = recalculateCountedLine(next, current.expectedCents, null, "system:pdv", now);
+      }
       transaction.set(document.ref, next);
-      if (current.countedCents !== next.countedCents) {
+      if (current.reportedCents !== next.reportedCents) {
         writeAudit(transaction, {
           workspaceId: closure.workspaceId,
           closureId: id,
           lineId: current.id,
-          action: "counted_amount_updated",
+          action: "reported_amount_updated",
           actor,
           createdAt: now,
-          previousValue: current.countedCents,
-          newValue: next.countedCents,
+          previousValue: current.reportedCents,
+          newValue: next.reportedCents,
         });
       }
-      if (current.note !== next.note) {
+      if (current.reportedNote !== next.reportedNote) {
         writeAudit(transaction, {
           workspaceId: closure.workspaceId,
           closureId: id,
           lineId: current.id,
-          action: "note_updated",
+          action: "reported_note_updated",
           actor,
           createdAt: now,
-          previousValue: current.note,
-          newValue: next.note,
+          previousValue: current.reportedNote,
+          newValue: next.reportedNote,
         });
       }
       return next;
@@ -371,42 +391,29 @@ export async function submitCashClosure(id: string, actor: CashClosureActor) {
       transaction.get(ref.collection("lines")),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
-    const closure = snapshotValue<CashClosure>(closureSnapshot);
+    const rawClosure = snapshotValue<CashClosure>(closureSnapshot);
+    const normalized = normalizeCashClosureWithLines(
+      rawClosure,
+      lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
+    );
+    const closure = normalized.closure;
     assertCashClosureTransition(closure.status, "pending_review");
     const now = new Date().toISOString();
-    const lines = lineSnapshot.docs.map((document) => {
-      const current = snapshotValue<CashClosureLine>(document);
-      if (!isPdvAutoCountedChannel(current.channel) || (
-        current.countedCents === current.expectedCents &&
-        current.differenceCents === 0 &&
-        current.status === "matched"
-      )) return current;
-      const next = recalculateCountedLine(
-        current,
-        current.expectedCents,
-        current.note,
-        "system:pdv",
-        now,
-      );
-      transaction.set(document.ref, next);
-      writeAudit(transaction, {
-        workspaceId: closure.workspaceId,
-        closureId: id,
-        lineId: current.id,
-        action: "counted_amount_updated",
-        actor,
-        createdAt: now,
-        previousValue: current.countedCents,
-        newValue: next.countedCents,
-      });
-      return next;
-    });
-    if (lines.some((line) => line.countedCents === null)) {
+    if (normalized.lines.some((line) => line.reportedCents === null)) {
       throw new Error("Preencha o dinheiro e os demais valores manuais antes de finalizar.");
     }
-    if (lines.some((line) => line.differenceCents !== 0 && !line.note?.trim())) {
+    if (normalized.lines.some((line) => line.reportedDifferenceCents !== 0 && !line.reportedNote?.trim())) {
       throw new Error("Toda divergência precisa de uma observação antes da finalização.");
     }
+    const normalizedById = new Map(normalized.lines.map((line) => [line.id, line]));
+    const lines = lineSnapshot.docs.map((document) => {
+      const current = normalizedById.get(document.id)!;
+      const next = isPdvAutoCountedChannel(current.channel)
+        ? recalculateCountedLine(current, current.expectedCents, null, "system:pdv", now)
+        : recalculateCountedLine(current, null, null, actor.userId, now);
+      if (JSON.stringify(next) !== JSON.stringify(current)) transaction.set(document.ref, next);
+      return next;
+    });
     const next: CashClosure = {
       ...recomputeCashClosureFromLines(closure, lines, now),
       status: "pending_review",
@@ -429,6 +436,86 @@ export async function submitCashClosure(id: string, actor: CashClosureActor) {
   return result;
 }
 
+export async function saveCashClosureConference(
+  id: string,
+  updates: CashClosureDraftLineInput[],
+  actor: CashClosureActor,
+) {
+  const ref = closureRef(id);
+  const result = await financialDbAdmin.runTransaction(async (transaction) => {
+    const [closureSnapshot, lineSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(ref.collection("lines")),
+    ]);
+    if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
+    const normalized = normalizeCashClosureWithLines(
+      snapshotValue<CashClosure>(closureSnapshot),
+      lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
+    );
+    if (normalized.closure.status !== "pending_review") {
+      throw new Error("A conferência financeira só pode ser preenchida durante a revisão.");
+    }
+
+    const updateById = new Map(updates.map((update) => [update.id, update]));
+    if (updateById.size !== updates.length) throw new Error("Há linhas duplicadas no payload.");
+    const normalizedById = new Map(normalized.lines.map((line) => [line.id, line]));
+    const now = new Date().toISOString();
+    const nextLines = lineSnapshot.docs.map((document) => {
+      const current = normalizedById.get(document.id)!;
+      const update = updateById.get(current.id);
+      if (!update) return current;
+      updateById.delete(current.id);
+      const countedCents = isPdvAutoCountedChannel(current.channel)
+        ? current.expectedCents
+        : update.countedCents ?? null;
+      if (countedCents !== null && (!Number.isSafeInteger(countedCents) || countedCents < 0)) {
+        throw new Error(`Valor conferido inválido na linha ${current.id}.`);
+      }
+      const normalizedNote = update.note?.trim() || null;
+      if (current.countedCents === countedCents && current.note === normalizedNote) return current;
+      const next = recalculateCountedLine(
+        current,
+        countedCents,
+        update.note ?? null,
+        isPdvAutoCountedChannel(current.channel) ? "system:pdv" : actor.userId,
+        now,
+      );
+      transaction.set(document.ref, next);
+      if (current.countedCents !== next.countedCents) {
+        writeAudit(transaction, {
+          workspaceId: normalized.closure.workspaceId,
+          closureId: id,
+          lineId: current.id,
+          action: "counted_amount_updated",
+          actor,
+          createdAt: now,
+          previousValue: current.countedCents,
+          newValue: next.countedCents,
+        });
+      }
+      if (current.note !== next.note) {
+        writeAudit(transaction, {
+          workspaceId: normalized.closure.workspaceId,
+          closureId: id,
+          lineId: current.id,
+          action: "note_updated",
+          actor,
+          createdAt: now,
+          previousValue: current.note,
+          newValue: next.note,
+        });
+      }
+      return next;
+    });
+    if (updateById.size > 0) throw new Error("Uma ou mais linhas não pertencem a este fechamento.");
+    const nextClosure = recomputeCashClosureFromLines(normalized.closure, nextLines, now);
+    transaction.set(ref, nextClosure);
+    return { closure: nextClosure, lines: nextLines };
+  });
+  await refreshCashClosureSummaries(result.closure);
+  return result;
+}
+
 export async function approveCashClosure(id: string, reason: string, actor: CashClosureActor) {
   const cleanReason = reason.trim();
   if (!cleanReason) throw new Error("Informe o motivo ou parecer da aprovação.");
@@ -439,12 +526,18 @@ export async function approveCashClosure(id: string, reason: string, actor: Cash
       transaction.get(ref.collection("lines")),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
-    const closure = snapshotValue<CashClosure>(closureSnapshot);
+    const normalized = normalizeCashClosureWithLines(
+      snapshotValue<CashClosure>(closureSnapshot),
+      lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
+    );
+    const closure = normalized.closure;
     assertCashClosureTransition(closure.status, "approved");
-    const lines = lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document));
+    const lines = normalized.lines;
     if (lines.some((line) => line.countedCents === null)) throw new Error("O fechamento ainda possui linhas pendentes.");
-    if (lines.some((line) => line.differenceCents !== 0 && !line.note?.trim())) {
-      throw new Error("Há divergência sem observação.");
+    if (lines.some((line) => (
+      line.differenceCents !== 0 || line.conferenceDifferenceCents !== 0
+    ) && !line.note?.trim())) {
+      throw new Error("Toda diferença da conferência financeira precisa de uma observação.");
     }
     const now = new Date().toISOString();
     const recalculated = recomputeCashClosureFromLines(closure, lines, now);
@@ -455,7 +548,10 @@ export async function approveCashClosure(id: string, reason: string, actor: Cash
       approvedAt: now,
       approvedBy: actor.userId,
       approvalReason: cleanReason,
-      approvedWithDivergence: recalculated.divergentLineCount > 0,
+      approvedWithDivergence:
+        recalculated.divergentLineCount > 0 ||
+        recalculated.reportedDivergentLineCount > 0 ||
+        lines.some((line) => (line.conferenceDifferenceCents ?? 0) !== 0),
       cashDepositEligibleCents: eligibleCents,
       cashDeposit:
         closure.cashDeposit.adjustmentId

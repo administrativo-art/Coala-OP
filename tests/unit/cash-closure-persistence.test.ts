@@ -6,7 +6,9 @@ import {
   cashClosureId,
   cashClosureLineId,
   mergeBuiltClosureForPersistence,
+  normalizeCashClosureWithLines,
   recalculateCountedLine,
+  recalculateReportedLine,
   withPdvAutomaticClosureTotals,
 } from "../../src/features/financial/cash-closures/persistence";
 
@@ -71,6 +73,61 @@ test("ressincronização atualiza esperado e preserva contado e observação", (
   assert.equal(second.lines[0].differenceCents, -600);
   assert.equal(second.lines[0].note, "Falta conferida");
   assert.equal(second.lines[0].status, "divergent");
+});
+
+test("mantém separados o informado pelo Caixa e a conferência do Financeiro", () => {
+  const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
+  const reported = recalculateReportedLine(
+    first.lines[0],
+    9_500,
+    "Caixa informou falta",
+    "cashier-1",
+    "2026-07-08T11:00:00.000Z",
+  );
+  const counted = recalculateCountedLine(
+    reported,
+    9_700,
+    "Financeiro contou R$ 2,00 a mais que o Caixa",
+    "finance-1",
+    "2026-07-08T12:00:00.000Z",
+  );
+
+  assert.equal(counted.reportedDifferenceCents, -500);
+  assert.equal(counted.conferenceDifferenceCents, 200);
+  assert.equal(counted.differenceCents, -300);
+  assert.equal(counted.reportedNote, "Caixa informou falta");
+  assert.equal(counted.note, "Financeiro contou R$ 2,00 a mais que o Caixa");
+});
+
+test("registro legado usa o valor antigo como Caixa e exige nova conferência antes da aprovação", () => {
+  const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
+  const legacyLine = recalculateCountedLine(
+    first.lines[0],
+    9_500,
+    "Valor legado",
+    "user-1",
+    "2026-07-08T11:00:00.000Z",
+  );
+  const legacyShape = {
+    ...legacyLine,
+    reportedCents: undefined,
+    reportedDifferenceCents: undefined,
+    conferenceDifferenceCents: undefined,
+    reportedNote: undefined,
+    reportedBy: undefined,
+    reportedAt: undefined,
+  } as unknown as typeof legacyLine;
+  const normalized = normalizeCashClosureWithLines(
+    { ...first.closure, status: "pending_review" },
+    [legacyShape],
+  );
+
+  assert.equal(normalized.lines[0].reportedCents, 9_500);
+  assert.equal(normalized.lines[0].reportedDifferenceCents, -500);
+  assert.equal(normalized.lines[0].countedCents, null);
+  assert.equal(normalized.lines[0].reportedNote, "Valor legado");
+  assert.equal(normalized.closure.unreportedLineCount, 0);
+  assert.equal(normalized.closure.pendingLineCount, 1);
 });
 
 test("duas sincronizações com a mesma fonte não duplicam linhas", () => {

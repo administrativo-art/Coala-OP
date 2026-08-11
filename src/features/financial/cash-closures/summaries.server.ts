@@ -36,6 +36,7 @@ function summaryFromClosures(input: {
   now: string;
 }): CashClosureMonthlySummary {
   const closures = input.closures.map(withPdvAutomaticClosureTotals);
+  const approvedClosures = closures.filter((closure) => closure.status === "approved");
   return {
     id: input.id,
     workspaceId: input.workspaceId,
@@ -46,13 +47,13 @@ function summaryFromClosures(input: {
     month: input.month,
     closureCount: closures.length,
     pendingCount: closures.filter((closure) => ["draft", "pending_review", "reopened"].includes(closure.status)).length,
-    divergentCount: closures.filter((closure) => closure.divergentLineCount > 0).length,
-    approvedCount: closures.filter((closure) => closure.status === "approved").length,
+    divergentCount: approvedClosures.filter((closure) => closure.divergentLineCount > 0).length,
+    approvedCount: approvedClosures.length,
     syncErrorCount: closures.filter((closure) => closure.status === "sync_error" || !!closure.syncError).length,
     expectedTotalCents: closures.reduce((total, closure) => total + closure.expectedTotalCents, 0),
-    countedTotalCents: closures.reduce((total, closure) => total + closure.countedTotalCents, 0),
-    differenceTotalCents: closures.reduce((total, closure) => total + closure.differenceTotalCents, 0),
-    countedCashCents: closures.reduce((total, closure) => total + closure.countedCashCents, 0),
+    countedTotalCents: approvedClosures.reduce((total, closure) => total + closure.countedTotalCents, 0),
+    differenceTotalCents: approvedClosures.reduce((total, closure) => total + closure.differenceTotalCents, 0),
+    countedCashCents: approvedClosures.reduce((total, closure) => total + closure.countedCashCents, 0),
     allocatedCashCents: closures
       .filter((closure) => ["allocated", "issued", "paid", "adjusted"].includes(closure.cashDeposit.status))
       .reduce((total, closure) => total + closure.cashDeposit.eligibleCents, 0),

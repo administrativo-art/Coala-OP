@@ -193,6 +193,8 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
         channel: acc.channel,
         channelLabel: acc.channelLabel,
         expectedAmountCents: acc.expectedAmountCents,
+        reportedAmountCents: automaticallyCounted ? acc.expectedAmountCents : null,
+        reportedDifferenceAmountCents: automaticallyCounted ? 0 : null,
         countedAmountCents: automaticallyCounted ? acc.expectedAmountCents : null,
         differenceAmountCents: automaticallyCounted ? 0 : null,
         status: automaticallyCounted ? "matched" as const : "pending" as const,
