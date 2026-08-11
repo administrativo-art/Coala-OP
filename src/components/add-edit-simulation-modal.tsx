@@ -441,15 +441,15 @@ useEffect(() => {
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{simulationToEdit ? 'Editar' : 'Nova'} análise de custo</DialogTitle>
-          <DialogDescription>Construa a composição da sua mercadoria, defina preços e analise a lucratividade.</DialogDescription>
+      <DialogContent className="flex h-[90vh] w-[calc(100vw-2rem)] max-w-[980px] flex-col overflow-hidden rounded-[22px] border-0 p-0 shadow-2xl sm:max-w-[980px]">
+        <DialogHeader className="flex-shrink-0 border-b border-[#eeece7] px-6 py-5 pr-14">
+          <DialogTitle className="text-xl font-black tracking-tight text-slate-950">{simulationToEdit ? 'Editar mercadoria' : 'Nova mercadoria'}</DialogTitle>
+          <DialogDescription>Cadastre a composição, o preço e as unidades em que a mercadoria estará disponível.</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
-            <ScrollArea className="flex-1 pr-6">
-              <div className="space-y-4">
+            <ScrollArea className="flex-1 px-6">
+              <div className="space-y-5 py-5">
                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
                     <FormField control={form.control} name="name" render={({ field }) => (
                         <FormItem>
@@ -627,8 +627,8 @@ useEffect(() => {
 
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Composição (CMV)</h3>
-                  <div className="rounded-md border">
-                      <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-x-2 px-3 py-2 text-xs text-muted-foreground font-semibold border-b">
+                  <div className="rounded-xl border">
+                      <div className="hidden grid-cols-[1fr_auto_1fr_auto] items-center gap-x-2 border-b px-3 py-2 text-xs font-semibold text-muted-foreground md:grid">
                           <span>Insumo base</span>
                           <span className="w-8"></span>
                           <div className="grid grid-cols-[1fr_1fr_auto] gap-x-2 items-center">
@@ -650,7 +650,7 @@ useEffect(() => {
                           const impactPercentage = itemImpacts.get(index) ?? 0;
 
                           return (
-                              <div key={item.id} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-x-2 p-2 border-b last:border-b-0">
+                              <div key={item.id} className="flex flex-col gap-3 border-b p-3 last:border-b-0 md:grid md:grid-cols-[1fr_auto_1fr_auto] md:items-center md:gap-x-2 md:p-2">
                                   <div className="space-y-1 self-center">
                                       <p className="font-medium text-sm break-words">{baseProduct?.name}</p>
                                       <div className="flex justify-start">
@@ -681,10 +681,10 @@ useEffect(() => {
                                       />
                                   </div>
                                   </div>
-                                  <Button type="button" variant="ghost" size="icon" className="text-destructive h-8 w-8 self-center" onClick={() => remove(index)}>
+                                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 self-end text-destructive md:self-center" onClick={() => remove(index)}>
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
-                                  <div className="grid grid-cols-[1fr_1fr_auto] gap-x-2">
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:gap-x-2 md:col-span-2">
                                       <div className="flex items-start gap-1">
                                           <FormField control={form.control} name={`items.${index}.quantity`} render={({ field: qtyField }) => (
                                           <FormItem className="flex-grow"><FormControl><Input type="number" {...qtyField} className="text-center" /></FormControl><FormMessage /></FormItem>
@@ -868,7 +868,7 @@ useEffect(() => {
 
               </div>
             </ScrollArea>
-            <DialogFooter className="pt-4 border-t mt-auto flex justify-between w-full">
+            <DialogFooter className="mt-auto flex w-full justify-between border-t border-[#eeece7] bg-[#faf9f6] px-6 py-4">
               <div>
                 {simulationToEdit && (
                   <Button type="button" variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
@@ -881,7 +881,7 @@ useEffect(() => {
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit">Salvar</Button>
+                <Button type="submit" className="bg-pink-600 font-bold text-white hover:bg-pink-700">{simulationToEdit ? 'Salvar alterações' : 'Criar mercadoria'}</Button>
               </div>
             </DialogFooter>
           </form>

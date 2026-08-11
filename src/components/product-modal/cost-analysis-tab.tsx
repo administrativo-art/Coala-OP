@@ -7,11 +7,14 @@ import * as z from 'zod';
 import { type ProductSimulation } from '@/types';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
+import { useBaseProducts } from '@/hooks/use-base-products';
 import { useCompanySettings } from '@/hooks/use-company-settings';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useChannels } from '@/hooks/use-channels';
 import { useToast } from '@/hooks/use-toast';
 import { buildPriceOverrideId, calculateSimulationMetrics } from '@/lib/pricing-context';
+import { convertValue } from '@/lib/conversion';
+import { getPricingCommercialStatus } from '@/lib/pricing-insights';
 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -83,7 +86,8 @@ function isCommercialSalesUnit(name: string) {
 }
 
 export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: ProductSimulation, onOpenChange: (open: boolean) => void }) {
-  const { updateSimulation, getSimulationOverrides, resolveSimulationPrice, upsertPriceOverride, deletePriceOverride } = useProductSimulation();
+  const { updateSimulation, getSimulationOverrides, resolveSimulationPrice, upsertPriceOverride, deletePriceOverride, simulationItems } = useProductSimulation();
+  const { baseProducts } = useBaseProducts();
   const { categories } = useProductSimulationCategories();
   const { pricingParameters } = useCompanySettings();
   const { kiosks } = useKiosks();
@@ -122,9 +126,9 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
   );
   const scopedKiosks = useMemo(() => {
     if (watchedKioskIds.length === 0) return commercialSalesKiosks;
-    return kiosks.filter(kiosk => watchedKioskIds.includes(kiosk.id));
-  }, [commercialSalesKiosks, kiosks, watchedKioskIds]);
-  const activeChannels = useMemo(() => channels.filter(channel => channel.active), [channels]);
+    return commercialSalesKiosks.filter(kiosk => watchedKioskIds.includes(kiosk.id));
+  }, [commercialSalesKiosks, watchedKioskIds]);
+  const activeChannels = useMemo(() => channels.filter(channel => channel.active && channel.type !== 'balcao'), [channels]);
   const overrides = useMemo(() => getSimulationOverrides(simulation.id), [getSimulationOverrides, simulation.id]);
   const previewSimulation = useMemo(
     () => ({ ...simulation, kioskIds: scopedKiosks.map(kiosk => kiosk.id), salePrice: watchedSalePrice }),
@@ -134,6 +138,28 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
     () => scopedKiosks.map(kiosk => kiosk.id).join('|'),
     [scopedKiosks]
   );
+  const cmvComposition = useMemo(() => simulationItems
+    .filter((item) => item.simulationId === simulation.id)
+    .flatMap((item) => {
+      const baseProduct = baseProducts.find((product) => product.id === item.baseProductId);
+      if (!baseProduct) return [];
+      const defaultCost = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+      let cost = item.quantity * defaultCost;
+      if (!item.useDefault) {
+        try {
+          const valueInBase = convertValue(1, item.overrideUnit || baseProduct.unit, baseProduct.unit, baseProduct.category);
+          cost = item.quantity * ((item.overrideCostPerUnit || 0) / valueInBase);
+        } catch {
+          cost = 0;
+        }
+      }
+      return [{
+        id: item.id,
+        name: baseProduct.name,
+        cost,
+        share: cmv > 0 ? (cost / cmv) * 100 : 0,
+      }];
+    }), [baseProducts, cmv, simulation.id, simulationItems]);
 
   useEffect(() => {
     if ((simulation.kioskIds ?? []).length === 0 && commercialSalesKiosks.length > 0 && watchedKioskIds.length === 0) {
@@ -296,12 +322,15 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
   const lines = categories.filter(c => c.type === 'line');
   const groups = categories.filter(c => c.type === 'group');
   const editingChannel = editingOverride?.channelId ? channels.find(channel => channel.id === editingOverride.channelId) ?? null : null;
+  const editingChannelRuleBasePrice = editingOverride?.unitId
+    ? getUnitDraftPrice(editingOverride.unitId)
+    : watchedSalePrice;
   const editingChannelRulePrice = useMemo(() => {
     if (!editingChannel?.defaultPriceRule || editingChannel.defaultPriceRule.mode !== 'markup') {
       return null;
     }
-    return watchedSalePrice * (1 + editingChannel.defaultPriceRule.value);
-  }, [editingChannel, watchedSalePrice]);
+    return editingChannelRuleBasePrice * (1 + editingChannel.defaultPriceRule.value);
+  }, [editingChannel, editingChannelRuleBasePrice]);
   const editingHasManualOverride = useMemo(() => {
     if (!editingOverride) return false;
     return overrides.some(
@@ -321,17 +350,17 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <Tabs defaultValue="cost" className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-6 py-2 border-b bg-gray-50/30">
-          <TabsList className="bg-transparent border-0 p-0 h-auto gap-4">
-            <TabsTrigger value="cost" className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-gray-200 px-3 py-1.5 text-xs font-bold rounded-lg transition-all">
-              1. Precificação e Fiscal
+      <Tabs defaultValue="cost" className="flex flex-1 flex-col overflow-hidden">
+        <div className="overflow-x-auto border-b border-[#eeece7] px-6 py-3">
+          <TabsList className="h-auto gap-1 bg-transparent p-0">
+            <TabsTrigger value="cost" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-slate-400 data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
+              Custo &amp; preço
             </TabsTrigger>
-            <TabsTrigger value="contexts" className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-gray-200 px-3 py-1.5 text-xs font-bold rounded-lg transition-all">
-              2. Preço por Canal
+            <TabsTrigger value="contexts" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-slate-400 data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
+              Preços por canal
             </TabsTrigger>
-            <TabsTrigger value="ficha" className="data-[state=active]:bg-white data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-gray-200 px-3 py-1.5 text-xs font-bold rounded-lg transition-all">
-              3. Composição e Preparo
+            <TabsTrigger value="ficha" className="rounded-lg border-0 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-slate-400 data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 data-[state=active]:shadow-none">
+              Ficha técnica
             </TabsTrigger>
           </TabsList>
         </div>
@@ -339,16 +368,16 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
         <TabsContent value="cost" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex">
           <Form {...form}>
             <form id="product-modal-form" onSubmit={form.handleSubmit(onSubmit)} className="flex w-full h-full">
-              <ScrollArea className="flex-1 p-6">
+              <ScrollArea className="flex-1 bg-white p-6">
                 <div className="space-y-6">
                   {/* Categorização */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid gap-4 md:grid-cols-3">
                     <FormField
                       control={form.control}
                       name="kioskIds"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-xs font-semibold text-gray-500 uppercase">Quiosques</FormLabel>
+                          <FormLabel className="text-xs font-semibold uppercase text-gray-500">Unidades</FormLabel>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="outline" className="w-full justify-between text-xs font-normal">
@@ -357,7 +386,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="w-56">
-                              {kiosks.map(k => (
+                              {commercialSalesKiosks.map(k => (
                                 <DropdownMenuCheckboxItem
                                   key={k.id}
                                   checked={field.value?.includes(k.id)}
@@ -430,7 +459,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                   {/* Dados Fiscais */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Dados Fiscais</h4>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid gap-4 md:grid-cols-3">
                       <FormField
                         control={form.control}
                         name="ncm"
@@ -480,8 +509,26 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                     </div>
                   </div>
 
+                  <div className="rounded-2xl border border-[#eeece7] bg-[#faf9f6] p-5">
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Composição do CMV</h4>
+                        <p className="mt-1 text-xs text-slate-500">Participação de cada insumo no custo total.</p>
+                      </div>
+                      <p className="text-lg font-black text-slate-900">{formatCurrency(cmv)}</p>
+                    </div>
+                    <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+                      {cmvComposition.length ? cmvComposition.map((item) => (
+                        <div key={item.id}>
+                          <div className="mb-1 flex items-center justify-between gap-3 text-xs"><span className="truncate font-semibold text-slate-600">{item.name}</span><span className="shrink-0 font-bold text-slate-500">{formatCurrency(item.cost)} · {item.share.toFixed(0)}%</span></div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-gradient-to-r from-pink-600 to-pink-400" style={{ width: `${Math.min(100, item.share)}%` }} /></div>
+                        </div>
+                      )) : <p className="text-xs text-slate-400">Nenhum insumo vinculado à ficha.</p>}
+                    </div>
+                  </div>
+
                   {/* Definição de Preço */}
-                  <div className="p-5 border rounded-xl bg-white shadow-sm space-y-4">
+                  <div className="space-y-4 rounded-2xl border border-[#eeece7] bg-white p-5">
                     <div className="flex justify-between items-center gap-4">
                       <div>
                         <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Definição de preço por unidade</h4>
@@ -499,16 +546,17 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                         const tax = pricingParameters?.averageTaxPercentage || 0;
                         const fee = pricingParameters?.averageCardFeePercentage || 0;
                         const metrics = calculateSimulationMetrics(unitPrice, cmv, tax, fee);
-                        const goal = form.getValues('profitGoal') || 0;
+                        const goal = form.getValues('profitGoal');
+                        const commercialStatus = getPricingCommercialStatus(unitPrice, cmv, goal);
 
                         return (
-                          <div key={kiosk.id} className="rounded-xl border bg-gray-50/50 p-4">
+                          <div key={kiosk.id} className="rounded-2xl border border-[#e6e3dd] bg-white p-4">
                             <div className="mb-3 flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-bold text-gray-900">{kiosk.name}</p>
                                 <p className="mt-0.5 text-xs text-gray-400">Preço balcão da unidade</p>
                               </div>
-                              <Badge variant="outline" className="bg-white text-[10px]">Balcão</Badge>
+                              <Badge variant="outline" className={cn("rounded-full text-[9px] font-black uppercase", commercialStatus === 'met' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : commercialStatus === 'loss' ? 'border-red-200 bg-red-50 text-red-700' : commercialStatus === 'none' ? 'border-slate-200 bg-slate-50 text-slate-600' : 'border-orange-200 bg-orange-50 text-orange-700')}>{commercialStatus === 'met' ? 'Na meta' : commercialStatus === 'loss' ? 'Prejuízo' : commercialStatus === 'none' ? 'Sem meta' : 'Abaixo'}</Badge>
                             </div>
 
                             <div className="relative mb-4">
@@ -544,7 +592,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                                 <div className="text-right">
                                   <p className={cn(
                                     "text-lg font-black",
-                                    metrics.grossMarginPct >= goal ? "text-green-600" : "text-orange-500"
+                                    metrics.grossMarginPct >= (goal ?? 0) ? "text-green-600" : "text-orange-500"
                                   )}>
                                     {metrics.grossMarginPct.toFixed(1)}%
                                   </p>
@@ -582,7 +630,7 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
         </TabsContent>
 
         <TabsContent value="contexts" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex">
-          <ScrollArea className="flex-1 p-6">
+          <ScrollArea className="flex-1 bg-[#faf9f6] p-6">
             <div className="space-y-4">
               <div>
                 <h4 className="text-sm font-semibold text-gray-900">Preços por canal de venda</h4>
@@ -593,31 +641,34 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
 
               <div className="grid gap-4">
                 {scopedKiosks.map((unit) => (
-                  <div key={unit.id} className="rounded-xl border bg-white p-4">
+                  <div key={unit.id} className="overflow-hidden rounded-2xl border border-[#e6e3dd] bg-white">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <h5 className="text-sm font-bold text-gray-900">{unit.name}</h5>
-                      <Badge variant="outline" className="bg-gray-50 text-[10px]">Unidade comercial</Badge>
+                      <h5 className="px-4 pt-4 text-sm font-black text-gray-900">{unit.name}</h5>
+                      <Badge variant="outline" className="mr-4 mt-4 rounded-full bg-gray-50 text-[9px] font-black uppercase">Unidade comercial</Badge>
                     </div>
-                    <div className="grid gap-2 md:grid-cols-2">
+                    <div className="grid border-t md:grid-cols-2 xl:grid-cols-3">
                       {activeChannels.map((channel) => {
                         const resolution = resolveSimulationPrice(previewSimulation, unit.id, channel.id);
                         const exactOverride = overrides.find(
                           (override) => override.unitId === unit.id && override.channelId === channel.id
                         ) ?? null;
+                        const metrics = calculateSimulationMetrics(
+                          resolution.price ?? 0,
+                          cmv,
+                          pricingParameters?.averageTaxPercentage || 0,
+                          pricingParameters?.averageCardFeePercentage || 0,
+                        );
 
                         return (
-                          <button
+                          <div
                             key={`${unit.id}:${channel.id}`}
-                            type="button"
-                            onClick={() => openOverrideEditor(unit.id, channel.id)}
-                            className="rounded-lg border bg-gray-50/50 p-3 text-left transition-colors hover:bg-gray-50"
+                            className="border-b border-r border-[#f1efe9] p-4 text-left transition-colors hover:bg-pink-50/30"
                           >
                             <div className="mb-2 flex items-center justify-between gap-2">
-                              <span className="truncate text-sm font-semibold text-gray-800">{channel.name}</span>
-                              <div
-                                className="flex items-center gap-2"
-                                onClick={(event) => event.stopPropagation()}
-                              >
+                              <button type="button" onClick={() => openOverrideEditor(unit.id, channel.id)} className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-gray-800 hover:text-pink-600">
+                                {channel.name}
+                              </button>
+                              <div className="flex items-center gap-2">
                                 <span className={cn(
                                   "text-[10px] font-bold",
                                   resolution.available ? "text-emerald-600" : "text-rose-600"
@@ -630,22 +681,19 @@ export function CostAnalysisTab({ simulation, onOpenChange }: { simulation: Prod
                                 />
                               </div>
                             </div>
-                            <div className="flex items-end justify-between gap-3">
+                            <button type="button" onClick={() => openOverrideEditor(unit.id, channel.id)} className="flex w-full items-end justify-between gap-3 text-left">
                               <div>
-                                <p className="text-lg font-black text-gray-900">
+                                <p className="text-base font-black text-gray-900">
                                   {resolution.price === null ? 'Indisponível' : formatCurrency(resolution.price)}
                                 </p>
                                 <p className="mt-1 text-[11px] text-muted-foreground">{sourceLabels[resolution.source] ?? resolution.source}</p>
                               </div>
-                              {exactOverride && (
-                                <span className="text-[11px] font-medium text-muted-foreground">
-                                  Preço específico
-                                </span>
-                              )}
-                            </div>
-                          </button>
+                              <div className="text-right"><p className={cn("text-sm font-black", metrics.grossMarginPct < 0 ? 'text-red-600' : metrics.grossMarginPct < (form.getValues('profitGoal') ?? 0) ? 'text-orange-600' : 'text-emerald-600')}>{resolution.available ? `${metrics.grossMarginPct.toFixed(1)}%` : '—'}</p>{exactOverride ? <span className="text-[9px] font-bold uppercase text-pink-600">Específico</span> : null}</div>
+                            </button>
+                          </div>
                         );
                       })}
+                      {activeChannels.length === 0 ? <p className="col-span-full p-5 text-xs text-slate-400">Nenhum canal adicional ativo. O preço de balcão permanece configurado na aba anterior.</p> : null}
                     </div>
                   </div>
                 ))}

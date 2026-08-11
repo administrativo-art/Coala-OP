@@ -32,46 +32,77 @@ export function resolveEffectivePrice(
     };
   }
 
-  const candidates: Array<{
-    source: EffectivePriceResolution['source'];
-    unitId: string | null;
-    channelId: string | null;
-  }> = [
-    { source: 'override:unit+channel', unitId, channelId },
-    { source: 'override:unit', unitId, channelId: null },
-    { source: 'override:channel', unitId: null, channelId },
-  ];
+  const contextOverride =
+    unitId && channelId
+      ? overrides.find(
+          (override) => override.unitId === unitId && override.channelId === channelId
+        ) ?? null
+      : null;
 
-  for (const candidate of candidates) {
-    if (
-      (candidate.source === 'override:unit+channel' && (!candidate.unitId || !candidate.channelId)) ||
-      (candidate.source === 'override:unit' && !candidate.unitId) ||
-      (candidate.source === 'override:channel' && !candidate.channelId)
-    ) {
-      continue;
-    }
-
-    const match =
-      overrides.find(
-        (override) =>
-          override.unitId === candidate.unitId && override.channelId === candidate.channelId
-      ) ?? null;
-
-    if (!match) {
-      continue;
-    }
-
+  if (contextOverride) {
     return {
-      price: match.finalPrice ?? simulation.salePrice ?? 0,
-      available: match.available,
-      source: candidate.source,
-      override: match,
+      price: contextOverride.finalPrice ?? simulation.salePrice ?? 0,
+      available: contextOverride.available,
+      source: 'override:unit+channel',
+      override: contextOverride,
+    };
+  }
+
+  const unitOverride =
+    unitId
+      ? overrides.find(
+          (override) => override.unitId === unitId && override.channelId === null
+        ) ?? null
+      : null;
+
+  if (unitOverride && !unitOverride.available) {
+    return {
+      price: unitOverride.finalPrice ?? simulation.salePrice ?? 0,
+      available: false,
+      source: 'override:unit',
+      override: unitOverride,
+    };
+  }
+
+  const unitPrice = unitOverride?.finalPrice ?? simulation.salePrice ?? 0;
+
+  if (unitOverride && channel?.defaultPriceRule?.mode === 'markup') {
+    return {
+      price: unitPrice * (1 + channel.defaultPriceRule.value),
+      available: true,
+      source: 'channel-default-rule',
+      override: null,
+    };
+  }
+
+  if (unitOverride) {
+    return {
+      price: unitPrice,
+      available: true,
+      source: 'override:unit',
+      override: unitOverride,
+    };
+  }
+
+  const channelOverride =
+    channelId
+      ? overrides.find(
+          (override) => override.unitId === null && override.channelId === channelId
+        ) ?? null
+      : null;
+
+  if (channelOverride) {
+    return {
+      price: channelOverride.finalPrice ?? simulation.salePrice ?? 0,
+      available: channelOverride.available,
+      source: 'override:channel',
+      override: channelOverride,
     };
   }
 
   if (channel?.defaultPriceRule?.mode === 'markup') {
     return {
-      price: (simulation.salePrice ?? 0) * (1 + channel.defaultPriceRule.value),
+      price: unitPrice * (1 + channel.defaultPriceRule.value),
       available: true,
       source: 'channel-default-rule',
       override: null,

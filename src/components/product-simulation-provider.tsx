@@ -12,6 +12,7 @@ import { useChannels } from '@/hooks/use-channels';
 import { convertValue } from '@/lib/conversion';
 import { buildPriceOverrideId, calculateSimulationMetrics, resolveEffectivePrice } from '@/lib/pricing-context';
 import { canViewTechnicalSheets } from '@/lib/commercial-permissions';
+import { resolveBatchArchivedStatus, type BatchSimulationStatusUpdate } from '@/lib/product-simulation-batch';
 
 interface SimulationData {
     name: string;
@@ -43,7 +44,7 @@ interface PriceOverrideInput {
 }
 
 interface BulkUpdatePayload {
-    status: { action: 'keep' | 'set', value?: 'active' | 'archived' };
+    status: BatchSimulationStatusUpdate;
     kiosk: { action: 'keep' | 'add' | 'remove' | 'set', ids: string[] };
     line: { action: 'keep' | 'set' | 'clear', id?: string };
     category: { action: 'keep' | 'set' | 'clear', id?: string };
@@ -439,10 +440,14 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
         simulationsToUpdate: ProductSimulation[],
         updates: BulkUpdatePayload
     ) => {
-        if (!user || simulationsToUpdate.length === 0) return;
+        if (!user) {
+            throw new Error('Usuário não autenticado para alteração em lote.');
+        }
+        if (simulationsToUpdate.length === 0) return;
 
         const batch = writeBatch(db);
         const now = new Date().toISOString();
+        const archivedStatus = resolveBatchArchivedStatus(updates.status);
 
         for (const sim of simulationsToUpdate) {
             const simRef = doc(db, "productSimulations", sim.id);
@@ -450,8 +455,11 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
             const updatePayload: Partial<ProductSimulation> & { ppo?: Partial<ProductSimulation['ppo']> } = {
                 updatedAt: now,
                 updatedBy: { userId: user.id, username: user.username },
-                ppo: { ...ppo }
             };
+
+            if (archivedStatus !== undefined) {
+                updatePayload.isArchived = archivedStatus;
+            }
 
             // Handle Kiosk
             if (updates.kiosk.action === 'set') {
@@ -486,10 +494,13 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
                 updatePayload.groupIds = (sim.groupIds || []).filter(id => id !== updates.group.id);
             }
 
-            // Handle Fiscal Info
-            if (updates.ncm.action === 'set' && updates.ncm.value) updatePayload.ppo!.ncm = updates.ncm.value;
-            if (updates.cest.action === 'set' && updates.cest.value) updatePayload.ppo!.cest = updates.cest.value;
-            if (updates.cfop.action === 'set' && updates.cfop.value) updatePayload.ppo!.cfop = updates.cfop.value;
+            // Handle Fiscal Info without rewriting PPO on unrelated batch updates.
+            if (updates.ncm.action === 'set' || updates.cest.action === 'set' || updates.cfop.action === 'set') {
+                updatePayload.ppo = { ...ppo };
+                if (updates.ncm.action === 'set' && updates.ncm.value) updatePayload.ppo.ncm = updates.ncm.value;
+                if (updates.cest.action === 'set' && updates.cest.value) updatePayload.ppo.cest = updates.cest.value;
+                if (updates.cfop.action === 'set' && updates.cfop.value) updatePayload.ppo.cfop = updates.cfop.value;
+            }
             
             // Handle Price
             if (updates.price.action === 'change' && updates.price.value !== 0) {
@@ -529,6 +540,14 @@ export function ProductSimulationProvider({ children }: { children: React.ReactN
 
         try {
             await batch.commit();
+            if (archivedStatus !== undefined) {
+                const updatedIds = new Set(simulationsToUpdate.map(simulation => simulation.id));
+                setRawSimulations(current => current.map(simulation => (
+                    updatedIds.has(simulation.id)
+                        ? { ...simulation, isArchived: archivedStatus, updatedAt: now, updatedBy: { userId: user.id, username: user.username } }
+                        : simulation
+                )));
+            }
         } catch (error) {
             console.error("Error performing bulk simulation update:", error);
             throw error;
