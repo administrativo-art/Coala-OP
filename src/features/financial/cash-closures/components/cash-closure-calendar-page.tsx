@@ -83,17 +83,17 @@ export function CashClosureCalendarPage({ kioskId, year, month }: { kioskId: str
     <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel }]} />
     <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[26px] font-black tracking-tight">{monthLabel}</h1><p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">{kioskName}</p></div><Button variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div>
     <div className="grid gap-3 lg:grid-cols-[3fr_4fr]">
-      <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]"><CardContent className="grid min-h-[68px] grid-cols-3 items-center justify-items-center gap-3 p-3.5 px-4">{[
+      <Card className="overflow-hidden rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]"><CardContent className="grid h-[72px] grid-cols-3 items-stretch !p-0">{[
         ["Vendas no PDV", formatBRL(totals.expected), ""],
         ["Conferido", hasFinalizedClosure ? formatBRL(totals.counted) : "—", ""],
         ["Diferença", !hasFinalizedClosure ? "—" : formatBRL(totals.difference), totals.difference === 0 ? "text-emerald-700" : "text-rose-700"],
-      ].map(([label, value, valueClass]) => <div key={label} className="min-w-0 text-center"><p className="whitespace-nowrap text-[11px] font-bold text-zinc-400">{label}</p><strong className={cn("block whitespace-nowrap font-mono text-[14px] leading-tight xl:text-[15px]", valueClass)}>{value}</strong></div>)}</CardContent></Card>
-      <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]"><CardContent className="grid min-h-[68px] grid-cols-2 items-center justify-items-center gap-3 p-3.5 px-4 sm:grid-cols-4">{[
+      ].map(([label, value, valueClass]) => <div key={label} className="flex min-w-0 flex-col items-center justify-center px-3 text-center"><p className="whitespace-nowrap text-[11px] font-bold leading-4 text-zinc-400">{label}</p><strong className={cn("block whitespace-nowrap font-mono text-[14px] leading-5 xl:text-[15px]", valueClass)}>{value}</strong></div>)}</CardContent></Card>
+      <Card className="overflow-hidden rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]"><CardContent className="grid min-h-[72px] grid-cols-2 items-stretch !p-0 sm:grid-cols-4">{[
         ["Dinheiro", formatBRL(totals.cash), ""],
         ["Em depósito", formatBRL(totals.allocated), ""],
         ["Boleto emitido", formatBRL(totals.issued), ""],
         ["Depositado", formatBRL(totals.paid), "text-emerald-700"],
-      ].map(([label, value, valueClass]) => <div key={label} className="min-w-0 text-center"><p className="whitespace-nowrap text-[11px] font-bold text-zinc-400">{label}</p><strong className={cn("block whitespace-nowrap font-mono text-[14px] leading-tight xl:text-[15px]", valueClass)}>{value}</strong></div>)}</CardContent></Card>
+      ].map(([label, value, valueClass]) => <div key={label} className="flex min-w-0 flex-col items-center justify-center px-3 text-center"><p className="whitespace-nowrap text-[11px] font-bold leading-4 text-zinc-400">{label}</p><strong className={cn("block whitespace-nowrap font-mono text-[14px] leading-5 xl:text-[15px]", valueClass)}>{value}</strong></div>)}</CardContent></Card>
     </div>
     {loading ? <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : <Card className="rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]"><CardContent className="p-3 sm:p-4"><div className="grid grid-cols-7 gap-1.5">{WEEKDAYS.map((day) => <div key={day} className="px-1 py-1 text-center text-[11px] font-extrabold uppercase tracking-wide text-zinc-400">{day}</div>)}{days.map((day, index) => {
       if (day === null) return <div key={`empty-${index}`} />;
