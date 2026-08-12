@@ -64,10 +64,11 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Search, MoreHorizontal, Pencil, UserX, RefreshCw } from 'lucide-react';
+import { Search, MoreHorizontal, Pencil, UserX } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createManagedTerminationProcess } from '@/features/hr/termination/client';
-import { CLT_TERMINATION_REASONS } from '@/lib/hr/employment-relationship';
+import { CLT_TERMINATION_REASONS, PJ_TERMINATION_REASONS, terminationReasonsForRelationship } from '@/lib/hr/employment-relationship';
+import { CnpjValidator } from '@/lib/company/cnpj-validator';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
@@ -89,9 +90,8 @@ const collaboratorSchema = z.object({
 type CollaboratorFormValues = z.infer<typeof collaboratorSchema>;
 
 const terminationSchema = z.object({
-  terminationReason: z.enum(CLT_TERMINATION_REASONS, {
-    required_error: 'Selecione o motivo do desligamento.',
-  }),
+  employerUnitId: z.string().min(1, 'Selecione o CNPJ empregador.'),
+  terminationReason: z.union([z.enum(CLT_TERMINATION_REASONS), z.enum(PJ_TERMINATION_REASONS)]),
   terminationCause: z.string().optional(),
   terminationNotes: z.string().optional(),
   terminationDate: z.string().min(1, 'Informe a data do desligamento.'),
@@ -630,17 +630,19 @@ function EditSheet({
 
 interface TerminationDialogProps {
   user: User | null;
+  units: DPUnit[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }
 
-function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps) {
+function TerminationDialog({ user, units, open, onOpenChange }: TerminationDialogProps) {
   const { firebaseUser } = useAuth();
   const { toast } = useToast();
 
   const form = useForm<TerminationFormValues>({
     resolver: zodResolver(terminationSchema),
     defaultValues: {
+      employerUnitId: '',
       terminationReason: undefined,
       terminationCause: '',
       terminationNotes: '',
@@ -651,19 +653,23 @@ function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps)
   React.useEffect(() => {
     if (open) {
       form.reset({
+        employerUnitId: units.some((unit) => unit.id === user?.employerUnitId && CnpjValidator.validate(unit.cnpj ?? '').valid)
+          ? user?.employerUnitId ?? ''
+          : units.find((unit) => CnpjValidator.clean(unit.cnpj ?? '') === CnpjValidator.clean(user?.employerCnpj ?? '') && CnpjValidator.validate(unit.cnpj ?? '').valid)?.id ?? '',
         terminationReason: undefined,
         terminationCause: '',
         terminationNotes: '',
         terminationDate: format(new Date(), 'yyyy-MM-dd'),
       });
     }
-  }, [open, form]);
+  }, [open, form, units, user?.employerCnpj, user?.employerUnitId]);
 
   async function onSubmit(values: TerminationFormValues) {
     if (!user || !firebaseUser) return;
     try {
       const result = await createManagedTerminationProcess(firebaseUser, {
         employeeId: user.id,
+        employerUnitId: values.employerUnitId,
         terminationReason: values.terminationReason,
         terminationCause: values.terminationCause || undefined,
         terminationNotes: values.terminationNotes || undefined,
@@ -674,8 +680,8 @@ function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps)
       });
       onOpenChange(false);
       window.location.assign(`/dashboard/dp/terminations/${result.process.id}`);
-    } catch {
-      toast({ title: 'Erro ao iniciar desligamento.', variant: 'destructive' });
+    } catch (error) {
+      toast({ title: 'Erro ao iniciar desligamento.', description: error instanceof Error ? error.message : undefined, variant: 'destructive' });
     }
   }
 
@@ -692,6 +698,25 @@ function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps)
 
         <Form {...form}>
           <form id="termination-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 py-2">
+
+            <FormField
+              control={form.control}
+              name="employerUnitId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{user?.employmentRelationshipType === 'pj' ? 'CNPJ da contratante' : 'CNPJ empregador'}</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione a empresa" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {units.filter((unit) => CnpjValidator.validate(unit.cnpj ?? '').valid).map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -720,7 +745,7 @@ function TerminationDialog({ user, open, onOpenChange }: TerminationDialogProps)
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {CLT_TERMINATION_REASONS.map((reason) => (
+                      {terminationReasonsForRelationship(user?.employmentRelationshipType).filter((reason) => user?.employmentRelationshipType !== 'pj' || reason === 'Encerramento por acordo entre as partes').map((reason) => (
                         <SelectItem key={reason} value={reason}>{reason}</SelectItem>
                       ))}
                     </SelectContent>
@@ -867,74 +892,15 @@ function CollaboratorRow({ user, onEdit, onTerminate, canEdit, canTerminate, shi
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DPCollaboratorsManager() {
-  const { activeUsers, permissions, updateUser, firebaseUser } = useAuth();
+  const { activeUsers, permissions } = useAuth();
   const { shiftDefinitions, shiftDefsLoading, shiftDefsError } = useDP();
   const { roles, functions, units, loading: hrLoading, error: hrError } = useHrBootstrap();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [editUser, setEditUser] = useState<User | null>(null);
   const [terminateUser, setTerminateUser] = useState<User | null>(null);
-  const [syncing, setSyncing] = useState(false);
-
   const canEdit = permissions.dp?.collaborators?.edit ?? false;
   const canTerminate = permissions.dp?.collaborators?.terminate ?? false;
-
-  async function handleBizneoSync() {
-    setSyncing(true);
-    try {
-      const token = await firebaseUser?.getIdToken();
-      if (!token) throw new Error('Usuário não autenticado.');
-
-      // 1. Busca usuários do Bizneo via rota server-side (que tem o token da API)
-      const res = await fetch('/api/integrations/bizneo/sync-users', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error ?? 'Erro ao buscar usuários do Bizneo.');
-
-      // 2. Cruza por email e atualiza cada usuário Coala via Firestore client
-      const bizneoByEmail = new Map<
-        string,
-        { id: number; email: string; avatar_url?: string | null; birthday?: string | null; work_contracts?: { start_at?: string | null; end_at?: string | null }[] }
-      >(
-        (data.users as { id: number; email: string; avatar_url?: string | null; birthday?: string | null; work_contracts?: { start_at?: string | null; end_at?: string | null }[] }[])
-          .map(u => [u.email.toLowerCase(), u])
-      );
-
-      let matched = 0;
-      const unmatched: string[] = [];
-      const updates: Promise<void>[] = [];
-
-      for (const user of activeUsers) {
-        const bizneoUser = bizneoByEmail.get((user.email ?? '').toLowerCase());
-        if (bizneoUser) {
-          const admissionDate = bizneoUser.work_contracts?.find((contract) => !contract.end_at && contract.start_at)?.start_at
-            ?? bizneoUser.work_contracts?.find((contract) => contract.start_at)?.start_at;
-          updates.push(updateUser({
-            ...user,
-            registrationIdBizneo: String(bizneoUser.id),
-            ...(bizneoUser.avatar_url ? { avatarUrl: bizneoUser.avatar_url } : {}),
-            ...(admissionDate ? { admissionDate: Timestamp.fromDate(new Date(`${admissionDate}T12:00:00`)) } : {}),
-            ...(bizneoUser.birthday ? { birthDate: Timestamp.fromDate(new Date(`${bizneoUser.birthday}T12:00:00`)) } : {}),
-          }));
-          matched++;
-        } else {
-          unmatched.push(user.username);
-        }
-      }
-
-      await Promise.all(updates);
-
-      toast({
-        title: 'Dados Bizneo sincronizados',
-        description: `${matched} vinculado(s) com foto, matrícula, admissão e nascimento · ${unmatched.length} sem correspondência.`,
-      });
-    } catch (e: any) {
-      toast({ title: 'Erro ao sincronizar com Bizneo.', description: e.message, variant: 'destructive' });
-    } finally {
-      setSyncing(false);
-    }
-  }
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -968,18 +934,6 @@ export function DPCollaboratorsManager() {
           />
         </div>
         <Badge variant="outline">{filtered.length}</Badge>
-        {canEdit && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleBizneoSync}
-            disabled={syncing}
-            className="gap-1.5 shrink-0"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Sincronizando...' : 'Sincronizar Bizneo'}
-          </Button>
-        )}
       </div>
 
       <ScrollArea className="h-[calc(100vh-280px)]">
@@ -1018,6 +972,7 @@ export function DPCollaboratorsManager() {
 
       <TerminationDialog
         user={terminateUser}
+        units={units}
         open={!!terminateUser}
         onOpenChange={open => { if (!open) setTerminateUser(null); }}
       />

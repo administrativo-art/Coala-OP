@@ -83,6 +83,7 @@ export type TerminationDocument = {
     | "resignation_letter"
     | "request_confirmation"
     | "dismissal_notice"
+    | "pj_termination_agreement"
     | "accountant_document"
     | "aso_dismissal"
     | "payment_proof"
@@ -109,6 +110,88 @@ export type TerminationDocument = {
   selectedForEmployee?: boolean;
   uploadedAt: string;
   uploadedBy: string;
+};
+
+export type TerminationEmployerSnapshot = {
+  unitId: string | null;
+  entityId: string | null;
+  legalName: string;
+  tradeName: string | null;
+  cnpj: string;
+  address: string;
+  capturedAt: string;
+};
+
+export type PjTerminationPartySnapshot = {
+  entityId: string | null;
+  legalName: string;
+  tradeName: string | null;
+  cnpj: string;
+  email: string;
+  address: string;
+  representative: {
+    name: string;
+    email: string;
+    role: string | null;
+    qualification: string;
+    cpf: string;
+    professionalId: string | null;
+  };
+};
+
+export type PjTerminationContractSnapshot = {
+  onboardingId: string;
+  contractor: PjTerminationPartySnapshot;
+  provider: PjTerminationPartySnapshot;
+  sourceContract: {
+    contractDate: string;
+    contractStartDate: string;
+    termType: "fixed" | "indefinite";
+    contractEndDate: string | null;
+    monthlyValue: number;
+    version: number;
+    signedStoragePath: string;
+    signedHashSha256: string;
+    signedAt: string;
+    signatureCity: string;
+    forumCity: string;
+  };
+  capturedAt: string;
+};
+
+export type PjTerminationWitness = {
+  name: string;
+  email: string;
+  cpf: string;
+};
+
+export type PjTerminationAgreement = {
+  status: "not_generated" | "review_pending" | "approved" | "sent" | "signed" | "correction_required" | "failed";
+  version: number;
+  documentId: string | null;
+  settlement: {
+    terminationDate: string;
+    daysWorked: number;
+    prorataFormulaText: string;
+    grossValue: number;
+    invoiceNumber: string;
+    invoiceDate: string;
+    paymentConfirmed: true;
+    paymentDate: string;
+    signatureCity: string;
+    forumCity: string;
+    signatureDate: string;
+  } | null;
+  witnesses: [PjTerminationWitness, PjTerminationWitness] | null;
+  generatedAt?: string | null;
+  generatedBy?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  sentAt?: string | null;
+  signedAt?: string | null;
+  signatureRequestId?: string | null;
+  providerDocumentId?: string | null;
+  lastError?: string | null;
 };
 
 export type CltTerminationProcess = {
@@ -145,6 +228,11 @@ export type CltTerminationProcess = {
   } | null;
   unitId?: string | null;
   unitName?: string | null;
+  /** Retrato imutável da empregadora no momento da abertura da rescisão. */
+  employer?: TerminationEmployerSnapshot | null;
+  /** Partes e contrato assinado copiados na abertura do encerramento PJ. */
+  pjContractSnapshot?: PjTerminationContractSnapshot | null;
+  pjAgreement?: PjTerminationAgreement | null;
   jobRoleName?: string | null;
   status: TerminationProcessStatus;
   health: TerminationHealth;
@@ -303,6 +391,9 @@ export type ProcessProjection = {
   title: string;
   subjectId: string;
   subjectName: string;
+  employerEntityId?: string | null;
+  employerName?: string | null;
+  employerCnpj?: string | null;
   status: TerminationProcessStatus;
   health: TerminationHealth;
   progress: number;

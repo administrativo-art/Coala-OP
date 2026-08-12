@@ -42,6 +42,8 @@ Este contrato separa referências operacionais de referências históricas. Um d
 
 Cada desligamento produz `coala-rh/terminationImpactReports/{uid}__{data}` com contadores e pendências. A aplicação grava `terminationEffectsVersion` no usuário para garantir idempotência. Reprocessar o mesmo evento não duplica efeitos.
 
+O relatório também preserva a empregadora jurídica da rescisão (`unitId`, `entityId`, razão social e CNPJ), separada da unidade operacional do colaborador, permitindo auditoria e segmentação por CNPJ.
+
 Pendências que exigem decisão humana permanecem explícitas:
 
 - sucessor de unidade/grupo;

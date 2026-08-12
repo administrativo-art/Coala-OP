@@ -33,6 +33,7 @@ import {
   type IntegrationTemplateMetadataClient,
 } from "./client";
 import { IntegrationRulesPanel, IntegrationSimulatorPanel } from "./IntegrationRulePanels";
+import { DEFAULT_PROBATION_CONFIG, PROBATION_TOTAL_DAYS } from "./probation";
 import {
   type IntegrationBlock,
   type IntegrationCommunication,
@@ -240,7 +241,7 @@ export function IntegrationTemplateManager({ roles, functions, getToken, canMana
   const stageBlocks = (draft?.blocks ?? []).filter((block) => block.stageId === selectedStage?.id).sort((a, b) => a.order - b.order);
   const selectedBlock = draft?.blocks.find((block) => block.id === selectedBlockId) ?? null;
   const probationConfig = draft?.probation ?? {
-    firstPeriodDays: 45, secondPeriodDays: 45, evaluationWindowDays: 10,
+    ...DEFAULT_PROBATION_CONFIG,
     alertsBeforeDays: [10, 5, 1], extensionTermRequired: false,
     evaluator: { strategy: "direct_manager" as const, fallback: "hr_pool" as const },
     effectivenessRule: "manual" as const,
@@ -580,13 +581,17 @@ export function IntegrationTemplateManager({ roles, functions, getToken, canMana
               {tab === "probation" ? (
                 <div className="space-y-5 rounded-xl border bg-white p-5">
                   <div className="flex items-start gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700"><Clock3 className="h-5 w-5" /></span><div><h3 className="font-black">Período de experiência</h3><p className="text-sm text-slate-500">A admissão calculará períodos, avaliações, alertas e decisão automaticamente.</p></div></div>
-                  <div className="grid gap-4 md:grid-cols-3">{([['firstPeriodDays','Primeiro período'],['secondPeriodDays','Prorrogação'],['evaluationWindowDays','Janela de avaliação']] as const).map(([key,label]) => <label key={key} className="text-xs font-bold text-slate-500">{label}<div className="mt-1 flex items-center rounded-lg border bg-white"><input type="number" min={key === 'secondPeriodDays' ? 0 : 1} max="90" value={probationConfig[key]} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, [key]: Number(event.target.value) } })} className="h-11 min-w-0 flex-1 px-3 text-sm font-black outline-none" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>)}</div>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="text-xs font-bold text-slate-500">Primeiro período<div className="mt-1 flex items-center rounded-lg border bg-white"><input type="number" min="1" max={PROBATION_TOTAL_DAYS - 1} value={probationConfig.firstPeriodDays} disabled={!canManage} onChange={(event) => { const firstPeriodDays = Number(event.target.value); patchDraft({ probation: { ...probationConfig, firstPeriodDays, secondPeriodDays: PROBATION_TOTAL_DAYS - firstPeriodDays } }); }} className="h-11 min-w-0 flex-1 px-3 text-sm font-black outline-none" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
+                    <label className="text-xs font-bold text-slate-500">Prorrogação automática<div className="mt-1 flex items-center rounded-lg border bg-slate-50"><input type="number" value={probationConfig.secondPeriodDays} disabled className="h-11 min-w-0 flex-1 bg-transparent px-3 text-sm font-black text-slate-500 outline-none" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
+                    <label className="text-xs font-bold text-slate-500">Janela de avaliação<div className="mt-1 flex items-center rounded-lg border bg-white"><input type="number" min="1" max="90" value={probationConfig.evaluationWindowDays} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, evaluationWindowDays: Number(event.target.value) } })} className="h-11 min-w-0 flex-1 px-3 text-sm font-black outline-none" /><span className="pr-3 text-xs text-slate-400">dias</span></div></label>
+                  </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="text-xs font-bold text-slate-500">Alertas antes do fim de cada período<input value={probationConfig.alertsBeforeDays.join(', ')} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, alertsBeforeDays: event.target.value.split(',').map(Number).filter(Number.isFinite) } })} placeholder="10, 5, 1" className="mt-1 h-10 w-full rounded-lg border px-3 text-sm" /></label>
                     <label className="text-xs font-bold text-slate-500">Responsável pela avaliação<select value={probationConfig.evaluator.strategy} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, evaluator: { ...probationConfig.evaluator, strategy: event.target.value as typeof probationConfig.evaluator.strategy } } })} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"><option value="direct_manager">Gestor direto</option><option value="unit_manager">Gestor da unidade</option><option value="hr_pool">Equipe de RH</option><option value="specific_user">Usuário específico</option><option value="selected_during_execution">Escolher na execução</option></select></label>
                     <label className="text-xs font-bold text-slate-500">Regra de efetivação<select value={probationConfig.effectivenessRule} disabled={!canManage} onChange={(event) => patchDraft({ probation: { ...probationConfig, effectivenessRule: event.target.value as typeof probationConfig.effectivenessRule } })} className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"><option value="manual">Decisão manual do RH</option><option value="approved_evaluations">Efetivar com avaliações aprovadas</option><option value="automatic_at_end">Efetivar ao fim do período</option></select></label>
                   </div>
-                  <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">Total: {probationConfig.firstPeriodDays + probationConfig.secondPeriodDays} dias · a passagem para o segundo período é automática, sem geração de termo manual · avaliações nos últimos {probationConfig.evaluationWindowDays} dias de cada período.</p>
+                  <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">Total: {probationConfig.firstPeriodDays + probationConfig.secondPeriodDays} dias · na abertura da integração, o RH confirma o primeiro período e o sistema calcula o segundo · avaliações nos últimos {probationConfig.evaluationWindowDays} dias de cada período.</p>
                 </div>
               ) : null}
 

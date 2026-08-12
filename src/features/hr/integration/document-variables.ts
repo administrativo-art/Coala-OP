@@ -2,7 +2,7 @@ import { DEFAULT_COMPLEMENTARY_FIELDS } from "@/features/rh/lib/default-field-ma
 import type { FieldMapEntry, FieldType, FieldVisibility } from "@/types/rh";
 
 export const DOCUMENT_VARIABLE_SCHEMA_VERSION = "coala-documents-v2" as const;
-export const DOCUMENT_VARIABLE_COUNT = 110 as const;
+export const DOCUMENT_VARIABLE_COUNT = 112 as const;
 
 export type DocumentVariableSource =
   | "field_value"
@@ -226,9 +226,39 @@ const ONBOARDING_VARIABLES: DocumentVariableCatalogEntry[] = [
     resolution: [{ source: "onboarding", path: "expectedAdmissionDate" }],
   },
   {
+    key: "integration.probation_first_period_days",
+    placeholder: "{{integration.probation_first_period_days}}",
+    label: "Duração do primeiro período de experiência",
+    section: "Integração - contrato de experiência",
+    fieldType: "number",
+    format: "number_br",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "probationV2.config.firstPeriodDays" }],
+  },
+  {
+    key: "integration.probation_second_period_days",
+    placeholder: "{{integration.probation_second_period_days}}",
+    label: "Duração do segundo período de experiência",
+    section: "Integração - contrato de experiência",
+    fieldType: "number",
+    format: "number_br",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "probationV2.config.secondPeriodDays" }],
+  },
+  {
     key: "integration.probation_first_end_date",
     placeholder: "{{integration.probation_first_end_date}}",
-    label: "Término dos primeiros 45 dias",
+    label: "Término do primeiro período de experiência",
     section: "Integração - contrato de experiência",
     fieldType: "date",
     format: "date_br",

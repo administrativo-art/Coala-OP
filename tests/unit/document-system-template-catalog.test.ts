@@ -158,6 +158,8 @@ test("contrato de experiência v3 usa somente os campos vigentes", async () => {
   }
   assert.ok(template?.variables.includes("integration.employer_name"));
   assert.ok(template?.variables.includes("contract_final_end_long"));
+  assert.ok(template?.variables.includes("contract_first_period_days"));
+  assert.ok(template?.variables.includes("contract_second_period_days"));
   assert.ok(template?.variables.includes("employee.address"));
   assert.ok(template?.variables.includes("contract_employee_cpf"));
   assert.equal(template?.variables.includes("employee.pis"), false);
@@ -171,7 +173,7 @@ test("contrato de experiência v3 usa somente os campos vigentes", async () => {
   assert.equal(template?.fieldMapping?.contract_cct_validity, undefined);
   assert.equal(template?.fieldMapping?.contract_union_employees, undefined);
   assert.equal(template?.fieldMapping?.contract_union_employers, undefined);
-  assert.equal(template?.variables.length, 14);
+  assert.equal(template?.variables.length, 16);
 
   const prepared = await readFile(
     path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v3.docx"),
@@ -184,6 +186,10 @@ test("contrato de experiência v3 usa somente os campos vigentes", async () => {
   assert.equal(documentXml.includes("{{contract_work_hours}}"), false);
   assert.equal(documentXml.includes("{{contract_workplace_address}}"), false);
   assert.ok(documentXml.includes("{{contract_monthly_salary}}"));
+  assert.ok(documentXml.includes("{{contract_first_period_days}} dias"));
+  assert.ok(documentXml.includes("{{contract_second_period_days}} dias"));
+  assert.equal(documentXml.includes("vigorará por 45"), false);
+  assert.equal(documentXml.includes("por igual período"), false);
   assert.ok(documentXml.includes("JORNADA DE TRABALHO"));
   assert.ok(documentXml.includes("CONFIDENCIALIDADE E PROPRIEDADE INTELECTUAL"));
   assert.ok(documentXml.includes("Termo de Confidencialidade que"));

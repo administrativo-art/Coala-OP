@@ -206,15 +206,16 @@ function contractBody() {
     ),
     paragraph(
       "CTClausulaN2",
-      "O presente contrato inicia-se em {{contract_start_long}} e vigorará por 45 " +
-        "(quarenta e cinco) dias, encerrando-se o primeiro período em " +
+      "O presente contrato inicia-se em {{contract_start_long}} e vigorará por " +
+        "{{contract_first_period_days}} dias, encerrando-se o primeiro período em " +
         "{{contract_first_end_long}}. O primeiro dia de trabalho é considerado dia " +
         "1 para efeito da contagem.",
     ),
     paragraph(
       "CTClausulaN2",
       "Na ausência de manifestação contrária até o primeiro termo, o contrato será " +
-        "prorrogado uma única vez por igual período, com término final em " +
+        "prorrogado uma única vez por {{contract_second_period_days}} dias, com " +
+        "término final em " +
         "{{contract_final_end_long}}. A prorrogação será registrada pela EMPREGADORA " +
         "nos assentamentos funcionais do EMPREGADO(A). Havendo continuidade da " +
         "prestação de serviços após o termo final ou nova prorrogação, o contrato " +
@@ -382,10 +383,12 @@ const expectedVariables = [
   "contract_employer_cnpj",
   "contract_final_end_long",
   "contract_first_end_long",
+  "contract_first_period_days",
   "contract_job_cbo",
   "contract_monthly_salary",
   "contract_signature_date_long",
   "contract_signature_place",
+  "contract_second_period_days",
   "contract_start_long",
   "employee.address",
   "employee.name",

@@ -889,6 +889,12 @@ export type User = {
   jobFunctionIds?: string[];
   jobFunctionNames?: string[];
   employmentRelationshipType?: 'clt' | 'pj' | 'internship';
+  onboardingId?: string | null;
+  /** Unidade jurídica responsável pelo vínculo; não se confunde com a unidade de trabalho. */
+  employerUnitId?: string | null;
+  employerUnitName?: string | null;
+  employerCnpj?: string | null;
+  employerAddress?: string | null;
   responsibleUnitIds?: string[];
   /**
    * Limite territorial do acesso aos dados.
@@ -939,6 +945,10 @@ export type User = {
   terminationNotes?: string;
   terminationRelationshipType?: 'clt' | 'pj' | 'internship';
   terminationProcessId?: string;
+  terminationEmployerUnitId?: string | null;
+  terminationEmployerName?: string | null;
+  terminationEmployerCnpj?: string | null;
+  terminationEmployerEntityId?: string | null;
   employmentStatus?: 'active' | 'terminated';
 };
 

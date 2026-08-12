@@ -10,11 +10,19 @@ import {
 } from "../../../src/features/hr/integration/document-variables";
 
 describe("catálogo de variáveis documentais", () => {
-  test("mantém exatamente as 110 variáveis do contrato v2", () => {
+  test("mantém o catálogo versionado de variáveis documentais", () => {
     assert.equal(DOCUMENT_VARIABLES.length, DOCUMENT_VARIABLE_COUNT);
-    assert.equal(Object.keys(DOCUMENT_VARIABLE_CATALOG).length, 110);
+    assert.equal(Object.keys(DOCUMENT_VARIABLE_CATALOG).length, DOCUMENT_VARIABLE_COUNT);
     assert.ok(getDocumentVariable("employee.name"));
     assert.ok(getDocumentVariable("system.documents.email"));
+    assert.deepEqual(getDocumentVariable("integration.probation_first_period_days")?.resolution, [{
+      source: "onboarding",
+      path: "probationV2.config.firstPeriodDays",
+    }]);
+    assert.deepEqual(getDocumentVariable("integration.probation_second_period_days")?.resolution, [{
+      source: "onboarding",
+      path: "probationV2.config.secondPeriodDays",
+    }]);
   });
 
   test("preserva condicionais e grupo repetível do mapa de RH", () => {

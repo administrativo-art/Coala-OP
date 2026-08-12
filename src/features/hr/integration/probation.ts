@@ -1,6 +1,9 @@
+export const PROBATION_TOTAL_DAYS = 90 as const;
+export const DEFAULT_PROBATION_FIRST_PERIOD_DAYS = 30 as const;
+
 export const DEFAULT_PROBATION_CONFIG = {
-  firstPeriodDays: 45,
-  secondPeriodDays: 45,
+  firstPeriodDays: DEFAULT_PROBATION_FIRST_PERIOD_DAYS,
+  secondPeriodDays: PROBATION_TOTAL_DAYS - DEFAULT_PROBATION_FIRST_PERIOD_DAYS,
   evaluationWindowDays: 10,
 } as const;
 
@@ -28,6 +31,26 @@ export type ProbationSchedule = {
   secondPeriod: ProbationPeriodSchedule | null;
   finalEndDate: string;
 };
+
+export function probationConfigForFirstPeriod(
+  firstPeriodDays: number,
+  baseConfig: ProbationConfig = DEFAULT_PROBATION_CONFIG,
+): ProbationConfig {
+  if (!Number.isInteger(firstPeriodDays) || firstPeriodDays < 1 || firstPeriodDays >= PROBATION_TOTAL_DAYS) {
+    throw new Error(`O primeiro período deve ter entre 1 e ${PROBATION_TOTAL_DAYS - 1} dias.`);
+  }
+  const secondPeriodDays = PROBATION_TOTAL_DAYS - firstPeriodDays;
+  return {
+    ...baseConfig,
+    firstPeriodDays,
+    secondPeriodDays,
+    evaluationWindowDays: Math.min(
+      baseConfig.evaluationWindowDays,
+      firstPeriodDays,
+      secondPeriodDays,
+    ),
+  };
+}
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -67,8 +90,8 @@ export function validateProbationConfig(config: ProbationConfig) {
   if (!Number.isInteger(secondPeriodDays) || secondPeriodDays < 0) {
     throw new Error("O segundo período deve ser zero ou um número inteiro positivo.");
   }
-  if (firstPeriodDays + secondPeriodDays > 90) {
-    throw new Error("A soma dos períodos de experiência não pode ultrapassar 90 dias.");
+  if (firstPeriodDays + secondPeriodDays > PROBATION_TOTAL_DAYS) {
+    throw new Error(`A soma dos períodos de experiência não pode ultrapassar ${PROBATION_TOTAL_DAYS} dias.`);
   }
   if (!Number.isInteger(evaluationWindowDays) || evaluationWindowDays < 1) {
     throw new Error("A janela de avaliação deve ter pelo menos 1 dia.");

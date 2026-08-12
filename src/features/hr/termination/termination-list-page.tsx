@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Clock3, MapPin, Search } from 
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { terminationFetch } from "./client";
 import type { CltTerminationProcess, TerminationStepId } from "./types";
 
@@ -108,7 +109,7 @@ export function TerminationListPage() {
   }, [firebaseUser]);
 
   const shown = useMemo(
-    () => items.filter((item) => `${item.employeeName} ${item.request.protocol}`.toLowerCase().includes(query.toLowerCase())),
+    () => items.filter((item) => `${item.employeeName} ${item.request.protocol} ${item.employer?.legalName ?? ""} ${item.employer?.cnpj ?? ""} ${item.employer?.cnpj ? CnpjValidator.format(item.employer.cnpj) : ""} ${item.pjContractSnapshot?.provider.legalName ?? ""} ${item.pjContractSnapshot?.provider.cnpj ?? ""}`.toLowerCase().includes(query.toLowerCase())),
     [items, query],
   );
   const active = items.filter((item) => !["completed", "cancelled"].includes(item.status));
@@ -129,7 +130,7 @@ export function TerminationListPage() {
 
       <div className="relative max-w-xl">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <Input className="h-[46px] rounded-xl pl-11" placeholder="Buscar colaborador ou protocolo" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Input className="h-[46px] rounded-xl pl-11" placeholder="Buscar colaborador, protocolo, empresa ou CNPJ" value={query} onChange={(event) => setQuery(event.target.value)} />
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -169,6 +170,15 @@ export function TerminationListPage() {
                     <MapPin className="h-3.5 w-3.5" />
                     {item.unitName ?? "Unidade não definida"}
                   </div>
+                  <div className="mt-1.5 text-[11px] font-bold text-slate-500">
+                    {item.employer?.legalName ?? "CNPJ empregador pendente"}
+                    {item.employer?.cnpj ? ` · ${CnpjValidator.format(item.employer.cnpj)}` : ""}
+                  </div>
+                  {item.pjContractSnapshot?.provider ? (
+                    <div className="mt-1 text-[11px] font-bold text-violet-600">
+                      Prestadora: {item.pjContractSnapshot.provider.legalName} · {CnpjValidator.format(item.pjContractSnapshot.provider.cnpj)}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-3">

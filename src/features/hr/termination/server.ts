@@ -1,6 +1,8 @@
 import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { renderToBuffer } from "@react-pdf/renderer";
+import type { DocumentSnapshot } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import type { NextRequest } from "next/server";
 
@@ -22,6 +24,7 @@ import {
   createEmployeeResignationSteps,
   createEmployerDismissalSteps,
   createInitialTerminationSteps,
+  createPjTerminationSteps,
   patchStep,
   recalculateTermination,
 } from "./core";
@@ -35,15 +38,22 @@ import {
 } from "./emails";
 import type {
   CltTerminationProcess,
+  PjTerminationAgreement,
+  PjTerminationContractSnapshot,
+  TerminationEmployerSnapshot,
   TerminationDocument,
   TerminationEvent,
 } from "./types";
-import type { ManagedTerminationCreateInput } from "./schemas";
+import type { ManagedTerminationCreateInput, PjTerminationAgreementGenerateInput } from "./schemas";
 import { terminationReasonsForRelationship } from "@/lib/hr/employment-relationship";
 import { recalculateEmploymentEndRetention } from "@/features/hr/documents/document-retention.server";
 import { createPaymentRequest, refreshPaymentRequest } from "@/features/financial/payment-requests/service.server";
 import { getPaymentRequest } from "@/features/financial/payment-requests/repository.server";
 import { resolveCompanyProcessContact } from "@/lib/company/company-process-contact.server";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
+import { resolveDocumentLegalEntitySnapshot } from "@/features/hr/documents/legal-entity-snapshot.server";
+import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company-document-signatory.server";
+import { PjTerminationAgreementPdf } from "./pj-termination-agreement-pdf";
 
 const COLLECTION = "terminationProcesses";
 const PROJECTION_COLLECTION = "processProjections";
@@ -52,6 +62,10 @@ const MAX_LETTER_BYTES = 12 * 1024 * 1024;
 
 function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function toIso(value: unknown) {
@@ -92,6 +106,16 @@ function safeFileName(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 120);
 }
 
+function formatBrMoney(value: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
+function belemDateOnly(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Belem", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+  const part = (type: "year" | "month" | "day") => parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 function processProtocol(now: Date) {
   const date = now.toISOString().slice(0, 10).replace(/-/g, "");
   return `PD-${date}-${randomBytes(3).toString("hex").toUpperCase()}`;
@@ -123,7 +147,41 @@ export function assertTerminationManager(context: ServerUserContext) {
 export async function getTermination(id: string) {
   const snapshot = await hrDbAdmin.collection(COLLECTION).doc(id).get();
   if (!snapshot.exists) return null;
-  return recalculateTermination({ id: snapshot.id, ...(serialize(snapshot.data()) as Omit<CltTerminationProcess, "id">) } as CltTerminationProcess);
+  let process = recalculateTermination({ id: snapshot.id, ...(serialize(snapshot.data()) as Omit<CltTerminationProcess, "id">) } as CltTerminationProcess);
+  if (!usableEmployerSnapshot(process.employer) && !["completed", "cancelled"].includes(process.status)) {
+    const userSnapshot = await dbAdmin.collection("users").doc(process.employeeId).get();
+    if (userSnapshot.exists) {
+      const user = { id: userSnapshot.id, ...(userSnapshot.data() as Omit<ServerUserContext["userDoc"], "id">) };
+      const employer = await resolveTerminationEmployer({ user }).catch(() => null);
+      if (employer) {
+        process = recalculateTermination({ ...process, employer });
+        await Promise.all([
+          snapshot.ref.set({ employer }, { merge: true }),
+          persistCollaboratorEmployer(process.employeeId, employer),
+          syncTerminationProjection(process),
+        ]).catch(() => undefined);
+      }
+    }
+  }
+  if (process.processType === "pj_contract_termination" && !process.pjContractSnapshot && !["completed", "cancelled"].includes(process.status) && usableEmployerSnapshot(process.employer)) {
+    const userSnapshot = await dbAdmin.collection("users").doc(process.employeeId).get();
+    if (userSnapshot.exists) {
+      const user = { id: userSnapshot.id, ...(userSnapshot.data() as Omit<ServerUserContext["userDoc"], "id">) };
+      const pjContractSnapshot = await resolvePjTerminationContractSnapshot({ user, employer: process.employer, capturedAt: new Date().toISOString() }).catch(() => null);
+      if (pjContractSnapshot) {
+        process = recalculateTermination({
+          ...process,
+          pjContractSnapshot,
+          pjAgreement: process.pjAgreement ?? { status: "not_generated", version: 0, documentId: null, settlement: null, witnesses: null },
+        });
+        await Promise.all([
+          snapshot.ref.set({ pjContractSnapshot, pjAgreement: process.pjAgreement, steps: process.steps }, { merge: true }),
+          syncTerminationProjection(process),
+        ]).catch(() => undefined);
+      }
+    }
+  }
+  return process;
 }
 
 export async function assertTerminationVisible(context: ServerUserContext, process: CltTerminationProcess) {
@@ -133,7 +191,18 @@ export async function assertTerminationVisible(context: ServerUserContext, proce
 }
 
 export function terminationForViewer(context: ServerUserContext, process: CltTerminationProcess) {
-  if (canViewAll(context) || process.employeeId !== context.userDoc.id || process.processType !== "clt_hr_termination") return process;
+  if (canViewAll(context) || process.employeeId !== context.userDoc.id) return process;
+  if (process.processType === "pj_contract_termination") {
+    return {
+      ...process,
+      terminationNotes: null,
+      terminationInternalReason: null,
+      documents: process.documents.filter((document) => document.visibility === "employee"),
+      operational: process.operational ? { ...process.operational, notes: null } : process.operational,
+      pjAgreement: process.pjAgreement ? { ...process.pjAgreement, witnesses: null } : process.pjAgreement,
+    };
+  }
+  if (process.processType !== "clt_hr_termination") return process;
   return {
     ...process,
     terminationNotes: null,
@@ -222,6 +291,257 @@ async function loadUnit(user: ServerUserContext["userDoc"]) {
   };
 }
 
+function usableEmployerSnapshot(value: CltTerminationProcess["employer"]): value is TerminationEmployerSnapshot {
+  return Boolean(
+    value
+    && value.legalName?.trim()
+    && CnpjValidator.validate(value.cnpj ?? "").valid,
+  );
+}
+
+type EmployerSource = {
+  unitId: string | null;
+  legalName: string | null;
+  cnpj: string | null;
+  address: string | null;
+};
+
+async function employerSourceFromUnit(unitId: string, fallback: Partial<EmployerSource> = {}): Promise<EmployerSource> {
+  const snapshot = await dbAdmin.collection("dp_units").doc(unitId).get();
+  if (!snapshot.exists && !fallback.cnpj) throw new Error("O CNPJ empregador selecionado não foi encontrado.");
+  return {
+    unitId,
+    legalName: asString(snapshot.get("legalName")) ?? asString(snapshot.get("name")) ?? fallback.legalName ?? null,
+    cnpj: asString(snapshot.get("cnpj")) ?? fallback.cnpj ?? null,
+    address: asString(snapshot.get("address")) ?? fallback.address ?? null,
+  };
+}
+
+async function storedEmployerSource(user: ServerUserContext["userDoc"]): Promise<EmployerSource | null> {
+  if (CnpjValidator.validate(asString(user.employerCnpj) ?? "").valid) {
+    return {
+      unitId: asString(user.employerUnitId),
+      legalName: asString(user.employerUnitName),
+      cnpj: asString(user.employerCnpj),
+      address: asString(user.employerAddress),
+    };
+  }
+  if (asString(user.employerUnitId)) {
+    const source = await employerSourceFromUnit(asString(user.employerUnitId)!).catch(() => null);
+    if (source && CnpjValidator.validate(source.cnpj ?? "").valid) return source;
+  }
+  const onboardingId = asString((user as ServerUserContext["userDoc"] & { onboardingId?: string | null }).onboardingId);
+  if (onboardingId) {
+    const onboarding = await hrDbAdmin.collection("onboardingProcesses").doc(onboardingId).get();
+    if (onboarding.exists) {
+      const onboardingSource: EmployerSource = {
+        unitId: asString(onboarding.get("employerUnitId")),
+        legalName: asString(onboarding.get("employerUnitName")),
+        cnpj: asString(onboarding.get("employerCnpj")),
+        address: asString(onboarding.get("employerAddress")),
+      };
+      if (CnpjValidator.validate(onboardingSource.cnpj ?? "").valid) {
+        return onboardingSource;
+      }
+    }
+  }
+
+  const employee = await hrDbAdmin.collection("employees").doc(user.id).get();
+  const employerField = await employee.ref.collection("field_values").doc("employee.employer_cnpj").get();
+  const employeeCnpj = asString(employee.get("employer_cnpj")) ?? asString(employerField.get("value_text"));
+  if (!CnpjValidator.validate(employeeCnpj ?? "").valid) return null;
+  const cleanCnpj = CnpjValidator.clean(employeeCnpj!);
+  const unitMatch = await dbAdmin.collection("dp_units").where("cnpj", "==", cleanCnpj).limit(1).get();
+  const unit = unitMatch.docs[0] ?? null;
+  return {
+    unitId: asString(employee.get("employer_unit_id")) ?? unit?.id ?? null,
+    legalName: asString(employee.get("employer_unit_name")) ?? asString(unit?.get("legalName")) ?? asString(unit?.get("name")),
+    cnpj: cleanCnpj,
+    address: asString(employee.get("employer_address")) ?? asString(unit?.get("address")),
+  };
+}
+
+async function resolveTerminationEmployer(params: {
+  user: ServerUserContext["userDoc"];
+  employerUnitId?: string | null;
+}): Promise<TerminationEmployerSnapshot> {
+  const explicitUnitId = asString(params.employerUnitId);
+  const source = explicitUnitId
+    ? await employerSourceFromUnit(explicitUnitId)
+    : await storedEmployerSource(params.user);
+  if (!source) {
+    throw new Error("Defina o CNPJ empregador no cadastro do colaborador antes de iniciar a rescisão.");
+  }
+  const validation = CnpjValidator.validate(source.cnpj ?? "");
+  if (!validation.valid) throw new Error("O CNPJ empregador está ausente ou inválido. Revise o cadastro da empresa.");
+  const legalEntity = await resolveDocumentLegalEntitySnapshot({
+    cnpj: validation.clean,
+    fallbackName: source.legalName,
+    fallbackAddress: source.address,
+  });
+  const legalName = asString(legalEntity.legalName) ?? source.legalName;
+  if (!legalName) throw new Error("A razão social da empregadora precisa estar cadastrada.");
+  return {
+    unitId: source.unitId,
+    entityId: legalEntity.entityId,
+    legalName,
+    tradeName: asString(legalEntity.tradeName),
+    cnpj: validation.clean,
+    address: asString(legalEntity.address) ?? source.address ?? "",
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+async function persistCollaboratorEmployer(employeeId: string, employer: TerminationEmployerSnapshot) {
+  await Promise.all([
+    dbAdmin.collection("users").doc(employeeId).set({
+      employerUnitId: employer.unitId,
+      employerUnitName: employer.legalName,
+      employerCnpj: employer.cnpj,
+      employerAddress: employer.address,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true }),
+    hrDbAdmin.collection("employees").doc(employeeId).set({
+      employer_unit_id: employer.unitId,
+      employer_unit_name: employer.legalName,
+      employer_cnpj: employer.cnpj,
+      employer_address: employer.address,
+      updated_at: new Date().toISOString(),
+    }, { merge: true }),
+    hrDbAdmin.collection("employees").doc(employeeId).collection("field_values").doc("employee.employer_cnpj").set({
+      field_key: "employee.employer_cnpj",
+      value_text: employer.cnpj,
+      source: "termination_employer_confirmation",
+      updated_at: new Date().toISOString(),
+    }, { merge: true }),
+  ]);
+}
+
+function requireTerminationEmployer(process: CltTerminationProcess) {
+  if (!usableEmployerSnapshot(process.employer)) {
+    throw new Error("A rescisão não possui um CNPJ empregador válido. Revise o vínculo antes de continuar.");
+  }
+  return process.employer;
+}
+
+function requireText(value: unknown, message: string) {
+  const normalized = asString(value);
+  if (!normalized) throw new Error(message);
+  return normalized;
+}
+
+async function findSignedPjOnboarding(user: ServerUserContext["userDoc"]) {
+  const candidates = new Map<string, DocumentSnapshot>();
+  const onboardingId = asString((user as ServerUserContext["userDoc"] & { onboardingId?: string | null }).onboardingId);
+  if (onboardingId) {
+    const direct = await hrDbAdmin.collection("onboardingProcesses").doc(onboardingId).get();
+    if (direct.exists) candidates.set(direct.id, direct);
+  }
+  const [byCollaborator, byEmployee] = await Promise.all([
+    hrDbAdmin.collection("onboardingProcesses").where("collaboratorUserId", "==", user.id).limit(20).get(),
+    hrDbAdmin.collection("onboardingProcesses").where("employeeId", "==", user.id).limit(20).get(),
+  ]);
+  [...byCollaborator.docs, ...byEmployee.docs].forEach((document) => candidates.set(document.id, document));
+  return [...candidates.values()]
+    .filter((document) => {
+      const data = document.data() ?? {};
+      const contract = asRecord(asRecord(data.pjWorkflow).contract);
+      return data.employmentRelationshipType === "pj"
+        && contract.status === "signed"
+        && Boolean(asString(contract.signedStoragePath));
+    })
+    .sort((left, right) => String(right.get("updatedAt") ?? "").localeCompare(String(left.get("updatedAt") ?? "")))[0] ?? null;
+}
+
+async function resolvePjTerminationContractSnapshot(params: {
+  user: ServerUserContext["userDoc"];
+  employer: TerminationEmployerSnapshot;
+  capturedAt: string;
+}): Promise<PjTerminationContractSnapshot> {
+  const onboarding = await findSignedPjOnboarding(params.user);
+  if (!onboarding) {
+    throw new Error("O contrato PJ original precisa estar assinado e vinculado ao cadastro antes do encerramento.");
+  }
+  const process = onboarding.data() ?? {};
+  const workflow = asRecord(process.pjWorkflow);
+  const provider = asRecord(workflow.provider);
+  const terms = asRecord(workflow.terms);
+  const contract = asRecord(workflow.contract);
+  const answers = asRecord(process.publicFormAnswers);
+  const contractorRepresentative = asRecord(contract.contractorRepresentative);
+  const sourceEmployerCnpj = CnpjValidator.clean(asString(process.employerCnpj) ?? params.employer.cnpj);
+  if (!CnpjValidator.validate(sourceEmployerCnpj).valid || sourceEmployerCnpj !== CnpjValidator.clean(params.employer.cnpj)) {
+    throw new Error("O CNPJ selecionado não corresponde à contratante do contrato PJ original.");
+  }
+  const providerCnpj = CnpjValidator.clean(asString(provider.cnpj) ?? "");
+  if (!CnpjValidator.validate(providerCnpj).valid) throw new Error("O CNPJ da prestadora no contrato original está ausente ou inválido.");
+  const signedStoragePath = requireText(contract.signedStoragePath, "O arquivo assinado do contrato PJ não foi encontrado.");
+  const [signedContractBuffer] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(signedStoragePath).download();
+  const providerEntity = await resolveDocumentLegalEntitySnapshot({
+    cnpj: providerCnpj,
+    fallbackName: asString(provider.legalName),
+    fallbackAddress: asString(answers.companyAddress),
+  }).catch(() => null);
+  const contractorCpf = String(contractorRepresentative.cpf ?? "").replace(/\D/g, "");
+  const providerCpf = String(answers.representativeCpf ?? "").replace(/\D/g, "");
+  if (contractorCpf.length !== 11 || providerCpf.length !== 11) {
+    throw new Error("Os CPFs dos representantes do contrato PJ original precisam estar completos.");
+  }
+  const generatedAt = requireText(contract.generatedAt ?? contract.signedAt ?? terms.contractStartDate, "A data do contrato PJ original não foi encontrada.");
+  const signedAt = requireText(contract.signedAt ?? contract.generatedAt, "A data da assinatura do contrato PJ original não foi encontrada.");
+  const monthlyValue = Number(terms.monthlyValue);
+  if (!Number.isFinite(monthlyValue) || monthlyValue <= 0) throw new Error("O valor mensal do contrato PJ original está inválido.");
+  return {
+    onboardingId: onboarding.id,
+    contractor: {
+      entityId: params.employer.entityId,
+      legalName: requireText(process.employerUnitName ?? params.employer.legalName, "A razão social da contratante está ausente."),
+      tradeName: params.employer.tradeName,
+      cnpj: sourceEmployerCnpj,
+      email: requireText(contractorRepresentative.email, "O e-mail do representante da contratante está ausente."),
+      address: requireText(process.employerAddress ?? params.employer.address, "O endereço da contratante está ausente."),
+      representative: {
+        name: requireText(contractorRepresentative.name, "O representante da contratante está ausente."),
+        email: requireText(contractorRepresentative.email, "O e-mail do representante da contratante está ausente."),
+        role: requireText(contractorRepresentative.role, "O cargo do representante da contratante está ausente."),
+        qualification: requireText(contractorRepresentative.qualification, "A qualificação do representante da contratante está ausente."),
+        cpf: contractorCpf,
+        professionalId: asString(contractorRepresentative.professionalId),
+      },
+    },
+    provider: {
+      entityId: providerEntity?.entityId ?? null,
+      legalName: requireText(provider.legalName, "A razão social da prestadora está ausente."),
+      tradeName: asString(provider.tradeName),
+      cnpj: providerCnpj,
+      email: requireText(provider.email, "O e-mail da prestadora está ausente."),
+      address: requireText(answers.companyAddress, "O endereço da prestadora está ausente."),
+      representative: {
+        name: requireText(answers.representativeName, "O representante da prestadora está ausente."),
+        email: requireText(provider.email, "O e-mail da prestadora está ausente."),
+        role: null,
+        qualification: requireText(answers.representativeQualification, "A qualificação do representante da prestadora está ausente."),
+        cpf: providerCpf,
+        professionalId: null,
+      },
+    },
+    sourceContract: {
+      contractDate: generatedAt.slice(0, 10),
+      contractStartDate: requireText(terms.contractStartDate, "A data inicial do contrato PJ está ausente.").slice(0, 10),
+      termType: terms.termType === "fixed" ? "fixed" : "indefinite",
+      contractEndDate: asString(terms.contractEndDate)?.slice(0, 10) ?? null,
+      monthlyValue: Number(monthlyValue.toFixed(2)),
+      version: Math.max(1, Number(contract.version ?? 1)),
+      signedStoragePath,
+      signedHashSha256: createHash("sha256").update(signedContractBuffer).digest("hex"),
+      signedAt,
+      signatureCity: requireText(contract.signatureCity, "A cidade de assinatura do contrato PJ está ausente."),
+      forumCity: requireText(contract.forumCity, "O foro do contrato PJ está ausente."),
+    },
+    capturedAt: params.capturedAt,
+  };
+}
+
 async function findHrAssignee() {
   const profiles = await dbAdmin.collection("profiles").get();
   for (const profile of profiles.docs) {
@@ -277,6 +597,9 @@ export async function createManagedTermination(params: {
   if (!allowedReasons.some((reason) => reason === params.input.terminationReason)) {
     throw new Error("Motivo de encerramento incompatível com o tipo de vínculo.");
   }
+  if (relationship === "pj" && params.input.terminationReason !== "Encerramento por acordo entre as partes") {
+    throw new Error("O fluxo documental PJ disponível gera distrato por mútuo acordo. Para encerramento unilateral, use a notificação contratual específica.");
+  }
 
   const existingSnapshot = await hrDbAdmin
     .collection(COLLECTION)
@@ -295,17 +618,26 @@ export async function createManagedTermination(params: {
   const processId = randomUUID();
   const protocol = processProtocol(new Date(now));
   const unit = await loadUnit(target);
-  const accountantContact = relationship === "clt" ? await resolveCompanyProcessContact("termination") : null;
+  const employer = await resolveTerminationEmployer({ user: target, employerUnitId: params.input.employerUnitId });
+  await persistCollaboratorEmployer(target.id, employer);
+  const accountantContact = relationship === "clt" ? await resolveCompanyProcessContact("termination", employer) : null;
   const identity = await loadExpectedIdentity(target.id).catch(() => null);
-  const legalPaymentDueDate = calculateMaterialDeadline(params.input.terminationDate);
+  const pjContractSnapshot = relationship === "pj"
+    ? await resolvePjTerminationContractSnapshot({ user: target, employer, capturedAt: now })
+    : null;
+  const legalPaymentDueDate = relationship === "clt"
+    ? calculateMaterialDeadline(params.input.terminationDate)
+    : params.input.terminationDate;
   const guidedEmployerDismissal = relationship === "clt" && params.input.terminationReason === "Dispensa sem justa causa";
   if (guidedEmployerDismissal && new Date(params.input.communicationAt!).getTime() > Date.now() + 5 * 60_000) {
     throw new Error("A comunicação presencial precisa ter ocorrido antes da abertura do processo.");
   }
-  let steps = guidedEmployerDismissal
-    ? createEmployerDismissalSteps(now, params.input.terminationDate, legalPaymentDueDate)
-    : createInitialTerminationSteps(now);
-  if (!guidedEmployerDismissal) {
+  let steps = relationship === "pj"
+    ? createPjTerminationSteps(now, params.input.terminationDate, params.context.userDoc.id)
+    : guidedEmployerDismissal
+      ? createEmployerDismissalSteps(now, params.input.terminationDate, legalPaymentDueDate)
+      : createInitialTerminationSteps(now);
+  if (!guidedEmployerDismissal && relationship === "clt") {
     steps = patchStep(steps, "request_validation_notice", {
       status: "completed",
       completedAt: now,
@@ -313,16 +645,14 @@ export async function createManagedTermination(params: {
       note: "Desligamento iniciado e validado pelo RH.",
     });
     steps = patchStep(steps, "uniform_return", { status: "in_progress", startedAt: now, dueAt: params.input.terminationDate });
-    steps = patchStep(steps, "aso", relationship === "clt" ? {
+    steps = patchStep(steps, "aso", {
       status: "pending", dueAt: legalPaymentDueDate, note: "Aguardando a devolução dos uniformes.",
-    } : {
-      status: "completed", startedAt: now, completedAt: now, completedBy: params.context.userDoc.id, note: "ASO demissional não aplicável ao vínculo PJ.",
     });
     steps = patchStep(steps, "accountant", {
-      status: relationship === "clt" ? "blocked" : "in_progress",
-      startedAt: relationship === "pj" ? now : null,
+      status: "blocked",
+      startedAt: null,
       dueAt: legalPaymentDueDate,
-      blockedReason: relationship === "clt" ? "Aguardando conclusão e aprovação do ASO demissional." : null,
+      blockedReason: "Aguardando conclusão e aprovação do ASO demissional.",
     });
     for (const stepId of ["document_audit", "signatures", "legal_obligations"] as const) steps = patchStep(steps, stepId, { dueAt: legalPaymentDueDate });
     steps = patchStep(steps, "legal_obligations", { status: "in_progress", startedAt: now });
@@ -362,11 +692,14 @@ export async function createManagedTermination(params: {
     } : null,
     unitId: unit.id,
     unitName: unit.name,
+    employer,
+    pjContractSnapshot,
+    pjAgreement: relationship === "pj" ? { status: "not_generated", version: 0, documentId: null, settlement: null, witnesses: null } : null,
     jobRoleName: target.jobRoleName ?? null,
     status: "active",
     health: "on_track",
     progress: 0,
-    currentSummary: "Desligamento iniciado pelo RH",
+    currentSummary: relationship === "pj" ? "Encerramento PJ iniciado" : "Desligamento iniciado pelo RH",
     source: "hr_manual",
     request: {
       noticePreference: "request_waiver",
@@ -393,10 +726,10 @@ export async function createManagedTermination(params: {
       decidedAt: now,
       decidedBy: params.context.userDoc.id,
     },
-    accountant: {
+    accountant: relationship === "clt" ? {
       status: relationship === "clt" ? "not_started" : "ready_to_send",
       recipientEmail: accountantContact?.email ?? null,
-    },
+    } : null,
     payment: guidedEmployerDismissal ? { status: "not_started", dueAt: legalPaymentDueDate } : null,
     employeeCompletion: guidedEmployerDismissal ? { status: "not_started" } : null,
     internalClosure: guidedEmployerDismissal ? { status: "pending" } : null,
@@ -470,11 +803,16 @@ export async function createManagedTermination(params: {
       type: "HR_TERMINATION_CREATED",
       at: now,
       ...eventActor(params.context),
-      message: `Desligamento iniciado pelo RH. Motivo: ${params.input.terminationReason}. Término previsto em ${params.input.terminationDate}.`,
+      message: `${relationship === "pj" ? "Encerramento contratual PJ" : "Desligamento"} iniciado pelo RH. Motivo: ${params.input.terminationReason}. Término previsto em ${params.input.terminationDate}.`,
       data: {
         terminationReason: params.input.terminationReason,
         terminationCause: params.input.terminationCause ?? null,
         terminationDate: params.input.terminationDate,
+        employerUnitId: employer.unitId,
+        employerEntityId: employer.entityId,
+        employerCnpj: employer.cnpj,
+        providerCnpj: pjContractSnapshot?.provider.cnpj ?? null,
+        sourceContractHashSha256: pjContractSnapshot?.sourceContract.signedHashSha256 ?? null,
       },
     }),
     createHrTask(
@@ -524,7 +862,9 @@ export async function createEmployeeResignationRequest(params: {
   const cpf = String(identity?.cpf ?? "").replace(/\D/g, "");
   if (cpf.length !== 11) throw new Error("O CPF do colaborador precisa estar validado no cadastro do RH.");
   const unit = await loadUnit(user);
-  const accountantContact = await resolveCompanyProcessContact("termination");
+  const employer = await resolveTerminationEmployer({ user });
+  await persistCollaboratorEmployer(user.id, employer);
+  const accountantContact = await resolveCompanyProcessContact("termination", employer);
   const nowDate = new Date();
   const now = nowDate.toISOString();
   const processId = randomUUID();
@@ -557,6 +897,7 @@ export async function createEmployeeResignationRequest(params: {
     employmentRelationshipType: "clt",
     unitId: unit.id,
     unitName: unit.name,
+    employer,
     jobRoleName: user.jobRoleName ?? null,
     status: "hr_review",
     health: "on_track",
@@ -600,7 +941,7 @@ export async function createEmployeeResignationRequest(params: {
       actorId: user.id,
       actorName: getUserDisplayName(user, user.id),
       message: "Carta manuscrita enviada e encaminhada para conferência do RH.",
-      data: { protocol, originalHash, letterVersion: 1, handwrittenLetterConfirmedAt: now },
+      data: { protocol, originalHash, letterVersion: 1, handwrittenLetterConfirmedAt: now, employerUnitId: employer.unitId, employerEntityId: employer.entityId, employerCnpj: employer.cnpj },
     }),
   ]);
   await createTerminationAsoShadow(process);
@@ -711,7 +1052,7 @@ async function createTerminationAsoShadow(process: CltTerminationProcess) {
   const ref = hrDbAdmin.collection("onboardingProcesses").doc(process.id);
   if ((await ref.get()).exists) return;
   const identity = await loadExpectedIdentity(process.employeeId);
-  const unit = process.unitId ? await dbAdmin.collection("dp_units").doc(process.unitId).get() : null;
+  const employer = requireTerminationEmployer(process);
   const now = new Date().toISOString();
   await ref.set({
     processKind: "termination_aso",
@@ -722,9 +1063,11 @@ async function createTerminationAsoShadow(process: CltTerminationProcess) {
     functionName: process.jobRoleName ?? "Colaborador(a)",
     unitId: process.unitId ?? null,
     unitName: process.unitName ?? null,
-    employerLegalName: asString(unit?.get("legalName")) ?? asString(unit?.get("name")) ?? process.unitName ?? "Coala Shakes",
-    employerCnpj: asString(unit?.get("cnpj")),
-    employerAddress: asString(unit?.get("address")),
+    employerUnitId: employer.unitId,
+    employerUnitName: employer.legalName,
+    employerLegalName: employer.legalName,
+    employerCnpj: employer.cnpj,
+    employerAddress: employer.address,
     publicFormAnswers: { fullName: process.employeeName, cpf: identity?.cpf ?? null },
     asoWorkflow: { status: "ready_to_generate", examType: "dismissal", updatedAt: now },
     documents: [],
@@ -740,6 +1083,9 @@ async function sendEmployerDismissalNotice(params: { context: ServerUserContext;
   }
   if (process.dismissalCommunication.officialNoticeStatus === "signed") return process;
   const now = new Date().toISOString();
+  const employer = requireTerminationEmployer(process);
+  const companySignatory = await resolveCompanyDocumentSignatory({ entityId: employer.entityId, cnpj: employer.cnpj });
+  if (!companySignatory) throw new Error(`Defina o signatário documental da empresa ${employer.legalName} antes de enviar o comunicado.`);
   const identity = await loadExpectedIdentity(process.employeeId).catch(() => null);
   const cpf = String(identity?.cpf ?? "").replace(/\D/g, "");
   const noticeType = process.notice?.decision === "worked" ? "worked" : "indemnified";
@@ -747,7 +1093,9 @@ async function sendEmployerDismissalNotice(params: { context: ServerUserContext;
     protocol: process.request.protocol,
     employeeName: process.employeeName,
     cpfMasked: process.employeeCpfMasked ?? maskCpf(cpf),
-    companyName: process.unitName ?? "Coala Shakes",
+    companyName: employer.legalName,
+    companyCnpj: CnpjValidator.format(employer.cnpj),
+    companyAddress: employer.address,
     communicationAt: process.dismissalCommunication.occurredAt,
     communicationLocation: process.dismissalCommunication.location,
     responsibleName: process.dismissalCommunication.responsibleName,
@@ -768,7 +1116,7 @@ async function sendEmployerDismissalNotice(params: { context: ServerUserContext;
       documentName: `Comunicado de dispensa — ${process.employeeName}`,
       message: "Confira e assine o comunicado oficial do seu desligamento.",
       signers: [
-        { email: params.context.userDoc.email, name: getUserDisplayName(params.context.userDoc, params.context.userDoc.id), action: "SIGN" },
+        { email: companySignatory.email, name: companySignatory.name, action: "SIGN" },
         { email: process.employeeEmail, name: process.employeeName, action: "SIGN", ...(cpf.length === 11 ? { cpf } : {}) },
       ],
     });
@@ -823,6 +1171,10 @@ async function sendEmployerDismissalNotice(params: { context: ServerUserContext;
       provider: "autentique",
       providerDocumentId: provider.document.id,
       signerEmail: process.employeeEmail,
+      employerEntityId: employer.entityId,
+      employerCnpj: employer.cnpj,
+      companySignatoryUserId: companySignatory.userId,
+      companySignatoryEmail: companySignatory.email,
       documentStoragePath: storagePath,
       documentHash: hash,
       sandbox: provider.sandbox,
@@ -962,7 +1314,9 @@ export async function reviewTerminationLetter(params: {
     protocol: process.request.protocol,
     employeeName: process.employeeName,
     cpfMasked: maskCpf(cpf),
-    companyName: process.unitName ?? "Coala Shakes",
+    companyName: requireTerminationEmployer(process).legalName,
+    companyCnpj: CnpjValidator.format(requireTerminationEmployer(process).cnpj),
+    companyAddress: requireTerminationEmployer(process).address,
     submittedAt: now,
     noticePreference: process.request.noticePreference,
     desiredLastDay: process.request.desiredLastDay,
@@ -1289,7 +1643,7 @@ export async function revokeTerminationAccess(params: {
     throw new Error("Conclua primeiro a entrega final ao colaborador.");
   }
   if (!process.notice) throw new Error("Defina o término do contrato antes de bloquear acessos.");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = belemDateOnly();
   if (today < process.notice.contractEndDate) {
     throw new Error(`Os acessos só podem ser bloqueados a partir de ${process.notice.contractEndDate}.`);
   }
@@ -1517,7 +1871,7 @@ export async function completeEmployeeResignation(params: {
   if (asoReservation) steps = patchStep(steps, "aso", { status: "waived", completedAt: now, completedBy: params.context.userDoc.id, note: asoReservation.note.trim() });
   await Promise.all([
     authAdmin.updateUser(process.employeeId, { disabled: true }),
-    dbAdmin.collection("users").doc(process.employeeId).set({ isActive: false, employmentStatus: "terminated", inactivationType: "contract_termination", terminationDate: process.notice.contractEndDate, terminationReason: process.terminationReason ?? (process.processType === "clt_employee_resignation" ? "Pedido de demissão" : null), terminationCause: process.terminationCause ?? null, terminationNotes: process.terminationNotes ?? null, terminationInternalReason: process.terminationInternalReason ?? null, terminationRelationshipType: process.employmentRelationshipType, terminationProcessId: process.id, updatedAt: now }, { merge: true }),
+    dbAdmin.collection("users").doc(process.employeeId).set({ isActive: false, employmentStatus: "terminated", inactivationType: "contract_termination", terminationDate: process.notice.contractEndDate, terminationReason: process.terminationReason ?? (process.processType === "clt_employee_resignation" ? "Pedido de demissão" : null), terminationCause: process.terminationCause ?? null, terminationNotes: process.terminationNotes ?? null, terminationInternalReason: process.terminationInternalReason ?? null, terminationRelationshipType: process.employmentRelationshipType, terminationProcessId: process.id, terminationEmployerUnitId: process.employer?.unitId ?? null, terminationEmployerName: process.employer?.legalName ?? null, terminationEmployerCnpj: process.employer?.cnpj ?? null, terminationEmployerEntityId: process.employer?.entityId ?? null, updatedAt: now }, { merge: true }),
   ]);
   const updated = await saveTermination({
     ...process,
@@ -1543,6 +1897,9 @@ export async function completeTermination(params: { context: ServerUserContext; 
   if (isGuidedEmployerDismissal(process)) {
     throw new Error("Use a finalização total guiada para registrar ASO, uniformes e eventuais ressalvas.");
   }
+  if (process.processType === "pj_contract_termination" && process.pjAgreement?.status !== "signed") {
+    throw new Error("O distrato precisa estar assinado pelas duas partes e pelas testemunhas antes do fechamento.");
+  }
   if (!process.notice) throw new Error("Defina o aviso-prévio e a data de término.");
   const incomplete = process.steps.filter((step) => step.required && step.id !== "closure" && !["completed", "waived"].includes(step.status));
   if (incomplete.length) throw new Error(`Ainda existem etapas obrigatórias: ${incomplete.map((step) => step.label).join(", ")}.`);
@@ -1561,6 +1918,10 @@ export async function completeTermination(params: { context: ServerUserContext; 
       terminationInternalReason: process.terminationInternalReason ?? null,
       terminationRelationshipType: process.employmentRelationshipType,
       terminationProcessId: process.id,
+      terminationEmployerUnitId: process.employer?.unitId ?? null,
+      terminationEmployerName: process.employer?.legalName ?? null,
+      terminationEmployerCnpj: process.employer?.cnpj ?? null,
+      terminationEmployerEntityId: process.employer?.entityId ?? null,
       updatedAt: now,
     }, { merge: true }),
   ]);
@@ -1593,7 +1954,8 @@ export async function completeTermination(params: { context: ServerUserContext; 
 export async function sendTerminationToAccountant(params: { context: ServerUserContext; id: string; recipientEmail: string; appBaseUrl: string }) {
   const process = await requireManagedProcess(params.context, params.id);
   if (!process.notice) throw new Error("Defina o aviso-prévio antes do envio à contabilidade.");
-  const configuredContact = await resolveCompanyProcessContact("termination");
+  const employer = requireTerminationEmployer(process);
+  const configuredContact = await resolveCompanyProcessContact("termination", employer);
   const recipient = params.recipientEmail.trim().toLowerCase() || configuredContact?.email || "";
   if (!recipient.includes("@")) throw new Error("Informe um e-mail válido da contabilidade.");
   const token = randomBytes(32).toString("base64url");
@@ -1601,7 +1963,7 @@ export async function sendTerminationToAccountant(params: { context: ServerUserC
   const expiresAt = new Date(Date.now() + 30 * 86_400_000).toISOString();
   const url = `${params.appBaseUrl}/desligamento/contabilidade/${token}`;
   const now = new Date().toISOString();
-  const summary = `Colaborador: ${process.employeeName}\nProtocolo: ${process.request.protocol}\nTérmino do contrato: ${process.notice.contractEndDate}\nPrazo legal: ${process.notice.legalPaymentDueDate}\nAviso: ${process.notice.decision}`;
+  const summary = `Empresa: ${employer.legalName}\nCNPJ: ${CnpjValidator.format(employer.cnpj)}\nColaborador: ${process.employeeName}\nProtocolo: ${process.request.protocol}\nTérmino do contrato: ${process.notice.contractEndDate}\nPrazo legal: ${process.notice.legalPaymentDueDate}\nAviso: ${process.notice.decision}`;
   const accountantAttachments = [] as Array<{ filename: string; content: string; contentType: string }>;
   const sourceDocuments = process.documents.filter((document) => document.isCurrent !== false && ["resignation_letter", "request_confirmation", "dismissal_notice"].includes(document.type));
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
@@ -1627,6 +1989,8 @@ export async function sendTerminationToAccountant(params: { context: ServerUserC
     html: renderTerminationAccountantEmail({
       employeeName: process.employeeName,
       protocol: process.request.protocol,
+      companyName: employer.legalName,
+      companyCnpj: CnpjValidator.format(employer.cnpj),
       contractEndDate: process.notice.contractEndDate,
       legalPaymentDueDate: process.notice.legalPaymentDueDate,
       noticeLabel,
@@ -1757,12 +2121,14 @@ async function createTerminationPaymentControl(process: CltTerminationProcess, c
     });
   }
   try {
+    const employer = requireTerminationEmployer(process);
     const payment = await createPaymentRequest({
       sourceType: "termination",
       sourceId: process.id,
       beneficiaryReference: { sourceType: "employee", sourceId: process.employeeId },
+      legalEntitySnapshot: { entityId: employer.entityId, legalName: employer.legalName, cnpj: employer.cnpj },
       amount,
-      description: `Rescisão CLT — ${process.employeeName}`,
+      description: `Rescisão CLT — ${process.employeeName} — ${CnpjValidator.format(employer.cnpj)}`,
     }, { uid: context.userDoc.id, email: context.userDoc.email, name: getUserDisplayName(context.userDoc, context.userDoc.id) });
     const now = new Date().toISOString();
     const updated = await saveTermination({
@@ -1921,11 +2287,250 @@ export async function auditTerminationDocuments(params: {
   return updated;
 }
 
+function requirePjTermination(process: CltTerminationProcess) {
+  if (process.processType !== "pj_contract_termination" || !process.pjContractSnapshot) {
+    throw new Error("Este processo não possui um contrato PJ de origem congelado.");
+  }
+  return process.pjContractSnapshot;
+}
+
+export async function generatePjTerminationAgreement(params: {
+  context: ServerUserContext;
+  id: string;
+  input: PjTerminationAgreementGenerateInput;
+}) {
+  const process = await requireManagedProcess(params.context, params.id);
+  const contract = requirePjTermination(process);
+  if (process.terminationReason !== "Encerramento por acordo entre as partes") {
+    throw new Error("Este modelo de distrato só pode ser usado no encerramento por acordo entre as partes.");
+  }
+  if (["sent", "signed"].includes(process.pjAgreement?.status ?? "")) {
+    throw new Error("O distrato já foi enviado para assinatura e não pode ser substituído.");
+  }
+  const terminationDate = process.notice?.contractEndDate;
+  if (!terminationDate) throw new Error("A data do encerramento não foi definida.");
+  const today = belemDateOnly();
+  if (params.input.invoiceDate > params.input.paymentDate) throw new Error("A nota fiscal não pode ser posterior ao pagamento confirmado.");
+  if (params.input.paymentDate > today) throw new Error("O pagamento só pode ser confirmado depois de realizado.");
+  const signerKeys = [
+    contract.contractor.representative.email,
+    contract.provider.representative.email,
+    ...params.input.witnesses.map((witness) => witness.email),
+  ].map((value) => value.trim().toLowerCase());
+  if (new Set(signerKeys).size !== signerKeys.length) throw new Error("Cada signatário precisa ter um e-mail diferente.");
+  const witnessCpfs = params.input.witnesses.map((witness) => witness.cpf);
+  if (new Set(witnessCpfs).size !== witnessCpfs.length) throw new Error("Informe duas testemunhas diferentes.");
+  const grossValue = Number(((contract.sourceContract.monthlyValue / 30) * params.input.daysWorked).toFixed(2));
+  const prorataFormulaText = `${formatBrMoney(contract.sourceContract.monthlyValue)} ÷ 30 × ${params.input.daysWorked} = ${formatBrMoney(grossValue)}`;
+  const settlement: NonNullable<PjTerminationAgreement["settlement"]> = {
+    terminationDate,
+    daysWorked: params.input.daysWorked,
+    prorataFormulaText,
+    grossValue,
+    invoiceNumber: params.input.invoiceNumber,
+    invoiceDate: params.input.invoiceDate,
+    paymentConfirmed: true,
+    paymentDate: params.input.paymentDate,
+    signatureCity: params.input.signatureCity,
+    forumCity: params.input.forumCity,
+    signatureDate: today,
+  };
+  const pdf = PjTerminationAgreementPdf({
+    data: {
+      contract,
+      ...settlement,
+      witnesses: params.input.witnesses,
+    },
+  }) as Parameters<typeof renderToBuffer>[0];
+  const buffer = Buffer.from(await renderToBuffer(pdf));
+  const now = new Date().toISOString();
+  const version = (process.pjAgreement?.version ?? 0) + 1;
+  const documentId = randomUUID();
+  const storagePath = `hr/termination/${process.id}/pj-agreement/v${version}/distrato.pdf`;
+  const contentHash = createHash("sha256").update(buffer).digest("hex");
+  await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, {
+    resumable: false,
+    metadata: {
+      contentType: "application/pdf",
+      cacheControl: "private, no-store",
+      metadata: {
+        terminationId: process.id,
+        version: String(version),
+        contentHash,
+        sourceContractHash: contract.sourceContract.signedHashSha256,
+      },
+    },
+  });
+  const documents = [
+    ...process.documents.map((document) => document.type === "pj_termination_agreement" && document.isCurrent !== false
+      ? { ...document, isCurrent: false }
+      : document),
+    {
+      id: documentId,
+      type: "pj_termination_agreement" as const,
+      label: "Distrato de contrato de prestação de serviços",
+      fileName: `distrato-${safeFileName(contract.provider.legalName)}-v${version}.pdf`,
+      mimeType: "application/pdf",
+      storagePath,
+      contentHash,
+      visibility: "internal" as const,
+      auditStatus: "pending" as const,
+      version,
+      isCurrent: true,
+      supersedesId: process.pjAgreement?.documentId ?? null,
+      signatureMode: "both" as const,
+      signatureRequired: true,
+      selectedForEmployee: true,
+      uploadedAt: now,
+      uploadedBy: params.context.userDoc.id,
+    },
+  ];
+  let steps = patchStep(process.steps, "document_audit", {
+    status: "in_progress",
+    startedAt: process.steps.find((step) => step.id === "document_audit")?.startedAt ?? now,
+    completedAt: null,
+    completedBy: null,
+    note: `Distrato v${version} gerado. Aguardando revisão do RH.`,
+  });
+  steps = patchStep(steps, "signatures", { status: "pending", startedAt: null, completedAt: null, completedBy: null, note: null });
+  steps = patchStep(steps, "legal_obligations", {
+    status: "completed",
+    completedAt: now,
+    completedBy: params.context.userDoc.id,
+    note: `NF ${params.input.invoiceNumber} e pagamento de ${formatBrMoney(grossValue)} confirmados antes da geração.`,
+  });
+  const updated = await saveTermination({
+    ...process,
+    documents,
+    steps,
+    pjAgreement: {
+      status: "review_pending",
+      version,
+      documentId,
+      settlement,
+      witnesses: params.input.witnesses,
+      generatedAt: now,
+      generatedBy: params.context.userDoc.id,
+      approvedAt: null,
+      approvedBy: null,
+      sentAt: null,
+      signedAt: null,
+      signatureRequestId: null,
+      providerDocumentId: null,
+      lastError: null,
+    },
+    lastActivityAt: now,
+    updatedAt: now,
+  });
+  await appendTerminationEvent(process.id, {
+    type: "PJ_TERMINATION_AGREEMENT_GENERATED",
+    at: now,
+    ...eventActor(params.context),
+    message: `Distrato v${version} gerado com as partes e o contrato de origem congelados.`,
+    data: { documentId, version, contentHash, sourceContractHash: contract.sourceContract.signedHashSha256, grossValue },
+  });
+  return updated;
+}
+
+export async function approvePjTerminationAgreement(params: { context: ServerUserContext; id: string }) {
+  const process = await requireManagedProcess(params.context, params.id);
+  requirePjTermination(process);
+  const agreement = process.pjAgreement;
+  if (!agreement?.documentId || agreement.status !== "review_pending") throw new Error("Gere uma versão do distrato antes da aprovação.");
+  const current = process.documents.find((document) => document.id === agreement.documentId && document.isCurrent !== false);
+  if (!current) throw new Error("O arquivo atual do distrato não foi encontrado.");
+  const now = new Date().toISOString();
+  const documents = process.documents.map((document) => document.id === current.id
+    ? { ...document, auditStatus: "approved" as const, reviewedAt: now, reviewedBy: params.context.userDoc.id }
+    : document);
+  let steps = patchStep(process.steps, "document_audit", { status: "completed", completedAt: now, completedBy: params.context.userDoc.id, note: `Distrato v${agreement.version} aprovado.` });
+  steps = patchStep(steps, "signatures", { status: "in_progress", startedAt: now, note: "Distrato aprovado e pronto para envio às quatro assinaturas." });
+  const updated = await saveTermination({
+    ...process,
+    documents,
+    steps,
+    pjAgreement: { ...agreement, status: "approved", approvedAt: now, approvedBy: params.context.userDoc.id, lastError: null },
+    lastActivityAt: now,
+    updatedAt: now,
+  });
+  await appendTerminationEvent(process.id, { type: "PJ_TERMINATION_AGREEMENT_APPROVED", at: now, ...eventActor(params.context), message: `Distrato v${agreement.version} aprovado pelo RH.` });
+  return updated;
+}
+
+export async function sendPjTerminationAgreementForSignature(params: { context: ServerUserContext; id: string }) {
+  const process = await requireManagedProcess(params.context, params.id);
+  const contract = requirePjTermination(process);
+  const agreement = process.pjAgreement;
+  if (!agreement?.documentId || agreement.status !== "approved" || !agreement.witnesses) {
+    throw new Error("Aprove o distrato antes de solicitar as assinaturas.");
+  }
+  const document = process.documents.find((item) => item.id === agreement.documentId && item.isCurrent !== false && item.auditStatus === "approved");
+  if (!document) throw new Error("O distrato aprovado não foi encontrado.");
+  const existing = await hrDbAdmin.collection("hrSignatureRequests").where("terminationId", "==", process.id).where("terminationDocumentId", "==", document.id).limit(10).get();
+  if (existing.docs.some((request) => !["failed", "cancelled", "expired", "rejected"].includes(String(request.get("status"))))) {
+    throw new Error("Este distrato já possui uma solicitação de assinatura.");
+  }
+  const [buffer] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(document.storagePath).download();
+  const now = new Date().toISOString();
+  const requestRef = hrDbAdmin.collection("hrSignatureRequests").doc();
+  await requestRef.set({
+    source: "pj_termination_agreement",
+    terminationId: process.id,
+    terminationDocumentId: document.id,
+    purpose: "termination_final_document",
+    status: "sending",
+    documentStoragePath: document.storagePath,
+    sourceContractHashSha256: contract.sourceContract.signedHashSha256,
+    contractorCnpj: contract.contractor.cnpj,
+    providerCnpj: contract.provider.cnpj,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: params.context.userDoc.id,
+  });
+  try {
+    const provider = await createAutentiqueDocument({
+      buffer,
+      fileName: document.fileName,
+      documentName: `Distrato de prestação de serviços - ${contract.provider.legalName}`,
+      message: "Confira o distrato e realize a assinatura eletrônica.",
+      signers: [
+        { name: contract.contractor.representative.name, email: contract.contractor.representative.email, cpf: contract.contractor.representative.cpf, action: "SIGN" },
+        { name: contract.provider.representative.name, email: contract.provider.representative.email, cpf: contract.provider.representative.cpf, action: "SIGN" },
+        ...agreement.witnesses.map((witness) => ({ name: witness.name, email: witness.email, cpf: witness.cpf, action: "SIGN_AS_A_WITNESS" as const })),
+      ],
+    });
+    await requestRef.set({ status: "sent", provider: "autentique", sandbox: provider.sandbox, providerDocumentId: provider.document.id, providerSignatures: provider.document.signatures, sentAt: now, updatedAt: now }, { merge: true });
+    const steps = patchStep(process.steps, "signatures", { status: "waiting_external", startedAt: process.steps.find((step) => step.id === "signatures")?.startedAt ?? now, note: "Aguardando contratante, contratada e duas testemunhas." });
+    const updated = await saveTermination({
+      ...process,
+      steps,
+      pjAgreement: { ...agreement, status: "sent", sentAt: now, signatureRequestId: requestRef.id, providerDocumentId: provider.document.id, lastError: null },
+      lastActivityAt: now,
+      updatedAt: now,
+    });
+    await appendTerminationEvent(process.id, { type: "PJ_TERMINATION_AGREEMENT_SENT", at: now, ...eventActor(params.context), message: "Distrato enviado para assinatura da contratante, contratada e duas testemunhas." });
+    return updated;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao enviar o distrato para assinatura.";
+    await requestRef.set({ status: "failed", error: message, updatedAt: new Date().toISOString() }, { merge: true });
+    await saveTermination({ ...process, pjAgreement: { ...agreement, status: "approved", lastError: message }, lastActivityAt: now, updatedAt: now });
+    throw error;
+  }
+}
+
 export async function sendTerminationDocumentsForSignature(params: { context: ServerUserContext; id: string }) {
   const process = await requireManagedProcess(params.context, params.id);
   if (process.accountant?.status !== "approved") throw new Error("Aprove os documentos da contabilidade antes de solicitar assinaturas.");
   const selected = process.documents.filter((document) => document.isCurrent !== false && document.selectedForEmployee && document.auditStatus === "approved" && ["employee", "company", "both"].includes(document.signatureMode ?? ""));
   if (!selected.length) throw new Error("Selecione documentos aprovados para assinatura.");
+  const employer = requireTerminationEmployer(process);
+  const companySignatureRequired = selected.some((document) => ["company", "both"].includes(document.signatureMode ?? ""));
+  const companySignatory = companySignatureRequired
+    ? await resolveCompanyDocumentSignatory({ entityId: employer.entityId, cnpj: employer.cnpj })
+    : null;
+  if (companySignatureRequired && !companySignatory) {
+    throw new Error(`Defina o signatário documental da empresa ${employer.legalName} antes de solicitar as assinaturas.`);
+  }
   const employeeSnapshot = await dbAdmin.collection("users").doc(process.employeeId).get();
   const phone = normalizePhone(employeeSnapshot.get("phone"));
   if (selected.some((document) => ["employee", "both"].includes(document.signatureMode ?? "")) && !phone) throw new Error("O colaborador precisa ter celular vinculado para assinar.");
@@ -1940,7 +2545,7 @@ export async function sendTerminationDocumentsForSignature(params: { context: Se
     const signatureMode = document.signatureMode ?? "both";
     const signers = [] as Array<{ email: string; name: string; action: "SIGN"; cpf?: string; requireSmsVerificationPhone?: string }>;
     if (signatureMode === "employee" || signatureMode === "both") signers.push({ email: process.employeeEmail, name: process.employeeName, action: "SIGN", cpf: cpf.length === 11 ? cpf : undefined, requireSmsVerificationPhone: phone ?? undefined });
-    if (signatureMode === "company" || signatureMode === "both") signers.push({ email: params.context.userDoc.email, name: getUserDisplayName(params.context.userDoc, params.context.userDoc.id), action: "SIGN" });
+    if ((signatureMode === "company" || signatureMode === "both") && companySignatory) signers.push({ email: companySignatory.email, name: companySignatory.name, action: "SIGN" });
     const provider = await createAutentiqueDocument({
       buffer,
       fileName: document.fileName,
@@ -1948,7 +2553,7 @@ export async function sendTerminationDocumentsForSignature(params: { context: Se
       message: "Confira e assine os documentos do seu desligamento.",
       signers,
     });
-    await hrDbAdmin.collection("hrSignatureRequests").add({ terminationId: process.id, terminationDocumentId: document.id, purpose: "termination_final_document", status: "sent", provider: "autentique", providerDocumentId: provider.document.id, documentStoragePath: document.storagePath, signatureMode, createdAt: now, updatedAt: now });
+    await hrDbAdmin.collection("hrSignatureRequests").add({ terminationId: process.id, terminationDocumentId: document.id, purpose: "termination_final_document", status: "sent", provider: "autentique", providerDocumentId: provider.document.id, documentStoragePath: document.storagePath, signatureMode, employerEntityId: employer.entityId, employerCnpj: employer.cnpj, companySignatoryUserId: companySignatory?.userId ?? null, companySignatoryEmail: companySignatory?.email ?? null, createdAt: now, updatedAt: now });
   }
   const steps = patchStep(process.steps, "signatures", { status: "waiting_external", startedAt: process.steps.find((step) => step.id === "signatures")?.startedAt ?? now });
   const updated = await saveTermination({ ...process, steps, lastActivityAt: now, updatedAt: now });
@@ -1968,7 +2573,10 @@ export async function markTerminationDocumentSigned(params: { terminationId: str
   const requests = await hrDbAdmin.collection("hrSignatureRequests").where("terminationId", "==", process.id).where("purpose", "==", "termination_final_document").get();
   const allSigned = requests.docs.every((document) => document.get("terminationDocumentId") === params.documentId || ["signed", "completed"].includes(String(document.get("status"))));
   const steps = allSigned ? patchStep(process.steps, "signatures", { status: "completed", completedAt: params.signedAt, completedBy: "system:autentique" }) : process.steps;
-  const updated = await saveTermination({ ...process, documents, steps, lastActivityAt: params.signedAt, updatedAt: params.signedAt });
+  const pjAgreement = process.pjAgreement?.documentId === params.documentId
+    ? { ...process.pjAgreement, status: "signed" as const, signedAt: params.signedAt, lastError: null }
+    : process.pjAgreement;
+  const updated = await saveTermination({ ...process, documents, steps, pjAgreement, lastActivityAt: params.signedAt, updatedAt: params.signedAt });
   await appendTerminationEvent(process.id, { type: "FINAL_DOCUMENT_SIGNED", at: params.signedAt, actorId: "system:autentique", actorName: "Autentique", message: "Documento final assinado e arquivado no dossiê." });
   return updated;
 }

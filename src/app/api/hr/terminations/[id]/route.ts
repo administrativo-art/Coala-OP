@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  approvePjTerminationAgreement,
   assertTerminationVisible,
   auditTerminationDocuments,
   completeEmployeeResignation,
@@ -11,6 +12,7 @@ import {
   listTerminationEvents,
   prepareTerminationPayment,
   formalizeEmployerDismissalNoticeRefusal,
+  generatePjTerminationAgreement,
   reconcileTerminationProviderState,
   reviewTerminationLetter,
   revokeTerminationAccess,
@@ -18,6 +20,7 @@ import {
   sendTerminationEmployeePackage,
   sendTerminationToAccountant,
   sendTerminationDocumentsForSignature,
+  sendPjTerminationAgreementForSignature,
   syncTerminationPayment,
   syncTerminationUniformReturn,
   terminationContext,
@@ -25,6 +28,7 @@ import {
   updateTerminationStep,
   validateTerminationRequest,
 } from "@/features/hr/termination/server";
+import { pjTerminationAgreementGenerateSchema } from "@/features/hr/termination/schemas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +56,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params;
     const body = await request.json() as Record<string, unknown>;
     let process;
-    if (body.action === "review_letter") process = await reviewTerminationLetter({
+    if (body.action === "generate_pj_agreement") process = await generatePjTerminationAgreement({
+      context,
+      id,
+      input: pjTerminationAgreementGenerateSchema.parse(body),
+    });
+    else if (body.action === "approve_pj_agreement") process = await approvePjTerminationAgreement({ context, id });
+    else if (body.action === "send_pj_agreement_signatures") process = await sendPjTerminationAgreementForSignature({ context, id });
+    else if (body.action === "review_letter") process = await reviewTerminationLetter({
       context,
       id,
       decision: body.decision as "approved" | "correction_requested" | "exception_review",

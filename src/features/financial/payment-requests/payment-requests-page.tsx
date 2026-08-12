@@ -71,11 +71,11 @@ export function PaymentRequestsPage() {
     } catch (error) { preview?.close(); toast({ variant: 'destructive', title: error instanceof Error ? error.message : 'Falha ao abrir comprovante.' }); }
   }
 
-  if (!permissions.financial?.paymentRequests?.view) return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui permissão para visualizar solicitações bancárias.</div>;
+  if (!permissions.financial?.paymentRequests?.view) return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui permissão para visualizar autorizações bancárias.</div>;
 
   return <div className="space-y-5">
     <div className="flex items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold tracking-tight">Pagamentos bancários</h1><p className="text-sm text-muted-foreground">Autorização, aprovação bancária, conciliação e comprovantes Pix.</p></div>
+      <div><h1 className="text-2xl font-bold tracking-tight">Autorizações bancárias</h1><p className="text-sm text-muted-foreground">Autorização, aprovação bancária, conciliação e comprovantes Pix.</p></div>
       <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar lista</Button>
     </div>
     {loading ? <div className="flex h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : items.length === 0 ?

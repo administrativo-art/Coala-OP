@@ -9,8 +9,8 @@ import {
   normalizeBrazilianDocument,
   toIsoString,
 } from "./normalization";
-import { encryptPaymentDestination } from "./security.server";
-import { supplierPaymentProfileInputSchema } from "./schemas";
+import { decryptPaymentDestination, encryptPaymentDestination } from "./security.server";
+import { entityPixProfileInputSchema, supplierPaymentProfileInputSchema } from "./schemas";
 import type {
   BeneficiaryListItem,
   ProtectedPaymentDestination,
@@ -20,6 +20,7 @@ import type {
 const PROFILE_COLLECTION = "supplierPaymentProfiles";
 
 type ProfileInput = z.infer<typeof supplierPaymentProfileInputSchema>;
+type EntityPixProfileInput = z.infer<typeof entityPixProfileInputSchema>;
 type Actor = { uid: string; name?: string | null; email?: string | null };
 
 function valueText(data: FirebaseFirestore.DocumentData | undefined) {
@@ -47,11 +48,36 @@ function profileForList(
 }
 
 async function employeeBeneficiaries(): Promise<BeneficiaryListItem[]> {
-  const employees = await hrDbAdmin.collection("employees").get();
+  const [employees, users] = await Promise.all([
+    hrDbAdmin.collection("employees").get(),
+    dbAdmin.collection("users").get(),
+  ]);
+  const coalaUserIds = new Set(users.docs.map((document) => document.id));
+  const coalaNameByEmployeeId = new Map<string, string>();
+  const linkedEmployeeIds = new Set(
+    users.docs.flatMap((document) => {
+      const data = document.data();
+      const employeeIds = [document.id, data.hrEmployeeId, data.registrationIdBizneo]
+        .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+        .map((value) => value.trim());
+      const userName = String(data.username ?? data.name ?? "").trim();
+      if (userName) employeeIds.forEach((employeeId) => coalaNameByEmployeeId.set(employeeId, userName));
+      return employeeIds;
+    }),
+  );
+  const linkedEmployees = employees.docs.filter((employee) => {
+    const data = employee.data();
+    const authUid = typeof data.auth_uid === "string" ? data.auth_uid.trim() : "";
+    const sourceUserId = typeof data.source_user_id === "string" ? data.source_user_id.trim() : "";
+    return linkedEmployeeIds.has(employee.id)
+      || coalaUserIds.has(employee.id)
+      || Boolean(authUid && coalaUserIds.has(authUid))
+      || Boolean(sourceUserId && coalaUserIds.has(sourceUserId));
+  });
   const result: BeneficiaryListItem[] = [];
 
-  for (let offset = 0; offset < employees.docs.length; offset += 150) {
-    const group = employees.docs.slice(offset, offset + 150);
+  for (let offset = 0; offset < linkedEmployees.length; offset += 150) {
+    const group = linkedEmployees.slice(offset, offset + 150);
     const references = group.flatMap((employee) => [
       employee.ref.collection("field_values").doc("employee.cpf"),
       employee.ref.collection("field_values").doc("employee.pix_key"),
@@ -60,12 +86,17 @@ async function employeeBeneficiaries(): Promise<BeneficiaryListItem[]> {
 
     group.forEach((employee, index) => {
       const data = employee.data();
+      const authUid = typeof data.auth_uid === "string" ? data.auth_uid.trim() : "";
+      const sourceUserId = typeof data.source_user_id === "string" ? data.source_user_id.trim() : "";
       const cpf = valueText(values[index * 2]?.data());
       const pixKey = valueText(values[index * 2 + 1]?.data());
       const status = String(data.status ?? "active");
       result.push({
         reference: { sourceType: "employee", sourceId: employee.id },
-        name: String(data.name ?? data.email ?? "Colaborador sem nome"),
+        name: coalaNameByEmployeeId.get(employee.id)
+          ?? coalaNameByEmployeeId.get(authUid)
+          ?? coalaNameByEmployeeId.get(sourceUserId)
+          ?? String(data.name ?? data.email ?? "Colaborador sem nome"),
         documentMasked: maskBrazilianDocument(cpf),
         active: status === "active",
         paymentMethod: pixKey ? "pix_key" : undefined,
@@ -120,6 +151,71 @@ export async function getEntityPaymentProfile(entityId: string) {
         }
       : null,
   };
+}
+
+export async function getEntityPixProfile(entityId: string) {
+  const result = await getEntityPaymentProfile(entityId);
+  const profile = await financialDbAdmin.collection(PROFILE_COLLECTION).doc(entityId).get();
+  if (!profile.exists) return { ...result, pixKey: "" };
+  const destination = decryptPaymentDestination(String(profile.get("encryptedPaymentData") ?? ""));
+  return { ...result, pixKey: destination.pixKey ?? "" };
+}
+
+export async function saveEntityPixProfile(
+  entityId: string,
+  input: EntityPixProfileInput,
+  actor: Actor,
+  options?: { requireCreator?: boolean },
+) {
+  const entityRef = dbAdmin.collection("entities").doc(entityId);
+  const profileRef = financialDbAdmin.collection(PROFILE_COLLECTION).doc(entityId);
+  const [entity, current] = await Promise.all([entityRef.get(), profileRef.get()]);
+  if (!entity.exists) throw new Error("Pessoa ou empresa não encontrada.");
+  if (options?.requireCreator && entity.get("createdBy") !== actor.uid) {
+    throw new Error("Sem permissão para alterar a chave Pix deste cadastro.");
+  }
+
+  const pixKey = input.pixKey.trim();
+  const now = new Date().toISOString();
+  if (!pixKey) {
+    if (current.exists) {
+      await profileRef.collection("events").add({
+        type: "pix_removed",
+        at: now,
+        actorId: actor.uid,
+        actorName: actor.name ?? null,
+        actorEmail: actor.email ?? null,
+      });
+      await profileRef.delete();
+    }
+    return getEntityPaymentProfile(entityId);
+  }
+
+  const data: SupplierPaymentProfile = {
+    entityId,
+    active: true,
+    paymentMethod: "pix_key",
+    pixKeyType: inferPixKeyType(pixKey),
+    encryptedPaymentData: encryptPaymentDestination({ pixKey }),
+    maskedPaymentDestination: maskPaymentDestination(pixKey),
+    holderName: String(entity.get("name") ?? entity.get("razao_social") ?? ""),
+    holderDocument: normalizeBrazilianDocument(entity.get("document") ?? entity.get("cnpj")),
+    validatedAt: now,
+    validatedBy: actor.uid,
+    createdAt: current.get("createdAt") ?? now,
+    createdBy: current.get("createdBy") ?? actor.uid,
+    updatedAt: now,
+    updatedBy: actor.uid,
+  };
+  await profileRef.set(data, { merge: false });
+  await profileRef.collection("events").add({
+    type: current.exists ? "pix_updated" : "pix_created",
+    at: now,
+    actorId: actor.uid,
+    actorName: actor.name ?? null,
+    actorEmail: actor.email ?? null,
+  });
+  return getEntityPaymentProfile(entityId);
 }
 
 function protectedDestination(input: ProfileInput): ProtectedPaymentDestination | null {

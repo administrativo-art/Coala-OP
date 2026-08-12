@@ -21,8 +21,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { terminationFetch } from "./client";
 import { EmployeeResignationDetail } from "./employee-resignation-detail";
+import { PjTerminationDetail } from "./pj-termination-detail";
 import {
   TerminationAsoCard,
   TerminationUniformCard,
@@ -330,6 +332,10 @@ export function TerminationDetailPage({ id }: { id: string }) {
     && Boolean(process.dismissalCommunication)
   )) {
     return <EmployeeResignationDetail process={process} events={events} asoWorkflow={asoWorkflow} busy={busy} error={error} onAction={action} />;
+  }
+
+  if (process.processType === "pj_contract_termination") {
+    return <PjTerminationDetail process={process} events={events} busy={busy} error={error} onAction={action} />;
   }
 
   const asoStep = stepsById.get("aso")!;
@@ -657,6 +663,10 @@ export function TerminationDetailPage({ id }: { id: string }) {
                       {process.unitName}
                     </span>
                   ) : null}
+                  <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold ${process.employer ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
+                    <BriefcaseBusiness className="h-3.5 w-3.5" />
+                    {process.employer ? `${process.employer.legalName} · ${CnpjValidator.format(process.employer.cnpj)}` : "CNPJ empregador pendente"}
+                  </span>
                 </div>
               </div>
             </div>

@@ -25,6 +25,18 @@ function dateBr(value: string) { const [year, month, day] = value.slice(0, 10).s
 function currency(value: number | null) { return value == null ? 'Não informado' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value); }
 function numeric(value: unknown) { const number = typeof value === 'number' ? value : Number(value); return Number.isFinite(number) && number > 0 ? number : null; }
 function safeFilePart(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'colaborador'; }
+function probationContractLabel(process: Record<string, unknown>) {
+  const probation = record(process.probationV2);
+  const config = record(probation.config);
+  const schedule = record(probation.schedule);
+  const firstPeriod = record(schedule.firstPeriod);
+  const secondPeriod = record(schedule.secondPeriod);
+  const first = numeric(config.firstPeriodDays) ?? numeric(firstPeriod.days);
+  const second = numeric(config.secondPeriodDays) ?? numeric(secondPeriod.days);
+  if (first != null && second != null) return `${first} dias + ${second} dias`;
+  if (first != null) return `${first} dias`;
+  return 'Não informado';
+}
 
 const FAMILY_DOCUMENT_NAMES: Record<string, string> = {
   'certidão': 'Certidão de nascimento',
@@ -120,7 +132,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     maritalStatus: text(answers.maritalStatus, 80) || extractedText(documents, 'maritalStatus') || 'Não informado', employeeCpf: text(answers.cpf, 20),
     educationLevel: text(answers.educationLevel, 120) || 'Não informado', admissionDate: dateBr(text(process.expectedAdmissionDate, 10)),
     jobFunction: text(process.functionName, 180) || text(process.jobRoleName, 180), salaryLabel: currency(monthlySalary),
-    probationContract: '45 dias + 45 dias', weeklyRest: text(process.weeklyRest, 120) || 'Conforme escala',
+    probationContract: probationContractLabel(process), weeklyRest: text(process.weeklyRest, 120) || 'Conforme escala',
     workSchedule: text(jobFunction.workSchedule, 400) || text(role.workSchedule, 400) || text(process.shiftDefinitionName, 180) || 'Não informada',
     salaryLimitLabel: currency(1980.38), quotaLabel: currency(67.54), familySalaryConclusion: analysis.conclusion,
     dependents: analysis.dependents, logoDataUri: `data:image/png;base64,${logo.toString('base64')}`,

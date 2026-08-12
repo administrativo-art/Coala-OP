@@ -11,7 +11,7 @@ import { canViewPurchasing } from '@/lib/purchasing-permissions';
 export interface EntitiesContextType {
   entities: Entity[];
   loading: boolean;
-  addEntity: (entity: Omit<Entity, 'id'>) => Promise<void>;
+  addEntity: (entity: Omit<Entity, 'id'>) => Promise<string>;
   updateEntity: (entity: Entity) => Promise<void>;
   deleteEntity: (entityId: string) => Promise<void>;
 }
@@ -66,6 +66,8 @@ export function EntitiesProvider({ children }: { children: React.ReactNode }) {
       const payload = await response.json().catch(() => ({}));
       throw new Error(payload.error || 'Falha ao adicionar pessoa ou empresa.');
     }
+    const payload = await response.json();
+    return String(payload.id);
   }, [firebaseUser]);
 
   const updateEntity = useCallback(async (entity: Entity) => {

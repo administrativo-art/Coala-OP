@@ -90,6 +90,16 @@ const EMPLOYER_DISMISSAL_STEP_DEFINITIONS: Array<Pick<TerminationStep, "id" | "l
   { id: "aso", label: "ASO demissional", lane: "aso", owner: "hr", required: false },
 ];
 
+const PJ_TERMINATION_STEP_DEFINITIONS: Array<Pick<TerminationStep, "id" | "label" | "lane" | "owner" | "required">> = [
+  { id: "request_validation_notice", label: "Contrato de origem e condições do encerramento", lane: "request", owner: "hr", required: true },
+  { id: "document_audit", label: "Geração e revisão do distrato", lane: "documents", owner: "hr", required: true },
+  { id: "signatures", label: "Assinaturas do distrato", lane: "documents", owner: "employer", required: true },
+  { id: "legal_obligations", label: "Nota fiscal e pagamento final", lane: "payment", owner: "finance", required: true },
+  { id: "access_revocation", label: "Revogação de acessos", lane: "operational", owner: "hr", required: true },
+  { id: "operational", label: "Devoluções e eliminação de dados", lane: "operational", owner: "hr", required: true },
+  { id: "closure", label: "Fechamento do contrato PJ", lane: "closure", owner: "hr", required: true },
+];
+
 export function createInitialTerminationSteps(now: string): TerminationStep[] {
   return STEP_DEFINITIONS.map((step) => ({
     ...step,
@@ -132,9 +142,33 @@ export function createEmployerDismissalSteps(now: string, contractEndDate: strin
   });
 }
 
+export function createPjTerminationSteps(now: string, terminationDate: string, actorId = "hr"): TerminationStep[] {
+  const contractReached = now.slice(0, 10) >= terminationDate;
+  return PJ_TERMINATION_STEP_DEFINITIONS.map((step) => ({
+    ...step,
+    status: step.id === "request_validation_notice"
+      ? "completed"
+      : step.id === "document_audit" || step.id === "legal_obligations" || step.id === "operational"
+        ? "in_progress"
+        : step.id === "access_revocation"
+          ? contractReached ? "in_progress" : "blocked"
+          : "pending",
+    ...(step.id === "request_validation_notice" ? { startedAt: now, completedAt: now, completedBy: actorId } : {}),
+    ...(["document_audit", "legal_obligations", "operational"].includes(step.id) ? { startedAt: now } : {}),
+    ...(step.id === "access_revocation" ? {
+      dueAt: terminationDate,
+      ...(contractReached ? { startedAt: now } : { blockedReason: `Aguardando o encerramento do contrato em ${terminationDate}.` }),
+    } : {}),
+    ...(step.id === "document_audit" ? { note: "Preencha os dados financeiros, gere e revise o distrato." } : {}),
+    ...(step.id === "legal_obligations" ? { note: "A nota fiscal e o pagamento precisam estar confirmados antes da geração final." } : {}),
+    ...(step.id === "operational" ? { note: "Confirme a devolução de materiais e a eliminação dos dados após a assinatura." } : {}),
+  })) as TerminationStep[];
+}
+
 function unifyRequestValidationNotice(
-  process: Pick<CltTerminationProcess, "steps" | "notice" | "createdAt" | "dismissalCommunication">,
+  process: Pick<CltTerminationProcess, "processType" | "steps" | "notice" | "createdAt" | "dismissalCommunication">,
 ) {
+  if (process.processType === "pj_contract_termination") return process.steps;
   if (process.steps.some((step) => step.id === "request_received")) return process.steps;
   if (process.dismissalCommunication) return process.steps;
   const legacyIds = new Set<TerminationStepId>([
@@ -260,14 +294,24 @@ export function applyAccountantReadiness<T extends CltTerminationProcess>(proces
 }
 
 export function recalculateTermination<T extends CltTerminationProcess>(process: T, now = new Date()): T {
-  const unifiedSteps = unifyRequestValidationNotice(process);
+  const legacyPjSteps = process.processType === "pj_contract_termination"
+    && !["completed", "cancelled"].includes(process.status)
+    && process.steps.some((step) => ["aso", "uniform_return", "accountant"].includes(step.id));
+  const normalizedPjSteps = legacyPjSteps
+    ? createPjTerminationSteps(process.createdAt, process.notice?.contractEndDate ?? now.toISOString().slice(0, 10)).map((step) => {
+      if (!["access_revocation", "operational", "closure"].includes(step.id)) return step;
+      const previous = process.steps.find((candidate) => candidate.id === step.id);
+      return previous ? { ...step, status: previous.status, startedAt: previous.startedAt, completedAt: previous.completedAt, completedBy: previous.completedBy, blockedReason: previous.blockedReason, note: previous.note ?? step.note } : step;
+    })
+    : process.steps;
+  const unifiedSteps = unifyRequestValidationNotice({ ...process, steps: normalizedPjSteps });
   const hasAccessStep = unifiedSteps.some((step) => step.id === "access_revocation");
   let steps = hasAccessStep
     ? unifiedSteps
     : unifiedSteps.flatMap((step) => step.id === "closure"
       ? [{ id: "access_revocation", label: "Bloqueio de acessos", lane: "operational", owner: "hr", required: true, status: "pending" } as TerminationStep, step]
       : [step]);
-  if (!steps.some((step) => step.id === "uniform_return")) {
+  if (process.processType !== "pj_contract_termination" && !steps.some((step) => step.id === "uniform_return")) {
     const uniformStep: TerminationStep = {
       id: "uniform_return",
       label: "Devolução de uniformes",
@@ -342,7 +386,9 @@ export function recalculateTermination<T extends CltTerminationProcess>(process:
 }
 
 export function buildProcessProjection(process: CltTerminationProcess, version: number, syncedAt: string): ProcessProjection {
-  const title = process.source === "hr_manual"
+  const title = process.processType === "pj_contract_termination"
+    ? `Encerramento PJ — ${process.employeeName}`
+    : process.source === "hr_manual"
     ? `Desligamento — ${process.employeeName}`
     : `Pedido de demissão — ${process.employeeName}`;
   return {
@@ -356,6 +402,9 @@ export function buildProcessProjection(process: CltTerminationProcess, version: 
     title,
     subjectId: process.employeeId,
     subjectName: process.employeeName,
+    employerEntityId: process.employer?.entityId ?? null,
+    employerName: process.employer?.legalName ?? null,
+    employerCnpj: process.employer?.cnpj ?? null,
     status: process.status,
     health: process.health,
     progress: process.progress,

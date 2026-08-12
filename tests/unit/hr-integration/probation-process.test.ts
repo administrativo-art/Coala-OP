@@ -5,9 +5,9 @@ import { completeProbationEvaluation, createProbationProcess, decideProbation, r
 describe("acompanhamento da experiência", () => {
   it("abre avaliações somente dentro da janela e gera alertas", () => {
     const created = createProbationProcess("2026-01-01", undefined, "2026-01-01T10:00:00.000Z");
-    assert.equal(created.evaluations[0].windowStartDate, "2026-02-05");
+    assert.equal(created.evaluations[0].windowStartDate, "2026-01-21");
     assert.equal(created.alerts.length, 6);
-    const available = refreshProbationProcess(created, "2026-02-05");
+    const available = refreshProbationProcess(created, "2026-01-21");
     assert.equal(available.evaluations[0].status, "available");
   });
   it("registra resultado e mantém a prorrogação automática sem termo", () => {

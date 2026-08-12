@@ -9,8 +9,12 @@ import { logAction } from '@/lib/log-action';
 import { createOnboardingPublicLinkWindow } from '@/lib/hr/onboarding-public-link';
 import { createIntegrationExecution } from '@/features/hr/integration/process';
 import { createProbationProcess } from '@/features/hr/integration/probation-process';
+import {
+  DEFAULT_PROBATION_FIRST_PERIOD_DAYS,
+  probationConfigForFirstPeriod,
+} from '@/features/hr/integration/probation';
 import { blankIntegrationTemplateContent, getIntegrationTemplate, getIntegrationTemplateVersion } from '@/features/hr/integration/server';
-import type { IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
+import { probationConfigSchema, type IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { resolveCompanyProcessContact } from '@/lib/company/company-process-contact.server';
@@ -319,6 +323,7 @@ export async function POST(request: NextRequest) {
   const employerUnitId = asString(input.employerUnitId);
   const shiftDefinitionId = asString(input.shiftDefinitionId);
   const expectedAdmissionDate = asDateString(input.expectedAdmissionDate);
+  const probationFirstPeriodDays = asNumber(input.probationFirstPeriodDays) ?? DEFAULT_PROBATION_FIRST_PERIOD_DAYS;
   const operational = asBoolean(input.operational);
   const participatesInGoals = asBoolean(input.participatesInGoals);
   const loginRestrictionEnabled = asBoolean(input.loginRestrictionEnabled);
@@ -459,8 +464,21 @@ export async function POST(request: NextRequest) {
       ...blankIntegrationTemplateContent(),
     };
   }
+  try {
+    const currentProbation = probationConfigSchema.parse(integrationSnapshot.probation ?? {});
+    const probation = probationConfigForFirstPeriod(
+      probationFirstPeriodDays,
+      currentProbation,
+    );
+    integrationSnapshot = {
+      ...integrationSnapshot,
+      probation: { ...currentProbation, ...probation },
+    };
+  } catch (cause) {
+    return jsonError(cause instanceof Error ? cause.message : 'Período de experiência inválido.');
+  }
   const integrationV2 = createIntegrationExecution({ mode: integrationMode, snapshot: integrationSnapshot, now });
-  const probationV2 = createProbationProcess(expectedAdmissionDate, integrationSnapshot.probation, now);
+  const probationV2 = createProbationProcess(expectedAdmissionDate, integrationV2.snapshot.probation, now);
   const stages = applyOnboardingSignatureMode(
     mergeOnboardingStageModels(roleData.onboardingStages, functionData.onboardingStages),
     generateSignatureDocuments

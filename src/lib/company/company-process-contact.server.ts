@@ -10,6 +10,7 @@ export type CompanyProcessContact = {
   department: string;
   email: string;
   purpose: CompanyEmailPurpose;
+  companyCnpj?: string;
 };
 
 function validEmail(value: unknown) {
@@ -23,7 +24,10 @@ function records(value: unknown) {
     : [];
 }
 
-export async function resolveCompanyProcessContact(purpose: CompanyEmailPurpose): Promise<CompanyProcessContact | null> {
+export async function resolveCompanyProcessContact(
+  purpose: CompanyEmailPurpose,
+  company?: { entityId?: unknown; cnpj?: unknown } | null,
+): Promise<CompanyProcessContact | null> {
   const snapshot = await dbAdmin.collection("entities").get();
   const matches = snapshot.docs.flatMap((document) => {
     if (document.get("status") === "inactive") return [];
@@ -41,9 +45,24 @@ export async function resolveCompanyProcessContact(purpose: CompanyEmailPurpose)
         department: String(entry.department ?? "Contato"),
         email,
         purpose,
+        companyCnpj: String(document.get("cnpj") ?? document.get("document") ?? "").replace(/\D/g, ""),
       } satisfies CompanyProcessContact];
     });
   });
+
+  const entityId = typeof company?.entityId === "string" ? company.entityId.trim() : "";
+  const cnpj = String(company?.cnpj ?? "").replace(/\D/g, "");
+  const scoped = matches.filter((match) => (
+    (entityId && match.entityId === entityId)
+    || (cnpj.length === 14 && match.companyCnpj === cnpj)
+  ));
+  if (scoped.length > 1) {
+    throw new Error(`Há mais de um e-mail marcado para ${purpose} no CNPJ informado. Revise o cadastro da empresa.`);
+  }
+  if (scoped[0]) return scoped[0];
+  if (entityId || cnpj.length === 14) {
+    return matches.length === 1 ? matches[0] : null;
+  }
 
   if (matches.length > 1) {
     throw new Error(`Há mais de um e-mail de empresa marcado para ${purpose}. Revise os cadastros antes de continuar.`);

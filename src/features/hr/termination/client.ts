@@ -14,6 +14,7 @@ export function createManagedTerminationProcess(
   user: FirebaseUser,
   input: {
     employeeId: string;
+    employerUnitId: string;
     terminationDate: string;
     terminationReason: EmploymentTerminationReason;
     terminationCause?: string;

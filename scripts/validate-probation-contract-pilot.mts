@@ -30,7 +30,9 @@ const flat: Record<string, unknown> = {
   "integration.job_cbo": "513415",
   "integration.monthly_salary": "R$ 1.787,30",
   "integration.expected_admission_date": "01/08/2026",
-  "integration.probation_first_end_date": "14/09/2026",
+  "integration.probation_first_period_days": "30",
+  "integration.probation_second_period_days": "60",
+  "integration.probation_first_end_date": "30/08/2026",
   "integration.probation_final_end_date": "29/10/2026",
 };
 const rawFlat: Record<string, unknown> = {
@@ -40,7 +42,9 @@ const rawFlat: Record<string, unknown> = {
   "integration.job_cbo": "513415",
   "integration.monthly_salary": 1787.3,
   "integration.expected_admission_date": "2026-08-01",
-  "integration.probation_first_end_date": "2026-09-14",
+  "integration.probation_first_period_days": 30,
+  "integration.probation_second_period_days": 60,
+  "integration.probation_first_end_date": "2026-08-30",
   "integration.probation_final_end_date": "2026-10-29",
 };
 applyFieldMapping({

@@ -4,10 +4,21 @@ import { describe, test } from "node:test";
 import {
   addCalendarDays,
   buildProbationSchedule,
+  probationConfigForFirstPeriod,
   validateProbationConfig,
 } from "../../../src/features/hr/integration/probation";
 
 describe("período de experiência", () => {
+  test("calcula automaticamente o segundo período para completar 90 dias", () => {
+    assert.deepEqual(probationConfigForFirstPeriod(30), {
+      firstPeriodDays: 30,
+      secondPeriodDays: 60,
+      evaluationWindowDays: 10,
+    });
+    assert.equal(probationConfigForFirstPeriod(45).secondPeriodDays, 45);
+    assert.throws(() => probationConfigForFirstPeriod(90), /entre 1 e 89 dias/);
+  });
+
   test("calcula 45 + 45 e as janelas inclusivas de 10 dias", () => {
     const schedule = buildProbationSchedule("2026-07-17", {
       firstPeriodDays: 45,

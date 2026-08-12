@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyAccountantReadiness,
+  buildProcessProjection,
   calculateMaterialDeadline,
   calculateNoticeDates,
   calculateTerminationHealth,
@@ -10,6 +11,7 @@ import {
   createEmployeeResignationSteps,
   createEmployerDismissalSteps,
   createInitialTerminationSteps,
+  createPjTerminationSteps,
   patchStep,
   recalculateTermination,
 } from "../../src/features/hr/termination/core";
@@ -41,6 +43,49 @@ test("devolução de uniformes é a segunda etapa obrigatória", () => {
   assert.equal(steps[0]?.id, "request_validation_notice");
   assert.equal(steps[1]?.id, "uniform_return");
   assert.equal(steps[1]?.required, true);
+});
+
+test("projeção do desligamento preserva a empregadora jurídica separada da unidade", () => {
+  const process = processFixture({
+    unitId: "kiosk-unit",
+    unitName: "Quiosque Operacional",
+    employer: {
+      unitId: "legal-unit",
+      entityId: "entity-1",
+      legalName: "Coala Empregadora Ltda.",
+      tradeName: "Coala",
+      cnpj: "14276603000125",
+      address: "São Luís/MA",
+      capturedAt: "2026-08-10T12:00:00.000Z",
+    },
+  });
+  const projection = buildProcessProjection(process, 1, "2026-08-10T12:00:00.000Z");
+  assert.equal(projection.employerName, "Coala Empregadora Ltda.");
+  assert.equal(projection.employerCnpj, "14276603000125");
+  assert.equal(process.unitName, "Quiosque Operacional");
+});
+
+test("encerramento PJ não herda etapas de ASO, uniformes ou contabilidade CLT", () => {
+  const now = "2026-08-10T12:00:00.000Z";
+  const result = recalculateTermination(processFixture({
+    processType: "pj_contract_termination",
+    employmentRelationshipType: "pj",
+    accountant: null,
+    steps: createPjTerminationSteps(now, "2026-08-15", "hr-test"),
+    notice: {
+      decision: "hr_defined",
+      communicationDate: "2026-08-10",
+      contractEndDate: "2026-08-15",
+      legalPaymentDueDate: "2026-08-15",
+      decidedAt: now,
+      decidedBy: "hr-test",
+    },
+  }), new Date(now));
+  assert.equal(result.steps.some((step) => step.id === "aso"), false);
+  assert.equal(result.steps.some((step) => step.id === "uniform_return"), false);
+  assert.equal(result.steps.some((step) => step.id === "accountant"), false);
+  assert.equal(result.steps.find((step) => step.id === "document_audit")?.status, "in_progress");
+  assert.equal(result.steps.find((step) => step.id === "access_revocation")?.status, "blocked");
 });
 
 function processFixture(overrides: Partial<CltTerminationProcess> = {}): CltTerminationProcess {

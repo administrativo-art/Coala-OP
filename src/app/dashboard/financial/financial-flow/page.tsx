@@ -1,5 +1,5 @@
-import { FinancialFlowPage } from "@/features/financial/pages/financial-flow-page";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <FinancialFlowPage />;
+  redirect("/dashboard/financial/cash-flow");
 }

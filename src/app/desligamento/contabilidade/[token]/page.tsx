@@ -13,6 +13,7 @@ type Summary = {
   employeeName: string;
   protocol: string;
   unitName?: string | null;
+  employer?: { legalName: string; tradeName?: string | null; cnpj: string } | null;
   jobRoleName?: string | null;
   notice?: { contractEndDate: string; legalPaymentDueDate: string } | null;
   status: "sent" | "documents_received" | "correction_requested" | "approved";
@@ -81,7 +82,8 @@ export default function AccountantTerminationPage() {
           <Card className="rounded-2xl">
             <CardHeader><CardTitle>{process.employeeName}</CardTitle></CardHeader>
             <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
-              <p><b>Protocolo:</b> {process.protocol}</p><p><b>Empresa:</b> {process.unitName ?? "—"}</p>
+              <p><b>Protocolo:</b> {process.protocol}</p><p><b>Empresa:</b> {process.employer?.legalName ?? "—"}</p>
+              <p><b>CNPJ:</b> {process.employer?.cnpj ? process.employer.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : "—"}</p><p><b>Unidade de trabalho:</b> {process.unitName ?? "—"}</p>
               <p><b>Cargo:</b> {process.jobRoleName ?? "—"}</p><p><b>Término:</b> {process.notice?.contractEndDate ?? "—"}</p>
               <p><b>Prazo legal:</b> {process.notice?.legalPaymentDueDate ?? "—"}</p><p><b>Situação:</b> {approved ? "Aprovado pelo RH" : process.status === "correction_requested" ? "Correção solicitada" : "Em análise"}</p>
             </CardContent>

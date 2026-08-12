@@ -133,6 +133,31 @@ test("valor mínimo de 250 centavos é aceito e convertido sem drift", () => {
   assert.equal(parseInterMoneyToCents("2.5"), 250);
 });
 
+test("vencimento escolhido no modal prevalece sobre o prazo padrão", () => {
+  const input = buildInterCobrancaIssueInput({
+    batch: batch(500_000),
+    attempt: 1,
+    payer,
+    dueBusinessDays: 2,
+    dueDate: "2026-08-06",
+    numDiasAgenda: 30,
+    today: "2026-08-03",
+  });
+  assert.equal(input.dataVencimento, "2026-08-06");
+});
+
+test("vencimento escolhido no modal é limitado aos próximos 60 dias", () => {
+  assert.throws(() => buildInterCobrancaIssueInput({
+    batch: batch(500_000),
+    attempt: 1,
+    payer,
+    dueBusinessDays: 2,
+    dueDate: "2026-10-15",
+    numDiasAgenda: 30,
+    today: "2026-08-03",
+  }), /próximos 60 dias/i);
+});
+
 test("valor abaixo do mínimo não é emitido", () => {
   assert.throws(() => buildInterCobrancaIssueInput({
     batch: batch(249),

@@ -152,6 +152,7 @@ export function canReadFinancialPath(
     case "expenses":
       return (
         permissions.expenses.view ||
+        permissions.cashFlow.view ||
         permissions.dashboard ||
         permissions.financialFlow ||
         permissions.dre

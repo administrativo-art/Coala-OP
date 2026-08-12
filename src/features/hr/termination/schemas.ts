@@ -8,9 +8,39 @@ import { JUST_CAUSE_TYPES } from "@/lib/hr/termination-options";
 
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.");
 
+function validCpf(value: string) {
+  if (!/^\d{11}$/.test(value) || /^(\d)\1{10}$/.test(value)) return false;
+  const digit = (length: number) => {
+    const sum = value.slice(0, length).split("").reduce((total, entry, index) => total + Number(entry) * (length + 1 - index), 0);
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+  return digit(9) === Number(value[9]) && digit(10) === Number(value[10]);
+}
+
+const pjWitnessSchema = z.object({
+  name: z.string().trim().min(3, "Informe o nome completo da testemunha.").max(180),
+  email: z.string().trim().email("Informe um e-mail válido para a testemunha.").max(240),
+  cpf: z.string().transform((value) => value.replace(/\D/g, "")).refine(validCpf, "Informe um CPF válido para a testemunha."),
+});
+
+export const pjTerminationAgreementGenerateSchema = z.object({
+  daysWorked: z.number().int().min(1, "Informe ao menos um dia trabalhado.").max(30, "O critério de trinta avos aceita no máximo 30 dias."),
+  invoiceNumber: z.string().trim().min(1, "Informe o número da nota fiscal.").max(80),
+  invoiceDate: dateOnlySchema,
+  paymentConfirmed: z.literal(true, { errorMap: () => ({ message: "Confirme o recebimento antes de gerar o distrato." }) }),
+  paymentDate: dateOnlySchema,
+  signatureCity: z.string().trim().min(2, "Informe a cidade da assinatura.").max(180),
+  forumCity: z.string().trim().min(2, "Informe o foro.").max(180),
+  witnesses: z.tuple([pjWitnessSchema, pjWitnessSchema]),
+});
+
+export type PjTerminationAgreementGenerateInput = z.infer<typeof pjTerminationAgreementGenerateSchema>;
+
 export const managedTerminationCreateSchema = z.object({
   source: z.literal("hr_manual"),
   employeeId: z.string().trim().min(1),
+  employerUnitId: z.string({ required_error: "Selecione o CNPJ empregador." }).trim().min(1, "Selecione o CNPJ empregador."),
   terminationDate: dateOnlySchema,
   terminationReason: z.union([
     z.enum(CLT_TERMINATION_REASONS),

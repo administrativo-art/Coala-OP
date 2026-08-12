@@ -12,6 +12,11 @@ import { IntegrationSubfieldEditor, IntegrationTemplateManager } from '@/feature
 import type { IntegrationTemplateMetadataClient } from '@/features/hr/integration/client';
 import { simulateIntegrationTemplate } from '@/features/hr/integration/engine';
 import { IntegrationRulesPanel } from '@/features/hr/integration/IntegrationRulePanels';
+import {
+  buildProbationSchedule,
+  DEFAULT_PROBATION_FIRST_PERIOD_DAYS,
+  probationConfigForFirstPeriod,
+} from '@/features/hr/integration/probation';
 import { PjOnboardingDetailPanel } from '@/features/hr/onboarding-pj/detail-panel';
 import type { IntegrationBlock, IntegrationRule, IntegrationStage, IntegrationSubfield, IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import type {
@@ -7337,6 +7342,7 @@ function StartOnboardingModal({
   const [unitId, setUnitId] = useState('');
   const [employerUnitId, setEmployerUnitId] = useState('');
   const [expectedAdmissionDate, setExpectedAdmissionDate] = useState('');
+  const [probationFirstPeriodDays, setProbationFirstPeriodDays] = useState(String(DEFAULT_PROBATION_FIRST_PERIOD_DAYS));
   const [finalizationSettings, setFinalizationSettings] = useState<OnboardingFinalizationSettings>(() => getFinalizationDraft(null));
   const [generateSignatureDocuments, setGenerateSignatureDocuments] = useState(false);
   const [requiresPdvAccess, setRequiresPdvAccess] = useState(false);
@@ -7368,6 +7374,17 @@ function StartOnboardingModal({
     () => activeUnits.filter(unit => CnpjValidator.validate(unit.cnpj ?? '').valid),
     [activeUnits],
   );
+  const probationPreview = useMemo(() => {
+    try {
+      const config = probationConfigForFirstPeriod(Number(probationFirstPeriodDays));
+      return {
+        config,
+        schedule: expectedAdmissionDate ? buildProbationSchedule(expectedAdmissionDate, config) : null,
+      };
+    } catch {
+      return null;
+    }
+  }, [expectedAdmissionDate, probationFirstPeriodDays]);
 
   useEffect(() => {
     if (functionId && !availableFunctions.some(item => item.id === functionId)) {
@@ -7446,6 +7463,10 @@ function StartOnboardingModal({
       setError('Selecione o CNPJ responsável pela contratação.');
       return;
     }
+    if (!probationPreview) {
+      setError('Informe um primeiro período de experiência válido, entre 1 e 89 dias.');
+      return;
+    }
     setFormStep(2);
   }
 
@@ -7486,6 +7507,7 @@ function StartOnboardingModal({
           employerUnitId,
           shiftDefinitionId: finalizationSettings.shiftDefinitionId || null,
           expectedAdmissionDate: expectedAdmissionDate || null,
+          probationFirstPeriodDays: Number(probationFirstPeriodDays),
           operational: finalizationSettings.operational ?? false,
           participatesInGoals: finalizationSettings.participatesInGoals ?? false,
           loginRestrictionEnabled: finalizationSettings.loginRestrictionEnabled ?? false,
@@ -7682,10 +7704,30 @@ function StartOnboardingModal({
                   </label>
                 </div>
 
-                <label className="block max-w-sm text-sm font-semibold text-slate-700">
-                  Data prevista de admissão
-                  <input type="date" value={expectedAdmissionDate} onChange={event => setExpectedAdmissionDate(event.target.value)} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
-                </label>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Data prevista de admissão
+                    <input type="date" value={expectedAdmissionDate} onChange={event => setExpectedAdmissionDate(event.target.value)} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    1º período de experiência <span className="text-rose-500">*</span>
+                    <div className="mt-1.5 flex h-10 items-center rounded-xl border border-slate-200 bg-white focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100">
+                      <input type="number" min="1" max="89" step="1" value={probationFirstPeriodDays} onChange={event => setProbationFirstPeriodDays(event.target.value)} required className="h-full min-w-0 flex-1 rounded-xl bg-transparent px-3 text-sm text-slate-900 outline-none" />
+                      <span className="pr-3 text-xs font-bold text-slate-400">dias</span>
+                    </div>
+                  </label>
+                </div>
+                {probationPreview ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3">
+                    <p className="text-xs font-black text-amber-900">2º período calculado automaticamente: {probationPreview.config.secondPeriodDays} dias</p>
+                    <p className="mt-1 text-xs font-semibold text-amber-700">
+                      Total de 90 dias
+                      {probationPreview.schedule ? ` · 1º período até ${formatOnboardingDateOnly(probationPreview.schedule.firstPeriod.endDate)} · contrato até ${formatOnboardingDateOnly(probationPreview.schedule.finalEndDate)}` : ' · as datas serão calculadas a partir da admissão'}.
+                    </p>
+                  </div>
+                ) : (
+                  <ErrorLine msg="O primeiro período deve ter entre 1 e 89 dias." />
+                )}
                 {error ? <ErrorLine msg={error} /> : null}
               </div>
             ) : (

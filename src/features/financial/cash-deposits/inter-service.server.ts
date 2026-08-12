@@ -114,6 +114,8 @@ async function prepareIssue(input: {
   workspaceId: string;
   batchId: string;
   actor: CashClosureActor;
+  dueBusinessDays?: number;
+  dueDate?: string;
 }) {
   const settings = getInterCobrancaSettings();
   const payer = await resolveConfiguredInterCobrancaPayer();
@@ -145,7 +147,8 @@ async function prepareIssue(input: {
       batch,
       attempt,
       payer,
-      dueBusinessDays: settings.dueBusinessDays,
+      dueBusinessDays: input.dueBusinessDays ?? settings.dueBusinessDays,
+      dueDate: input.dueDate,
       numDiasAgenda: settings.numDiasAgenda,
       holidays: settings.holidays,
     });
@@ -370,6 +373,8 @@ export async function issueInterCobrancaForBatch(input: {
   workspaceId: string;
   batchId: string;
   actor: CashClosureActor;
+  dueBusinessDays?: number;
+  dueDate?: string;
 }) {
   const readiness = interCobrancaReadiness();
   if (!readiness.ready) throw new Error(readiness.reason ?? "Cobrança Inter não configurada.");

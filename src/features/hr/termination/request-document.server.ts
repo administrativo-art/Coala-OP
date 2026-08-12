@@ -39,6 +39,8 @@ export async function buildTerminationRequestConfirmation(params: {
   employeeName: string;
   cpfMasked: string;
   companyName: string;
+  companyCnpj: string;
+  companyAddress: string;
   submittedAt: string;
   noticePreference: "work" | "request_waiver";
   desiredLastDay?: string | null;
@@ -60,6 +62,8 @@ export async function buildTerminationRequestConfirmation(params: {
     ["Colaborador", params.employeeName],
     ["CPF", params.cpfMasked],
     ["Empresa", params.companyName],
+    ["CNPJ", params.companyCnpj],
+    ["Endereço da empregadora", params.companyAddress || "Não informado"],
     ["Enviado em", new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium", timeZone: "America/Belem" }).format(new Date(params.submittedAt))],
     ["Preferência de aviso-prévio", params.noticePreference === "work" ? "Cumprir 30 dias" : "Solicitar dispensa do cumprimento"],
     ["Último dia desejado", params.desiredLastDay || "Não informado"],
@@ -108,6 +112,8 @@ export async function buildEmployerDismissalNotice(params: {
   employeeName: string;
   cpfMasked: string;
   companyName: string;
+  companyCnpj: string;
+  companyAddress: string;
   communicationAt: string;
   communicationLocation: string;
   responsibleName: string;
@@ -129,6 +135,8 @@ export async function buildEmployerDismissalNotice(params: {
     ["Colaborador(a)", params.employeeName],
     ["CPF", params.cpfMasked],
     ["Empresa", params.companyName],
+    ["CNPJ", params.companyCnpj],
+    ["Endereço da empregadora", params.companyAddress || "Não informado"],
     ["Comunicação presencial", new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Belem" }).format(new Date(params.communicationAt))],
     ["Local", params.communicationLocation],
     ["Responsável pela comunicação", params.responsibleName],

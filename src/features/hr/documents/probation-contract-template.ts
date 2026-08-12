@@ -87,17 +87,19 @@ export const PROBATION_CONTRACT_V3_SOURCE =
   "docs/modelos-documentos/admissionais/01-contrato-experiencia-v3.docx";
 
 export const PROBATION_CONTRACT_V3_HASH =
-  "9f2f1f8a84f3df0675803961a0f2fbb6304c8a3d42e40bc528748cce35eafd4f";
+  "eaa43b298ba99b6a948216152dd8ca58a0c969aa3416d7d3548f91f20c50f3c6";
 
 export const PROBATION_CONTRACT_V3_VARIABLES = [
   "contract_employee_cpf",
   "contract_employer_cnpj",
   "contract_final_end_long",
   "contract_first_end_long",
+  "contract_first_period_days",
   "contract_job_cbo",
   "contract_monthly_salary",
   "contract_signature_date_long",
   "contract_signature_place",
+  "contract_second_period_days",
   "contract_start_long",
   "employee.address",
   "employee.name",
@@ -136,6 +138,14 @@ export const PROBATION_CONTRACT_V3_FIELD_MAPPING: TemplateFieldMapping = {
     kind: "system",
     key: "integration.probation_first_end_date",
     formatter: "date_long_br",
+  },
+  contract_first_period_days: {
+    kind: "system",
+    key: "integration.probation_first_period_days",
+  },
+  contract_second_period_days: {
+    kind: "system",
+    key: "integration.probation_second_period_days",
   },
   contract_final_end_long: {
     kind: "system",

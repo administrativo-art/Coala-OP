@@ -12,6 +12,12 @@ export type TerminationEffectsReport = {
   version: 1;
   userId: string;
   userName: string;
+  employer: {
+    unitId: string | null;
+    entityId: string | null;
+    legalName: string | null;
+    cnpj: string | null;
+  } | null;
   effectiveDate: string;
   appliedAt: string;
   counts: Record<string, number>;
@@ -87,6 +93,13 @@ export async function applyUserTerminationEffects(params: {
   const appliedAt = now.toISOString();
   const effectiveDate = effectiveDateFor(params.user, now);
   const userName = stringValue(params.user.username) ?? params.userId;
+  const employerCnpj = stringValue(params.user.terminationEmployerCnpj) ?? stringValue(params.user.employerCnpj);
+  const employer = employerCnpj ? {
+    unitId: stringValue(params.user.terminationEmployerUnitId) ?? stringValue(params.user.employerUnitId),
+    entityId: stringValue(params.user.terminationEmployerEntityId),
+    legalName: stringValue(params.user.terminationEmployerName) ?? stringValue(params.user.employerUnitName),
+    cnpj: employerCnpj.replace(/\D/g, ""),
+  } : null;
   const counts: Record<string, number> = {};
   const mainWrites: PendingWrite[] = [];
   const hrWrites: PendingWrite[] = [];
@@ -419,6 +432,7 @@ export async function applyUserTerminationEffects(params: {
     version: 1,
     userId: params.userId,
     userName,
+    employer,
     effectiveDate,
     appliedAt,
     counts,

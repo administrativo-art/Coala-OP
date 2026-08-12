@@ -550,6 +550,13 @@ export function ExpensesPage() {
           <p className="text-muted-foreground">Painel consolidado de despesas, contas a pagar e histórico de liquidações.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {permissions.financial?.paymentRequests?.view && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={FINANCIAL_ROUTES.paymentRequests}>
+                <Landmark className="mr-2 h-4 w-4" /> Autorizações bancárias
+              </Link>
+            </Button>
+          )}
           {permissions.financial?.expenses?.import && (
             <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)}>
               <FileUp className="mr-2 h-4 w-4" /> Importar extrato

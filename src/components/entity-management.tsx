@@ -348,7 +348,7 @@ const ENTITY_WIZARD_STEPS = [
 
 function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolean, onOpenChange: (open: boolean) => void, entityToEdit: Entity | null }) {
     const { addEntity, updateEntity } = useEntities();
-    const { firebaseUser } = useAuth();
+    const { firebaseUser, permissions } = useAuth();
 
     const [currentStep, setCurrentStep] = useState(1);
     const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -359,6 +359,9 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
     const [documentSignatoryOptions, setDocumentSignatoryOptions] = useState<DocumentSignatoryOption[]>([]);
     const [documentSignatoryLoading, setDocumentSignatoryLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [pixKey, setPixKey] = useState('');
+    const [initialPixKey, setInitialPixKey] = useState('');
+    const [pixLoading, setPixLoading] = useState(false);
     const lastAutoLookupCnpjRef = useRef<string>('');
 
     const form = useForm<EntityFormValues>({
@@ -373,8 +376,42 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         setCnpjLookupMessage(null);
         setCnpjLookupResult(null);
         setLoadedCompanyEntityId(entityToEdit?.id ?? null);
+        setPixKey('');
+        setInitialPixKey('');
         lastAutoLookupCnpjRef.current = CnpjValidator.clean(entityToEdit?.document ?? '');
     }, [entityToEdit, form, open]);
+
+    const paymentProfileEntityId = entityToEdit?.id ?? loadedCompanyEntityId;
+    const canManagePix = Boolean(
+        permissions.registration?.entities?.edit ||
+        (!paymentProfileEntityId && permissions.registration?.entities?.add)
+    );
+
+    useEffect(() => {
+        if (!open || !firebaseUser || !paymentProfileEntityId || !permissions.registration?.entities?.edit) return;
+        let cancelled = false;
+        setPixLoading(true);
+        void (async () => {
+            try {
+                const response = await fetch(`/api/financial/beneficiaries/entities/${encodeURIComponent(paymentProfileEntityId)}`, {
+                    headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
+                    cache: 'no-store',
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(payload.error || 'Falha ao carregar a chave Pix.');
+                if (!cancelled) {
+                    const currentPixKey = String(payload.pixKey ?? '');
+                    setPixKey(currentPixKey);
+                    setInitialPixKey(currentPixKey);
+                }
+            } catch (error) {
+                if (!cancelled) setCnpjLookupMessage(error instanceof Error ? error.message : 'Falha ao carregar a chave Pix.');
+            } finally {
+                if (!cancelled) setPixLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [firebaseUser, open, paymentProfileEntityId, permissions.registration?.entities?.edit]);
 
     useEffect(() => {
         if (!open || !firebaseUser) return;
@@ -578,6 +615,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         setCnpjLookupMessage(null);
 
         try {
+            let savedEntityId = entityToEdit?.id ?? loadedCompanyEntityId ?? null;
             if (values.type === 'pessoa_juridica') {
                 if (!firebaseUser) throw new Error('Usuário não autenticado.');
                 if (/baixad|inapt|suspens/i.test(values.cadastralStatus ?? '')) {
@@ -605,10 +643,22 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                 });
                 const result = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(result.error || 'Falha ao salvar empresa.');
+                savedEntityId = String(result.id ?? targetId ?? '');
             } else if (entityToEdit) {
                 await updateEntity({ ...entityToEdit, ...payload });
+                savedEntityId = entityToEdit.id;
             } else {
-                await addEntity(payload);
+                savedEntityId = await addEntity(payload);
+            }
+            if (savedEntityId && firebaseUser && canManagePix && pixKey.trim() !== initialPixKey.trim()) {
+                const token = await firebaseUser.getIdToken();
+                const response = await fetch(`/api/financial/beneficiaries/entities/${encodeURIComponent(savedEntityId)}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ pixKey: pixKey.trim() }),
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(result.error || 'O cadastro foi salvo, mas não foi possível salvar a chave Pix.');
             }
             onOpenChange(false);
         } catch (error) {
@@ -993,6 +1043,26 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                                         ))}
                                                         {departmentEmails.length === 0 ? <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">Nenhum e-mail setorial cadastrado.</p> : null}
                                                     </div>
+                                                </div>
+                                            ) : null}
+
+                                            {canManagePix ? (
+                                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+                                                    <div className="mb-3">
+                                                        <p className="text-sm font-bold text-slate-900">Dados para pagamento</p>
+                                                        <p className="mt-1 text-xs text-slate-500">Cadastros ativos com chave Pix preenchida ficam disponíveis para pagamento.</p>
+                                                    </div>
+                                                    <label className="space-y-2 text-sm font-medium">
+                                                        <span>Chave Pix <span className="text-xs font-normal text-muted-foreground">(opcional)</span></span>
+                                                        <Input
+                                                            value={pixKey}
+                                                            onChange={(event) => setPixKey(event.target.value)}
+                                                            disabled={pixLoading}
+                                                            placeholder={pixLoading ? 'Carregando chave Pix...' : 'CPF, CNPJ, e-mail, telefone ou chave aleatória'}
+                                                            autoComplete="off"
+                                                        />
+                                                        <span className="block text-xs font-normal text-muted-foreground">A chave é exibida sem máscara somente nesta edição e permanece criptografada no armazenamento.</span>
+                                                    </label>
                                                 </div>
                                             ) : null}
 

@@ -7,6 +7,8 @@ import {
   interCobrancaReadiness,
   type InterCobrancaPayer,
 } from "@/lib/integrations/inter/config.server";
+import { todayInClosureTimezone } from "../cash-closures/date";
+import { addBusinessDays } from "./inter-cobranca";
 import { interCobrancaPayerFromCompany } from "./payer";
 
 export async function resolveConfiguredInterCobrancaPayer(): Promise<InterCobrancaPayer> {
@@ -23,8 +25,22 @@ export async function configuredInterCobrancaReadiness() {
   const readiness = interCobrancaReadiness();
   if (!readiness.ready) return readiness;
   try {
-    await resolveConfiguredInterCobrancaPayer();
-    return readiness;
+    const [payer, settings] = await Promise.all([
+      resolveConfiguredInterCobrancaPayer(),
+      Promise.resolve(getInterCobrancaSettings()),
+    ]);
+    const today = todayInClosureTimezone();
+    return {
+      ...readiness,
+      payer: { name: payer.nome, cpfCnpj: payer.cpfCnpj },
+      issueSettings: {
+        dueBusinessDays: settings.dueBusinessDays,
+        suggestedDueDates: {
+          1: addBusinessDays(today, 1, settings.holidays),
+          2: addBusinessDays(today, 2, settings.holidays),
+        },
+      },
+    };
   } catch (error) {
     return {
       ...readiness,

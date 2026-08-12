@@ -3,6 +3,8 @@ import { renderEmailIconBox } from "@/lib/email/email-icon";
 type TerminationAccountantEmailInput = {
   employeeName: string;
   protocol: string;
+  companyName: string;
+  companyCnpj: string;
   contractEndDate: string;
   legalPaymentDueDate: string;
   noticeLabel: string;
@@ -64,6 +66,8 @@ export function renderTerminationAccountantEmail(
               </td></tr>
               <tr><td style="padding:0 19px">
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:11px">
+                  <tr><td style="padding:13px 0;border-bottom:1px solid #efedf0;color:#9297a8">Empresa</td><td align="right" style="padding:13px 0;border-bottom:1px solid #efedf0;font-weight:900;color:#202137">${escapeHtml(input.companyName)}</td></tr>
+                  <tr><td style="padding:13px 0;border-bottom:1px solid #efedf0;color:#9297a8">CNPJ</td><td align="right" style="padding:13px 0;border-bottom:1px solid #efedf0;font-weight:900;color:#202137">${escapeHtml(input.companyCnpj)}</td></tr>
                   <tr><td style="padding:13px 0;border-bottom:1px solid #efedf0;color:#9297a8">Término do contrato</td><td align="right" style="padding:13px 0;border-bottom:1px solid #efedf0;font-weight:900;color:#202137">${escapeHtml(dateBr(input.contractEndDate))}</td></tr>
                   <tr><td style="padding:13px 0;border-bottom:1px solid #efedf0;color:#9297a8">Prazo legal</td><td align="right" style="padding:13px 0;border-bottom:1px solid #efedf0;font-weight:900;color:#e72d87">${escapeHtml(dateBr(input.legalPaymentDueDate))}</td></tr>
                   <tr><td style="padding:13px 0;color:#9297a8">Aviso prévio</td><td align="right" style="padding:13px 0"><span style="display:inline-block;padding:5px 10px;border-radius:999px;background:#e1f6fa;color:#1695ae;font-size:10px;font-weight:900">${escapeHtml(input.noticeLabel)}</span></td></tr>

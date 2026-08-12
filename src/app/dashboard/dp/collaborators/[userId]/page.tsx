@@ -95,6 +95,7 @@ import {
   type EmploymentTerminationReason,
 } from "@/lib/hr/employment-relationship";
 import { createManagedTerminationProcess } from "@/features/hr/termination/client";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
 
 const FIELD_VISIBILITIES: NormalizedFieldVisibility[] = ["public", "restricted_partial", "restricted_total", "confidential"];
 const FIELD_VISIBILITY_LABELS: Record<NormalizedFieldVisibility, string> = {
@@ -137,6 +138,7 @@ const VACATION_STATUS: Record<string, { label: string; className: string }> = {
 };
 
 type TerminationPayload = {
+  employerUnitId: string;
   terminationReason: EmploymentTerminationReason;
   terminationCause?: string;
   terminationNotes?: string;
@@ -2019,18 +2021,21 @@ function EmployeeProfileHeaderSummary({
 
 function TerminationDialog({
   user,
+  units,
   open,
   saving,
   onOpenChange,
   onConfirm,
 }: {
   user: User;
+  units: DPUnit[];
   open: boolean;
   saving: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (payload: TerminationPayload) => Promise<void>;
 }) {
   const [terminationDate, setTerminationDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [employerUnitId, setEmployerUnitId] = useState("");
   const [terminationReason, setTerminationReason] = useState<EmploymentTerminationReason | "">("");
   const [terminationCause, setTerminationCause] = useState("");
   const [terminationNotes, setTerminationNotes] = useState("");
@@ -2043,14 +2048,21 @@ function TerminationDialog({
   const [message, setMessage] = useState<string | null>(null);
   const needsSubtype = requiresTerminationSubtype(terminationReason);
   const relationshipType = user.employmentRelationshipType;
-  const availableReasons = terminationReasonsForRelationship(relationshipType);
+  const availableReasons = terminationReasonsForRelationship(relationshipType)
+    .filter((reason) => relationshipType !== "pj" || reason === "Encerramento por acordo entre as partes");
   const copy = terminationCopyForRelationship(relationshipType);
   const terminationAvailable = relationshipType === "clt" || relationshipType === "pj";
   const isWithoutCause = terminationReason === "Dispensa sem justa causa";
+  const employerUnits = units.filter((unit) => CnpjValidator.validate(unit.cnpj ?? "").valid);
 
   useEffect(() => {
     if (!open) return;
     setTerminationDate(format(new Date(), "yyyy-MM-dd"));
+    setEmployerUnitId(
+      employerUnits.some((unit) => unit.id === user.employerUnitId)
+        ? user.employerUnitId ?? ""
+        : employerUnits.find((unit) => CnpjValidator.clean(unit.cnpj ?? "") === CnpjValidator.clean(user.employerCnpj ?? ""))?.id ?? "",
+    );
     setTerminationReason("");
     setTerminationCause("");
     setTerminationNotes("");
@@ -2061,12 +2073,16 @@ function TerminationDialog({
     setCommunicationConfirmed(false);
     setNoticeType("indemnified");
     setMessage(null);
-  }, [open]);
+  }, [open, user.employerCnpj, user.employerUnitId, units]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!terminationDate) {
       setMessage(copy.missingDate);
+      return;
+    }
+    if (!employerUnitId) {
+      setMessage("Selecione o CNPJ empregador responsável pelo vínculo.");
       return;
     }
     if (!terminationAvailable) {
@@ -2096,6 +2112,7 @@ function TerminationDialog({
 
     setMessage(null);
     await onConfirm({
+      employerUnitId,
       terminationDate,
       terminationReason,
       terminationCause: needsSubtype ? terminationCause : undefined,
@@ -2122,6 +2139,21 @@ function TerminationDialog({
         </DialogHeader>
 
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
+          <label className="block text-xs font-black uppercase tracking-wide text-[#777784]">
+            {relationshipType === "pj" ? "CNPJ da contratante" : "CNPJ empregador"}
+            <select
+              value={employerUnitId}
+              onChange={(event) => setEmployerUnitId(event.target.value)}
+              required
+              className="mt-1 h-9 w-full rounded-lg border border-[#dedfe4] bg-white px-2.5 text-xs font-bold text-[#1d1d26] outline-none focus:border-[#df2f78]"
+            >
+              <option value="">Selecione a empresa responsável pelo vínculo</option>
+              {employerUnits.map((unit) => (
+                <option key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? "")}</option>
+              ))}
+            </select>
+            <span className="mt-1 block normal-case tracking-normal text-[11px] font-semibold text-slate-500">{relationshipType === "pj" ? "O sistema confirmará este CNPJ contra o contrato PJ assinado e congelará as duas partes no distrato." : "Este CNPJ será congelado no processo e usado no ASO, documentos, contabilidade e assinatura."}</span>
+          </label>
           <div className="grid gap-2.5 sm:grid-cols-2">
             <label className="text-xs font-black uppercase tracking-wide text-[#777784]">
               {isWithoutCause ? "Último dia de trabalho" : copy.dateLabel}
@@ -2520,6 +2552,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
     try {
       const result = await createManagedTerminationProcess(firebaseUser, {
         employeeId: collaborator.id,
+        employerUnitId: payload.employerUnitId,
         terminationDate: payload.terminationDate,
         terminationReason: payload.terminationReason,
         terminationCause: payload.terminationCause,
@@ -2840,6 +2873,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
       <div className="mx-auto w-full max-w-[1600px] space-y-2.5">
         <TerminationDialog
           user={collaborator}
+          units={units}
           open={terminationDialogOpen}
           saving={terminationSaving}
           onOpenChange={setTerminationDialogOpen}

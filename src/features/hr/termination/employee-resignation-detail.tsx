@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
+import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import type { CltTerminationProcess, TerminationDocument, TerminationEvent, TerminationStep, TerminationStepId } from "./types";
 import {
   TerminationAsoCard,
@@ -328,7 +329,10 @@ export function EmployeeResignationDetail({
                 </Badge>
               </div>
               <h1 className="mt-2 text-2xl font-black">{process.employeeName}</h1>
-              <p className="mt-1 text-sm font-medium text-slate-500">{process.jobRoleName ?? "Cargo não informado"} · {process.unitName ?? "Unidade não informada"}</p>
+              <p className="mt-1 text-sm font-medium text-slate-500">{process.jobRoleName ?? "Cargo não informado"} · Unidade de trabalho: {process.unitName ?? "não informada"}</p>
+              <p className={`mt-2 text-xs font-black ${process.employer ? "text-emerald-700" : "text-amber-700"}`}>
+                {process.employer ? `Empregadora: ${process.employer.legalName} · ${CnpjValidator.format(process.employer.cnpj)}` : "CNPJ empregador pendente"}
+              </p>
             </div>
             <div className="w-full max-w-[250px]">
               <div className="flex items-end justify-between gap-3">

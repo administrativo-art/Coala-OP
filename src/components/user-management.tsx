@@ -51,6 +51,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { formatPersonName } from '@/lib/person-name';
+import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import {
   calculateVacationHealth,
   CYCLE_STATUS_CONFIG,
@@ -354,6 +355,7 @@ export function UserManagement({
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [inactivationMode, setInactivationMode] = useState<InactivationMode>('temporary');
   const [terminationDate, setTerminationDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [terminationEmployerUnitId, setTerminationEmployerUnitId] = useState('');
   const [terminationReason, setTerminationReason] = useState('');
   const [terminationCause, setTerminationCause] = useState('');
   const [terminationNotes, setTerminationNotes] = useState('');
@@ -463,7 +465,8 @@ export function UserManagement({
     [units]
   );
   const selectedTerminationRelationship = userToInactivate?.employmentRelationshipType;
-  const availableTerminationReasons = terminationReasonsForRelationship(selectedTerminationRelationship);
+  const availableTerminationReasons = terminationReasonsForRelationship(selectedTerminationRelationship)
+    .filter((reason) => selectedTerminationRelationship !== 'pj' || reason === 'Encerramento por acordo entre as partes');
   const terminationCopy = terminationCopyForRelationship(selectedTerminationRelationship);
   const contractTerminationAvailable = selectedTerminationRelationship === 'clt' || selectedTerminationRelationship === 'pj';
   const selectedWorkUnits = useMemo(() => {
@@ -748,6 +751,11 @@ export function UserManagement({
     if (user.id === currentUser?.id || profileIsAdmin(user.profileId) || user.isActive === false) return;
     setInactivationMode('temporary');
     setTerminationDate(format(new Date(), 'yyyy-MM-dd'));
+    setTerminationEmployerUnitId(
+      units.some((unit) => unit.id === user.employerUnitId && CnpjValidator.validate(unit.cnpj ?? '').valid)
+        ? user.employerUnitId ?? ''
+        : units.find((unit) => CnpjValidator.clean(unit.cnpj ?? '') === CnpjValidator.clean(user.employerCnpj ?? '') && CnpjValidator.validate(unit.cnpj ?? '').valid)?.id ?? '',
+    );
     setTerminationReason('');
     setTerminationCause('');
     setTerminationNotes('');
@@ -770,6 +778,10 @@ export function UserManagement({
         toast({ title: `${terminationCopy.reasonLabel} obrigatório.`, description: terminationCopy.missingReason, variant: 'destructive' });
         return;
       }
+      if (inactivationMode === 'contract_termination' && !terminationEmployerUnitId) {
+        toast({ title: 'CNPJ empregador obrigatório.', description: 'Selecione a empresa responsável pelo vínculo.', variant: 'destructive' });
+        return;
+      }
       if (
         inactivationMode === 'contract_termination' &&
         !availableTerminationReasons.some((reason) => reason === terminationReason)
@@ -781,6 +793,7 @@ export function UserManagement({
         if (!firebaseUser || !terminationReason) return;
         const result = await createManagedTerminationProcess(firebaseUser, {
           employeeId: userToInactivate.id,
+          employerUnitId: terminationEmployerUnitId,
           terminationDate,
           terminationReason: terminationReason as EmploymentTerminationReason,
           terminationCause: requiresTerminationSubtype(terminationReason) ? terminationCause : undefined,
@@ -1944,6 +1957,18 @@ export function UserManagement({
 
             {inactivationMode === 'contract_termination' && (
               <div className="grid gap-4 rounded-lg border bg-slate-50/70 p-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Label>{selectedTerminationRelationship === 'pj' ? 'CNPJ da contratante' : 'CNPJ empregador'}</Label>
+                  <Select value={terminationEmployerUnitId} onValueChange={setTerminationEmployerUnitId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a empresa responsável pelo vínculo" /></SelectTrigger>
+                    <SelectContent>
+                      {units.filter((unit) => CnpjValidator.validate(unit.cnpj ?? '').valid).map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-xs text-slate-500">{selectedTerminationRelationship === 'pj' ? 'O CNPJ será validado contra o contrato assinado antes da abertura do distrato.' : 'A unidade de trabalho permanece separada da empregadora jurídica.'}</p>
+                </div>
                 <div>
                   <Label>{terminationCopy.dateLabel}</Label>
                   <Input type="date" value={terminationDate} onChange={(event) => setTerminationDate(event.target.value)} />

@@ -243,9 +243,16 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         color: SECTION_COLORS.fin,
         items: [
           { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
-          { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
-          { label: "Favorecidos", href: "/dashboard/financial/beneficiaries", icon: Users, show: permissions.financial?.beneficiaries?.view },
-          { label: "Pagamentos bancários", href: "/dashboard/financial/payment-requests", icon: Wallet, show: permissions.financial?.paymentRequests?.view },
+          {
+            label: "Contas a pagar",
+            href: "__group:accounts-payable",
+            icon: ReceiptText,
+            show: permissions.financial?.expenses?.view || permissions.financial?.paymentRequests?.view,
+            children: [
+              { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
+              { label: "Autorizações bancárias", href: "/dashboard/financial/payment-requests", icon: Wallet, show: permissions.financial?.paymentRequests?.view },
+            ],
+          },
           {
             label: "Controle de caixa",
             href: "__group:cash-control",
@@ -256,8 +263,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
             ],
           },
-          { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view },
-          { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", icon: DollarSign, show: permissions.financial?.financialFlow },
+          { label: "Fluxo de caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
           { label: "Patrimônio", href: "/dashboard/financial/assets", icon: PackageCheck, show: permissions.assets?.view },
         ],

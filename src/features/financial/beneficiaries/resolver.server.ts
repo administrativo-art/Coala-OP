@@ -53,25 +53,20 @@ async function resolveEntity(sourceId: string): Promise<ResolvedPaymentBeneficia
   ]);
   if (!entity.exists) throw new Error("Pessoa ou empresa favorecida não encontrada.");
   if (entity.get("status") === "inactive") throw new Error("A pessoa ou empresa favorecida está inativa.");
-  if (!profile.exists || profile.get("active") === false) throw new Error("O perfil de pagamento do favorecido está ausente ou inativo.");
-  if (!profile.get("validatedAt")) throw new Error("Os dados de pagamento do favorecido ainda não foram validados.");
+  if (!profile.exists) throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
   const entityDocument = normalizeBrazilianDocument(entity.get("document") ?? entity.get("cnpj"));
-  const holderDocument = normalizeBrazilianDocument(profile.get("holderDocument"));
-  if (![11, 14].includes(entityDocument.length) || holderDocument !== entityDocument) {
-    throw new Error("O CPF/CNPJ do titular não corresponde ao cadastro do favorecido.");
-  }
   const paymentData = decryptPaymentDestination(String(profile.get("encryptedPaymentData") ?? ""));
-  const paymentMethod = profile.get("paymentMethod") as ResolvedPaymentBeneficiary["paymentMethod"];
+  if (!paymentData.pixKey) {
+    throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
+  }
   return {
     sourceType: "entity",
     sourceId,
     name: String(entity.get("name") ?? entity.get("razao_social") ?? "Favorecido"),
     document: entityDocument,
-    paymentMethod,
+    paymentMethod: "pix_key",
     pixKeyType: profile.get("pixKeyType") ?? undefined,
     pixKey: paymentData.pixKey,
-    pixCopyPaste: paymentData.pixCopyPaste,
-    bankDetails: paymentData.bankDetails,
     validated: true,
     sourceUpdatedAt: String(profile.get("updatedAt") ?? new Date(0).toISOString()),
   };

@@ -7,13 +7,14 @@ import type { PaymentBeneficiaryReference } from "../beneficiaries/types";
 import { createAndStoreConfirmedPaymentProof } from "@/lib/integrations/inter/proof.server";
 import { getInterPixStatus, mapInterPixStatus, submitInterPix } from "@/lib/integrations/inter/pix-payments.server";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, transitionPaymentRequest } from "./repository.server";
-import type { BankPaymentRequest, BankPaymentRequestStatus, BankPaymentSourceType, PaymentActor } from "./types";
+import type { BankPaymentRequest, BankPaymentRequestStatus, BankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot } from "./types";
 
 export async function createPaymentRequest(input: {
   sourceType: BankPaymentSourceType;
   sourceId: string;
   expenseId?: string;
   beneficiaryReference: PaymentBeneficiaryReference;
+  legalEntitySnapshot?: PaymentLegalEntitySnapshot;
   amount: number;
   description: string;
 }, actor: PaymentActor) {

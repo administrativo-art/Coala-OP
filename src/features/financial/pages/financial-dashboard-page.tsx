@@ -412,18 +412,11 @@ export function FinancialDashboardPage() {
             description="Lançamento, edição, contas a pagar e importação de extratos."
           />
         )}
-        {permissions.financial?.cashFlow?.view && (
+        {(permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow) && (
           <ShortcutCard
             href={FINANCIAL_ROUTES.cashFlow}
             title="Fluxo de caixa"
-            description="Receitas, transferências, ajustes e saldo por conta."
-          />
-        )}
-        {permissions.financial?.financialFlow && (
-          <ShortcutCard
-            href={FINANCIAL_ROUTES.financialFlow}
-            title="Fluxo financeiro"
-            description="Análise do provisionado versus liquidado ao longo do período."
+            description="Visão global do realizado, previsto e saldo projetado."
           />
         )}
         {permissions.financial?.dre && (

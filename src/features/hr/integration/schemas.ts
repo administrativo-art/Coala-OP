@@ -378,6 +378,7 @@ export const integrationProcessCreateSchema = z.object({
   roleId: idSchema,
   functionId: idSchema.nullable().optional(),
   expectedAdmissionDate: dateOnlySchema.nullable().optional(),
+  probationFirstPeriodDays: z.number().int().min(1).max(89).default(DEFAULT_PROBATION_CONFIG.firstPeriodDays),
   templateId: idSchema.optional(),
   templateVersion: z.number().int().positive().optional(),
 }).superRefine((value, ctx) => {

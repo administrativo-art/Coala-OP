@@ -35,6 +35,7 @@ const DOCUMENT_UPLOAD_ITEMS = 'documentUploadItems';
 const MAX_EXPIRED_DOCUMENT_BATCHES_PER_RUN = 50;
 
 const BRT = 'America/Sao_Paulo';
+const BIZNEO_COLLABORATOR_IMPORT_ENABLED = false;
 const DEV_DELETE_USER_UIDS = new Set(
   (process.env.DEV_DELETE_USER_UIDS ?? 'U0Q9YZIl7XhQU2B0tB5U6Zpt5Td2')
     .split(',')
@@ -691,6 +692,10 @@ export const syncBizneoUsersMonthly = onSchedule({
   memory: '512MiB',
   secrets: ['BIZNEO_TOKEN'],
 }, async () => {
+  if (!BIZNEO_COLLABORATOR_IMPORT_ENABLED) {
+    console.log('[syncBizneoUsersMonthly] Importação de colaboradores do Bizneo desativada por política operacional.');
+    return;
+  }
   console.log('[syncBizneoUsersMonthly] Iniciando sincronização mensal Bizneo.');
   const result = await syncBizneoUsersIntoCoala('monthly-schedule');
   console.log('[syncBizneoUsersMonthly] Concluído.', result);

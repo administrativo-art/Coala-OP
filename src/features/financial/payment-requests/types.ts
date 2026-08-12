@@ -7,6 +7,12 @@ export type BankPaymentRequestStatus =
 
 export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination";
 
+export type PaymentLegalEntitySnapshot = {
+  entityId?: string | null;
+  legalName: string;
+  cnpj: string;
+};
+
 export type BankPaymentRequest = {
   id: string;
   sourceType: BankPaymentSourceType;
@@ -14,6 +20,7 @@ export type BankPaymentRequest = {
   expenseId?: string;
   beneficiaryReference: PaymentBeneficiaryReference;
   beneficiarySnapshot: BeneficiarySnapshot;
+  legalEntitySnapshot?: PaymentLegalEntitySnapshot;
   amount: number;
   description: string;
   status: BankPaymentRequestStatus;

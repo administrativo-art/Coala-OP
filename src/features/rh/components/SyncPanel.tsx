@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
 import type { SyncLog } from '@/types/rh';
 import type { Timestamp } from 'firebase/firestore';
 import { useSyncLog } from '../hooks/useSyncLog';
-import { callManualSync } from '../lib/rh-client';
 
 function formatDate(ts: Timestamp | unknown): string {
   try {
@@ -34,69 +32,14 @@ function StatusBadge({ status }: { status: SyncLog['status'] }) {
 
 export function SyncPanel() {
   const logState     = useSyncLog();
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
-  const [syncError, setSyncError]   = useState<string | null>(null);
-
-  const handleManualSync = useCallback(async () => {
-    setSyncing(true);
-    setSyncResult(null);
-    setSyncError(null);
-    try {
-      const result = await callManualSync();
-      setSyncResult(
-        `Sync concluído: ${result.updated_count} atualizados de ${result.employee_count} colaboradores.` +
-        (result.error_count > 0 ? ` ${result.error_count} erros.` : '')
-      );
-    } catch (err) {
-      setSyncError(err instanceof Error ? err.message : 'Erro ao disparar sync.');
-    } finally {
-      setSyncing(false);
-    }
-  }, []);
 
   return (
     <div className="space-y-6">
-      {/* Manual sync card */}
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-800">Sync manual com Bizneo</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              O sync automático roda diariamente às 03:00. Use isso para forçar uma atualização imediata.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleManualSync}
-            disabled={syncing}
-            className="shrink-0 flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 transition-colors font-medium"
-          >
-            {syncing ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Sincronizando…
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                </svg>
-                Sincronizar agora
-              </>
-            )}
-          </button>
-        </div>
-
-        {syncResult && (
-          <div className="mt-3 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{syncResult}</div>
-        )}
-        {syncError && (
-          <div className="mt-3 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">{syncError}</div>
-        )}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+        <h2 className="text-sm font-semibold text-amber-950">Importação de colaboradores desativada</h2>
+        <p className="mt-1 text-xs text-amber-800">
+          Os colaboradores devem ser cadastrados e admitidos pelo Coala One. O histórico abaixo é mantido apenas para auditoria.
+        </p>
       </div>
 
       {/* Log history */}

@@ -160,6 +160,7 @@ export function buildInterCobrancaIssueInput(input: {
   attempt: number;
   payer: InterCobrancaPayer;
   dueBusinessDays: number;
+  dueDate?: string;
   numDiasAgenda: number;
   holidays?: string[];
   today?: string;
@@ -170,11 +171,11 @@ export function buildInterCobrancaIssueInput(input: {
   if (input.batch.totalCents > input.batch.maxCents) {
     throw new Error("O bloco ultrapassa o limite de depósito.");
   }
-  const dataVencimento = addBusinessDays(
-    input.today ?? todayInClosureTimezone(),
-    input.dueBusinessDays,
-    input.holidays,
-  );
+  const today = input.today ?? todayInClosureTimezone();
+  const dataVencimento = input.dueDate ?? addBusinessDays(today, input.dueBusinessDays, input.holidays);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataVencimento) || dateKey(parseDateKey(dataVencimento)) !== dataVencimento) throw new Error("A data de vencimento é inválida.");
+  const daysUntilDue = Math.round((parseDateKey(dataVencimento).getTime() - parseDateKey(today).getTime()) / 86_400_000);
+  if (daysUntilDue < 0 || daysUntilDue > 60) throw new Error("O vencimento deve ficar entre hoje e os próximos 60 dias.");
   return {
     seuNumero: deterministicSeuNumero({
       kioskId: input.batch.kioskId,

@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UsersRound, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ShieldCheck, Package, Box, Warehouse, UserCog, BarChart3, TrendingUp, History, Truck, Users, UserCheck, ShoppingCart, ListOrdered, DollarSign, AreaChart, BookOpen, ShieldCheck as AuditIcon, ListTodo, FileText, Repeat, ClipboardCheck, Settings, LayoutDashboard, Ticket, Copy, PackagePlus, Target, CalendarDays, Umbrella, UserCircle, LayoutGrid, MonitorPlay, Wallet, Receipt, Shirt } from 'lucide-react';
 import { type Profile, type PermissionSet, defaultGuestPermissions } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { useAuth } from '@/hooks/use-auth';
@@ -371,8 +371,9 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const financialViewWatch = form.watch('permissions.financial.view' as any);
   const financialCashFlowViewWatch = form.watch('permissions.financial.cashFlow.view' as any);
   const financialExpensesViewWatch = form.watch('permissions.financial.expenses.view' as any);
-  const financialBeneficiariesViewWatch = form.watch('permissions.financial.beneficiaries.view' as any);
   const financialPaymentRequestsViewWatch = form.watch('permissions.financial.paymentRequests.view' as any);
+  const financialCashClosuresViewWatch = form.watch('permissions.financial.cashClosures.view' as any);
+  const financialCashDepositsViewWatch = form.watch('permissions.financial.cashDeposits.view' as any);
   const financialSettingsViewWatch = form.watch('permissions.financial.settings.view' as any);
   const dpViewWatch = form.watch('permissions.dp.view' as any);
   const dpSchedulesViewWatch = form.watch('permissions.dp.schedules.view' as any);
@@ -737,6 +738,27 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </div>
 
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Fechamento do caixa</h4>
+                                  {renderPermissionSwitch("permissions.financial.cashClosures.view" as any, "Visualizar fechamentos", "Permite consultar os fechamentos diários e mensais das unidades.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.cashClosures.edit" as any, "Preencher conferência", "Permite informar a contagem do caixa enquanto o fechamento estiver editável.", !financialCashClosuresViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cashClosures.approve" as any, "Finalizar conferência", "Permite concluir a conferência financeira do fechamento.", !financialCashClosuresViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cashClosures.reopen" as any, "Reabrir fechamento", "Permite reabrir um fechamento já concluído para correção.", !financialCashClosuresViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cashClosures.resync" as any, "Ressincronizar PDV", "Permite atualizar os valores registrados pelo PDV.", !financialCashClosuresViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Depósitos</h4>
+                                  {renderPermissionSwitch("permissions.financial.cashDeposits.view" as any, "Visualizar depósitos", "Permite acompanhar lotes, boletos e liquidações de dinheiro.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.cashDeposits.issue" as any, "Emitir boleto", "Permite emitir cobranças bancárias para depósito do dinheiro conferido.", !financialCashDepositsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cashDeposits.cancel" as any, "Cancelar boleto", "Permite cancelar uma cobrança bancária ainda elegível.", !financialCashDepositsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cashDeposits.adjust" as any, "Ajustar lotes", "Permite alocar ajustes e dividir lotes quando necessário.", !financialCashDepositsViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Receipt className="h-4 w-4" /> Despesas</h4>
                                   {renderPermissionSwitch("permissions.financial.expenses.view" as any, "Visualizar despesas", "Permite acessar despesas, contas a pagar e histórico.", !financialViewWatch)}
                                   <div className="pl-6 space-y-2">
@@ -749,17 +771,8 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </div>
 
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><UsersRound className="h-4 w-4" /> Favorecidos</h4>
-                                  {renderPermissionSwitch("permissions.financial.beneficiaries.view" as any, "Visualizar favorecidos", "Permite consultar colaboradores, pessoas e empresas disponíveis para pagamentos.", !financialViewWatch)}
-                                  <div className="pl-6 space-y-2">
-                                    {renderPermissionSwitch("permissions.financial.beneficiaries.viewMaskedPaymentData" as any, "Visualizar dados de pagamento mascarados", "Exibe somente a chave ou conta mascarada para conferência.", !financialBeneficiariesViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.financial.beneficiaries.managePaymentData" as any, "Gerenciar dados de pagamento", "Permite cadastrar e alterar o destino de pagamento de pessoas e empresas; não autoriza pagamentos.", !financialBeneficiariesViewWatch, true)}
-                                  </div>
-                                </div>
-
-                                <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Pagamentos bancários</h4>
-                                  {renderPermissionSwitch("permissions.financial.paymentRequests.view" as any, "Visualizar solicitações", "Permite acompanhar pagamentos Pix e seus estados bancários.", !financialViewWatch)}
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Autorizações bancárias</h4>
+                                  {renderPermissionSwitch("permissions.financial.paymentRequests.view" as any, "Visualizar autorizações", "Permite acompanhar pagamentos Pix e seus estados bancários.", !financialViewWatch)}
                                   <div className="pl-6 space-y-2">
                                     {renderPermissionSwitch("permissions.financial.paymentRequests.create" as any, "Criar solicitações", "Permite gerar solicitações a partir de recibos e despesas autorizadas.", !financialPaymentRequestsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.paymentRequests.authorize" as any, "Autorizar no Financeiro", "Permite aprovar no Coala o envio de pagamentos de recibos.", !financialPaymentRequestsViewWatch, true)}
@@ -772,7 +785,6 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><AreaChart className="h-4 w-4" /> Análises</h4>
-                                  {renderPermissionSwitch("permissions.financial.financialFlow" as any, "Visualizar fluxo financeiro", "Permite analisar despesas provisionadas e pagas.", !financialViewWatch)}
                                   {renderPermissionSwitch("permissions.financial.dre" as any, "Visualizar DRE", "Permite acessar o demonstrativo de resultado.", !financialViewWatch)}
                                 </div>
 

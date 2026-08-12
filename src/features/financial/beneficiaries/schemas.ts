@@ -40,6 +40,10 @@ export const supplierPaymentProfileInputSchema = z
     }
   });
 
+export const entityPixProfileInputSchema = z.object({
+  pixKey: z.string().trim().max(180),
+});
+
 export const asoClinicConfigInputSchema = z.object({
   entityId: z.string().trim().min(1),
   active: z.boolean().default(true),

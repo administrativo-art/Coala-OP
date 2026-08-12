@@ -14,6 +14,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         employeeName: process.employeeName,
         protocol: process.request.protocol,
         unitName: process.unitName,
+        employer: process.employer ? {
+          legalName: process.employer.legalName,
+          tradeName: process.employer.tradeName,
+          cnpj: process.employer.cnpj,
+        } : null,
         jobRoleName: process.jobRoleName,
         notice: process.notice,
         status: process.accountant?.status ?? "not_started",

@@ -538,6 +538,10 @@ async function createCollaboratorFromOnboarding(params: {
     profileId,
     employmentRelationshipType: relationship,
     ...collaboratorCore.userPatch,
+    employerUnitId: asString(params.process.employerUnitId),
+    employerUnitName: asString(params.process.employerUnitName),
+    employerCnpj: asString(params.process.employerCnpj),
+    employerAddress: asString(params.process.employerAddress),
     transportVoucherHistory,
     isActive: true,
     admissionDate: admissionTimestamp,
@@ -566,6 +570,10 @@ async function createCollaboratorFromOnboarding(params: {
     status: 'active',
     job_role_id: collaboratorCore.role?.id ?? asString(params.process.jobRoleId) ?? profileId,
     unit_id: unitId ?? 'sem-unidade',
+    employer_unit_id: asString(params.process.employerUnitId),
+    employer_unit_name: asString(params.process.employerUnitName),
+    employer_cnpj: asString(params.process.employerCnpj),
+    employer_address: asString(params.process.employerAddress),
     profile_completion: 0,
     synced_at: admissionTimestamp,
     created_at: admissionTimestamp,
@@ -606,6 +614,9 @@ async function createCollaboratorFromOnboarding(params: {
     'employee.job_role_id': { value_text: collaboratorCore.role?.name ?? asString(params.process.jobRoleName) ?? asString(params.process.jobRoleId) ?? '' },
     'employee.admission_date': { value_date: admissionTimestamp },
   };
+  if (asString(params.process.employerCnpj)) {
+    values['employee.employer_cnpj'] = { value_text: asString(params.process.employerCnpj) };
+  }
 
   const textAnswers: Array<[string, string]> = [
     ['employee.cpf', answerString(publicAnswers, 'cpf')],

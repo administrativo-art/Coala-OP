@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowLeft,
+  Banknote,
   Check,
   CheckCircle2,
   CircleDollarSign,
+  CreditCard,
   Info,
   Loader2,
+  LockKeyhole,
   RefreshCw,
   RotateCcw,
   Save,
@@ -107,6 +111,12 @@ function differenceLabel(value: number | null) {
   if (value === null) return "—";
   if (value === 0) return "Sem diferença";
   return value < 0 ? `Falta ${formatBRL(Math.abs(value))}` : `Sobra ${formatBRL(value)}`;
+}
+
+function ChannelIcon({ line }: { line: CashClosureLine }) {
+  if (line.channel === "cash") return <Banknote className="h-[19px] w-[19px] text-emerald-600" />;
+  if (line.channel === "pix") return <span className="grid h-[18px] w-[18px] rotate-45 place-items-center rounded-[3px] border-2 border-emerald-600"><span className="h-1.5 w-1.5 rounded-[2px] border border-emerald-600" /></span>;
+  return <CreditCard className="h-[19px] w-[19px] text-indigo-500" />;
 }
 
 export function CashClosureDayPage({ kioskId, date }: Props) {
@@ -375,6 +385,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
         <p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">Fechamento de {date.split("-").reverse().join("/")}</p>
       </div>
       <div className="flex flex-wrap gap-2">
+        <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 font-bold"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
         {permissions.financial.cashClosures.resync && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void sync()} disabled={!!working}><RefreshCw className="mr-2 h-4 w-4" />Ressincronizar</Button>}
         {editable && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void save()} disabled={saveState === "saving" || !!working}><Save className="mr-2 h-4 w-4" />Salvar</Button>}
         {cashierEditable && <Button className="h-10 rounded-xl bg-pink-600 px-4 font-extrabold text-white hover:bg-pink-700" onClick={() => void submit()} disabled={!!working}><Send className="mr-2 h-4 w-4" />Enviar ao Financeiro</Button>}
@@ -389,6 +400,11 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       {saveState === "saved" && <><Check className="h-3.5 w-3.5 text-emerald-600" />Salvo automaticamente</>}
       {saveState === "error" && <><AlertTriangle className="h-3.5 w-3.5 text-rose-600" />Falha ao salvar; não feche a página</>}
       {data.closure.pdvChangedAfterApproval && <span className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700">O PDV mudou após a aprovação</span>}
+    </div>
+
+    <div className="flex items-center gap-2.5 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-[12.5px] text-zinc-500">
+      <LockKeyhole className="h-4 w-4 shrink-0 text-zinc-400" />
+      <span><strong className="text-zinc-900">Pix e cartões são conferidos automaticamente pelo PDV</strong> e ficam travados. Só o <strong className="text-zinc-900">dinheiro</strong> exige contagem do Caixa e do Financeiro.</span>
     </div>
 
     {data.closure.source.unknownPaymentNames.length > 0 && <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900"><strong>Formas não mapeadas:</strong> {data.closure.source.unknownPaymentNames.join(", ")}</div>}
@@ -409,42 +425,43 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
 
     {groups.length === 0 ? <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Dia sem movimento. O fechamento zerado pode ser finalizado diretamente.</CardContent></Card> : groups.map((group) => {
       const expected = group.lines.reduce((total, line) => total + line.expectedCents, 0);
-      const reported = group.lines.reduce((total, line) => total + (line.reportedCents ?? 0), 0);
-      const counted = group.lines.reduce((total, line) => total + (line.countedCents ?? 0), 0);
-      const reportPending = group.lines.some((line) => line.reportedCents === null);
       const financePending = group.lines.some((line) => line.countedCents === null);
       const difference = group.lines.reduce((total, line) => total + (line.differenceCents ?? 0), 0);
       const initials = group.name.split(" ").slice(0, 2).map((part) => part[0]).join("");
       const interval = operatorInterval(group.lines);
+      const groupResult = financePending ? null : resultText(difference);
       return <Card key={group.key} className="overflow-hidden rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]">
-        <CardHeader className="border-b border-stone-100 px-[18px] py-3.5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-3"><CardTitle className="flex items-center gap-2.5 text-[15px] font-black"><span className="grid h-7 w-7 place-items-center rounded-[9px] bg-pink-100 text-xs font-black text-pink-600">{initials}</span>{group.name}</CardTitle>{interval && <span className="text-[11.5px] font-semibold text-zinc-400">{interval}</span>}</div><div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 font-mono text-[12px]"><span className="text-zinc-400">PDV {formatBRL(expected)}</span><span className="text-zinc-400">Caixa {reportPending ? "—" : formatBRL(reported)}</span><span className="text-zinc-400">Financeiro {financePending ? "—" : formatBRL(counted)}</span><strong className={financePending ? "text-zinc-400" : resultText(difference).className}>{financePending ? "Aguardando Financeiro" : resultText(difference).label}</strong></div></div></CardHeader>
-        <CardContent className="space-y-0 px-[18px] pb-3.5 pt-1.5">
-          <div className="hidden grid-cols-[minmax(170px,1fr)_120px_150px_150px_minmax(150px,.8fr)] gap-3 border-b border-stone-100 px-0.5 py-2 text-[10.5px] font-extrabold uppercase tracking-wide text-zinc-400 md:grid"><span>Canal</span><span className="text-right">PDV</span><span className="text-right">Caixa</span><span className="text-right">Financeiro</span><span>Resultado final</span></div>
+        <CardHeader className="border-b border-stone-100 px-5 py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="grid h-[38px] w-[38px] place-items-center rounded-full bg-pink-100 text-xs font-black text-pink-600">{initials}</span><div><CardTitle className="text-[15px] font-bold">{group.name}</CardTitle>{interval && <p className="mt-0.5 text-[11.5px] font-semibold text-zinc-400">{interval}</p>}</div></div><div className="flex flex-wrap items-center justify-end gap-2"><span className="inline-flex h-7 items-center rounded-full bg-stone-100 px-3 font-mono text-[11.5px] font-bold text-zinc-600"><span className="mr-1.5 font-sans font-semibold text-zinc-400">PDV</span>{formatBRL(expected)}</span><span className={cn("inline-flex h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", groupResult?.className ?? "bg-stone-100 text-zinc-500", !groupResult ? "bg-stone-100" : difference === 0 ? "bg-emerald-50" : "bg-rose-50")}>{!groupResult ? "Aguardando Financeiro" : difference === 0 ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Tudo confere</> : groupResult.label}</span></div></div></CardHeader>
+        <CardContent className="space-y-0 !p-0">
+          <div className="hidden grid-cols-[14px_minmax(170px,1.5fr)_130px_150px_150px_minmax(150px,190px)] gap-3 border-b border-stone-100 bg-stone-50/80 px-5 py-2.5 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-400 lg:grid"><span /><span>Canal</span><span className="text-right">PDV · esperado</span><span className="text-right">Caixa · contado</span><span className="text-right">Financeiro · conferido</span><span>Resultado</span></div>
           {group.lines.map((line) => {
             const result = resultText(line.differenceCents);
             const hasReportedDifference = line.reportedDifferenceCents !== null && line.reportedDifferenceCents !== 0;
             const hasFinanceDifference = line.countedCents !== null && (line.differenceCents !== 0 || line.conferenceDifferenceCents !== 0);
-            return <div key={line.id} className={cn("grid gap-3 border-b border-stone-100 px-0.5 py-2.5 last:border-b-0 md:grid-cols-[minmax(170px,1fr)_120px_150px_150px_minmax(150px,.8fr)] md:items-center", (hasReportedDifference || hasFinanceDifference) && "rounded-xl bg-amber-50/60 px-2")}>
-              <div className="flex items-center gap-2 font-semibold">{channelName(line)}{line.channel === "cash" && <Popover><PopoverTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7"><Info className="h-4 w-4" /><span className="sr-only">Ver composição do dinheiro</span></Button></PopoverTrigger><PopoverContent align="start" className="space-y-2 text-sm"><p className="font-semibold">Composição do dinheiro</p><div className="flex justify-between"><span>Recebido</span><strong>{formatBRL(line.metadata.grossCashCents ?? line.expectedCents)}</strong></div><div className="flex justify-between"><span>Troco</span><strong>- {formatBRL(line.metadata.changeCents ?? 0)}</strong></div><div className="flex justify-between border-t pt-2"><span>Líquido esperado</span><strong>{formatBRL(line.expectedCents)}</strong></div></PopoverContent></Popover>}</div>
+            const automatic = isPdvAutoCountedChannel(line.channel);
+            const complete = line.reportedCents !== null && line.countedCents !== null;
+            return <div key={line.id} className={cn("grid gap-3 border-b border-stone-100 px-5 py-3.5 last:border-b-0 lg:grid-cols-[14px_minmax(170px,1.5fr)_130px_150px_150px_minmax(150px,190px)] lg:items-center", (hasReportedDifference || hasFinanceDifference) && "bg-rose-50/35")}>
+              <span className={cn("hidden h-[34px] w-[5px] rounded-full lg:block", complete && line.differenceCents === 0 ? "bg-emerald-500" : complete ? "bg-rose-500" : "bg-amber-400")} />
+              <div className="flex items-center gap-2.5 font-semibold"><ChannelIcon line={line} /><span>{channelName(line)}{line.channel === "cash" && <span className="mt-0.5 block text-[10.5px] font-medium text-zinc-400">{formatBRL(line.metadata.grossCashCents ?? line.expectedCents)} recebido − {formatBRL(line.metadata.changeCents ?? 0)} troco</span>}</span>{line.channel === "cash" && <Popover><PopoverTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7"><Info className="h-4 w-4" /><span className="sr-only">Ver composição do dinheiro</span></Button></PopoverTrigger><PopoverContent align="start" className="space-y-2 text-sm"><p className="font-semibold">Composição do dinheiro</p><div className="flex justify-between"><span>Recebido</span><strong>{formatBRL(line.metadata.grossCashCents ?? line.expectedCents)}</strong></div><div className="flex justify-between"><span>Troco</span><strong>- {formatBRL(line.metadata.changeCents ?? 0)}</strong></div><div className="flex justify-between border-t pt-2"><span>Líquido esperado</span><strong>{formatBRL(line.expectedCents)}</strong></div></PopoverContent></Popover>}</div>
               <div className="text-right font-mono text-sm">{formatBRL(line.expectedCents)}</div>
-              <CentsInput value={line.reportedCents} onChange={(value) => updateLine(line.id, { reportedCents: value })} disabled={!cashierEditable || isPdvAutoCountedChannel(line.channel)} ariaLabel={`Valor informado pelo caixa em ${channelName(line)} para ${group.name}`} className="h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]" />
-              <CentsInput value={line.countedCents} onChange={(value) => updateLine(line.id, { countedCents: value })} disabled={!financeEditable || isPdvAutoCountedChannel(line.channel)} ariaLabel={`Valor conferido pelo financeiro em ${channelName(line)} para ${group.name}`} className="h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]" />
-              <div><strong className={cn("text-sm", line.reportedCents === null || line.countedCents === null ? "text-zinc-400" : result.className)}>{line.reportedCents === null ? "Caixa não informou" : line.countedCents === null ? "Aguardando Financeiro" : result.label}</strong>{hasReportedDifference && <p className="mt-1 text-[10.5px] text-zinc-500">Caixa × PDV: {differenceLabel(line.reportedDifferenceCents)}</p>}{line.conferenceDifferenceCents !== null && line.conferenceDifferenceCents !== 0 && <p className="text-[10.5px] text-zinc-500">Financeiro × Caixa: {differenceLabel(line.conferenceDifferenceCents)}</p>}</div>
-              {hasReportedDifference && <div className="md:col-span-5"><Textarea value={line.reportedNote ?? ""} onChange={(event) => updateLine(line.id, { reportedNote: event.target.value })} disabled={!cashierEditable} placeholder="Justificativa obrigatória do Caixa para a diferença em relação ao PDV" className="min-h-16" /></div>}
-              {hasFinanceDifference && <div className="md:col-span-5"><Textarea value={line.note ?? ""} onChange={(event) => updateLine(line.id, { note: event.target.value })} disabled={!financeEditable} placeholder="Parecer obrigatório do Financeiro sobre a diferença apurada" className="min-h-16" /></div>}
+              <div className="relative"><CentsInput value={line.reportedCents} onChange={(value) => updateLine(line.id, { reportedCents: value })} disabled={!cashierEditable || automatic} ariaLabel={`Valor informado pelo caixa em ${channelName(line)} para ${group.name}`} className={cn("h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]", automatic && "border-dashed bg-stone-100 pl-8 text-zinc-500")} />{automatic && <LockKeyhole className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />}</div>
+              <div className="relative"><CentsInput value={line.countedCents} onChange={(value) => updateLine(line.id, { countedCents: value })} disabled={!financeEditable || automatic} ariaLabel={`Valor conferido pelo financeiro em ${channelName(line)} para ${group.name}`} className={cn("h-9 rounded-[10px] border-stone-300 bg-stone-50 font-mono text-[13px]", automatic && "border-dashed bg-stone-100 pl-8 text-zinc-500", financeEditable && !automatic && "border-pink-500 bg-white ring-2 ring-pink-100")} />{automatic && <LockKeyhole className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />}</div>
+              <div><strong className={cn("inline-flex min-h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", line.reportedCents === null || line.countedCents === null ? "bg-stone-100 text-zinc-500" : line.differenceCents === 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>{line.reportedCents === null ? "Caixa não informou" : line.countedCents === null ? "Aguardando Financeiro" : automatic ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Conferido</> : result.label}</strong>{hasReportedDifference && <p className="mt-1 text-[10.5px] text-zinc-500">Caixa × PDV: {differenceLabel(line.reportedDifferenceCents)}</p>}{line.conferenceDifferenceCents !== null && line.conferenceDifferenceCents !== 0 && <p className="text-[10.5px] text-zinc-500">Financeiro × Caixa: {differenceLabel(line.conferenceDifferenceCents)}</p>}</div>
+              {hasReportedDifference && <div className="lg:col-span-6 lg:pl-[29px]"><Textarea value={line.reportedNote ?? ""} onChange={(event) => updateLine(line.id, { reportedNote: event.target.value })} disabled={!cashierEditable} placeholder="Justificativa obrigatória do Caixa para a diferença em relação ao PDV" className="min-h-[52px] border-rose-200 bg-rose-50/40 text-[12.5px]" /></div>}
+              {hasFinanceDifference && <div className="lg:col-span-6 lg:pl-[29px]"><Textarea value={line.note ?? ""} onChange={(event) => updateLine(line.id, { note: event.target.value })} disabled={!financeEditable} placeholder="Parecer obrigatório do Financeiro sobre a diferença apurada" className="min-h-[52px] border-rose-200 bg-rose-50/40 text-[12.5px]" /></div>}
             </div>;
           })}
         </CardContent>
       </Card>;
     })}
 
-    <Card className="border-0 bg-zinc-900 text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid items-center gap-3 p-3.5 px-4 sm:grid-cols-3 lg:grid-cols-6">
-      <div className="min-w-0 text-center"><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Total PDV</p><p className="mt-0.5 whitespace-nowrap font-mono text-[15px] font-extrabold xl:text-[17px]">{formatBRL(liveSummary.expected)}</p></div>
-      <div className="min-w-0 text-center"><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Informado Caixa</p><p className="mt-0.5 whitespace-nowrap font-mono text-[15px] font-extrabold xl:text-[17px]">{liveSummary.unreported > 0 ? "—" : formatBRL(liveSummary.reported)}</p></div>
-      <div className="min-w-0 text-center"><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Conferido Financeiro</p><p className="mt-0.5 whitespace-nowrap font-mono text-[15px] font-extrabold xl:text-[17px]">{liveSummary.pending > 0 ? "—" : formatBRL(liveSummary.counted)}</p></div>
-      <div className="min-w-0 text-center"><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">Diferença final</p><p className={cn("mt-0.5 whitespace-nowrap font-mono text-[15px] font-extrabold xl:text-[17px]", liveSummary.pending ? "text-zinc-500" : resultText(liveSummary.difference).className)}>{liveSummary.pending ? "—" : differenceLabel(liveSummary.difference)}</p></div>
-      <div className="min-w-0 text-center"><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">A informar Caixa</p><p className="mt-0.5 whitespace-nowrap font-mono text-[15px] font-extrabold text-amber-300 xl:text-[17px]">{liveSummary.unreported}</p></div>
-      <div className="min-w-0 text-center"><p className="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500">A conferir Financeiro</p><p className="mt-0.5 whitespace-nowrap font-mono text-[15px] font-extrabold text-amber-300 xl:text-[17px]">{liveSummary.pending}</p></div>
+    <Card className="overflow-hidden border-0 bg-zinc-900 text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid items-stretch !p-0 sm:grid-cols-3 lg:grid-cols-[1.3fr_1fr_1fr_1fr_.9fr_.9fr]">
+      <SummaryMetric label="Total PDV" value={formatBRL(liveSummary.expected)} prominent />
+      <SummaryMetric label="Informado Caixa" value={liveSummary.unreported > 0 ? "—" : formatBRL(liveSummary.reported)} />
+      <SummaryMetric label="Conferido Financeiro" value={liveSummary.pending > 0 ? "—" : formatBRL(liveSummary.counted)} />
+      <SummaryMetric label="Diferença final" value={liveSummary.pending ? "—" : differenceLabel(liveSummary.difference)} valueClass={liveSummary.pending ? "text-zinc-500" : resultText(liveSummary.difference).className} />
+      <SummaryMetric label="A informar Caixa" value={String(liveSummary.unreported)} valueClass={liveSummary.unreported ? "text-amber-300" : "text-emerald-300"} />
+      <SummaryMetric label="A conferir Financeiro" value={String(liveSummary.pending)} valueClass={liveSummary.pending ? "text-amber-300" : "text-emerald-300"} />
     </CardContent></Card>
 
     <Dialog open={reasonAction !== null} onOpenChange={(open) => { if (!open) { setReasonAction(null); setReason(""); } }}>
@@ -455,4 +472,8 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       </DialogContent>
     </Dialog>
   </div>;
+}
+
+function SummaryMetric({ label, value, valueClass, prominent = false }: { label: string; value: string; valueClass?: string; prominent?: boolean }) {
+  return <div className="flex min-w-0 flex-col justify-center border-zinc-700/70 px-5 py-4 text-left sm:border-l sm:first:border-l-0"><p className="text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-500">{label}</p><p className={cn("mt-1 whitespace-nowrap font-mono text-[16px] font-extrabold", prominent && "text-xl", valueClass)}>{value}</p></div>;
 }
