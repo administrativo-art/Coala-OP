@@ -49,7 +49,7 @@ export function CashClosureMonthsPage({ kioskId }: { kioskId: string }) {
     ?? kioskId;
 
   if (!permissions.financial?.cashClosures?.view) return null;
-  return <div className="w-full max-w-none space-y-5">
+  return <div className="mx-auto w-full max-w-[1180px] space-y-5 pb-10">
     <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: kioskName }]} />
     <div><h1 className="text-[26px] font-black tracking-tight">Meses da unidade</h1><p className="mt-1.5 text-sm font-semibold text-zinc-500">{kioskName}</p></div>
     {loading ? <div className="flex h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">{items.map((summary) => {

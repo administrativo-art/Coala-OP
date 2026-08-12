@@ -195,7 +195,7 @@ export function CashFlowPage() {
   const loading = loadingTransactions || loadingPayments || loadingExpenses;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[1220px] space-y-6 pb-10">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Fluxo de caixa</h1>

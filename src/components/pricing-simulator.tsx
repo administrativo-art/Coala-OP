@@ -83,6 +83,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ProductModal } from "./product-modal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { PricingHistoryAnalysis } from "./pricing-history-analysis";
+import { BackButton } from "@/components/navigation/back-button";
 import {
     canCreateTechnicalSheets,
     canDeleteTechnicalSheets,
@@ -195,7 +196,7 @@ function isSimulationAvailableInUnit(simulation: ProductSimulation, unitId: stri
 }
 
 
-export function PricingSimulator() {
+export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean }) {
     const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdateSimulations, priceHistory, updateSimulation, resolveSimulationPrice } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
@@ -1274,8 +1275,24 @@ export function PricingSimulator() {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-end">
+        <div className="space-y-5">
+            <div className={cn("flex gap-4", pageHeader ? "flex-col justify-between lg:flex-row lg:items-end" : "justify-end")}>
+                {pageHeader && (
+                    <div className="flex min-w-0 items-start gap-2">
+                        <BackButton
+                            fallbackHref="/dashboard/pricing"
+                            variant="ghost"
+                            iconOnly
+                            className="mt-5 h-9 w-9 shrink-0 rounded-full text-muted-foreground transition-colors hover:bg-white"
+                            ariaLabel="Voltar para gestão de preços e margens"
+                        />
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-pink-600">Coala · Comercial</p>
+                            <h1 className="mt-1 text-[26px] font-black tracking-[-0.02em] text-slate-950">Precificação &amp; CMV</h1>
+                            <p className="mt-1 max-w-[620px] text-[13px] text-muted-foreground">Ferramenta de decisão comercial — encontre margens ruins, CMV anormal e divergências de preço por canal sem abrir cada mercadoria.</p>
+                        </div>
+                    </div>
+                )}
                 <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full md:w-auto">
                     <TabsList className="bg-white border shadow-sm p-1 h-11 rounded-xl">
                         <TabsTrigger 
@@ -1312,13 +1329,13 @@ export function PricingSimulator() {
                                         aria-pressed={isActive}
                                         onClick={() => handleUnitContextChange(item.id)}
                                         className={cn(
-                                            "flex min-h-24 items-center gap-4 rounded-2xl border bg-white p-4 text-left shadow-sm transition-all",
+                                            "flex min-h-[70px] items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm transition-all",
                                             "hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md",
                                             isActive && "border-pink-500 bg-pink-50/70 ring-2 ring-pink-100"
                                         )}
                                     >
                                         <span className={cn(
-                                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500",
+                                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500",
                                             isActive && "bg-pink-600 text-white"
                                         )}>
                                             <Icon className="h-5 w-5" />

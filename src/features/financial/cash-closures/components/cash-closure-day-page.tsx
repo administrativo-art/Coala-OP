@@ -377,12 +377,14 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     </CardContent></Card>;
   }
 
-  return <div className="w-full max-w-none space-y-4">
+  return <div className="mx-auto w-full max-w-[1180px] space-y-4 pb-10">
     <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: data.closure.kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel, href: monthHref }, { label: date.split("-").reverse().join("/") }]} />
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <div className="flex flex-wrap items-center gap-2.5"><h1 className="text-[26px] font-black tracking-tight">{data.closure.kioskName}</h1><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11.5px] font-extrabold", data.closure.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ["pending_review", "reopened"].includes(data.closure.status) ? "border-amber-200 bg-amber-50 text-amber-800" : "border-stone-200 bg-stone-100 text-zinc-500")}>{STATUS_LABEL[data.closure.status]}</Badge></div>
-        <p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">Fechamento de {date.split("-").reverse().join("/")}</p>
+        <p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">
+          Fechamento de {date.split("-").reverse().join("/")} · {groups.length} {groups.length === 1 ? "operador" : "operadores"} · {data.lines.length} {data.lines.length === 1 ? "lançamento" : "lançamentos"}
+        </p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 font-bold"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
@@ -408,7 +410,6 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     </div>
 
     {data.closure.source.unknownPaymentNames.length > 0 && <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900"><strong>Formas não mapeadas:</strong> {data.closure.source.unknownPaymentNames.join(", ")}</div>}
-    {requiresSeniorApproval && <div className="flex items-start gap-3 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] leading-5 text-rose-900"><AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0" /><span><strong>Aprovação sênior necessária.</strong> A diferença final entre Financeiro e PDV ultrapassa {formatBRL(seniorDivergenceCents)}; a aprovação exige também permissão de reabertura.</span></div>}
     {data.closure.cashDeposit.manualSplitRequired && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><div><strong>Dinheiro acima de R$ 5.000,00.</strong><p>O fechamento tem {formatBRL(data.closure.cashDeposit.eligibleCents)} e precisa ser dividido manualmente em partes de até R$ 5.000,00.</p></div>{permissions.financial?.cashDeposits?.adjust && <Button variant="outline" onClick={() => void splitOversizedDeposit()} disabled={!!working}>{working === "split-deposit" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar divisão sugerida</Button>}</div>}
     {data.closure.status === "approved" && <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]">
       <CardHeader className="pb-3"><CardTitle className="text-base">Referência do depósito</CardTitle></CardHeader>
@@ -454,6 +455,8 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
         </CardContent>
       </Card>;
     })}
+
+    {requiresSeniorApproval && <div className="flex items-start gap-3 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] leading-5 text-rose-900"><AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0" /><span><strong>Aprovação sênior necessária.</strong> A diferença final entre Financeiro e PDV ultrapassa {formatBRL(seniorDivergenceCents)}; a aprovação exige também permissão de reabertura.</span></div>}
 
     <Card className="overflow-hidden border-0 bg-zinc-900 text-white shadow-[0_14px_34px_-12px_rgba(0,0,0,.5)]"><CardContent className="grid items-stretch !p-0 sm:grid-cols-3 lg:grid-cols-[1.3fr_1fr_1fr_1fr_.9fr_.9fr]">
       <SummaryMetric label="Total PDV" value={formatBRL(liveSummary.expected)} prominent />

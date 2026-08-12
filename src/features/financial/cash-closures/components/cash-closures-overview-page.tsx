@@ -80,7 +80,7 @@ export function CashClosuresOverviewPage() {
 
   if (!permissions.financial?.cashClosures?.view) return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso a fechamentos de caixa.</div>;
 
-  return <div className="w-full max-w-none space-y-[18px]">
+  return <div className="mx-auto w-full max-w-[1180px] space-y-[18px] pb-10">
     <CashControlNavigation active="closures" />
     <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-[11.5px] font-extrabold uppercase tracking-[.12em] text-emerald-700">Controle de caixa</p><h1 className="mt-1.5 text-3xl font-black tracking-tight">Fechamento do caixa</h1><p className="mt-1.5 text-sm font-medium text-zinc-500">Pendências, divergências e aprovações por unidade.</p></div><Button variant="outline" className="h-[42px] rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div>
     {latestJobRun && latestJobRun.status !== "success" && <div className="flex items-start gap-3 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] leading-5 text-rose-900"><AlertTriangle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-rose-700" /><span><strong>Falha no job diário de {latestJobRun.date.split("-").reverse().join("/")}.</strong> {latestJobRun.failureCount} unidade(s) não sincronizada(s). Use “Sincronizar ontem” nos cards afetados.</span></div>}

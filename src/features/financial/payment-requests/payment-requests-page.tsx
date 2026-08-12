@@ -73,7 +73,7 @@ export function PaymentRequestsPage() {
 
   if (!permissions.financial?.paymentRequests?.view) return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui permissão para visualizar autorizações bancárias.</div>;
 
-  return <div className="space-y-5">
+  return <div className="mx-auto w-full max-w-[1220px] space-y-5 pb-10">
     <div className="flex items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold tracking-tight">Autorizações bancárias</h1><p className="text-sm text-muted-foreground">Autorização, aprovação bancária, conciliação e comprovantes Pix.</p></div>
       <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar lista</Button>

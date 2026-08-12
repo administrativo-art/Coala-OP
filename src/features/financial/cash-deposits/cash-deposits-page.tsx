@@ -352,7 +352,7 @@ export function CashDepositsPage() {
     return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso aos depósitos em dinheiro.</div>;
   }
 
-  return <div className="w-full max-w-none space-y-[18px]">
+  return <div className="mx-auto w-full max-w-[1180px] space-y-[18px] pb-10">
     <CashControlNavigation active="deposits" />
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div>

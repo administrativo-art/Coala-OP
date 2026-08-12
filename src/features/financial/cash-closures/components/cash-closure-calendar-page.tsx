@@ -86,7 +86,7 @@ export function CashClosureCalendarPage({ kioskId, year, month }: { kioskId: str
     ?? kioskId;
   const hasFinalizedClosure = finalizedClosures.length > 0;
   if (!permissions.financial?.cashClosures?.view) return null;
-  return <div className="w-full max-w-none space-y-4">
+  return <div className="mx-auto w-full max-w-[1180px] space-y-4 pb-10">
     <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel }]} />
     <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[26px] font-black tracking-tight">{monthLabel}</h1><p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">{kioskName}</p></div><Button variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div>
     <div className="grid gap-3 lg:grid-cols-[3fr_4fr]">

@@ -363,7 +363,7 @@ export function FinancialDashboardPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[1220px] space-y-6 pb-10">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold tracking-tight">Painel financeiro</h1>
         <p className="text-muted-foreground">
