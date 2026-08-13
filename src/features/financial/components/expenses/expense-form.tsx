@@ -1,9 +1,9 @@
 "use client";
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { addMonths, addWeeks, format } from "date-fns";
+import { addMonths, addWeeks, format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { addDoc, getDoc, Timestamp, updateDoc } from "firebase/firestore";
+import { addDoc, getDoc, getDocs, query, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import type { FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,6 +21,14 @@ import {
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency } from "@/features/financial/lib/utils";
+import {
+  buildEqualRateio,
+  distributeRateioPercentages,
+  isRateioOccurrenceEligible,
+  resolveRateioForCompetence,
+  type ExpenseRateioPolicy,
+  type RateioCriterion,
+} from "@/features/financial/lib/expense-rateio";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { financialDb } from "@/lib/firebase-financial";
 
 type InstallmentPreview = {
   number: number;
@@ -63,6 +72,10 @@ function toOptionalDate(value: any): Date | undefined {
 
 function normalizeExpenseDescriptionLabel(value: string) {
   return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+}
+
+function toRateioDateString(value: Date) {
+  return format(value, "yyyy-MM-dd");
 }
 
 function buildRecurringOccurrences(
@@ -414,6 +427,7 @@ export function ExpenseForm() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
+  const [loadedRecurrenceGroupId, setLoadedRecurrenceGroupId] = useState<string | null>(null);
   const [importTransactionData, setImportTransactionData] = useState<any | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
@@ -481,6 +495,9 @@ export function ExpenseForm() {
       isApportioned: false,
       paymentMethod: "single",
       apportionments: [{ resultCenter: "", percentage: 100 }],
+      rateioCriterion: "equal",
+      rateioEffectiveFrom: startOfMonth(addMonths(new Date(), 1)),
+      rateioFirstMonthMode: "full",
       variedInstallments: [],
       accountPlan: "",
       description: "",
@@ -515,6 +532,9 @@ export function ExpenseForm() {
   const variedInstallments = form.watch("variedInstallments");
   const isApportioned = form.watch("isApportioned");
   const apportionments = form.watch("apportionments");
+  const rateioCriterion = form.watch("rateioCriterion");
+  const rateioEffectiveFrom = form.watch("rateioEffectiveFrom");
+  const rateioFirstMonthMode = form.watch("rateioFirstMonthMode");
   const selectedAccountPlan = useMemo(
     // Busca na lista completa: despesas antigas podem apontar para conta-grupo ou inativa.
     () => (accounts || []).find((a: any) => a.id === accountPlanValue),
@@ -642,12 +662,89 @@ export function ExpenseForm() {
 
   const {
     fields: apportionmentFields,
-    append: appendApportionment,
-    remove: removeApportionment,
+    replace: replaceApportionments,
   } = useFieldArray({
     control: form.control,
     name: "apportionments",
   });
+
+  function rebalanceRateio(
+    rows: NonNullable<ExpenseFormValues["apportionments"]>,
+    criterion: RateioCriterion
+  ) {
+    if (rows.length === 0 || criterion === "fixed") return rows;
+    const weights = rows.map((row) =>
+      criterion === "equal" ? 1 : Math.max(0, Number(row.basisValue) || 0)
+    );
+    const percentages = distributeRateioPercentages(weights);
+    return rows.map((row, index) => ({ ...row, percentage: percentages[index] }));
+  }
+
+  function handleRateioToggle(checked: boolean) {
+    form.setValue("isApportioned", checked, { shouldDirty: true, shouldValidate: true });
+    if (!checked) return;
+
+    const participationStartDate =
+      paymentMethod === "recurring"
+        ? rateioEffectiveFrom || recurrenceFirstDueDate || startOfMonth(addMonths(new Date(), 1))
+        : undefined;
+    replaceApportionments(
+      buildEqualRateio(
+        units.map((unit) => unit.name),
+        participationStartDate ? format(participationStartDate, "yyyy-MM-dd") : undefined
+      ).map((item) => ({
+        ...item,
+        participationStartDate,
+      }))
+    );
+    form.setValue("rateioCriterion", "equal", { shouldDirty: true, shouldValidate: true });
+  }
+
+  function handleRateioCriterionChange(criterion: RateioCriterion) {
+    const currentRows = form.getValues("apportionments") || [];
+    const preparedRows = currentRows.map((row) => ({
+      ...row,
+      basisValue:
+        criterion === "revenue" || criterion === "headcount"
+          ? Number(row.basisValue) || 1
+          : row.basisValue,
+    }));
+    replaceApportionments(rebalanceRateio(preparedRows, criterion));
+    form.setValue("rateioCriterion", criterion, { shouldDirty: true, shouldValidate: true });
+  }
+
+  function handleAddRateioUnit() {
+    const currentRows = form.getValues("apportionments") || [];
+    const selectedCenters = new Set(currentRows.map((row) => row.resultCenter));
+    const nextUnit = units.find((unit) => !selectedCenters.has(unit.name));
+    if (!nextUnit) return;
+
+    const nextRows = [
+      ...currentRows,
+      {
+        resultCenter: nextUnit.name,
+        percentage: 0,
+        basisValue: rateioCriterion === "revenue" || rateioCriterion === "headcount" ? 1 : undefined,
+        participationStartDate:
+          paymentMethod === "recurring"
+            ? rateioEffectiveFrom || startOfMonth(addMonths(new Date(), 1))
+            : undefined,
+      },
+    ];
+    replaceApportionments(rebalanceRateio(nextRows, rateioCriterion));
+  }
+
+  function handleRemoveRateioUnit(index: number) {
+    const nextRows = (form.getValues("apportionments") || []).filter((_, rowIndex) => rowIndex !== index);
+    replaceApportionments(rebalanceRateio(nextRows, rateioCriterion));
+  }
+
+  function handleRateioBasisChange(index: number, value: number) {
+    const nextRows = (form.getValues("apportionments") || []).map((row, rowIndex) =>
+      rowIndex === index ? { ...row, basisValue: value } : row
+    );
+    replaceApportionments(rebalanceRateio(nextRows, rateioCriterion));
+  }
 
   const {
     fields: variedFields,
@@ -698,6 +795,21 @@ export function ExpenseForm() {
   }, [form, paymentMethod]);
 
   useEffect(() => {
+    if (
+      paymentMethod !== "recurring" ||
+      !recurrenceFirstDueDate ||
+      editId ||
+      form.formState.dirtyFields.rateioEffectiveFrom
+    ) {
+      return;
+    }
+    form.setValue("rateioEffectiveFrom", startOfMonth(recurrenceFirstDueDate), {
+      shouldDirty: false,
+      shouldValidate: true,
+    });
+  }, [editId, form, paymentMethod, recurrenceFirstDueDate]);
+
+  useEffect(() => {
     if (editId || !importTransactionId) return;
 
     let active = true;
@@ -725,6 +837,9 @@ export function ExpenseForm() {
           dueDate: transactionDate,
           isApportioned: false,
           apportionments: [{ resultCenter: "", percentage: 100 }],
+          rateioCriterion: "equal",
+          rateioEffectiveFrom: startOfMonth(transactionDate || new Date()),
+          rateioFirstMonthMode: "full",
         });
         setImportTransactionData({ id: snapshot.id, ...data });
       } catch (error) {
@@ -779,6 +894,18 @@ export function ExpenseForm() {
           if (!data || !active) return;
         }
 
+        const nextOpenCompetence = startOfMonth(addMonths(new Date(), 1));
+        const storedPolicy = data.rateioPolicy as ExpenseRateioPolicy | undefined;
+        const loadedApportionments = (storedPolicy?.participants || data.apportionments || [
+          { resultCenter: "", percentage: 100 },
+        ]).map((item: any) => ({
+          resultCenter: item.resultCenter || "",
+          percentage: Number(item.percentage) || 0,
+          basisValue: item.basisValue == null ? undefined : Number(item.basisValue),
+          participationStartDate: item.participationStartDate
+            ? toOptionalDate(`${String(item.participationStartDate).slice(0, 10)}T12:00:00`)
+            : undefined,
+        }));
         const resetData: any = {
           accountPlan: data.accountPlan,
           description: data.description,
@@ -789,7 +916,16 @@ export function ExpenseForm() {
           paymentMethod: data.paymentMethod || "single",
           isApportioned: data.isApportioned,
           resultCenter: data.resultCenter || "",
-          apportionments: data.apportionments || [{ resultCenter: "", percentage: 100 }],
+          apportionments: loadedApportionments,
+          rateioCriterion:
+            data.rateioCriterion || storedPolicy?.criterion || (data.isApportioned ? "fixed" : "equal"),
+          rateioEffectiveFrom: data.recurrenceGroupId
+            ? nextOpenCompetence
+            : toOptionalDate(data.rateioEffectiveFrom) ||
+              (storedPolicy?.effectiveFrom
+                ? toOptionalDate(`${storedPolicy.effectiveFrom}T12:00:00`)
+                : toOptionalDate(data.competenceDate)),
+          rateioFirstMonthMode: data.rateioFirstMonthMode || storedPolicy?.firstMonthMode || "full",
           installments: data.installments?.length || 2,
         };
 
@@ -814,6 +950,7 @@ export function ExpenseForm() {
 
         form.reset(resetData);
         setLoadedStatus(data.status ?? null);
+        setLoadedRecurrenceGroupId(data.recurrenceGroupId ?? null);
       } catch (error) {
         console.error(error);
         toast({ variant: "destructive", title: "Erro ao carregar despesa." });
@@ -1010,7 +1147,18 @@ export function ExpenseForm() {
         values.paymentMethod === "installments" ? values.installmentPeriodicity ?? null : null,
       isApportioned: values.isApportioned,
       resultCenter: values.isApportioned ? null : values.resultCenter ?? null,
-      apportionments: values.isApportioned ? values.apportionments : null,
+      apportionments: values.isApportioned
+        ? (values.apportionments || []).map((item) => ({
+            resultCenter: item.resultCenter,
+            percentage: Number(item.percentage) || 0,
+          }))
+        : null,
+      rateioCriterion: values.isApportioned ? values.rateioCriterion : null,
+      rateioEffectiveFrom:
+        values.isApportioned && values.rateioEffectiveFrom
+          ? Timestamp.fromDate(startOfMonth(values.rateioEffectiveFrom))
+          : null,
+      rateioFirstMonthMode: values.isApportioned ? values.rateioFirstMonthMode : null,
       installments: installmentsToSave,
       recurrenceFirstDueDate:
         values.paymentMethod === "recurring" && values.recurrenceFirstDueDate
@@ -1024,14 +1172,45 @@ export function ExpenseForm() {
     };
   }
 
+  function buildRateioPolicy(values: ExpenseFormValues, versionId: string): ExpenseRateioPolicy | null {
+    if (!values.isApportioned) return null;
+    const effectiveDate = startOfMonth(
+      values.rateioEffectiveFrom ||
+        values.recurrenceFirstDueDate ||
+        values.competenceDate ||
+        values.dueDate ||
+        new Date()
+    );
+
+    return {
+      versionId,
+      criterion: values.rateioCriterion,
+      effectiveFrom: toRateioDateString(effectiveDate),
+      firstMonthMode: values.rateioFirstMonthMode,
+      participants: (values.apportionments || []).map((item) => ({
+        resultCenter: item.resultCenter,
+        percentage: Number(item.percentage) || 0,
+        ...(item.basisValue == null ? {} : { basisValue: Number(item.basisValue) || 0 }),
+        participationStartDate: toRateioDateString(
+          item.participationStartDate || effectiveDate
+        ),
+      })),
+    };
+  }
+
   async function handleSaveDraft() {
     if (!firebaseUser) return;
     setIsSaving(true);
 
     try {
       const values = form.getValues();
+      const draftRateioVersionId = values.isApportioned ? crypto.randomUUID() : null;
       const payload = {
         ...buildExpensePayload(values),
+        rateioVersionId: draftRateioVersionId,
+        rateioPolicy: draftRateioVersionId
+          ? buildRateioPolicy(values, draftRateioVersionId)
+          : null,
         status: "draft",
         createdBy: firebaseUser.uid,
         draftSavedAt: Timestamp.now(),
@@ -1093,39 +1272,102 @@ export function ExpenseForm() {
         ...buildExpensePayload(values),
         ...importPaymentMetadata,
       };
+      const rateioVersionId = values.isApportioned ? crypto.randomUUID() : null;
+      const rateioPolicy = rateioVersionId ? buildRateioPolicy(values, rateioVersionId) : null;
 
       let savedExpenseId = editId || "";
 
       if (editId && values.paymentMethod !== "recurring") {
-        await updateDoc(financialDoc("expenses", editId), payload);
+        await updateDoc(financialDoc("expenses", editId), {
+          ...payload,
+          rateioVersionId,
+          rateioPolicy,
+        });
         toast({ title: "Despesa atualizada." });
-      } else if (values.paymentMethod === "recurring") {
-        const recurrenceGroupId = crypto.randomUUID();
-        const [firstOccurrence, ...remainingOccurrences] = recurringOccurrences;
+      } else if (editId && values.paymentMethod === "recurring" && loadedRecurrenceGroupId) {
+        const groupSnapshot = await getDocs(
+          query(
+            financialCollection("expenses"),
+            where("recurrenceGroupId", "==", loadedRecurrenceGroupId)
+          )
+        );
+        const effectiveFrom =
+          rateioPolicy?.effectiveFrom ||
+          toRateioDateString(startOfMonth(values.rateioEffectiveFrom || new Date()));
+        const eligibleOccurrences = groupSnapshot.docs.filter((expenseDoc) => {
+          const data = expenseDoc.data() as any;
+          if (data.competenceClosed === true || data.periodStatus === "closed") return false;
+          return isRateioOccurrenceEligible(data, effectiveFrom);
+        });
 
-        if (editId && firstOccurrence) {
-          await updateDoc(financialDoc("expenses", editId), {
-            ...payload,
-            totalValue: firstOccurrence.value,
-            competenceDate: Timestamp.fromDate(firstOccurrence.competenceDate),
-            dueDate: Timestamp.fromDate(firstOccurrence.dueDate),
-            installments: [
-              {
-                number: 1,
-                dueDate: Timestamp.fromDate(firstOccurrence.dueDate),
-                value: firstOccurrence.value,
-                status: "pending",
-              },
-            ],
-            recurrenceGroupId,
-            recurrenceIndex: firstOccurrence.number,
-            recurrenceTotal: recurringOccurrences.length,
-          });
+        if (eligibleOccurrences.length === 0) {
+          throw new Error("Não há competências futuras pendentes dentro da vigência escolhida.");
         }
 
-        await Promise.all(
-          (editId ? remainingOccurrences : recurringOccurrences).map((occurrence) =>
-            addDoc(financialCollection("expenses"), {
+        const batch = writeBatch(financialDb);
+        eligibleOccurrences.forEach((expenseDoc) => {
+          const existing = expenseDoc.data() as any;
+          const competence = toOptionalDate(existing.competenceDate) || toOptionalDate(existing.dueDate);
+          const resolvedApportionments = rateioPolicy && competence
+            ? resolveRateioForCompetence(rateioPolicy, competence)
+            : null;
+
+          if (values.isApportioned && (!resolvedApportionments || resolvedApportionments.length === 0)) {
+            throw new Error("A versão do rateio precisa ter ao menos uma unidade ativa na primeira competência.");
+          }
+
+          batch.update(expenseDoc.ref, {
+            accountPlan: payload.accountPlan,
+            accountId: payload.accountId,
+            accountPlanName: payload.accountPlanName,
+            description: payload.description,
+            supplier: payload.supplier,
+            notes: payload.notes,
+            totalValue: payload.totalValue,
+            isApportioned: values.isApportioned,
+            resultCenter: values.isApportioned ? null : values.resultCenter ?? null,
+            apportionments: values.isApportioned ? resolvedApportionments : null,
+            rateioCriterion: values.isApportioned ? values.rateioCriterion : null,
+            rateioEffectiveFrom:
+              values.isApportioned && values.rateioEffectiveFrom
+                ? Timestamp.fromDate(startOfMonth(values.rateioEffectiveFrom))
+                : null,
+            rateioFirstMonthMode: values.isApportioned ? values.rateioFirstMonthMode : null,
+            rateioVersionId,
+            rateioPolicy,
+            installments: Array.isArray(existing.installments)
+              ? existing.installments.map((installment: any) => ({
+                  ...installment,
+                  value: values.totalValue,
+                }))
+              : [],
+            updatedAt: Timestamp.now(),
+            updatedBy: firebaseUser.uid,
+          });
+        });
+        await batch.commit();
+        toast({
+          title: "Nova versão do rateio aplicada.",
+          description: `${eligibleOccurrences.length} competência${eligibleOccurrences.length === 1 ? " futura foi atualizada" : "s futuras foram atualizadas"}. Histórico pago e competências anteriores foram preservados.`,
+        });
+      } else if (editId && values.paymentMethod === "recurring") {
+        await updateDoc(financialDoc("expenses", editId), {
+          ...payload,
+          rateioVersionId,
+          rateioPolicy,
+        });
+        toast({ title: "Despesa recorrente atualizada." });
+      } else if (values.paymentMethod === "recurring") {
+        const recurrenceGroupId = crypto.randomUUID();
+        const occurrenceDocuments = recurringOccurrences.map((occurrence) => {
+            const resolvedApportionments = rateioPolicy
+              ? resolveRateioForCompetence(rateioPolicy, occurrence.competenceDate)
+              : null;
+            if (values.isApportioned && (!resolvedApportionments || resolvedApportionments.length === 0)) {
+              throw new Error("A vigência do rateio não pode começar depois da primeira competência da recorrência.");
+            }
+
+            return {
               ...payload,
               totalValue: occurrence.value,
               competenceDate: Timestamp.fromDate(occurrence.competenceDate),
@@ -1143,16 +1385,26 @@ export function ExpenseForm() {
               recurrenceTotal: recurringOccurrences.length,
               recurrenceFirstDueDate: Timestamp.fromDate(values.recurrenceFirstDueDate!),
               recurrenceEndDate: Timestamp.fromDate(values.recurrenceEndDate!),
+              apportionments: values.isApportioned ? resolvedApportionments : null,
+              rateioVersionId,
+              rateioPolicy,
               status: "pending",
               createdBy: firebaseUser.uid,
               createdAt: Timestamp.now(),
-            })
+            };
+          });
+
+        await Promise.all(
+          occurrenceDocuments.map((occurrenceDocument) =>
+            addDoc(financialCollection("expenses"), occurrenceDocument)
           )
         );
         toast({ title: "Despesas recorrentes lançadas." });
       } else {
         const createdExpense = await addDoc(financialCollection("expenses"), {
           ...payload,
+          rateioVersionId,
+          rateioPolicy,
           createdBy: firebaseUser.uid,
           createdAt: Timestamp.now(),
         });
@@ -1174,7 +1426,7 @@ export function ExpenseForm() {
       toast({
         variant: "destructive",
         title: "Erro ao salvar despesa",
-        description: "Não foi possível concluir a operação.",
+        description: error instanceof Error ? error.message : "Não foi possível concluir a operação.",
       });
     } finally {
       setIsSaving(false);
@@ -1615,7 +1867,7 @@ export function ExpenseForm() {
                               <p className="text-sm text-muted-foreground">Distribua o valor proporcionalmente entre centros de resultado.</p>
                             </div>
                             <FormControl>
-                              <Switch checked={field.value} onCheckedChange={field.onChange} />
+                              <Switch checked={field.value} onCheckedChange={handleRateioToggle} />
                             </FormControl>
                           </FormItem>
                         )}
@@ -1623,18 +1875,105 @@ export function ExpenseForm() {
 
                       {isApportioned && (
                         <div className="space-y-4 rounded-xl border p-4">
-                          <div className="flex items-center justify-between">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <p className="font-medium">Rateio</p>
-                              <p className="text-sm text-muted-foreground">A soma deve fechar em 100%.</p>
+                              <p className="text-sm text-muted-foreground">
+                                Ao ativar, todas as unidades entram com divisão igual. Você pode remover unidades ou mudar o critério.
+                              </p>
                             </div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => appendApportionment({ resultCenter: "", percentage: 0 })}>
-                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRateioCriterionChange("equal")}
+                              >
+                                Dividir igualmente
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleAddRateioUnit}
+                                disabled={units.length === 0 || (apportionments || []).length >= units.length}
+                              >
+                                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar unidade
+                              </Button>
+                            </div>
                           </div>
 
+                          <div className={cn("grid gap-4", paymentMethod === "recurring" ? "lg:grid-cols-3" : "lg:grid-cols-1")}>
+                            <FormField
+                              control={form.control}
+                              name="rateioCriterion"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Critério</FormLabel>
+                                  <Select value={field.value} onValueChange={(value) => handleRateioCriterionChange(value as RateioCriterion)}>
+                                    <FormControl>
+                                      <SelectTrigger><SelectValue /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="equal">Igualitário</SelectItem>
+                                      <SelectItem value="fixed">Percentual fixo</SelectItem>
+                                      <SelectItem value="revenue">Por faturamento-base</SelectItem>
+                                      <SelectItem value="headcount">Por número de funcionários</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            {paymentMethod === "recurring" && (
+                              <FormField
+                                control={form.control}
+                                name="rateioEffectiveFrom"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <DatePickerField
+                                      label={loadedRecurrenceGroupId ? "Nova vigência a partir de" : "Vigência a partir de"}
+                                      value={field.value}
+                                      onChange={(value) => field.onChange(value ? startOfMonth(value) : undefined)}
+                                    />
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+
+                            {paymentMethod === "recurring" && (
+                              <FormField
+                                control={form.control}
+                                name="rateioFirstMonthMode"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Primeiro mês da unidade</FormLabel>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                      <FormControl>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="full">Integral</SelectItem>
+                                        <SelectItem value="prorated">Proporcional aos dias</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+
+                          {loadedRecurrenceGroupId && paymentMethod === "recurring" && (
+                            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                              A nova versão será aplicada somente às competências pendentes a partir da vigência. Pagamentos e competências anteriores não serão alterados.
+                            </div>
+                          )}
+
                           {apportionmentFields.map((field, index) => (
-                            <div key={field.id} className="grid gap-4 md:grid-cols-[1fr,180px,48px]">
+                            <div key={field.id} className="grid gap-4 rounded-lg border bg-muted/15 p-3 lg:grid-cols-[minmax(180px,1fr),160px,160px,minmax(180px,220px),48px]">
                               <FormField
                                 control={form.control}
                                 name={`apportionments.${index}.resultCenter`}
@@ -1649,7 +1988,13 @@ export function ExpenseForm() {
                                       </FormControl>
                                       <SelectContent>
                                         {units.map((unit) => (
-                                          <SelectItem key={unit.id} value={unit.name}>
+                                          <SelectItem
+                                            key={unit.id}
+                                            value={unit.name}
+                                            disabled={(apportionments || []).some(
+                                              (item, rowIndex) => rowIndex !== index && item.resultCenter === unit.name
+                                            )}
+                                          >
                                             {unit.name}
                                           </SelectItem>
                                         ))}
@@ -1666,14 +2011,69 @@ export function ExpenseForm() {
                                   <FormItem>
                                     <FormLabel>Percentual</FormLabel>
                                     <FormControl>
-                                      <Input type="number" min="0" max="100" step="0.01" {...field} />
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        step="0.01"
+                                        value={field.value ?? 0}
+                                        readOnly={rateioCriterion === "revenue" || rateioCriterion === "headcount"}
+                                        onChange={(event) => {
+                                          field.onChange(Number(event.target.value));
+                                          if (rateioCriterion !== "fixed") {
+                                            form.setValue("rateioCriterion", "fixed", { shouldDirty: true });
+                                          }
+                                        }}
+                                      />
                                     </FormControl>
+                                    <p className="text-xs text-muted-foreground">
+                                      {formatCurrency(((totalValue || 0) * (Number(field.value) || 0)) / 100)}
+                                    </p>
                                     <FormMessage />
                                   </FormItem>
                                 )}
                               />
+
+                              {(rateioCriterion === "revenue" || rateioCriterion === "headcount") ? (
+                                <FormField
+                                  control={form.control}
+                                  name={`apportionments.${index}.basisValue`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{rateioCriterion === "revenue" ? "Faturamento-base" : "Funcionários"}</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          step={rateioCriterion === "headcount" ? "1" : "0.01"}
+                                          value={field.value ?? ""}
+                                          onChange={(event) => handleRateioBasisChange(index, Number(event.target.value))}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              ) : <div />}
+
+                              {paymentMethod === "recurring" ? (
+                                <FormField
+                                  control={form.control}
+                                  name={`apportionments.${index}.participationStartDate`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <DatePickerField
+                                        label="Início da participação"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                      />
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              ) : <div />}
                               <div className="flex items-end">
-                                <Button type="button" variant="ghost" size="icon" onClick={() => removeApportionment(index)}>
+                                <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveRateioUnit(index)}>
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -1683,6 +2083,11 @@ export function ExpenseForm() {
                           <p className={cn("text-sm font-medium", rateioTotal === 100 ? "text-emerald-600" : "text-amber-600")}>
                             Rateio atual: {rateioTotal.toFixed(2)}%
                           </p>
+                          {paymentMethod === "recurring" && rateioFirstMonthMode === "full" && (
+                            <p className="text-xs text-muted-foreground">
+                              Por padrão, uma unidade inaugurada no meio do mês deve começar no mês seguinte. Para entrar no próprio mês, escolha proporcional aos dias.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

@@ -16,9 +16,14 @@ export const expenseFormSchema = z
         z.object({
           resultCenter: z.string(),
           percentage: z.coerce.number(),
+          basisValue: z.coerce.number().nonnegative().optional(),
+          participationStartDate: z.date().optional(),
         })
       )
       .optional(),
+    rateioCriterion: z.enum(["equal", "fixed", "revenue", "headcount"]).default("equal"),
+    rateioEffectiveFrom: z.date().optional(),
+    rateioFirstMonthMode: z.enum(["full", "prorated"]).default("full"),
     paymentMethod: z.enum(["single", "installments", "recurring"]).default("single"),
     installments: z.coerce
       .number()
@@ -115,11 +120,54 @@ export const expenseFormSchema = z
       if (!data.isApportioned) {
         return true;
       }
-      return (data.apportionments || []).every((item) => item.percentage >= 1);
+      return (data.apportionments || []).every((item) => item.percentage > 0);
     },
     {
       message: "Porcentagem deve ser maior que 0.",
       path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned) return true;
+      const centers = (data.apportionments || []).map((item) => item.resultCenter.trim()).filter(Boolean);
+      return new Set(centers).size === centers.length;
+    },
+    {
+      message: "Cada unidade pode participar apenas uma vez do rateio.",
+      path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned || !["revenue", "headcount"].includes(data.rateioCriterion)) {
+        return true;
+      }
+      return (data.apportionments || []).every((item) => Number(item.basisValue) > 0);
+    },
+    {
+      message: "Informe uma base maior que zero para cada unidade.",
+      path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned || data.rateioCriterion !== "headcount") return true;
+      return (data.apportionments || []).every((item) => Number.isInteger(Number(item.basisValue)));
+    },
+    {
+      message: "O número de funcionários deve ser inteiro.",
+      path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned || data.paymentMethod !== "recurring") return true;
+      return !!data.rateioEffectiveFrom;
+    },
+    {
+      message: "Informe a competência inicial desta versão do rateio.",
+      path: ["rateioEffectiveFrom"],
     }
   )
   .refine(

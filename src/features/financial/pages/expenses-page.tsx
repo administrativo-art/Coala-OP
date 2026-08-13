@@ -27,6 +27,7 @@ import { FinancialImportPage } from "@/features/financial/pages/import-page";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
+import { expenseValueForResultCenter } from "@/features/financial/lib/expense-rateio";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
@@ -474,13 +475,17 @@ export function ExpensesPage() {
 
     scopedExpenses.forEach((expense) => {
       const due = toDate(expense.dueDate);
+      const scopedValue = expenseValueForResultCenter(
+        expense,
+        unitFilter === "all" ? undefined : unitFilter
+      );
       if (expense.status === "pending") {
-        open += expense.totalValue || 0;
-        if (due && due < now) overdue += expense.totalValue || 0;
-        if (due && due >= now && due <= in7Days) dueSoon += expense.totalValue || 0;
+        open += scopedValue;
+        if (due && due < now) overdue += scopedValue;
+        if (due && due >= now && due <= in7Days) dueSoon += scopedValue;
       }
       if (expense.status === "paid") {
-        paid += expense.totalValue || 0;
+        paid += scopedValue;
       }
     });
 
@@ -502,7 +507,7 @@ export function ExpensesPage() {
     });
 
     return { open, overdue, paid, dueSoon, pendingAudit };
-  }, [expenses, scopedExpenses, transactions]);
+  }, [expenses, scopedExpenses, transactions, unitFilter]);
 
   useEffect(() => {
     if (!expandedExpenseId) return;

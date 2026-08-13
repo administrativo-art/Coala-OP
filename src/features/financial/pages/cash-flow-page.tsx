@@ -4,11 +4,12 @@ import { useMemo, useState } from "react";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarRange, CircleDollarSign, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { CalendarRange, CircleDollarSign, Download, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { NewTransactionDialog } from "@/features/financial/components/cash-flow/new-transaction-dialog";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
+import { buildCashFlowCsv, buildExpenseLifecycleData } from "@/features/financial/lib/cash-flow-analysis";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import type { Account } from "@/features/financial/types/account";
 import type { Transaction } from "@/features/financial/types/transaction";
@@ -26,6 +27,12 @@ type Movement = {
   description: string;
   accountId?: string;
   accountName?: string;
+  accountPlanId?: string;
+  accountPlanName?: string;
+  supplier?: string;
+  expenseId?: string;
+  competenceDate?: Date | null;
+  dueDate?: Date | null;
   direction: "in" | "out";
   status: "realized" | "forecast";
   amount: number;
@@ -76,17 +83,26 @@ export function CashFlowPage() {
   const { data: transactionsData, loading: loadingTransactions } = useFinancialCollection<Transaction>(financialCollection("transactions"));
   const { data: paymentsData, loading: loadingPayments } = useFinancialCollection<any>(financialCollection("payments"));
   const { data: expensesData, loading: loadingExpenses } = useFinancialCollection<any>(financialCollection("expenses"));
+  const { data: accountPlansData, loading: loadingAccountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
 
   const canView = Boolean(permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow);
   const months = Number.parseInt(period, 10);
   const periodStart = startOfMonth(subMonths(new Date(), months - 1));
   const periodEnd = endOfMonth(new Date());
   const accounts = accountsData || [];
+  const expenseMap = useMemo(
+    () => new Map((expensesData || []).map((expense) => [expense.id, expense])),
+    [expensesData]
+  );
+  const accountPlanMap = useMemo(
+    () => new Map((accountPlansData || []).map((plan) => [plan.id, plan.name])),
+    [accountPlansData]
+  );
 
   const realizedMovements = useMemo<Movement[]>(() => {
-    const paymentTransactions: Transaction[] = (paymentsData || []).flatMap((payment) =>
-      (payment.splits || []).map((split: any) => ({
-        id: `${payment.id}-${split.accountId}`,
+    const paymentTransactions = (paymentsData || []).flatMap((payment) =>
+      (payment.splits || []).map((split: any, splitIndex: number) => ({
+        id: `payment-${payment.id}-${splitIndex}`,
         type: "expense_payment",
         direction: "out",
         accountId: split.accountId,
@@ -94,29 +110,43 @@ export function CashFlowPage() {
         paymentMethodLabel: split.paymentMethodLabel,
         amount: Number(split.amount) || 0,
         date: payment.paidAt,
-        description: payment.description || "Pagamento de despesa",
+        description: payment.description,
+        expenseId: payment.expenseId,
         createdBy: payment.createdBy,
         createdAt: payment.createdAt,
       }))
     );
 
-    return [...(transactionsData || []), ...paymentTransactions].flatMap((transaction) => {
+    return [...(transactionsData || []), ...paymentTransactions].flatMap((transaction: any) => {
       const date = toDate(transaction.date);
       if (!date || date < periodStart || date > periodEnd) return [];
       if (transaction.type === "transfer_in" || transaction.type === "transfer_out") return [];
       const direction = transaction.direction || (String(transaction.type).includes("expense") ? "out" : "in");
+      const expenseId = transaction.expenseId || transaction.linkedExpenseId;
+      const expense = expenseId ? expenseMap.get(expenseId) : undefined;
+      const accountPlanId = transaction.accountPlanId || expense?.accountId || expense?.accountPlan;
       return [{
-        id: `realized-${transaction.id}`,
+        id: transaction.id.startsWith?.("payment-") ? transaction.id : `realized-${transaction.id}`,
         date,
-        description: transaction.description || "Movimentação financeira",
+        description: transaction.description || expense?.description || "Movimentação financeira",
         accountId: transaction.accountId,
         accountName: transaction.accountName,
+        accountPlanId,
+        accountPlanName:
+          transaction.accountPlanName ||
+          expense?.accountPlanName ||
+          accountPlanMap.get(accountPlanId) ||
+          undefined,
+        supplier: transaction.supplier || expense?.supplier || undefined,
+        expenseId,
+        competenceDate: toDate(transaction.competenceDate) || toDate(expense?.competenceDate),
+        dueDate: toDate(expense?.dueDate),
         direction,
         status: "realized" as const,
         amount: Number(transaction.amount) || 0,
       }];
     });
-  }, [paymentsData, periodEnd, periodStart, transactionsData]);
+  }, [accountPlanMap, expenseMap, paymentsData, periodEnd, periodStart, transactionsData]);
 
   const forecastMovements = useMemo<Movement[]>(() =>
     (expensesData || []).flatMap((expense) => {
@@ -129,11 +159,20 @@ export function CashFlowPage() {
         description: expense.description || "Despesa prevista",
         accountId: expense.bankAccountId || expense.paymentAccountId,
         accountName: expense.bankAccountName || expense.paymentAccountName,
+        accountPlanId: expense.accountId || expense.accountPlan,
+        accountPlanName:
+          expense.accountPlanName ||
+          accountPlanMap.get(expense.accountId || expense.accountPlan) ||
+          undefined,
+        supplier: expense.supplier || undefined,
+        expenseId: expense.id,
+        competenceDate: toDate(expense.competenceDate),
+        dueDate: toDate(expense.dueDate),
         direction: "out" as const,
         status: "forecast" as const,
         amount: Number(expense.totalValue) || 0,
       }];
-    }), [expensesData, periodEnd, periodStart]);
+    }), [accountPlanMap, expensesData, periodEnd, periodStart]);
 
   const allMovements = useMemo(
     () => [...realizedMovements, ...forecastMovements].sort((left, right) => right.date.getTime() - left.date.getTime()),
@@ -188,11 +227,28 @@ export function CashFlowPage() {
     });
   }, [months, scopedForecast, scopedRealized]);
 
+  const expenseLifecycleData = useMemo(
+    () => buildExpenseLifecycleData(expensesData || [], months),
+    [expensesData, months]
+  );
+
+  function exportCsv() {
+    if (filteredMovements.length === 0) return;
+    const csv = buildCashFlowCsv(filteredMovements);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `fluxo-de-caixa-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  }
+
   if (!canView) {
     return <FinancialAccessGuard title="Fluxo de caixa" description="Seu perfil não possui permissão para consultar o fluxo de caixa." />;
   }
 
-  const loading = loadingTransactions || loadingPayments || loadingExpenses;
+  const loading = loadingTransactions || loadingPayments || loadingExpenses || loadingAccountPlans;
 
   return (
     <div className="mx-auto w-full max-w-[1220px] space-y-6 pb-10">
@@ -213,6 +269,9 @@ export function CashFlowPage() {
             <SelectTrigger className="w-44"><CalendarRange className="mr-2 h-3.5 w-3.5" /><SelectValue /></SelectTrigger>
             <SelectContent>{PERIOD_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={filteredMovements.length === 0}>
+            <Download className="mr-2 h-4 w-4" /> Exportar CSV
+          </Button>
           {permissions.financial?.cashFlow?.create && <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Novo lançamento</Button>}
         </div>
       </div>
@@ -252,6 +311,32 @@ export function CashFlowPage() {
       </Card>
 
       <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle>Despesas provisionadas × pagas</CardTitle>
+          <CardDescription>
+            Leitura por competência. O provisionado representa todas as despesas válidas; o pago mostra a parcela já liquidada.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[280px] w-full">
+            {loading ? <Skeleton className="h-full w-full" /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={expenseLifecycleData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.12} />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+                  <YAxis tickLine={false} axisLine={false} fontSize={10} tickFormatter={(value) => `R$${Math.round(value / 1000)}k`} />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Legend />
+                  <Bar dataKey="provisioned" name="Provisionado" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="paid" name="Pago" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl">
         <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <CardTitle>Movimentações</CardTitle>
@@ -274,9 +359,22 @@ export function CashFlowPage() {
           ) : (
             <div className="divide-y rounded-xl border">
               {filteredMovements.slice(0, 50).map((movement) => (
-                <div key={movement.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[100px_minmax(0,1fr)_140px_130px] sm:items-center">
-                  <span className="text-xs text-muted-foreground">{format(movement.date, "dd/MM/yyyy")}</span>
-                  <div className="min-w-0"><p className="truncate text-sm font-medium">{movement.description}</p><p className="truncate text-xs text-muted-foreground">{movement.accountName || (movement.status === "forecast" ? "Conta a definir" : "Sem conta informada")}</p></div>
+                <div key={movement.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[100px_minmax(0,1fr)_120px_140px] sm:items-center">
+                  <div>
+                    <p className="text-xs font-medium">{format(movement.date, "dd/MM/yyyy")}</p>
+                    <p className="text-[10px] text-muted-foreground">Movimentação</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{movement.description}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[movement.supplier, movement.accountPlanName].filter(Boolean).join(" · ") || "Sem plano de contas informado"}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {movement.accountName || (movement.status === "forecast" ? "Conta financeira a definir" : "Sem conta financeira")}
+                      {movement.competenceDate ? ` · Competência ${format(movement.competenceDate, "MM/yyyy")}` : ""}
+                      {movement.dueDate ? ` · Venc. ${format(movement.dueDate, "dd/MM/yyyy")}` : ""}
+                    </p>
+                  </div>
                   <Badge variant="outline" className={cn("w-fit", movement.status === "realized" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>{movement.status === "realized" ? "Realizado" : "Previsto"}</Badge>
                   <span className={cn("text-right font-mono text-sm font-bold", movement.direction === "in" ? "text-emerald-600" : "text-rose-600")}>{movement.direction === "in" ? "+" : "-"}{formatCurrency(movement.amount)}</span>
                 </div>

@@ -9,6 +9,7 @@ import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
+import { expenseValueForResultCenter } from "@/features/financial/lib/expense-rateio";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
@@ -109,9 +110,7 @@ export function DrePage() {
   // ── computation helpers ─────────────────────────────────────────────────────
 
   function matchesUnit(exp: any): boolean {
-    if (!selectedUnitName) return true;
-    const unit = exp.resultCenter || exp.apportionments?.[0]?.resultCenter || "";
-    return unit === selectedUnitName;
+    return expenseValueForResultCenter(exp, selectedUnitName) > 0;
   }
 
   function getRevenue(monthKey: string): number {
@@ -144,7 +143,7 @@ export function DrePage() {
       if (accountIsDreMap[accountKey] === false) return sum;
       const p = accountDrePosMap[accountKey] ?? null;
       if (p !== pos) return sum;
-      return sum + (exp.totalValue || 0);
+      return sum + expenseValueForResultCenter(exp, selectedUnitName);
     }, 0);
   }
 
@@ -225,7 +224,7 @@ export function DrePage() {
       if (d && format(d, "yyyy-MM") !== selectedMonth) return;
       if (!matchesUnit(exp)) return;
       const name = accountNameById[exp.accountId ?? exp.accountPlan] || exp.accountPlanName || "Sem classificação";
-      totals[name] = (totals[name] || 0) + (exp.totalValue || 0);
+      totals[name] = (totals[name] || 0) + expenseValueForResultCenter(exp, selectedUnitName);
     });
     return Object.entries(totals).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
     // eslint-disable-next-line react-hooks/exhaustive-deps

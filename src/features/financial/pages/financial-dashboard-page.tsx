@@ -15,6 +15,7 @@ import {
 import { useFinancialDashboardIndicators } from "@/features/financial/hooks/use-dashboard-indicators";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
+import { expenseValueForResultCenter } from "@/features/financial/lib/expense-rateio";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
@@ -226,9 +227,11 @@ function ExpenseFiltersBar({
 function ExpenseList({
   expenses,
   emptyMessage,
+  resultCenter,
 }: {
   expenses: any[];
   emptyMessage: string;
+  resultCenter?: string;
 }) {
   return expenses.length === 0 ? (
     <p className="text-sm text-muted-foreground">{emptyMessage}</p>
@@ -243,7 +246,9 @@ function ExpenseList({
               {toDate(expense.dueDate) ? format(toDate(expense.dueDate)!, "dd/MM/yyyy") : "—"}
             </p>
           </div>
-          <span className="shrink-0 font-mono text-sm font-semibold">{formatCurrency(expense.totalValue || 0)}</span>
+          <span className="shrink-0 font-mono text-sm font-semibold">
+            {formatCurrency(expenseValueForResultCenter(expense, resultCenter))}
+          </span>
         </div>
       ))}
     </div>
@@ -503,7 +508,11 @@ export function FinancialDashboardPage() {
                     suppliers={suppliers}
                     accountPlans={accountPlans}
                   />
-                  <ExpenseList expenses={unitExpenses.slice(0, 8)} emptyMessage="Nenhuma despesa encontrada para esta unidade." />
+                  <ExpenseList
+                    expenses={unitExpenses.slice(0, 8)}
+                    emptyMessage="Nenhuma despesa encontrada para esta unidade."
+                    resultCenter={kiosk.name}
+                  />
                 </CardContent>
               </Card>
             );
