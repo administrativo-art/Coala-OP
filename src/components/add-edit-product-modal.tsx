@@ -253,6 +253,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
     const nutritionalTableFileInputRef = useRef<HTMLInputElement>(null);
     const compositionFileInputRef = useRef<HTMLInputElement>(null);
+    const dialogContentRef = useRef<HTMLDivElement>(null);
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
@@ -870,7 +871,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="w-[95vw] sm:max-w-5xl p-0 gap-0 overflow-hidden">
+                <DialogContent ref={dialogContentRef} className="w-[95vw] sm:max-w-5xl p-0 gap-0 overflow-hidden">
                     {/* Header */}
                     <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1130,6 +1131,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             </PopoverTrigger>
                                                             <PopoverContent
                                                                 align="start"
+                                                                portalContainer={dialogContentRef.current}
                                                                 className="pointer-events-auto z-[70] w-[var(--radix-popover-trigger-width)] p-0"
                                                             >
                                                                 <Command>
@@ -1189,6 +1191,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                 </PopoverTrigger>
                                                                 <PopoverContent
                                                                     align="start"
+                                                                    portalContainer={dialogContentRef.current}
                                                                     className="pointer-events-auto z-[70] w-[var(--radix-popover-trigger-width)] p-0"
                                                                 >
                                                                     <Command>
