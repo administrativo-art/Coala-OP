@@ -1130,7 +1130,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             </PopoverTrigger>
                                                             <PopoverContent
                                                                 align="start"
-                                                                className="z-[70] w-[var(--radix-popover-trigger-width)] p-0"
+                                                                className="pointer-events-auto z-[70] w-[var(--radix-popover-trigger-width)] p-0"
                                                             >
                                                                 <Command>
                                                                     <CommandInput placeholder="Buscar categoria..." />
@@ -1189,7 +1189,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                 </PopoverTrigger>
                                                                 <PopoverContent
                                                                     align="start"
-                                                                    className="z-[70] w-[var(--radix-popover-trigger-width)] p-0"
+                                                                    className="pointer-events-auto z-[70] w-[var(--radix-popover-trigger-width)] p-0"
                                                                 >
                                                                     <Command>
                                                                         <CommandInput placeholder="Buscar insumo base..." />
