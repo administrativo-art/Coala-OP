@@ -1,28 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { type ComponentType, Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { deleteDoc, Timestamp, updateDoc } from "firebase/firestore";
-import { format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
+import { format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  AlertTriangle,
-  CheckCheck,
   ChevronDown,
   ChevronUp,
   CircleDollarSign,
-  Clock3,
   Landmark,
   FilePlus2,
   FileUp,
   Filter,
   Loader2,
   MoreHorizontal,
-  SearchCheck,
   Search,
   Trash2,
 } from "lucide-react";
 import { PayExpenseDialog } from "@/features/financial/components/pay-expense-dialog";
+import {
+  ExpensePeriodFilter,
+  type ExpensePeriodPreset,
+} from "@/features/financial/components/expenses/expense-period-filter";
+import { KpiFlowStrip } from "@/features/financial/components/expenses/kpi-flow-strip";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FinancialImportPage } from "@/features/financial/pages/import-page";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
@@ -42,7 +43,7 @@ import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { useToast } from "@/hooks/use-toast";
 import type { PurchaseOrderItem } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,29 +99,6 @@ const STATUS_ACCENT_COLORS: Record<string, string> = {
   due_soon: "bg-amber-500",
 };
 
-const KPI_TONES = {
-  pending: {
-    iconWrap: "bg-blue-50 text-blue-700",
-    bars: "bg-blue-400/80",
-  },
-  overdue: {
-    iconWrap: "bg-rose-50 text-rose-700",
-    bars: "bg-rose-400/80",
-  },
-  dueSoon: {
-    iconWrap: "bg-amber-50 text-amber-700",
-    bars: "bg-amber-400/80",
-  },
-  paid: {
-    iconWrap: "bg-emerald-50 text-emerald-700",
-    bars: "bg-emerald-400/80",
-  },
-  pendingAudit: {
-    iconWrap: "bg-violet-50 text-violet-700",
-    bars: "bg-violet-400/80",
-  },
-} as const;
-
 const UNIT_COLOR_STYLES: Array<{ match: string; dot: string; active: string; soft: string }> = [
   { match: "iguatemi", dot: "bg-indigo-500", active: "border-indigo-500 bg-indigo-50 text-indigo-700", soft: "border-indigo-200 hover:border-indigo-300" },
   { match: "higien", dot: "bg-orange-400", active: "border-orange-500 bg-orange-50 text-orange-700", soft: "border-orange-200 hover:border-orange-300" },
@@ -128,76 +106,6 @@ const UNIT_COLOR_STYLES: Array<{ match: string; dot: string; active: string; sof
   { match: "morumbi", dot: "bg-violet-500", active: "border-violet-500 bg-violet-50 text-violet-700", soft: "border-violet-200 hover:border-violet-300" },
   { match: "matriz", dot: "bg-sky-500", active: "border-sky-500 bg-sky-50 text-sky-700", soft: "border-sky-200 hover:border-sky-300" },
 ];
-
-const PERIOD_PRESET_OPTIONS = [
-  { value: "current_month", label: "Mês atual" },
-  { value: "last_3_months", label: "Últimos 3 meses" },
-  { value: "last_6_months", label: "Últimos 6 meses" },
-  { value: "current_year", label: "Ano atual" },
-  { value: "last_12_months", label: "Últimos 12 meses" },
-  { value: "custom", label: "Personalizado" },
-] as const;
-
-type PeriodPresetValue = (typeof PERIOD_PRESET_OPTIONS)[number]["value"];
-
-function KpiCard({
-  label,
-  value,
-  description,
-  href,
-  onClick,
-  count,
-  icon: Icon,
-  iconWrapClass,
-  barsClass,
-}: {
-  label: string;
-  value: string;
-  description: string;
-  href?: string;
-  onClick?: () => void;
-  count?: number;
-  icon: ComponentType<{ className?: string }>;
-  iconWrapClass: string;
-  barsClass: string;
-}) {
-  return (
-    <Card
-      className={cn(
-        "overflow-hidden rounded-2xl border-border/70 shadow-sm",
-        (href || onClick) && "cursor-pointer transition-colors hover:border-primary/40"
-      )}
-      onClick={onClick}
-    >
-      <CardHeader className="space-y-4 pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className={cn("flex h-7 w-7 items-center justify-center rounded-xl", iconWrapClass)}>
-              <Icon className="h-3.5 w-3.5" />
-            </span>
-            <CardTitle className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</CardTitle>
-          </div>
-          {count !== undefined ? (
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{count}</span>
-          ) : null}
-        </div>
-        <div className="grid h-8 grid-cols-8 items-end gap-1">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div
-              key={index}
-              className={cn("block w-full rounded-sm", barsClass)}
-              style={{ height: `${10 + ((index * 7) % 18)}px` }}
-            />
-          ))}
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="font-mono text-[28px] font-bold leading-none tracking-tight">{value}</div>
-        <p className="mt-2 text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 function PurchaseOrderItemsLink({ orderId, href, label }: { orderId: string; href: string; label?: string }) {
   const { fetchOrderItems } = usePurchaseOrders();
@@ -438,7 +346,7 @@ export function ExpensesPage() {
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") ?? "all");
   const [originFilter, setOriginFilter] = useState(searchParams.get("origin") ?? "all");
-  const [periodPreset, setPeriodPreset] = useState<PeriodPresetValue>("current_month");
+  const [periodPreset, setPeriodPreset] = useState<ExpensePeriodPreset>("current_month");
   const [dateFrom, setDateFrom] = useState(searchParams.get("date_from") ?? "");
   const [dateTo, setDateTo] = useState(searchParams.get("date_to") ?? "");
   const [competenceMonth, setCompetenceMonth] = useState(searchParams.get("competence") ?? format(new Date(), "yyyy-MM"));
@@ -505,34 +413,6 @@ export function ExpensesPage() {
     setDateTo(format(endOfMonth(now), "yyyy-MM-dd"));
     setCompetenceMonth(format(now, "yyyy-MM"));
   }, [searchParams]);
-
-  function applyPeriodPreset(value: PeriodPresetValue) {
-    const now = new Date();
-    setPeriodPreset(value);
-
-    if (value === "custom") {
-      return;
-    }
-
-    if (value === "current_month") {
-      setDateFrom(format(startOfMonth(now), "yyyy-MM-dd"));
-      setDateTo(format(endOfMonth(now), "yyyy-MM-dd"));
-      setCompetenceMonth(format(now, "yyyy-MM"));
-      return;
-    }
-
-    if (value === "current_year") {
-      setDateFrom(format(startOfYear(now), "yyyy-MM-dd"));
-      setDateTo(format(endOfMonth(now), "yyyy-MM-dd"));
-      setCompetenceMonth("");
-      return;
-    }
-
-    const monthsBack = value === "last_3_months" ? 2 : value === "last_6_months" ? 5 : 11;
-    setDateFrom(format(startOfMonth(subMonths(now, monthsBack)), "yyyy-MM-dd"));
-    setDateTo(format(endOfMonth(now), "yyyy-MM-dd"));
-    setCompetenceMonth("");
-  }
 
   const accountPlanNames = useMemo(
     () =>
@@ -664,6 +544,19 @@ export function ExpensesPage() {
     return { open, overdue, paid, dueSoon, pendingAudit };
   }, [expenses, resultCenterNameById, scopedExpenses, transactions, unitFilter]);
 
+  const pendingAuditCount = useMemo(() => {
+    const now = startOfDay(new Date());
+    const expenseCount = expenses.filter((expense) => getExpenseStatusKey(expense, now) === "pending_audit").length;
+    const transactionCount = transactions.filter(
+      (transaction) =>
+        transaction.importedFrom === "bank_statement" &&
+        transaction.direction === "out" &&
+        transaction.auditStatus === "pending"
+    ).length;
+
+    return expenseCount + transactionCount;
+  }, [expenses, transactions]);
+
   useEffect(() => {
     if (!expandedExpenseId) return;
     if (!filtered.some((expense) => expense.id === expandedExpenseId)) {
@@ -783,50 +676,12 @@ export function ExpensesPage() {
           </TabsList>
 
           <TabsContent value="expenses" className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard
-          label="Em aberto"
-          value={formatCurrency(kpis.open)}
-          description="Total de compromissos pendentes."
-          icon={Landmark}
-          iconWrapClass={KPI_TONES.pending.iconWrap}
-          barsClass={KPI_TONES.pending.bars}
-        />
-        <KpiCard
-          label="Vencido"
-          value={formatCurrency(kpis.overdue)}
-          description="Despesas que já passaram do vencimento."
-          icon={AlertTriangle}
-          iconWrapClass={KPI_TONES.overdue.iconWrap}
-          barsClass={KPI_TONES.overdue.bars}
-        />
-        <KpiCard
-          label="Vence em 7 dias"
-          value={formatCurrency(kpis.dueSoon)}
-          description="Monitoramento do curto prazo."
-          icon={Clock3}
-          iconWrapClass={KPI_TONES.dueSoon.iconWrap}
-          barsClass={KPI_TONES.dueSoon.bars}
-        />
-        <KpiCard
-          label="Pago"
-          value={formatCurrency(kpis.paid)}
-          description="Histórico já liquidado."
-          icon={CheckCheck}
-          iconWrapClass={KPI_TONES.paid.iconWrap}
-          barsClass={KPI_TONES.paid.bars}
-        />
-        <KpiCard
-          label="Pendente auditoria"
-          value={formatCurrency(kpis.pendingAudit)}
-          description="Compras e extratos reconhecidos aguardando tratamento."
-          icon={SearchCheck}
-          iconWrapClass={KPI_TONES.pendingAudit.iconWrap}
-          barsClass={KPI_TONES.pendingAudit.bars}
-          href={FINANCIAL_ROUTES.pendingAuditExpenses}
-          onClick={() => router.push(FINANCIAL_ROUTES.pendingAuditExpenses)}
-        />
-      </div>
+      <KpiFlowStrip
+        kpis={kpis}
+        openCount={scopedExpenses.filter((expense) => expense.status === "pending").length}
+        auditCount={pendingAuditCount}
+        auditHref={FINANCIAL_ROUTES.pendingAuditExpenses}
+      />
 
       <div className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unidade</p>
@@ -914,16 +769,17 @@ export function ExpensesPage() {
                 <SelectItem value="manual">Demais despesas</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={periodPreset} onValueChange={(value) => applyPeriodPreset(value as PeriodPresetValue)}>
-              <SelectTrigger className="h-8 w-[160px] rounded-lg border-border/70 bg-background text-xs">
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                {PERIOD_PRESET_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ExpensePeriodFilter
+              preset={periodPreset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onApply={(period) => {
+                setPeriodPreset(period.preset);
+                setDateFrom(period.dateFrom);
+                setDateTo(period.dateTo);
+                setCompetenceMonth(period.preset === "current_month" ? period.dateFrom.slice(0, 7) : "");
+              }}
+            />
             <Select value={accountPlanFilter} onValueChange={setAccountPlanFilter}>
               <SelectTrigger className="h-8 w-[170px] rounded-lg border-border/70 bg-background text-xs">
                 <SelectValue placeholder="Plano de contas" />
@@ -991,9 +847,9 @@ export function ExpensesPage() {
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="line-clamp-2 min-w-0 font-medium leading-5">{expense.description}</p>
                                   {expense.installments?.length > 1 && (
-                                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                    <div className="inline-flex rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                                       <InstallmentScheduleTooltip installments={expense.installments} label={installmentLabel} />
-                                    </span>
+                                    </div>
                                   )}
                                   {expense.originModule === "purchasing" && (
                                     <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
@@ -1066,9 +922,9 @@ export function ExpensesPage() {
                                   </div>
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Parcela</p>
-                                    <p className="mt-1 text-sm font-medium">
+                                    <div className="mt-1 text-sm font-medium">
                                       <InstallmentScheduleTooltip installments={expense.installments || []} label={installmentLabel} />
-                                    </p>
+                                    </div>
                                   </div>
                                   {expense.purchaseOrderId && (
                                     <div className="sm:col-span-3">
@@ -1085,58 +941,58 @@ export function ExpensesPage() {
                                     </div>
                                   )}
                                 </div>
-                                <div className="flex flex-col justify-between gap-4">
-                                  <div className="text-right">
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Valor total</p>
-                                    <p className="mt-1 font-mono text-xl font-bold">{formatCurrency(expense.totalValue || 0)}</p>
-                                  </div>
-                                  <div className="flex flex-wrap justify-end gap-2">
-                                    {permissions.financial?.expenses?.edit &&
-                                      expense.originModule === "purchasing" &&
-                                      expense.originStatus === "pending_audit" && (
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          disabled={finalizingAuditId === expense.id}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            void handleFinalizeAudit(expense);
-                                          }}
-                                        >
-                                          {finalizingAuditId === expense.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                          Finalizar auditoria
-                                        </Button>
-                                      )}
-                                    {permissions.financial?.expenses?.pay && expense.status === "pending" && (
+                                <div className="text-right">
+                                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Valor total</p>
+                                  <p className="mt-1 font-mono text-xl font-bold">{formatCurrency(expense.totalValue || 0)}</p>
+                                </div>
+                                <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4 md:col-span-2 md:flex-nowrap">
+                                  {permissions.financial?.expenses?.edit &&
+                                    expense.originModule === "purchasing" &&
+                                    expense.originStatus === "pending_audit" && (
                                       <Button
                                         type="button"
                                         size="sm"
+                                        variant="outline"
+                                        className="border-rose-200 bg-rose-50 text-rose-600 hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
+                                        disabled={finalizingAuditId === expense.id}
                                         onClick={(event) => {
                                           event.stopPropagation();
-                                          setPayTarget({
-                                            ...expense,
-                                            accountPlanName: planName,
-                                            resultCenter: primaryUnit,
-                                          });
+                                          void handleFinalizeAudit(expense);
                                         }}
                                       >
-                                        Registrar pagamento
+                                        {finalizingAuditId === expense.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Finalizar auditoria
                                       </Button>
                                     )}
-                                    {permissions.financial?.expenses?.edit && (
-                                      <Button type="button" variant="outline" size="sm" asChild onClick={(event) => event.stopPropagation()}>
-                                        <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
-                                          {expense.status === "draft" ? "Continuar" : "Editar"}
-                                        </Link>
-                                      </Button>
-                                    )}
-                                    {permissions.financial?.expenses?.delete && expense.originModule !== "purchasing" && (
-                                      <Button type="button" variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); setDeleteTarget(expense); }}>
-                                        Excluir
-                                      </Button>
-                                    )}
-                                  </div>
+                                  {permissions.financial?.expenses?.pay && expense.status === "pending" && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setPayTarget({
+                                          ...expense,
+                                          accountPlanName: planName,
+                                          resultCenter: primaryUnit,
+                                        });
+                                      }}
+                                    >
+                                      Registrar pagamento
+                                    </Button>
+                                  )}
+                                  {permissions.financial?.expenses?.edit && (
+                                    <Button type="button" variant="outline" size="sm" asChild onClick={(event) => event.stopPropagation()}>
+                                      <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
+                                        {expense.status === "draft" ? "Continuar" : "Editar"}
+                                      </Link>
+                                    </Button>
+                                  )}
+                                  {permissions.financial?.expenses?.delete && expense.originModule !== "purchasing" && (
+                                    <Button type="button" variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); setDeleteTarget(expense); }}>
+                                      Excluir
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             </td>
