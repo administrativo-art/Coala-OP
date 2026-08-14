@@ -389,6 +389,10 @@ async function lookupBarcode(rawBarcode: string | null) {
 }
 
 async function internalSyncExpense(orderId: string, orderData: any, uid: string) {
+  if (orderData.archivedLinkedExpenseId || orderData.financialExpenseArchivedAt) {
+    return null;
+  }
+
   const supplierSnap = orderData.supplierId ? await dbAdmin.collection('entities').doc(orderData.supplierId).get() : null;
   const supplier = supplierSnap?.data() as Record<string, any> | undefined;
 
@@ -1859,6 +1863,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
 
     const order = orderSnap.data() as Record<string, any>;
+    if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt) {
+      return jsonError('A despesa anterior deste pedido foi arquivada na virada financeira de 01/08/2026.', 409);
+    }
     const supplierSnap = order.supplierId ? await dbAdmin.collection('entities').doc(order.supplierId).get() : null;
     const supplier = supplierSnap?.data() as Record<string, any> | undefined;
 

@@ -2339,6 +2339,9 @@ export type PurchaseOrder = {
   trackingInfo?: string;
   notes?: string;
   linkedExpenseId?: string;
+  archivedLinkedExpenseId?: string;
+  financialArchiveRunId?: string;
+  financialExpenseArchivedAt?: string;
   createdAt: string;
   createdBy: string; // userId
   confirmedAt?: string;

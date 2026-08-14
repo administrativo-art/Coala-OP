@@ -263,7 +263,15 @@ export default function PurchaseOrderPage() {
     let cancelled = false;
 
     async function ensureLinkedExpense() {
-      if (!firebaseUser || !order || order.status !== 'confirmed' || order.linkedExpenseId || syncingExpense) {
+      if (
+        !firebaseUser ||
+        !order ||
+        order.status !== 'confirmed' ||
+        order.linkedExpenseId ||
+        order.archivedLinkedExpenseId ||
+        order.financialExpenseArchivedAt ||
+        syncingExpense
+      ) {
         return;
       }
       if (expenseSyncAttemptedRef.current === order.id) return;
@@ -579,6 +587,11 @@ export default function PurchaseOrderPage() {
                     >
                       Abrir despesa no financeiro
                     </Link>
+                  )}
+                  {!order.linkedExpenseId && order.archivedLinkedExpenseId && (
+                    <span className="inline-flex text-xs font-medium text-muted-foreground">
+                      Despesa financeira anterior arquivada na virada de 01/08/2026
+                    </span>
                   )}
                 </div>
               )}
