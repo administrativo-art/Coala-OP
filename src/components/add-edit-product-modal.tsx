@@ -1149,6 +1149,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                                         handleOperationalCategoryChange(category.id, field.onChange);
                                                                                         setOperationalCategoryOpen(false);
                                                                                     }}
+                                                                                    onClick={() => {
+                                                                                        handleOperationalCategoryChange(category.id, field.onChange);
+                                                                                        setOperationalCategoryOpen(false);
+                                                                                    }}
                                                                                     onSelect={() => {
                                                                                         handleOperationalCategoryChange(category.id, field.onChange);
                                                                                         setOperationalCategoryOpen(false);
@@ -1214,6 +1218,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                                             handleBaseProductChange('', field.onChange);
                                                                                             setBaseProductOpen(false);
                                                                                         }}
+                                                                                        onClick={() => {
+                                                                                            handleBaseProductChange('', field.onChange);
+                                                                                            setBaseProductOpen(false);
+                                                                                        }}
                                                                                         onSelect={() => {
                                                                                             handleBaseProductChange('', field.onChange);
                                                                                             setBaseProductOpen(false);
@@ -1233,6 +1241,10 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                                             onPointerDown={(event) => {
                                                                                                 if (event.button !== 0) return;
                                                                                                 event.preventDefault();
+                                                                                                handleBaseProductChange(baseProduct.id, field.onChange);
+                                                                                                setBaseProductOpen(false);
+                                                                                            }}
+                                                                                            onClick={() => {
                                                                                                 handleBaseProductChange(baseProduct.id, field.onChange);
                                                                                                 setBaseProductOpen(false);
                                                                                             }}
