@@ -191,8 +191,19 @@ function PurchaseOrderItemsLink({ orderId, href, label }: { orderId: string; hre
   );
 }
 
-function InstallmentScheduleTooltip({ installments, label }: { installments: any[]; label: string }) {
+function InstallmentScheduleTooltip({
+  installments,
+  label,
+  totalInstallments,
+}: {
+  installments: any[];
+  label: string;
+  totalInstallments?: number;
+}) {
   if (!Array.isArray(installments) || installments.length <= 1) return <span>{label}</span>;
+  const scheduleTotal = Number(totalInstallments) > 0
+    ? Number(totalInstallments)
+    : Math.max(installments.length, ...installments.map((installment) => Number(installment?.number) || 0));
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -207,14 +218,20 @@ function InstallmentScheduleTooltip({ installments, label }: { installments: any
           <div className="space-y-1.5">
             {installments.map((installment, index) => {
               const dueDate = toDate(installment?.dueDate);
-              const status = installment?.status === "paid" ? "Paga" : installment?.status === "cancelled" ? "Cancelada" : "Pendente";
+              const status = installment?.status === "paid"
+                ? "Paga"
+                : installment?.status === "cancelled"
+                ? "Cancelada"
+                : installment?.status === "pending"
+                ? "Pendente"
+                : null;
               return (
                 <div key={`${installment?.number || index + 1}-${dueDate?.getTime() || index}`} className="grid grid-cols-[40px_1fr_auto] gap-2 text-xs">
-                  <span className="text-muted-foreground">{installment?.number || index + 1}/{installments.length}</span>
+                  <span className="text-muted-foreground">{installment?.number || index + 1}/{scheduleTotal}</span>
                   <span>{dueDate ? format(dueDate, "dd/MM/yyyy") : "Sem data"}</span>
                   <span className="text-right">
                     {formatCurrency(Number(installment?.value) || 0)}
-                    <span className="ml-1 text-[10px] text-muted-foreground">· {status}</span>
+                    {status ? <span className="ml-1 text-[10px] text-muted-foreground">· {status}</span> : null}
                   </span>
                 </div>
               );
@@ -830,9 +847,15 @@ export function ExpensesPage() {
                     const isExpanded = expandedExpenseId === expense.id;
                     const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
                     const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
-                    const installmentLabel = expense.installments?.length
-                      ? `${expense.installments[0]?.number || 1}/${expense.installments.length}`
-                      : "1/1";
+                    const installmentSchedule = Array.isArray(expense.installmentSchedule) && expense.installmentSchedule.length > 0
+                      ? expense.installmentSchedule
+                      : expense.installments || [];
+                    const installmentNumber = Number(expense.installmentNumber) || Number(expense.installments?.[0]?.number) || 1;
+                    const installmentTotal = Number(expense.installmentTotal) || Math.max(
+                      installmentSchedule.length || 1,
+                      ...installmentSchedule.map((installment: any) => Number(installment?.number) || 0)
+                    );
+                    const installmentLabel = `${installmentNumber}/${installmentTotal}`;
 
                     return (
                       <Fragment key={expense.id}>
@@ -846,9 +869,13 @@ export function ExpensesPage() {
                               <div className="min-w-0 space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="line-clamp-2 min-w-0 font-medium leading-5">{expense.description}</p>
-                                  {expense.installments?.length > 1 && (
+                                  {installmentSchedule.length > 1 && (
                                     <div className="inline-flex rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                      <InstallmentScheduleTooltip installments={expense.installments} label={installmentLabel} />
+                                      <InstallmentScheduleTooltip
+                                        installments={installmentSchedule}
+                                        label={installmentLabel}
+                                        totalInstallments={installmentTotal}
+                                      />
                                     </div>
                                   )}
                                   {expense.originModule === "purchasing" && (
@@ -923,7 +950,11 @@ export function ExpensesPage() {
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Parcela</p>
                                     <div className="mt-1 text-sm font-medium">
-                                      <InstallmentScheduleTooltip installments={expense.installments || []} label={installmentLabel} />
+                                      <InstallmentScheduleTooltip
+                                        installments={installmentSchedule}
+                                        label={installmentLabel}
+                                        totalInstallments={installmentTotal}
+                                      />
                                     </div>
                                   </div>
                                   {expense.purchaseOrderId && (

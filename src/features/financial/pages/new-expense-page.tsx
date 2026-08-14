@@ -17,15 +17,5 @@ export function NewExpensePage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Lançar despesa</h1>
-        <p className="text-muted-foreground">
-          Preencha os campos abaixo para provisionar uma nova despesa no módulo financeiro.
-        </p>
-      </div>
-      <ExpenseForm />
-    </div>
-  );
+  return <ExpenseForm />;
 }

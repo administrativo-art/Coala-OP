@@ -7,7 +7,7 @@ import { addDoc, getDoc, getDocs, query, Timestamp, updateDoc, where, writeBatch
 import { useFieldArray, useForm } from "react-hook-form";
 import type { FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2, CalendarIcon, Check, ChevronLeft, ChevronRight, ChevronsUpDown, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound, X } from "lucide-react";
+import { Building2, CalendarIcon, Check, ChevronLeft, ChevronRight, ChevronsUpDown, CircleHelp, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound, X } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useEntities } from "@/hooks/use-entities";
@@ -19,12 +19,17 @@ import {
   type ExpenseFormValues,
 } from "@/features/financial/lib/schemas";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
+import {
+  expenseSeriesPosition,
+  selectExpenseSeriesEntries,
+  type ExpenseSeriesEntry,
+  type ExpenseSeriesUpdateScope,
+} from "@/features/financial/lib/expense-series";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency } from "@/features/financial/lib/utils";
 import {
   buildEqualRateio,
   distributeRateioPercentages,
-  isRateioOccurrenceEligible,
   resolveResultCenterName,
   resolveRateioForCompetence,
   type ExpenseRateioPolicy,
@@ -38,7 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -47,6 +52,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { financialDb } from "@/lib/firebase-financial";
 
@@ -430,6 +436,11 @@ export function ExpenseForm() {
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
   const [loadedRecurrenceGroupId, setLoadedRecurrenceGroupId] = useState<string | null>(null);
+  const [loadedSeriesEntry, setLoadedSeriesEntry] = useState<ExpenseSeriesEntry | null>(null);
+  const [loadedSeriesTotal, setLoadedSeriesTotal] = useState<number | null>(null);
+  const [seriesUpdateDialogOpen, setSeriesUpdateDialogOpen] = useState(false);
+  const [seriesUpdateScope, setSeriesUpdateScope] = useState<ExpenseSeriesUpdateScope>("single");
+  const [pendingSeriesValues, setPendingSeriesValues] = useState<ExpenseFormValues | null>(null);
   const [importTransactionData, setImportTransactionData] = useState<any | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
@@ -963,6 +974,15 @@ export function ExpenseForm() {
         form.reset(resetData);
         setLoadedStatus(data.status ?? null);
         setLoadedRecurrenceGroupId(data.recurrenceGroupId ?? null);
+        setLoadedSeriesEntry({
+          id: editId,
+          recurrenceIndex: data.recurrenceIndex,
+          installmentNumber: data.installmentNumber,
+          dueDate: data.dueDate,
+          installments: data.installments,
+        });
+        const seriesTotal = Number(data.recurrenceTotal ?? data.installmentTotal);
+        setLoadedSeriesTotal(Number.isFinite(seriesTotal) && seriesTotal > 0 ? seriesTotal : null);
       } catch (error) {
         console.error(error);
         toast({ variant: "destructive", title: "Erro ao carregar despesa." });
@@ -1055,7 +1075,7 @@ export function ExpenseForm() {
     () => [
       { id: "identification", label: "Identificação" },
       { id: "classification", label: "Classificação" },
-      { id: "schedule", label: "Vencimento & parcelas" },
+      { id: "schedule", label: "Vencimento e parcelas" },
       { id: "review", label: "Revisão" },
     ] as const,
     []
@@ -1252,7 +1272,10 @@ export function ExpenseForm() {
     }
   }
 
-  async function onSubmit(values: ExpenseFormValues) {
+  async function onSubmit(
+    values: ExpenseFormValues,
+    updateScope: ExpenseSeriesUpdateScope = "single"
+  ) {
     if (!firebaseUser) return;
     setIsSaving(true);
 
@@ -1284,91 +1307,118 @@ export function ExpenseForm() {
         ...buildExpensePayload(values),
         ...importPaymentMetadata,
       };
+      const editPayload =
+        editId && !importTransactionId
+          ? { ...payload, status: loadedStatus || "pending" }
+          : payload;
       const rateioVersionId = values.isApportioned ? crypto.randomUUID() : null;
       const rateioPolicy = rateioVersionId ? buildRateioPolicy(values, rateioVersionId) : null;
 
       let savedExpenseId = editId || "";
 
-      if (editId && values.paymentMethod !== "recurring") {
-        await updateDoc(financialDoc("expenses", editId), {
-          ...payload,
-          rateioVersionId,
-          rateioPolicy,
-        });
-        toast({ title: "Despesa atualizada." });
-      } else if (editId && values.paymentMethod === "recurring" && loadedRecurrenceGroupId) {
+      if (editId && loadedRecurrenceGroupId && updateScope !== "single") {
         const groupSnapshot = await getDocs(
           query(
             financialCollection("expenses"),
             where("recurrenceGroupId", "==", loadedRecurrenceGroupId)
           )
         );
-        const effectiveFrom =
-          rateioPolicy?.effectiveFrom ||
-          toRateioDateString(startOfMonth(values.rateioEffectiveFrom || new Date()));
-        const eligibleOccurrences = groupSnapshot.docs.filter((expenseDoc) => {
-          const data = expenseDoc.data() as any;
-          if (data.competenceClosed === true || data.periodStatus === "closed") return false;
-          return isRateioOccurrenceEligible(data, effectiveFrom);
-        });
+        const currentEntry = loadedSeriesEntry || { id: editId };
+        const groupEntries = groupSnapshot.docs.map((expenseDoc) => ({
+          id: expenseDoc.id,
+          ...(expenseDoc.data() as Omit<ExpenseSeriesEntry, "id">),
+        }));
+        const selectedIds = new Set(
+          selectExpenseSeriesEntries(groupEntries, currentEntry, updateScope).map((entry) => entry.id)
+        );
+        const selectedExpenses = groupSnapshot.docs.filter((expenseDoc) => selectedIds.has(expenseDoc.id));
 
-        if (eligibleOccurrences.length === 0) {
-          throw new Error("Não há competências futuras pendentes dentro da vigência escolhida.");
-        }
+        if (selectedExpenses.length === 0) throw new Error("Nenhuma parcela relacionada foi encontrada.");
 
         const batch = writeBatch(financialDb);
-        eligibleOccurrences.forEach((expenseDoc) => {
+        const dirtyFields = form.formState.dirtyFields;
+
+        selectedExpenses.forEach((expenseDoc) => {
           const existing = expenseDoc.data() as any;
+
+          if (expenseDoc.id === editId) {
+            batch.update(expenseDoc.ref, {
+              ...editPayload,
+              rateioVersionId,
+              rateioPolicy,
+              updatedBy: firebaseUser.uid,
+            });
+            return;
+          }
+
+          const sharedPatch: Record<string, unknown> = {};
+          if (dirtyFields.accountPlan) {
+            sharedPatch.accountPlan = editPayload.accountPlan;
+            sharedPatch.accountId = editPayload.accountId;
+            sharedPatch.accountPlanName = editPayload.accountPlanName;
+          }
+          if (dirtyFields.description) sharedPatch.description = editPayload.description;
+          if (dirtyFields.supplier) sharedPatch.supplier = editPayload.supplier;
+          if (dirtyFields.notes) sharedPatch.notes = editPayload.notes;
+
+          const isSettledOrClosed =
+            existing.status === "paid" ||
+            existing.competenceClosed === true ||
+            existing.periodStatus === "closed";
+          if (dirtyFields.totalValue && !isSettledOrClosed) {
+            sharedPatch.totalValue = editPayload.totalValue;
+            if (Array.isArray(existing.installments) && existing.installments.length === 1) {
+              sharedPatch.installments = existing.installments.map((installment: any) => ({
+                ...installment,
+                value: values.totalValue,
+              }));
+            }
+          }
+
+          const rateioChanged =
+            !!dirtyFields.isApportioned ||
+            !!dirtyFields.resultCenter ||
+            !!dirtyFields.apportionments ||
+            !!dirtyFields.rateioCriterion ||
+            !!dirtyFields.rateioEffectiveFrom ||
+            !!dirtyFields.rateioFirstMonthMode;
           const competence = toOptionalDate(existing.competenceDate) || toOptionalDate(existing.dueDate);
           const resolvedApportionments = rateioPolicy && competence
             ? resolveRateioForCompetence(rateioPolicy, competence)
             : null;
 
-          if (values.isApportioned && (!resolvedApportionments || resolvedApportionments.length === 0)) {
-            throw new Error("A versão do rateio precisa ter ao menos uma unidade ativa na primeira competência.");
+          if (rateioChanged && (!values.isApportioned || (resolvedApportionments && resolvedApportionments.length > 0))) {
+            sharedPatch.isApportioned = values.isApportioned;
+            sharedPatch.resultCenter = values.isApportioned ? null : values.resultCenter ?? null;
+            sharedPatch.apportionments = values.isApportioned ? resolvedApportionments : null;
+            sharedPatch.rateioCriterion = values.isApportioned ? values.rateioCriterion : null;
+            sharedPatch.rateioEffectiveFrom =
+              values.isApportioned && values.rateioEffectiveFrom
+                ? Timestamp.fromDate(startOfMonth(values.rateioEffectiveFrom))
+                : null;
+            sharedPatch.rateioFirstMonthMode = values.isApportioned ? values.rateioFirstMonthMode : null;
+            sharedPatch.rateioVersionId = rateioVersionId;
+            sharedPatch.rateioPolicy = rateioPolicy;
           }
 
           batch.update(expenseDoc.ref, {
-            accountPlan: payload.accountPlan,
-            accountId: payload.accountId,
-            accountPlanName: payload.accountPlanName,
-            description: payload.description,
-            supplier: payload.supplier,
-            notes: payload.notes,
-            totalValue: payload.totalValue,
-            isApportioned: values.isApportioned,
-            resultCenter: values.isApportioned ? null : values.resultCenter ?? null,
-            apportionments: values.isApportioned ? resolvedApportionments : null,
-            rateioCriterion: values.isApportioned ? values.rateioCriterion : null,
-            rateioEffectiveFrom:
-              values.isApportioned && values.rateioEffectiveFrom
-                ? Timestamp.fromDate(startOfMonth(values.rateioEffectiveFrom))
-                : null,
-            rateioFirstMonthMode: values.isApportioned ? values.rateioFirstMonthMode : null,
-            rateioVersionId,
-            rateioPolicy,
-            installments: Array.isArray(existing.installments)
-              ? existing.installments.map((installment: any) => ({
-                  ...installment,
-                  value: values.totalValue,
-                }))
-              : [],
+            ...sharedPatch,
             updatedAt: Timestamp.now(),
             updatedBy: firebaseUser.uid,
           });
         });
         await batch.commit();
         toast({
-          title: "Nova versão do rateio aplicada.",
-          description: `${eligibleOccurrences.length} competência${eligibleOccurrences.length === 1 ? " futura foi atualizada" : "s futuras foram atualizadas"}. Histórico pago e competências anteriores foram preservados.`,
+          title: "Parcelas relacionadas atualizadas.",
+          description: `${selectedExpenses.length} parcela${selectedExpenses.length === 1 ? " foi atualizada" : "s foram atualizadas"}. Vencimentos, competências e pagamentos das demais foram preservados.`,
         });
-      } else if (editId && values.paymentMethod === "recurring") {
+      } else if (editId) {
         await updateDoc(financialDoc("expenses", editId), {
-          ...payload,
+          ...editPayload,
           rateioVersionId,
           rateioPolicy,
         });
-        toast({ title: "Despesa recorrente atualizada." });
+        toast({ title: "Despesa atualizada." });
       } else if (values.paymentMethod === "recurring") {
         const recurrenceGroupId = crypto.randomUUID();
         const occurrenceDocuments = recurringOccurrences.map((occurrence) => {
@@ -1445,6 +1495,42 @@ export function ExpenseForm() {
     }
   }
 
+  function hasSeriesSharedChanges() {
+    const dirtyFields = form.formState.dirtyFields;
+    return !!(
+      dirtyFields.accountPlan ||
+      dirtyFields.description ||
+      dirtyFields.supplier ||
+      dirtyFields.notes ||
+      dirtyFields.totalValue ||
+      dirtyFields.isApportioned ||
+      dirtyFields.resultCenter ||
+      dirtyFields.apportionments ||
+      dirtyFields.rateioCriterion ||
+      dirtyFields.rateioEffectiveFrom ||
+      dirtyFields.rateioFirstMonthMode
+    );
+  }
+
+  async function handleValidatedSubmit(values: ExpenseFormValues) {
+    if (editId && loadedRecurrenceGroupId && hasSeriesSharedChanges()) {
+      setPendingSeriesValues(values);
+      setSeriesUpdateScope("single");
+      setSeriesUpdateDialogOpen(true);
+      return;
+    }
+
+    await onSubmit(values, "single");
+  }
+
+  async function handleConfirmSeriesUpdate() {
+    if (!pendingSeriesValues) return;
+    const values = pendingSeriesValues;
+    setSeriesUpdateDialogOpen(false);
+    setPendingSeriesValues(null);
+    await onSubmit(values, seriesUpdateScope);
+  }
+
   async function handleFinalizeClick() {
     if (paymentMethod === "recurring") {
       form.clearErrors("competenceDate");
@@ -1452,7 +1538,7 @@ export function ExpenseForm() {
     }
 
     await form.handleSubmit(
-      onSubmit,
+      handleValidatedSubmit,
       (errors: FieldErrors<ExpenseFormValues>) => {
         const flattenedErrors = flattenFormErrors(errors);
         console.error("Expense form validation errors:", flattenedErrors, errors);
@@ -1479,11 +1565,15 @@ export function ExpenseForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="min-h-[calc(100vh-5rem)]">
-        <div className="flex min-h-[calc(100vh-5rem)] bg-black/25 backdrop-blur-[2px]">
-          <div className="hidden flex-1 xl:block" />
-
-          <div className="ml-auto flex w-full max-w-[1220px] overflow-hidden rounded-l-[32px] border border-border/70 bg-background shadow-2xl">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleFinalizeClick();
+        }}
+        className="min-h-[calc(100vh-5rem)]"
+      >
+        <div className="min-h-[calc(100vh-5rem)] py-2">
+          <div className="mx-auto flex w-full max-w-[1480px] overflow-hidden rounded-2xl border border-border/70 bg-background shadow-sm">
             <div className="flex min-w-0 flex-1 flex-col border-r">
               <div className="border-b px-6 py-5">
                 <div className="flex items-start justify-between gap-4">
@@ -2328,7 +2418,7 @@ export function ExpenseForm() {
               </div>
             </div>
 
-            <aside className="w-[344px] shrink-0 bg-muted/20">
+            <aside className="hidden w-[344px] shrink-0 bg-muted/20 xl:block">
               <div className="border-b px-5 py-5">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pré-visualização</p>
                 <h3 className="mt-1 text-sm font-semibold">Como aparecerá na fila</h3>
@@ -2395,6 +2485,136 @@ export function ExpenseForm() {
             </aside>
           </div>
         </div>
+
+        <Dialog
+          open={seriesUpdateDialogOpen}
+          onOpenChange={(open) => {
+            if (isSaving) return;
+            setSeriesUpdateDialogOpen(open);
+            if (!open) setPendingSeriesValues(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Onde aplicar as alterações?</DialogTitle>
+              <DialogDescription>
+                Esta despesa pertence a um grupo de parcelas. Escolha o alcance antes de atualizar.
+              </DialogDescription>
+            </DialogHeader>
+
+            <TooltipProvider delayDuration={150}>
+              <RadioGroup
+                value={seriesUpdateScope}
+                onValueChange={(value) => setSeriesUpdateScope(value as ExpenseSeriesUpdateScope)}
+                className="space-y-2"
+              >
+                <label
+                  htmlFor="series-update-single"
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
+                    seriesUpdateScope === "single" && "border-primary bg-primary/5"
+                  )}
+                >
+                  <RadioGroupItem id="series-update-single" value="single" className="mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Somente esta parcela</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Explicação: somente esta parcela">
+                            <CircleHelp className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          Altera apenas o lançamento aberto nesta tela. Nenhuma outra parcela do grupo é modificada.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">As demais parcelas permanecem exatamente como estão.</p>
+                  </div>
+                </label>
+
+                <label
+                  htmlFor="series-update-future"
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
+                    seriesUpdateScope === "current-and-future" && "border-primary bg-primary/5"
+                  )}
+                >
+                  <RadioGroupItem id="series-update-future" value="current-and-future" className="mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Esta e as próximas</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Explicação: esta e as próximas parcelas">
+                            <CircleHelp className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          Aplica os campos compartilhados à parcela atual e às posteriores. Parcelas anteriores ficam preservadas.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {loadedSeriesEntry && expenseSeriesPosition(loadedSeriesEntry)
+                        ? `Da parcela ${expenseSeriesPosition(loadedSeriesEntry)}/${loadedSeriesTotal || "—"} em diante.`
+                        : "Da parcela selecionada em diante."}
+                    </p>
+                  </div>
+                </label>
+
+                <label
+                  htmlFor="series-update-all"
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
+                    seriesUpdateScope === "all" && "border-primary bg-primary/5"
+                  )}
+                >
+                  <RadioGroupItem id="series-update-all" value="all" className="mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Todas as parcelas relacionadas</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Explicação: todas as parcelas relacionadas">
+                            <CircleHelp className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          Aplica os campos compartilhados a todo o grupo, inclusive às parcelas anteriores. Dados de pagamento permanecem intactos.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">Inclui parcelas anteriores, atuais e futuras existentes.</p>
+                  </div>
+                </label>
+              </RadioGroup>
+            </TooltipProvider>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800">
+              Nas demais parcelas, vencimento, competência, numeração, status e liquidação são preservados. O valor de parcelas pagas ou de competências fechadas também não é alterado.
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => {
+                  setSeriesUpdateDialogOpen(false);
+                  setPendingSeriesValues(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="button" disabled={isSaving} onClick={() => void handleConfirmSeriesUpdate()}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Aplicar alterações
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <QuickAddEntityDialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onCreated={(name) => form.setValue("supplier", name)} />
       </form>
