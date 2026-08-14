@@ -52,19 +52,30 @@ export function findInstallmentMatch(
 > | null {
   if (entry.amount >= 0) return null;
 
-  let best: (PendingInstallment & { confidence: "high" | "medium" }) | null = null;
+  const exactCandidates = pendingInstallments.filter(
+    (installment) =>
+      Math.abs(Math.abs(entry.amount) - installment.value) <= 0.05 &&
+      dateDiff(entry.date, installment.dueDate) <= 5
+  );
 
-  for (const installment of pendingInstallments) {
-    const closeValue = valueMatch(entry.amount, installment.value, 0.02);
-    const closeDate = dateDiff(entry.date, installment.dueDate) <= 5;
+  // Pagamento automático exige correspondência única em centavos. Duas parcelas
+  // iguais na mesma janela continuam para escolha humana, sem vínculo arbitrário.
+  if (exactCandidates.length > 1) return null;
 
-    if (closeValue && closeDate) {
-      best = { ...installment, confidence: "high" };
-      break;
-    }
+  let best: (PendingInstallment & { confidence: "high" | "medium" }) | null =
+    exactCandidates.length === 1 ? { ...exactCandidates[0], confidence: "high" } : null;
 
-    if (valueMatch(entry.amount, installment.value, 0.05) && !best) {
-      best = { ...installment, confidence: "medium" };
+  if (!best) {
+    const mediumCandidates = pendingInstallments
+      .filter((installment) => valueMatch(entry.amount, installment.value, 0.05))
+      .sort((left, right) => {
+        const leftValueDiff = Math.abs(Math.abs(entry.amount) - left.value);
+        const rightValueDiff = Math.abs(Math.abs(entry.amount) - right.value);
+        return leftValueDiff - rightValueDiff || dateDiff(entry.date, left.dueDate) - dateDiff(entry.date, right.dueDate);
+      });
+
+    if (mediumCandidates.length > 0) {
+      best = { ...mediumCandidates[0], confidence: "medium" };
     }
   }
 

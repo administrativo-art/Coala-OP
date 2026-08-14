@@ -8,6 +8,7 @@ import { Search } from "lucide-react";
 import { BackButton } from "@/components/navigation/back-button";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
+import { resolveResultCenterName, type ResultCenterNameMap } from "@/features/financial/lib/expense-rateio";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
@@ -27,6 +28,7 @@ export function PendingAuditExpensesPage() {
   const { data: expensesData, loading } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: transactionsData, loading: transactionsLoading } = useFinancialCollection<any>(financialCollection("transactions"));
   const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
+  const { data: resultCenters, loading: resultCentersLoading } = useFinancialCollection<any>(financialCollection("resultCenters"));
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -56,6 +58,15 @@ export function PendingAuditExpensesPage() {
     });
     return map;
   }, [accountPlans]);
+  const resultCenterNameById = useMemo(() => {
+    const map: ResultCenterNameMap = {};
+    (resultCenters || []).forEach((center) => {
+      if (typeof center.id === "string" && typeof center.name === "string" && center.name.trim()) {
+        map[center.id] = center.name.trim();
+      }
+    });
+    return map;
+  }, [resultCenters]);
 
   const suppliers = useMemo(
     () =>
@@ -111,7 +122,7 @@ export function PendingAuditExpensesPage() {
         planName: accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "",
         dueDate: toDate(expense.dueDate),
         competenceDate: toDate(expense.competenceDate),
-        unitName: expense.resultCenter || "",
+        unitName: resolveResultCenterName(expense.resultCenter, resultCenterNameById),
         totalValue: expense.totalValue || 0,
         purchaseOrderId: expense.purchaseOrderId || "",
       }));
@@ -163,7 +174,7 @@ export function PendingAuditExpensesPage() {
         return true;
       })
       .sort((a, b) => (a.dueDate?.getTime() || now.getTime()) - (b.dueDate?.getTime() || now.getTime()));
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, search, supplierFilter, transactions, unitFilter]);
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, resultCenterNameById, search, supplierFilter, transactions, unitFilter]);
 
   async function handleLinkImportedExpense() {
     if (!linkingTransactionId || selectedExpenseId === "none") return;
@@ -256,7 +267,7 @@ export function PendingAuditExpensesPage() {
           <CardDescription>{pendingItems.length} pendência(s) no recorte atual.</CardDescription>
         </CardHeader>
         <CardContent>
-          {loading || transactionsLoading ? (
+          {loading || transactionsLoading || resultCentersLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, index) => (
                 <Skeleton key={index} className="h-20 w-full rounded-xl" />

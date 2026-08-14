@@ -28,6 +28,30 @@ type ExpenseLike = {
   apportionments?: Array<{ resultCenter?: string; percentage?: number }> | null;
 };
 
+export type ResultCenterNameMap = Record<string, string>;
+
+export function resolveResultCenterName(
+  resultCenter: string | null | undefined,
+  namesById: ResultCenterNameMap = {}
+) {
+  const value = typeof resultCenter === "string" ? resultCenter.trim() : "";
+  return value ? namesById[value] || value : "";
+}
+
+export function expenseReferencesResultCenter(
+  expense: ExpenseLike,
+  resultCenter: string,
+  namesById: ResultCenterNameMap = {}
+) {
+  if (!expense.isApportioned) {
+    return resolveResultCenterName(expense.resultCenter, namesById) === resultCenter;
+  }
+
+  return (expense.apportionments || []).some(
+    (item) => resolveResultCenterName(item.resultCenter, namesById) === resultCenter
+  );
+}
+
 function parseLocalDate(value: string | Date): Date {
   if (value instanceof Date) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
   const [year, month, day] = value.slice(0, 10).split("-").map(Number);
@@ -139,13 +163,19 @@ export function isRateioOccurrenceEligible(
   return !!competence && monthKey(competence) >= monthKey(effectiveFrom);
 }
 
-export function expenseValueForResultCenter(expense: ExpenseLike, resultCenter?: string | null) {
+export function expenseValueForResultCenter(
+  expense: ExpenseLike,
+  resultCenter?: string | null,
+  namesById: ResultCenterNameMap = {}
+) {
   const totalValue = Number(expense.totalValue) || 0;
   if (!resultCenter) return totalValue;
-  if (!expense.isApportioned) return expense.resultCenter === resultCenter ? totalValue : 0;
+  if (!expense.isApportioned) {
+    return resolveResultCenterName(expense.resultCenter, namesById) === resultCenter ? totalValue : 0;
+  }
 
   const percentage = (expense.apportionments || [])
-    .filter((item) => item.resultCenter === resultCenter)
+    .filter((item) => resolveResultCenterName(item.resultCenter, namesById) === resultCenter)
     .reduce((sum, item) => sum + (Number(item.percentage) || 0), 0);
 
   return Number(((totalValue * percentage) / 100).toFixed(2));

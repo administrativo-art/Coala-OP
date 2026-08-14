@@ -25,9 +25,11 @@ import {
   buildEqualRateio,
   distributeRateioPercentages,
   isRateioOccurrenceEligible,
+  resolveResultCenterName,
   resolveRateioForCompetence,
   type ExpenseRateioPolicy,
   type RateioCriterion,
+  type ResultCenterNameMap,
 } from "@/features/financial/lib/expense-rateio";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
@@ -445,6 +447,16 @@ export function ExpenseForm() {
   const { data: expenseDescriptions, refresh: refreshExpenseDescriptions } = useFinancialCollection<any>(
     financialCollection("expenseDescriptions")
   );
+  const { data: resultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
+  const resultCenterNameById = useMemo(() => {
+    const map: ResultCenterNameMap = {};
+    (resultCenters || []).forEach((center) => {
+      if (typeof center.id === "string" && typeof center.name === "string" && center.name.trim()) {
+        map[center.id] = center.name.trim();
+      }
+    });
+    return map;
+  }, [resultCenters]);
   const units = useMemo(
     () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
     [kiosks]
@@ -856,7 +868,7 @@ export function ExpenseForm() {
   }, [editId, form, importTransactionId, toast]);
 
   useEffect(() => {
-    if (!editId) return;
+    if (!editId || resultCenters === null) return;
 
     let active = true;
 
@@ -899,7 +911,7 @@ export function ExpenseForm() {
         const loadedApportionments = (storedPolicy?.participants || data.apportionments || [
           { resultCenter: "", percentage: 100 },
         ]).map((item: any) => ({
-          resultCenter: item.resultCenter || "",
+          resultCenter: resolveResultCenterName(item.resultCenter, resultCenterNameById),
           percentage: Number(item.percentage) || 0,
           basisValue: item.basisValue == null ? undefined : Number(item.basisValue),
           participationStartDate: item.participationStartDate
@@ -915,7 +927,7 @@ export function ExpenseForm() {
           competenceDate: toOptionalDate(data.competenceDate),
           paymentMethod: data.paymentMethod || "single",
           isApportioned: data.isApportioned,
-          resultCenter: data.resultCenter || "",
+          resultCenter: resolveResultCenterName(data.resultCenter, resultCenterNameById),
           apportionments: loadedApportionments,
           rateioCriterion:
             data.rateioCriterion || storedPolicy?.criterion || (data.isApportioned ? "fixed" : "equal"),
@@ -964,7 +976,7 @@ export function ExpenseForm() {
     return () => {
       active = false;
     };
-  }, [editId, firebaseUser, form, toast]);
+  }, [editId, firebaseUser, form, resultCenterNameById, resultCenters, toast]);
 
   const equalInstallments = useMemo<InstallmentPreview[]>(() => {
     if (

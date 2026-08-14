@@ -430,7 +430,8 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     firstInstallmentDueDate:
       orderData.paymentCondition === 'installments' ? Timestamp.fromDate(new Date(orderData.paymentDueDate)) : null,
     isApportioned: false,
-    resultCenter: orderData.resultCenterId ?? null,
+    resultCenter: orderData.resultCenterName ?? orderData.resultCenterId ?? null,
+    resultCenterId: orderData.resultCenterId ?? null,
     apportionments: null,
     notes: buildPurchaseAuditNotes(orderData),
     status: 'pending',
@@ -1899,7 +1900,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       firstInstallmentDueDate:
         order.paymentCondition === 'installments' ? Timestamp.fromDate(new Date(order.paymentDueDate)) : null,
       isApportioned: false,
-      resultCenter: order.resultCenterId ?? null,
+      resultCenter: order.resultCenterName ?? order.resultCenterId ?? null,
+      resultCenterId: order.resultCenterId ?? null,
       apportionments: null,
       notes: buildPurchaseAuditNotes(order),
       status: 'pending',

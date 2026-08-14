@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addDoc, doc, increment, Timestamp, updateDoc } from "firebase/firestore";
+import { addDoc, doc, getDoc, increment, Timestamp, updateDoc } from "firebase/firestore";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -312,6 +312,8 @@ function buildSessionSummary(items: ImportSessionItem[]): ImportSessionSummary {
 
 function createSessionItem(transaction: ImportedTransaction): ImportSessionItem {
   const competenceDate = format(transaction.date, "yyyy-MM-01");
+  const canPrelinkPayment =
+    transaction.suggestedConfidence === "high" && !!transaction.suggestedExpenseId;
   const preferredDescription = transaction.matchedAliasId
     ? transaction.description || transaction.suggestedExpenseDescription || transaction.rawDescription
     : transaction.suggestedExpenseDescription || transaction.description || transaction.rawDescription;
@@ -330,7 +332,7 @@ function createSessionItem(transaction: ImportedTransaction): ImportSessionItem 
     suggestedConfidence: transaction.suggestedConfidence,
     expenseDraft: {
       mode: transaction.linkedExpenseId || transaction.suggestedExpenseId ? "existing" : "new",
-      linkedExpenseId: transaction.linkedExpenseId || transaction.suggestedExpenseId || "",
+      linkedExpenseId: transaction.linkedExpenseId || (canPrelinkPayment ? transaction.suggestedExpenseId : "") || "",
       purchaseOrderId: "",
       purchaseLinkMode: "goods",
       allocatedAmount: Math.abs(transaction.amount),
@@ -947,13 +949,34 @@ export function FinancialImportPage({
     () =>
       expenses
         .filter((expense) => expense.status === "pending" && expense.totalValue)
-        .map((expense) => ({
-          expenseId: expense.id,
-          expenseDescription: expense.description,
-          installmentNumber: expense.installmentNumber,
-          dueDate: toDate(expense.dueDate) || new Date(),
-          value: expense.totalValue,
-        })),
+        .flatMap((expense) => {
+          const installments = Array.isArray(expense.installments)
+            ? expense.installments.filter(
+                (installment: any) =>
+                  installment?.status !== "paid" &&
+                  installment?.status !== "cancelled" &&
+                  Number(installment?.value) > 0
+              )
+            : [];
+
+          if (installments.length > 0) {
+            return installments.map((installment: any, index: number) => ({
+              expenseId: expense.id,
+              expenseDescription: expense.description,
+              installmentNumber: Number(installment.number) || index + 1,
+              dueDate: toDate(installment.dueDate) || toDate(expense.dueDate) || new Date(),
+              value: Number(installment.value) || 0,
+            }));
+          }
+
+          return [{
+            expenseId: expense.id,
+            expenseDescription: expense.description,
+            installmentNumber: expense.installmentNumber,
+            dueDate: toDate(expense.dueDate) || new Date(),
+            value: Number(expense.totalValue) || 0,
+          }];
+        }),
     [expenses]
   );
   const linkableExpenses = useMemo(
@@ -1283,7 +1306,42 @@ export function FinancialImportPage({
         const importedTransactions = applyAliasesAndMatch(entries, aliases, pendingInstallments);
         const statementAccountName = getAccountName(statementAccountId);
         const items = importedTransactions.map((transaction) => {
-          const item = createSessionItem(transaction);
+          let item = createSessionItem(transaction);
+          const purchaseCandidate =
+            transaction.suggestedConfidence === "high"
+              ? purchaseCandidates.find((candidate) => candidate.linkedExpenseId === transaction.suggestedExpenseId)
+              : undefined;
+
+          if (purchaseCandidate) {
+            const purchaseLinkMode: ImportSessionPurchaseLinkMode =
+              purchaseCandidate.goodsPending > 0 ? "goods" : "freight";
+            const eligibleAmount =
+              purchaseLinkMode === "goods" ? purchaseCandidate.goodsPending : purchaseCandidate.freightPending;
+            const accountPlanId =
+              purchaseLinkMode === "goods" ? purchaseCandidate.goodsAccountPlanId : purchaseCandidate.freightAccountPlanId;
+            const accountPlanName =
+              purchaseLinkMode === "goods" ? purchaseCandidate.goodsAccountPlanName : purchaseCandidate.freightAccountPlanName;
+
+            item = {
+              ...item,
+              expenseDraft: {
+                ...item.expenseDraft,
+                mode: "purchase",
+                linkedExpenseId: purchaseCandidate.linkedExpenseId,
+                purchaseOrderId: purchaseCandidate.orderId,
+                purchaseLinkMode,
+                allocatedAmount: Math.min(Math.abs(transaction.amount), eligibleAmount),
+                supplier: purchaseCandidate.supplierName || item.expenseDraft.supplier,
+                accountPlanId,
+                accountPlanName,
+                resultCenterId: purchaseCandidate.resultCenterId,
+                resultCenterName: purchaseCandidate.resultCenterName,
+                isApportioned: false,
+                apportionments: [],
+              },
+            };
+          }
+
           return {
             ...item,
             financialDraft: {
@@ -1338,6 +1396,7 @@ export function FinancialImportPage({
       statementAccountId,
       openSessions.length,
       pendingInstallments,
+      purchaseCandidates,
       refreshImportSessions,
       replaceSessionUrl,
       toast,
@@ -1842,8 +1901,28 @@ export function FinancialImportPage({
                 freightAmountPaid: purchaseCandidate.freightAmountPaid + freightAllocation,
               });
 
+              let installmentsPatch: Record<string, unknown> = {};
+              if (item.suggestedInstallmentNumber) {
+                const expenseSnapshot = await getDoc(financialDoc("expenses", expenseId));
+                const currentInstallments = expenseSnapshot.exists() && Array.isArray(expenseSnapshot.data()?.installments)
+                  ? expenseSnapshot.data()!.installments
+                  : [];
+                const nextInstallments = currentInstallments.map((installment: any, index: number) =>
+                  (Number(installment?.number) || index + 1) === item.suggestedInstallmentNumber
+                    ? {
+                        ...installment,
+                        status: "paid",
+                        paidAt: transactionDate,
+                        linkedBankTransactionId: createdTransaction.id,
+                      }
+                    : installment
+                );
+                if (nextInstallments.length > 0) installmentsPatch = { installments: nextInstallments };
+              }
+
               await updateDoc(financialDoc("expenses", expenseId), {
                 linkedBankTransactionId: createdTransaction.id,
+                ...installmentsPatch,
                 updatedAt: now,
                 ...(fullyPaidAfterAllocation
                   ? {

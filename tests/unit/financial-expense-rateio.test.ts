@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   buildEqualRateio,
   distributeRateioPercentages,
+  expenseReferencesResultCenter,
   expenseValueForResultCenter,
   isRateioOccurrenceEligible,
+  resolveResultCenterName,
   resolveRateioForCompetence,
   type ExpenseRateioPolicy,
 } from "../../src/features/financial/lib/expense-rateio";
@@ -95,6 +97,19 @@ test("DRE usa somente a participação da unidade no valor rateado", () => {
 
   assert.equal(expenseValueForResultCenter(expense, "A"), 300);
   assert.equal(expenseValueForResultCenter(expense), 1200);
+});
+
+test("resolve ID legado do centro de resultado para o nome exibido", () => {
+  const namesById = { centro_tirirical: "Tirirical" };
+  const expense = {
+    totalValue: 500,
+    isApportioned: false,
+    resultCenter: "centro_tirirical",
+  };
+
+  assert.equal(resolveResultCenterName(expense.resultCenter, namesById), "Tirirical");
+  assert.equal(expenseReferencesResultCenter(expense, "Tirirical", namesById), true);
+  assert.equal(expenseValueForResultCenter(expense, "Tirirical", namesById), 500);
 });
 
 test("recorrência rateada exige vigência e bases válidas para critérios variáveis", () => {

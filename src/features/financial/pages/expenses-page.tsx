@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type ComponentType, Fragment, useEffect, useMemo, useState } from "react";
-import { deleteDoc } from "firebase/firestore";
+import { deleteDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth, subMonths, startOfYear } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import {
   FilePlus2,
   FileUp,
   Filter,
+  Loader2,
   MoreHorizontal,
   SearchCheck,
   Search,
@@ -27,11 +28,19 @@ import { FinancialImportPage } from "@/features/financial/pages/import-page";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
-import { expenseValueForResultCenter } from "@/features/financial/lib/expense-rateio";
+import {
+  expenseReferencesResultCenter,
+  expenseValueForResultCenter,
+  resolveResultCenterName,
+  type ResultCenterNameMap,
+} from "@/features/financial/lib/expense-rateio";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
+import { useProducts } from "@/hooks/use-products";
+import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { useToast } from "@/hooks/use-toast";
+import type { PurchaseOrderItem } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -55,6 +64,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
 
@@ -189,6 +199,125 @@ function KpiCard({
   );
 }
 
+function PurchaseOrderItemsLink({ orderId, href, label }: { orderId: string; href: string; label?: string }) {
+  const { fetchOrderItems } = usePurchaseOrders();
+  const { products, getProductFullName } = useProducts();
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<PurchaseOrderItem[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    if (!open || items !== null || loadError) return;
+    let cancelled = false;
+
+    void fetchOrderItems(orderId)
+      .then((data) => {
+        if (!cancelled) setItems(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchOrderItems, items, loadError, open, orderId]);
+
+  return (
+    <TooltipProvider delayDuration={250}>
+      <Tooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <Link href={href} className="mt-1 inline-block text-sm font-medium text-primary underline underline-offset-2">
+            {label || `Abrir pedido ${orderId}`}
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          align="start"
+          sideOffset={8}
+          className="w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl p-0"
+        >
+          <div className="border-b bg-muted/40 px-3 py-2.5">
+            <p className="font-semibold">Itens do pedido</p>
+            <p className="text-xs text-muted-foreground">Clique no link para abrir todos os detalhes.</p>
+          </div>
+          <div className="max-h-72 overflow-y-auto p-2">
+            {items === null && !loadError ? (
+              <div className="flex items-center justify-center gap-2 px-3 py-5 text-xs text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando itens...
+              </div>
+            ) : loadError ? (
+              <p className="px-3 py-4 text-xs text-muted-foreground">Não foi possível carregar a prévia.</p>
+            ) : items?.length ? (
+              <div className="divide-y">
+                {items.map((item) => {
+                  const product = item.productId ? products.find((entry) => entry.id === item.productId) : null;
+                  const itemName =
+                    (product ? getProductFullName(product) : "") ||
+                    item.itemName ||
+                    item.baseItemId ||
+                    "Item da compra";
+                  const quantity = Number(item.quantityOrdered || 0);
+                  const total = Number(item.totalOrdered ?? quantity * Number(item.unitPriceOrdered || 0));
+
+                  return (
+                    <div key={item.id} className="flex items-start justify-between gap-3 px-2 py-2.5">
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 text-xs font-medium leading-4">{itemName}</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {quantity.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {item.purchaseUnitLabel || item.unit || "un."}
+                        </p>
+                      </div>
+                      <p className="shrink-0 font-mono text-xs font-semibold">{formatCurrency(total)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="px-3 py-4 text-xs text-muted-foreground">Nenhum item cadastrado neste pedido.</p>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function InstallmentScheduleTooltip({ installments, label }: { installments: any[]; label: string }) {
+  if (!Array.isArray(installments) || installments.length <= 1) return <span>{label}</span>;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" className="cursor-help border-b border-dotted border-current" aria-label="Ver datas das parcelas">
+            {label}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="start" sideOffset={8} className="w-72 rounded-xl p-3">
+          <p className="mb-2 text-xs font-semibold">Cronograma das parcelas</p>
+          <div className="space-y-1.5">
+            {installments.map((installment, index) => {
+              const dueDate = toDate(installment?.dueDate);
+              const status = installment?.status === "paid" ? "Paga" : installment?.status === "cancelled" ? "Cancelada" : "Pendente";
+              return (
+                <div key={`${installment?.number || index + 1}-${dueDate?.getTime() || index}`} className="grid grid-cols-[40px_1fr_auto] gap-2 text-xs">
+                  <span className="text-muted-foreground">{installment?.number || index + 1}/{installments.length}</span>
+                  <span>{dueDate ? format(dueDate, "dd/MM/yyyy") : "Sem data"}</span>
+                  <span className="text-right">
+                    {formatCurrency(Number(installment?.value) || 0)}
+                    <span className="ml-1 text-[10px] text-muted-foreground">· {status}</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function getUnitColorStyle(unitName: string) {
   const normalized = unitName.toLowerCase();
   return UNIT_COLOR_STYLES.find((style) => normalized.includes(style.match)) ?? {
@@ -198,18 +327,29 @@ function getUnitColorStyle(unitName: string) {
   };
 }
 
-function expenseMatchesUnit(expense: any, unitName: string) {
-  return (
-    expense.resultCenter === unitName ||
-    (Array.isArray(expense.apportionments) &&
-      expense.apportionments.some((item: any) => item?.resultCenter === unitName))
+function getExpenseUnitLabel(expense: any, resultCenterNameById: ResultCenterNameMap) {
+  if (!expense.isApportioned) {
+    return resolveResultCenterName(expense.resultCenter, resultCenterNameById) || "—";
+  }
+
+  const participants = Array.from(
+    new Set<string>(
+      (expense.apportionments || [])
+        .map((item: any) => resolveResultCenterName(item?.resultCenter, resultCenterNameById))
+        .filter(Boolean)
+    )
   );
+
+  if (participants.length === 1) return participants[0];
+  if (participants.length > 1) return `Rateado · ${participants.length} unidades`;
+  return "Rateado";
 }
 
 function matchesBaseFilters(
   expense: any,
   {
     accountPlanMap,
+    resultCenterNameById,
     search,
     originFilter,
     dateFrom,
@@ -221,6 +361,7 @@ function matchesBaseFilters(
     now,
   }: {
     accountPlanMap: Record<string, string>;
+    resultCenterNameById: ResultCenterNameMap;
     search: string;
     originFilter: string;
     dateFrom: string;
@@ -236,7 +377,7 @@ function matchesBaseFilters(
   const due = toDate(expense.dueDate);
   const competence = toDate(expense.competenceDate);
   const belongsToUnit =
-    unitFilter === "all" || expenseMatchesUnit(expense, unitFilter);
+    unitFilter === "all" || expenseReferencesResultCenter(expense, unitFilter, resultCenterNameById);
   const normalizedSearch = search.toLowerCase();
   const matchesSearch =
     !search ||
@@ -285,14 +426,15 @@ function getExpenseStatusKey(expense: any, now: Date) {
 }
 
 export function ExpensesPage() {
-  const { permissions } = useAuth();
+  const { firebaseUser, permissions } = useAuth();
   const { kiosks } = useKiosks();
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: expensesData, loading } = useFinancialCollection<any>(financialCollection("expenses"));
+  const { data: expensesData, loading, refresh: refreshExpenses } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: transactionsData } = useFinancialCollection<any>(financialCollection("transactions"));
   const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
+  const { data: resultCenters, loading: resultCentersLoading } = useFinancialCollection<any>(financialCollection("resultCenters"));
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") ?? "all");
   const [originFilter, setOriginFilter] = useState(searchParams.get("origin") ?? "all");
@@ -305,6 +447,7 @@ export function ExpensesPage() {
   const [unitFilter, setUnitFilter] = useState(searchParams.get("unit") ?? "all");
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [finalizingAuditId, setFinalizingAuditId] = useState<string | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const canAccessAudits = !!permissions.financial?.expenses?.import;
@@ -328,6 +471,15 @@ export function ExpensesPage() {
     });
     return map;
   }, [accountPlans]);
+  const resultCenterNameById = useMemo(() => {
+    const map: ResultCenterNameMap = {};
+    (resultCenters || []).forEach((center) => {
+      if (typeof center.id === "string" && typeof center.name === "string" && center.name.trim()) {
+        map[center.id] = center.name.trim();
+      }
+    });
+    return map;
+  }, [resultCenters]);
 
   useEffect(() => {
     setSearch(searchParams.get("search") ?? "");
@@ -406,6 +558,7 @@ export function ExpensesPage() {
         if (
           !matchesBaseFilters(expense, {
             accountPlanMap,
+            resultCenterNameById,
             search,
             originFilter,
             dateFrom,
@@ -430,13 +583,14 @@ export function ExpensesPage() {
         return matchesStatus;
       })
       .sort((a, b) => (toDate(b.createdAt)?.getTime() || 0) - (toDate(a.createdAt)?.getTime() || 0));
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, search, statusFilter, supplierFilter, unitFilter]);
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, resultCenterNameById, search, statusFilter, supplierFilter, unitFilter]);
 
   const scopedExpenses = useMemo(() => {
     const now = startOfDay(new Date());
     return expenses.filter((expense) =>
       matchesBaseFilters(expense, {
         accountPlanMap,
+        resultCenterNameById,
         search,
         originFilter,
         dateFrom,
@@ -448,18 +602,18 @@ export function ExpensesPage() {
         now,
       })
     );
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, search, supplierFilter, unitFilter]);
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, resultCenterNameById, search, supplierFilter, unitFilter]);
   const unitCounts = useMemo(() => {
     const counts = new Map<string, number>();
     scopedExpenses.forEach((expense) => {
       units.forEach((unit) => {
-        if (expenseMatchesUnit(expense, unit.name)) {
+        if (expenseReferencesResultCenter(expense, unit.name, resultCenterNameById)) {
           counts.set(unit.name, (counts.get(unit.name) || 0) + 1);
         }
       });
     });
     return counts;
-  }, [scopedExpenses, units]);
+  }, [resultCenterNameById, scopedExpenses, units]);
 
   const filteredCountLabel = `${filtered.length} de ${scopedExpenses.length}`;
 
@@ -477,7 +631,8 @@ export function ExpensesPage() {
       const due = toDate(expense.dueDate);
       const scopedValue = expenseValueForResultCenter(
         expense,
-        unitFilter === "all" ? undefined : unitFilter
+        unitFilter === "all" ? undefined : unitFilter,
+        resultCenterNameById
       );
       if (expense.status === "pending") {
         open += scopedValue;
@@ -507,7 +662,7 @@ export function ExpensesPage() {
     });
 
     return { open, overdue, paid, dueSoon, pendingAudit };
-  }, [expenses, scopedExpenses, transactions, unitFilter]);
+  }, [expenses, resultCenterNameById, scopedExpenses, transactions, unitFilter]);
 
   useEffect(() => {
     if (!expandedExpenseId) return;
@@ -527,12 +682,51 @@ export function ExpensesPage() {
 
     try {
       await deleteDoc(financialDoc("expenses", deleteTarget.id));
+      refreshExpenses();
       toast({ title: "Despesa excluída." });
     } catch (error: any) {
       console.error("Erro ao excluir despesa:", error);
       toast({ variant: "destructive", title: "Erro ao excluir a despesa.", description: error.message || "Tente novamente mais tarde." });
     } finally {
       setDeleteTarget(null);
+    }
+  }
+
+  async function handleFinalizeAudit(expense: any) {
+    if (!firebaseUser || expense.originModule !== "purchasing" || expense.originStatus !== "pending_audit") return;
+
+    setFinalizingAuditId(expense.id);
+    try {
+      const normalizedResultCenter = resolveResultCenterName(expense.resultCenter, resultCenterNameById);
+      const normalizedApportionments = Array.isArray(expense.apportionments)
+        ? expense.apportionments.map((item: any) => ({
+            ...item,
+            resultCenter: resolveResultCenterName(item?.resultCenter, resultCenterNameById),
+          }))
+        : expense.apportionments;
+      await updateDoc(financialDoc("expenses", expense.id), {
+        originStatus: "audited",
+        auditStatus: "resolved",
+        auditFinalizedAt: Timestamp.now(),
+        auditFinalizedBy: firebaseUser.uid,
+        ...(normalizedResultCenter && normalizedResultCenter !== expense.resultCenter
+          ? { resultCenterId: expense.resultCenter, resultCenter: normalizedResultCenter }
+          : {}),
+        ...(Array.isArray(normalizedApportionments) ? { apportionments: normalizedApportionments } : {}),
+        updatedAt: Timestamp.now(),
+      });
+      refreshExpenses();
+      toast({
+        title: "Auditoria finalizada.",
+        description: expense.linkedBankTransactionId
+          ? "O pagamento identificado no extrato foi preservado e a pendência foi encerrada."
+          : "A classificação foi aprovada; a despesa permanece em aberto até o pagamento.",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Não foi possível finalizar a auditoria." });
+    } finally {
+      setFinalizingAuditId(null);
     }
   }
 
@@ -759,7 +953,7 @@ export function ExpensesPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {loading || resultCentersLoading ? (
                   Array.from({ length: 5 }).map((_, index) => (
                     <tr key={index} className="border-b">
                       <td colSpan={7} className="p-4">
@@ -779,9 +973,7 @@ export function ExpensesPage() {
                     const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                     const isExpanded = expandedExpenseId === expense.id;
                     const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
-                    const primaryUnit = expense.isApportioned
-                      ? expense.apportionments?.[0]?.resultCenter || "Rateado"
-                      : expense.resultCenter || "—";
+                    const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
                     const installmentLabel = expense.installments?.length
                       ? `${expense.installments[0]?.number || 1}/${expense.installments.length}`
                       : "1/1";
@@ -795,12 +987,12 @@ export function ExpensesPage() {
                           <td className="px-4 py-3">
                             <div className="flex items-start gap-3">
                               <span className={cn("mt-1 h-7 w-1 shrink-0 rounded-full", STATUS_ACCENT_COLORS[statusKey] || "bg-border")} />
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium">{expense.description}</p>
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="line-clamp-2 min-w-0 font-medium leading-5">{expense.description}</p>
                                   {expense.installments?.length > 1 && (
                                     <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                      {installmentLabel}
+                                      <InstallmentScheduleTooltip installments={expense.installments} label={installmentLabel} />
                                     </span>
                                   )}
                                   {expense.originModule === "purchasing" && (
@@ -809,11 +1001,6 @@ export function ExpensesPage() {
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                  {primaryUnit !== "—" ? `${primaryUnit} · ` : ""}
-                                  {expense.supplier || "Sem fornecedor"}
-                                  {expense.notes ? ` · ${expense.notes}` : ""}
-                                </p>
                               </div>
                             </div>
                           </td>
@@ -823,7 +1010,9 @@ export function ExpensesPage() {
                               <p className="text-xs text-muted-foreground">{planName}</p>
                             </div>
                           </td>
-                          <td className="px-4 py-3">{primaryUnit}</td>
+                          <td className="px-4 py-3">
+                            <p className="line-clamp-2 break-words leading-5">{primaryUnit}</p>
+                          </td>
                           <td className="px-4 py-3">
                             <div className="space-y-1 text-center md:text-left">
                               <p>{due ? format(due, "dd/MM/yyyy") : "—"}</p>
@@ -877,17 +1066,17 @@ export function ExpensesPage() {
                                   </div>
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Parcela</p>
-                                    <p className="mt-1 text-sm font-medium">{installmentLabel}</p>
+                                    <p className="mt-1 text-sm font-medium">
+                                      <InstallmentScheduleTooltip installments={expense.installments || []} label={installmentLabel} />
+                                    </p>
                                   </div>
                                   {expense.purchaseOrderId && (
                                     <div className="sm:col-span-3">
                                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pedido vinculado</p>
-                                      <Link
+                                      <PurchaseOrderItemsLink
+                                        orderId={expense.purchaseOrderId}
                                         href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(FINANCIAL_ROUTES.pendingAuditExpenses)}`}
-                                        className="mt-1 inline-block text-sm font-medium text-primary underline underline-offset-2"
-                                      >
-                                        Abrir pedido {expense.purchaseOrderId}
-                                      </Link>
+                                      />
                                     </div>
                                   )}
                                   {expense.notes && (
@@ -902,6 +1091,23 @@ export function ExpensesPage() {
                                     <p className="mt-1 font-mono text-xl font-bold">{formatCurrency(expense.totalValue || 0)}</p>
                                   </div>
                                   <div className="flex flex-wrap justify-end gap-2">
+                                    {permissions.financial?.expenses?.edit &&
+                                      expense.originModule === "purchasing" &&
+                                      expense.originStatus === "pending_audit" && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={finalizingAuditId === expense.id}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            void handleFinalizeAudit(expense);
+                                          }}
+                                        >
+                                          {finalizingAuditId === expense.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                          Finalizar auditoria
+                                        </Button>
+                                      )}
                                     {permissions.financial?.expenses?.pay && expense.status === "pending" && (
                                       <Button
                                         type="button"
@@ -950,7 +1156,7 @@ export function ExpensesPage() {
               <span className="text-right text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Valor</span>
               <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Status</span>
             </div>
-            {loading ? (
+            {loading || resultCentersLoading ? (
               <div className="space-y-3 p-4">
                 {Array.from({ length: 5 }).map((_, index) => (
                   <Skeleton key={index} className="h-24 w-full rounded-xl" />
@@ -964,9 +1170,7 @@ export function ExpensesPage() {
                   const due = toDate(expense.dueDate);
                   const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                   const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
-                  const primaryUnit = expense.isApportioned
-                    ? expense.apportionments?.[0]?.resultCenter || "Rateado"
-                    : expense.resultCenter || "—";
+                  const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
 
                   return (
                     <div key={expense.id} className="border-b border-border/50 px-4 py-3 last:border-b-0 hover:bg-muted/10">
@@ -980,6 +1184,8 @@ export function ExpensesPage() {
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{expense.supplier || "—"}</span>
                         <span className="text-border">·</span>
+                        <span>{primaryUnit}</span>
+                        <span className="text-border">·</span>
                         <span>{planName}</span>
                         <span className="text-border">·</span>
                         <span>{due ? `Venc. ${format(due, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
@@ -991,12 +1197,11 @@ export function ExpensesPage() {
                             Compras
                           </span>
                           {expense.purchaseOrderId && (
-                            <Link
+                            <PurchaseOrderItemsLink
+                              orderId={expense.purchaseOrderId}
                               href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(FINANCIAL_ROUTES.pendingAuditExpenses)}`}
-                              className="text-[11px] text-primary underline"
-                            >
-                              Abrir pedido
-                            </Link>
+                              label="Abrir pedido"
+                            />
                           )}
                           <span className={cn("text-[11px]", statusKey === "pending_audit" ? "text-amber-700" : "text-muted-foreground")}>
                             {statusKey === "cancelled"
@@ -1022,6 +1227,16 @@ export function ExpensesPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
+                            {permissions.financial?.expenses?.edit &&
+                              expense.originModule === "purchasing" &&
+                              expense.originStatus === "pending_audit" && (
+                                <DropdownMenuItem
+                                  disabled={finalizingAuditId === expense.id}
+                                  onClick={() => void handleFinalizeAudit(expense)}
+                                >
+                                  Finalizar auditoria
+                                </DropdownMenuItem>
+                              )}
                             {permissions.financial?.expenses?.pay && expense.status === "pending" && (
                               <DropdownMenuItem
                                 onClick={() =>
