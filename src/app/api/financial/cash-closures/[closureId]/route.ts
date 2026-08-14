@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
+import { dbAdmin } from "@/lib/firebase-admin";
 import {
   assertCashClosureAccess,
   cashClosureActor,
   cashClosureSeniorDivergenceCents,
 } from "@/features/financial/cash-closures/access.server";
+import { resolveOperatorAvatarUrls } from "@/features/financial/cash-closures/operator-avatars";
 import {
   getCashClosure,
   saveCashClosureConference,
@@ -30,8 +32,19 @@ async function loadAuthorized(request: NextRequest, routeContext: RouteContext, 
 export async function GET(request: NextRequest, routeContext: RouteContext) {
   try {
     const { result } = await loadAuthorized(request, routeContext, "view");
+    const usersSnapshot = await dbAdmin.collection("users")
+      .select("username", "avatarUrl", "pdvOperatorIds", "registrationIdPdv")
+      .get();
+    const operatorAvatars = resolveOperatorAvatarUrls({
+      kioskId: result.closure.kioskId,
+      operators: Array.from(new Map(
+        result.lines.map((line) => [line.operatorId, { id: line.operatorId, name: line.operatorName }]),
+      ).values()),
+      users: usersSnapshot.docs.map((document) => document.data()),
+    });
     return NextResponse.json({
       ...result,
+      operatorAvatars,
       settings: { seniorDivergenceCents: cashClosureSeniorDivergenceCents() },
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

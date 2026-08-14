@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -123,6 +124,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
   const [data, setData] = useState<CashClosureWithLines | null>(null);
+  const [operatorAvatars, setOperatorAvatars] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -163,6 +165,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     try {
       const payload = await api(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`);
       setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
+      setOperatorAvatars(payload.operatorAvatars ?? {});
       setSeniorDivergenceCents(payload.settings?.seniorDivergenceCents ?? 1_000);
       setSaveState("idle");
     } catch (error) {
@@ -432,7 +435,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       const interval = operatorInterval(group.lines);
       const groupResult = financePending ? null : resultText(difference);
       return <Card key={group.key} className="overflow-hidden rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]">
-        <CardHeader className="border-b border-stone-100 px-5 py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="grid h-[38px] w-[38px] place-items-center rounded-full bg-pink-100 text-xs font-black text-pink-600">{initials}</span><div><CardTitle className="text-[15px] font-bold">{group.name}</CardTitle>{interval && <p className="mt-0.5 text-[11.5px] font-semibold text-zinc-400">{interval}</p>}</div></div><div className="flex flex-wrap items-center justify-end gap-2"><span className="inline-flex h-7 items-center rounded-full bg-stone-100 px-3 font-mono text-[11.5px] font-bold text-zinc-600"><span className="mr-1.5 font-sans font-semibold text-zinc-400">PDV</span>{formatBRL(expected)}</span><span className={cn("inline-flex h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", groupResult?.className ?? "bg-stone-100 text-zinc-500", !groupResult ? "bg-stone-100" : difference === 0 ? "bg-emerald-50" : "bg-rose-50")}>{!groupResult ? "Aguardando Financeiro" : difference === 0 ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Tudo confere</> : groupResult.label}</span></div></div></CardHeader>
+        <CardHeader className="border-b border-stone-100 px-5 py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><Avatar className="h-[38px] w-[38px]"><AvatarImage src={operatorAvatars[group.lines[0].operatorId]} alt={group.name} className="object-cover" /><AvatarFallback className="bg-pink-100 text-xs font-black text-pink-600">{initials}</AvatarFallback></Avatar><div><CardTitle className="text-[15px] font-bold">{group.name}</CardTitle>{interval && <p className="mt-0.5 text-[11.5px] font-semibold text-zinc-400">{interval}</p>}</div></div><div className="flex flex-wrap items-center justify-end gap-2"><span className="inline-flex h-7 items-center rounded-full bg-stone-100 px-3 font-mono text-[11.5px] font-bold text-zinc-600"><span className="mr-1.5 font-sans font-semibold text-zinc-400">PDV</span>{formatBRL(expected)}</span><span className={cn("inline-flex h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", groupResult?.className ?? "bg-stone-100 text-zinc-500", !groupResult ? "bg-stone-100" : difference === 0 ? "bg-emerald-50" : "bg-rose-50")}>{!groupResult ? "Aguardando Financeiro" : difference === 0 ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Tudo confere</> : groupResult.label}</span></div></div></CardHeader>
         <CardContent className="space-y-0 !p-0">
           <div className="hidden grid-cols-[14px_minmax(170px,1.5fr)_130px_150px_150px_minmax(150px,190px)] gap-3 border-b border-stone-100 bg-stone-50/80 px-5 py-2.5 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-400 lg:grid"><span /><span>Canal</span><span className="text-right">PDV · esperado</span><span className="text-right">Caixa · contado</span><span className="text-right">Financeiro · conferido</span><span>Resultado</span></div>
           {group.lines.map((line) => {
