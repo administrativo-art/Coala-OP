@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import {
   assertCashClosureAccess,
+  canUseCashClosure,
   cashClosureActor,
   cashClosureSeniorDivergenceCents,
 } from "@/features/financial/cash-closures/access.server";
@@ -61,8 +62,17 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
       assertCashClosureAccess(context, "approve", result.closure.kioskId);
       return NextResponse.json(await saveCashClosureConference(closureId, input.lines, cashClosureActor(context)));
     }
-    assertCashClosureAccess(context, "edit", result.closure.kioskId);
-    return NextResponse.json(await saveCashClosureDraft(closureId, input.lines, cashClosureActor(context)));
+    const editReported = canUseCashClosure(context, "edit", result.closure.kioskId);
+    const editCounted = canUseCashClosure(context, "approve", result.closure.kioskId);
+    if (!editReported && !editCounted) {
+      throw new Error("Sem permissão para editar este fechamento de caixa.");
+    }
+    return NextResponse.json(await saveCashClosureDraft(
+      closureId,
+      input.lines,
+      cashClosureActor(context),
+      { editReported, editCounted },
+    ));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao salvar fechamento.";
     return NextResponse.json({ error: message }, { status: message.includes("permissão") ? 403 : message.includes("não encontrado") ? 404 : 400 });

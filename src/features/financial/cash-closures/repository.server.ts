@@ -301,6 +301,7 @@ export async function saveCashClosureDraft(
   id: string,
   updates: CashClosureDraftLineInput[],
   actor: CashClosureActor,
+  permissions: { editReported: boolean; editCounted: boolean } = { editReported: true, editCounted: false },
 ) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
@@ -328,25 +329,47 @@ export async function saveCashClosureDraft(
       const update = updateById.get(current.id);
       if (!update) return current;
       updateById.delete(current.id);
-      const reportedCents = isPdvAutoCountedChannel(current.channel)
-        ? current.expectedCents
-        : update.reportedCents !== undefined ? update.reportedCents : update.countedCents ?? null;
-      if (reportedCents !== null && (!Number.isSafeInteger(reportedCents) || reportedCents < 0)) {
-        throw new Error(`Valor informado inválido na linha ${current.id}.`);
+      const automatic = isPdvAutoCountedChannel(current.channel);
+      let next = current;
+      if (automatic || permissions.editReported) {
+        const reportedCents = automatic
+          ? current.expectedCents
+          : update.reportedCents !== undefined ? update.reportedCents : update.countedCents ?? null;
+        if (reportedCents !== null && (!Number.isSafeInteger(reportedCents) || reportedCents < 0)) {
+          throw new Error(`Valor informado inválido na linha ${current.id}.`);
+        }
+        const reportedNote = automatic
+          ? null
+          : update.reportedNote !== undefined ? update.reportedNote : update.note ?? null;
+        const normalizedReportedNote = reportedNote?.trim() || null;
+        if (next.reportedCents !== reportedCents || next.reportedNote !== normalizedReportedNote) {
+          next = recalculateReportedLine(
+            next,
+            reportedCents,
+            reportedNote,
+            automatic ? "system:pdv" : actor.userId,
+            now,
+          );
+        }
       }
-      const reportedNote = update.reportedNote !== undefined ? update.reportedNote : update.note ?? null;
-      const normalizedNote = reportedNote?.trim() || null;
-      if (current.reportedCents === reportedCents && current.reportedNote === normalizedNote) return current;
-      let next = recalculateReportedLine(
-        current,
-        reportedCents,
-        reportedNote,
-        isPdvAutoCountedChannel(current.channel) ? "system:pdv" : actor.userId,
-        now,
-      );
-      if (isPdvAutoCountedChannel(current.channel)) {
-        next = recalculateCountedLine(next, current.expectedCents, null, "system:pdv", now);
+      if (automatic || permissions.editCounted) {
+        const countedCents = automatic ? current.expectedCents : update.countedCents ?? null;
+        if (countedCents !== null && (!Number.isSafeInteger(countedCents) || countedCents < 0)) {
+          throw new Error(`Valor conferido inválido na linha ${current.id}.`);
+        }
+        const countedNote = automatic ? null : update.note ?? null;
+        const normalizedCountedNote = countedNote?.trim() || null;
+        if (next.countedCents !== countedCents || next.note !== normalizedCountedNote) {
+          next = recalculateCountedLine(
+            next,
+            countedCents,
+            countedNote,
+            automatic ? "system:pdv" : actor.userId,
+            now,
+          );
+        }
       }
+      if (JSON.stringify(current) === JSON.stringify(next)) return current;
       transaction.set(document.ref, next);
       if (current.reportedCents !== next.reportedCents) {
         writeAudit(transaction, {
@@ -370,6 +393,30 @@ export async function saveCashClosureDraft(
           createdAt: now,
           previousValue: current.reportedNote,
           newValue: next.reportedNote,
+        });
+      }
+      if (current.countedCents !== next.countedCents) {
+        writeAudit(transaction, {
+          workspaceId: closure.workspaceId,
+          closureId: id,
+          lineId: current.id,
+          action: "counted_amount_updated",
+          actor,
+          createdAt: now,
+          previousValue: current.countedCents,
+          newValue: next.countedCents,
+        });
+      }
+      if (current.note !== next.note) {
+        writeAudit(transaction, {
+          workspaceId: closure.workspaceId,
+          closureId: id,
+          lineId: current.id,
+          action: "note_updated",
+          actor,
+          createdAt: now,
+          previousValue: current.note,
+          newValue: next.note,
         });
       }
       return next;
@@ -410,7 +457,7 @@ export async function submitCashClosure(id: string, actor: CashClosureActor) {
       const current = normalizedById.get(document.id)!;
       const next = isPdvAutoCountedChannel(current.channel)
         ? recalculateCountedLine(current, current.expectedCents, null, "system:pdv", now)
-        : recalculateCountedLine(current, null, null, actor.userId, now);
+        : current;
       if (JSON.stringify(next) !== JSON.stringify(current)) transaction.set(document.ref, next);
       return next;
     });
