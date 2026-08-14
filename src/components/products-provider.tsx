@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
 import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
+import { normalizeMeasurementUnit } from '@/lib/conversion';
 
 export interface ProductsContextType {
   products: Product[];
@@ -53,7 +54,9 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     const applyProducts = (productsData: Product[]) => {
       if (!active) return;
-      setProducts(productsData.sort((a,b) => a.baseName.localeCompare(b.baseName)));
+      setProducts(productsData
+        .map((product) => ({ ...product, unit: normalizeMeasurementUnit(product.unit) }))
+        .sort((a,b) => a.baseName.localeCompare(b.baseName)));
       setLoading(false);
     };
 

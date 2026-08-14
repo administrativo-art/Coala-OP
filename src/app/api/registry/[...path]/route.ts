@@ -11,6 +11,7 @@ import {
   isStockCountOwner,
 } from '@/features/stock-count/lib/finalize';
 import { type StockAuditSession } from '@/types';
+import { normalizeMeasurementUnit } from '@/lib/conversion';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -133,6 +134,13 @@ function normalizeEntityDocument(value: unknown) {
   return typeof value === 'string' ? value.replace(/\D/g, '') : '';
 }
 
+function normalizeRegistryMeasurementUnit(resource: string | undefined, body: Record<string, any>) {
+  if (!['products', 'base-products'].includes(resource ?? '') || typeof body.unit !== 'string') {
+    return body;
+  }
+  return { ...body, unit: normalizeMeasurementUnit(body.unit) };
+}
+
 async function assertUniqueEntityDocument(value: unknown, currentId?: string) {
   const normalized = normalizeEntityDocument(value);
   if (!normalized) return normalized;
@@ -185,7 +193,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   const userContext = await getUserContext(request);
   if (!userContext) return jsonError('Não autorizado.', 401);
   if (!canUseRegistryResource(userContext, resource, 'create')) return permissionError();
-  const body = await request.json().catch(() => ({}));
+  const rawBody = await request.json().catch(() => ({})) as Record<string, any>;
+  const body = normalizeRegistryMeasurementUnit(resource, rawBody);
 
   const collectionMap: Record<string, string> = {
     'products': 'products',
@@ -253,7 +262,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
   const userContext = await getUserContext(request);
   if (!userContext) return jsonError('Não autorizado.', 401);
   if (!canUseRegistryResource(userContext, resource, 'update')) return permissionError();
-  const body = await request.json().catch(() => ({}));
+  const rawBody = await request.json().catch(() => ({})) as Record<string, any>;
+  const body = normalizeRegistryMeasurementUnit(resource, rawBody);
 
   const collectionMap: Record<string, string> = {
     'products': 'products',

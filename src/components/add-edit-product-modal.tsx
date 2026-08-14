@@ -1111,7 +1111,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <FormLabel>Categoria do item <span className="text-rose-500">*</span></FormLabel>
                                                             <span className="text-xs text-muted-foreground">define o fluxo de compra</span>
                                                         </div>
-                                                        <Popover modal open={operationalCategoryOpen} onOpenChange={setOperationalCategoryOpen}>
+                                                        <Popover open={operationalCategoryOpen} onOpenChange={setOperationalCategoryOpen}>
                                                             <PopoverTrigger asChild>
                                                                 <FormControl>
                                                                     <Button
@@ -1170,7 +1170,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <span className="text-xs text-muted-foreground">agrupa e converte o estoque</span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <Popover modal open={baseProductOpen} onOpenChange={setBaseProductOpen}>
+                                                            <Popover open={baseProductOpen} onOpenChange={setBaseProductOpen}>
                                                                 <PopoverTrigger asChild>
                                                                     <FormControl>
                                                                         <Button

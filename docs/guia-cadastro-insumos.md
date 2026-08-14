@@ -332,9 +332,9 @@ Estes dois campos juntos definem **a régua de medida de todo o insumo**. Todos 
 |---|---|---|
 | `Volume` | `l`, `ml`, `bag` | Use `l` — estoque fica legível (ex: "45 l") |
 | `Massa` | `kg`, `g`, `mg` | Use `kg` — estoque fica legível (ex: "12 kg") |
-| `Unidade` | `un`, `unidade`, `pacote`, `bag`, `caixa` | Use `un` |
-| `Embalagem` | `un`, `unidade`, `pacote`, `bag`, `caixa` | Use `un` |
-| `Vestimenta` | `peça`, `un`, `unidade` | Use `peça` |
+| `Unidade` | `un`, `pacote`, `bag`, `caixa` | Use `un` |
+| `Embalagem` | `un`, `pacote`, `bag`, `caixa` | Use `un` |
+| `Vestimenta` | `peça`, `un` | Use `peça` |
 
 **Regra crítica:** a Categoria escolhida aqui **deve ser idêntica** à Categoria de todos os Insumos Derivados que você vincular a este Base. Se as categorias forem diferentes, a conversão falha na hora da compra.
 
@@ -570,9 +570,9 @@ A unidade do número informado em "Qtd. embalagem". Deve pertencer à mesma cate
 |---|---|---|
 | `Volume` | `l`, `ml`, `bag` | `ml` para embalagens pequenas, `l` para grandes |
 | `Massa` | `kg`, `g`, `mg` | `g` para embalagens pequenas, `kg` para grandes |
-| `Unidade` | `un`, `unidade`, `pacote`, `bag`, `caixa` | `un` na maioria dos casos |
-| `Embalagem` | `un`, `unidade`, `pacote`, `bag`, `caixa` | `un` na maioria dos casos |
-| `Vestimenta` | `peça`, `un`, `unidade` | `peça` |
+| `Unidade` | `un`, `pacote`, `bag`, `caixa` | `un` na maioria dos casos |
+| `Embalagem` | `un`, `pacote`, `bag`, `caixa` | `un` na maioria dos casos |
+| `Vestimenta` | `peça`, `un` | `peça` |
 
 **A conversão automática funciona assim:**
 ```
@@ -1193,4 +1193,3 @@ Existe um módulo separado chamado **Patrimônio (Assets)**, destinado a equipam
 > Por isso, a **Categoria do item** `Patrimônio` não aparece no formulário de Insumo Derivado — ela é exclusiva do cadastro de Assets.
 
 O guia detalhado do módulo de Patrimônio está em elaboração. Enquanto isso, qualquer dúvida sobre cadastro de equipamentos ou bens patrimoniais deve ser direcionada ao time de TI ou ao administrador do sistema.
-

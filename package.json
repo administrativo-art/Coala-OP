@@ -32,6 +32,7 @@
     "migrate:company-contacts": "node --import tsx scripts/migrate-company-department-contacts.mts",
     "migrate:onboarding-v2": "node scripts/migrate-onboarding-templates-v2.mjs",
     "migrate:user-unit-access": "node scripts/migrate-user-unit-access-scope.mjs",
+    "migrate:measurement-unit-alias": "node scripts/migrate-measurement-unit-alias.mjs",
     "migrate:standard-person-links": "node scripts/migrate-standard-person-links.mjs",
     "migrate:profile-compliance": "node --import tsx scripts/migrate-profile-compliance-v1.mts",
     "sync:profile-compliance-cache": "node --import tsx scripts/sync-profile-compliance-cache.mts",
