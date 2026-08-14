@@ -1143,16 +1143,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                                 <CommandItem
                                                                                     key={category.id}
                                                                                     value={`${category.name} ${normalizeAlias(category.name)} ${category.slug || ''}`}
-                                                                                    onPointerDown={(event) => {
-                                                                                        if (event.button !== 0) return;
-                                                                                        event.preventDefault();
-                                                                                        handleOperationalCategoryChange(category.id, field.onChange);
-                                                                                        setOperationalCategoryOpen(false);
-                                                                                    }}
-                                                                                    onClick={() => {
-                                                                                        handleOperationalCategoryChange(category.id, field.onChange);
-                                                                                        setOperationalCategoryOpen(false);
-                                                                                    }}
                                                                                     onSelect={() => {
                                                                                         handleOperationalCategoryChange(category.id, field.onChange);
                                                                                         setOperationalCategoryOpen(false);
@@ -1212,16 +1202,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                                 <CommandGroup>
                                                                                     <CommandItem
                                                                                         value="sem insumo base limpar desvincular"
-                                                                                        onPointerDown={(event) => {
-                                                                                            if (event.button !== 0) return;
-                                                                                            event.preventDefault();
-                                                                                            handleBaseProductChange('', field.onChange);
-                                                                                            setBaseProductOpen(false);
-                                                                                        }}
-                                                                                        onClick={() => {
-                                                                                            handleBaseProductChange('', field.onChange);
-                                                                                            setBaseProductOpen(false);
-                                                                                        }}
                                                                                         onSelect={() => {
                                                                                             handleBaseProductChange('', field.onChange);
                                                                                             setBaseProductOpen(false);
@@ -1238,16 +1218,6 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                                                         <CommandItem
                                                                                             key={baseProduct.id}
                                                                                             value={`${baseProduct.name} ${normalizeAlias(baseProduct.name)} ${baseProduct.unit} ${groupName} ${normalizeAlias(groupName)}`}
-                                                                                            onPointerDown={(event) => {
-                                                                                                if (event.button !== 0) return;
-                                                                                                event.preventDefault();
-                                                                                                handleBaseProductChange(baseProduct.id, field.onChange);
-                                                                                                setBaseProductOpen(false);
-                                                                                            }}
-                                                                                            onClick={() => {
-                                                                                                handleBaseProductChange(baseProduct.id, field.onChange);
-                                                                                                setBaseProductOpen(false);
-                                                                                            }}
                                                                                             onSelect={() => {
                                                                                                 handleBaseProductChange(baseProduct.id, field.onChange);
                                                                                                 setBaseProductOpen(false);
