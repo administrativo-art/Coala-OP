@@ -35,6 +35,7 @@ import {
   resolveResultCenterName,
   type ResultCenterNameMap,
 } from "@/features/financial/lib/expense-rateio";
+import { compareExpensesByDueDate } from "@/features/financial/lib/expense-order";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
@@ -479,7 +480,7 @@ export function ExpensesPage() {
 
         return matchesStatus;
       })
-      .sort((a, b) => (toDate(b.createdAt)?.getTime() || 0) - (toDate(a.createdAt)?.getTime() || 0));
+      .sort(compareExpensesByDueDate);
   }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, resultCenterNameById, search, statusFilter, supplierFilter, unitFilter]);
 
   const scopedExpenses = useMemo(() => {
