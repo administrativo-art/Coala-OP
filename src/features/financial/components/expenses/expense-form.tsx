@@ -20,6 +20,10 @@ import {
 } from "@/features/financial/lib/schemas";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import {
+  PLANNED_PAYMENT_METHOD_LABELS,
+  type PlannedPaymentMethodType,
+} from "@/features/financial/lib/card-invoices";
+import {
   expenseSeriesPosition,
   selectExpenseSeriesEntries,
   type ExpenseSeriesEntry,
@@ -459,6 +463,7 @@ export function ExpenseForm() {
     financialCollection("expenseDescriptions")
   );
   const { data: resultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
+  const { data: bankAccounts } = useFinancialCollection<any>(financialCollection("bankAccounts"));
   const resultCenterNameById = useMemo(() => {
     const map: ResultCenterNameMap = {};
     (resultCenters || []).forEach((center) => {
@@ -480,6 +485,33 @@ export function ExpenseForm() {
     const parentIds = new Set(all.map((a: any) => a.parentId).filter(Boolean));
     return all.filter((a: any) => a.active !== false && !parentIds.has(a.id));
   }, [accounts]);
+
+  const plannedPaymentInstruments = useMemo(
+    () =>
+      (bankAccounts || [])
+        .filter((account: any) => account.active !== false)
+        .flatMap((account: any) =>
+          (account.paymentMethods || []).map((method: any) => ({
+            key: `${account.id}:${method.id}`,
+            accountId: account.id as string,
+            accountName: account.name as string,
+            methodId: method.id as string,
+            methodLabel: method.label as string,
+            type: method.type as PlannedPaymentMethodType,
+            lastDigits: method.lastDigits as string | undefined,
+            closingDay: method.closingDay as number | undefined,
+            dueDay: method.dueDay as number | undefined,
+          }))
+        )
+        .sort((left: any, right: any) =>
+          `${left.accountName} ${left.methodLabel}`.localeCompare(
+            `${right.accountName} ${right.methodLabel}`,
+            "pt-BR",
+            { sensitivity: "base" }
+          )
+        ),
+    [bankAccounts]
+  );
 
   const groupedAccounts = useMemo(() => {
     const groups: Record<string, any[]> = {};
@@ -517,6 +549,11 @@ export function ExpenseForm() {
     defaultValues: {
       isApportioned: false,
       paymentMethod: "single",
+      plannedPaymentMethodType: undefined,
+      plannedBankAccountId: "",
+      plannedBankAccountName: "",
+      plannedPaymentMethodId: "",
+      plannedPaymentMethodLabel: "",
       apportionments: [{ resultCenter: "", percentage: 100 }],
       rateioCriterion: "equal",
       rateioEffectiveFrom: startOfMonth(addMonths(new Date(), 1)),
@@ -538,6 +575,10 @@ export function ExpenseForm() {
   });
 
   const paymentMethod = form.watch("paymentMethod");
+  const plannedBankAccountId = form.watch("plannedBankAccountId");
+  const plannedPaymentMethodId = form.watch("plannedPaymentMethodId");
+  const plannedPaymentMethodType = form.watch("plannedPaymentMethodType");
+  const plannedPaymentMethodLabel = form.watch("plannedPaymentMethodLabel");
   const accountPlanValue = form.watch("accountPlan");
   const installmentType = form.watch("installmentType");
   const installmentsQty = form.watch("installments");
@@ -563,6 +604,23 @@ export function ExpenseForm() {
     () => (accounts || []).find((a: any) => a.id === accountPlanValue),
     [accountPlanValue, accounts]
   );
+  const plannedPaymentSelection =
+    plannedBankAccountId && plannedPaymentMethodId
+      ? `${plannedBankAccountId}:${plannedPaymentMethodId}`
+      : "none";
+  const selectedPlannedInstrument = useMemo(
+    () => plannedPaymentInstruments.find((instrument: any) => instrument.key === plannedPaymentSelection) ?? null,
+    [plannedPaymentInstruments, plannedPaymentSelection]
+  );
+
+  function handlePlannedPaymentChange(value: string) {
+    const instrument = plannedPaymentInstruments.find((item: any) => item.key === value);
+    form.setValue("plannedPaymentMethodType", instrument?.type, { shouldDirty: true });
+    form.setValue("plannedBankAccountId", instrument?.accountId || "", { shouldDirty: true });
+    form.setValue("plannedBankAccountName", instrument?.accountName || "", { shouldDirty: true });
+    form.setValue("plannedPaymentMethodId", instrument?.methodId || "", { shouldDirty: true });
+    form.setValue("plannedPaymentMethodLabel", instrument?.methodLabel || "", { shouldDirty: true });
+  }
   const activeExpenseDescriptions = useMemo(
     () =>
       [...(expenseDescriptions || [])]
@@ -937,6 +995,11 @@ export function ExpenseForm() {
           totalValue: data.totalValue,
           competenceDate: toOptionalDate(data.competenceDate),
           paymentMethod: data.paymentMethod || "single",
+          plannedPaymentMethodType: data.plannedPaymentMethodType || undefined,
+          plannedBankAccountId: data.plannedBankAccountId || "",
+          plannedBankAccountName: data.plannedBankAccountName || "",
+          plannedPaymentMethodId: data.plannedPaymentMethodId || "",
+          plannedPaymentMethodLabel: data.plannedPaymentMethodLabel || "",
           isApportioned: data.isApportioned,
           resultCenter: resolveResultCenterName(data.resultCenter, resultCenterNameById),
           apportionments: loadedApportionments,
@@ -1174,6 +1237,11 @@ export function ExpenseForm() {
           ? Timestamp.fromDate(values.dueDate)
           : null,
       paymentMethod: values.paymentMethod,
+      plannedPaymentMethodType: values.plannedPaymentMethodType ?? null,
+      plannedBankAccountId: values.plannedBankAccountId || null,
+      plannedBankAccountName: values.plannedBankAccountName || null,
+      plannedPaymentMethodId: values.plannedPaymentMethodId || null,
+      plannedPaymentMethodLabel: values.plannedPaymentMethodLabel || null,
       installmentType: values.paymentMethod === "installments" ? values.installmentType ?? null : null,
       installmentPeriodicity:
         values.paymentMethod === "installments" ? values.installmentPeriodicity ?? null : null,
@@ -1360,6 +1428,19 @@ export function ExpenseForm() {
           if (dirtyFields.description) sharedPatch.description = editPayload.description;
           if (dirtyFields.supplier) sharedPatch.supplier = editPayload.supplier;
           if (dirtyFields.notes) sharedPatch.notes = editPayload.notes;
+          const plannedPaymentChanged =
+            !!dirtyFields.plannedPaymentMethodType ||
+            !!dirtyFields.plannedBankAccountId ||
+            !!dirtyFields.plannedBankAccountName ||
+            !!dirtyFields.plannedPaymentMethodId ||
+            !!dirtyFields.plannedPaymentMethodLabel;
+          if (plannedPaymentChanged) {
+            sharedPatch.plannedPaymentMethodType = editPayload.plannedPaymentMethodType;
+            sharedPatch.plannedBankAccountId = editPayload.plannedBankAccountId;
+            sharedPatch.plannedBankAccountName = editPayload.plannedBankAccountName;
+            sharedPatch.plannedPaymentMethodId = editPayload.plannedPaymentMethodId;
+            sharedPatch.plannedPaymentMethodLabel = editPayload.plannedPaymentMethodLabel;
+          }
 
           const isSettledOrClosed =
             existing.status === "paid" ||
@@ -1502,6 +1583,11 @@ export function ExpenseForm() {
       dirtyFields.description ||
       dirtyFields.supplier ||
       dirtyFields.notes ||
+      dirtyFields.plannedPaymentMethodType ||
+      dirtyFields.plannedBankAccountId ||
+      dirtyFields.plannedBankAccountName ||
+      dirtyFields.plannedPaymentMethodId ||
+      dirtyFields.plannedPaymentMethodLabel ||
       dirtyFields.totalValue ||
       dirtyFields.isApportioned ||
       dirtyFields.resultCenter ||
@@ -2202,6 +2288,39 @@ export function ExpenseForm() {
                         <p className="text-sm text-muted-foreground">Quando pagar e como dividir.</p>
                       </div>
 
+                      <div className="rounded-xl border bg-muted/15 p-4">
+                        <FormLabel>Forma de pagamento prevista</FormLabel>
+                        <p className="mb-3 mt-1 text-xs text-muted-foreground">
+                          Define onde a despesa será conferida. O meio efetivo continuará sendo registrado no pagamento.
+                        </p>
+                        <Select value={plannedPaymentSelection} onValueChange={handlePlannedPaymentChange}>
+                          <SelectTrigger className="bg-background">
+                            <SelectValue placeholder="Não informado" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Não informado</SelectItem>
+                            {plannedPaymentInstruments.map((instrument: any) => (
+                              <SelectItem key={instrument.key} value={instrument.key}>
+                                {instrument.accountName} · {instrument.methodLabel}
+                                {instrument.lastDigits ? ` · final ${instrument.lastDigits}` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        {plannedPaymentMethodType === "credit_card" && selectedPlannedInstrument ? (
+                          <div className="mt-3 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-800">
+                            <CreditCard className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>
+                              Esta despesa aparecerá na fatura mensal de <strong>{selectedPlannedInstrument.methodLabel}</strong>.
+                              {paymentMethod === "recurring"
+                                ? " Cada ocorrência mensal será lançada no ciclo correspondente."
+                                : " A fatura será conciliada separadamente com a saída bancária."}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+
                       <div className="grid gap-4 md:grid-cols-2">
                         {paymentMethod === "single" ? (
                           <FormField
@@ -2339,7 +2458,7 @@ export function ExpenseForm() {
                           </div>
                         </div>
 
-                        <div className="mt-4 grid gap-4 md:grid-cols-4">
+                        <div className="mt-4 grid gap-4 md:grid-cols-5">
                           <div>
                             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
                             <p className="text-sm font-medium">{selectedAccountPlan?.name || "—"}</p>
@@ -2360,6 +2479,14 @@ export function ExpenseForm() {
                                 : paymentMethod === "installments"
                                 ? `${installmentsSummary?.length || installmentsQty}x`
                                 : "recorrente"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pagamento previsto</p>
+                            <p className="text-sm font-medium">
+                              {plannedPaymentMethodType
+                                ? plannedPaymentMethodLabel || PLANNED_PAYMENT_METHOD_LABELS[plannedPaymentMethodType]
+                                : "Não informado"}
                             </p>
                           </div>
                         </div>
@@ -2455,6 +2582,14 @@ export function ExpenseForm() {
                     <div>
                       <p className="font-medium text-muted-foreground">Plano</p>
                       <p className="mt-1">{selectedAccountPlan?.order || "—"}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="font-medium text-muted-foreground">Pagamento previsto</p>
+                      <p className="mt-1">
+                        {plannedPaymentMethodType
+                          ? plannedPaymentMethodLabel || PLANNED_PAYMENT_METHOD_LABELS[plannedPaymentMethodType]
+                          : "Não informado"}
+                      </p>
                     </div>
                   </div>
                 </div>

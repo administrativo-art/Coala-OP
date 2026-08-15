@@ -177,6 +177,28 @@ service cloud.firestore {
         && request.resource.data.status == 'paid';
     }
 
+    function isCardStatementPaymentUpdate() {
+      return canPayExpenses()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'paidAt',
+          'installments',
+          'paidByCardStatement',
+          'cardStatementKey',
+          'cardStatementId',
+          'linkedBankTransactionId',
+          'updatedAt'
+        ])
+        && request.resource.data.paidByCardStatement == true
+        && request.resource.data.cardStatementKey is string
+        && request.resource.data.cardStatementId is string
+        && request.resource.data.linkedBankTransactionId is string
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'paidAt'])
+          || request.resource.data.status == 'paid'
+        );
+    }
+
     function hasConsistentExpenseAccount(data) {
       return data.accountPlan is string
         && data.accountPlan.size() > 0
@@ -236,7 +258,8 @@ service cloud.firestore {
       allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre();
       allow create: if canCreateExpenses() && hasValidExpenseAccount(request.resource.data);
       allow update: if (canEditExpenses() && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data)))
-        || isPaymentStatusUpdate();
+        || isPaymentStatusUpdate()
+        || isCardStatementPaymentUpdate();
       allow delete: if canDeleteExpenses();
     }
 
@@ -244,6 +267,12 @@ service cloud.firestore {
       allow read: if canViewExpenses() || canViewCashFlow() || canViewFinancialFlow() || canViewDre();
       allow create: if canPayExpenses();
       allow update, delete: if false;
+    }
+
+    match /cardStatements/{statementId} {
+      allow read: if canViewExpenses() || canViewCashFlow() || canViewFinancialFlow() || canViewDre();
+      allow create, update: if canEditExpenses() || canPayExpenses() || canImportExpenses();
+      allow delete: if canEditExpenses();
     }
 
     match /transactions/{transactionId} {

@@ -357,6 +357,28 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
       status: "paid",
       paidAt: new Date(),
     }));
+    await assertSucceeds(setDoc(doc(payer.firestore(), "cardStatements/inter__card__2026-08"), {
+      key: "inter:card:2026-08",
+      status: "paid",
+      linkedBankTransactionId: "transaction-1",
+    }));
+    await assertSucceeds(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
+      installments: [{ number: 1, value: 1000, status: "paid" }],
+      paidByCardStatement: true,
+      cardStatementKey: "inter:card:2026-08",
+      cardStatementId: "inter__card__2026-08",
+      linkedBankTransactionId: "transaction-1",
+      updatedAt: new Date(),
+    }));
+    await assertFails(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
+      status: "pending",
+      paidAt: new Date(),
+      paidByCardStatement: true,
+      cardStatementKey: "inter:card:2026-08",
+      cardStatementId: "inter__card__2026-08",
+      linkedBankTransactionId: "transaction-1",
+      updatedAt: new Date(),
+    }));
     await assertFails(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       totalValue: 1,
     }));

@@ -158,6 +158,7 @@ export function canReadFinancialPath(
         permissions.dre
       );
     case "payments":
+    case "cardStatements":
       return (
         permissions.expenses.view ||
         permissions.cashFlow.view ||

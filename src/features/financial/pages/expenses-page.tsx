@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   CircleDollarSign,
+  CreditCard,
   Landmark,
   FilePlus2,
   FileUp,
@@ -36,6 +37,10 @@ import {
   type ResultCenterNameMap,
 } from "@/features/financial/lib/expense-rateio";
 import { compareExpensesByDueDate } from "@/features/financial/lib/expense-order";
+import {
+  PLANNED_PAYMENT_METHOD_LABELS,
+  type PlannedPaymentMethodType,
+} from "@/features/financial/lib/card-invoices";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
@@ -284,6 +289,7 @@ function matchesBaseFilters(
     supplierFilter,
     accountPlanFilter,
     unitFilter,
+    paymentTypeFilter,
     now,
   }: {
     accountPlanMap: Record<string, string>;
@@ -296,6 +302,7 @@ function matchesBaseFilters(
     supplierFilter: string;
     accountPlanFilter: string;
     unitFilter: string;
+    paymentTypeFilter: string;
     now: Date;
   }
 ) {
@@ -322,6 +329,10 @@ function matchesBaseFilters(
     !competenceMonth || (competence && format(competence, "yyyy-MM") === competenceMonth);
   const matchesSupplier = supplierFilter === "all" || (expense.supplier || "") === supplierFilter;
   const matchesAccountPlan = accountPlanFilter === "all" || planName === accountPlanFilter;
+  const matchesPaymentType =
+    paymentTypeFilter === "all" ||
+    (paymentTypeFilter === "unassigned" && !expense.plannedPaymentMethodType) ||
+    expense.plannedPaymentMethodType === paymentTypeFilter;
 
   return (
     matchesSearch &&
@@ -331,6 +342,7 @@ function matchesBaseFilters(
     matchesCompetence &&
     matchesSupplier &&
     matchesAccountPlan &&
+    matchesPaymentType &&
     belongsToUnit
   );
 }
@@ -371,6 +383,7 @@ export function ExpensesPage() {
   const [supplierFilter, setSupplierFilter] = useState(searchParams.get("supplier") ?? "all");
   const [accountPlanFilter, setAccountPlanFilter] = useState(searchParams.get("account_plan") ?? "all");
   const [unitFilter, setUnitFilter] = useState(searchParams.get("unit") ?? "all");
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState(searchParams.get("payment_type") ?? "all");
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [finalizingAuditId, setFinalizingAuditId] = useState<string | null>(null);
@@ -418,6 +431,7 @@ export function ExpensesPage() {
     setSupplierFilter(searchParams.get("supplier") ?? "all");
     setAccountPlanFilter(searchParams.get("account_plan") ?? "all");
     setUnitFilter(searchParams.get("unit") ?? "all");
+    setPaymentTypeFilter(searchParams.get("payment_type") ?? "all");
   }, [searchParams]);
 
   useEffect(() => {
@@ -465,6 +479,7 @@ export function ExpensesPage() {
             supplierFilter,
             accountPlanFilter,
             unitFilter,
+            paymentTypeFilter,
             now,
           })
         ) {
@@ -481,7 +496,7 @@ export function ExpensesPage() {
         return matchesStatus;
       })
       .sort(compareExpensesByDueDate);
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, resultCenterNameById, search, statusFilter, supplierFilter, unitFilter]);
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter, unitFilter]);
 
   const scopedExpenses = useMemo(() => {
     const now = startOfDay(new Date());
@@ -497,10 +512,11 @@ export function ExpensesPage() {
         supplierFilter,
         accountPlanFilter,
         unitFilter,
+        paymentTypeFilter,
         now,
       })
     );
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, resultCenterNameById, search, supplierFilter, unitFilter]);
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, paymentTypeFilter, resultCenterNameById, search, supplierFilter, unitFilter]);
   const unitCounts = useMemo(() => {
     const counts = new Map<string, number>();
     scopedExpenses.forEach((expense) => {
@@ -660,6 +676,11 @@ export function ExpensesPage() {
           <p className="text-muted-foreground">Painel consolidado de despesas, contas a pagar e histórico de liquidações.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={FINANCIAL_ROUTES.cardStatements}>
+              <CreditCard className="mr-2 h-4 w-4" /> Faturas de cartão
+            </Link>
+          </Button>
           {permissions.financial?.paymentRequests?.view && (
             <Button variant="outline" size="sm" asChild>
               <Link href={FINANCIAL_ROUTES.paymentRequests}>
@@ -787,6 +808,21 @@ export function ExpensesPage() {
                 <SelectItem value="manual">Demais despesas</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={paymentTypeFilter} onValueChange={setPaymentTypeFilter}>
+              <SelectTrigger className="h-8 w-[175px] rounded-lg border-border/70 bg-background text-xs">
+                <CreditCard className="mr-2 h-3.5 w-3.5 opacity-50" />
+                <SelectValue placeholder="Forma de pagamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os pagamentos</SelectItem>
+                <SelectItem value="credit_card">Cartão de crédito</SelectItem>
+                <SelectItem value="debit_card">Cartão de débito</SelectItem>
+                <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="transfer">Transferência</SelectItem>
+                <SelectItem value="cash">Dinheiro</SelectItem>
+                <SelectItem value="unassigned">Não informado</SelectItem>
+              </SelectContent>
+            </Select>
             <ExpensePeriodFilter
               preset={periodPreset}
               dateFrom={dateFrom}
@@ -884,6 +920,13 @@ export function ExpensesPage() {
                                       Compras
                                     </span>
                                   )}
+                                  {expense.plannedPaymentMethodType && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                                      {expense.plannedPaymentMethodType === "credit_card" && <CreditCard className="h-3 w-3" />}
+                                      {expense.plannedPaymentMethodLabel ||
+                                        PLANNED_PAYMENT_METHOD_LABELS[expense.plannedPaymentMethodType as PlannedPaymentMethodType]}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -957,6 +1000,17 @@ export function ExpensesPage() {
                                         totalInstallments={installmentTotal}
                                       />
                                     </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pagamento previsto</p>
+                                    <p className="mt-1 text-sm font-medium">
+                                      {expense.plannedPaymentMethodType
+                                        ? `${expense.plannedBankAccountName ? `${expense.plannedBankAccountName} · ` : ""}${
+                                            expense.plannedPaymentMethodLabel ||
+                                            PLANNED_PAYMENT_METHOD_LABELS[expense.plannedPaymentMethodType as PlannedPaymentMethodType]
+                                          }`
+                                        : "Não informado"}
+                                    </p>
                                   </div>
                                   {expense.purchaseOrderId && (
                                     <div className="sm:col-span-3">

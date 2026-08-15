@@ -25,6 +25,13 @@ export const expenseFormSchema = z
     rateioEffectiveFrom: z.date().optional(),
     rateioFirstMonthMode: z.enum(["full", "prorated"]).default("full"),
     paymentMethod: z.enum(["single", "installments", "recurring"]).default("single"),
+    plannedPaymentMethodType: z
+      .enum(["credit_card", "debit_card", "pix", "transfer", "cash"])
+      .optional(),
+    plannedBankAccountId: z.string().optional(),
+    plannedBankAccountName: z.string().optional(),
+    plannedPaymentMethodId: z.string().optional(),
+    plannedPaymentMethodLabel: z.string().optional(),
     installments: z.coerce
       .number()
       .int()

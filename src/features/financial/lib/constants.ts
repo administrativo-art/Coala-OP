@@ -5,6 +5,7 @@ export const FINANCIAL_COLLECTIONS = {
   expenseDescriptions: "expenseDescriptions",
   expenses: "expenses",
   bankAccounts: "bankAccounts",
+  cardStatements: "cardStatements",
   payments: "payments",
   transactions: "transactions",
   importAliases: "importAliases",
@@ -25,6 +26,7 @@ export const FINANCIAL_ROUTES = {
   pendingAuditExpenses: "/dashboard/financial/expenses/pending-audit",
   newExpense: "/dashboard/financial/expenses/new",
   importExpenses: "/dashboard/financial/expenses/import",
+  cardStatements: "/dashboard/financial/expenses/card-statements",
   settings: "/dashboard/financial/settings",
   paymentRequests: "/dashboard/financial/payment-requests",
 } as const;
