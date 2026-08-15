@@ -108,6 +108,9 @@ export type ImportSessionFinancialDraft = {
 export type ImportSessionItem = {
   id: string;
   origin?: ImportSessionOrigin;
+  syncSource?: "inter_api";
+  externalTransactionId?: string;
+  linkedBankTransactionId?: string;
   date: string;
   amount: number;
   rawDescription: string;
@@ -133,6 +136,8 @@ export type ImportSessionSummary = {
 export type ImportSession = {
   id: string;
   origin: ImportSessionOrigin;
+  syncSource?: "inter_api";
+  syncKey?: string;
   originLabel?: string;
   requestDate?: string;
   displayName: string;

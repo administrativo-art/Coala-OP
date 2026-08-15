@@ -430,6 +430,85 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
   }
 });
 
+test("Financeiro permite auditar sincronização do Inter sem alterar a identidade bancária", async () => {
+  const env = await initializeTestEnvironment({
+    projectId: "demo-security-inter-statement",
+    firestore: { rules: rules.financial },
+  });
+
+  try {
+    const transactionDate = new Date("2026-08-15T15:00:00.000Z");
+    const createdAt = new Date("2026-08-15T15:01:00.000Z");
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      const permissions = {
+        view: true,
+        dashboard: false,
+        financialFlow: false,
+        dre: false,
+        cashFlow: { view: true, create: false },
+        expenses: {
+          view: true,
+          create: false,
+          edit: false,
+          pay: false,
+          import: true,
+          delete: false,
+        },
+        settings: { view: false },
+      };
+      await Promise.all([
+        setDoc(doc(db, "users/importer"), { active: true, isDefaultAdmin: false, permissions }),
+        setDoc(doc(db, "users/viewer"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: { ...permissions, expenses: { ...permissions.expenses, import: false } },
+        }),
+        setDoc(doc(db, "transactions/inter-event"), {
+          importedFrom: "bank_statement",
+          importSource: "inter_api",
+          externalTransactionId: "event-1",
+          amount: 1200,
+          date: transactionDate,
+          description: "Pix enviado",
+          auditStatus: "pending",
+          createdBy: "system:inter-statement",
+          createdAt,
+        }),
+        setDoc(doc(db, "importDrafts/inter-2026-08"), {
+          status: "open",
+          syncSource: "inter_api",
+          syncKey: "account:2026-08",
+          createdBy: "system:inter-statement",
+          items: [],
+        }),
+      ]);
+    });
+
+    const importer = env.authenticatedContext("importer");
+    const viewer = env.authenticatedContext("viewer");
+    await assertSucceeds(updateDoc(doc(importer.firestore(), "transactions/inter-event"), {
+      description: "Honorários advocatícios",
+      auditStatus: "resolved",
+      linkedExpenseId: "expense-1",
+    }));
+    await assertFails(updateDoc(doc(importer.firestore(), "transactions/inter-event"), {
+      amount: 1,
+    }));
+    await assertFails(updateDoc(doc(viewer.firestore(), "transactions/inter-event"), {
+      auditStatus: "resolved",
+    }));
+    await assertSucceeds(updateDoc(doc(importer.firestore(), "importDrafts/inter-2026-08"), {
+      items: [{ id: "event-1", status: "completed" }],
+    }));
+    await assertFails(updateDoc(doc(importer.firestore(), "importDrafts/inter-2026-08"), {
+      syncKey: "forged",
+    }));
+  } finally {
+    await env.cleanup();
+  }
+});
+
 test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backend", async () => {
   const env = await initializeTestEnvironment({
     projectId: "demo-security-cash-closures",

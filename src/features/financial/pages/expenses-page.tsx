@@ -10,11 +10,13 @@ import {
   ChevronUp,
   CircleDollarSign,
   CreditCard,
+  FileCheck2,
   FilePlus2,
   FileUp,
   Filter,
   Loader2,
   MoreHorizontal,
+  ReceiptText,
   Search,
   Trash2,
 } from "lucide-react";
@@ -697,12 +699,32 @@ export function ExpensesPage() {
 
       {canAccessAudits ? (
         <Tabs value={currentView} onValueChange={(value) => setExpensesView(value as "expenses" | "audits")} className="space-y-6">
-          <TabsList className="grid h-auto w-full max-w-[420px] grid-cols-2 rounded-2xl border bg-background p-1 shadow-sm">
-            <TabsTrigger value="expenses" className="rounded-xl px-4 py-2 text-sm font-medium">
-              Despesas
+          <TabsList className="grid h-auto w-full grid-cols-2 rounded-none border-0 border-b border-[#ded3c5] bg-transparent p-0 shadow-none">
+            <TabsTrigger
+              value="expenses"
+              className="group relative min-h-16 rounded-none border-0 bg-transparent px-3 py-4 text-[#746961] shadow-none transition-colors data-[state=active]:bg-transparent data-[state=active]:text-[#211814] data-[state=active]:shadow-none"
+            >
+              <span className="flex items-center justify-center gap-3">
+                <ReceiptText className="h-5 w-5 text-[#a79c93] group-data-[state=active]:text-[#a6325b]" />
+                <span className="text-sm font-bold sm:text-base">Despesas</span>
+                <span className="rounded-full bg-[#e6e0d8] px-2.5 py-1 text-xs font-bold text-[#746961] group-data-[state=active]:bg-[#a6325b] group-data-[state=active]:text-white">
+                  {expenses.length}
+                </span>
+              </span>
+              <span className="absolute inset-x-4 -bottom-px hidden h-1 rounded-full bg-[#a6325b] group-data-[state=active]:block" />
             </TabsTrigger>
-            <TabsTrigger value="audits" className="rounded-xl px-4 py-2 text-sm font-medium">
-              Auditorias
+            <TabsTrigger
+              value="audits"
+              className="group relative min-h-16 rounded-none border-0 bg-transparent px-3 py-4 text-[#746961] shadow-none transition-colors data-[state=active]:bg-transparent data-[state=active]:text-[#211814] data-[state=active]:shadow-none"
+            >
+              <span className="flex items-center justify-center gap-3">
+                <FileCheck2 className="h-5 w-5 text-[#a79c93] group-data-[state=active]:text-[#a6325b]" />
+                <span className="text-sm font-bold sm:text-base">Auditorias</span>
+                <span className="rounded-full bg-[#e6e0d8] px-2.5 py-1 text-xs font-bold text-[#746961] group-data-[state=active]:bg-[#a6325b] group-data-[state=active]:text-white">
+                  {pendingAuditCount}
+                </span>
+              </span>
+              <span className="absolute inset-x-4 -bottom-px hidden h-1 rounded-full bg-[#a6325b] group-data-[state=active]:block" />
             </TabsTrigger>
           </TabsList>
 

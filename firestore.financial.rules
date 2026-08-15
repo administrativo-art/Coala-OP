@@ -199,6 +199,26 @@ service cloud.firestore {
         );
     }
 
+    function isBankStatementAuditUpdate() {
+      return canImportExpenses()
+        && resource.data.get('importedFrom', null) == 'bank_statement'
+        && request.resource.data.get('importedFrom', null) == 'bank_statement'
+        && request.resource.data.get('importSource', null) == resource.data.get('importSource', null)
+        && request.resource.data.get('externalTransactionId', null) == resource.data.get('externalTransactionId', null)
+        && request.resource.data.get('amount', null) == resource.data.get('amount', null)
+        && request.resource.data.get('date', null) == resource.data.get('date', null)
+        && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null)
+        && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null);
+    }
+
+    function isAutomatedImportDraftUpdate() {
+      return canImportExpenses()
+        && resource.data.get('syncSource', null) == 'inter_api'
+        && request.resource.data.get('syncSource', null) == 'inter_api'
+        && request.resource.data.get('syncKey', null) == resource.data.get('syncKey', null)
+        && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null);
+    }
+
     function hasConsistentExpenseAccount(data) {
       return data.accountPlan is string
         && data.accountPlan.size() > 0
@@ -278,7 +298,8 @@ service cloud.firestore {
     match /transactions/{transactionId} {
       allow read: if canViewCashFlow() || canViewFinancialFlow() || canViewDre() || canViewDashboard();
       allow create: if canCreateCashFlow() || canImportExpenses() || canPayExpenses();
-      allow update, delete: if false;
+      allow update: if isBankStatementAuditUpdate();
+      allow delete: if false;
     }
 
     match /importDrafts/{draftId} {
@@ -288,7 +309,8 @@ service cloud.firestore {
       );
       allow delete: if canImportExpenses() && resource.data.createdBy == request.auth.uid;
       allow create: if canImportExpenses() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if canImportExpenses() && resource.data.createdBy == request.auth.uid;
+      allow update: if (canImportExpenses() && resource.data.createdBy == request.auth.uid)
+        || isAutomatedImportDraftUpdate();
     }
 
     // Dados de favorecidos contêm destino bancário criptografado e auditoria.

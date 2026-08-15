@@ -63,6 +63,10 @@ env:
     value: "250"
   - variable: INTER_COBRANCA_BANK_ACCOUNT_ID
     value: "PoulVqBxvW6XNgLEeoob"
+  - variable: INTER_STATEMENT_BANK_ACCOUNT_ID
+    value: "PoulVqBxvW6XNgLEeoob"
+  - variable: INTER_STATEMENT_INITIAL_LOOKBACK_DAYS
+    value: "7"
   - variable: CASH_CLOSURE_JOB_SECRET
     secret: CASH_CLOSURE_JOB_SECRET
   - variable: CASH_CLOSURE_SENIOR_DIVERGENCE_CENTS

@@ -236,6 +236,9 @@ function serializeSessionItem(item: ImportSessionItem) {
   return {
     id: item.id,
     origin: item.origin ?? null,
+    syncSource: item.syncSource ?? null,
+    externalTransactionId: item.externalTransactionId ?? null,
+    linkedBankTransactionId: item.linkedBankTransactionId ?? null,
     date: item.date,
     amount: item.amount,
     rawDescription: item.rawDescription,
@@ -386,6 +389,9 @@ function normalizeSession(doc: any): ImportSession {
         return {
           id: String(item.id ?? ""),
           origin: item.origin ? getImportSessionOrigin(item.origin) : origin,
+          syncSource: item.syncSource === "inter_api" ? "inter_api" : undefined,
+          externalTransactionId: item.externalTransactionId ? String(item.externalTransactionId) : undefined,
+          linkedBankTransactionId: item.linkedBankTransactionId ? String(item.linkedBankTransactionId) : undefined,
           date: String(item.date ?? ""),
           amount: Number(item.amount ?? 0),
           rawDescription: String(item.rawDescription ?? ""),
@@ -464,6 +470,8 @@ function normalizeSession(doc: any): ImportSession {
   return {
     ...doc,
     origin,
+    syncSource: doc.syncSource === "inter_api" ? "inter_api" : undefined,
+    syncKey: doc.syncKey ? String(doc.syncKey) : undefined,
     originLabel: String(doc.originLabel ?? IMPORT_SESSION_ORIGIN_LABELS[origin]),
     requestDate: doc.requestDate ? String(doc.requestDate) : undefined,
     displayName: String(doc.displayName ?? doc.fileName ?? "Sessão de importação"),
@@ -897,6 +905,16 @@ export function FinancialImportPage({
   const refreshImportSessions = useCallback(() => {
     refreshSessions();
   }, [refreshSessions]);
+  const canEditImportSession = useCallback(
+    (session: ImportSession | null) =>
+      Boolean(
+        session &&
+        firebaseUser &&
+        (session.createdBy === firebaseUser.uid ||
+          (session.syncSource === "inter_api" && permissions.financial?.expenses?.import))
+      ),
+    [firebaseUser, permissions.financial?.expenses?.import]
+  );
 
   const aliases = aliasesData || [];
   const expenses = expensesData || [];
@@ -1167,7 +1185,7 @@ export function FinancialImportPage({
   }, [currentSessionId, isSessionDirty, openSessions, replaceSessionUrl, selectedSessionId]);
 
   useEffect(() => {
-    if (!currentSession || !isSessionDirty || !firebaseUser || currentSession.createdBy !== firebaseUser.uid) return;
+    if (!currentSession || !isSessionDirty || !canEditImportSession(currentSession)) return;
 
     const revisionAtSchedule = sessionRevisionRef.current;
     const timeout = window.setTimeout(async () => {
@@ -1193,7 +1211,7 @@ export function FinancialImportPage({
     }, 600);
 
     return () => window.clearTimeout(timeout);
-  }, [currentSession, firebaseUser, isSessionDirty, toast]);
+  }, [canEditImportSession, currentSession, isSessionDirty, toast]);
 
   const updateSession = useCallback((updater: (session: ImportSession) => ImportSession) => {
     setCurrentSession((previous) => {
@@ -1486,7 +1504,18 @@ export function FinancialImportPage({
   }, [supplierSearch, users]);
 
   function setItemStatus(itemId: string, status: ImportSessionItemStatus) {
+    const target = currentSession?.items.find((item) => item.id === itemId);
     updateItem(itemId, (item) => ({ ...item, status }));
+    if (target?.linkedBankTransactionId && (status === "ignored" || status === "pending")) {
+      void updateDoc(financialDoc("transactions", target.linkedBankTransactionId), {
+        auditStatus: status,
+        auditedBy: status === "ignored" ? firebaseUser?.uid || null : null,
+        auditedAt: status === "ignored" ? Timestamp.now() : null,
+      }).catch((error) => {
+        console.error(error);
+        toast({ variant: "destructive", title: "Não foi possível atualizar a situação no extrato." });
+      });
+    }
   }
 
   function getMethodsForAccount(accountId: string) {
@@ -1685,48 +1714,74 @@ export function FinancialImportPage({
             ? item.financialDraft.counterpartyPaymentMethodLabel
             : item.financialDraft.paymentMethodLabel;
 
-          await Promise.all([
-            addDoc(financialCollection("transactions"), {
-              type: "transfer_out",
-              direction: "out",
-              amount: Math.abs(item.amount),
-              date: transactionDate,
-              description: item.financialDraft.description,
-              notes: item.financialDraft.notes || "",
-              accountId: fromAccountId,
-              accountName: fromAccountName,
-              paymentMethodId: fromPaymentMethodId,
-              paymentMethodLabel: fromPaymentMethodLabel,
-              toAccountId,
-              toAccountName,
-              toPaymentMethodId,
-              toPaymentMethodLabel,
-              importedFrom,
-              rawBankDescription: item.rawDescription,
-              createdBy: firebaseUser.uid,
-              createdAt: now,
-            }),
-            addDoc(financialCollection("transactions"), {
-              type: "transfer_in",
-              direction: "in",
-              amount: Math.abs(item.amount),
-              date: transactionDate,
-              description: item.financialDraft.description,
-              notes: item.financialDraft.notes || "",
-              accountId: toAccountId,
-              accountName: toAccountName,
-              paymentMethodId: toPaymentMethodId,
-              paymentMethodLabel: toPaymentMethodLabel,
-              toAccountId: fromAccountId,
-              toAccountName: fromAccountName,
-              toPaymentMethodId: fromPaymentMethodId,
-              toPaymentMethodLabel: fromPaymentMethodLabel,
-              importedFrom,
-              rawBankDescription: item.rawDescription,
-              createdBy: firebaseUser.uid,
-              createdAt: now,
-            }),
-          ]);
+          const transferOut = {
+            type: "transfer_out",
+            direction: "out",
+            amount: Math.abs(item.amount),
+            date: transactionDate,
+            description: item.financialDraft.description,
+            notes: item.financialDraft.notes || "",
+            accountId: fromAccountId,
+            accountName: fromAccountName,
+            paymentMethodId: fromPaymentMethodId,
+            paymentMethodLabel: fromPaymentMethodLabel,
+            toAccountId,
+            toAccountName,
+            toPaymentMethodId,
+            toPaymentMethodLabel,
+            importedFrom,
+            rawBankDescription: item.rawDescription,
+          };
+          const transferIn = {
+            type: "transfer_in",
+            direction: "in",
+            amount: Math.abs(item.amount),
+            date: transactionDate,
+            description: item.financialDraft.description,
+            notes: item.financialDraft.notes || "",
+            accountId: toAccountId,
+            accountName: toAccountName,
+            paymentMethodId: toPaymentMethodId,
+            paymentMethodLabel: toPaymentMethodLabel,
+            toAccountId: fromAccountId,
+            toAccountName: fromAccountName,
+            toPaymentMethodId: fromPaymentMethodId,
+            toPaymentMethodLabel: fromPaymentMethodLabel,
+            importedFrom,
+            rawBankDescription: item.rawDescription,
+          };
+
+          if (item.linkedBankTransactionId) {
+            const primary = originIsCurrent ? transferOut : transferIn;
+            const counterpart = originIsCurrent ? transferIn : transferOut;
+            await Promise.all([
+              updateDoc(financialDoc("transactions", item.linkedBankTransactionId), {
+                ...primary,
+                auditStatus: "resolved",
+                auditedBy: firebaseUser.uid,
+                auditedAt: now,
+              }),
+              addDoc(financialCollection("transactions"), {
+                ...counterpart,
+                sourceBankTransactionId: item.linkedBankTransactionId,
+                createdBy: firebaseUser.uid,
+                createdAt: now,
+              }),
+            ]);
+          } else {
+            await Promise.all([
+              addDoc(financialCollection("transactions"), {
+                ...transferOut,
+                createdBy: firebaseUser.uid,
+                createdAt: now,
+              }),
+              addDoc(financialCollection("transactions"), {
+                ...transferIn,
+                createdBy: firebaseUser.uid,
+                createdAt: now,
+              }),
+            ]);
+          }
         } else if (item.amount < 0) {
           const isPurchaseMode = item.expenseDraft.mode === "purchase";
           const purchaseCandidate = isPurchaseMode ? purchaseBalances.get(item.expenseDraft.purchaseOrderId) : undefined;
@@ -1825,7 +1880,7 @@ export function FinancialImportPage({
             });
           }
 
-          const createdTransaction = await addDoc(financialCollection("transactions"), {
+          const transactionPayload = {
             type: "expense_payment",
             direction: "out",
             amount: Math.abs(item.amount),
@@ -1850,9 +1905,18 @@ export function FinancialImportPage({
             importedFrom,
             rawBankDescription: item.rawDescription,
             auditStatus: "resolved",
-            createdBy: firebaseUser.uid,
-            createdAt: now,
-          });
+          };
+          const createdTransaction = item.linkedBankTransactionId
+            ? await updateDoc(financialDoc("transactions", item.linkedBankTransactionId), {
+                ...transactionPayload,
+                auditedBy: firebaseUser.uid,
+                auditedAt: now,
+              }).then(() => ({ id: item.linkedBankTransactionId! }))
+            : await addDoc(financialCollection("transactions"), {
+                ...transactionPayload,
+                createdBy: firebaseUser.uid,
+                createdAt: now,
+              });
 
           if (expenseId) {
             if (splitExpenseIds.length > 0) {
@@ -1997,7 +2061,7 @@ export function FinancialImportPage({
   }
 
   async function updateSessionStatus(nextStatus: "completed" | "discarded") {
-    if (!currentSession || !firebaseUser || currentSession.createdBy !== firebaseUser.uid) return;
+    if (!currentSession || !canEditImportSession(currentSession)) return;
 
     setIsProcessing(true);
     try {
@@ -2053,7 +2117,7 @@ export function FinancialImportPage({
   }
 
   const selectedSession = currentSession;
-  const selectedSessionEditable = !!selectedSession && !!firebaseUser && selectedSession.createdBy === firebaseUser.uid;
+  const selectedSessionEditable = canEditImportSession(selectedSession);
   const selectedStatementAccountLabel = selectedSession
     ? getAccountDisplayLabel(accounts, selectedSession.statementAccountId, selectedSession.statementAccountName)
     : "";
