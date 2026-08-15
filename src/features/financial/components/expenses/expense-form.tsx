@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { addMonths, addWeeks, format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { addDoc, getDoc, getDocs, query, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
@@ -426,7 +426,11 @@ function QuickAddEntityDialog({
   );
 }
 
-export function ExpenseForm() {
+type ExpenseFormProps = {
+  presentation?: "page" | "modal";
+};
+
+export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const { firebaseUser, users, permissions } = useAuth();
   const { entities } = useEntities();
   const { kiosks, loading: unitsLoading } = useKiosks();
@@ -452,6 +456,7 @@ export function ExpenseForm() {
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const submissionInFlightRef = useRef(false);
   const [currentStep, setCurrentStep] = useState<"identification" | "classification" | "schedule" | "review">(
     "identification"
   );
@@ -1298,8 +1303,20 @@ export function ExpenseForm() {
     };
   }
 
+  function leaveExpenseForm(destination = returnTo || FINANCIAL_ROUTES.expenses) {
+    if (presentation === "modal") {
+      window.location.assign(destination);
+      return;
+    }
+
+    router.push(destination);
+    router.refresh();
+  }
+
   async function handleSaveDraft() {
     if (!firebaseUser) return;
+    if (submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
     setIsSaving(true);
 
     try {
@@ -1326,8 +1343,7 @@ export function ExpenseForm() {
       }
 
       toast({ title: "Rascunho salvo." });
-      router.push(`${FINANCIAL_ROUTES.expenses}?status=draft`);
-      router.refresh();
+      leaveExpenseForm(`${FINANCIAL_ROUTES.expenses}?status=draft`);
     } catch (error) {
       console.error(error);
       toast({
@@ -1336,6 +1352,7 @@ export function ExpenseForm() {
         description: "Não foi possível guardar o preenchimento atual.",
       });
     } finally {
+      submissionInFlightRef.current = false;
       setIsSaving(false);
     }
   }
@@ -1345,6 +1362,8 @@ export function ExpenseForm() {
     updateScope: ExpenseSeriesUpdateScope = "single"
   ) {
     if (!firebaseUser) return;
+    if (submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
     setIsSaving(true);
 
     try {
@@ -1562,8 +1581,7 @@ export function ExpenseForm() {
         });
       }
 
-      router.push(returnTo || FINANCIAL_ROUTES.expenses);
-      router.refresh();
+      leaveExpenseForm();
     } catch (error) {
       console.error(error);
       toast({
@@ -1572,6 +1590,7 @@ export function ExpenseForm() {
         description: error instanceof Error ? error.message : "Não foi possível concluir a operação.",
       });
     } finally {
+      submissionInFlightRef.current = false;
       setIsSaving(false);
     }
   }
@@ -1675,7 +1694,7 @@ export function ExpenseForm() {
                       variant="ghost"
                       size="icon"
                       className="rounded-full"
-                      onClick={() => router.push(returnTo || FINANCIAL_ROUTES.expenses)}
+                      onClick={() => leaveExpenseForm()}
                     >
                       <X className="h-4 w-4" />
                       <span className="sr-only">Fechar</span>
@@ -2508,7 +2527,7 @@ export function ExpenseForm() {
 
               <div className="border-t bg-background px-6 py-4">
                 <div className={cn("flex flex-wrap items-center justify-between gap-3")}>
-                  <Button type="button" variant="ghost" onClick={() => router.push(returnTo || FINANCIAL_ROUTES.expenses)}>
+                  <Button type="button" variant="ghost" onClick={() => leaveExpenseForm()}>
                     Cancelar
                   </Button>
 

@@ -10,7 +10,6 @@ import {
   ChevronUp,
   CircleDollarSign,
   CreditCard,
-  Landmark,
   FilePlus2,
   FileUp,
   Filter,
@@ -681,13 +680,6 @@ export function ExpensesPage() {
               <CreditCard className="mr-2 h-4 w-4" /> Faturas de cartão
             </Link>
           </Button>
-          {permissions.financial?.paymentRequests?.view && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={FINANCIAL_ROUTES.paymentRequests}>
-                <Landmark className="mr-2 h-4 w-4" /> Autorizações bancárias
-              </Link>
-            </Button>
-          )}
           {permissions.financial?.expenses?.import && (
             <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)}>
               <FileUp className="mr-2 h-4 w-4" /> Importar extrato

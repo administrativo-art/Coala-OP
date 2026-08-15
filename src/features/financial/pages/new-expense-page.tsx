@@ -4,7 +4,11 @@ import { ExpenseForm } from "@/features/financial/components/expenses/expense-fo
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { useAuth } from "@/hooks/use-auth";
 
-export function NewExpensePage() {
+type NewExpensePageProps = {
+  presentation?: "page" | "modal";
+};
+
+export function NewExpensePage({ presentation = "page" }: NewExpensePageProps) {
   const { permissions } = useAuth();
 
   if (!permissions.financial?.expenses?.create) {
@@ -17,5 +21,5 @@ export function NewExpensePage() {
     );
   }
 
-  return <ExpenseForm />;
+  return <ExpenseForm presentation={presentation} />;
 }
