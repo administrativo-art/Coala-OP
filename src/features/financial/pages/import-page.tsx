@@ -370,6 +370,24 @@ function serializeSessionItems(items: ImportSessionItem[]) {
   return items.map(serializeSessionItem);
 }
 
+function sessionReflectsSavedAuditState(serverSession: ImportSession, savedSession: ImportSession) {
+  if (
+    serverSession.statementAccountId !== savedSession.statementAccountId ||
+    serverSession.statementAccountName !== savedSession.statementAccountName
+  ) {
+    return false;
+  }
+
+  const serverItemsById = new Map(serverSession.items.map((item) => [item.id, item]));
+  return savedSession.items.every((savedItem) => {
+    const serverItem = serverItemsById.get(savedItem.id);
+    return Boolean(
+      serverItem &&
+      JSON.stringify(serializeSessionItem(serverItem)) === JSON.stringify(serializeSessionItem(savedItem))
+    );
+  });
+}
+
 function buildSessionSummary(items: ImportSessionItem[]): ImportSessionSummary {
   return {
     total: items.length,
@@ -1177,6 +1195,7 @@ export function FinancialImportPage({
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [isSessionDirty, setIsSessionDirty] = useState(false);
   const sessionRevisionRef = useRef(0);
+  const lastPersistedSessionRef = useRef<ImportSession | null>(null);
   const currentSessionId = currentSession ? currentSession.id : null;
   const [directionFilter, setDirectionFilter] = useState<"all" | "in" | "out">("all");
   const [itemStatusFilter, setItemStatusFilter] = useState<"all" | ImportSessionItemStatus>("all");
@@ -1233,6 +1252,7 @@ export function FinancialImportPage({
   useEffect(() => {
     setDescriptionDraftsByItem({});
     setApportionmentPercentageDrafts({});
+    lastPersistedSessionRef.current = null;
   }, [currentSessionId]);
 
   useEffect(() => {
@@ -1278,6 +1298,24 @@ export function FinancialImportPage({
       return;
     }
 
+    const lastPersistedSession = lastPersistedSessionRef.current;
+    if (
+      !isSessionDirty &&
+      lastPersistedSession?.id === sessionFromList.id &&
+      !sessionReflectsSavedAuditState(sessionFromList, lastPersistedSession)
+    ) {
+      setCurrentSession((previous) =>
+        previous?.id === sessionFromList.id ? previous : lastPersistedSession
+      );
+      return;
+    }
+    if (
+      lastPersistedSession?.id === sessionFromList.id &&
+      sessionReflectsSavedAuditState(sessionFromList, lastPersistedSession)
+    ) {
+      lastPersistedSessionRef.current = null;
+    }
+
     setCurrentSession((previous) => {
       if (previous?.id !== sessionFromList.id || !isSessionDirty) {
         return sessionFromList;
@@ -1301,7 +1339,9 @@ export function FinancialImportPage({
         });
 
         if (sessionRevisionRef.current === revisionAtSchedule) {
+          lastPersistedSessionRef.current = currentSession;
           setIsSessionDirty(false);
+          refreshImportSessions();
         }
       } catch (error) {
         console.error(error);
@@ -1316,7 +1356,7 @@ export function FinancialImportPage({
     }, 600);
 
     return () => window.clearTimeout(timeout);
-  }, [canEditImportSession, currentSession, isSessionDirty, patchImportSession, toast]);
+  }, [canEditImportSession, currentSession, isSessionDirty, patchImportSession, refreshImportSessions, toast]);
 
   const updateSession = useCallback((updater: (session: ImportSession) => ImportSession) => {
     setCurrentSession((previous) => {
@@ -1640,6 +1680,7 @@ export function FinancialImportPage({
       });
 
       if (sessionRevisionRef.current === confirmationRevision) {
+        lastPersistedSessionRef.current = nextSession;
         setExpandedItemId(nextPendingItemId ?? (itemStatusFilter === "all" ? itemId : null));
         setIsSessionDirty(false);
       }
@@ -2193,6 +2234,7 @@ export function FinancialImportPage({
         items: serializeSessionItems(updatedSession.items),
       });
 
+      lastPersistedSessionRef.current = updatedSession;
       setCurrentSession(updatedSession);
       setIsSessionDirty(false);
       refreshImportSessions();
@@ -2593,7 +2635,7 @@ export function FinancialImportPage({
       {selectedSession ? (
         <Card className="h-[min(720px,calc(100vh-215px))] min-h-[590px] overflow-hidden rounded-[30px] border-border/70 bg-background shadow-sm">
           <div
-            className="grid h-full min-h-0"
+            className="grid h-full min-h-0 min-w-0"
             style={{ gridTemplateColumns: sessionsSidebarOpen ? "286px minmax(560px, 1fr) 360px" : "40px 560px minmax(360px, 1fr)" }}
           >
             <div className="flex min-h-0 flex-col border-r bg-[#fbfbfc]">
@@ -2900,7 +2942,7 @@ export function FinancialImportPage({
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-col bg-[#fbfbfc]">
+            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#fbfbfc]">
               <div className="flex items-center justify-between border-b px-4 py-2.5">
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Resumo geral</p>
                 <Button
@@ -2916,7 +2958,7 @@ export function FinancialImportPage({
                   {generalSummaryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
                 {generalSummaryOpen ? <div className="sticky top-0 z-10 border-b bg-[#fbfbfc] p-4">
                   <div className="rounded-2xl border bg-background p-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
@@ -2966,7 +3008,7 @@ export function FinancialImportPage({
                   ? purchaseCandidatesByOrderId.get(item.expenseDraft.purchaseOrderId) ?? null
                   : null;
                 return (
-                  <div className="space-y-3 p-4">
+                  <div className="min-w-0 space-y-3 p-4">
                     <div className="rounded-2xl border bg-background p-4 shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -3045,12 +3087,12 @@ export function FinancialImportPage({
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50/50 p-3">
+                    <div className="min-w-0 overflow-hidden rounded-2xl border border-sky-100 bg-sky-50/50 p-3">
                       <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-800">
                         1. {isIncomingMovement ? "Destino do recebimento" : "Origem do pagamento"}
                       </p>
-                      <div className="grid gap-3">
-                        <div className="space-y-1.5">
+                      <div className="grid min-w-0 gap-3">
+                        <div className="min-w-0 space-y-1.5">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
                             {isIncomingMovement ? "Onde entrou" : "De onde saiu"}
                           </p>
@@ -3071,10 +3113,10 @@ export function FinancialImportPage({
                               }));
                             }}
                           >
-                            <SelectTrigger className="h-9 w-full min-w-0 max-w-full overflow-hidden rounded-xl text-xs [&>span]:block [&>span]:min-w-0 [&>span]:truncate">
+                            <SelectTrigger className="h-9 w-full min-w-0 max-w-full overflow-hidden rounded-xl text-xs [&>span]:block [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left [&>svg]:shrink-0">
                               <SelectValue placeholder={isIncomingMovement ? "Selecione onde entrou" : "Selecione de onde saiu"} />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-24px)]">
                               <SelectItem value="none">
                                 {isIncomingMovement ? "Selecione onde entrou" : "Selecione de onde saiu"}
                               </SelectItem>
@@ -3086,7 +3128,7 @@ export function FinancialImportPage({
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="min-w-0 space-y-1.5">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
                             {isIncomingMovement ? "Como entrou" : "Como saiu"}
                           </p>
@@ -3104,10 +3146,10 @@ export function FinancialImportPage({
                               }));
                             }}
                           >
-                            <SelectTrigger className="h-9 w-full min-w-0 max-w-full overflow-hidden rounded-xl text-xs [&>span]:block [&>span]:min-w-0 [&>span]:truncate">
+                            <SelectTrigger className="h-9 w-full min-w-0 max-w-full overflow-hidden rounded-xl text-xs [&>span]:block [&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left [&>svg]:shrink-0">
                               <SelectValue placeholder={isIncomingMovement ? "Selecione como entrou" : "Selecione como saiu"} />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-24px)]">
                               <SelectItem value="none">
                                 {isIncomingMovement ? "Selecione como entrou" : "Selecione como saiu"}
                               </SelectItem>
