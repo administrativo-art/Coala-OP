@@ -65,6 +65,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { db } from "@/lib/firebase";
+import { fetchWithTimeout } from "@/lib/fetch-utils";
 import { cn } from "@/lib/utils";
 import type { PurchaseFinancial, PurchaseOrder } from "@/types";
 
@@ -171,6 +172,71 @@ function getTransactionKindClassName(item: ImportSessionItem) {
   if (item.expenseDraft.mode === "purchase") return "bg-blue-100 text-blue-700";
   if (item.expenseDraft.mode === "split") return "bg-amber-100 text-amber-700";
   return "bg-rose-100 text-rose-700";
+}
+
+const IMPORT_ITEM_STATUS_META: Record<
+  ImportSessionItemStatus,
+  { label: string; className: string }
+> = {
+  pending: {
+    label: "Pendente",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  audited: {
+    label: "Auditada",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  completed: {
+    label: "Efetivada",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  },
+  ignored: {
+    label: "Ignorada",
+    className: "border-zinc-200 bg-zinc-100 text-zinc-600",
+  },
+};
+
+function inferStatementPaymentMethod(item: ImportSessionItem, accounts: Account[]) {
+  if (item.financialDraft.paymentMethodId) return null;
+  const account = accounts.find((entry) => entry.id === item.financialDraft.accountId);
+  if (!account) return null;
+
+  const text = `${item.rawDescription} ${item.financialDraft.description}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleUpperCase("pt-BR");
+  const expectedType = text.includes("PIX")
+    ? "pix"
+    : /CARTAO.*CREDITO|FATURA/.test(text)
+    ? "credit_card"
+    : /CARTAO.*DEBITO/.test(text)
+    ? "debit_card"
+    : /TRANSFERENCIA|\bTED\b|\bDOC\b/.test(text)
+    ? "transfer"
+    : /SAQUE|DINHEIRO/.test(text)
+    ? "cash"
+    : null;
+  if (!expectedType) return null;
+
+  return account.paymentMethods.find((method) => method.type === expectedType) ?? null;
+}
+
+function applyStatementPaymentMethodSuggestions(session: ImportSession, accounts: Account[]) {
+  return {
+    ...session,
+    items: session.items.map((item) => {
+      const method = inferStatementPaymentMethod(item, accounts);
+      if (!method) return item;
+      return {
+        ...item,
+        financialDraft: {
+          ...item.financialDraft,
+          paymentMethodId: method.id,
+          paymentMethodLabel: method.label,
+        },
+      };
+    }),
+  };
 }
 
 function createDraftId(prefix: string) {
@@ -487,18 +553,27 @@ function normalizeSession(doc: any): ImportSession {
 }
 
 function getSortedItems(items: ImportSessionItem[]) {
-  const order: Record<ImportSessionItemStatus, number> = {
-    pending: 0,
-    audited: 1,
-    completed: 2,
-    ignored: 3,
-  };
+  return [...items].sort(
+    (left, right) => new Date(left.date).getTime() - new Date(right.date).getTime()
+  );
+}
 
-  return [...items].sort((left, right) => {
-    const statusDiff = order[left.status] - order[right.status];
-    if (statusDiff !== 0) return statusDiff;
-    return new Date(left.date).getTime() - new Date(right.date).getTime();
+function getNextPendingItemId(
+  items: ImportSessionItem[],
+  currentItemId: string,
+  direction: "all" | "in" | "out"
+) {
+  const visibleItems = getSortedItems(items).filter((item) => {
+    if (direction === "in") return item.amount >= 0;
+    if (direction === "out") return item.amount < 0;
+    return true;
   });
+  const currentIndex = visibleItems.findIndex((item) => item.id === currentItemId);
+  const orderedCandidates =
+    currentIndex >= 0
+      ? [...visibleItems.slice(currentIndex + 1), ...visibleItems.slice(0, currentIndex)]
+      : visibleItems;
+  return orderedCandidates.find((item) => item.status === "pending")?.id ?? null;
 }
 
 function buildSessionPayload(
@@ -905,6 +980,30 @@ export function FinancialImportPage({
   const refreshImportSessions = useCallback(() => {
     refreshSessions();
   }, [refreshSessions]);
+  const patchImportSession = useCallback(
+    async (sessionId: string, payload: Record<string, unknown>) => {
+      if (!firebaseUser) throw new Error("Usuário não autenticado.");
+      const token = await firebaseUser.getIdToken();
+      const response = await fetchWithTimeout(
+        `/api/financial/import-sessions/${encodeURIComponent(sessionId)}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+        20_000
+      );
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        throw new Error(result?.error || "Não foi possível salvar a auditoria.");
+      }
+      return result;
+    },
+    [firebaseUser]
+  );
   const canEditImportSession = useCallback(
     (session: ImportSession | null) =>
       Boolean(
@@ -937,6 +1036,7 @@ export function FinancialImportPage({
       (sessionsData || [])
         .filter((session) => session.status === "open")
         .map(normalizeSession)
+        .map((session) => applyStatementPaymentMethodSuggestions(session, accounts))
         .sort((left, right) => {
           const leftDate = left.items
             .map((item) => new Date(item.date))
@@ -951,7 +1051,7 @@ export function FinancialImportPage({
 
           return leftDate - rightDate;
         }),
-    [sessionsData]
+    [accounts, sessionsData]
   );
   const units = useMemo(
     () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
@@ -1191,12 +1291,11 @@ export function FinancialImportPage({
     const timeout = window.setTimeout(async () => {
       setIsSavingSession(true);
       try {
-        await updateDoc(financialDoc("importDrafts", currentSession.id), {
+        await patchImportSession(currentSession.id, {
+          action: "save",
           statementAccountId: currentSession.statementAccountId,
           statementAccountName: currentSession.statementAccountName,
           items: serializeSessionItems(currentSession.items),
-          summary: buildSessionSummary(currentSession.items),
-          updatedAt: Timestamp.now(),
         });
 
         if (sessionRevisionRef.current === revisionAtSchedule) {
@@ -1204,14 +1303,18 @@ export function FinancialImportPage({
         }
       } catch (error) {
         console.error(error);
-        toast({ variant: "destructive", title: "Erro ao salvar a sessão de importação." });
+        toast({
+          variant: "destructive",
+          title: "Erro ao salvar a sessão de importação.",
+          description: error instanceof Error ? error.message : undefined,
+        });
       } finally {
         setIsSavingSession(false);
       }
     }, 600);
 
     return () => window.clearTimeout(timeout);
-  }, [canEditImportSession, currentSession, isSessionDirty, toast]);
+  }, [canEditImportSession, currentSession, isSessionDirty, patchImportSession, toast]);
 
   const updateSession = useCallback((updater: (session: ImportSession) => ImportSession) => {
     setCurrentSession((previous) => {
@@ -1504,17 +1607,58 @@ export function FinancialImportPage({
   }, [supplierSearch, users]);
 
   function setItemStatus(itemId: string, status: ImportSessionItemStatus) {
-    const target = currentSession?.items.find((item) => item.id === itemId);
     updateItem(itemId, (item) => ({ ...item, status }));
-    if (target?.linkedBankTransactionId && (status === "ignored" || status === "pending")) {
-      void updateDoc(financialDoc("transactions", target.linkedBankTransactionId), {
-        auditStatus: status,
-        auditedBy: status === "ignored" ? firebaseUser?.uid || null : null,
-        auditedAt: status === "ignored" ? Timestamp.now() : null,
-      }).catch((error) => {
-        console.error(error);
-        toast({ variant: "destructive", title: "Não foi possível atualizar a situação no extrato." });
+  }
+
+  async function confirmAuditItem(itemId: string) {
+    if (!currentSession || !canEditImportSession(currentSession)) return;
+
+    const previousSession = currentSession;
+    const nextItems = currentSession.items.map((item) =>
+      item.id === itemId ? { ...item, status: "audited" as const } : item
+    );
+    const nextSession = {
+      ...currentSession,
+      items: nextItems,
+      summary: buildSessionSummary(nextItems),
+    };
+    const nextPendingItemId = getNextPendingItemId(nextItems, itemId, directionFilter);
+    sessionRevisionRef.current += 1;
+    const confirmationRevision = sessionRevisionRef.current;
+
+    setCurrentSession(nextSession);
+    setIsSessionDirty(false);
+    setIsSavingSession(true);
+    try {
+      await patchImportSession(nextSession.id, {
+        action: "save",
+        statementAccountId: nextSession.statementAccountId,
+        statementAccountName: nextSession.statementAccountName,
+        items: serializeSessionItems(nextSession.items),
       });
+
+      if (sessionRevisionRef.current === confirmationRevision) {
+        setExpandedItemId(nextPendingItemId ?? (itemStatusFilter === "all" ? itemId : null));
+        setIsSessionDirty(false);
+      }
+      refreshImportSessions();
+      toast({
+        title: "Auditoria confirmada — aguardando efetivação",
+      });
+    } catch (error) {
+      console.error(error);
+      if (sessionRevisionRef.current === confirmationRevision) {
+        setCurrentSession(previousSession);
+        setExpandedItemId(itemId);
+        setIsSessionDirty(false);
+      }
+      toast({
+        variant: "destructive",
+        title: "Não foi possível confirmar a auditoria.",
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsSavingSession(false);
     }
   }
 
@@ -2040,12 +2184,11 @@ export function FinancialImportPage({
         summary: buildSessionSummary(nextItems),
       };
 
-      await updateDoc(financialDoc("importDrafts", currentSession.id), {
+      await patchImportSession(currentSession.id, {
+        action: "finalize",
         statementAccountId: updatedSession.statementAccountId,
         statementAccountName: updatedSession.statementAccountName,
         items: serializeSessionItems(updatedSession.items),
-        summary: updatedSession.summary,
-        updatedAt: now,
       });
 
       setCurrentSession(updatedSession);
@@ -2065,10 +2208,9 @@ export function FinancialImportPage({
 
     setIsProcessing(true);
     try {
-      await updateDoc(financialDoc("importDrafts", currentSession.id), {
+      await patchImportSession(currentSession.id, {
+        action: "status",
         status: nextStatus,
-        updatedAt: Timestamp.now(),
-        completedAt: Timestamp.now(),
       });
       toast({
         title: nextStatus === "completed" ? "Sessão concluída." : "Sessão descartada.",
@@ -2092,10 +2234,9 @@ export function FinancialImportPage({
 
     setIsProcessing(true);
     try {
-      await updateDoc(financialDoc("importDrafts", sessionId), {
+      await patchImportSession(sessionId, {
+        action: "status",
         status: "discarded",
-        updatedAt: Timestamp.now(),
-        completedAt: Timestamp.now(),
       });
 
       if (currentSessionId === sessionId) {
@@ -2626,7 +2767,7 @@ export function FinancialImportPage({
                     {([
                       ["pending", "Pendentes", selectedSessionCounts.pending],
                       ["audited", "Auditadas", selectedSessionCounts.audited],
-                      ["completed", "Concluídas", selectedSessionCounts.completed],
+                      ["completed", "Efetivadas", selectedSessionCounts.completed],
                       ["ignored", "Ignoradas", selectedSessionCounts.ignored],
                     ] as const).map(([value, label, count]) => (
                       <button
@@ -2686,6 +2827,7 @@ export function FinancialImportPage({
                   const isExpense = item.amount < 0;
                   const primaryDescription = getTransactionPrimaryDescription(item);
                   const kindLabel = getTransactionKindLabel(item);
+                  const statusMeta = IMPORT_ITEM_STATUS_META[item.status];
 
                   return (
                     <Fragment key={item.id}>
@@ -2719,10 +2861,18 @@ export function FinancialImportPage({
                             {formatInputDate(item.date)} · {item.rawDescription}
                           </p>
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 space-y-1">
                           <Badge className={cn("rounded-full px-2 py-0.5 text-[10.5px] hover:bg-current/0", getTransactionKindClassName(item))}>
                             {kindLabel}
                           </Badge>
+                          <div>
+                            <Badge
+                              variant="outline"
+                              className={cn("rounded-full px-2 py-0.5 text-[9.5px] font-semibold", statusMeta.className)}
+                            >
+                              {statusMeta.label}
+                            </Badge>
+                          </div>
                         </div>
                         <p className={cn("whitespace-nowrap text-right font-mono text-sm font-semibold", isExpense ? "text-rose-600" : "text-emerald-600")}>
                           {isExpense ? "− " : "+ "}
@@ -2907,7 +3057,7 @@ export function FinancialImportPage({
                               }));
                             }}
                           >
-                            <SelectTrigger className="h-9 overflow-hidden rounded-xl text-xs [&>span]:truncate">
+                            <SelectTrigger className="h-9 w-full min-w-0 max-w-full overflow-hidden rounded-xl text-xs [&>span]:block [&>span]:min-w-0 [&>span]:truncate">
                               <SelectValue placeholder={isIncomingMovement ? "Selecione onde entrou" : "Selecione de onde saiu"} />
                             </SelectTrigger>
                             <SelectContent>
@@ -2940,7 +3090,7 @@ export function FinancialImportPage({
                               }));
                             }}
                           >
-                            <SelectTrigger className="h-9 rounded-xl text-xs">
+                            <SelectTrigger className="h-9 w-full min-w-0 max-w-full overflow-hidden rounded-xl text-xs [&>span]:block [&>span]:min-w-0 [&>span]:truncate">
                               <SelectValue placeholder={isIncomingMovement ? "Selecione como entrou" : "Selecione como saiu"} />
                             </SelectTrigger>
                             <SelectContent>
@@ -3360,10 +3510,21 @@ export function FinancialImportPage({
                           type="button"
                           size="sm"
                           className="rounded-xl"
-                          disabled={!validation.ready || !selectedSessionEditable}
-                          onClick={() => setItemStatus(item.id, "audited")}
+                          disabled={
+                            !validation.ready ||
+                            !selectedSessionEditable ||
+                            isSavingSession ||
+                            item.status === "audited" ||
+                            item.status === "completed"
+                          }
+                          onClick={() => void confirmAuditItem(item.id)}
                         >
-                          Confirmar etapa
+                          {isSavingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          {item.status === "completed"
+                            ? "Efetivada"
+                            : item.status === "audited"
+                            ? "Auditoria confirmada"
+                            : "Confirmar etapa"}
                         </Button>
                       </div>
                     </div>

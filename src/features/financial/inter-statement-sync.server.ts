@@ -30,6 +30,12 @@ type ImportAliasData = {
   descriptionOverride?: string;
 };
 
+type StatementPaymentMethod = {
+  id: string;
+  type: "debit_card" | "credit_card" | "pix" | "transfer" | "cash";
+  label: string;
+};
+
 type ExistingInterLedgerCandidate = {
   transactionId: string;
   direction: "in" | "out";
@@ -105,6 +111,22 @@ function normalizedText(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR");
 }
 
+function inferStatementPaymentMethod(entry: InterStatementEntry, methods: StatementPaymentMethod[]) {
+  const text = normalizedText(`${entry.description} ${entry.operationType} ${entry.transactionType}`);
+  const expectedType = text.includes("PIX")
+    ? "pix"
+    : /CARTAO.*CREDITO|FATURA/.test(text)
+    ? "credit_card"
+    : /CARTAO.*DEBITO/.test(text)
+    ? "debit_card"
+    : /TRANSFERENCIA|\bTED\b|\bDOC\b/.test(text)
+    ? "transfer"
+    : /SAQUE|DINHEIRO/.test(text)
+    ? "cash"
+    : null;
+  return expectedType ? methods.find((method) => method.type === expectedType) ?? null : null;
+}
+
 function canAutoMatchExpense(entry: InterStatementEntry) {
   if (entry.amount >= 0) return false;
   const text = normalizedText(`${entry.description} ${entry.operationType} ${entry.transactionType}`);
@@ -152,8 +174,9 @@ function buildSessionItem(params: {
   alias?: ImportAliasData;
   match?: PendingExpenseMatch | null;
   existingLedger?: ExistingInterLedgerCandidate | null;
+  paymentMethod?: StatementPaymentMethod | null;
 }) {
-  const { entry, transactionId, accountId, accountName, alias, match, existingLedger } = params;
+  const { entry, transactionId, accountId, accountName, alias, match, existingLedger, paymentMethod } = params;
   const isDebit = entry.amount < 0;
   const linkedExpenseId = match?.expenseId || existingLedger?.expenseId || "";
   const linkedExpenseDescription = match?.expenseDescription || existingLedger?.description || "";
@@ -199,8 +222,8 @@ function buildSessionItem(params: {
       description,
       accountId,
       accountName,
-      paymentMethodId: "",
-      paymentMethodLabel: "Banco Inter",
+      paymentMethodId: paymentMethod?.id || "",
+      paymentMethodLabel: paymentMethod?.label || "",
       counterpartyAccountId: "",
       counterpartyAccountName: "",
       counterpartyPaymentMethodId: "",
@@ -542,6 +565,21 @@ export async function syncInterStatement(): Promise<SyncResult> {
   const accountSnapshot = await financialDbAdmin.collection("bankAccounts").doc(accountId).get();
   if (!accountSnapshot.exists) throw new Error("A conta financeira vinculada ao extrato do Inter não foi encontrada.");
   const accountName = String(accountSnapshot.get("name") || "Banco Inter");
+  const accountPaymentMethods = (Array.isArray(accountSnapshot.get("paymentMethods"))
+    ? accountSnapshot.get("paymentMethods")
+    : [])
+    .filter(
+      (method: unknown): method is StatementPaymentMethod =>
+        Boolean(
+          method &&
+          typeof method === "object" &&
+          typeof (method as StatementPaymentMethod).id === "string" &&
+          typeof (method as StatementPaymentMethod).label === "string" &&
+          ["debit_card", "credit_card", "pix", "transfer", "cash"].includes(
+            (method as StatementPaymentMethod).type
+          )
+        )
+    );
   const stateRef = financialDbAdmin.collection("integrationState").doc(SYNC_STATE_DOCUMENT);
   const stateSnapshot = await stateRef.get();
   const endDate = dateInTimeZone();
@@ -600,6 +638,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
       alias,
       match: result.matched ? result.appliedMatch : null,
       existingLedger: result.reconciledExisting ? existingLedger : null,
+      paymentMethod: inferStatementPaymentMethod(entry, accountPaymentMethods),
     }));
     sessionItems.set(month, items);
   }
