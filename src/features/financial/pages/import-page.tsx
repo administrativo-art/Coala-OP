@@ -370,24 +370,6 @@ function serializeSessionItems(items: ImportSessionItem[]) {
   return items.map(serializeSessionItem);
 }
 
-function sessionReflectsSavedAuditState(serverSession: ImportSession, savedSession: ImportSession) {
-  if (
-    serverSession.statementAccountId !== savedSession.statementAccountId ||
-    serverSession.statementAccountName !== savedSession.statementAccountName
-  ) {
-    return false;
-  }
-
-  const serverItemsById = new Map(serverSession.items.map((item) => [item.id, item]));
-  return savedSession.items.every((savedItem) => {
-    const serverItem = serverItemsById.get(savedItem.id);
-    return Boolean(
-      serverItem &&
-      JSON.stringify(serializeSessionItem(serverItem)) === JSON.stringify(serializeSessionItem(savedItem))
-    );
-  });
-}
-
 function buildSessionSummary(items: ImportSessionItem[]): ImportSessionSummary {
   return {
     total: items.length,
@@ -1195,7 +1177,6 @@ export function FinancialImportPage({
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [isSessionDirty, setIsSessionDirty] = useState(false);
   const sessionRevisionRef = useRef(0);
-  const lastPersistedSessionRef = useRef<ImportSession | null>(null);
   const currentSessionId = currentSession ? currentSession.id : null;
   const [directionFilter, setDirectionFilter] = useState<"all" | "in" | "out">("all");
   const [itemStatusFilter, setItemStatusFilter] = useState<"all" | ImportSessionItemStatus>("all");
@@ -1252,7 +1233,6 @@ export function FinancialImportPage({
   useEffect(() => {
     setDescriptionDraftsByItem({});
     setApportionmentPercentageDrafts({});
-    lastPersistedSessionRef.current = null;
   }, [currentSessionId]);
 
   useEffect(() => {
@@ -1298,29 +1278,25 @@ export function FinancialImportPage({
       return;
     }
 
-    const lastPersistedSession = lastPersistedSessionRef.current;
-    if (
-      !isSessionDirty &&
-      lastPersistedSession?.id === sessionFromList.id &&
-      !sessionReflectsSavedAuditState(sessionFromList, lastPersistedSession)
-    ) {
-      setCurrentSession((previous) =>
-        previous?.id === sessionFromList.id ? previous : lastPersistedSession
-      );
-      return;
-    }
-    if (
-      lastPersistedSession?.id === sessionFromList.id &&
-      sessionReflectsSavedAuditState(sessionFromList, lastPersistedSession)
-    ) {
-      lastPersistedSessionRef.current = null;
-    }
-
     setCurrentSession((previous) => {
-      if (previous?.id !== sessionFromList.id || !isSessionDirty) {
+      if (previous?.id !== sessionFromList.id) {
         return sessionFromList;
       }
-      return previous;
+
+      // While this session is open in the editor, its local state is authoritative.
+      // A refresh can finish with an older snapshot and must never restore stale field
+      // values. Automated bank syncs may still append transactions, so merge only IDs
+      // that are genuinely new and preserve every item already being audited.
+      const existingIds = new Set(previous.items.map((item) => item.id));
+      const appendedItems = sessionFromList.items.filter((item) => !existingIds.has(item.id));
+      if (appendedItems.length === 0) return previous;
+
+      const items = [...previous.items, ...appendedItems];
+      return {
+        ...previous,
+        items,
+        summary: buildSessionSummary(items),
+      };
     });
   }, [currentSessionId, isSessionDirty, openSessions, replaceSessionUrl, selectedSessionId]);
 
@@ -1339,7 +1315,6 @@ export function FinancialImportPage({
         });
 
         if (sessionRevisionRef.current === revisionAtSchedule) {
-          lastPersistedSessionRef.current = currentSession;
           setIsSessionDirty(false);
           refreshImportSessions();
         }
@@ -1680,7 +1655,6 @@ export function FinancialImportPage({
       });
 
       if (sessionRevisionRef.current === confirmationRevision) {
-        lastPersistedSessionRef.current = nextSession;
         setExpandedItemId(nextPendingItemId ?? (itemStatusFilter === "all" ? itemId : null));
         setIsSessionDirty(false);
       }
@@ -2234,7 +2208,6 @@ export function FinancialImportPage({
         items: serializeSessionItems(updatedSession.items),
       });
 
-      lastPersistedSessionRef.current = updatedSession;
       setCurrentSession(updatedSession);
       setIsSessionDirty(false);
       refreshImportSessions();
