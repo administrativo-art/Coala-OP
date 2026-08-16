@@ -35,6 +35,8 @@ import { expenseDescriptionFormSchema } from "@/features/financial/lib/schemas";
 import { usePurchaseFinancials } from "@/hooks/use-purchase-financials";
 import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { AccountPlanTreeSelect } from "@/components/purchasing/account-plan-tree-select";
+import { ResultCenterSelect } from "@/components/purchasing/result-center-select";
 import { applyAliasesAndMatch, type PendingInstallment } from "@/features/financial/lib/import-matcher";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { parseCSV, CSV_BANK_PROFILES } from "@/features/financial/lib/parsers/csv";
@@ -2779,50 +2781,59 @@ export function FinancialImportPage({
                     {selectedSession.items.length} itens
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex gap-1 overflow-x-auto rounded-xl bg-muted/50 p-1">
-                    {([
-                      ["pending", "Pendentes", selectedSessionCounts.pending],
-                      ["audited", "Auditadas", selectedSessionCounts.audited],
-                      ["completed", "Efetivadas", selectedSessionCounts.completed],
-                      ["ignored", "Ignoradas", selectedSessionCounts.ignored],
-                    ] as const).map(([value, label, count]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setItemStatusFilter(value)}
-                        className={cn(
-                          "whitespace-nowrap rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors",
-                          itemStatusFilter === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
-                        )}
-                      >
-                        <span>{label}</span>
-                        <span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{count}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <div className="flex rounded-full bg-muted/50 p-1">
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status</p>
+                    <div className="grid grid-cols-5 gap-1 rounded-xl bg-muted/50 p-1">
                       {([
-                        ["all", "Todas"],
-                        ["out", "Saídas"],
-                        ["in", "Entradas"],
-                      ] as const).map(([value, label]) => (
+                        ["all", "Todos", selectedSession.items.length],
+                        ["pending", "Pendentes", selectedSessionCounts.pending],
+                        ["audited", "Auditadas", selectedSessionCounts.audited],
+                        ["completed", "Efetivadas", selectedSessionCounts.completed],
+                        ["ignored", "Ignoradas", selectedSessionCounts.ignored],
+                      ] as const).map(([value, label, count]) => (
                         <button
                           key={value}
                           type="button"
-                          onClick={() => setDirectionFilter(value)}
+                          onClick={() => setItemStatusFilter(value)}
                           className={cn(
-                            "rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
-                            directionFilter === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+                            "flex min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[10.5px] font-medium transition-colors",
+                            itemStatusFilter === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                           )}
                         >
-                          {label}
+                          <span>{label}</span>
+                          <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[9.5px] leading-none text-muted-foreground">
+                            {count}
+                          </span>
                         </button>
                       ))}
                     </div>
-                    <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                      {selectedSessionItems.length} / {selectedSession.items.length}
+                  </div>
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Movimentação</p>
+                      <div className="flex rounded-full bg-muted/50 p-1">
+                        {([
+                          ["all", "Todas"],
+                          ["out", "Saídas"],
+                          ["in", "Entradas"],
+                        ] as const).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setDirectionFilter(value)}
+                            className={cn(
+                              "rounded-full px-3 py-1 text-[10.5px] font-medium transition-colors",
+                              directionFilter === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="pb-1.5 whitespace-nowrap text-[10.5px] text-muted-foreground">
+                      Exibindo {selectedSessionItems.length} de {selectedSession.items.length}
                     </span>
                   </div>
                 </div>
@@ -3246,58 +3257,41 @@ export function FinancialImportPage({
                               className="h-9 rounded-xl text-xs"
                               placeholder="Descrição da despesa"
                             />
-                            <Select
-                              value={item.expenseDraft.accountPlanId || "none"}
-                              onValueChange={(value) => {
+                            <AccountPlanTreeSelect
+                              value={item.expenseDraft.accountPlanId}
+                              onChange={(value) => {
                                 const account = flattenedAccounts.find((entry) => entry.id === value);
                                 updateItem(item.id, (current) => ({
                                   ...current,
                                   expenseDraft: {
                                     ...current.expenseDraft,
-                                    accountPlanId: value === "none" ? "" : value,
+                                    accountPlanId: value,
                                     accountPlanName: account?.name || "",
                                   },
                                 }));
                               }}
-                            >
-                              <SelectTrigger className="h-9 rounded-xl text-xs">
-                                <SelectValue placeholder="Plano de contas" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Plano de contas</SelectItem>
-                                {flattenedAccounts.map((account) => (
-                                  <SelectItem key={account.id} value={account.id}>
-                                    {account.order} - {account.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={item.expenseDraft.resultCenterId || "none"}
-                              onValueChange={(value) => {
+                              options={accountPlansList}
+                              placeholder="Plano de contas"
+                              triggerClassName="h-9 rounded-xl text-xs"
+                            />
+                            <ResultCenterSelect
+                              value={item.expenseDraft.resultCenterId}
+                              onChange={(value) => {
                                 const unit = units.find((entry) => entry.id === value);
                                 updateItem(item.id, (current) => ({
                                   ...current,
                                   expenseDraft: {
                                     ...current.expenseDraft,
-                                    resultCenterId: value === "none" ? "" : value,
+                                    resultCenterId: value,
                                     resultCenterName: unit?.name || "",
                                   },
                                 }));
                               }}
-                            >
-                              <SelectTrigger className="h-9 rounded-xl text-xs">
-                                <SelectValue placeholder="Unidade" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Unidade</SelectItem>
-                                {units.map((unit) => (
-                                  <SelectItem key={unit.id} value={unit.id}>
-                                    {unit.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              options={units}
+                              placeholder="Unidade"
+                              searchPlaceholder="Buscar unidade..."
+                              triggerClassName="h-9 rounded-xl text-xs"
+                            />
                           </div>
                         ) : null}
 
@@ -3466,52 +3460,35 @@ export function FinancialImportPage({
                                       }
                                       className="h-9 rounded-xl text-xs"
                                     />
-                                    <Select
-                                      value={split.accountPlanId || "none"}
-                                      onValueChange={(value) => {
+                                    <AccountPlanTreeSelect
+                                      value={split.accountPlanId}
+                                      onChange={(value) => {
                                         const account = flattenedAccounts.find((entry) => entry.id === value);
                                         updateSplitExpense(item.id, split.id, (current) => ({
                                           ...current,
-                                          accountPlanId: value === "none" ? "" : value,
+                                          accountPlanId: value,
                                           accountPlanName: account?.name || "",
                                         }));
                                       }}
-                                    >
-                                      <SelectTrigger className="h-9 rounded-xl text-xs">
-                                        <SelectValue placeholder="Plano de contas" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="none">Plano de contas</SelectItem>
-                                        {flattenedAccounts.map((account) => (
-                                          <SelectItem key={account.id} value={account.id}>
-                                            {account.order} - {account.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <Select
-                                      value={split.resultCenterId || "none"}
-                                      onValueChange={(value) => {
+                                      options={accountPlansList}
+                                      placeholder="Plano de contas"
+                                      triggerClassName="h-9 rounded-xl text-xs"
+                                    />
+                                    <ResultCenterSelect
+                                      value={split.resultCenterId}
+                                      onChange={(value) => {
                                         const unit = units.find((entry) => entry.id === value);
                                         updateSplitExpense(item.id, split.id, (current) => ({
                                           ...current,
-                                          resultCenterId: value === "none" ? "" : value,
+                                          resultCenterId: value,
                                           resultCenterName: unit?.name || "",
                                         }));
                                       }}
-                                    >
-                                      <SelectTrigger className="h-9 rounded-xl text-xs">
-                                        <SelectValue placeholder="Unidade" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="none">Unidade</SelectItem>
-                                        {units.map((unit) => (
-                                          <SelectItem key={unit.id} value={unit.id}>
-                                            {unit.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                      options={units}
+                                      placeholder="Unidade"
+                                      searchPlaceholder="Buscar unidade..."
+                                      triggerClassName="h-9 rounded-xl text-xs"
+                                    />
                                   </div>
                                 </div>
                               ))}

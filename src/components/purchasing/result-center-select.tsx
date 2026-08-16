@@ -14,6 +14,7 @@ interface Props {
   onChange: (value: string) => void;
   options: ResultCenterOption[];
   placeholder: string;
+  searchPlaceholder?: string;
   disabled?: boolean;
   triggerClassName?: string;
 }
@@ -31,6 +32,7 @@ export function ResultCenterSelect({
   onChange,
   options,
   placeholder,
+  searchPlaceholder = 'Buscar centro de resultado...',
   disabled = false,
   triggerClassName,
 }: Props) {
@@ -80,7 +82,7 @@ export function ResultCenterSelect({
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar centro de resultado..."
+            placeholder={searchPlaceholder}
             className="h-9 pl-8"
           />
         </div>
