@@ -342,13 +342,13 @@ export function CashFlowPage() {
             <CardTitle>Movimentações</CardTitle>
             <CardDescription>Uma linha do tempo única para valores realizados e previstos.</CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-36 shrink-0 gap-2 [&>span]:whitespace-nowrap"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Todos</SelectItem><SelectItem value="realized">Realizados</SelectItem><SelectItem value="forecast">Previstos</SelectItem></SelectContent>
             </Select>
             <Select value={directionFilter} onValueChange={setDirectionFilter}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-44 shrink-0 gap-2 [&>span]:whitespace-nowrap"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">Entradas e saídas</SelectItem><SelectItem value="in">Entradas</SelectItem><SelectItem value="out">Saídas</SelectItem></SelectContent>
             </Select>
           </div>

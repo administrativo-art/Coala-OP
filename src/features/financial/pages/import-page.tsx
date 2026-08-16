@@ -2184,7 +2184,7 @@ export function FinancialImportPage({
     if (isIncome) {
       return [
         {
-          label: "Classificar conta financeira e forma de pagamento",
+          label: "Definir onde e como o dinheiro entrou",
           done:
             selectedDetailItem.financialDraft.accountId.trim().length > 0 &&
             selectedDetailItem.financialDraft.paymentMethodId.trim().length > 0,
@@ -2212,7 +2212,7 @@ export function FinancialImportPage({
 
     return [
       {
-        label: "Conta e forma de pagamento definidas",
+        label: "Definir de onde e como o dinheiro saiu",
         done:
           selectedDetailItem.financialDraft.accountId.trim().length > 0 &&
           selectedDetailItem.financialDraft.paymentMethodId.trim().length > 0,
@@ -2794,6 +2794,7 @@ export function FinancialImportPage({
               {selectedDetailItem && selectedValidation ? (() => {
                 const item = selectedDetailItem;
                 const validation = selectedValidation;
+                const isIncomingMovement = item.amount >= 0;
                 const currentMethods = getMethodsForAccount(item.financialDraft.accountId);
                 const existingOptions = getFilteredExistingExpenses(item.id, item.suggestedExpenseId).slice(0, 8);
                 const purchaseOptions = getFilteredPurchaseCandidates(item.id).slice(0, 8);
@@ -2841,13 +2842,54 @@ export function FinancialImportPage({
                       </div>
                     </div>
 
+                    <div className="rounded-2xl border bg-background p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Movimentação selecionada
+                        </p>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "shrink-0 rounded-full",
+                            isIncomingMovement
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-rose-200 bg-rose-50 text-rose-700"
+                          )}
+                        >
+                          {isIncomingMovement ? "Entrada" : "Saída"}
+                        </Badge>
+                      </div>
+                      <p className="mt-3 break-words text-sm font-semibold leading-snug">
+                        {item.rawDescription || "Movimentação sem descrição no extrato"}
+                      </p>
+                      <div className="mt-3 flex items-end justify-between gap-3 rounded-xl bg-muted/60 px-3 py-2.5">
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Data no extrato</p>
+                          <p className="mt-1 text-sm font-medium">{formatInputDate(item.date)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[11px] text-muted-foreground">Valor</p>
+                          <p
+                            className={cn(
+                              "mt-1 whitespace-nowrap font-mono text-sm font-semibold",
+                              isIncomingMovement ? "text-emerald-600" : "text-rose-700"
+                            )}
+                          >
+                            {isIncomingMovement ? "+" : "−"} {formatCurrency(Math.abs(item.amount))}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="rounded-2xl border border-sky-100 bg-sky-50/50 p-3">
                       <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-800">
-                        1. Classificação financeira
+                        1. {isIncomingMovement ? "Destino do recebimento" : "Origem do pagamento"}
                       </p>
-                      <div className="grid gap-3 grid-cols-2">
+                      <div className="grid gap-3">
                         <div className="space-y-1.5">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">Conta</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+                            {isIncomingMovement ? "Onde entrou" : "De onde saiu"}
+                          </p>
                           <Select
                             value={item.financialDraft.accountId || "none"}
                             onValueChange={(value) => {
@@ -2866,10 +2908,12 @@ export function FinancialImportPage({
                             }}
                           >
                             <SelectTrigger className="h-9 overflow-hidden rounded-xl text-xs [&>span]:truncate">
-                              <SelectValue placeholder="Conta" />
+                              <SelectValue placeholder={isIncomingMovement ? "Selecione onde entrou" : "Selecione de onde saiu"} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="none">Selecione a conta</SelectItem>
+                              <SelectItem value="none">
+                                {isIncomingMovement ? "Selecione onde entrou" : "Selecione de onde saiu"}
+                              </SelectItem>
                               {accounts.map((account) => (
                                 <SelectItem key={account.id} value={account.id}>
                                   {getAccountOptionLabel(account, unitNameById)}
@@ -2879,7 +2923,9 @@ export function FinancialImportPage({
                           </Select>
                         </div>
                         <div className="space-y-1.5">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">Forma</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+                            {isIncomingMovement ? "Como entrou" : "Como saiu"}
+                          </p>
                           <Select
                             value={item.financialDraft.paymentMethodId || "none"}
                             onValueChange={(value) => {
@@ -2895,10 +2941,12 @@ export function FinancialImportPage({
                             }}
                           >
                             <SelectTrigger className="h-9 rounded-xl text-xs">
-                              <SelectValue placeholder="Forma" />
+                              <SelectValue placeholder={isIncomingMovement ? "Selecione como entrou" : "Selecione como saiu"} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="none">Selecione a forma</SelectItem>
+                              <SelectItem value="none">
+                                {isIncomingMovement ? "Selecione como entrou" : "Selecione como saiu"}
+                              </SelectItem>
                               {currentMethods.map((method: any) => (
                                 <SelectItem key={method.id} value={method.id}>
                                   {method.label}
