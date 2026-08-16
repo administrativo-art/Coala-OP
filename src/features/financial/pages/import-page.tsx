@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Trash2,
   ChevronsUpDown,
   FileUp,
@@ -1192,6 +1193,7 @@ export function FinancialImportPage({
   const [supplierOpenItemId, setSupplierOpenItemId] = useState<string | null>(null);
   const [supplierSearch, setSupplierSearch] = useState("");
   const [sessionsSidebarOpen, setSessionsSidebarOpen] = useState(true);
+  const [generalSummaryOpen, setGeneralSummaryOpen] = useState(true);
   const canManageExpenseDescriptions = !!permissions.financial?.settings?.manageExpenseDescriptions;
   const canQuickAddExpenseDescriptions =
     !!permissions.financial?.expenses?.create ||
@@ -2899,11 +2901,23 @@ export function FinancialImportPage({
             </div>
 
             <div className="flex min-h-0 flex-col bg-[#fbfbfc]">
-              <div className="border-b px-4 py-3">
+              <div className="flex items-center justify-between border-b px-4 py-2.5">
                 <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Resumo geral</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
+                  onClick={() => setGeneralSummaryOpen((current) => !current)}
+                  aria-expanded={generalSummaryOpen}
+                  aria-label={generalSummaryOpen ? "Recolher resumo geral" : "Expandir resumo geral"}
+                  title={generalSummaryOpen ? "Recolher resumo geral" : "Expandir resumo geral"}
+                >
+                  {generalSummaryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <div className="sticky top-0 z-10 border-b bg-[#fbfbfc] p-4">
+                {generalSummaryOpen ? <div className="sticky top-0 z-10 border-b bg-[#fbfbfc] p-4">
                   <div className="rounded-2xl border bg-background p-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -2940,7 +2954,7 @@ export function FinancialImportPage({
                       </div>
                     </div>
                   </div>
-                </div>
+                </div> : null}
               {selectedDetailItem && selectedValidation ? (() => {
                 const item = selectedDetailItem;
                 const validation = selectedValidation;
