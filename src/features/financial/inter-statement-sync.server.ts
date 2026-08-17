@@ -80,6 +80,10 @@ function addDays(isoDate: string, amount: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function firstDayOfMonth(isoDate: string) {
+  return `${isoDate.slice(0, 7)}-01`;
+}
+
 function asDate(value: unknown) {
   if (value && typeof value === "object" && typeof (value as { toDate?: unknown }).toDate === "function") {
     const date = (value as { toDate: () => Date }).toDate();
@@ -555,11 +559,6 @@ async function updateMonthlySession(params: {
   });
 }
 
-function initialLookbackDays() {
-  const configured = Number(process.env.INTER_STATEMENT_INITIAL_LOOKBACK_DAYS || 7);
-  return Number.isSafeInteger(configured) && configured >= 1 && configured <= 89 ? configured : 7;
-}
-
 export async function syncInterStatement(): Promise<SyncResult> {
   const accountId = requiredSetting("INTER_STATEMENT_BANK_ACCOUNT_ID", "INTER_COBRANCA_BANK_ACCOUNT_ID");
   const accountSnapshot = await financialDbAdmin.collection("bankAccounts").doc(accountId).get();
@@ -583,10 +582,15 @@ export async function syncInterStatement(): Promise<SyncResult> {
   const stateRef = financialDbAdmin.collection("integrationState").doc(SYNC_STATE_DOCUMENT);
   const stateSnapshot = await stateRef.get();
   const endDate = dateInTimeZone();
+  const currentMonthStart = firstDayOfMonth(endDate);
   const lastSuccessfulSyncAt = asDate(stateSnapshot.get("lastSuccessfulSyncAt"));
-  const startDate = lastSuccessfulSyncAt
+  const overlapStart = lastSuccessfulSyncAt
     ? addDays(dateInTimeZone(lastSuccessfulSyncAt), -3)
-    : addDays(endDate, -initialLookbackDays());
+    : currentMonthStart;
+  // A sessão automática é mensal. Reconsulta o mês corrente desde o dia 1
+  // (com deduplicação por ID bancário) para não deixar dias anteriores fora
+  // quando a integração for ativada ou retomada no meio do mês.
+  const startDate = overlapStart < currentMonthStart ? overlapStart : currentMonthStart;
   const boundedStartDate = startDate < addDays(endDate, -89) ? addDays(endDate, -89) : startDate;
 
   const [entries, candidates, aliases, existingLedgerCandidates] = await Promise.all([

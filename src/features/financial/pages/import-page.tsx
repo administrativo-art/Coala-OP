@@ -672,8 +672,19 @@ function getAccountDisplayLabel(accounts: Account[], accountId: string, fallback
 }
 
 function getSessionPeriodLabel(session: ImportSession) {
+  const monthlyKey = session.syncSource === "inter_api"
+    ? session.syncKey?.match(/:(\d{4}-\d{2})$/)?.[1] || session.fileName?.match(/inter-api-(\d{4}-\d{2})/)?.[1]
+    : null;
+
+  if (monthlyKey) {
+    const [year, month] = monthlyKey.split("-").map(Number);
+    const first = new Date(year, month - 1, 1);
+    const last = new Date(year, month, 0);
+    return `${format(first, "dd/MM/yyyy", { locale: ptBR })} — ${format(last, "dd/MM/yyyy", { locale: ptBR })}`;
+  }
+
   const dates = session.items
-    .map((item) => new Date(item.date))
+    .map((item) => new Date(`${item.date}T00:00:00`))
     .filter((date) => !Number.isNaN(date.getTime()))
     .sort((left, right) => left.getTime() - right.getTime());
 
@@ -1196,6 +1207,13 @@ export function FinancialImportPage({
   const [supplierSearch, setSupplierSearch] = useState("");
   const [sessionsSidebarOpen, setSessionsSidebarOpen] = useState(true);
   const [generalSummaryOpen, setGeneralSummaryOpen] = useState(true);
+  const visibleOpenSessions = useMemo(
+    () =>
+      statementAccountId
+        ? openSessions.filter((session) => session.statementAccountId === statementAccountId)
+        : openSessions,
+    [openSessions, statementAccountId]
+  );
   const canManageExpenseDescriptions = !!permissions.financial?.settings?.manageExpenseDescriptions;
   const canQuickAddExpenseDescriptions =
     !!permissions.financial?.expenses?.create ||
@@ -1225,12 +1243,24 @@ export function FinancialImportPage({
   }, []);
 
   useEffect(() => {
-    if (!selectedSessionId && openSessions.length > 0) {
-      const firstSession = openSessions[0];
+    if (!selectedSessionId && visibleOpenSessions.length > 0) {
+      const firstSession = visibleOpenSessions[0];
       setSelectedSessionId(firstSession.id);
       replaceSessionUrl(firstSession.id);
     }
-  }, [openSessions, replaceSessionUrl, selectedSessionId]);
+  }, [replaceSessionUrl, selectedSessionId, visibleOpenSessions]);
+
+  useEffect(() => {
+    if (!statementAccountId) return;
+    if (selectedSessionId && visibleOpenSessions.some((session) => session.id === selectedSessionId)) return;
+
+    const nextSession = visibleOpenSessions[0] ?? null;
+    setSelectedSessionId(nextSession?.id ?? null);
+    setCurrentSession(nextSession);
+    setExpandedItemId(nextSession?.items[0]?.id ?? null);
+    setIsSessionDirty(false);
+    replaceSessionUrl(nextSession?.id ?? null);
+  }, [replaceSessionUrl, selectedSessionId, statementAccountId, visibleOpenSessions]);
 
   useEffect(() => {
     setDescriptionDraftsByItem({});
@@ -2619,7 +2649,7 @@ export function FinancialImportPage({
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Sessões</p>
                     <div className="flex items-center gap-1.5">
-                      <Badge variant="secondary" className="rounded-full text-[10px]">{openSessions.length}</Badge>
+                      <Badge variant="secondary" className="rounded-full text-[10px]">{visibleOpenSessions.length}</Badge>
                       <button type="button" onClick={() => setSessionsSidebarOpen(false)} className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
                         <PanelLeftClose className="h-3.5 w-3.5" />
                       </button>
@@ -2691,7 +2721,7 @@ export function FinancialImportPage({
                 ) : null}
 
                 <div className="space-y-2">
-                  {openSessions.map((session) => {
+                  {visibleOpenSessions.map((session) => {
                     const isSelected = session.id === selectedSession.id;
                     const periodLabel = getSessionPeriodLabel(session);
 
@@ -2720,7 +2750,7 @@ export function FinancialImportPage({
                               isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                             )}
                           >
-                            {openSessions.findIndex((entry) => entry.id === session.id) + 1}
+                            {visibleOpenSessions.findIndex((entry) => entry.id === session.id) + 1}
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-semibold">{periodLabel}</p>
@@ -3567,6 +3597,29 @@ export function FinancialImportPage({
               </div>
             </div>
           </div>
+        </Card>
+      ) : statementAccountId && visibleOpenSessions.length === 0 ? (
+        <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
+          <CardHeader>
+            <CardTitle>Nenhuma sessão aberta para esta conta</CardTitle>
+            <CardDescription>
+              Selecione outra conta ou importe o extrato para iniciar uma nova auditoria.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Select value={statementAccountId} onValueChange={setStatementAccountId}>
+              <SelectTrigger className="h-11 rounded-2xl">
+                <SelectValue placeholder="Conta vinculada ao extrato" />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {getAccountOptionLabel(account, unitNameById)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
         </Card>
       ) : (
         uploadOnly || showImportControls ? (
