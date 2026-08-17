@@ -24,6 +24,11 @@ export function isCardStatementSettlementText(value: string) {
   return /PAGAMENTO(?:\s+DE)?\s+FATURA|LIQUIDACAO(?:\s+DE)?\s+FATURA/.test(text);
 }
 
+export function isBoletoPaymentText(value: string) {
+  const text = normalizeStatementText(value);
+  return /BOLETO|COD(?:IGO)?\s*(?:DE\s*)?BARRA(?:S|\s*LINHA\s*DIGITAVEL)?|LINHA\s*DIGITAVEL|PAGAMENTO\s+DE\s+TITULO|CONVENIO|ARRECADACAO/.test(text);
+}
+
 function findByIdentity<TMethod extends StatementPaymentMethodOption>(
   methods: TMethod[],
   id: string,
@@ -56,7 +61,7 @@ export function inferStatementPaymentMethodFromText<TMethod extends StatementPay
       /DEBITO\s+AUTOMATICO/,
     ) ?? null;
   }
-  if (/BOLETO|CODIGO\s+DE\s+BARRAS|PAGAMENTO\s+DE\s+TITULO|CONVENIO|ARRECADACAO/.test(text)) {
+  if (isBoletoPaymentText(text)) {
     return findByIdentity(methods, STATEMENT_PAYMENT_METHOD_IDS.boleto, /BOLETO|CODIGO\s+DE\s+BARRAS/) ?? null;
   }
   if (/CARTAO.*DEBITO/.test(text)) {

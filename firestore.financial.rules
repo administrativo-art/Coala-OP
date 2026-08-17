@@ -229,12 +229,20 @@ service cloud.firestore {
       return hasConsistentExpenseAccount(data)
         && exists(/databases/$(database)/documents/accounts/$(data.accountPlan))
         && get(/databases/$(database)/documents/accounts/$(data.accountPlan)).data.active == true
-        && get(/databases/$(database)/documents/accounts/$(data.accountPlan)).data.isGroup != true;
+        && (
+          get(/databases/$(database)/documents/accounts/$(data.accountPlan)).data.isGroup != true
+          || (
+            data.get('hasAccountAllocations', false) == true
+            && data.accountAllocations is list
+            && data.accountAllocations.size() >= 2
+            && data.accountAllocations.size() <= 25
+          )
+        );
     }
 
     function expenseAccountChanged() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['accountPlan', 'accountId']);
+        .hasAny(['accountPlan', 'accountId', 'hasAccountAllocations', 'accountAllocations']);
     }
 
     match /users/{userId} {

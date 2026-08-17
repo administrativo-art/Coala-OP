@@ -4,6 +4,7 @@ import test from "node:test";
 import { findUniqueExactExpenseMatch } from "../../src/features/financial/lib/inter-statement-reconciliation";
 import {
   inferStatementPaymentMethodFromText,
+  isBoletoPaymentText,
   isCardStatementSettlementText,
   STATEMENT_PAYMENT_METHOD_IDS,
 } from "../../src/features/financial/lib/statement-payment-method";
@@ -57,6 +58,33 @@ test("gera chaves idempotentes e distingue ocorrências bancárias idênticas se
     interStatementSessionDocumentId("conta-inter", "2026-08"),
     interStatementSessionDocumentId("conta-inter", "2026-08")
   );
+});
+
+test("preserva os detalhes completos e referências internas do pagamento retornado pelo Inter", () => {
+  const [payment] = normalizeInterStatementEntries([
+    {
+      idTransacao: "tx-boleto",
+      dataTransacao: "2026-08-15",
+      tipoOperacao: "D",
+      tipoTransacao: "PAGAMENTO_BOLETO",
+      valor: "101,32",
+      titulo: "Pagamento efetuado",
+      descricao: "Fornecedor Exemplo",
+      numeroDocumento: "doc-123",
+      detalhes: {
+        codBarraLinhaDigitavel: "12345678901234567890123456789012345678901234",
+        codigoAutenticacao: "auth-456",
+        nomeBeneficiario: "Fornecedor Exemplo",
+      },
+    },
+  ]);
+
+  assert.equal(
+    (payment.raw.detalhes as Record<string, unknown>).codBarraLinhaDigitavel,
+    "12345678901234567890123456789012345678901234"
+  );
+  assert.equal(payment.references.includes("auth-456"), true);
+  assert.equal(payment.references.includes("doc-123"), true);
 });
 
 test("baixa automaticamente apenas quando existe um único candidato exato", () => {
@@ -114,6 +142,10 @@ test("classifica as formas de saída do extrato sem confundir pagamento de fatur
     STATEMENT_PAYMENT_METHOD_IDS.boleto
   );
   assert.equal(
+    inferStatementPaymentMethodFromText('{"detalhes":{"codBarraLinhaDigitavel":"123"}}', methods)?.id,
+    STATEMENT_PAYMENT_METHOD_IDS.boleto
+  );
+  assert.equal(
     inferStatementPaymentMethodFromText("Transferência TED enviada", methods)?.id,
     STATEMENT_PAYMENT_METHOD_IDS.bankTransfer
   );
@@ -126,4 +158,5 @@ test("classifica as formas de saída do extrato sem confundir pagamento de fatur
     STATEMENT_PAYMENT_METHOD_IDS.cardStatementSettlement
   );
   assert.equal(isCardStatementSettlementText("Liquidação de fatura do cartão"), true);
+  assert.equal(isBoletoPaymentText("codBarraLinhaDigitavel"), true);
 });

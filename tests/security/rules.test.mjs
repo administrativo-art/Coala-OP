@@ -342,6 +342,18 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           active: true,
           isGroup: true,
         }),
+        setDoc(doc(db, "accounts/group-child-a"), {
+          name: "Subconta A",
+          active: true,
+          isGroup: false,
+          parentId: "group-account",
+        }),
+        setDoc(doc(db, "accounts/group-child-b"), {
+          name: "Subconta B",
+          active: true,
+          isGroup: false,
+          parentId: "group-account",
+        }),
         setDoc(doc(db, "expenses/expense-1"), {
           description: "Despesa",
           totalValue: 1000,
@@ -405,6 +417,27 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
       status: "pending",
       accountPlan: "group-account",
       accountId: "group-account",
+    }));
+    await assertFails(setDoc(doc(creator.firestore(), "expenses/group-account-one-allocation"), {
+      description: "Despesa com grupo e apropriação incompleta",
+      totalValue: 100,
+      status: "pending",
+      accountPlan: "group-account",
+      accountId: "group-account",
+      hasAccountAllocations: true,
+      accountAllocations: [{ accountPlanId: "group-child-a", amount: 100 }],
+    }));
+    await assertSucceeds(setDoc(doc(creator.firestore(), "expenses/group-account-allocated"), {
+      description: "Despesa com grupo apropriadamente desmembrada",
+      totalValue: 100,
+      status: "pending",
+      accountPlan: "group-account",
+      accountId: "group-account",
+      hasAccountAllocations: true,
+      accountAllocations: [
+        { accountPlanId: "group-child-a", accountPlanName: "Subconta A", amount: 40 },
+        { accountPlanId: "group-child-b", accountPlanName: "Subconta B", amount: 60 },
+      ],
     }));
     await assertFails(setDoc(doc(creator.firestore(), "expenses/mismatched-account"), {
       description: "Despesa com conta divergente",

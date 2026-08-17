@@ -40,6 +40,14 @@ import {
   type RateioCriterion,
   type ResultCenterNameMap,
 } from "@/features/financial/lib/expense-rateio";
+import {
+  accountAllocationDifference,
+  accountAllocationTotal,
+} from "@/features/financial/lib/expense-account-allocations";
+import {
+  consultDasProvision,
+  DAS_PROVISION_SERIES_KEY,
+} from "@/features/financial/lib/das-provisions";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import { Badge } from "@/components/ui/badge";
@@ -469,6 +477,37 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   );
   const { data: resultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
   const { data: bankAccounts } = useFinancialCollection<any>(financialCollection("bankAccounts"));
+  const form = useForm<ExpenseFormValues>({
+    resolver: zodResolver(expenseFormSchema),
+    defaultValues: {
+      isApportioned: false,
+      paymentMethod: "single",
+      plannedPaymentMethodType: undefined,
+      plannedBankAccountId: "",
+      plannedBankAccountName: "",
+      plannedPaymentMethodId: "",
+      plannedPaymentMethodLabel: "",
+      apportionments: [{ resultCenter: "", percentage: 100 }],
+      rateioCriterion: "equal",
+      rateioEffectiveFrom: startOfMonth(addMonths(new Date(), 1)),
+      rateioFirstMonthMode: "full",
+      hasAccountAllocations: false,
+      accountAllocations: [],
+      variedInstallments: [],
+      accountPlan: "",
+      description: "",
+      supplier: "",
+      notes: "",
+      resultCenter: "",
+      totalValue: 0,
+      installments: 2,
+      installmentType: "equal",
+      installmentPeriodicity: "monthly",
+      recurrenceFirstDueDate: undefined,
+      recurrenceEndDate: undefined,
+    },
+    mode: "onChange",
+  });
   const resultCenterNameById = useMemo(() => {
     const map: ResultCenterNameMap = {};
     (resultCenters || []).forEach((center) => {
@@ -483,13 +522,23 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     [kiosks]
   );
 
-  const activeAccounts = useMemo(() => {
+  const hasAccountAllocations = form.watch("hasAccountAllocations");
+
+  const postingAccounts = useMemo(() => {
     const all = accounts || [];
     // Contas com filhas são nós de grupo: a DRE lê a posição da própria conta,
     // então o lançamento precisa ir em uma folha.
     const parentIds = new Set(all.map((a: any) => a.parentId).filter(Boolean));
     return all.filter((a: any) => a.active !== false && !parentIds.has(a.id));
   }, [accounts]);
+
+  const allocationHeaderAccounts = useMemo(() => {
+    const all = accounts || [];
+    const parentIds = new Set(all.map((account: any) => account.parentId).filter(Boolean));
+    return all.filter((account: any) => account.active !== false && parentIds.has(account.id));
+  }, [accounts]);
+
+  const activeAccounts = hasAccountAllocations ? allocationHeaderAccounts : postingAccounts;
 
   const plannedPaymentInstruments = useMemo(
     () =>
@@ -549,42 +598,13 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       .filter((g) => g.accounts.length > 0);
   }, [groupedAccounts, accountPlanSearch]);
 
-  const form = useForm<ExpenseFormValues>({
-    resolver: zodResolver(expenseFormSchema),
-    defaultValues: {
-      isApportioned: false,
-      paymentMethod: "single",
-      plannedPaymentMethodType: undefined,
-      plannedBankAccountId: "",
-      plannedBankAccountName: "",
-      plannedPaymentMethodId: "",
-      plannedPaymentMethodLabel: "",
-      apportionments: [{ resultCenter: "", percentage: 100 }],
-      rateioCriterion: "equal",
-      rateioEffectiveFrom: startOfMonth(addMonths(new Date(), 1)),
-      rateioFirstMonthMode: "full",
-      variedInstallments: [],
-      accountPlan: "",
-      description: "",
-      supplier: "",
-      notes: "",
-      resultCenter: "",
-      totalValue: 0,
-      installments: 2,
-      installmentType: "equal",
-      installmentPeriodicity: "monthly",
-      recurrenceFirstDueDate: undefined,
-      recurrenceEndDate: undefined,
-    },
-    mode: "onChange",
-  });
-
   const paymentMethod = form.watch("paymentMethod");
   const plannedBankAccountId = form.watch("plannedBankAccountId");
   const plannedPaymentMethodId = form.watch("plannedPaymentMethodId");
   const plannedPaymentMethodType = form.watch("plannedPaymentMethodType");
   const plannedPaymentMethodLabel = form.watch("plannedPaymentMethodLabel");
   const accountPlanValue = form.watch("accountPlan");
+  const accountAllocations = form.watch("accountAllocations");
   const installmentType = form.watch("installmentType");
   const installmentsQty = form.watch("installments");
   const totalValue = form.watch("totalValue");
@@ -609,6 +629,34 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     () => (accounts || []).find((a: any) => a.id === accountPlanValue),
     [accountPlanValue, accounts]
   );
+  const accountAllocationOptions = useMemo(() => {
+    if (!hasAccountAllocations || !accountPlanValue) return [];
+    const all = (accounts || []).filter((account: any) => account.active !== false);
+    const childrenByParent = new Map<string, any[]>();
+    all.forEach((account: any) => {
+      if (!account.parentId) return;
+      const children = childrenByParent.get(account.parentId) || [];
+      children.push(account);
+      childrenByParent.set(account.parentId, children);
+    });
+    const leaves: any[] = [];
+    const visit = (parentId: string) => {
+      (childrenByParent.get(parentId) || []).forEach((child) => {
+        if ((childrenByParent.get(child.id) || []).length > 0) visit(child.id);
+        else leaves.push(child);
+      });
+    };
+    visit(accountPlanValue);
+    return leaves.sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
+  }, [accountPlanValue, accounts, hasAccountAllocations]);
+  const {
+    fields: accountAllocationFields,
+    replace: replaceAccountAllocations,
+    append: appendAccountAllocation,
+    remove: removeAccountAllocation,
+  } = useFieldArray({ control: form.control, name: "accountAllocations" });
+  const allocatedAccountTotal = accountAllocationTotal(accountAllocations);
+  const accountAllocationRemaining = accountAllocationDifference(accountAllocations, totalValue || 0);
   const plannedPaymentSelection =
     plannedBankAccountId && plannedPaymentMethodId
       ? `${plannedBankAccountId}:${plannedPaymentMethodId}`
@@ -625,6 +673,52 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     form.setValue("plannedBankAccountName", instrument?.accountName || "", { shouldDirty: true });
     form.setValue("plannedPaymentMethodId", instrument?.methodId || "", { shouldDirty: true });
     form.setValue("plannedPaymentMethodLabel", instrument?.methodLabel || "", { shouldDirty: true });
+  }
+
+  function allocationRowsForParent(parentId: string) {
+    const all = (accounts || []).filter((account: any) => account.active !== false);
+    const childrenByParent = new Map<string, any[]>();
+    all.forEach((account: any) => {
+      if (!account.parentId) return;
+      const children = childrenByParent.get(account.parentId) || [];
+      children.push(account);
+      childrenByParent.set(account.parentId, children);
+    });
+    const leaves: any[] = [];
+    const visit = (id: string) => {
+      (childrenByParent.get(id) || []).forEach((child) => {
+        if ((childrenByParent.get(child.id) || []).length > 0) visit(child.id);
+        else leaves.push(child);
+      });
+    };
+    visit(parentId);
+    return leaves
+      .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+      .map((account) => ({ accountPlanId: account.id, amount: 0 }));
+  }
+
+  function handleAccountAllocationMode(checked: boolean) {
+    form.setValue("hasAccountAllocations", checked, { shouldDirty: true, shouldValidate: true });
+    form.setValue("accountPlan", "", { shouldDirty: true, shouldValidate: true });
+    replaceAccountAllocations([]);
+    setAccountPlanSearch("");
+  }
+
+  function handleAccountPlanSelection(accountId: string) {
+    form.setValue("accountPlan", accountId, { shouldDirty: true, shouldValidate: true });
+    if (hasAccountAllocations) replaceAccountAllocations(allocationRowsForParent(accountId));
+    setAccountPlanOpen(false);
+  }
+
+  function fillAccountAllocationRemaining(index: number) {
+    const otherCents = (accountAllocations || [])
+      .filter((_, currentIndex) => currentIndex !== index)
+      .reduce((total, allocation) => total + Math.round((Number(allocation.amount) || 0) * 100), 0);
+    const remainingCents = Math.max(0, Math.round((Number(totalValue) || 0) * 100) - otherCents);
+    form.setValue(`accountAllocations.${index}.amount`, remainingCents / 100, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   }
   const activeExpenseDescriptions = useMemo(
     () =>
@@ -914,6 +1008,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           ...form.getValues(),
           paymentMethod: "single",
           accountPlan: data.accountPlanId || "",
+          hasAccountAllocations: false,
+          accountAllocations: [],
           description: data.description || "",
           supplier: data.supplier || "",
           resultCenter: data.resultCenterName || "",
@@ -994,6 +1090,14 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         }));
         const resetData: any = {
           accountPlan: data.accountPlan,
+          hasAccountAllocations:
+            data.hasAccountAllocations === true && Array.isArray(data.accountAllocations) && data.accountAllocations.length > 0,
+          accountAllocations: Array.isArray(data.accountAllocations)
+            ? data.accountAllocations.map((allocation: any) => ({
+                accountPlanId: String(allocation.accountPlanId ?? ""),
+                amount: Number(allocation.amount) || 0,
+              }))
+            : [],
           description: data.description,
           supplier: data.supplier,
           notes: data.notes,
@@ -1161,6 +1265,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     { label: "Descrição", ok: (descriptionValue || "").trim().length >= 3 },
     { label: "Fornecedor", ok: (supplierValue || "").trim().length >= 3 },
     { label: "Plano de contas", ok: !!accountPlanValue },
+    {
+      label: "Apropriações contábeis",
+      ok: !hasAccountAllocations || Math.abs(accountAllocationRemaining) < 0.001,
+    },
     { label: "Unidade ou rateio", ok: isApportioned ? rateioTotal === 100 : !!resultCenterValue },
     { label: "Valor", ok: Number(totalValue || 0) > 0 },
     { label: "Vencimento", ok: !!previewDueDate },
@@ -1213,13 +1321,30 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   }
 
   function buildExpensePayload(values: ExpenseFormValues) {
-    const account = activeAccounts.find((item: any) => item.id === values.accountPlan);
+    const account = (accounts || []).find((item: any) => item.id === values.accountPlan);
     const installmentsToSave = buildInstallmentsFromValues(values);
+    const isDasTitle = account?.name?.trim().toLocaleLowerCase("pt-BR") === "das" && values.hasAccountAllocations;
+    const storedAccountAllocations = values.hasAccountAllocations
+      ? (values.accountAllocations || []).map((allocation) => {
+          const allocationAccount = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+          return {
+            accountPlanId: allocation.accountPlanId,
+            accountPlanName: allocationAccount?.name || allocation.accountPlanId,
+            amount: Number((Number(allocation.amount) || 0).toFixed(2)),
+          };
+        })
+      : null;
 
     return {
       accountPlan: values.accountPlan || "",
       accountId: values.accountPlan || "",
       accountPlanName: account?.name || values.accountPlan || "",
+      provisionSeriesKey: isDasTitle ? DAS_PROVISION_SERIES_KEY : null,
+      provisionType: isDasTitle ? "actual" : null,
+      provisionCompetence:
+        isDasTitle && values.competenceDate ? format(values.competenceDate, "yyyy-MM") : null,
+      hasAccountAllocations: values.hasAccountAllocations,
+      accountAllocations: storedAccountAllocations,
       description: values.description || "",
       supplier: values.supplier ?? "",
       notes: values.notes ?? "",
@@ -1275,6 +1400,43 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           : null,
       updatedAt: Timestamp.now(),
     };
+  }
+
+  async function reconcileDasProvisionAfterSave(expenseId: string, payload: ReturnType<typeof buildExpensePayload>) {
+    if (!firebaseUser || payload.provisionType !== "actual" || !payload.provisionCompetence) return "not_applicable";
+    const snapshot = await getDocs(
+      query(
+        financialCollection("expenses"),
+        where("provisionSeriesKey", "==", DAS_PROVISION_SERIES_KEY),
+      ),
+    );
+    const related = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+    const consultation = consultDasProvision({ id: expenseId, ...payload }, related);
+    if (consultation.status !== "matched" || !consultation.provision.id) return consultation.status;
+
+    const now = Timestamp.now();
+    const batch = writeBatch(financialDb);
+    batch.update(financialDoc("expenses", expenseId), {
+      reconciledProvisionId: consultation.provision.id,
+      provisionReconciliationStatus: "reconciled",
+      provisionedValue: consultation.provisionedValue,
+      provisionVariance: consultation.variance,
+      provisionReconciledAt: now,
+      provisionReconciledBy: firebaseUser.uid,
+      updatedAt: now,
+    });
+    batch.update(financialDoc("expenses", consultation.provision.id), {
+      status: "reconciled",
+      replacedByExpenseId: expenseId,
+      actualValue: consultation.actualValue,
+      provisionVariance: consultation.variance,
+      provisionReconciliationStatus: "reconciled",
+      provisionReconciledAt: now,
+      provisionReconciledBy: firebaseUser.uid,
+      updatedAt: now,
+    });
+    await batch.commit();
+    return "reconciled";
   }
 
   function buildRateioPolicy(values: ExpenseFormValues, versionId: string): ExpenseRateioPolicy | null {
@@ -1444,6 +1606,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
             sharedPatch.accountId = editPayload.accountId;
             sharedPatch.accountPlanName = editPayload.accountPlanName;
           }
+          if (dirtyFields.hasAccountAllocations || dirtyFields.accountAllocations) {
+            sharedPatch.hasAccountAllocations = editPayload.hasAccountAllocations;
+            sharedPatch.accountAllocations = editPayload.accountAllocations;
+          }
           if (dirtyFields.description) sharedPatch.description = editPayload.description;
           if (dirtyFields.supplier) sharedPatch.supplier = editPayload.supplier;
           if (dirtyFields.notes) sharedPatch.notes = editPayload.notes;
@@ -1574,6 +1740,22 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         toast({ title: "Despesa lançada." });
       }
 
+      if (savedExpenseId && payload.provisionType === "actual") {
+        const reconciliation = await reconcileDasProvisionAfterSave(savedExpenseId, payload);
+        if (reconciliation === "reconciled") {
+          toast({
+            title: "Provisão do DAS conciliada.",
+            description: "A previsão da competência foi substituída pelo valor real sem duplicar a DRE.",
+          });
+        } else if (reconciliation === "ambiguous") {
+          toast({
+            variant: "destructive",
+            title: "Há mais de uma provisão para esta competência.",
+            description: "A despesa foi salva, mas a conciliação precisa de revisão.",
+          });
+        }
+      }
+
       if (importTransactionId && savedExpenseId) {
         await updateDoc(financialDoc("transactions", importTransactionId), {
           auditStatus: "resolved",
@@ -1599,6 +1781,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     const dirtyFields = form.formState.dirtyFields;
     return !!(
       dirtyFields.accountPlan ||
+      dirtyFields.hasAccountAllocations ||
+      dirtyFields.accountAllocations ||
       dirtyFields.description ||
       dirtyFields.supplier ||
       dirtyFields.notes ||
@@ -1962,10 +2146,28 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
                       <FormField
                         control={form.control}
+                        name="hasAccountAllocations"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-xl border p-4">
+                            <div>
+                              <FormLabel>Desmembrar em subcontas</FormLabel>
+                              <p className="text-sm text-muted-foreground">
+                                Mantém um único título e distribui seu valor entre contas filhas, como na composição de um DAS.
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch checked={field.value} onCheckedChange={handleAccountAllocationMode} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
                         name="accountPlan"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Plano de contas</FormLabel>
+                            <FormLabel>{hasAccountAllocations ? "Conta-mãe do título" : "Plano de contas"}</FormLabel>
                             <Popover open={accountPlanOpen} onOpenChange={setAccountPlanOpen}>
                               <PopoverTrigger asChild>
                                 <FormControl>
@@ -1981,7 +2183,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                         {selectedAccountPlan.name}
                                       </span>
                                     ) : (
-                                      "Selecione o plano de contas"
+                                      hasAccountAllocations ? "Selecione a conta-mãe" : "Selecione o plano de contas"
                                     )}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                   </Button>
@@ -2013,7 +2215,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                                 "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
                                                 field.value === account.id && "bg-muted/30 font-medium"
                                               )}
-                                              onClick={() => { field.onChange(account.id); setAccountPlanOpen(false); }}
+                                              onClick={() => handleAccountPlanSelection(account.id)}
                                             >
                                               <span className="min-w-0">
                                                 <span className="block truncate">{account.name}</span>
@@ -2035,6 +2237,121 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                           </FormItem>
                         )}
                       />
+
+                      {hasAccountAllocations && (
+                        <div className="space-y-4 rounded-xl border p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium">Apropriações contábeis</p>
+                              <p className="text-sm text-muted-foreground">
+                                Cada linha alimentará sua posição própria na DRE, mas todas continuarão ligadas ao mesmo vencimento e pagamento.
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={
+                                accountAllocationOptions.length === 0
+                                || (accountAllocations || []).length >= accountAllocationOptions.length
+                              }
+                              onClick={() => {
+                                const selected = new Set((accountAllocations || []).map((item) => item.accountPlanId));
+                                const next = accountAllocationOptions.find((account: any) => !selected.has(account.id));
+                                if (next) appendAccountAllocation({ accountPlanId: next.id, amount: 0 });
+                              }}
+                            >
+                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar subconta
+                            </Button>
+                          </div>
+
+                          {accountAllocationFields.length === 0 ? (
+                            <div className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                              Selecione uma conta-mãe com subcontas ativas.
+                            </div>
+                          ) : accountAllocationFields.map((allocationField, index) => (
+                            <div
+                              key={allocationField.id}
+                              className="grid gap-3 rounded-lg border bg-muted/15 p-3 md:grid-cols-[minmax(220px,1fr),180px,auto,40px]"
+                            >
+                              <FormField
+                                control={form.control}
+                                name={`accountAllocations.${index}.accountPlanId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Subconta</FormLabel>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                      <FormControl>
+                                        <SelectTrigger><SelectValue placeholder="Selecione a subconta" /></SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {accountAllocationOptions.map((account: any) => (
+                                          <SelectItem
+                                            key={account.id}
+                                            value={account.id}
+                                            disabled={(accountAllocations || []).some(
+                                              (item, rowIndex) => rowIndex !== index && item.accountPlanId === account.id
+                                            )}
+                                          >
+                                            {account.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`accountAllocations.${index}.amount`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Valor</FormLabel>
+                                    <FormControl>
+                                      <CurrencyInput value={field.value ?? 0} onChange={field.onChange} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="self-end"
+                                onClick={() => fillAccountAllocationRemaining(index)}
+                              >
+                                Preencher restante
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="self-end"
+                                disabled={accountAllocationFields.length <= 2}
+                                onClick={() => removeAccountAllocation(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2 text-sm">
+                            <span>Apropriado: <strong>{formatCurrency(allocatedAccountTotal)}</strong></span>
+                            <span className={cn(
+                              "font-medium",
+                              Math.abs(accountAllocationRemaining) < 0.001 ? "text-emerald-600" : "text-amber-700"
+                            )}>
+                              {accountAllocationRemaining >= 0 ? "Restante" : "Excedente"}: {formatCurrency(Math.abs(accountAllocationRemaining))}
+                            </span>
+                          </div>
+                          {(form.formState.errors.accountAllocations as any)?.message && (
+                            <p className="text-sm font-medium text-destructive">
+                              {(form.formState.errors.accountAllocations as any).message}
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       {!isApportioned && (
                         <FormField
@@ -2510,6 +2827,25 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                           </div>
                         </div>
 
+                        {hasAccountAllocations && accountAllocationFields.length > 0 ? (
+                          <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                              Composição contábil do título
+                            </p>
+                            <div className="mt-2 space-y-1.5">
+                              {(accountAllocations || []).map((allocation) => {
+                                const account = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+                                return (
+                                  <div key={allocation.accountPlanId} className="flex items-center justify-between gap-3 text-sm">
+                                    <span>{account?.name || allocation.accountPlanId || "Subconta pendente"}</span>
+                                    <span className="font-mono font-semibold">{formatCurrency(Number(allocation.amount) || 0)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+
                         {notesValue ? (
                           <div className="mt-4 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                             <span className="font-medium text-foreground">Obs.:</span> {notesValue}
@@ -2600,7 +2936,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                     </div>
                     <div>
                       <p className="font-medium text-muted-foreground">Plano</p>
-                      <p className="mt-1">{selectedAccountPlan?.order || "—"}</p>
+                      <p className="mt-1">
+                        {selectedAccountPlan?.name || "—"}
+                        {hasAccountAllocations ? ` · ${(accountAllocations || []).length} apropriações` : ""}
+                      </p>
                     </div>
                     <div className="col-span-2">
                       <p className="font-medium text-muted-foreground">Pagamento previsto</p>

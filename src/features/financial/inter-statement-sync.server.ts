@@ -155,6 +155,15 @@ function buildSummary(items: Array<{ status?: string }>) {
   };
 }
 
+function statementMetadata(entry: InterStatementEntry) {
+  return {
+    bankStatementData: entry.raw,
+    bankReferences: entry.references,
+    bankOperationType: entry.operationType || null,
+    bankTransactionType: entry.transactionType || null,
+  };
+}
+
 function buildSessionItem(params: {
   entry: InterStatementEntry;
   transactionId: string;
@@ -178,6 +187,7 @@ function buildSessionItem(params: {
     syncSource: "inter_api",
     externalTransactionId: entry.externalId,
     linkedBankTransactionId: transactionId,
+    ...statementMetadata(entry),
     date: entry.date,
     amount: entry.amount,
     rawDescription: entry.description,
@@ -197,12 +207,16 @@ function buildSessionItem(params: {
       supplier: alias?.supplier || "",
       accountPlanId: alias?.accountPlanId || "",
       accountPlanName: alias?.accountPlanName || "",
+      hasAccountAllocations: false,
+      accountAllocations: [],
       isApportioned: false,
       resultCenterId: alias?.resultCenterId || "",
       resultCenterName: alias?.resultCenterName || "",
       apportionments: [],
+      splitAllocationMode: "amount",
       splitExpenses: [],
       competenceDate: `${entry.date.slice(0, 7)}-01`,
+      dueDate: entry.date,
       notes: `Sincronizado automaticamente do Banco Inter: ${entry.description}`,
     },
     financialDraft: {
@@ -338,11 +352,18 @@ async function registerEntry(params: {
   return financialDbAdmin.runTransaction(async (transaction) => {
     const existingEvent = await transaction.get(eventRef);
     if (existingEvent.exists) {
+      const linkedTransactionId = String(existingEvent.get("linkedTransactionId") || transactionId);
+      transaction.set(
+        financialDbAdmin.collection("transactions").doc(linkedTransactionId),
+        statementMetadata(entry),
+        { merge: true },
+      );
+      transaction.set(eventRef, statementMetadata(entry), { merge: true });
       return {
         inserted: false,
         matched: existingEvent.get("reconciliationMode") === "expense_auto_match",
         reconciledExisting: existingEvent.get("reconciliationMode") === "existing_inter_ledger",
-        transactionId: String(existingEvent.get("linkedTransactionId") || transactionId),
+        transactionId: linkedTransactionId,
       };
     }
 
@@ -356,8 +377,7 @@ async function registerEntry(params: {
           externalTransactionId: entry.externalId,
           externalTransactionIds: FieldValue.arrayUnion(entry.externalId),
           rawBankDescription: entry.description,
-          bankOperationType: entry.operationType || null,
-          bankTransactionType: entry.transactionType || null,
+          ...statementMetadata(entry),
           auditStatus: "resolved",
           bankReconciledAt: Timestamp.now(),
         }, { merge: true });
@@ -369,6 +389,7 @@ async function registerEntry(params: {
           direction: entry.amount < 0 ? "out" : "in",
           amount: Math.abs(entry.amount),
           description: entry.description,
+          ...statementMetadata(entry),
           linkedTransactionId: existingLedger.transactionId,
           linkedExpenseId: existingLedger.expenseId || null,
           reconciliationMode: "existing_inter_ledger",
@@ -391,6 +412,7 @@ async function registerEntry(params: {
         provider: "inter",
         accountId,
         externalTransactionId: entry.externalId,
+        ...statementMetadata(entry),
         linkedTransactionId: transactionId,
         reconciliationMode: "existing_statement_transaction",
         createdAt: Timestamp.now(),
@@ -471,8 +493,7 @@ async function registerEntry(params: {
       importSource: "inter_api",
       externalTransactionId: entry.externalId,
       rawBankDescription: entry.description,
-      bankOperationType: entry.operationType || null,
-      bankTransactionType: entry.transactionType || null,
+      ...statementMetadata(entry),
       auditStatus: appliedMatch || entry.amount >= 0 ? "resolved" : "pending",
       autoMatched: Boolean(appliedMatch),
       autoMatchConfidence: appliedMatch ? "high" : null,
@@ -487,6 +508,7 @@ async function registerEntry(params: {
       direction: entry.amount < 0 ? "out" : "in",
       amount: Math.abs(entry.amount),
       description: entry.description,
+      ...statementMetadata(entry),
       linkedTransactionId: transactionId,
       linkedExpenseId: appliedMatch?.expenseId || null,
       reconciliationMode: appliedMatch ? "expense_auto_match" : "statement_entry",
@@ -510,16 +532,31 @@ async function updateMonthlySession(params: {
     const snapshot = await transaction.get(sessionRef);
     const current = snapshot.exists ? snapshot.data() || {} : {};
     const currentItems = Array.isArray(current.items) ? current.items : [];
+    const incomingById = new Map(
+      items.map((item) => [String(item.externalTransactionId || item.id || ""), item]),
+    );
+    const refreshedCurrentItems = currentItems.map((item: Record<string, unknown>) => {
+      const incoming = incomingById.get(String(item.externalTransactionId || item.id || ""));
+      if (!incoming) return item;
+      return {
+        ...item,
+        bankStatementData: incoming.bankStatementData,
+        bankReferences: incoming.bankReferences,
+        bankOperationType: incoming.bankOperationType,
+        bankTransactionType: incoming.bankTransactionType,
+      };
+    });
     const knownIds = new Set(currentItems.map((item: Record<string, unknown>) => String(item.externalTransactionId || item.id || "")));
     const appended = items.filter((item) => !knownIds.has(String(item.externalTransactionId || item.id || "")));
-    if (snapshot.exists && appended.length === 0) return;
 
-    const nextItems = [...currentItems, ...appended].sort((left, right) =>
+    const nextItems = [...refreshedCurrentItems, ...appended].sort((left, right) =>
       String((left as Record<string, unknown>).date || "").localeCompare(String((right as Record<string, unknown>).date || ""))
     );
     const summary = buildSummary(nextItems);
     const [year, monthNumber] = month.split("-");
     const now = Timestamp.now();
+    const wasExplicitlyClosed = current.status === "completed" && Boolean(current.closedAt);
+    const hasLateItems = wasExplicitlyClosed && appended.length > 0;
     transaction.set(sessionRef, {
       origin: "bank_statement",
       originLabel: "Sincronização Banco Inter",
@@ -533,12 +570,13 @@ async function updateMonthlySession(params: {
       statementAccountName: accountName,
       createdBy: current.createdBy || SYSTEM_ACTOR,
       createdByName: current.createdByName || "Banco Inter",
-      status: summary.pending > 0 ? "open" : "completed",
+      status: wasExplicitlyClosed ? "completed" : "open",
       items: nextItems,
       summary,
       createdAt: current.createdAt || now,
       updatedAt: now,
-      completedAt: summary.pending > 0 ? null : now,
+      completedAt: wasExplicitlyClosed ? current.completedAt || current.closedAt : null,
+      statementOutdated: hasLateItems ? true : Boolean(current.statementOutdated),
       lastSyncedAt: now,
     }, { merge: true });
   });
@@ -628,7 +666,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
       match: result.matched ? result.appliedMatch : null,
       existingLedger: result.reconciledExisting ? existingLedger : null,
       paymentMethod: inferStatementPaymentMethodFromText<StatementPaymentMethod>(
-        `${entry.description} ${entry.operationType} ${entry.transactionType}`,
+        `${entry.description} ${entry.operationType} ${entry.transactionType} ${JSON.stringify(entry.raw)}`,
         accountPaymentMethods,
       ),
     }));

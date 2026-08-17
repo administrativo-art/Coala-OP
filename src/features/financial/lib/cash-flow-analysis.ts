@@ -43,7 +43,7 @@ export function buildExpenseLifecycleData(
   }
 
   expenses.forEach((expense) => {
-    if (["draft", "cancelled"].includes(expense.status)) return;
+    if (["draft", "cancelled", "reconciled"].includes(expense.status)) return;
     const competence = toDate(expense.competenceDate) || toDate(expense.dueDate);
     if (!competence) return;
     const point = points.get(format(startOfMonth(competence), "yyyy-MM"));

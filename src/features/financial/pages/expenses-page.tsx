@@ -37,6 +37,10 @@ import {
   resolveResultCenterName,
   type ResultCenterNameMap,
 } from "@/features/financial/lib/expense-rateio";
+import {
+  expenseAccountAllocations,
+  expenseAccountPlanLabels,
+} from "@/features/financial/lib/expense-account-allocations";
 import { compareExpensesByDueDate } from "@/features/financial/lib/expense-order";
 import {
   PLANNED_PAYMENT_METHOD_LABELS,
@@ -84,6 +88,8 @@ const STATUS_LABELS: Record<string, string> = {
   overdue: "Vencido",
   pending: "Em aberto",
   due_soon: "Vence hoje",
+  provisioned: "Provisionado",
+  reconciled: "Previsão conciliada",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -94,6 +100,8 @@ const STATUS_COLORS: Record<string, string> = {
   overdue: "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
   pending: "border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
   due_soon: "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800",
+  provisioned: "border-cyan-300 bg-cyan-50 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300 dark:border-cyan-800",
+  reconciled: "border-slate-300 bg-slate-50 text-slate-500 dark:bg-slate-950/30 dark:text-slate-400 dark:border-slate-800",
 };
 
 const STATUS_ACCENT_COLORS: Record<string, string> = {
@@ -104,6 +112,8 @@ const STATUS_ACCENT_COLORS: Record<string, string> = {
   overdue: "bg-rose-500",
   pending: "bg-blue-500",
   due_soon: "bg-amber-500",
+  provisioned: "bg-cyan-500",
+  reconciled: "bg-slate-400",
 };
 
 const UNIT_COLOR_STYLES: Array<{ match: string; dot: string; active: string; soft: string }> = [
@@ -308,6 +318,7 @@ function matchesBaseFilters(
   }
 ) {
   const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "";
+  const accountingPlanNames = Array.from(new Set([planName, ...expenseAccountPlanLabels(expense, accountPlanMap)].filter(Boolean)));
   const due = toDate(expense.dueDate);
   const competence = toDate(expense.competenceDate);
   const belongsToUnit =
@@ -316,7 +327,7 @@ function matchesBaseFilters(
   const matchesSearch =
     !search ||
     expense.description.toLowerCase().includes(normalizedSearch) ||
-    planName.toLowerCase().includes(normalizedSearch) ||
+    accountingPlanNames.some((name) => name.toLowerCase().includes(normalizedSearch)) ||
     (expense.supplier || "").toLowerCase().includes(normalizedSearch);
 
   const matchesOrigin =
@@ -329,7 +340,7 @@ function matchesBaseFilters(
   const matchesCompetence =
     !competenceMonth || (competence && format(competence, "yyyy-MM") === competenceMonth);
   const matchesSupplier = supplierFilter === "all" || (expense.supplier || "") === supplierFilter;
-  const matchesAccountPlan = accountPlanFilter === "all" || planName === accountPlanFilter;
+  const matchesAccountPlan = accountPlanFilter === "all" || accountingPlanNames.includes(accountPlanFilter);
   const matchesPaymentType =
     paymentTypeFilter === "all" ||
     (paymentTypeFilter === "unassigned" && !expense.plannedPaymentMethodType) ||
@@ -452,7 +463,13 @@ export function ExpensesPage() {
       Array.from(
         new Set(
           expenses
-            .map((expense) => accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan)
+            .flatMap((expense) => {
+              const planName = accountPlanMap[expense.accountId ?? expense.accountPlan]
+                || expense.accountPlanName
+                || expense.accountId
+                || expense.accountPlan;
+              return [planName, ...expenseAccountPlanLabels(expense, accountPlanMap)];
+            })
             .filter(Boolean)
         )
       ).sort((a, b) => String(a).localeCompare(String(b), "pt-BR")) as string[],
@@ -808,6 +825,8 @@ export function ExpensesPage() {
                 <SelectItem value="draft">Rascunhos</SelectItem>
                 <SelectItem value="overdue">Vencidos</SelectItem>
                 <SelectItem value="paid">Pagos</SelectItem>
+                <SelectItem value="provisioned">Provisionados</SelectItem>
+                <SelectItem value="reconciled">Previsões conciliadas</SelectItem>
                 <SelectItem value="cancelled">Cancelados</SelectItem>
               </SelectContent>
             </Select>
@@ -897,6 +916,7 @@ export function ExpensesPage() {
                     const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                     const isExpanded = expandedExpenseId === expense.id;
                     const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
+                    const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
                     const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
                     const installmentSchedule = Array.isArray(expense.installmentSchedule) && expense.installmentSchedule.length > 0
                       ? expense.installmentSchedule
@@ -991,6 +1011,21 @@ export function ExpensesPage() {
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
                                     <p className="mt-1 text-sm font-medium">{planName}</p>
                                   </div>
+                                  {accountingAllocations.length > 1 && (
+                                    <div className="sm:col-span-3 rounded-xl border bg-muted/20 p-3">
+                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                        Apropriações do título
+                                      </p>
+                                      <div className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                                        {accountingAllocations.map((allocation) => (
+                                          <div key={allocation.accountPlanId} className="flex items-center justify-between gap-3 text-sm">
+                                            <span>{allocation.accountPlanName || allocation.accountPlanId}</span>
+                                            <span className="font-mono font-semibold">{formatCurrency(allocation.amount)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Centro de resultado</p>
                                     <p className="mt-1 text-sm font-medium">{expense.isApportioned ? "Rateado" : primaryUnit}</p>
@@ -1126,6 +1161,7 @@ export function ExpensesPage() {
                   const due = toDate(expense.dueDate);
                   const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                   const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
+                  const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
                   const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
 
                   return (
@@ -1143,6 +1179,7 @@ export function ExpensesPage() {
                         <span>{primaryUnit}</span>
                         <span className="text-border">·</span>
                         <span>{planName}</span>
+                        {accountingAllocations.length > 1 && <span>· {accountingAllocations.length} apropriações</span>}
                         <span className="text-border">·</span>
                         <span>{due ? `Venc. ${format(due, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
                       </div>

@@ -6,12 +6,13 @@ import {
   buildExpenseLifecycleData,
 } from "../../src/features/financial/lib/cash-flow-analysis";
 
-test("comparativo contabiliza provisionado e pago por competência sem incluir rascunhos ou cancelados", () => {
+test("comparativo contabiliza provisionado e pago sem duplicar previsões conciliadas", () => {
   const data = buildExpenseLifecycleData([
     { status: "pending", totalValue: 1200, competenceDate: new Date(2026, 7, 1) },
     { status: "paid", totalValue: 400, competenceDate: new Date(2026, 7, 1) },
     { status: "draft", totalValue: 900, competenceDate: new Date(2026, 7, 1) },
     { status: "cancelled", totalValue: 800, competenceDate: new Date(2026, 7, 1) },
+    { status: "reconciled", totalValue: 1200, competenceDate: new Date(2026, 7, 1) },
   ], 1, new Date(2026, 7, 13));
 
   assert.equal(data.length, 1);

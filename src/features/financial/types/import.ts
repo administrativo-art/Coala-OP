@@ -59,6 +59,13 @@ export type ImportSessionApportionment = {
   percentage: number;
 };
 
+export type ImportSessionAccountAllocation = {
+  id: string;
+  accountPlanId: string;
+  accountPlanName: string;
+  amount: number;
+};
+
 export type ImportSessionSplitExpense = {
   id: string;
   description: string;
@@ -68,7 +75,9 @@ export type ImportSessionSplitExpense = {
   resultCenterId: string;
   resultCenterName: string;
   competenceDate: string;
+  dueDate: string;
   value: number;
+  percentage: number;
 };
 
 export type ImportSessionExpenseDraft = {
@@ -81,12 +90,16 @@ export type ImportSessionExpenseDraft = {
   supplier: string;
   accountPlanId: string;
   accountPlanName: string;
+  hasAccountAllocations: boolean;
+  accountAllocations: ImportSessionAccountAllocation[];
   isApportioned: boolean;
   resultCenterId: string;
   resultCenterName: string;
   apportionments: ImportSessionApportionment[];
+  splitAllocationMode: "amount" | "percentage";
   splitExpenses: ImportSessionSplitExpense[];
   competenceDate: string;
+  dueDate: string;
   notes: string;
 };
 
@@ -105,12 +118,51 @@ export type ImportSessionFinancialDraft = {
   notes: string;
 };
 
+export type ImportSessionItemEffectuation = {
+  id: string;
+  status: "active" | "reopened";
+  transactionIds: string[];
+  expenseIds: string[];
+  createdExpenseIds: string[];
+  purchaseFinancialId?: string | null;
+  purchaseGoodsAmount?: number;
+  purchaseFreightAmount?: number;
+  effectuatedAt?: string;
+  effectuatedBy?: string;
+  reopenedAt?: string;
+  reopenedBy?: string;
+  reopenReason?: string;
+};
+
+export type ImportSessionItemAuditHistory = {
+  action: "audit_confirmed" | "effectuated" | "reopened";
+  actorId: string;
+  actorName: string;
+  at: string;
+  revision?: number;
+  reason?: string;
+  changes?: Array<{
+    field: string;
+    label: string;
+    previousValue: string;
+    nextValue: string;
+  }>;
+};
+
+export type ImportSessionItemAuditSnapshot = {
+  values: Record<string, string>;
+};
+
 export type ImportSessionItem = {
   id: string;
   origin?: ImportSessionOrigin;
   syncSource?: "inter_api";
   externalTransactionId?: string;
   linkedBankTransactionId?: string;
+  bankStatementData?: Record<string, unknown>;
+  bankReferences?: string[];
+  bankOperationType?: string;
+  bankTransactionType?: string;
   date: string;
   amount: number;
   rawDescription: string;
@@ -123,6 +175,10 @@ export type ImportSessionItem = {
   expenseDraft: ImportSessionExpenseDraft;
   financialDraft: ImportSessionFinancialDraft;
   status: ImportSessionItemStatus;
+  effectuation?: ImportSessionItemEffectuation;
+  auditHistory?: ImportSessionItemAuditHistory[];
+  auditSnapshot?: ImportSessionItemAuditSnapshot;
+  auditRevision?: number;
 };
 
 export type ImportSessionSummary = {
@@ -131,6 +187,17 @@ export type ImportSessionSummary = {
   audited: number;
   ignored: number;
   completed: number;
+};
+
+export type ImportStatementClosure = {
+  itemCount: number;
+  completedCount: number;
+  ignoredCount: number;
+  entries: number;
+  exits: number;
+  balance: number;
+  completedAmount: number;
+  ignoredAmount: number;
 };
 
 export type ImportSession = {
@@ -154,4 +221,9 @@ export type ImportSession = {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   completedAt?: Timestamp | null;
+  closure?: ImportStatementClosure;
+  closureHash?: string;
+  closedAt?: Timestamp | null;
+  closedBy?: string;
+  statementOutdated?: boolean;
 };

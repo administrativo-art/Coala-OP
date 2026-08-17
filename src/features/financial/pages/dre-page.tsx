@@ -9,7 +9,7 @@ import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
-import { expenseValueForResultCenter } from "@/features/financial/lib/expense-rateio";
+import { expenseAccountAllocationsForResultCenter } from "@/features/financial/lib/expense-account-allocations";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
@@ -109,13 +109,10 @@ export function DrePage() {
 
   // ── computation helpers ─────────────────────────────────────────────────────
 
-  function matchesUnit(exp: any): boolean {
-    return expenseValueForResultCenter(exp, selectedUnitName) > 0;
-  }
-
   function getRevenue(monthKey: string): number {
     return (transactions || []).reduce((sum: number, tx: any) => {
       if (tx.direction !== "in" || tx.type === "transfer_in") return sum;
+      if (tx.reversed === true || tx.auditStatus === "pending" || tx.auditStatus === "reversed") return sum;
       const d = toDate(tx.date);
       if (!d || format(d, "yyyy-MM") !== monthKey) return sum;
       if (selectedUnitName && tx.resultCenterName !== selectedUnitName) return sum;
@@ -134,16 +131,16 @@ export function DrePage() {
 
   function getExpensesByDrePos(pos: string | null, monthKey: string): number {
     return (expenses || []).reduce((sum: number, exp: any) => {
-      if (exp.status !== "paid") return sum;
-      const d = toDate(exp.paidAt);
+      if (["draft", "cancelled", "reconciled"].includes(exp.status)) return sum;
+      const d = toDate(exp.competenceDate) || toDate(exp.dueDate) || toDate(exp.paidAt);
       if (!d || format(d, "yyyy-MM") !== monthKey) return sum;
-      if (!matchesUnit(exp)) return sum;
-      const accountKey = exp.accountId ?? exp.accountPlan;
-      // Contas patrimoniais (is_dre_account: false) nunca entram na DRE, nem em "Não classificado"
-      if (accountIsDreMap[accountKey] === false) return sum;
-      const p = accountDrePosMap[accountKey] ?? null;
-      if (p !== pos) return sum;
-      return sum + expenseValueForResultCenter(exp, selectedUnitName);
+      const allocated = expenseAccountAllocationsForResultCenter(exp, selectedUnitName);
+      return sum + allocated.reduce((allocationSum, allocation) => {
+        // Contas patrimoniais nunca entram na DRE, nem em "Não classificado".
+        if (accountIsDreMap[allocation.accountPlanId] === false) return allocationSum;
+        const allocationPosition = accountDrePosMap[allocation.accountPlanId] ?? null;
+        return allocationPosition === pos ? allocationSum + allocation.amount : allocationSum;
+      }, 0);
     }, 0);
   }
 
@@ -219,12 +216,13 @@ export function DrePage() {
   const topExpensePlans = useMemo(() => {
     const totals: Record<string, number> = {};
     (expenses || []).forEach((exp: any) => {
-      if (exp.status === "cancelled" || exp.status === "draft") return;
-      const d = toDate(exp.dueDate || exp.createdAt);
+      if (["cancelled", "draft", "reconciled"].includes(exp.status)) return;
+      const d = toDate(exp.competenceDate) || toDate(exp.dueDate) || toDate(exp.createdAt);
       if (d && format(d, "yyyy-MM") !== selectedMonth) return;
-      if (!matchesUnit(exp)) return;
-      const name = accountNameById[exp.accountId ?? exp.accountPlan] || exp.accountPlanName || "Sem classificação";
-      totals[name] = (totals[name] || 0) + expenseValueForResultCenter(exp, selectedUnitName);
+      expenseAccountAllocationsForResultCenter(exp, selectedUnitName, {}, accountNameById).forEach((allocation) => {
+        const name = allocation.accountPlanName || "Sem classificação";
+        totals[name] = (totals[name] || 0) + allocation.amount;
+      });
     });
     return Object.entries(totals).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -18,6 +18,8 @@ type FinancialBootstrapUser = {
   email?: string;
   username?: string;
   profileId?: string;
+  unitId?: string | null;
+  unitIds?: string[];
   permissions?: Record<string, unknown>;
   syncedAt?: string;
   active?: boolean;

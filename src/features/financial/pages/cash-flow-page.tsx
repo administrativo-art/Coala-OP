@@ -118,6 +118,7 @@ export function CashFlowPage() {
     );
 
     return [...(transactionsData || []), ...paymentTransactions].flatMap((transaction: any) => {
+      if (transaction.reversed === true || transaction.auditStatus === "reversed") return [];
       const date = toDate(transaction.date);
       if (!date || date < periodStart || date > periodEnd) return [];
       if (transaction.type === "transfer_in" || transaction.type === "transfer_out") return [];
@@ -150,7 +151,7 @@ export function CashFlowPage() {
 
   const forecastMovements = useMemo<Movement[]>(() =>
     (expensesData || []).flatMap((expense) => {
-      if (["paid", "draft", "cancelled"].includes(expense.status)) return [];
+      if (["paid", "draft", "cancelled", "reconciled"].includes(expense.status)) return [];
       const date = toDate(expense.dueDate) || toDate(expense.competenceDate);
       if (!date || date < periodStart || date > periodEnd) return [];
       return [{

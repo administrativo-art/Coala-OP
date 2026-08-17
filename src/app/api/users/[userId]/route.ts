@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { Timestamp } from "firebase-admin/firestore";
 
 import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
 import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
 import { recordTransportVoucherDecision } from "@/features/hr/lib/transport-voucher-decision.server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
+import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { canDelegateUnitAccess } from "@/lib/unit-access";
 import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 
@@ -213,6 +215,30 @@ export async function PATCH(
     }
 
     await userRef.set(payload, { merge: true });
+
+    if (unitAssignmentChanged) {
+      const nextUser = { ...existingUser, ...payload };
+      const employeeId = typeof nextUser.hrEmployeeId === "string" && nextUser.hrEmployeeId.trim()
+        ? nextUser.hrEmployeeId.trim()
+        : typeof nextUser.registrationIdBizneo === "string" && nextUser.registrationIdBizneo.trim()
+          ? nextUser.registrationIdBizneo.trim()
+          : userId;
+      const employeeRef = hrDbAdmin.collection("employees").doc(employeeId);
+      const employeeSnap = await employeeRef.get();
+      if (employeeSnap.exists) {
+        const nextUnitIds = Array.isArray(nextUser.unitIds)
+          ? nextUser.unitIds.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+          : [];
+        const nextPrimaryUnitId = typeof nextUser.unitId === "string" && nextUser.unitId.trim()
+          ? nextUser.unitId.trim()
+          : nextUnitIds[0] ?? "sem-unidade";
+        await employeeRef.set({
+          unit_id: nextPrimaryUnitId,
+          unit_ids: nextUnitIds,
+          updated_at: Timestamp.now(),
+        }, { merge: true });
+      }
+    }
 
     if (hasOwn(payload, "needsTransportVoucher") || hasOwn(payload, "transportVoucherValue")) {
       const active = payload.needsTransportVoucher === true;

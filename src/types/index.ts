@@ -907,7 +907,10 @@ export type User = {
   mustChangePassword?: boolean;
   passwordChangedAt?: Timestamp;
   lastLoginAt?: Timestamp;
-  unitIds?: string[];               // unidade(s) de trabalho
+  /** Unidade principal de lotação, usada como referência financeira. */
+  unitId?: string;
+  /** Unidades em que a pessoa pode ser escalada e atuar. */
+  unitIds?: string[];
   admissionDate?: Timestamp;
   birthDate?: Timestamp;
   shiftDefinitionId?: string;

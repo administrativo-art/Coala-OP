@@ -92,7 +92,7 @@ export async function resolveCollaboratorCore(
       ? asStringArray(data.functionId)
       : asStringArray(currentUser.jobFunctionIds);
 
-  const unitIds = asStringArray(data.unitIds).length > 0
+  const resolvedUnitIds = asStringArray(data.unitIds).length > 0
     ? asStringArray(data.unitIds)
     : asStringArray(data.assignedKioskIds).length > 0
       ? asStringArray(data.assignedKioskIds)
@@ -101,6 +101,16 @@ export async function resolveCollaboratorCore(
         : asStringArray(currentUser.unitIds).length > 0
           ? asStringArray(currentUser.unitIds)
           : asStringArray(currentUser.assignedKioskIds);
+  const primaryUnitId = asString(data.unitId)
+    ?? asString(currentUser.unitId)
+    ?? resolvedUnitIds[0]
+    ?? null;
+  const unitIds = primaryUnitId
+    ? [primaryUnitId, ...resolvedUnitIds.filter((unitId) => unitId !== primaryUnitId)]
+    : resolvedUnitIds;
+  const assignedKioskIds = hasOwn(data, "assignedKioskIds")
+    ? asStringArray(data.assignedKioskIds)
+    : asStringArray(currentUser.assignedKioskIds);
 
   const [roleDoc, functionDocs, shiftDefinitionDoc] = await Promise.all([
     jobRoleId ? hrDbAdmin.collection("jobRoles").doc(jobRoleId).get() : Promise.resolve(null),
@@ -191,7 +201,8 @@ export async function resolveCollaboratorCore(
       unitAccessScope,
       unitAccessUnitIds: unitAccessScope === "selected" ? unitAccessUnitIds : [],
     } : {}),
-    ...(unitIds.length > 0 ? { unitIds, assignedKioskIds: unitIds } : {}),
+    ...(unitIds.length > 0 ? { unitId: primaryUnitId ?? unitIds[0], unitIds } : {}),
+    ...(hasOwn(data, "assignedKioskIds") ? { assignedKioskIds } : {}),
     ...(hasOwn(data, "shiftDefinitionId") ? { shiftDefinitionId: shiftDefinitionId ?? null } : {}),
     ...(operationalValue !== null ? { operacional: operationalValue } : {}),
     ...(hasOwn(data, "participatesInGoals") ? { participatesInGoals: asBoolean(data.participatesInGoals) ?? false } : {}),

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildEqualRateio,
+  distributeEqualRateioPercentages,
   distributeRateioPercentages,
   expenseReferencesResultCenter,
   expenseValueForResultCenter,
@@ -15,6 +16,9 @@ import { expenseFormSchema } from "../../src/features/financial/lib/schemas";
 
 test("divide o rateio igualitário em 100% mesmo quando há dízima", () => {
   assert.deepEqual(distributeRateioPercentages([1, 1, 1]), [33.34, 33.33, 33.33]);
+  assert.deepEqual(distributeEqualRateioPercentages(1), [100]);
+  assert.deepEqual(distributeEqualRateioPercentages(2), [50, 50]);
+  assert.deepEqual(distributeEqualRateioPercentages(3), [33.33, 33.33, 33.34]);
   assert.deepEqual(buildEqualRateio(["A", "B", "C", "D"]).map((item) => item.percentage), [25, 25, 25, 25]);
 });
 

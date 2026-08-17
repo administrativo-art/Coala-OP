@@ -30,7 +30,11 @@ Todas as filhas estão **inativas** — eram contas informativas com posições 
 
 ## 2. Impostos e deduções → linha (-) Impostos e deduções (`impostos_deducoes`)
 
-Grupo e todas as filhas: **DAS**, **DARE**, **Devoluções / cancelamentos**, **Descontos concedidos**.
+Contas vinculadas a `impostos_deducoes`:
+
+- **DAS** (grupo): **ICMS do DAS**, **Cofins do DAS** e **PIS/Pasep do DAS**. As demais parcelas do DAS são apropriadas em **Pessoal** (CPP) e **IR / CSLL** (IRPJ e CSLL).
+- **DARE** (grupo): **ICMS antecipado**. Outras receitas estaduais devem ganhar subconta própria quando surgirem.
+- **Devoluções / cancelamentos** e **Descontos concedidos**.
 
 ## 3. Custos variáveis complementares → linha (-) Insumos e fretes de aquisição (`custos_variaveis`)
 

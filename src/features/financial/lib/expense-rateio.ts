@@ -103,6 +103,11 @@ export function distributeRateioPercentages(weights: number[]): number[] {
   return hundredths.map((value) => value / 100);
 }
 
+export function distributeEqualRateioPercentages(count: number): number[] {
+  if (!Number.isInteger(count) || count <= 0) return [];
+  return distributeRateioPercentages(Array.from({ length: count }, () => 1)).reverse();
+}
+
 export function buildEqualRateio(
   resultCenters: string[],
   participationStartDate?: string

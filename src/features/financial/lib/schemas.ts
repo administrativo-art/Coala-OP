@@ -3,6 +3,15 @@ import { z } from "zod";
 export const expenseFormSchema = z
   .object({
     accountPlan: z.string().min(1, "O plano de contas é obrigatório."),
+    hasAccountAllocations: z.boolean().default(false),
+    accountAllocations: z
+      .array(
+        z.object({
+          accountPlanId: z.string().min(1, "Selecione a conta da apropriação."),
+          amount: z.coerce.number().positive("O valor da apropriação deve ser positivo."),
+        })
+      )
+      .optional(),
     description: z
       .string()
       .min(10, "A descrição deve ter pelo menos 10 caracteres."),
@@ -55,6 +64,38 @@ export const expenseFormSchema = z
     supplier: z.string().optional(),
     notes: z.string().optional(),
   })
+  .refine(
+    (data) => !data.hasAccountAllocations || (data.accountAllocations?.length ?? 0) >= 2,
+    {
+      message: "Adicione pelo menos duas apropriações contábeis.",
+      path: ["accountAllocations"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.hasAccountAllocations) return true;
+      const ids = (data.accountAllocations || []).map((item) => item.accountPlanId).filter(Boolean);
+      return ids.length === new Set(ids).size;
+    },
+    {
+      message: "Cada conta pode aparecer apenas uma vez nas apropriações.",
+      path: ["accountAllocations"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.hasAccountAllocations) return true;
+      const allocatedCents = (data.accountAllocations || []).reduce(
+        (total, item) => total + Math.round((Number(item.amount) || 0) * 100),
+        0
+      );
+      return allocatedCents === Math.round((Number(data.totalValue) || 0) * 100);
+    },
+    {
+      message: "A soma das apropriações deve ser igual ao valor total da despesa.",
+      path: ["accountAllocations"],
+    }
+  )
   .refine(
     (data) => {
       if (data.paymentMethod === "recurring") {

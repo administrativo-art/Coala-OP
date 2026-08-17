@@ -31,6 +31,20 @@ function firstText(source: InterStatementPayload, keys: string[]) {
   return "";
 }
 
+function asPayload(value: unknown): InterStatementPayload {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as InterStatementPayload
+    : {};
+}
+
+function firstTextFromSources(sources: InterStatementPayload[], keys: string[]) {
+  for (const source of sources) {
+    const value = firstText(source, keys);
+    if (value) return value;
+  }
+  return "";
+}
+
 function parseMoney(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value !== "string") return 0;
@@ -75,6 +89,8 @@ export function normalizeInterStatementEntries(rawEntries: InterStatementPayload
   const fallbackOccurrences = new Map<string, number>();
 
   return rawEntries.map((raw): InterStatementEntry => {
+    const details = asPayload(raw.detalhes ?? raw.details);
+    const referenceSources = [raw, details];
     const date = normalizeDate(
       firstText(raw, ["dataEntrada", "dataTransacao", "dataInclusao", "dataHora", "data"])
     );
@@ -87,16 +103,17 @@ export function normalizeInterStatementEntries(rawEntries: InterStatementPayload
       ? `${title} — ${detail}`
       : detail || title || "Movimentação Banco Inter";
     const references = [...new Set([
-      firstText(raw, ["idTransacao"]),
-      firstText(raw, ["codigoTransacao"]),
-      firstText(raw, ["identificador"]),
-      firstText(raw, ["endToEndId"]),
-      firstText(raw, ["codigoSolicitacao"]),
-      firstText(raw, ["codigoAutenticacao"]),
-      firstText(raw, ["numeroDocumento"]),
-      firstText(raw, ["id"]),
+      firstTextFromSources(referenceSources, ["idTransacao"]),
+      firstTextFromSources(referenceSources, ["codigoTransacao"]),
+      firstTextFromSources(referenceSources, ["identificador"]),
+      firstTextFromSources(referenceSources, ["endToEndId"]),
+      firstTextFromSources(referenceSources, ["codigoSolicitacao"]),
+      firstTextFromSources(referenceSources, ["codigoAutenticacao"]),
+      firstTextFromSources(referenceSources, ["numeroDocumento"]),
+      firstTextFromSources(referenceSources, ["txId"]),
+      firstTextFromSources(referenceSources, ["id"]),
     ].filter(Boolean))];
-    const bankIdentifier = firstText(raw, [
+    const bankIdentifier = firstTextFromSources(referenceSources, [
       "idTransacao",
       "codigoTransacao",
       "identificador",
@@ -104,6 +121,7 @@ export function normalizeInterStatementEntries(rawEntries: InterStatementPayload
       "codigoSolicitacao",
       "codigoAutenticacao",
       "numeroDocumento",
+      "txId",
       "id",
     ]);
 

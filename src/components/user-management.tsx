@@ -248,6 +248,7 @@ const userSchema = z.object({
   username: z.string().trim().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
   email: z.string().email("O e-mail é inválido."),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
+  unitId: z.string().optional(),
   assignedKioskIds: z.array(z.string()),
   avatarUrl: z.string().optional(),
   operacional: z.boolean().optional(),
@@ -275,6 +276,9 @@ const userSchema = z.object({
 }, {
     message: 'Selecione pelo menos um quiosque.',
     path: ['assignedKioskIds'],
+}).refine(data => data.profileId === 'admin' || Boolean(data.unitId), {
+    message: 'Selecione a unidade principal do financeiro.',
+    path: ['unitId'],
 }).refine(data => data.unitAccessScope !== 'selected' || (data.unitAccessUnitIds?.length ?? 0) > 0, {
     message: 'Selecione ao menos uma unidade para o escopo específico.',
     path: ['unitAccessUnitIds'],
@@ -285,6 +289,8 @@ type UserFormValues = z.infer<typeof userSchema>;
 const USER_AUDIT_FIELDS = [
   'username',
   'profileId',
+  'unitId',
+  'unitIds',
   'assignedKioskIds',
   'operacional',
   'participatesInGoals',
@@ -388,6 +394,7 @@ export function UserManagement({
         username: '',
         email: '',
         profileId: '',
+        unitId: '',
         assignedKioskIds: [],
         avatarUrl: '',
         operacional: false,
@@ -484,6 +491,14 @@ export function UserManagement({
     () => selectedWorkUnits.map((unit) => unit.id),
     [selectedWorkUnits]
   );
+  useEffect(() => {
+    const currentPrimaryUnitId = form.getValues('unitId');
+    if (currentPrimaryUnitId && selectedWorkUnitIds.includes(currentPrimaryUnitId)) return;
+    form.setValue('unitId', selectedWorkUnitIds[0] ?? '', {
+      shouldDirty: Boolean(currentPrimaryUnitId),
+      shouldValidate: false,
+    });
+  }, [form, selectedWorkUnitIds]);
   const filteredShiftDefinitions = useMemo(() => {
     if (selectedKioskIds.length === 0) return shiftDefinitions;
     if (selectedWorkUnitIds.length === 0) return [];
@@ -623,6 +638,7 @@ export function UserManagement({
       username: '',
       email: '',
       profileId: '',
+      unitId: '',
       assignedKioskIds: [],
       avatarUrl: '',
       operacional: false,
@@ -652,7 +668,16 @@ export function UserManagement({
       username: user.username,
       email: user.email,
       profileId: user.profileId,
-      assignedKioskIds: user.assignedKioskIds || [],
+      unitId: user.unitId ?? user.unitIds?.[0] ?? '',
+      assignedKioskIds: Array.from(new Set([
+        ...(user.assignedKioskIds ?? []).filter((id) => kiosks.some((kiosk) => kiosk.id === id)),
+        ...kiosks
+          .filter((kiosk) => {
+            const unit = matchDPUnitForKiosk(kiosk.name, units);
+            return unit ? (user.unitIds ?? []).includes(unit.id) : false;
+          })
+          .map((kiosk) => kiosk.id),
+      ])),
       avatarUrl: user.avatarUrl || '',
       operacional: user.operacional || false,
       participatesInGoals: user.participatesInGoals || false,
@@ -675,7 +700,7 @@ export function UserManagement({
     setPdvOperatorIds(existing);
     setPendingTransportVoucherHistory([]);
     setShowForm(true);
-  }, [form, units]);
+  }, [form, kiosks, units]);
 
   useEffect(() => {
     if (!editUserId || initializedEditUserIdRef.current === editUserId) return;
@@ -883,10 +908,13 @@ export function UserManagement({
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           employmentRelationshipType: values.employmentRelationshipType,
+          unitId: values.unitId || selectedWorkUnitIds[0],
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitAccessScope: values.unitAccessScope,
           unitAccessUnitIds: expandedUnitAccessUnitIds,
-          unitIds: selectedWorkUnitIds.length > 0 ? selectedWorkUnitIds : undefined,
+          unitIds: selectedWorkUnitIds.length > 0
+            ? [values.unitId || selectedWorkUnitIds[0], ...selectedWorkUnitIds.filter((unitId) => unitId !== (values.unitId || selectedWorkUnitIds[0]))]
+            : undefined,
           admissionDate,
           birthDate,
           shiftDefinitionId: values.shiftDefinitionId || undefined,
@@ -925,10 +953,13 @@ export function UserManagement({
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
           employmentRelationshipType: values.employmentRelationshipType,
+          unitId: values.unitId || selectedWorkUnitIds[0],
           responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
           unitAccessScope: values.unitAccessScope,
           unitAccessUnitIds: expandedUnitAccessUnitIds,
-          unitIds: selectedWorkUnitIds.length > 0 ? selectedWorkUnitIds : undefined,
+          unitIds: selectedWorkUnitIds.length > 0
+            ? [values.unitId || selectedWorkUnitIds[0], ...selectedWorkUnitIds.filter((unitId) => unitId !== (values.unitId || selectedWorkUnitIds[0]))]
+            : undefined,
           admissionDate,
           birthDate,
       }, values.email);
@@ -1360,20 +1391,43 @@ export function UserManagement({
                           <FormMessage />
                         </FormItem>
                       )} />
+                      <FormField control={form.control} name="unitId" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidade principal (Financeiro)</FormLabel>
+                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={selectedWorkUnits.length === 0}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione primeiro uma unidade de escala" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {selectedWorkUnits.map((unit) => (
+                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            Define a lotação usada no financeiro. As demais unidades não alteram essa referência.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    <div>
                       <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Quiosques</FormLabel>
+                          <FormLabel>Unidades de escala e operação</FormLabel>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <FormControl>
                                 <Button variant="outline" className="w-full justify-between font-normal">
-                                  {(field.value?.length || 0) > 0 ? `${field.value.length} quiosque(s)` : 'Selecione quiosques'}
+                                  {(field.value?.length || 0) > 0 ? `${field.value.length} unidade(s)` : 'Selecione as unidades'}
                                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                               </FormControl>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                              <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
+                              <DropdownMenuLabel>Unidades disponíveis</DropdownMenuLabel>
                               <DropdownMenuSeparator />
                               <ScrollArea className="h-48">
                                 {kiosks.map(kiosk => (
@@ -1382,7 +1436,9 @@ export function UserManagement({
                                     checked={field.value?.includes(kiosk.id)}
                                     onCheckedChange={checked => {
                                       const selected = field.value || [];
-                                      field.onChange(checked ? [...selected, kiosk.id] : selected.filter(id => id !== kiosk.id));
+                                      field.onChange(checked
+                                        ? Array.from(new Set([...selected, kiosk.id]))
+                                        : selected.filter(id => id !== kiosk.id));
                                     }}
                                     onSelect={e => e.preventDefault()}
                                   >
@@ -1392,6 +1448,9 @@ export function UserManagement({
                               </ScrollArea>
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          <FormDescription className="text-xs">
+                            Controla onde a pessoa aparece na escala e pode operar; aceita várias unidades.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />

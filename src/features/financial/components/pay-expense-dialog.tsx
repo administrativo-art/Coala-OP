@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { addDoc, Timestamp, updateDoc } from "firebase/firestore";
+import { useMemo, useState } from "react";
+import { addDoc, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { formatCurrency } from "@/features/financial/lib/utils";
+import { consultDasProvision } from "@/features/financial/lib/das-provisions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { PaymentBeneficiaryReference } from "@/features/financial/beneficiaries/types";
+import { financialDb } from "@/lib/firebase-financial";
 
 const splitSchema = z.object({
   accountId: z.string().min(1, "Selecione uma conta."),
@@ -59,6 +61,12 @@ type ExpenseRecord = {
   generatedReceiptId?: string;
   beneficiaryReference?: PaymentBeneficiaryReference;
   paymentRequestId?: string;
+  accountPlan?: string;
+  competenceDate?: unknown;
+  provisionCompetence?: string;
+  provisionSeriesKey?: string;
+  provisionType?: string;
+  reconciledProvisionId?: string;
 };
 
 export function PayExpenseDialog({
@@ -76,6 +84,7 @@ export function PayExpenseDialog({
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const { data: accountsData } = useFinancialCollection<any>(financialCollection("bankAccounts"));
+  const { data: expensesData } = useFinancialCollection<any>(financialCollection("expenses"));
 
   const activeAccounts = (accountsData || []).filter((account) => account.active);
 
@@ -107,6 +116,10 @@ export function PayExpenseDialog({
   const totalPaid = splits.reduce((sum, split) => sum + (Number(split.amount) || 0), 0);
   const remaining = totalDue - totalPaid;
   const isOver = remaining < -0.01;
+  const dasProvisionConsultation = useMemo(
+    () => expense ? consultDasProvision(expense, expensesData || []) : { status: "not_applicable" as const },
+    [expense, expensesData],
+  );
 
   if (!expense) return null;
 
@@ -140,6 +153,37 @@ export function PayExpenseDialog({
     }
   }
 
+  async function reconcileDasProvisionIfNeeded() {
+    if (!expense || !firebaseUser || dasProvisionConsultation.status !== "matched") return;
+    if (!permissions.financial?.expenses?.edit) {
+      throw new Error("A provisão do DAS precisa ser conciliada por alguém com permissão de editar despesas antes da baixa.");
+    }
+    if (!dasProvisionConsultation.provision.id) throw new Error("A provisão encontrada não possui identificador válido.");
+
+    const now = Timestamp.now();
+    const batch = writeBatch(financialDb);
+    batch.update(financialDoc("expenses", expense.id), {
+      reconciledProvisionId: dasProvisionConsultation.provision.id,
+      provisionReconciliationStatus: "reconciled",
+      provisionedValue: dasProvisionConsultation.provisionedValue,
+      provisionVariance: dasProvisionConsultation.variance,
+      provisionReconciledAt: now,
+      provisionReconciledBy: firebaseUser.uid,
+      updatedAt: now,
+    });
+    batch.update(financialDoc("expenses", dasProvisionConsultation.provision.id), {
+      status: "reconciled",
+      replacedByExpenseId: expense.id,
+      actualValue: dasProvisionConsultation.actualValue,
+      provisionVariance: dasProvisionConsultation.variance,
+      provisionReconciliationStatus: "reconciled",
+      provisionReconciledAt: now,
+      provisionReconciledBy: firebaseUser.uid,
+      updatedAt: now,
+    });
+    await batch.commit();
+  }
+
   async function onSubmit(values: PayFormValues) {
     if (!expense || !firebaseUser) return;
     if (isOver) {
@@ -149,6 +193,10 @@ export function PayExpenseDialog({
 
     setIsSaving(true);
     try {
+      if (dasProvisionConsultation.status === "ambiguous") {
+        throw new Error("Há mais de uma provisão de DAS para esta competência. Revise-as antes do pagamento.");
+      }
+      await reconcileDasProvisionIfNeeded();
       const paidAt = Timestamp.fromDate(values.paidAt);
       const now = Timestamp.now();
       const basePayload = {
@@ -197,7 +245,11 @@ export function PayExpenseDialog({
       onSuccess?.();
     } catch (error) {
       console.error(error);
-      toast({ variant: "destructive", title: "Erro ao registrar pagamento." });
+      toast({
+        variant: "destructive",
+        title: "Erro ao registrar pagamento.",
+        description: error instanceof Error ? error.message : "Revise os dados e tente novamente.",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -261,6 +313,45 @@ export function PayExpenseDialog({
                 <div className="px-4 py-3">
                 <div className="space-y-3.5">
                   <div className="grid gap-3">
+                    {dasProvisionConsultation.status !== "not_applicable" && (
+                      <div className={cn(
+                        "rounded-2xl border p-3 text-sm",
+                        dasProvisionConsultation.status === "already_reconciled"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          : dasProvisionConsultation.status === "matched"
+                          ? "border-amber-200 bg-amber-50 text-amber-900"
+                          : dasProvisionConsultation.status === "ambiguous"
+                          ? "border-rose-200 bg-rose-50 text-rose-800"
+                          : "border-slate-200 bg-slate-50 text-slate-700",
+                      )}>
+                        <div className="flex items-start gap-2">
+                          {dasProvisionConsultation.status === "already_reconciled"
+                            ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                            : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+                          <div>
+                            <p className="font-semibold">Consulta automática da provisão do DAS</p>
+                            {dasProvisionConsultation.status === "matched" || dasProvisionConsultation.status === "already_reconciled" ? (
+                              <p className="mt-1 leading-5">
+                                Competência {dasProvisionConsultation.competence.slice(5, 7)}/{dasProvisionConsultation.competence.slice(0, 4)}:
+                                previsto {formatCurrency(dasProvisionConsultation.provisionedValue)}, real {formatCurrency(dasProvisionConsultation.actualValue)}.
+                                Diferença {formatCurrency(dasProvisionConsultation.variance)}.
+                                {dasProvisionConsultation.status === "matched"
+                                  ? " A previsão será substituída automaticamente antes da baixa."
+                                  : " Conciliação já registrada."}
+                              </p>
+                            ) : dasProvisionConsultation.status === "ambiguous" ? (
+                              <p className="mt-1 leading-5">Há mais de uma previsão para a mesma competência; o pagamento ficará bloqueado até a revisão.</p>
+                            ) : (
+                              <p className="mt-1 leading-5">
+                                Nenhuma previsão foi encontrada para {dasProvisionConsultation.competence
+                                  ? `${dasProvisionConsultation.competence.slice(5, 7)}/${dasProvisionConsultation.competence.slice(0, 4)}`
+                                  : "esta competência"}. O pagamento pode seguir, mas a ausência fica visível para conferência.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <FormField
                       control={form.control}
                       name="paidAt"

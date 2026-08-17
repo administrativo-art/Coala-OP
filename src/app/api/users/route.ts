@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
 
 const SYSTEM_URL = "https://op.coalashakes.com";
 const USER_DATA_FIELDS = new Set([
+  "unitId",
   "assignedKioskIds",
   "avatarUrl",
   "color",
@@ -161,6 +162,18 @@ export async function POST(request: NextRequest) {
     await authAdmin.setCustomUserClaims(authUser.uid, { profileId, isDefaultAdmin });
 
     const userData = cleanUserData(rawUserData);
+    const linkedUnitIds = Array.isArray(userData.unitIds)
+      ? userData.unitIds.filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
+      : Array.isArray(userData.assignedKioskIds)
+        ? userData.assignedKioskIds.filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
+        : [];
+    const primaryUnitId = text(userData.unitId) || linkedUnitIds[0] || null;
+    const unitIds = primaryUnitId
+      ? [primaryUnitId, ...linkedUnitIds.filter((unitId) => unitId !== primaryUnitId)]
+      : linkedUnitIds;
+    if (primaryUnitId) userData.unitId = primaryUnitId;
+    else delete userData.unitId;
+    userData.unitIds = unitIds;
     const hrEmployeeId = authUser.uid;
     const normalizedPersonRecordType = personRecordType(userData);
     await dbAdmin.collection("users").doc(authUser.uid).set({
@@ -199,11 +212,6 @@ export async function POST(request: NextRequest) {
     });
 
     const nowTimestamp = Timestamp.now();
-    const unitIds = Array.isArray(userData.unitIds)
-      ? userData.unitIds.filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
-      : Array.isArray(userData.assignedKioskIds)
-        ? userData.assignedKioskIds.filter((entry): entry is string => typeof entry === "string" && !!entry.trim())
-        : [];
     await hrDbAdmin.collection("employees").doc(hrEmployeeId).set({
       bizneo_employee_id: hrEmployeeId,
       auth_uid: authUser.uid,
@@ -215,7 +223,8 @@ export async function POST(request: NextRequest) {
       person_record_type: normalizedPersonRecordType,
       status: "active",
       job_role_id: text(userData.jobRoleId) || profileId,
-      unit_id: unitIds[0] ?? "sem-unidade",
+      unit_id: primaryUnitId ?? "sem-unidade",
+      unit_ids: unitIds,
       profile_completion: 0,
       synced_at: nowTimestamp,
       created_at: nowTimestamp,
