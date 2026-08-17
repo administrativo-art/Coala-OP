@@ -3,6 +3,11 @@ import test from "node:test";
 
 import { findUniqueExactExpenseMatch } from "../../src/features/financial/lib/inter-statement-reconciliation";
 import {
+  inferStatementPaymentMethodFromText,
+  isCardStatementSettlementText,
+  STATEMENT_PAYMENT_METHOD_IDS,
+} from "../../src/features/financial/lib/statement-payment-method";
+import {
   interStatementSessionDocumentId,
   interStatementTransactionDocumentId,
   normalizeInterStatementEntries,
@@ -82,4 +87,43 @@ test("baixa automaticamente apenas quando existe um único candidato exato", () 
     ),
     null
   );
+});
+
+test("classifica as formas de saída do extrato sem confundir pagamento de fatura com despesa", () => {
+  const methods = [
+    { id: "pix", type: "pix", label: "PIX Inter" },
+    { id: STATEMENT_PAYMENT_METHOD_IDS.bankDebit, type: "transfer", label: "Débito em conta" },
+    { id: STATEMENT_PAYMENT_METHOD_IDS.automaticDebit, type: "transfer", label: "Débito automático" },
+    { id: STATEMENT_PAYMENT_METHOD_IDS.boleto, type: "transfer", label: "Boleto / código de barras" },
+    { id: STATEMENT_PAYMENT_METHOD_IDS.bankTransfer, type: "transfer", label: "Transferência bancária" },
+    { id: STATEMENT_PAYMENT_METHOD_IDS.cardStatementSettlement, type: "transfer", label: "Liquidação de fatura" },
+    { id: "card", type: "credit_card", label: "Cartão Crédito Inter - 1127" },
+  ];
+
+  assert.equal(inferStatementPaymentMethodFromText("Pix enviado — Fornecedor", methods)?.id, "pix");
+  assert.equal(
+    inferStatementPaymentMethodFromText("Pagamento efetuado — T V N", methods)?.id,
+    STATEMENT_PAYMENT_METHOD_IDS.bankDebit
+  );
+  assert.equal(
+    inferStatementPaymentMethodFromText("Débito automático — Energia", methods)?.id,
+    STATEMENT_PAYMENT_METHOD_IDS.automaticDebit
+  );
+  assert.equal(
+    inferStatementPaymentMethodFromText("Pagamento de título por código de barras", methods)?.id,
+    STATEMENT_PAYMENT_METHOD_IDS.boleto
+  );
+  assert.equal(
+    inferStatementPaymentMethodFromText("Transferência TED enviada", methods)?.id,
+    STATEMENT_PAYMENT_METHOD_IDS.bankTransfer
+  );
+  assert.equal(
+    inferStatementPaymentMethodFromText("Pagamento efetuado — Pagamento Fatura - TITULAR", methods)?.id,
+    STATEMENT_PAYMENT_METHOD_IDS.cardStatementSettlement
+  );
+  assert.equal(
+    inferStatementPaymentMethodFromText("Pix para pagamento de fatura", methods)?.id,
+    STATEMENT_PAYMENT_METHOD_IDS.cardStatementSettlement
+  );
+  assert.equal(isCardStatementSettlementText("Liquidação de fatura do cartão"), true);
 });

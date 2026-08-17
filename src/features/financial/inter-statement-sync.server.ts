@@ -10,6 +10,7 @@ import {
   findUniqueExactExpenseMatch,
   type StatementExpenseMatchCandidate,
 } from "@/features/financial/lib/inter-statement-reconciliation";
+import { inferStatementPaymentMethodFromText } from "@/features/financial/lib/statement-payment-method";
 
 const TIME_ZONE = "America/Belem";
 const SYSTEM_ACTOR = "system:inter-statement";
@@ -113,22 +114,6 @@ function aliasMatches(description: string, alias: ImportAliasData) {
 
 function normalizedText(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR");
-}
-
-function inferStatementPaymentMethod(entry: InterStatementEntry, methods: StatementPaymentMethod[]) {
-  const text = normalizedText(`${entry.description} ${entry.operationType} ${entry.transactionType}`);
-  const expectedType = text.includes("PIX")
-    ? "pix"
-    : /CARTAO.*CREDITO|FATURA/.test(text)
-    ? "credit_card"
-    : /CARTAO.*DEBITO/.test(text)
-    ? "debit_card"
-    : /TRANSFERENCIA|\bTED\b|\bDOC\b/.test(text)
-    ? "transfer"
-    : /SAQUE|DINHEIRO/.test(text)
-    ? "cash"
-    : null;
-  return expectedType ? methods.find((method) => method.type === expectedType) ?? null : null;
 }
 
 function canAutoMatchExpense(entry: InterStatementEntry) {
@@ -642,7 +627,10 @@ export async function syncInterStatement(): Promise<SyncResult> {
       alias,
       match: result.matched ? result.appliedMatch : null,
       existingLedger: result.reconciledExisting ? existingLedger : null,
-      paymentMethod: inferStatementPaymentMethod(entry, accountPaymentMethods),
+      paymentMethod: inferStatementPaymentMethodFromText<StatementPaymentMethod>(
+        `${entry.description} ${entry.operationType} ${entry.transactionType}`,
+        accountPaymentMethods,
+      ),
     }));
     sessionItems.set(month, items);
   }

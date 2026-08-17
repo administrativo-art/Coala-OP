@@ -32,6 +32,11 @@ import { useEntities } from "@/hooks/use-entities";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { expenseDescriptionFormSchema } from "@/features/financial/lib/schemas";
+import {
+  inferStatementPaymentMethodFromText,
+  isCardStatementSettlementText,
+  STATEMENT_PAYMENT_METHOD_IDS,
+} from "@/features/financial/lib/statement-payment-method";
 import { usePurchaseFinancials } from "@/hooks/use-purchase-financials";
 import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
@@ -161,9 +166,15 @@ function getTransactionPrimaryDescription(item: ImportSessionItem) {
   return description.replace(/\s+/g, " ").trim();
 }
 
+function isCardStatementSettlementItem(item: ImportSessionItem) {
+  return item.financialDraft.paymentMethodId === STATEMENT_PAYMENT_METHOD_IDS.cardStatementSettlement ||
+    isCardStatementSettlementText(item.financialDraft.paymentMethodLabel);
+}
+
 function getTransactionKindLabel(item: ImportSessionItem) {
   if (item.financialDraft.movementKind === "transfer") return "Transferência";
   if (item.amount >= 0) return "Receita";
+  if (isCardStatementSettlementItem(item)) return "Fatura";
   if (item.expenseDraft.mode === "purchase") return "Compra";
   if (item.expenseDraft.mode === "split") return "Dividida";
   return "Despesa";
@@ -172,6 +183,7 @@ function getTransactionKindLabel(item: ImportSessionItem) {
 function getTransactionKindClassName(item: ImportSessionItem) {
   if (item.financialDraft.movementKind === "transfer") return "bg-sky-100 text-sky-700";
   if (item.amount >= 0) return "bg-emerald-100 text-emerald-700";
+  if (isCardStatementSettlementItem(item)) return "bg-violet-100 text-violet-700";
   if (item.expenseDraft.mode === "purchase") return "bg-blue-100 text-blue-700";
   if (item.expenseDraft.mode === "split") return "bg-amber-100 text-amber-700";
   return "bg-rose-100 text-rose-700";
@@ -200,28 +212,12 @@ const IMPORT_ITEM_STATUS_META: Record<
 };
 
 function inferStatementPaymentMethod(item: ImportSessionItem, accounts: Account[]) {
-  if (item.financialDraft.paymentMethodId) return null;
   const account = accounts.find((entry) => entry.id === item.financialDraft.accountId);
   if (!account) return null;
-
-  const text = `${item.rawDescription} ${item.financialDraft.description}`
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleUpperCase("pt-BR");
-  const expectedType = text.includes("PIX")
-    ? "pix"
-    : /CARTAO.*CREDITO|FATURA/.test(text)
-    ? "credit_card"
-    : /CARTAO.*DEBITO/.test(text)
-    ? "debit_card"
-    : /TRANSFERENCIA|\bTED\b|\bDOC\b/.test(text)
-    ? "transfer"
-    : /SAQUE|DINHEIRO/.test(text)
-    ? "cash"
-    : null;
-  if (!expectedType) return null;
-
-  return account.paymentMethods.find((method) => method.type === expectedType) ?? null;
+  return inferStatementPaymentMethodFromText(
+    `${item.rawDescription} ${item.financialDraft.description}`,
+    account.paymentMethods,
+  );
 }
 
 function applyStatementPaymentMethodSuggestions(session: ImportSession, accounts: Account[]) {
@@ -230,6 +226,13 @@ function applyStatementPaymentMethodSuggestions(session: ImportSession, accounts
     items: session.items.map((item) => {
       const method = inferStatementPaymentMethod(item, accounts);
       if (!method) return item;
+      const currentMethod = accounts
+        .flatMap((account) => account.paymentMethods)
+        .find((paymentMethod) => paymentMethod.id === item.financialDraft.paymentMethodId);
+      const shouldCorrectLegacyInvoiceMethod =
+        isCardStatementSettlementText(item.rawDescription) &&
+        currentMethod?.type === "credit_card";
+      if (item.financialDraft.paymentMethodId && !shouldCorrectLegacyInvoiceMethod) return item;
       return {
         ...item,
         financialDraft: {
@@ -874,6 +877,7 @@ function AccountPlanTreeRow({
 function validateItem(item: ImportSessionItem, purchaseCandidatesByOrderId: Map<string, PurchaseCandidate>) {
   const issues: string[] = [];
   const isTransfer = item.financialDraft.movementKind === "transfer";
+  const isCardStatementSettlement = isCardStatementSettlementItem(item);
   const movementBaseValid =
     item.financialDraft.accountId.trim().length > 0 &&
     item.financialDraft.paymentMethodId.trim().length > 0 &&
@@ -890,7 +894,7 @@ function validateItem(item: ImportSessionItem, purchaseCandidatesByOrderId: Map<
     issues.push(isTransfer ? "Complete a transferência entre contas." : "Preencha a movimentação financeira.");
   }
 
-  const requiresExpense = item.amount < 0 && !isTransfer;
+  const requiresExpense = item.amount < 0 && !isTransfer && !isCardStatementSettlement;
   let expenseValid = true;
 
   if (requiresExpense) {
@@ -1975,6 +1979,44 @@ export function FinancialImportPage({
               }),
             ]);
           }
+        } else if (item.amount < 0 && isCardStatementSettlementItem(item)) {
+          const settlementPayload = {
+            type: "card_statement_payment",
+            direction: "out",
+            amount: Math.abs(item.amount),
+            date: transactionDate,
+            description: item.financialDraft.description,
+            notes: item.financialDraft.notes || "Liquidação de fatura identificada no extrato bancário.",
+            accountId: item.financialDraft.accountId,
+            accountName: item.financialDraft.accountName,
+            paymentMethodId: item.financialDraft.paymentMethodId,
+            paymentMethodLabel: item.financialDraft.paymentMethodLabel,
+            accountPlanId: null,
+            accountPlanName: null,
+            resultCenterId: null,
+            resultCenterName: null,
+            supplier: null,
+            expenseId: null,
+            linkedExpenseId: null,
+            importedFrom,
+            rawBankDescription: item.rawDescription,
+            auditStatus: "resolved",
+            awaitingCardStatementReconciliation: true,
+          };
+
+          if (item.linkedBankTransactionId) {
+            await updateDoc(financialDoc("transactions", item.linkedBankTransactionId), {
+              ...settlementPayload,
+              auditedBy: firebaseUser.uid,
+              auditedAt: now,
+            });
+          } else {
+            await addDoc(financialCollection("transactions"), {
+              ...settlementPayload,
+              createdBy: firebaseUser.uid,
+              createdAt: now,
+            });
+          }
         } else if (item.amount < 0) {
           const isPurchaseMode = item.expenseDraft.mode === "purchase";
           const purchaseCandidate = isPurchaseMode ? purchaseBalances.get(item.expenseDraft.purchaseOrderId) : undefined;
@@ -2371,6 +2413,7 @@ export function FinancialImportPage({
     if (!selectedDetailItem || !selectedValidation) return [];
     const isIncome = selectedDetailItem.amount >= 0;
     const isTransfer = selectedDetailItem.financialDraft.movementKind === "transfer";
+    const isCardStatementSettlement = isCardStatementSettlementItem(selectedDetailItem);
     if (isIncome) {
       return [
         {
@@ -2414,7 +2457,11 @@ export function FinancialImportPage({
           selectedDetailItem.financialDraft.description.trim().length >= 3,
       },
       {
-        label: isIncome ? "Receita pronta para registrar" : isTransfer ? "Transferência validada" : "Despesa tratada",
+        label: isTransfer
+          ? "Transferência validada"
+          : isCardStatementSettlement
+          ? "Liquidação de fatura identificada"
+          : "Despesa tratada",
         done: selectedValidation.expenseValid,
       },
       {
@@ -2435,6 +2482,14 @@ export function FinancialImportPage({
         badge: "receita",
         text: item.financialDraft.description || "Registrar como receita bancária",
         className: "bg-emerald-100 text-emerald-700",
+      };
+    }
+
+    if (isCardStatementSettlementItem(item)) {
+      return {
+        badge: "fatura",
+        text: "Liquidação sem nova despesa",
+        className: "bg-violet-100 text-violet-700",
       };
     }
 
@@ -3213,6 +3268,13 @@ export function FinancialImportPage({
                         <p className="font-semibold text-emerald-800">3. Validar sugestão de receita</p>
                         <p className="mt-1 text-xs text-emerald-700">
                           Esta entrada será registrada como receita bancária no fluxo de caixa usando a conta, forma e descrição acima.
+                        </p>
+                      </div>
+                    ) : isCardStatementSettlementItem(item) ? (
+                      <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-3 text-sm">
+                        <p className="font-semibold text-violet-800">3. Liquidação de fatura</p>
+                        <p className="mt-1 text-xs leading-relaxed text-violet-700">
+                          Esta saída será registrada como pagamento de fatura, sem criar uma nova despesa. A associação com o cartão e a competência será concluída em Faturas de cartão.
                         </p>
                       </div>
                     ) : (
