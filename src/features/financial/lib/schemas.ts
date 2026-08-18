@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { personAllocationsAreValid } from "./expense-person-allocations";
 
 export const expenseFormSchema = z
   .object({
@@ -9,6 +10,23 @@ export const expenseFormSchema = z
         z.object({
           accountPlanId: z.string().min(1, "Selecione a conta da apropriação."),
           amount: z.coerce.number().positive("O valor da apropriação deve ser positivo."),
+        })
+      )
+      .optional(),
+    hasPersonAllocations: z.boolean().default(false),
+    personAllocations: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          accountPlanId: z.string().min(1, "Selecione a conta relacionada."),
+          employeeId: z.string().min(1, "Selecione o colaborador."),
+          employeeName: z.string().min(1, "O nome do colaborador é obrigatório."),
+          analysisType: z.enum(["employer_cost", "employee_deduction", "informational"]),
+          amount: z.coerce.number().positive("O valor individualizado deve ser positivo."),
+          resultCenter: z.string().min(1, "Selecione o centro de resultado."),
+          payrollDocumentId: z.string().optional(),
+          contractReference: z.string().optional(),
+          creditorName: z.string().optional(),
         })
       )
       .optional(),
@@ -69,6 +87,13 @@ export const expenseFormSchema = z
     {
       message: "Adicione pelo menos duas apropriações contábeis.",
       path: ["accountAllocations"],
+    }
+  )
+  .refine(
+    (data) => personAllocationsAreValid(data),
+    {
+      message: "A individualização deve fechar o total de cada conta e o valor total da despesa.",
+      path: ["personAllocations"],
     }
   )
   .refine(

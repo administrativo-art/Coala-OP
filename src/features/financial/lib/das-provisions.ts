@@ -1,8 +1,10 @@
-import { format } from "date-fns";
+import {
+  consultExpenseProvision,
+  DAS_PROVISION_SERIES_KEY,
+  expenseCompetenceKey,
+} from "@/features/financial/lib/expense-provisions";
 
-import { toDate } from "@/features/financial/lib/utils";
-
-export const DAS_PROVISION_SERIES_KEY = "das-simples-nacional";
+export { DAS_PROVISION_SERIES_KEY, expenseCompetenceKey };
 
 type DasExpenseLike = {
   id?: string;
@@ -37,16 +39,6 @@ function normalize(value: unknown) {
     .toLowerCase();
 }
 
-function money(value: unknown) {
-  return Math.round((Number(value) || 0) * 100) / 100;
-}
-
-export function expenseCompetenceKey(expense: DasExpenseLike) {
-  if (/^\d{4}-\d{2}$/.test(expense.provisionCompetence || "")) return expense.provisionCompetence!;
-  const competence = toDate(expense.competenceDate);
-  return competence ? format(competence, "yyyy-MM") : null;
-}
-
 export function isDasExpense(expense: DasExpenseLike) {
   return expense.provisionSeriesKey === DAS_PROVISION_SERIES_KEY
     || normalize(expense.accountPlanName) === "das";
@@ -57,44 +49,11 @@ export function consultDasProvision(
   expenses: DasExpenseLike[],
 ): DasProvisionConsultation {
   if (!isDasExpense(expense) || expense.provisionType === "forecast") return { status: "not_applicable" };
-  const competence = expenseCompetenceKey(expense);
-  if (!competence) return { status: "missing", competence: null };
-
-  if (expense.reconciledProvisionId) {
-    const provision = expenses.find((candidate) => candidate.id === expense.reconciledProvisionId);
-    if (provision) {
-      const actualValue = money(expense.totalValue);
-      const provisionedValue = money(provision.totalValue);
-      return {
-        status: "already_reconciled",
-        competence,
-        provision,
-        actualValue,
-        provisionedValue,
-        variance: money(actualValue - provisionedValue),
-      };
-    }
-  }
-
-  const candidates = expenses.filter((candidate) =>
-    candidate.id !== expense.id
-    && candidate.provisionSeriesKey === DAS_PROVISION_SERIES_KEY
-    && candidate.provisionType === "forecast"
-    && candidate.status === "provisioned"
-    && expenseCompetenceKey(candidate) === competence
+  const consultation = consultExpenseProvision(
+    { ...expense, provisionSeriesKey: DAS_PROVISION_SERIES_KEY },
+    expenses,
   );
-  if (candidates.length === 0) return { status: "missing", competence };
-  if (candidates.length > 1) return { status: "ambiguous", competence, candidates };
-
-  const provision = candidates[0];
-  const actualValue = money(expense.totalValue);
-  const provisionedValue = money(provision.totalValue);
-  return {
-    status: "matched",
-    competence,
-    provision,
-    actualValue,
-    provisionedValue,
-    variance: money(actualValue - provisionedValue),
-  };
+  if (consultation.status === "not_applicable") return consultation;
+  const { seriesKey: _seriesKey, ...legacyConsultation } = consultation;
+  return legacyConsultation as DasProvisionConsultation;
 }

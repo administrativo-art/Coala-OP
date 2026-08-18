@@ -50,6 +50,7 @@ export function DrePage() {
   const { data: transactions, loading: loadingTx } = useFinancialCollection<any>(financialCollection("transactions"));
   const { data: expenses, loading: loadingExp } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: accounts } = useFinancialCollection<any>(financialCollection("accounts"));
+  const { data: resultCenters, loading: loadingResultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
 
   const [salesReports, setSalesReports] = useState<SalesReport[]>([]);
   const [simulationCmvMap, setSimulationCmvMap] = useState<Record<string, number>>({});
@@ -76,7 +77,7 @@ export function DrePage() {
     return () => { cancelled = true; };
   }, []);
 
-  const loading = loadingTx || loadingExp || loadingCmv;
+  const loading = loadingTx || loadingExp || loadingResultCenters || loadingCmv;
 
   if (!permissions.financial?.dre) {
     return <FinancialAccessGuard title="DRE" description="Seu perfil não possui permissão para acessar o demonstrativo de resultado." />;
@@ -89,6 +90,17 @@ export function DrePage() {
     kiosks.forEach((k) => { m[k.id] = k.name; });
     return m;
   }, [kiosks]);
+
+  const resultCenterNameByKioskId = useMemo(() => {
+    const map: Record<string, string> = {};
+    (resultCenters || []).forEach((center: any) => {
+      if (typeof center?.name !== "string") return;
+      (Array.isArray(center.unitIds) ? center.unitIds : []).forEach((unitId: unknown) => {
+        if (typeof unitId === "string" && unitId) map[unitId] = center.name;
+      });
+    });
+    return map;
+  }, [resultCenters]);
 
   // accountId → dre_position (flat, no inheritance needed)
   const accountDrePosMap = useMemo(() => {
@@ -104,7 +116,9 @@ export function DrePage() {
     return m;
   }, [accounts]);
 
-  const selectedUnitName = unitFilter === "all" ? null : (kioskNameById[unitFilter] ?? null);
+  const selectedUnitName = unitFilter === "all"
+    ? null
+    : (resultCenterNameByKioskId[unitFilter] ?? kioskNameById[unitFilter] ?? null);
   const selectedKioskId = unitFilter === "all" ? null : unitFilter;
 
   // ── computation helpers ─────────────────────────────────────────────────────

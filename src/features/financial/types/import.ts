@@ -66,6 +66,21 @@ export type ImportSessionAccountAllocation = {
   amount: number;
 };
 
+export type ImportSessionPersonAllocation = {
+  id: string;
+  accountPlanId: string;
+  accountPlanName: string;
+  employeeId: string;
+  employeeName: string;
+  analysisType: "employer_cost" | "employee_deduction" | "informational";
+  amount: number;
+  resultCenterId: string;
+  resultCenterName: string;
+  payrollDocumentId: string;
+  contractReference: string;
+  creditorName: string;
+};
+
 export type ImportSessionSplitExpense = {
   id: string;
   description: string;
@@ -92,6 +107,8 @@ export type ImportSessionExpenseDraft = {
   accountPlanName: string;
   hasAccountAllocations: boolean;
   accountAllocations: ImportSessionAccountAllocation[];
+  hasPersonAllocations: boolean;
+  personAllocations: ImportSessionPersonAllocation[];
   isApportioned: boolean;
   resultCenterId: string;
   resultCenterName: string;

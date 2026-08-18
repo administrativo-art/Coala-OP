@@ -1,4 +1,5 @@
 import { expenseValueForResultCenter, type ResultCenterNameMap } from "./expense-rateio";
+import { expensePersonAllocations, type ExpensePersonAllocation } from "./expense-person-allocations";
 
 export type ExpenseAccountAllocation = {
   accountPlanId: string;
@@ -16,6 +17,8 @@ type ExpenseWithAccountAllocations = {
   isApportioned?: boolean;
   resultCenter?: string | null;
   apportionments?: Array<{ resultCenter?: string; percentage?: number }> | null;
+  hasPersonAllocations?: boolean;
+  personAllocations?: ExpensePersonAllocation[] | null;
 };
 
 function cents(value: unknown) {
@@ -78,14 +81,36 @@ export function expenseAccountAllocationsForResultCenter(
   resultCenterNames: ResultCenterNameMap = {},
   accountNames: Record<string, string> = {},
 ) {
-  return expenseAccountAllocations(expense, accountNames).map((allocation) => ({
-    ...allocation,
-    amount: expenseValueForResultCenter(
-      { ...expense, totalValue: allocation.amount },
-      resultCenter,
-      resultCenterNames,
-    ),
-  }));
+  const accountingAllocations = expenseAccountAllocations(expense, accountNames);
+  const personAllocations = expensePersonAllocations(expense, accountNames);
+
+  return accountingAllocations.map((allocation) => {
+    if (!resultCenter) return allocation;
+    if (personAllocations.length === 0) {
+      return {
+        ...allocation,
+        amount: expenseValueForResultCenter(
+          { ...expense, totalValue: allocation.amount },
+          resultCenter,
+          resultCenterNames,
+        ),
+      };
+    }
+    const amount = personAllocations
+      .filter((personAllocation) => personAllocation.accountPlanId === allocation.accountPlanId)
+      .reduce((total, personAllocation) => {
+        if (personAllocation.resultCenter) {
+          const storedName = resultCenterNames[personAllocation.resultCenter] || personAllocation.resultCenter;
+          return storedName === resultCenter ? total + personAllocation.amount : total;
+        }
+        return total + expenseValueForResultCenter(
+          { ...expense, totalValue: personAllocation.amount, hasPersonAllocations: false, personAllocations: null },
+          resultCenter,
+          resultCenterNames,
+        );
+      }, 0);
+    return { ...allocation, amount: Number(amount.toFixed(2)) };
+  });
 }
 
 export function expenseAccountPlanLabels(

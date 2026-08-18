@@ -26,6 +26,8 @@ type ExpenseLike = {
   isApportioned?: boolean;
   resultCenter?: string | null;
   apportionments?: Array<{ resultCenter?: string; percentage?: number }> | null;
+  hasPersonAllocations?: boolean;
+  personAllocations?: Array<{ resultCenter?: string | null; amount?: number | null }> | null;
 };
 
 export type ResultCenterNameMap = Record<string, string>;
@@ -43,6 +45,11 @@ export function expenseReferencesResultCenter(
   resultCenter: string,
   namesById: ResultCenterNameMap = {}
 ) {
+  if (expense.hasPersonAllocations === true && Array.isArray(expense.personAllocations)) {
+    return expense.personAllocations.some(
+      (item) => resolveResultCenterName(item.resultCenter, namesById) === resultCenter
+    );
+  }
   if (!expense.isApportioned) {
     return resolveResultCenterName(expense.resultCenter, namesById) === resultCenter;
   }
@@ -175,6 +182,12 @@ export function expenseValueForResultCenter(
 ) {
   const totalValue = Number(expense.totalValue) || 0;
   if (!resultCenter) return totalValue;
+  if (expense.hasPersonAllocations === true && Array.isArray(expense.personAllocations)) {
+    return Number(expense.personAllocations
+      .filter((item) => resolveResultCenterName(item.resultCenter, namesById) === resultCenter)
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+      .toFixed(2));
+  }
   if (!expense.isApportioned) {
     return resolveResultCenterName(expense.resultCenter, namesById) === resultCenter ? totalValue : 0;
   }

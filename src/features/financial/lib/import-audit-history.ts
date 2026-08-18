@@ -48,6 +48,29 @@ function summarizeAccountAllocations(value: unknown) {
     .join("; ");
 }
 
+function summarizePersonAllocations(value: unknown) {
+  const entries = asArray(value).map(asRecord);
+  if (entries.length === 0) return "Não informado";
+  return entries
+    .map((entry) => {
+      const analysisType = entry.analysisType === "employer_cost"
+        ? "Custo da empresa"
+        : entry.analysisType === "employee_deduction"
+        ? "Desconto do colaborador"
+        : "Informativo";
+      return [
+        displayValue(entry.employeeName),
+        displayValue(entry.accountPlanName),
+        analysisType,
+        displayValue(entry.resultCenterName ?? entry.resultCenter),
+        entry.payrollDocumentId ? `documento RH ${displayValue(entry.payrollDocumentId)}` : null,
+        entry.contractReference ? displayValue(entry.contractReference) : null,
+        `R$ ${displayValue(entry.amount)}`,
+      ].filter(Boolean).join(" · ");
+    })
+    .join("; ");
+}
+
 function summarizeSplitExpenses(value: unknown) {
   const entries = asArray(value).map(asRecord);
   if (entries.length === 0) return "Não informado";
@@ -86,6 +109,7 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
   { field: "expense.supplier", label: "Fornecedor", read: (item) => asRecord(item.expenseDraft).supplier },
   { field: "expense.accountPlan", label: "Plano de contas", read: (item) => asRecord(item.expenseDraft).accountPlanName },
   { field: "expense.accountAllocations", label: "Apropriações contábeis", read: (item) => summarizeAccountAllocations(asRecord(item.expenseDraft).accountAllocations) },
+  { field: "expense.personAllocations", label: "Individualização por colaborador", read: (item) => summarizePersonAllocations(asRecord(item.expenseDraft).personAllocations) },
   { field: "expense.resultCenter", label: "Unidade", read: (item) => asRecord(item.expenseDraft).resultCenterName },
   { field: "expense.apportionments", label: "Rateio entre unidades", read: (item) => summarizeApportionments(asRecord(item.expenseDraft).apportionments) },
   { field: "expense.splitMode", label: "Forma da divisão", read: (item) => asRecord(item.expenseDraft).splitAllocationMode },

@@ -45,9 +45,14 @@ import {
   accountAllocationTotal,
 } from "@/features/financial/lib/expense-account-allocations";
 import {
-  consultDasProvision,
-  DAS_PROVISION_SERIES_KEY,
-} from "@/features/financial/lib/das-provisions";
+  personAllocationAccountTotals,
+  personAllocationDifference,
+  personAllocationsAreValid,
+} from "@/features/financial/lib/expense-person-allocations";
+import {
+  consultExpenseProvision,
+  expenseProvisionIdentity,
+} from "@/features/financial/lib/expense-provisions";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import { Badge } from "@/components/ui/badge";
@@ -454,6 +459,11 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const [loadedRecurrenceGroupId, setLoadedRecurrenceGroupId] = useState<string | null>(null);
   const [loadedSeriesEntry, setLoadedSeriesEntry] = useState<ExpenseSeriesEntry | null>(null);
   const [loadedSeriesTotal, setLoadedSeriesTotal] = useState<number | null>(null);
+  const [loadedProvisionIdentity, setLoadedProvisionIdentity] = useState<{
+    provisionSeriesKey: string;
+    provisionType: string;
+    provisionCompetence: string | null;
+  } | null>(null);
   const [seriesUpdateDialogOpen, setSeriesUpdateDialogOpen] = useState(false);
   const [seriesUpdateScope, setSeriesUpdateScope] = useState<ExpenseSeriesUpdateScope>("single");
   const [pendingSeriesValues, setPendingSeriesValues] = useState<ExpenseFormValues | null>(null);
@@ -465,7 +475,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const [supplierSearch, setSupplierSearch] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const submissionInFlightRef = useRef(false);
-  const [currentStep, setCurrentStep] = useState<"identification" | "classification" | "schedule" | "review">(
+  const [currentStep, setCurrentStep] = useState<"identification" | "classification" | "individualization" | "schedule" | "review">(
     "identification"
   );
 
@@ -493,6 +503,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       rateioFirstMonthMode: "full",
       hasAccountAllocations: false,
       accountAllocations: [],
+      hasPersonAllocations: false,
+      personAllocations: [],
       variedInstallments: [],
       accountPlan: "",
       description: "",
@@ -521,6 +533,18 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
     [kiosks]
   );
+  const personResultCenterOptions = useMemo(() => {
+    const byName = new Map<string, { id: string; name: string }>();
+    (resultCenters || []).forEach((center: any) => {
+      if (typeof center?.name === "string" && center.name.trim()) {
+        byName.set(center.name.trim(), { id: String(center.id), name: center.name.trim() });
+      }
+    });
+    units.forEach((unit) => {
+      if (!byName.has(unit.name)) byName.set(unit.name, { id: unit.id, name: unit.name });
+    });
+    return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+  }, [resultCenters, units]);
 
   const hasAccountAllocations = form.watch("hasAccountAllocations");
 
@@ -605,6 +629,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const plannedPaymentMethodLabel = form.watch("plannedPaymentMethodLabel");
   const accountPlanValue = form.watch("accountPlan");
   const accountAllocations = form.watch("accountAllocations");
+  const hasPersonAllocations = form.watch("hasPersonAllocations");
+  const personAllocations = form.watch("personAllocations");
   const installmentType = form.watch("installmentType");
   const installmentsQty = form.watch("installments");
   const totalValue = form.watch("totalValue");
@@ -631,32 +657,60 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   );
   const accountAllocationOptions = useMemo(() => {
     if (!hasAccountAllocations || !accountPlanValue) return [];
-    const all = (accounts || []).filter((account: any) => account.active !== false);
-    const childrenByParent = new Map<string, any[]>();
-    all.forEach((account: any) => {
-      if (!account.parentId) return;
-      const children = childrenByParent.get(account.parentId) || [];
-      children.push(account);
-      childrenByParent.set(account.parentId, children);
+    return [...postingAccounts].sort((left, right) => {
+      const groupComparison = String(ACCOUNT_GROUP_LABELS[left.group] ?? left.group ?? "")
+        .localeCompare(String(ACCOUNT_GROUP_LABELS[right.group] ?? right.group ?? ""), "pt-BR");
+      return groupComparison || String(left.name).localeCompare(String(right.name), "pt-BR");
     });
-    const leaves: any[] = [];
-    const visit = (parentId: string) => {
-      (childrenByParent.get(parentId) || []).forEach((child) => {
-        if ((childrenByParent.get(child.id) || []).length > 0) visit(child.id);
-        else leaves.push(child);
-      });
-    };
-    visit(accountPlanValue);
-    return leaves.sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
-  }, [accountPlanValue, accounts, hasAccountAllocations]);
+  }, [accountPlanValue, hasAccountAllocations, postingAccounts]);
   const {
     fields: accountAllocationFields,
     replace: replaceAccountAllocations,
     append: appendAccountAllocation,
     remove: removeAccountAllocation,
   } = useFieldArray({ control: form.control, name: "accountAllocations" });
+  const {
+    fields: personAllocationFields,
+    replace: replacePersonAllocations,
+    append: appendPersonAllocation,
+    remove: removePersonAllocation,
+  } = useFieldArray({ control: form.control, name: "personAllocations" });
   const allocatedAccountTotal = accountAllocationTotal(accountAllocations);
   const accountAllocationRemaining = accountAllocationDifference(accountAllocations, totalValue || 0);
+  const allocatedPersonTotal = (personAllocations || []).reduce(
+    (total, allocation) => total + (Number(allocation.amount) || 0),
+    0,
+  );
+  const personAllocationRemaining = personAllocationDifference(personAllocations, totalValue || 0);
+  const personAccountTotals = personAllocationAccountTotals(personAllocations);
+  const personAllocationAccountOptions = useMemo(() => {
+    if (hasAccountAllocations) {
+      return (accountAllocations || [])
+        .filter((allocation) => allocation.accountPlanId && Number(allocation.amount) > 0)
+        .map((allocation) => {
+          const account = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+          return {
+            id: allocation.accountPlanId,
+            name: account?.name || allocation.accountPlanId,
+            amount: Number(allocation.amount) || 0,
+            isDreAccount: account?.is_dre_account !== false,
+          };
+        });
+    }
+    if (!accountPlanValue || !selectedAccountPlan) return [];
+    return [{
+      id: accountPlanValue,
+      name: selectedAccountPlan.name || accountPlanValue,
+      amount: Number(totalValue) || 0,
+      isDreAccount: selectedAccountPlan.is_dre_account !== false,
+    }];
+  }, [accountAllocations, accountPlanValue, accounts, hasAccountAllocations, selectedAccountPlan, totalValue]);
+  const financialEmployees = useMemo(
+    () => [...(users || [])].sort((left, right) => (
+      (left.username || left.email).localeCompare(right.username || right.email, "pt-BR")
+    )),
+    [users],
+  );
   const plannedPaymentSelection =
     plannedBankAccountId && plannedPaymentMethodId
       ? `${plannedBankAccountId}:${plannedPaymentMethodId}`
@@ -701,13 +755,65 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     form.setValue("hasAccountAllocations", checked, { shouldDirty: true, shouldValidate: true });
     form.setValue("accountPlan", "", { shouldDirty: true, shouldValidate: true });
     replaceAccountAllocations([]);
+    form.setValue("hasPersonAllocations", false, { shouldDirty: true, shouldValidate: true });
+    replacePersonAllocations([]);
     setAccountPlanSearch("");
   }
 
   function handleAccountPlanSelection(accountId: string) {
     form.setValue("accountPlan", accountId, { shouldDirty: true, shouldValidate: true });
     if (hasAccountAllocations) replaceAccountAllocations(allocationRowsForParent(accountId));
+    if (hasPersonAllocations) replacePersonAllocations([]);
     setAccountPlanOpen(false);
+  }
+
+  function handlePersonAllocationMode(checked: boolean) {
+    form.setValue("hasPersonAllocations", checked, { shouldDirty: true, shouldValidate: true });
+    if (!checked) {
+      replacePersonAllocations([]);
+      return;
+    }
+    const firstAccount = personAllocationAccountOptions[0];
+    if (!firstAccount || personAllocationFields.length > 0) return;
+    appendPersonAllocation({
+      id: crypto.randomUUID(),
+      accountPlanId: firstAccount.id,
+      employeeId: "",
+      employeeName: "",
+      analysisType: firstAccount.isDreAccount ? "employer_cost" : "employee_deduction",
+      amount: firstAccount.amount,
+      resultCenter: !isApportioned ? resultCenterValue || "" : "",
+      payrollDocumentId: "",
+      contractReference: "",
+      creditorName: "",
+    });
+  }
+
+  function handleAddPersonAllocation() {
+    const firstAccount = personAllocationAccountOptions[0];
+    appendPersonAllocation({
+      id: crypto.randomUUID(),
+      accountPlanId: firstAccount?.id || "",
+      employeeId: "",
+      employeeName: "",
+      analysisType: firstAccount?.isDreAccount === false ? "employee_deduction" : "employer_cost",
+      amount: 0,
+      resultCenter: !isApportioned ? resultCenterValue || "" : "",
+      payrollDocumentId: "",
+      contractReference: "",
+      creditorName: "",
+    });
+  }
+
+  function fillPersonAllocationRemaining(index: number) {
+    const otherCents = (personAllocations || [])
+      .filter((_, currentIndex) => currentIndex !== index)
+      .reduce((total, allocation) => total + Math.round((Number(allocation.amount) || 0) * 100), 0);
+    const remainingCents = Math.max(0, Math.round((Number(totalValue) || 0) * 100) - otherCents);
+    form.setValue(`personAllocations.${index}.amount`, remainingCents / 100, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   }
 
   function fillAccountAllocationRemaining(index: number) {
@@ -1010,6 +1116,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           accountPlan: data.accountPlanId || "",
           hasAccountAllocations: false,
           accountAllocations: [],
+          hasPersonAllocations: false,
+          personAllocations: [],
           description: data.description || "",
           supplier: data.supplier || "",
           resultCenter: data.resultCenterName || "",
@@ -1098,6 +1206,25 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                 amount: Number(allocation.amount) || 0,
               }))
             : [],
+          hasPersonAllocations:
+            data.hasPersonAllocations === true && Array.isArray(data.personAllocations) && data.personAllocations.length > 0,
+          personAllocations: Array.isArray(data.personAllocations)
+            ? data.personAllocations.map((allocation: any) => ({
+                id: String(allocation.id ?? crypto.randomUUID()),
+                accountPlanId: String(allocation.accountPlanId ?? ""),
+                employeeId: String(allocation.employeeId ?? ""),
+                employeeName: String(allocation.employeeName ?? ""),
+                analysisType:
+                  allocation.analysisType === "employee_deduction" || allocation.analysisType === "informational"
+                    ? allocation.analysisType
+                    : "employer_cost",
+                amount: Number(allocation.amount) || 0,
+                resultCenter: resolveResultCenterName(allocation.resultCenter, resultCenterNameById),
+                payrollDocumentId: String(allocation.payrollDocumentId ?? ""),
+                contractReference: String(allocation.contractReference ?? ""),
+                creditorName: String(allocation.creditorName ?? ""),
+              }))
+            : [],
           description: data.description,
           supplier: data.supplier,
           notes: data.notes,
@@ -1145,6 +1272,11 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
         form.reset(resetData);
         setLoadedStatus(data.status ?? null);
+        setLoadedProvisionIdentity(data.provisionSeriesKey ? {
+          provisionSeriesKey: String(data.provisionSeriesKey),
+          provisionType: String(data.provisionType || "actual"),
+          provisionCompetence: typeof data.provisionCompetence === "string" ? data.provisionCompetence : null,
+        } : null);
         setLoadedRecurrenceGroupId(data.recurrenceGroupId ?? null);
         setLoadedSeriesEntry({
           id: editId,
@@ -1247,6 +1379,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     () => [
       { id: "identification", label: "Identificação" },
       { id: "classification", label: "Classificação" },
+      { id: "individualization", label: "Individualização" },
       { id: "schedule", label: "Vencimento e parcelas" },
       { id: "review", label: "Revisão" },
     ] as const,
@@ -1268,6 +1401,17 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     {
       label: "Apropriações contábeis",
       ok: !hasAccountAllocations || Math.abs(accountAllocationRemaining) < 0.001,
+    },
+    {
+      label: "Individualização",
+      ok: !hasPersonAllocations || personAllocationsAreValid({
+        accountPlan: accountPlanValue,
+        totalValue,
+        hasAccountAllocations,
+        accountAllocations,
+        hasPersonAllocations,
+        personAllocations,
+      }),
     },
     { label: "Unidade ou rateio", ok: isApportioned ? rateioTotal === 100 : !!resultCenterValue },
     { label: "Valor", ok: Number(totalValue || 0) > 0 },
@@ -1323,7 +1467,21 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   function buildExpensePayload(values: ExpenseFormValues) {
     const account = (accounts || []).find((item: any) => item.id === values.accountPlan);
     const installmentsToSave = buildInstallmentsFromValues(values);
-    const isDasTitle = account?.name?.trim().toLocaleLowerCase("pt-BR") === "das" && values.hasAccountAllocations;
+    const inferredProvisionIdentity = expenseProvisionIdentity({
+      description: values.description,
+      accountPlanName: account?.name,
+      competenceDate: values.competenceDate,
+      provisionType: "actual",
+    });
+    const provisionIdentity = loadedProvisionIdentity?.provisionType === "forecast"
+      ? {
+          ...loadedProvisionIdentity,
+          provisionCompetence: values.competenceDate ? format(values.competenceDate, "yyyy-MM") : loadedProvisionIdentity.provisionCompetence,
+        }
+      : inferredProvisionIdentity || (loadedProvisionIdentity ? {
+          ...loadedProvisionIdentity,
+          provisionCompetence: values.competenceDate ? format(values.competenceDate, "yyyy-MM") : loadedProvisionIdentity.provisionCompetence,
+        } : null);
     const storedAccountAllocations = values.hasAccountAllocations
       ? (values.accountAllocations || []).map((allocation) => {
           const allocationAccount = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
@@ -1334,17 +1492,37 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           };
         })
       : null;
+    const storedPersonAllocations = values.hasPersonAllocations
+      ? (values.personAllocations || []).map((allocation) => {
+          const allocationAccount = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+          const employee = (users || []).find((item) => item.id === allocation.employeeId);
+          return {
+            id: allocation.id || crypto.randomUUID(),
+            accountPlanId: allocation.accountPlanId,
+            accountPlanName: allocationAccount?.name || allocation.accountPlanId,
+            employeeId: allocation.employeeId,
+            employeeName: employee?.username || allocation.employeeName,
+            analysisType: allocation.analysisType,
+            amount: Number((Number(allocation.amount) || 0).toFixed(2)),
+            resultCenter: allocation.resultCenter,
+            payrollDocumentId: allocation.payrollDocumentId?.trim() || null,
+            contractReference: allocation.contractReference?.trim() || null,
+            creditorName: allocation.creditorName?.trim() || null,
+          };
+        })
+      : null;
 
     return {
       accountPlan: values.accountPlan || "",
       accountId: values.accountPlan || "",
       accountPlanName: account?.name || values.accountPlan || "",
-      provisionSeriesKey: isDasTitle ? DAS_PROVISION_SERIES_KEY : null,
-      provisionType: isDasTitle ? "actual" : null,
-      provisionCompetence:
-        isDasTitle && values.competenceDate ? format(values.competenceDate, "yyyy-MM") : null,
+      provisionSeriesKey: provisionIdentity?.provisionSeriesKey ?? null,
+      provisionType: provisionIdentity?.provisionType ?? null,
+      provisionCompetence: provisionIdentity?.provisionCompetence ?? null,
       hasAccountAllocations: values.hasAccountAllocations,
       accountAllocations: storedAccountAllocations,
+      hasPersonAllocations: values.hasPersonAllocations,
+      personAllocations: storedPersonAllocations,
       description: values.description || "",
       supplier: values.supplier ?? "",
       notes: values.notes ?? "",
@@ -1402,16 +1580,16 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     };
   }
 
-  async function reconcileDasProvisionAfterSave(expenseId: string, payload: ReturnType<typeof buildExpensePayload>) {
-    if (!firebaseUser || payload.provisionType !== "actual" || !payload.provisionCompetence) return "not_applicable";
+  async function reconcileProvisionAfterSave(expenseId: string, payload: ReturnType<typeof buildExpensePayload>) {
+    if (!firebaseUser || payload.provisionType !== "actual" || !payload.provisionCompetence || !payload.provisionSeriesKey) return "not_applicable";
     const snapshot = await getDocs(
       query(
         financialCollection("expenses"),
-        where("provisionSeriesKey", "==", DAS_PROVISION_SERIES_KEY),
+        where("provisionSeriesKey", "==", payload.provisionSeriesKey),
       ),
     );
     const related = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-    const consultation = consultDasProvision({ id: expenseId, ...payload }, related);
+    const consultation = consultExpenseProvision({ id: expenseId, ...payload }, related);
     if (consultation.status !== "matched" || !consultation.provision.id) return consultation.status;
 
     const now = Timestamp.now();
@@ -1610,6 +1788,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
             sharedPatch.hasAccountAllocations = editPayload.hasAccountAllocations;
             sharedPatch.accountAllocations = editPayload.accountAllocations;
           }
+          if (dirtyFields.hasPersonAllocations || dirtyFields.personAllocations) {
+            sharedPatch.hasPersonAllocations = editPayload.hasPersonAllocations;
+            sharedPatch.personAllocations = editPayload.personAllocations;
+          }
           if (dirtyFields.description) sharedPatch.description = editPayload.description;
           if (dirtyFields.supplier) sharedPatch.supplier = editPayload.supplier;
           if (dirtyFields.notes) sharedPatch.notes = editPayload.notes;
@@ -1741,10 +1923,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       }
 
       if (savedExpenseId && payload.provisionType === "actual") {
-        const reconciliation = await reconcileDasProvisionAfterSave(savedExpenseId, payload);
+        const reconciliation = await reconcileProvisionAfterSave(savedExpenseId, payload);
         if (reconciliation === "reconciled") {
           toast({
-            title: "Provisão do DAS conciliada.",
+            title: "Provisão conciliada.",
             description: "A previsão da competência foi substituída pelo valor real sem duplicar a DRE.",
           });
         } else if (reconciliation === "ambiguous") {
@@ -1783,6 +1965,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       dirtyFields.accountPlan ||
       dirtyFields.hasAccountAllocations ||
       dirtyFields.accountAllocations ||
+      dirtyFields.hasPersonAllocations ||
+      dirtyFields.personAllocations ||
       dirtyFields.description ||
       dirtyFields.supplier ||
       dirtyFields.notes ||
@@ -2150,9 +2334,9 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                         render={({ field }) => (
                           <FormItem className="flex items-center justify-between rounded-xl border p-4">
                             <div>
-                              <FormLabel>Desmembrar em subcontas</FormLabel>
+                              <FormLabel>Compor em mais de uma conta</FormLabel>
                               <p className="text-sm text-muted-foreground">
-                                Mantém um único título e distribui seu valor entre contas filhas, como na composição de um DAS.
+                                Mantém um único título e distribui o valor entre contas contábeis, mesmo que estejam em grupos diferentes.
                               </p>
                             </div>
                             <FormControl>
@@ -2167,7 +2351,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                         name="accountPlan"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{hasAccountAllocations ? "Conta-mãe do título" : "Plano de contas"}</FormLabel>
+                            <FormLabel>{hasAccountAllocations ? "Conta de referência do título" : "Plano de contas"}</FormLabel>
                             <Popover open={accountPlanOpen} onOpenChange={setAccountPlanOpen}>
                               <PopoverTrigger asChild>
                                 <FormControl>
@@ -2183,7 +2367,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                         {selectedAccountPlan.name}
                                       </span>
                                     ) : (
-                                      hasAccountAllocations ? "Selecione a conta-mãe" : "Selecione o plano de contas"
+                                      hasAccountAllocations ? "Selecione a conta de referência" : "Selecione o plano de contas"
                                     )}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                   </Button>
@@ -2261,13 +2445,13 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                 if (next) appendAccountAllocation({ accountPlanId: next.id, amount: 0 });
                               }}
                             >
-                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar subconta
+                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar conta
                             </Button>
                           </div>
 
                           {accountAllocationFields.length === 0 ? (
                             <div className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                              Selecione uma conta-mãe com subcontas ativas.
+                              Selecione uma conta de referência para iniciar a composição.
                             </div>
                           ) : accountAllocationFields.map((allocationField, index) => (
                             <div
@@ -2279,10 +2463,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                                 name={`accountAllocations.${index}.accountPlanId`}
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel>Subconta</FormLabel>
+                                    <FormLabel>Conta</FormLabel>
                                     <Select value={field.value} onValueChange={field.onChange}>
                                       <FormControl>
-                                        <SelectTrigger><SelectValue placeholder="Selecione a subconta" /></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder="Selecione a conta" /></SelectTrigger>
                                       </FormControl>
                                       <SelectContent>
                                         {accountAllocationOptions.map((account: any) => (
@@ -2617,6 +2801,259 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                     </div>
                   )}
 
+                  {currentStep === "individualization" && (
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-semibold">Individualização</h2>
+                        <p className="text-sm text-muted-foreground">
+                          Vincule cada parte do título ao colaborador, contrato e centro responsáveis pelo valor.
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+                        <p className="font-medium">O favorecido bancário continua sendo único.</p>
+                        <p className="mt-1 text-sky-800">
+                          Aqui entram os vínculos analíticos. Em uma guia de FGTS, por exemplo, o recebedor é o órgão arrecadador e cada linha identifica o colaborador correspondente.
+                        </p>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="hasPersonAllocations"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-xl border p-4">
+                            <div>
+                              <FormLabel>Individualizar por colaborador ou contrato</FormLabel>
+                              <p className="text-sm text-muted-foreground">
+                                A soma por pessoa deverá fechar cada conta contábil e o total do título.
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch checked={field.value} onCheckedChange={handlePersonAllocationMode} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+
+                      {hasPersonAllocations ? (
+                        <div className="space-y-4 rounded-xl border p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium">Vínculos analíticos</p>
+                              <p className="text-sm text-muted-foreground">
+                                Repita o colaborador quando houver mais de um contrato ou mais de um centro de resultado.
+                              </p>
+                            </div>
+                            <Button type="button" variant="outline" size="sm" onClick={handleAddPersonAllocation}>
+                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar vínculo
+                            </Button>
+                          </div>
+
+                          {personAllocationFields.map((allocationField, index) => (
+                            <div key={allocationField.id} className="space-y-3 rounded-xl border bg-muted/15 p-3">
+                              <div className="grid gap-3 lg:grid-cols-4">
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.accountPlanId`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Conta contábil</FormLabel>
+                                      <Select
+                                        value={field.value || "none"}
+                                        onValueChange={(value) => {
+                                          const nextValue = value === "none" ? "" : value;
+                                          field.onChange(nextValue);
+                                          const account = personAllocationAccountOptions.find((item) => item.id === nextValue);
+                                          if (account) {
+                                            form.setValue(
+                                              `personAllocations.${index}.analysisType`,
+                                              account.isDreAccount ? "employer_cost" : "employee_deduction",
+                                              { shouldDirty: true, shouldValidate: true },
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione a conta" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="none">Selecione a conta</SelectItem>
+                                          {personAllocationAccountOptions.map((account) => (
+                                            <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.employeeId`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Colaborador</FormLabel>
+                                      <Select
+                                        value={field.value || "none"}
+                                        onValueChange={(value) => {
+                                          const nextValue = value === "none" ? "" : value;
+                                          field.onChange(nextValue);
+                                          const employee = financialEmployees.find((item) => item.id === nextValue);
+                                          form.setValue(
+                                            `personAllocations.${index}.employeeName`,
+                                            employee?.username || employee?.email || "",
+                                            { shouldDirty: true, shouldValidate: true },
+                                          );
+                                        }}
+                                      >
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="none">Selecione o colaborador</SelectItem>
+                                          {financialEmployees.map((employee) => (
+                                            <SelectItem key={employee.id} value={employee.id}>
+                                              {employee.username || employee.email}{employee.isActive === false ? " · inativo" : ""}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.analysisType`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Natureza na análise</FormLabel>
+                                      <Select value={field.value} onValueChange={field.onChange}>
+                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="employer_cost">Custo da empresa</SelectItem>
+                                          <SelectItem value="employee_deduction">Desconto do colaborador</SelectItem>
+                                          <SelectItem value="informational">Somente informativo</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.amount`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Valor</FormLabel>
+                                      <div className="flex gap-2">
+                                        <FormControl><CurrencyInput value={field.value ?? 0} onChange={field.onChange} /></FormControl>
+                                        <Button type="button" variant="outline" onClick={() => fillPersonAllocationRemaining(index)}>
+                                          Restante
+                                        </Button>
+                                      </div>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+
+                              <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_40px]">
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.resultCenter`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Centro de resultado</FormLabel>
+                                      <Select value={field.value || "none"} onValueChange={(value) => field.onChange(value === "none" ? "" : value)}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione o centro" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="none">Selecione o centro</SelectItem>
+                                          {personResultCenterOptions.map((center) => <SelectItem key={center.id} value={center.name}>{center.name}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.payrollDocumentId`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Documento de folha no RH</FormLabel>
+                                      <FormControl><Input placeholder="ID do contracheque ou da rescisão" {...field} /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.contractReference`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Contrato ou rubrica</FormLabel>
+                                      <FormControl><Input placeholder="Ex.: Empréstimo 1" {...field} /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.creditorName`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Credor relacionado</FormLabel>
+                                      <FormControl><Input placeholder="Instituição, se conhecida" {...field} /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <Button type="button" variant="ghost" size="icon" className="self-end" onClick={() => removePersonAllocation(index)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+
+                          <div className="space-y-2 rounded-lg bg-muted/30 px-3 py-3 text-sm">
+                            {personAllocationAccountOptions.map((account) => {
+                              const actual = personAccountTotals.get(account.id) || 0;
+                              const matches = Math.round(actual * 100) === Math.round(account.amount * 100);
+                              return (
+                                <div key={account.id} className="flex items-center justify-between gap-3">
+                                  <span>{account.name}</span>
+                                  <span className={cn("font-mono font-semibold", matches ? "text-emerald-600" : "text-amber-700")}>
+                                    {formatCurrency(actual)} / {formatCurrency(account.amount)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            <div className="flex items-center justify-between gap-3 border-t pt-2">
+                              <span>Total individualizado</span>
+                              <span className={cn("font-mono font-semibold", Math.abs(personAllocationRemaining) < 0.001 ? "text-emerald-600" : "text-amber-700")}>
+                                {formatCurrency(allocatedPersonTotal)} / {formatCurrency(totalValue || 0)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {(form.formState.errors.personAllocations as any)?.message ? (
+                            <p className="text-sm font-medium text-destructive">
+                              {(form.formState.errors.personAllocations as any).message}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                          Ative a individualização quando o título consolidar valores de mais de um colaborador ou contrato.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {currentStep === "schedule" && (
                     <div className="space-y-4">
                       <div>
@@ -2846,6 +3283,42 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                           </div>
                         ) : null}
 
+                        {hasPersonAllocations && personAllocationFields.length > 0 ? (
+                          <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                Individualização por colaborador
+                              </p>
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {personAllocationFields.length} vínculo{personAllocationFields.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            <div className="mt-2 space-y-2">
+                              {(personAllocations || []).map((allocation, index) => {
+                                const account = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+                                const analysisLabel = allocation.analysisType === "employer_cost"
+                                  ? "Custo da empresa"
+                                  : allocation.analysisType === "employee_deduction"
+                                  ? "Desconto do colaborador"
+                                  : "Informativo";
+                                return (
+                                  <div key={allocation.id || `${allocation.employeeId}-${index}`} className="flex flex-wrap items-start justify-between gap-3 rounded-md border bg-background px-3 py-2 text-sm">
+                                    <div>
+                                      <p className="font-medium">{allocation.employeeName || "Colaborador pendente"}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {account?.name || allocation.accountPlanId || "Conta pendente"} · {analysisLabel} · {allocation.resultCenter || "Centro pendente"}
+                                        {allocation.payrollDocumentId ? ` · Documento RH ${allocation.payrollDocumentId}` : ""}
+                                        {allocation.contractReference ? ` · ${allocation.contractReference}` : ""}
+                                      </p>
+                                    </div>
+                                    <span className="font-mono font-semibold">{formatCurrency(Number(allocation.amount) || 0)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+
                         {notesValue ? (
                           <div className="mt-4 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                             <span className="font-medium text-foreground">Obs.:</span> {notesValue}
@@ -2939,6 +3412,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                       <p className="mt-1">
                         {selectedAccountPlan?.name || "—"}
                         {hasAccountAllocations ? ` · ${(accountAllocations || []).length} apropriações` : ""}
+                        {hasPersonAllocations ? ` · ${(personAllocations || []).length} vínculos` : ""}
                       </p>
                     </div>
                     <div className="col-span-2">

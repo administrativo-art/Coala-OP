@@ -4,6 +4,10 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { dbAdmin } from "@/lib/firebase-admin";
+import {
+  consultExpenseProvision,
+  expenseProvisionIdentity,
+} from "@/features/financial/lib/expense-provisions";
 
 type RawRecord = Record<string, unknown>;
 type ItemStatus = "pending" | "audited" | "ignored" | "completed";
@@ -157,12 +161,40 @@ function assertItemReadyForEffectuation(item: RawRecord) {
       accountAllocations.every((entry) => hasText(entry.accountPlanId) && asNumber(entry.amount) > 0) &&
       accountAllocationIds.length === new Set(accountAllocationIds).size &&
       Math.abs(accountAllocations.reduce((sum, entry) => sum + asNumber(entry.amount), 0) - Math.abs(asNumber(item.amount))) < 0.01);
+  const personAllocations = asArray(expense.personAllocations).map(asRecord);
+  const expectedPersonAccounts = expense.hasAccountAllocations === true
+    ? accountAllocations.map((entry) => ({
+        accountPlanId: asString(entry.accountPlanId),
+        amount: asNumber(entry.amount),
+      }))
+    : [{ accountPlanId: asString(expense.accountPlanId), amount: Math.abs(asNumber(item.amount)) }];
+  const personAllocationValid = expense.hasPersonAllocations !== true ||
+    (personAllocations.length > 0 &&
+      personAllocations.every((entry) =>
+        hasText(entry.accountPlanId) &&
+        hasText(entry.employeeId) &&
+        hasText(entry.employeeName) &&
+        hasText(entry.resultCenterId) &&
+        ["employer_cost", "employee_deduction", "informational"].includes(asString(entry.analysisType)) &&
+        asNumber(entry.amount) > 0
+      ) &&
+      Math.abs(personAllocations.reduce((sum, entry) => sum + asNumber(entry.amount), 0) - Math.abs(asNumber(item.amount))) < 0.01 &&
+      expectedPersonAccounts.every((expected) => {
+        const allocated = personAllocations
+          .filter((entry) => asString(entry.accountPlanId) === expected.accountPlanId)
+          .reduce((sum, entry) => sum + asNumber(entry.amount), 0);
+        return Math.abs(allocated - expected.amount) < 0.01;
+      }) &&
+      personAllocations.every((entry) =>
+        expectedPersonAccounts.some((expected) => expected.accountPlanId === asString(entry.accountPlanId))
+      ));
   const dueDate = asString(expense.dueDate) || asString(item.date) || asString(draft.date);
   if (
     !hasText(expense.description, 10) ||
     !hasText(expense.supplier, 3) ||
     !hasText(expense.accountPlanId) ||
     !accountAllocationValid ||
+    !personAllocationValid ||
     !hasText(expense.competenceDate) ||
     !hasText(dueDate) ||
     !allocationValid
@@ -375,6 +407,42 @@ export async function effectuateImportSessionItem(params: {
   const batch = financialDbAdmin.batch();
   let purchaseEffect: Awaited<ReturnType<typeof applyPurchaseAllocation>> | null = null;
 
+  async function queueProvisionReconciliation(expenseId: string, expense: RawRecord) {
+    const identity = expenseProvisionIdentity(expense);
+    if (!identity?.provisionSeriesKey || !identity.provisionCompetence) return {};
+    const provisionSnapshot = await financialDbAdmin.collection("expenses")
+      .where("provisionSeriesKey", "==", identity.provisionSeriesKey)
+      .get();
+    const related = provisionSnapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+    const consultation = consultExpenseProvision({ id: expenseId, ...expense, ...identity }, related);
+    if (consultation.status === "ambiguous") throw new Error("AMBIGUOUS_EXPENSE_PROVISION");
+    if (consultation.status !== "matched" || !consultation.provision.id) {
+      return {
+        ...identity,
+        provisionReconciliationStatus: "forecast_not_found",
+      };
+    }
+    batch.update(financialDbAdmin.collection("expenses").doc(consultation.provision.id), {
+      status: "reconciled",
+      replacedByExpenseId: expenseId,
+      actualValue: consultation.actualValue,
+      provisionVariance: consultation.variance,
+      provisionReconciliationStatus: "reconciled",
+      provisionReconciledAt: now,
+      provisionReconciledBy: params.actorId,
+      updatedAt: now,
+    });
+    return {
+      ...identity,
+      reconciledProvisionId: consultation.provision.id,
+      provisionReconciliationStatus: "reconciled",
+      provisionedValue: consultation.provisionedValue,
+      provisionVariance: consultation.variance,
+      provisionReconciledAt: now,
+      provisionReconciledBy: params.actorId,
+    };
+  }
+
   const baseTransaction = {
     amount,
     date,
@@ -436,9 +504,17 @@ export async function effectuateImportSessionItem(params: {
     let expenseId = asString(expenseDraft.linkedExpenseId);
 
     if (mode === "split") {
-      splitExpenses.forEach((split, index) => {
+      for (const [index, split] of splitExpenses.entries()) {
         const id = `audit_exp_${effectuationId}_${index + 1}`;
         const dueDate = expenseDueTimestamp(split.dueDate, date);
+        const competenceDate = Timestamp.fromDate(new Date(`${asString(split.competenceDate)}T12:00:00-03:00`));
+        const provisionFields = await queueProvisionReconciliation(id, {
+          description: asString(split.description),
+          accountPlanName: asString(split.accountPlanName),
+          competenceDate,
+          totalValue: asNumber(split.value),
+          provisionType: "actual",
+        });
         expenseIds.push(id);
         createdExpenseIds.push(id);
         batch.set(financialDbAdmin.collection("expenses").doc(id), {
@@ -449,11 +525,13 @@ export async function effectuateImportSessionItem(params: {
           supplier: asString(split.supplier),
           notes: asString(expenseDraft.notes) || asString(item.rawDescription),
           totalValue: asNumber(split.value),
-          competenceDate: Timestamp.fromDate(new Date(`${asString(split.competenceDate)}T12:00:00-03:00`)),
+          competenceDate,
           dueDate,
           paymentMethod: "single",
           hasAccountAllocations: false,
           accountAllocations: null,
+          hasPersonAllocations: false,
+          personAllocations: null,
           isApportioned: false,
           resultCenter: asString(split.resultCenterName) || null,
           installments: [{ number: 1, dueDate, value: asNumber(split.value), status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }],
@@ -466,15 +544,24 @@ export async function effectuateImportSessionItem(params: {
           importSessionId: params.sessionId,
           importSessionItemId: params.itemId,
           effectuationId,
+          ...provisionFields,
           createdBy: params.actorId,
           createdAt: now,
           updatedAt: now,
         }, { merge: true });
-      });
+      }
       expenseId = expenseIds[0] || "";
     } else if (mode === "new") {
       expenseId = `audit_exp_${effectuationId}`;
       const dueDate = expenseDueTimestamp(expenseDraft.dueDate, date);
+      const competenceDate = Timestamp.fromDate(new Date(`${asString(expenseDraft.competenceDate)}T12:00:00-03:00`));
+      const provisionFields = await queueProvisionReconciliation(expenseId, {
+        description: asString(expenseDraft.description),
+        accountPlanName: asString(expenseDraft.accountPlanName),
+        competenceDate,
+        totalValue: amount,
+        provisionType: "actual",
+      });
       expenseIds.push(expenseId);
       createdExpenseIds.push(expenseId);
       batch.set(financialDbAdmin.collection("expenses").doc(expenseId), {
@@ -485,7 +572,7 @@ export async function effectuateImportSessionItem(params: {
         supplier: asString(expenseDraft.supplier),
         notes: asString(expenseDraft.notes),
         totalValue: amount,
-        competenceDate: Timestamp.fromDate(new Date(`${asString(expenseDraft.competenceDate)}T12:00:00-03:00`)),
+        competenceDate,
         dueDate,
         paymentMethod: "single",
         hasAccountAllocations: expenseDraft.hasAccountAllocations === true,
@@ -495,6 +582,26 @@ export async function effectuateImportSessionItem(params: {
               accountPlanName: asString(asRecord(entry).accountPlanName),
               amount: asNumber(asRecord(entry).amount),
             }))
+          : null,
+        hasPersonAllocations: expenseDraft.hasPersonAllocations === true,
+        personAllocations: expenseDraft.hasPersonAllocations === true
+          ? asArray(expenseDraft.personAllocations).map((entry) => {
+              const allocation = asRecord(entry);
+              return {
+                id: asString(allocation.id),
+                accountPlanId: asString(allocation.accountPlanId),
+                accountPlanName: asString(allocation.accountPlanName),
+                employeeId: asString(allocation.employeeId),
+                employeeName: asString(allocation.employeeName),
+                analysisType: asString(allocation.analysisType) || "informational",
+                amount: asNumber(allocation.amount),
+                resultCenterId: asString(allocation.resultCenterId),
+                resultCenter: asString(allocation.resultCenterName),
+                payrollDocumentId: asString(allocation.payrollDocumentId) || null,
+                contractReference: asString(allocation.contractReference) || null,
+                creditorName: asString(allocation.creditorName) || null,
+              };
+            })
           : null,
         isApportioned: expenseDraft.isApportioned === true,
         resultCenter: expenseDraft.isApportioned === true ? null : asString(expenseDraft.resultCenterName) || null,
@@ -509,6 +616,7 @@ export async function effectuateImportSessionItem(params: {
         importSessionId: params.sessionId,
         importSessionItemId: params.itemId,
         effectuationId,
+        ...provisionFields,
         createdBy: params.actorId,
         createdAt: now,
         updatedAt: now,
@@ -560,6 +668,26 @@ export async function effectuateImportSessionItem(params: {
             accountPlanName: asString(asRecord(entry).accountPlanName),
             amount: asNumber(asRecord(entry).amount),
           }))
+        : null,
+      hasPersonAllocations: expenseDraft.hasPersonAllocations === true,
+      personAllocations: expenseDraft.hasPersonAllocations === true
+        ? asArray(expenseDraft.personAllocations).map((entry) => {
+            const allocation = asRecord(entry);
+            return {
+              id: asString(allocation.id),
+              accountPlanId: asString(allocation.accountPlanId),
+              accountPlanName: asString(allocation.accountPlanName),
+              employeeId: asString(allocation.employeeId),
+              employeeName: asString(allocation.employeeName),
+              analysisType: asString(allocation.analysisType) || "informational",
+              amount: asNumber(allocation.amount),
+              resultCenterId: asString(allocation.resultCenterId),
+              resultCenter: asString(allocation.resultCenterName),
+              payrollDocumentId: asString(allocation.payrollDocumentId) || null,
+              contractReference: asString(allocation.contractReference) || null,
+              creditorName: asString(allocation.creditorName) || null,
+            };
+          })
         : null,
       resultCenterId: asString(expenseDraft.resultCenterId) || null,
       resultCenterName: asString(expenseDraft.resultCenterName) || null,
@@ -693,6 +821,19 @@ export async function reopenImportSessionItem(params: {
     const expenseSnapshot = await expenseRef.get();
     if (!expenseSnapshot.exists) continue;
     const expense = expenseSnapshot.data() ?? {};
+    const reconciledProvisionId = asString(expense.reconciledProvisionId);
+    if (reconciledProvisionId) {
+      batch.set(financialDbAdmin.collection("expenses").doc(reconciledProvisionId), {
+        status: "provisioned",
+        replacedByExpenseId: FieldValue.delete(),
+        actualValue: FieldValue.delete(),
+        provisionVariance: FieldValue.delete(),
+        provisionReconciliationStatus: "awaiting_actual",
+        provisionReconciledAt: FieldValue.delete(),
+        provisionReconciledBy: FieldValue.delete(),
+        updatedAt: now,
+      }, { merge: true });
+    }
     const installments = asArray(expense.installments).map(asRecord);
     const targetInstallment = asNumber(item.suggestedInstallmentNumber);
     const nextInstallments = installments.map((installment, index) => {
@@ -708,6 +849,12 @@ export async function reopenImportSessionItem(params: {
       paidByImport: false,
       linkedBankTransactionId: FieldValue.delete(),
       linkedBankTransactionIds: FieldValue.arrayRemove(primaryTransactionId),
+      reconciledProvisionId: FieldValue.delete(),
+      provisionedValue: FieldValue.delete(),
+      provisionVariance: FieldValue.delete(),
+      provisionReconciliationStatus: expense.provisionSeriesKey ? "forecast_not_found" : FieldValue.delete(),
+      provisionReconciledAt: FieldValue.delete(),
+      provisionReconciledBy: FieldValue.delete(),
       reopenedAt: now,
       reopenedBy: params.actorId,
       reopenReason: params.reason,

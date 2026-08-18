@@ -245,6 +245,20 @@ service cloud.firestore {
         .hasAny(['accountPlan', 'accountId', 'hasAccountAllocations', 'accountAllocations']);
     }
 
+    function hasValidExpenseIndividualization(data) {
+      return data.get('hasPersonAllocations', false) != true
+        || (
+          data.personAllocations is list
+          && data.personAllocations.size() >= 1
+          && data.personAllocations.size() <= 200
+        );
+    }
+
+    function expenseIndividualizationChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['hasPersonAllocations', 'personAllocations']);
+    }
+
     match /users/{userId} {
       allow get: if hasFinancialAccess() && request.auth.uid == userId;
       allow list: if isFinancialAdmin();
@@ -284,8 +298,12 @@ service cloud.firestore {
 
     match /expenses/{expenseId} {
       allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre();
-      allow create: if canCreateExpenses() && hasValidExpenseAccount(request.resource.data);
-      allow update: if (canEditExpenses() && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data)))
+      allow create: if canCreateExpenses()
+        && hasValidExpenseAccount(request.resource.data)
+        && hasValidExpenseIndividualization(request.resource.data);
+      allow update: if (canEditExpenses()
+          && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
+          && (!expenseIndividualizationChanged() || hasValidExpenseIndividualization(request.resource.data)))
         || isPaymentStatusUpdate()
         || isCardStatementPaymentUpdate();
       allow delete: if canDeleteExpenses();

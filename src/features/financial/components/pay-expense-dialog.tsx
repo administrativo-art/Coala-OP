@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { formatCurrency } from "@/features/financial/lib/utils";
-import { consultDasProvision } from "@/features/financial/lib/das-provisions";
+import { consultExpenseProvision } from "@/features/financial/lib/expense-provisions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -116,8 +116,8 @@ export function PayExpenseDialog({
   const totalPaid = splits.reduce((sum, split) => sum + (Number(split.amount) || 0), 0);
   const remaining = totalDue - totalPaid;
   const isOver = remaining < -0.01;
-  const dasProvisionConsultation = useMemo(
-    () => expense ? consultDasProvision(expense, expensesData || []) : { status: "not_applicable" as const },
+  const provisionConsultation = useMemo(
+    () => expense ? consultExpenseProvision(expense, expensesData || []) : { status: "not_applicable" as const },
     [expense, expensesData],
   );
 
@@ -153,29 +153,29 @@ export function PayExpenseDialog({
     }
   }
 
-  async function reconcileDasProvisionIfNeeded() {
-    if (!expense || !firebaseUser || dasProvisionConsultation.status !== "matched") return;
+  async function reconcileProvisionIfNeeded() {
+    if (!expense || !firebaseUser || provisionConsultation.status !== "matched") return;
     if (!permissions.financial?.expenses?.edit) {
-      throw new Error("A provisão do DAS precisa ser conciliada por alguém com permissão de editar despesas antes da baixa.");
+      throw new Error("A provisão precisa ser conciliada por alguém com permissão de editar despesas antes da baixa.");
     }
-    if (!dasProvisionConsultation.provision.id) throw new Error("A provisão encontrada não possui identificador válido.");
+    if (!provisionConsultation.provision.id) throw new Error("A provisão encontrada não possui identificador válido.");
 
     const now = Timestamp.now();
     const batch = writeBatch(financialDb);
     batch.update(financialDoc("expenses", expense.id), {
-      reconciledProvisionId: dasProvisionConsultation.provision.id,
+      reconciledProvisionId: provisionConsultation.provision.id,
       provisionReconciliationStatus: "reconciled",
-      provisionedValue: dasProvisionConsultation.provisionedValue,
-      provisionVariance: dasProvisionConsultation.variance,
+      provisionedValue: provisionConsultation.provisionedValue,
+      provisionVariance: provisionConsultation.variance,
       provisionReconciledAt: now,
       provisionReconciledBy: firebaseUser.uid,
       updatedAt: now,
     });
-    batch.update(financialDoc("expenses", dasProvisionConsultation.provision.id), {
+    batch.update(financialDoc("expenses", provisionConsultation.provision.id), {
       status: "reconciled",
       replacedByExpenseId: expense.id,
-      actualValue: dasProvisionConsultation.actualValue,
-      provisionVariance: dasProvisionConsultation.variance,
+      actualValue: provisionConsultation.actualValue,
+      provisionVariance: provisionConsultation.variance,
       provisionReconciliationStatus: "reconciled",
       provisionReconciledAt: now,
       provisionReconciledBy: firebaseUser.uid,
@@ -193,10 +193,10 @@ export function PayExpenseDialog({
 
     setIsSaving(true);
     try {
-      if (dasProvisionConsultation.status === "ambiguous") {
-        throw new Error("Há mais de uma provisão de DAS para esta competência. Revise-as antes do pagamento.");
+      if (provisionConsultation.status === "ambiguous") {
+        throw new Error("Há mais de uma provisão para esta série e competência. Revise-as antes do pagamento.");
       }
-      await reconcileDasProvisionIfNeeded();
+      await reconcileProvisionIfNeeded();
       const paidAt = Timestamp.fromDate(values.paidAt);
       const now = Timestamp.now();
       const basePayload = {
@@ -313,38 +313,38 @@ export function PayExpenseDialog({
                 <div className="px-4 py-3">
                 <div className="space-y-3.5">
                   <div className="grid gap-3">
-                    {dasProvisionConsultation.status !== "not_applicable" && (
+                    {provisionConsultation.status !== "not_applicable" && (
                       <div className={cn(
                         "rounded-2xl border p-3 text-sm",
-                        dasProvisionConsultation.status === "already_reconciled"
+                        provisionConsultation.status === "already_reconciled"
                           ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                          : dasProvisionConsultation.status === "matched"
+                          : provisionConsultation.status === "matched"
                           ? "border-amber-200 bg-amber-50 text-amber-900"
-                          : dasProvisionConsultation.status === "ambiguous"
+                          : provisionConsultation.status === "ambiguous"
                           ? "border-rose-200 bg-rose-50 text-rose-800"
                           : "border-slate-200 bg-slate-50 text-slate-700",
                       )}>
                         <div className="flex items-start gap-2">
-                          {dasProvisionConsultation.status === "already_reconciled"
+                          {provisionConsultation.status === "already_reconciled"
                             ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                             : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
                           <div>
-                            <p className="font-semibold">Consulta automática da provisão do DAS</p>
-                            {dasProvisionConsultation.status === "matched" || dasProvisionConsultation.status === "already_reconciled" ? (
+                            <p className="font-semibold">Consulta automática da provisão</p>
+                            {provisionConsultation.status === "matched" || provisionConsultation.status === "already_reconciled" ? (
                               <p className="mt-1 leading-5">
-                                Competência {dasProvisionConsultation.competence.slice(5, 7)}/{dasProvisionConsultation.competence.slice(0, 4)}:
-                                previsto {formatCurrency(dasProvisionConsultation.provisionedValue)}, real {formatCurrency(dasProvisionConsultation.actualValue)}.
-                                Diferença {formatCurrency(dasProvisionConsultation.variance)}.
-                                {dasProvisionConsultation.status === "matched"
+                                Competência {provisionConsultation.competence.slice(5, 7)}/{provisionConsultation.competence.slice(0, 4)}:
+                                previsto {formatCurrency(provisionConsultation.provisionedValue)}, real {formatCurrency(provisionConsultation.actualValue)}.
+                                Diferença {formatCurrency(provisionConsultation.variance)}.
+                                {provisionConsultation.status === "matched"
                                   ? " A previsão será substituída automaticamente antes da baixa."
                                   : " Conciliação já registrada."}
                               </p>
-                            ) : dasProvisionConsultation.status === "ambiguous" ? (
+                            ) : provisionConsultation.status === "ambiguous" ? (
                               <p className="mt-1 leading-5">Há mais de uma previsão para a mesma competência; o pagamento ficará bloqueado até a revisão.</p>
                             ) : (
                               <p className="mt-1 leading-5">
-                                Nenhuma previsão foi encontrada para {dasProvisionConsultation.competence
-                                  ? `${dasProvisionConsultation.competence.slice(5, 7)}/${dasProvisionConsultation.competence.slice(0, 4)}`
+                                Nenhuma previsão foi encontrada para {provisionConsultation.competence
+                                  ? `${provisionConsultation.competence.slice(5, 7)}/${provisionConsultation.competence.slice(0, 4)}`
                                   : "esta competência"}. O pagamento pode seguir, mas a ausência fica visível para conferência.
                               </p>
                             )}

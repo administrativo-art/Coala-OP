@@ -126,3 +126,36 @@ test("resume apropriações contábeis no histórico", () => {
     "Simples Nacional (R$ 800); ICMS (R$ 200)",
   );
 });
+
+test("registra a individualização por colaborador no histórico da auditoria", () => {
+  const snapshot = buildImportAuditSnapshot(item({
+    expenseDraft: {
+      mode: "new",
+      description: "GFD FGTS Digital 07/2026",
+      supplier: "FGTS Digital",
+      accountPlanName: "Folha de pagamento",
+      accountAllocations: [],
+      personAllocations: [
+        {
+          employeeName: "Carliane Sousa",
+          accountPlanName: "Empréstimos consignados a recolher",
+          analysisType: "employee_deduction",
+          resultCenterName: "Quiosque Tirirical",
+          payrollDocumentId: "recibo-carliane-2026-07",
+          contractReference: "Empréstimo 1",
+          amount: 288.43,
+        },
+      ],
+      resultCenterName: "Quiosque Tirirical",
+      competenceDate: "2026-07-01",
+      dueDate: "2026-08-20",
+      apportionments: [],
+      splitExpenses: [],
+    },
+  }));
+
+  assert.equal(
+    snapshot.values["expense.personAllocations"],
+    "Carliane Sousa · Empréstimos consignados a recolher · Desconto do colaborador · Quiosque Tirirical · documento RH recibo-carliane-2026-07 · Empréstimo 1 · R$ 288.43",
+  );
+});

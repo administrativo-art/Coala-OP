@@ -6,6 +6,7 @@ import { deleteDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  CalendarRange,
   ChevronDown,
   ChevronUp,
   CircleDollarSign,
@@ -41,6 +42,10 @@ import {
   expenseAccountAllocations,
   expenseAccountPlanLabels,
 } from "@/features/financial/lib/expense-account-allocations";
+import {
+  expensePersonAllocations,
+  personAllocationsAreValid,
+} from "@/features/financial/lib/expense-person-allocations";
 import { compareExpensesByDueDate } from "@/features/financial/lib/expense-order";
 import {
   PLANNED_PAYMENT_METHOD_LABELS,
@@ -338,7 +343,9 @@ function matchesBaseFilters(
   const matchesDateFrom = !dateFrom || (due && due >= new Date(`${dateFrom}T00:00:00`));
   const matchesDateTo = !dateTo || (due && due <= new Date(`${dateTo}T23:59:59`));
   const matchesCompetence =
-    !competenceMonth || (competence && format(competence, "yyyy-MM") === competenceMonth);
+    !competenceMonth
+    || competenceMonth === "all"
+    || (competence && format(competence, "yyyy-MM") === competenceMonth);
   const matchesSupplier = supplierFilter === "all" || (expense.supplier || "") === supplierFilter;
   const matchesAccountPlan = accountPlanFilter === "all" || accountingPlanNames.includes(accountPlanFilter);
   const matchesPaymentType =
@@ -391,7 +398,7 @@ export function ExpensesPage() {
   const [periodPreset, setPeriodPreset] = useState<ExpensePeriodPreset>("current_month");
   const [dateFrom, setDateFrom] = useState(searchParams.get("date_from") ?? "");
   const [dateTo, setDateTo] = useState(searchParams.get("date_to") ?? "");
-  const [competenceMonth, setCompetenceMonth] = useState(searchParams.get("competence") ?? format(new Date(), "yyyy-MM"));
+  const [competenceMonth, setCompetenceMonth] = useState(searchParams.get("competence") || "all");
   const [supplierFilter, setSupplierFilter] = useState(searchParams.get("supplier") ?? "all");
   const [accountPlanFilter, setAccountPlanFilter] = useState(searchParams.get("account_plan") ?? "all");
   const [unitFilter, setUnitFilter] = useState(searchParams.get("unit") ?? "all");
@@ -403,6 +410,7 @@ export function ExpensesPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const canAccessAudits = !!permissions.financial?.expenses?.import;
   const currentView = canAccessAudits && searchParams.get("view") === "audits" ? "audits" : "expenses";
+  const searchParamsKey = searchParams.toString();
 
   if (!permissions.financial?.expenses?.view) {
     return (
@@ -433,21 +441,23 @@ export function ExpensesPage() {
   }, [resultCenters]);
 
   useEffect(() => {
-    setSearch(searchParams.get("search") ?? "");
-    setStatusFilter(searchParams.get("status") ?? "all");
-    setOriginFilter(searchParams.get("origin") ?? "all");
+    const params = new URLSearchParams(searchParamsKey);
+    setSearch(params.get("search") ?? "");
+    setStatusFilter(params.get("status") ?? "all");
+    setOriginFilter(params.get("origin") ?? "all");
     setPeriodPreset("custom");
-    setDateFrom(searchParams.get("date_from") ?? "");
-    setDateTo(searchParams.get("date_to") ?? "");
-    setCompetenceMonth(searchParams.get("competence") ?? format(new Date(), "yyyy-MM"));
-    setSupplierFilter(searchParams.get("supplier") ?? "all");
-    setAccountPlanFilter(searchParams.get("account_plan") ?? "all");
-    setUnitFilter(searchParams.get("unit") ?? "all");
-    setPaymentTypeFilter(searchParams.get("payment_type") ?? "all");
-  }, [searchParams]);
+    setDateFrom(params.get("date_from") ?? "");
+    setDateTo(params.get("date_to") ?? "");
+    setCompetenceMonth(params.get("competence") || "all");
+    setSupplierFilter(params.get("supplier") ?? "all");
+    setAccountPlanFilter(params.get("account_plan") ?? "all");
+    setUnitFilter(params.get("unit") ?? "all");
+    setPaymentTypeFilter(params.get("payment_type") ?? "all");
+  }, [searchParamsKey]);
 
   useEffect(() => {
-    if (searchParams.get("date_from") || searchParams.get("date_to") || searchParams.get("competence")) {
+    const params = new URLSearchParams(searchParamsKey);
+    if (params.get("date_from") || params.get("date_to") || params.get("competence")) {
       return;
     }
 
@@ -455,8 +465,7 @@ export function ExpensesPage() {
     setPeriodPreset("current_month");
     setDateFrom(format(startOfMonth(now), "yyyy-MM-dd"));
     setDateTo(format(endOfMonth(now), "yyyy-MM-dd"));
-    setCompetenceMonth(format(now, "yyyy-MM"));
-  }, [searchParams]);
+  }, [searchParamsKey]);
 
   const accountPlanNames = useMemo(
     () =>
@@ -475,11 +484,37 @@ export function ExpensesPage() {
       ).sort((a, b) => String(a).localeCompare(String(b), "pt-BR")) as string[],
     [accountPlanMap, expenses]
   );
+  const competenceOptions = useMemo(
+    () => Array.from(
+      new Set(
+        expenses
+          .map((expense) => toDate(expense.competenceDate))
+          .filter((date): date is Date => Boolean(date))
+          .map((date) => format(date, "yyyy-MM"))
+      )
+    ).sort((left, right) => right.localeCompare(left)),
+    [expenses]
+  );
 
   const units = useMemo(
     () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
     [kiosks]
   );
+  const resultCenterNameByUnitName = useMemo(() => {
+    const kioskNameById = new Map(kiosks.map((kiosk) => [kiosk.id, kiosk.name]));
+    const map: Record<string, string> = {};
+    (resultCenters || []).forEach((center) => {
+      if (typeof center?.name !== "string") return;
+      (Array.isArray(center.unitIds) ? center.unitIds : []).forEach((unitId: unknown) => {
+        const unitName = typeof unitId === "string" ? kioskNameById.get(unitId) : undefined;
+        if (unitName) map[unitName] = center.name;
+      });
+    });
+    return map;
+  }, [kiosks, resultCenters]);
+  const financialUnitFilter = unitFilter === "all"
+    ? "all"
+    : (resultCenterNameByUnitName[unitFilter] || unitFilter);
 
   const filtered = useMemo(() => {
     const now = startOfDay(new Date());
@@ -496,7 +531,7 @@ export function ExpensesPage() {
             competenceMonth,
             supplierFilter,
             accountPlanFilter,
-            unitFilter,
+            unitFilter: financialUnitFilter,
             paymentTypeFilter,
             now,
           })
@@ -514,7 +549,7 @@ export function ExpensesPage() {
         return matchesStatus;
       })
       .sort(compareExpensesByDueDate);
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter, unitFilter]);
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
 
   const scopedExpenses = useMemo(() => {
     const now = startOfDay(new Date());
@@ -529,23 +564,24 @@ export function ExpensesPage() {
         competenceMonth,
         supplierFilter,
         accountPlanFilter,
-        unitFilter,
+        unitFilter: financialUnitFilter,
         paymentTypeFilter,
         now,
       })
     );
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, originFilter, paymentTypeFilter, resultCenterNameById, search, supplierFilter, unitFilter]);
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, supplierFilter]);
   const unitCounts = useMemo(() => {
     const counts = new Map<string, number>();
     scopedExpenses.forEach((expense) => {
       units.forEach((unit) => {
-        if (expenseReferencesResultCenter(expense, unit.name, resultCenterNameById)) {
+        const financialCenterName = resultCenterNameByUnitName[unit.name] || unit.name;
+        if (expenseReferencesResultCenter(expense, financialCenterName, resultCenterNameById)) {
           counts.set(unit.name, (counts.get(unit.name) || 0) + 1);
         }
       });
     });
     return counts;
-  }, [resultCenterNameById, scopedExpenses, units]);
+  }, [resultCenterNameById, resultCenterNameByUnitName, scopedExpenses, units]);
 
   const filteredCountLabel = `${filtered.length} de ${scopedExpenses.length}`;
 
@@ -563,7 +599,7 @@ export function ExpensesPage() {
       const due = toDate(expense.dueDate);
       const scopedValue = expenseValueForResultCenter(
         expense,
-        unitFilter === "all" ? undefined : unitFilter,
+        financialUnitFilter === "all" ? undefined : financialUnitFilter,
         resultCenterNameById
       );
       if (expense.status === "pending") {
@@ -594,7 +630,7 @@ export function ExpensesPage() {
     });
 
     return { open, overdue, paid, dueSoon, pendingAudit };
-  }, [expenses, resultCenterNameById, scopedExpenses, transactions, unitFilter]);
+  }, [expenses, financialUnitFilter, resultCenterNameById, scopedExpenses, transactions]);
 
   const pendingAuditCount = useMemo(() => {
     const now = startOfDay(new Date());
@@ -639,6 +675,15 @@ export function ExpensesPage() {
 
   async function handleFinalizeAudit(expense: any) {
     if (!firebaseUser || expense.originModule !== "purchasing" || expense.originStatus !== "pending_audit") return;
+
+    if (expense.hasPersonAllocations === true && !personAllocationsAreValid(expense)) {
+      toast({
+        variant: "destructive",
+        title: "Individualização incompleta.",
+        description: "Revise os colaboradores, centros e valores antes de finalizar a auditoria.",
+      });
+      return;
+    }
 
     setFinalizingAuditId(expense.id);
     try {
@@ -803,7 +848,7 @@ export function ExpensesPage() {
 
       <Card className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
         <CardHeader className="border-b bg-muted/20 px-4 py-3">
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[220px] flex-1">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -814,7 +859,7 @@ export function ExpensesPage() {
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-[150px] rounded-lg border-border/70 bg-background text-xs">
+              <SelectTrigger className="h-8 w-[150px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
                 <Filter className="mr-2 h-3.5 w-3.5 opacity-50" />
                 <SelectValue placeholder="Filtrar por status" />
               </SelectTrigger>
@@ -831,7 +876,7 @@ export function ExpensesPage() {
               </SelectContent>
             </Select>
             <Select value={originFilter} onValueChange={setOriginFilter}>
-              <SelectTrigger className="h-8 w-[170px] rounded-lg border-border/70 bg-background text-xs">
+              <SelectTrigger className="h-8 w-[170px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
                 <CircleDollarSign className="mr-2 h-3.5 w-3.5 opacity-50" />
                 <SelectValue placeholder="Filtrar por origem" />
               </SelectTrigger>
@@ -842,7 +887,7 @@ export function ExpensesPage() {
               </SelectContent>
             </Select>
             <Select value={paymentTypeFilter} onValueChange={setPaymentTypeFilter}>
-              <SelectTrigger className="h-8 w-[175px] rounded-lg border-border/70 bg-background text-xs">
+              <SelectTrigger className="h-8 w-[175px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
                 <CreditCard className="mr-2 h-3.5 w-3.5 opacity-50" />
                 <SelectValue placeholder="Forma de pagamento" />
               </SelectTrigger>
@@ -856,6 +901,23 @@ export function ExpensesPage() {
                 <SelectItem value="unassigned">Não informado</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={competenceMonth} onValueChange={setCompetenceMonth}>
+              <SelectTrigger className="h-8 w-[190px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
+                <CalendarRange className="mr-2 h-3.5 w-3.5 opacity-50" />
+                <SelectValue placeholder="Competência" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Competência: todas</SelectItem>
+                {competenceOptions.map((competence) => {
+                  const [year, month] = competence.split("-");
+                  return (
+                    <SelectItem key={competence} value={competence}>
+                      Competência: {month}/{year}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
             <ExpensePeriodFilter
               preset={periodPreset}
               dateFrom={dateFrom}
@@ -864,11 +926,10 @@ export function ExpensesPage() {
                 setPeriodPreset(period.preset);
                 setDateFrom(period.dateFrom);
                 setDateTo(period.dateTo);
-                setCompetenceMonth(period.preset === "current_month" ? period.dateFrom.slice(0, 7) : "");
               }}
             />
             <Select value={accountPlanFilter} onValueChange={setAccountPlanFilter}>
-              <SelectTrigger className="h-8 w-[170px] rounded-lg border-border/70 bg-background text-xs">
+              <SelectTrigger className="h-8 w-[170px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
                 <SelectValue placeholder="Plano de contas" />
               </SelectTrigger>
               <SelectContent>
@@ -917,6 +978,7 @@ export function ExpensesPage() {
                     const isExpanded = expandedExpenseId === expense.id;
                     const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
                     const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
+                    const personAllocations = expensePersonAllocations(expense, accountPlanMap);
                     const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
                     const installmentSchedule = Array.isArray(expense.installmentSchedule) && expense.installmentSchedule.length > 0
                       ? expense.installmentSchedule
@@ -1020,6 +1082,34 @@ export function ExpensesPage() {
                                         {accountingAllocations.map((allocation) => (
                                           <div key={allocation.accountPlanId} className="flex items-center justify-between gap-3 text-sm">
                                             <span>{allocation.accountPlanName || allocation.accountPlanId}</span>
+                                            <span className="font-mono font-semibold">{formatCurrency(allocation.amount)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {personAllocations.length > 0 && (
+                                    <div className="sm:col-span-3 rounded-xl border bg-muted/20 p-3">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                          Individualização auditável
+                                        </p>
+                                        <span className="text-xs text-muted-foreground">
+                                          {personAllocations.length} vínculo{personAllocations.length === 1 ? "" : "s"}
+                                        </span>
+                                      </div>
+                                      <div className="mt-2 space-y-2">
+                                        {personAllocations.map((allocation, index) => (
+                                          <div key={allocation.id || `${allocation.employeeId}-${index}`} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border bg-background px-3 py-2 text-sm">
+                                            <div>
+                                              <p className="font-medium">{allocation.employeeName}</p>
+                                              <p className="text-xs text-muted-foreground">
+                                                {allocation.accountPlanName} · {allocation.analysisType === "employer_cost" ? "Custo da empresa" : allocation.analysisType === "employee_deduction" ? "Desconto do colaborador" : "Informativo"} · {allocation.resultCenter || "Centro pendente"}
+                                                {allocation.contractReference ? ` · ${allocation.contractReference}` : ""}
+                                                {allocation.creditorName ? ` · ${allocation.creditorName}` : ""}
+                                                {allocation.payrollDocumentId ? ` · Documento RH ${allocation.payrollDocumentId}` : ""}
+                                              </p>
+                                            </div>
                                             <span className="font-mono font-semibold">{formatCurrency(allocation.amount)}</span>
                                           </div>
                                         ))}
@@ -1162,6 +1252,7 @@ export function ExpensesPage() {
                   const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                   const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
                   const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
+                  const personAllocations = expensePersonAllocations(expense, accountPlanMap);
                   const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
 
                   return (
@@ -1180,6 +1271,7 @@ export function ExpensesPage() {
                         <span className="text-border">·</span>
                         <span>{planName}</span>
                         {accountingAllocations.length > 1 && <span>· {accountingAllocations.length} apropriações</span>}
+                        {personAllocations.length > 0 && <span>· {personAllocations.length} vínculos</span>}
                         <span className="text-border">·</span>
                         <span>{due ? `Venc. ${format(due, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
                       </div>

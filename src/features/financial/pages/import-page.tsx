@@ -468,6 +468,26 @@ function createAccountAllocationEntry(
   };
 }
 
+function createPersonAllocationEntry(
+  overrides?: Partial<ImportSessionItem["expenseDraft"]["personAllocations"][number]>,
+) {
+  return {
+    id: createDraftId("person-allocation"),
+    accountPlanId: "",
+    accountPlanName: "",
+    employeeId: "",
+    employeeName: "",
+    analysisType: "employer_cost" as const,
+    amount: 0,
+    resultCenterId: "",
+    resultCenterName: "",
+    payrollDocumentId: "",
+    contractReference: "",
+    creditorName: "",
+    ...overrides,
+  };
+}
+
 function createSplitExpenseEntry(overrides?: Partial<ImportSessionItem["expenseDraft"]["splitExpenses"][number]>) {
   return {
     id: createDraftId("split-expense"),
@@ -548,6 +568,21 @@ function serializeSessionItem(item: ImportSessionItem) {
         accountPlanId: entry.accountPlanId,
         accountPlanName: entry.accountPlanName,
         amount: entry.amount,
+      })),
+      hasPersonAllocations: item.expenseDraft.hasPersonAllocations,
+      personAllocations: item.expenseDraft.personAllocations.map((entry) => ({
+        id: entry.id,
+        accountPlanId: entry.accountPlanId,
+        accountPlanName: entry.accountPlanName,
+        employeeId: entry.employeeId,
+        employeeName: entry.employeeName,
+        analysisType: entry.analysisType,
+        amount: entry.amount,
+        resultCenterId: entry.resultCenterId,
+        resultCenterName: entry.resultCenterName,
+        payrollDocumentId: entry.payrollDocumentId,
+        contractReference: entry.contractReference,
+        creditorName: entry.creditorName,
       })),
       isApportioned: item.expenseDraft.isApportioned,
       resultCenterId: item.expenseDraft.resultCenterId,
@@ -671,6 +706,8 @@ function createSessionItem(transaction: ImportedTransaction): ImportSessionItem 
       accountPlanName: transaction.accountPlanName,
       hasAccountAllocations: false,
       accountAllocations: [],
+      hasPersonAllocations: false,
+      personAllocations: [],
       isApportioned: false,
       resultCenterId: transaction.resultCenterId,
       resultCenterName: transaction.resultCenterName,
@@ -768,6 +805,26 @@ function normalizeSession(doc: any): ImportSession {
                     amount: Number(entry?.amount ?? 0),
                   })
                 )
+              : [],
+            hasPersonAllocations: Boolean(item.expenseDraft?.hasPersonAllocations),
+            personAllocations: Array.isArray(item.expenseDraft?.personAllocations)
+              ? item.expenseDraft.personAllocations.map((entry: any) => createPersonAllocationEntry({
+                  id: String(entry?.id ?? createDraftId("person-allocation")),
+                  accountPlanId: String(entry?.accountPlanId ?? ""),
+                  accountPlanName: String(entry?.accountPlanName ?? ""),
+                  employeeId: String(entry?.employeeId ?? ""),
+                  employeeName: String(entry?.employeeName ?? ""),
+                  analysisType:
+                    entry?.analysisType === "employee_deduction" || entry?.analysisType === "informational"
+                      ? entry.analysisType
+                      : "employer_cost",
+                  amount: Number(entry?.amount ?? 0),
+                  resultCenterId: String(entry?.resultCenterId ?? ""),
+                  resultCenterName: String(entry?.resultCenterName ?? ""),
+                  payrollDocumentId: String(entry?.payrollDocumentId ?? ""),
+                  contractReference: String(entry?.contractReference ?? ""),
+                  creditorName: String(entry?.creditorName ?? ""),
+                }))
               : [],
             isApportioned: Boolean(item.expenseDraft?.isApportioned),
             resultCenterId: String(item.expenseDraft?.resultCenterId ?? ""),
@@ -1315,11 +1372,46 @@ function validateItem(item: ImportSessionItem, purchaseCandidatesByOrderId: Map<
           ) &&
           accountAllocationIds.length === new Set(accountAllocationIds).size &&
           Math.abs(accountAllocationTotal - Math.abs(item.amount)) < 0.01);
+      const expectedPersonAccounts = item.expenseDraft.hasAccountAllocations
+        ? item.expenseDraft.accountAllocations.map((entry) => ({
+            accountPlanId: entry.accountPlanId,
+            amount: Number(entry.amount) || 0,
+          }))
+        : [{
+            accountPlanId: item.expenseDraft.accountPlanId,
+            amount: Math.abs(item.amount),
+          }];
+      const personAllocationTotal = item.expenseDraft.personAllocations.reduce(
+        (sum, entry) => sum + (Number(entry.amount) || 0),
+        0,
+      );
+      const personAllocationsValid =
+        !item.expenseDraft.hasPersonAllocations ||
+        (item.expenseDraft.personAllocations.length > 0 &&
+          item.expenseDraft.personAllocations.every((entry) =>
+            entry.accountPlanId.trim().length > 0 &&
+            entry.employeeId.trim().length > 0 &&
+            entry.employeeName.trim().length > 0 &&
+            entry.resultCenterId.trim().length > 0 &&
+            (entry.analysisType === "employer_cost" || entry.analysisType === "employee_deduction" || entry.analysisType === "informational") &&
+            Number(entry.amount) > 0
+          ) &&
+          Math.abs(personAllocationTotal - Math.abs(item.amount)) < 0.01 &&
+          expectedPersonAccounts.every((expected) => {
+            const allocated = item.expenseDraft.personAllocations
+              .filter((entry) => entry.accountPlanId === expected.accountPlanId)
+              .reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+            return Math.abs(allocated - expected.amount) < 0.01;
+          }) &&
+          item.expenseDraft.personAllocations.every((entry) =>
+            expectedPersonAccounts.some((expected) => expected.accountPlanId === entry.accountPlanId)
+          ));
       expenseValid =
         item.expenseDraft.description.trim().length >= 10 &&
         item.expenseDraft.supplier.trim().length >= 3 &&
         item.expenseDraft.accountPlanId.trim().length > 0 &&
         accountAllocationsValid &&
+        personAllocationsValid &&
         (item.expenseDraft.isApportioned ? apportionmentValid : item.expenseDraft.resultCenterId.trim().length > 0) &&
         item.expenseDraft.competenceDate.trim().length > 0 &&
         item.expenseDraft.dueDate.trim().length > 0;
@@ -1455,6 +1547,14 @@ export function FinancialImportPage({
     () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
     [kiosks]
   );
+  const personResultCenterOptions = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string }>();
+    (resultCentersData || []).forEach((center) => byId.set(center.id, center));
+    units.forEach((unit) => {
+      if (!byId.has(unit.id)) byId.set(unit.id, { id: unit.id, name: unit.name });
+    });
+    return Array.from(byId.values()).sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+  }, [resultCentersData, units]);
   const unitNameById = useMemo(() => {
     const map: Record<string, string> = {};
     for (const unit of units) map[unit.id] = unit.name;
@@ -2335,6 +2435,8 @@ export function FinancialImportPage({
           ...current.expenseDraft,
           hasAccountAllocations: enabled,
           accountAllocations: allocations,
+          hasPersonAllocations: false,
+          personAllocations: [],
         },
       };
     });
@@ -2372,6 +2474,91 @@ export function FinancialImportPage({
       expenseDraft: {
         ...current.expenseDraft,
         accountAllocations: current.expenseDraft.accountAllocations.filter((entry) => entry.id !== allocationId),
+      },
+    }));
+  }
+
+  function setPersonAllocationMode(itemId: string, enabled: boolean) {
+    updateItem(itemId, (current) => {
+      const account = current.expenseDraft.hasAccountAllocations
+        ? current.expenseDraft.accountAllocations.find((entry) => entry.accountPlanId && Number(entry.amount) > 0)
+        : {
+            accountPlanId: current.expenseDraft.accountPlanId,
+            accountPlanName: current.expenseDraft.accountPlanName,
+            amount: Math.abs(current.amount),
+          };
+      const accountDefinition = flattenedAccounts.find((entry) => entry.id === account?.accountPlanId);
+      const allocations = enabled && current.expenseDraft.personAllocations.length === 0 && account
+        ? [createPersonAllocationEntry({
+            accountPlanId: account.accountPlanId,
+            accountPlanName: account.accountPlanName,
+            analysisType: accountDefinition?.is_dre_account === false ? "employee_deduction" : "employer_cost",
+            amount: Number(account.amount) || 0,
+            resultCenterId: current.expenseDraft.isApportioned ? "" : current.expenseDraft.resultCenterId,
+            resultCenterName: current.expenseDraft.isApportioned ? "" : current.expenseDraft.resultCenterName,
+          })]
+        : current.expenseDraft.personAllocations;
+      return {
+        ...current,
+        expenseDraft: {
+          ...current.expenseDraft,
+          hasPersonAllocations: enabled,
+          personAllocations: enabled ? allocations : [],
+        },
+      };
+    });
+  }
+
+  function updatePersonAllocation(
+    itemId: string,
+    allocationId: string,
+    updater: (entry: ImportSessionItem["expenseDraft"]["personAllocations"][number]) => ImportSessionItem["expenseDraft"]["personAllocations"][number],
+  ) {
+    updateItem(itemId, (current) => ({
+      ...current,
+      expenseDraft: {
+        ...current.expenseDraft,
+        personAllocations: current.expenseDraft.personAllocations.map((entry) => (
+          entry.id === allocationId ? updater(entry) : entry
+        )),
+      },
+    }));
+  }
+
+  function appendPersonAllocation(itemId: string) {
+    updateItem(itemId, (current) => {
+      const account = current.expenseDraft.hasAccountAllocations
+        ? current.expenseDraft.accountAllocations.find((entry) => entry.accountPlanId)
+        : {
+            accountPlanId: current.expenseDraft.accountPlanId,
+            accountPlanName: current.expenseDraft.accountPlanName,
+          };
+      const accountDefinition = flattenedAccounts.find((entry) => entry.id === account?.accountPlanId);
+      return {
+        ...current,
+        expenseDraft: {
+          ...current.expenseDraft,
+          personAllocations: [
+            ...current.expenseDraft.personAllocations,
+            createPersonAllocationEntry({
+              accountPlanId: account?.accountPlanId || "",
+              accountPlanName: account?.accountPlanName || "",
+              analysisType: accountDefinition?.is_dre_account === false ? "employee_deduction" : "employer_cost",
+              resultCenterId: current.expenseDraft.isApportioned ? "" : current.expenseDraft.resultCenterId,
+              resultCenterName: current.expenseDraft.isApportioned ? "" : current.expenseDraft.resultCenterName,
+            }),
+          ],
+        },
+      };
+    });
+  }
+
+  function removePersonAllocation(itemId: string, allocationId: string) {
+    updateItem(itemId, (current) => ({
+      ...current,
+      expenseDraft: {
+        ...current.expenseDraft,
+        personAllocations: current.expenseDraft.personAllocations.filter((entry) => entry.id !== allocationId),
       },
     }));
   }
@@ -2554,6 +2741,8 @@ export function FinancialImportPage({
                 installmentPeriodicity: null,
                 hasAccountAllocations: false,
                 accountAllocations: null,
+                hasPersonAllocations: false,
+                personAllocations: null,
                 isApportioned: false,
                 resultCenter: split.resultCenterName || null,
                 apportionments: null,
@@ -2601,6 +2790,23 @@ export function FinancialImportPage({
                     accountPlanId: entry.accountPlanId,
                     accountPlanName: entry.accountPlanName,
                     amount: Number(entry.amount) || 0,
+                  }))
+                : null,
+              hasPersonAllocations: item.expenseDraft.hasPersonAllocations,
+              personAllocations: item.expenseDraft.hasPersonAllocations
+                ? item.expenseDraft.personAllocations.map((entry) => ({
+                    id: entry.id,
+                    accountPlanId: entry.accountPlanId,
+                    accountPlanName: entry.accountPlanName,
+                    employeeId: entry.employeeId,
+                    employeeName: entry.employeeName,
+                    analysisType: entry.analysisType,
+                    amount: Number(entry.amount) || 0,
+                    resultCenterId: entry.resultCenterId,
+                    resultCenter: entry.resultCenterName,
+                    payrollDocumentId: entry.payrollDocumentId || null,
+                    contractReference: entry.contractReference || null,
+                    creditorName: entry.creditorName || null,
                   }))
                 : null,
               isApportioned: item.expenseDraft.isApportioned,
@@ -2661,6 +2867,23 @@ export function FinancialImportPage({
                   accountPlanId: entry.accountPlanId,
                   accountPlanName: entry.accountPlanName,
                   amount: Number(entry.amount) || 0,
+                }))
+              : null,
+            hasPersonAllocations: item.expenseDraft.hasPersonAllocations,
+            personAllocations: item.expenseDraft.hasPersonAllocations
+              ? item.expenseDraft.personAllocations.map((entry) => ({
+                  id: entry.id,
+                  accountPlanId: entry.accountPlanId,
+                  accountPlanName: entry.accountPlanName,
+                  employeeId: entry.employeeId,
+                  employeeName: entry.employeeName,
+                  analysisType: entry.analysisType,
+                  amount: Number(entry.amount) || 0,
+                  resultCenterId: entry.resultCenterId,
+                  resultCenter: entry.resultCenterName,
+                  payrollDocumentId: entry.payrollDocumentId || null,
+                  contractReference: entry.contractReference || null,
+                  creditorName: entry.creditorName || null,
                 }))
               : null,
             resultCenterId: item.expenseDraft.resultCenterId || null,
@@ -3210,6 +3433,26 @@ export function FinancialImportPage({
               amount: Number(entry.amount ?? 0),
             }))
           : [],
+        hasPersonAllocations: expense.hasPersonAllocations === true,
+        personAllocations: Array.isArray(expense.personAllocations)
+          ? expense.personAllocations.map((entry: any) => createPersonAllocationEntry({
+              id: String(entry.id ?? createDraftId("person-allocation")),
+              accountPlanId: String(entry.accountPlanId ?? ""),
+              accountPlanName: String(entry.accountPlanName ?? ""),
+              employeeId: String(entry.employeeId ?? ""),
+              employeeName: String(entry.employeeName ?? ""),
+              analysisType:
+                entry.analysisType === "employee_deduction" || entry.analysisType === "informational"
+                  ? entry.analysisType
+                  : "employer_cost",
+              amount: Number(entry.amount ?? 0),
+              resultCenterId: String(entry.resultCenterId ?? ""),
+              resultCenterName: String(entry.resultCenter ?? entry.resultCenterName ?? ""),
+              payrollDocumentId: String(entry.payrollDocumentId ?? ""),
+              contractReference: String(entry.contractReference ?? ""),
+              creditorName: String(entry.creditorName ?? ""),
+            }))
+          : [],
         resultCenterId: expense.resultCenterId || current.expenseDraft.resultCenterId,
         resultCenterName: expense.resultCenter || expense.resultCenterName || current.expenseDraft.resultCenterName,
         isApportioned: false,
@@ -3274,6 +3517,8 @@ export function FinancialImportPage({
           purchaseOrderId: "",
           hasAccountAllocations: false,
           accountAllocations: [],
+          hasPersonAllocations: false,
+          personAllocations: [],
           splitAllocationMode: current.expenseDraft.splitAllocationMode || "amount",
           splitExpenses: existingSplits,
         },
@@ -3944,13 +4189,35 @@ export function FinancialImportPage({
                   (sum, entry) => sum + (Number(entry.amount) || 0),
                   0,
                 );
+                const personAllocationTotal = item.expenseDraft.personAllocations.reduce(
+                  (sum, entry) => sum + (Number(entry.amount) || 0),
+                  0,
+                );
+                const personAccountTotals = item.expenseDraft.personAllocations.reduce((totals, entry) => {
+                  totals.set(entry.accountPlanId, (totals.get(entry.accountPlanId) || 0) + (Number(entry.amount) || 0));
+                  return totals;
+                }, new Map<string, number>());
                 const apportionmentPercentageTotal = item.expenseDraft.apportionments.reduce(
                   (sum, entry) => sum + (Number(entry.percentage) || 0),
                   0,
                 );
+                const accountParentIds = new Set(flattenedAccounts.map((entry) => entry.parentId).filter(Boolean));
                 const accountAllocationOptions = flattenedAccounts.filter(
-                  (entry) => entry.parentId === item.expenseDraft.accountPlanId && entry.active !== false,
+                  (entry) => entry.active !== false && !accountParentIds.has(entry.id),
                 );
+                const personAccountOptions = item.expenseDraft.hasAccountAllocations
+                  ? item.expenseDraft.accountAllocations
+                      .filter((entry) => entry.accountPlanId && Number(entry.amount) > 0)
+                      .map((entry) => ({
+                        id: entry.accountPlanId,
+                        name: entry.accountPlanName || entry.accountPlanId,
+                        amount: Number(entry.amount) || 0,
+                      }))
+                  : [{
+                      id: item.expenseDraft.accountPlanId,
+                      name: item.expenseDraft.accountPlanName || item.expenseDraft.accountPlanId,
+                      amount: Math.abs(item.amount),
+                    }].filter((entry) => entry.id);
                 const currentMethods = getMethodsForAccount(item.financialDraft.accountId);
                 const counterpartyMethods = getMethodsForAccount(item.financialDraft.counterpartyAccountId);
                 const existingOptions = getFilteredExistingExpenses(item.id, item.suggestedExpenseId).slice(0, 8);
@@ -4548,7 +4815,12 @@ export function FinancialImportPage({
                                     ...current.expenseDraft,
                                     mode,
                                     ...(mode === "purchase"
-                                      ? { hasAccountAllocations: false, accountAllocations: [] }
+                                      ? {
+                                          hasAccountAllocations: false,
+                                          accountAllocations: [],
+                                          hasPersonAllocations: false,
+                                          personAllocations: [],
+                                        }
                                       : {}),
                                   },
                                 }));
@@ -4821,9 +5093,9 @@ export function FinancialImportPage({
 
                             <div className="flex items-center justify-between rounded-xl border bg-background px-3 py-2.5 md:col-span-2">
                               <div>
-                                <p className="text-sm font-medium">Desmembrar em subcontas</p>
+                                <p className="text-sm font-medium">Compor em mais de uma conta</p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  Mantém uma única despesa e distribui o valor entre contas filhas, como no DAS.
+                                  Mantém uma única despesa e distribui o valor entre contas contábeis, mesmo em grupos diferentes.
                                 </p>
                               </div>
                               <Switch
@@ -4834,7 +5106,7 @@ export function FinancialImportPage({
 
                             <div className="space-y-1.5 md:col-span-2">
                               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                {item.expenseDraft.hasAccountAllocations ? "Conta-mãe do título" : "Plano de contas"}{" "}
+                                {item.expenseDraft.hasAccountAllocations ? "Conta de referência do título" : "Plano de contas"}{" "}
                                 <span className="text-rose-500">*</span>
                               </p>
                               <AccountPlanTreeSelect
@@ -4865,11 +5137,13 @@ export function FinancialImportPage({
                                             }),
                                           ]
                                         : current.expenseDraft.accountAllocations,
+                                      hasPersonAllocations: false,
+                                      personAllocations: [],
                                     },
                                   }));
                                 }}
                                 options={accountPlansList}
-                                placeholder={item.expenseDraft.hasAccountAllocations ? "Selecione a conta-mãe" : "Selecione o plano de contas"}
+                                placeholder={item.expenseDraft.hasAccountAllocations ? "Selecione a conta de referência" : "Selecione o plano de contas"}
                                 triggerClassName="h-10 rounded-xl text-sm"
                               />
                             </div>
@@ -4880,7 +5154,7 @@ export function FinancialImportPage({
                                   <div>
                                     <p className="text-sm font-medium">Apropriações contábeis</p>
                                     <p className="text-[11px] text-muted-foreground">
-                                      Cada subconta alimentará sua posição na DRE sem criar outro pagamento.
+                                      Cada conta alimentará sua posição contábil sem criar outro pagamento.
                                     </p>
                                   </div>
                                   <Button
@@ -4894,7 +5168,7 @@ export function FinancialImportPage({
                                     }
                                     onClick={() => appendAccountAllocation(item.id)}
                                   >
-                                    <Plus className="mr-1 h-3.5 w-3.5" /> Adicionar subconta
+                                    <Plus className="mr-1 h-3.5 w-3.5" /> Adicionar conta
                                   </Button>
                                 </div>
                                 {item.expenseDraft.accountAllocations.map((allocation) => (
@@ -4911,10 +5185,10 @@ export function FinancialImportPage({
                                       }}
                                     >
                                       <SelectTrigger className="h-9 rounded-xl text-xs">
-                                        <SelectValue placeholder="Selecione a subconta" />
+                                        <SelectValue placeholder="Selecione a conta" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="none">Selecione a subconta</SelectItem>
+                                        <SelectItem value="none">Selecione a conta</SelectItem>
                                         {accountAllocationOptions.map((account) => (
                                           <SelectItem
                                             key={account.id}
@@ -4962,6 +5236,175 @@ export function FinancialImportPage({
                                   )}>
                                     {accountAllocationTotal <= Math.abs(item.amount) ? "Restante" : "Excedente"}: {formatCurrency(Math.abs(Math.abs(item.amount) - accountAllocationTotal))}
                                   </span>
+                                </div>
+                              </div>
+                            ) : null}
+
+                            <div className="flex items-center justify-between rounded-xl border bg-background px-3 py-2.5 md:col-span-2">
+                              <div>
+                                <p className="text-sm font-medium">Individualizar por colaborador ou contrato</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Confere quem originou cada valor sem alterar o favorecido bancário do pagamento.
+                                </p>
+                              </div>
+                              <Switch
+                                checked={item.expenseDraft.hasPersonAllocations}
+                                onCheckedChange={(checked) => setPersonAllocationMode(item.id, checked)}
+                              />
+                            </div>
+
+                            {item.expenseDraft.hasPersonAllocations ? (
+                              <div className="space-y-3 rounded-xl border bg-background p-3 md:col-span-2">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium">Conferência por pessoa</p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Cada conta deve fechar com a soma dos colaboradores e contratos vinculados.
+                                    </p>
+                                  </div>
+                                  <Button type="button" variant="outline" size="sm" className="h-8 rounded-xl text-xs" onClick={() => appendPersonAllocation(item.id)}>
+                                    <Plus className="mr-1 h-3.5 w-3.5" /> Adicionar vínculo
+                                  </Button>
+                                </div>
+
+                                {item.expenseDraft.personAllocations.map((allocation) => (
+                                  <div key={allocation.id} className="space-y-2 rounded-xl border bg-muted/15 p-3">
+                                    <div className="grid gap-2 lg:grid-cols-4">
+                                      <Select
+                                        value={allocation.accountPlanId || "none"}
+                                        onValueChange={(value) => {
+                                          const accountPlanId = value === "none" ? "" : value;
+                                          const account = personAccountOptions.find((entry) => entry.id === accountPlanId);
+                                          const definition = flattenedAccounts.find((entry) => entry.id === accountPlanId);
+                                          updatePersonAllocation(item.id, allocation.id, (current) => ({
+                                            ...current,
+                                            accountPlanId,
+                                            accountPlanName: account?.name || "",
+                                            analysisType: definition?.is_dre_account === false ? "employee_deduction" : "employer_cost",
+                                          }));
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-9 rounded-xl text-xs"><SelectValue placeholder="Conta" /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="none">Selecione a conta</SelectItem>
+                                          {personAccountOptions.map((account) => <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+
+                                      <Select
+                                        value={allocation.employeeId || "none"}
+                                        onValueChange={(value) => {
+                                          const employeeId = value === "none" ? "" : value;
+                                          const employee = users.find((entry) => entry.id === employeeId);
+                                          updatePersonAllocation(item.id, allocation.id, (current) => ({
+                                            ...current,
+                                            employeeId,
+                                            employeeName: employee?.username || employee?.email || "",
+                                          }));
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-9 rounded-xl text-xs"><SelectValue placeholder="Colaborador" /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="none">Selecione o colaborador</SelectItem>
+                                          {[...users]
+                                            .sort((left, right) => (left.username || left.email).localeCompare(right.username || right.email, "pt-BR"))
+                                            .map((employee) => (
+                                              <SelectItem key={employee.id} value={employee.id}>
+                                                {employee.username || employee.email}{employee.isActive === false ? " · inativo" : ""}
+                                              </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                      </Select>
+
+                                      <Select
+                                        value={allocation.analysisType}
+                                        onValueChange={(value) => updatePersonAllocation(item.id, allocation.id, (current) => ({
+                                          ...current,
+                                          analysisType: value as typeof current.analysisType,
+                                        }))}
+                                      >
+                                        <SelectTrigger className="h-9 rounded-xl text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="employer_cost">Custo da empresa</SelectItem>
+                                          <SelectItem value="employee_deduction">Desconto do colaborador</SelectItem>
+                                          <SelectItem value="informational">Somente informativo</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={allocation.amount}
+                                        onChange={(event) => updatePersonAllocation(item.id, allocation.id, (current) => ({
+                                          ...current,
+                                          amount: Number(event.target.value) || 0,
+                                        }))}
+                                        className="h-9 rounded-xl font-mono text-xs"
+                                        aria-label="Valor individualizado"
+                                      />
+                                    </div>
+
+                                    <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_36px]">
+                                      <ResultCenterSelect
+                                        value={allocation.resultCenterId}
+                                        onChange={(value) => {
+                                          const unit = personResultCenterOptions.find((entry) => entry.id === value);
+                                          updatePersonAllocation(item.id, allocation.id, (current) => ({
+                                            ...current,
+                                            resultCenterId: value,
+                                            resultCenterName: unit?.name || "",
+                                          }));
+                                        }}
+                                        options={personResultCenterOptions}
+                                        placeholder="Centro de resultado"
+                                        searchPlaceholder="Buscar unidade..."
+                                        triggerClassName="h-9 rounded-xl text-xs"
+                                      />
+                                      <Input
+                                        value={allocation.payrollDocumentId}
+                                        onChange={(event) => updatePersonAllocation(item.id, allocation.id, (current) => ({ ...current, payrollDocumentId: event.target.value }))}
+                                        placeholder="Documento no RH"
+                                        className="h-9 rounded-xl text-xs"
+                                      />
+                                      <Input
+                                        value={allocation.contractReference}
+                                        onChange={(event) => updatePersonAllocation(item.id, allocation.id, (current) => ({ ...current, contractReference: event.target.value }))}
+                                        placeholder="Contrato ou rubrica"
+                                        className="h-9 rounded-xl text-xs"
+                                      />
+                                      <Input
+                                        value={allocation.creditorName}
+                                        onChange={(event) => updatePersonAllocation(item.id, allocation.id, (current) => ({ ...current, creditorName: event.target.value }))}
+                                        placeholder="Credor relacionado"
+                                        className="h-9 rounded-xl text-xs"
+                                      />
+                                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={() => removePersonAllocation(item.id, allocation.id)}>
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+
+                                <div className="space-y-1.5 rounded-lg bg-muted/35 px-3 py-2 text-xs">
+                                  {personAccountOptions.map((account) => {
+                                    const allocated = personAccountTotals.get(account.id) || 0;
+                                    const matches = Math.abs(allocated - account.amount) < 0.01;
+                                    return (
+                                      <div key={account.id} className="flex items-center justify-between gap-3">
+                                        <span>{account.name}</span>
+                                        <span className={cn("font-semibold", matches ? "text-emerald-700" : "text-amber-700")}>
+                                          {formatCurrency(allocated)} / {formatCurrency(account.amount)}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                  <div className="flex items-center justify-between gap-3 border-t pt-1.5">
+                                    <span>Total individualizado</span>
+                                    <span className={cn("font-semibold", Math.abs(personAllocationTotal - Math.abs(item.amount)) < 0.01 ? "text-emerald-700" : "text-amber-700")}>
+                                      {formatCurrency(personAllocationTotal)} / {formatCurrency(Math.abs(item.amount))}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             ) : null}

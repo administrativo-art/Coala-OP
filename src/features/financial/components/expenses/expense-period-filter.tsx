@@ -117,11 +117,11 @@ export function ExpensePeriodFilter({
           type="button"
           variant="outline"
           className={cn(
-            "h-8 w-[160px] shrink-0 justify-between rounded-lg border-border/70 bg-background px-3 text-xs font-medium",
+            "h-8 w-[225px] shrink-0 justify-between rounded-lg border-border/70 bg-background px-3 text-xs font-medium",
             open && "border-primary"
           )}
         >
-          <span className="truncate">{label}</span>
+          <span className="truncate">Vencimento: {label}</span>
           <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
