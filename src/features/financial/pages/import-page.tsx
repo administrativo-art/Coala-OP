@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Check,
   CheckCircle2,
+  CreditCard,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -61,6 +62,7 @@ import {
 import { usePurchaseFinancials } from "@/hooks/use-purchase-financials";
 import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { CardStatementsWorkspace } from "@/features/financial/pages/card-statements-page";
 import { AccountPlanTreeSelect } from "@/components/purchasing/account-plan-tree-select";
 import { ResultCenterSelect } from "@/components/purchasing/result-center-select";
 import { applyAliasesAndMatch, type PendingInstallment } from "@/features/financial/lib/import-matcher";
@@ -1100,6 +1102,19 @@ function getSessionPeriodLabel(session: ImportSession) {
   return firstLabel === lastLabel ? firstLabel : `${firstLabel} — ${lastLabel}`;
 }
 
+function getSessionMonthKey(session: ImportSession) {
+  const syncedMonth = session.syncSource === "inter_api"
+    ? session.syncKey?.match(/:(\d{4}-\d{2})$/)?.[1] || session.fileName?.match(/inter-api-(\d{4}-\d{2})/)?.[1]
+    : null;
+  if (syncedMonth) return syncedMonth;
+
+  const dates = session.items
+    .map((item) => new Date(`${item.date}T00:00:00`))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((left, right) => right.getTime() - left.getTime());
+  return dates[0] ? format(dates[0], "yyyy-MM") : null;
+}
+
 function getSessionFinancialSummary(session: ImportSession) {
   const entries = session.items
     .filter((item) => item.amount > 0)
@@ -1696,6 +1711,7 @@ export function FinancialImportPage({
   const [closeStatementDialogOpen, setCloseStatementDialogOpen] = useState(false);
   const [sessionsSidebarOpen, setSessionsSidebarOpen] = useState(true);
   const [generalSummaryOpen, setGeneralSummaryOpen] = useState(false);
+  const [sessionLedgerView, setSessionLedgerView] = useState("checking_account");
   const visibleOpenSessions = useMemo(
     () =>
       statementAccountId
@@ -1723,12 +1739,23 @@ export function FinancialImportPage({
     []
   );
 
+  const selectSessionLedgerView = useCallback((view: string) => {
+    setSessionLedgerView(view);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (view === "checking_account") url.searchParams.delete("ledger");
+    else url.searchParams.set("ledger", view);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sessionFromUrl = new URL(window.location.href).searchParams.get("session");
+    const ledgerFromUrl = new URL(window.location.href).searchParams.get("ledger");
     if (sessionFromUrl) {
       setSelectedSessionId((current) => current ?? sessionFromUrl);
     }
+    if (ledgerFromUrl) setSessionLedgerView(ledgerFromUrl);
   }, []);
 
   useEffect(() => {
@@ -3260,6 +3287,25 @@ export function FinancialImportPage({
 
   const selectedSession = currentSession;
   const selectedSessionEditable = canEditImportSession(selectedSession);
+  const selectedSessionAccount = selectedSession
+    ? accounts.find((account) => account.id === selectedSession.statementAccountId) ?? null
+    : null;
+  const selectedSessionCards = (selectedSessionAccount?.paymentMethods || []).filter(
+    (method) => method.type === "credit_card"
+  );
+  const selectedLedgerCard = sessionLedgerView.startsWith("credit_card:")
+    ? selectedSessionCards.find((method) => method.id === sessionLedgerView.slice("credit_card:".length)) ?? null
+    : null;
+  const selectedSessionMonthKey = selectedSession ? getSessionMonthKey(selectedSession) : null;
+  const cardWorkspaceReturnTo = selectedSession && selectedLedgerCard
+    ? `${FINANCIAL_ROUTES.importExpenses}?session=${encodeURIComponent(selectedSession.id)}&ledger=${encodeURIComponent(`credit_card:${selectedLedgerCard.id}`)}`
+    : FINANCIAL_ROUTES.importExpenses;
+
+  useEffect(() => {
+    if (!sessionLedgerView.startsWith("credit_card:")) return;
+    if (!selectedSession || !bankAccountsData) return;
+    if (!selectedLedgerCard) selectSessionLedgerView("checking_account");
+  }, [bankAccountsData, selectSessionLedgerView, selectedLedgerCard, selectedSession, sessionLedgerView]);
 
   const selectedStatementAccountLabel = selectedSession
     ? getAccountDisplayLabel(accounts, selectedSession.statementAccountId, selectedSession.statementAccountName)
@@ -3770,6 +3816,9 @@ export function FinancialImportPage({
                     const periodLabel = getSessionPeriodLabel(session);
                     const sessionFinancialSummary = getSessionFinancialSummary(session);
                     const sessionAccount = accounts.find((account) => account.id === session.statementAccountId);
+                    const sessionCreditCards = (sessionAccount?.paymentMethods || []).filter(
+                      (method) => method.type === "credit_card"
+                    );
                     const sessionUnitName = sessionAccount?.resultCenterId
                       ? unitNameById[sessionAccount.resultCenterId] ?? ""
                       : "";
@@ -3792,6 +3841,7 @@ export function FinancialImportPage({
                             setCurrentSession(session);
                             setExpandedItemId(null);
                             if (!isSelected) setGeneralSummaryOpen(false);
+                            if (!isSelected) selectSessionLedgerView("checking_account");
                             setIsSessionDirty(false);
                             replaceSessionUrl(session.id);
                           }}
@@ -3835,6 +3885,40 @@ export function FinancialImportPage({
                           </div>
                         </div>
                         </button>
+                        {isSelected && sessionCreditCards.length > 0 ? (
+                          <div className="border-t p-2">
+                            <div className="flex flex-wrap gap-1 rounded-xl bg-muted/50 p-1">
+                              <button
+                                type="button"
+                                onClick={() => selectSessionLedgerView("checking_account")}
+                                className={cn(
+                                  "flex min-w-0 flex-1 items-center justify-center rounded-lg px-2 py-1.5 text-[10.5px] font-medium transition-colors",
+                                  !selectedLedgerCard ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                                )}
+                              >
+                                Conta corrente
+                              </button>
+                              {sessionCreditCards.map((method) => {
+                                const view = `credit_card:${method.id}`;
+                                const active = sessionLedgerView === view;
+                                return (
+                                  <button
+                                    key={method.id}
+                                    type="button"
+                                    onClick={() => selectSessionLedgerView(view)}
+                                    className={cn(
+                                      "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[10.5px] font-medium transition-colors",
+                                      active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                                    )}
+                                  >
+                                    <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                                    <span className="truncate">Cartão{method.lastDigits ? ` •••• ${method.lastDigits}` : " de crédito"}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                         {isSelected ? (
                           <button
                             type="button"
@@ -3899,6 +3983,18 @@ export function FinancialImportPage({
               </div>
             </div>
 
+            {selectedLedgerCard ? (
+              <div data-testid="card-statement-pane" className="min-h-0 min-w-0 overflow-hidden bg-muted/10">
+                <CardStatementsWorkspace
+                  embedded
+                  fixedMonthKey={selectedSessionMonthKey || undefined}
+                  accountId={selectedSession.statementAccountId}
+                  paymentMethodId={selectedLedgerCard.id}
+                  returnTo={cardWorkspaceReturnTo}
+                />
+              </div>
+            ) : (
+              <>
             <div data-testid="transactions-pane" className="flex min-h-0 min-w-0 flex-col">
               <div className="space-y-2 border-b px-4 py-3">
                 <div className="flex min-w-0 items-start justify-between gap-3">
@@ -4331,7 +4427,7 @@ export function FinancialImportPage({
                   : isCardStatementSettlementItem(item)
                   ? [
                       "Registra o pagamento sem criar uma nova despesa.",
-                      "Mantém a associação da fatura para conclusão em Faturas de cartão.",
+                      "Mantém a associação da fatura para conclusão na aba do cartão desta sessão.",
                       "Concilia a saída com o extrato bancário.",
                     ]
                   : item.expenseDraft.mode === "existing"
@@ -4741,7 +4837,7 @@ export function FinancialImportPage({
                       <div className={cn("rounded-2xl border border-violet-100 bg-violet-50/60 p-4 text-sm", auditStep !== 1 && "hidden")}>
                         <p className="font-semibold text-violet-800">Liquidação de fatura</p>
                         <p className="mt-1 text-xs leading-relaxed text-violet-700">
-                          Esta saída será registrada como pagamento de fatura, sem criar uma nova despesa. A associação com o cartão e a competência será concluída em Faturas de cartão.
+                          Esta saída será registrada como pagamento de fatura, sem criar uma nova despesa. A associação com o cartão e a competência será concluída na aba do cartão desta sessão.
                         </p>
                       </div>
                     ) : (
@@ -6105,6 +6201,8 @@ export function FinancialImportPage({
               </div>
               </SheetContent>
             </Sheet>
+              </>
+            )}
           </div>
         </Card>
       ) : statementAccountId && visibleOpenSessions.length === 0 ? (

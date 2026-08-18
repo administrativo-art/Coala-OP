@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCardStatementAllocations,
   buildCardStatementGroups,
   findCardStatementPaymentCandidates,
   resolveCardStatementCycle,
@@ -87,6 +88,95 @@ test("agrupa despesas recorrentes e parcelas sem transformar a fatura em nova de
   assert.equal(groups[0]?.recurringCount, 1);
   assert.equal(groups[0]?.lines[1]?.installmentNumber, 1);
   assert.equal(groups[1]?.projectedTotal, 500);
+});
+
+test("exibe a previsão do cartão e remove a previsão substituída pelo gasto real", () => {
+  const groups = buildCardStatementGroups([
+    {
+      id: "gpt-previsao",
+      description: "GPT/Codex | OpenAI",
+      supplier: "OpenAI",
+      totalValue: 100,
+      dueDate: new Date(2026, 7, 3, 12),
+      status: "provisioned",
+      provisionType: "forecast",
+      plannedPaymentMethodType: "credit_card",
+      plannedBankAccountId: "inter",
+      plannedPaymentMethodId: "card-1234",
+    },
+  ], [card]);
+
+  assert.equal(groups[0]?.provisionCount, 1);
+  assert.equal(groups[0]?.provisionedTotal, 100);
+  assert.equal(groups[0]?.projectedTotal, 100);
+
+  const reconciledGroups = buildCardStatementGroups([
+    {
+      id: "gpt-previsao",
+      description: "GPT/Codex | OpenAI",
+      totalValue: 100,
+      dueDate: new Date(2026, 7, 3, 12),
+      status: "reconciled",
+      provisionType: "forecast",
+      replacedByExpenseId: "gpt-real",
+      plannedPaymentMethodType: "credit_card",
+      plannedBankAccountId: "inter",
+      plannedPaymentMethodId: "card-1234",
+    },
+    {
+      id: "gpt-real",
+      description: "GPT/Codex | OpenAI",
+      totalValue: 112,
+      dueDate: new Date(2026, 7, 3, 12),
+      status: "pending",
+      provisionType: "actual",
+      plannedPaymentMethodType: "credit_card",
+      plannedBankAccountId: "inter",
+      plannedPaymentMethodId: "card-1234",
+    },
+  ], [card]);
+
+  assert.equal(reconciledGroups[0]?.lines.length, 1);
+  assert.equal(reconciledGroups[0]?.projectedTotal, 112);
+  assert.equal(reconciledGroups[0]?.provisionedTotal, 0);
+});
+
+test("congela a distribuição contábil das despesas vinculadas ao pagamento único", () => {
+  const allocations = buildCardStatementAllocations([{
+    lineId: "internet:2026-08",
+    expense: {
+      id: "internet",
+      description: "Internet - Administrativo | TVN",
+      supplier: "TVN",
+      competenceDate: new Date(2026, 7, 1, 12),
+      accountPlanId: "internet-account",
+      accountPlanName: "Internet",
+      resultCenterId: "administrativo",
+      resultCenterName: "Centro administrativo",
+      plannedPaymentMethodType: "credit_card",
+      plannedBankAccountId: "inter",
+      plannedPaymentMethodId: "card-1234",
+    },
+    chargeDate: new Date(2026, 7, 3, 12),
+    value: 102.93,
+    reconciled: true,
+  }]);
+
+  assert.deepEqual(allocations[0], {
+    lineId: "internet:2026-08",
+    expenseId: "internet",
+    installmentNumber: null,
+    description: "Internet - Administrativo | TVN",
+    supplier: "TVN",
+    amount: 102.93,
+    competenceDate: "2026-08-01",
+    accountPlanId: "internet-account",
+    accountPlanName: "Internet",
+    resultCenterId: "administrativo",
+    resultCenterName: "Centro administrativo",
+    accountAllocations: [],
+    apportionments: [],
+  });
 });
 
 test("sugere somente saídas bancárias compatíveis com o total e o vencimento", () => {

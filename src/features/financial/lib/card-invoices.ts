@@ -20,9 +20,18 @@ export type CardExpenseEntry = {
   description?: string;
   supplier?: string;
   totalValue?: number;
+  status?: unknown;
+  provisionType?: unknown;
+  replacedByExpenseId?: unknown;
   competenceDate?: unknown;
   dueDate?: unknown;
   cardChargeDate?: unknown;
+  accountPlanId?: unknown;
+  accountPlanName?: unknown;
+  accountAllocations?: unknown;
+  resultCenterId?: unknown;
+  resultCenterName?: unknown;
+  apportionments?: unknown;
   paymentMethod?: unknown;
   recurrenceGroupId?: unknown;
   recurrenceIndex?: unknown;
@@ -59,12 +68,30 @@ export type CardStatementLine = {
   installmentTotal?: number;
 };
 
+export type CardStatementAllocation = {
+  lineId: string;
+  expenseId: string;
+  installmentNumber: number | null;
+  description: string;
+  supplier: string;
+  amount: number;
+  competenceDate: string | null;
+  accountPlanId: string;
+  accountPlanName: string;
+  resultCenterId: string;
+  resultCenterName: string;
+  accountAllocations: unknown[];
+  apportionments: unknown[];
+};
+
 export type CardStatementGroup = CardStatementCycle & {
   card: CreditCardInstrument;
   lines: CardStatementLine[];
   projectedTotal: number;
   reconciledTotal: number;
   recurringCount: number;
+  provisionCount: number;
+  provisionedTotal: number;
 };
 
 export type BankOutflowEntry = {
@@ -114,6 +141,38 @@ export function cardExpenseChargeDate(expense: CardExpenseEntry) {
     cardDateFromUnknown(expense.dueDate) ??
     cardDateFromUnknown(expense.competenceDate)
   );
+}
+
+function dateKey(value: unknown) {
+  const date = cardDateFromUnknown(value);
+  if (!date) return null;
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+export function buildCardStatementAllocations(lines: CardStatementLine[]): CardStatementAllocation[] {
+  return lines.map((line) => ({
+    lineId: line.lineId,
+    expenseId: line.expense.id,
+    installmentNumber: Number.isFinite(line.installmentNumber) ? Number(line.installmentNumber) : null,
+    description: String(line.expense.description || ""),
+    supplier: String(line.expense.supplier || ""),
+    amount: Number(line.value.toFixed(2)),
+    competenceDate: dateKey(line.expense.competenceDate),
+    accountPlanId: String(line.expense.accountPlanId || ""),
+    accountPlanName: String(line.expense.accountPlanName || ""),
+    resultCenterId: String(line.expense.resultCenterId || ""),
+    resultCenterName: String(line.expense.resultCenterName || ""),
+    accountAllocations: Array.isArray(line.expense.accountAllocations)
+      ? line.expense.accountAllocations
+      : [],
+    apportionments: Array.isArray(line.expense.apportionments)
+      ? line.expense.apportionments
+      : [],
+  }));
 }
 
 export function resolveCardStatementCycle(
@@ -177,6 +236,10 @@ export function buildCardStatementGroups(
 
   for (const expense of expenses) {
     if (expense.plannedPaymentMethodType !== "credit_card") continue;
+    if (expense.status === "cancelled" || expense.status === "draft") continue;
+    if (expense.provisionType === "forecast" && (expense.status === "reconciled" || expense.replacedByExpenseId)) {
+      continue;
+    }
     const accountId = String(expense.plannedBankAccountId ?? "");
     const methodId = String(expense.plannedPaymentMethodId ?? "");
     const card = cardByKey.get(`${accountId}:${methodId}`);
@@ -211,6 +274,8 @@ export function buildCardStatementGroups(
         projectedTotal: 0,
         reconciledTotal: 0,
         recurringCount: 0,
+        provisionCount: 0,
+        provisionedTotal: 0,
       };
       current.lines.push({
         lineId: entry.lineId,
@@ -224,6 +289,10 @@ export function buildCardStatementGroups(
       current.projectedTotal += entry.value;
       if (entry.reconciled) current.reconciledTotal += entry.value;
       if (expense.paymentMethod === "recurring" || expense.recurrenceGroupId) current.recurringCount += 1;
+      if (expense.provisionType === "forecast" && expense.status === "provisioned") {
+        current.provisionCount += 1;
+        current.provisionedTotal += entry.value;
+      }
       groups.set(cycle.key, current);
     }
   }
@@ -242,6 +311,7 @@ export function buildCardStatementGroups(
       ),
       projectedTotal: Number(group.projectedTotal.toFixed(2)),
       reconciledTotal: Number(group.reconciledTotal.toFixed(2)),
+      provisionedTotal: Number(group.provisionedTotal.toFixed(2)),
     }))
     .sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
 }

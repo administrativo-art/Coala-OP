@@ -26,10 +26,12 @@ import { FinancialAccessGuard } from "@/features/financial/components/financial-
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import {
   buildCardStatementGroups,
+  buildCardStatementAllocations,
   findCardStatementPaymentCandidates,
   resolveCardStatementCycleFromMonth,
   type CardStatementLine,
   type CardStatementGroup,
+  type CardStatementAllocation,
   type CreditCardInstrument,
 } from "@/features/financial/lib/card-invoices";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
@@ -47,8 +49,23 @@ type StatementDocument = {
   officialTotal?: number;
   status?: "open" | "closed" | "paid";
   linkedBankTransactionId?: string;
+  linkedBankTransactionIds?: string[];
+  allocations?: CardStatementAllocation[];
+  settlements?: Array<{
+    transactionId: string;
+    amount: number;
+    paidAt: string;
+  }>;
   paidAt?: unknown;
   notes?: string;
+};
+
+type CardStatementsWorkspaceProps = {
+  embedded?: boolean;
+  fixedMonthKey?: string;
+  accountId?: string;
+  paymentMethodId?: string;
+  returnTo?: string;
 };
 
 function statementDocumentId(key: string) {
@@ -89,10 +106,43 @@ function statusLabel(status: StatementDocument["status"]) {
   return "Fatura aberta";
 }
 
-export function CardStatementsPage() {
+function cardLineAuditIssues(line: CardStatementLine) {
+  const expense = line.expense;
+  const issues: string[] = [];
+  if (String(expense.description || "").trim().length < 10) issues.push("descrição");
+  if (String(expense.supplier || "").trim().length < 3) issues.push("favorecido");
+  if (
+    !String(expense.accountPlanId || "").trim() &&
+    (!Array.isArray(expense.accountAllocations) || expense.accountAllocations.length === 0)
+  ) {
+    issues.push("plano de contas");
+  }
+  if (
+    !String(expense.resultCenterId || "").trim() &&
+    (!Array.isArray(expense.apportionments) || expense.apportionments.length === 0)
+  ) {
+    issues.push("centro de resultado");
+  }
+  if (!toDate(expense.competenceDate)) issues.push("competência");
+  return issues;
+}
+
+function expenseEditHref(expenseId: string, returnTo?: string) {
+  const params = new URLSearchParams({ edit: expenseId });
+  if (returnTo) params.set("returnTo", returnTo);
+  return `${FINANCIAL_ROUTES.newExpense}?${params.toString()}`;
+}
+
+export function CardStatementsWorkspace({
+  embedded = false,
+  fixedMonthKey,
+  accountId,
+  paymentMethodId,
+  returnTo,
+}: CardStatementsWorkspaceProps = {}) {
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
-  const [monthKey, setMonthKey] = useState(() => format(new Date(), "yyyy-MM"));
+  const [monthKey, setMonthKey] = useState(() => fixedMonthKey || format(new Date(), "yyyy-MM"));
   const [selectedCardKey, setSelectedCardKey] = useState("");
   const [officialTotalInput, setOfficialTotalInput] = useState("");
   const [notesInput, setNotesInput] = useState("");
@@ -117,7 +167,13 @@ export function CardStatementsPage() {
     canViewBankTransactions ? financialCollection("transactions") : null
   );
 
-  const cards = useMemo(() => paymentMethodCards(bankAccountsData || []), [bankAccountsData]);
+  const cards = useMemo(
+    () => paymentMethodCards(bankAccountsData || []).filter((card) => (
+      (!accountId || card.accountId === accountId) &&
+      (!paymentMethodId || card.methodId === paymentMethodId)
+    )),
+    [accountId, bankAccountsData, paymentMethodId]
+  );
   const generatedGroups = useMemo(
     () => buildCardStatementGroups(expensesData || [], cards),
     [cards, expensesData]
@@ -141,6 +197,8 @@ export function CardStatementsPage() {
         projectedTotal: 0,
         reconciledTotal: 0,
         recurringCount: 0,
+        provisionCount: 0,
+        provisionedTotal: 0,
       };
     });
   }, [cards, generatedGroups, monthKey]);
@@ -158,9 +216,17 @@ export function CardStatementsPage() {
     : null;
   const reconciledCount = selectedGroup?.lines.filter((line) => line.reconciled).length ?? 0;
   const allLinesReconciled = !!selectedGroup?.lines.length && reconciledCount === selectedGroup.lines.length;
-  const canClose = allLinesReconciled && officialTotal > 0 && Math.abs(difference || 0) <= 0.05;
+  const allLinesAuditComplete = !!selectedGroup?.lines.length && selectedGroup.lines.every(
+    (line) => cardLineAuditIssues(line).length === 0
+  );
+  const canClose = allLinesReconciled && allLinesAuditComplete && officialTotal > 0 && Math.abs(difference || 0) <= 0.05;
   const linkedTransactionIds = useMemo(
-    () => new Set((statementsData || []).map((statement) => statement.linkedBankTransactionId).filter(Boolean) as string[]),
+    () => new Set(
+      (statementsData || []).flatMap((statement) => [
+        statement.linkedBankTransactionId,
+        ...(statement.linkedBankTransactionIds || []),
+      ]).filter(Boolean) as string[]
+    ),
     [statementsData]
   );
   const paymentCandidates = useMemo(
@@ -174,6 +240,10 @@ export function CardStatementsPage() {
       : [],
     [linkedTransactionIds, officialTotal, selectedGroup, transactionsData]
   );
+
+  useEffect(() => {
+    if (fixedMonthKey && fixedMonthKey !== monthKey) setMonthKey(fixedMonthKey);
+  }, [fixedMonthKey, monthKey]);
 
   useEffect(() => {
     if (!monthGroups.length) {
@@ -232,8 +302,10 @@ export function CardStatementsPage() {
           closingDate: Timestamp.fromDate(selectedGroup.closingDate),
           dueDate: Timestamp.fromDate(selectedGroup.dueDate),
           projectedTotal: selectedGroup.projectedTotal,
+          provisionedTotal: selectedGroup.provisionedTotal,
           officialTotal: parsedOfficialTotal,
           status,
+          ...(status === "closed" ? { allocations: buildCardStatementAllocations(selectedGroup.lines) } : {}),
           notes: notesInput.trim(),
           updatedAt: Timestamp.now(),
           updatedBy: firebaseUser.uid,
@@ -253,6 +325,15 @@ export function CardStatementsPage() {
 
   async function toggleLine(line: CardStatementLine, reconciled: boolean) {
     if (!firebaseUser || !permissions.financial?.expenses?.edit || selectedStatement?.status === "paid") return;
+    const issues = cardLineAuditIssues(line);
+    if (reconciled && issues.length > 0) {
+      toast({
+        variant: "destructive",
+        title: "Complete a auditoria deste item.",
+        description: `Revise: ${issues.join(", ")}.`,
+      });
+      return;
+    }
     setWorking(line.lineId);
     try {
       const installments = Array.isArray(line.expense.installments) ? line.expense.installments : [];
@@ -305,6 +386,13 @@ export function CardStatementsPage() {
         {
           status: "paid",
           linkedBankTransactionId: candidate.transaction.id,
+          linkedBankTransactionIds: [candidate.transaction.id],
+          settlements: [{
+            transactionId: candidate.transaction.id,
+            amount: Number(Math.abs(Number(candidate.transaction.amount) || 0).toFixed(2)),
+            paidAt: format(paidAtDate, "yyyy-MM-dd"),
+          }],
+          allocations: buildCardStatementAllocations(selectedGroup.lines),
           paidAt: Timestamp.fromDate(paidAtDate),
           paidBy: firebaseUser.uid,
           updatedAt: Timestamp.now(),
@@ -369,8 +457,11 @@ export function CardStatementsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1220px] space-y-6 pb-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className={cn(
+      "mx-auto w-full space-y-6",
+      embedded ? "h-full max-w-none overflow-y-auto p-4" : "max-w-[1220px] pb-10"
+    )}>
+      {!embedded ? <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Button asChild variant="ghost" size="sm" className="-ml-3 mb-2">
             <Link href={FINANCIAL_ROUTES.expenses}><ArrowLeft className="mr-2 h-4 w-4" />Voltar às despesas</Link>
@@ -386,16 +477,16 @@ export function CardStatementsPage() {
             <Link href={FINANCIAL_ROUTES.newExpense}><ReceiptText className="mr-2 h-4 w-4" />Nova despesa</Link>
           </Button>
         </div>
-      </div>
+      </div> : null}
 
-      <div className="flex items-center justify-between rounded-2xl border bg-background px-3 py-2 shadow-sm">
+      {!embedded ? <div className="flex items-center justify-between rounded-2xl border bg-background px-3 py-2 shadow-sm">
         <Button variant="ghost" size="sm" onClick={() => setMonthKey(changeMonth(monthKey, -1))}>Anterior</Button>
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-muted-foreground" />
           <span className="font-semibold capitalize">{monthLabel(monthKey)}</span>
         </div>
         <Button variant="ghost" size="sm" onClick={() => setMonthKey(changeMonth(monthKey, 1))}>Próxima</Button>
-      </div>
+      </div> : null}
 
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2"><Skeleton className="h-40" /><Skeleton className="h-40" /></div>
@@ -412,7 +503,7 @@ export function CardStatementsPage() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {!embedded || monthGroups.length > 1 ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {monthGroups.map((group) => {
               const cardKey = `${group.card.accountId}:${group.card.methodId}`;
               const statement = statementByKey.get(group.key);
@@ -435,7 +526,7 @@ export function CardStatementsPage() {
                 </button>
               );
             })}
-          </div>
+          </div> : null}
 
           {selectedGroup && (
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -453,12 +544,33 @@ export function CardStatementsPage() {
                     <div className="divide-y">
                       {selectedGroup.lines.map((line) => {
                         const recurring = line.expense.paymentMethod === "recurring" || !!line.expense.recurrenceGroupId;
+                        const provision = line.expense.provisionType === "forecast" && line.expense.status === "provisioned";
+                        const issues = cardLineAuditIssues(line);
                         const installmentNumber = Number(line.installmentNumber || line.expense.installmentNumber || 0);
                         const installmentTotal = Number(line.installmentTotal || line.expense.installmentTotal || 0);
                         return (
                           <div key={line.lineId} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-medium">{line.expense.description || "Despesa sem descrição"}</p>{recurring && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700"><Repeat2 className="h-3 w-3" />Recorrente</span>}{installmentTotal > 1 && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{installmentNumber || 1}/{installmentTotal}</span>}</div><p className="mt-1 text-xs text-muted-foreground">{line.expense.supplier || "Sem fornecedor"} · cobrança prevista em {format(line.chargeDate, "dd/MM/yyyy")}</p></div>
-                            <div className="flex items-center justify-between gap-4 sm:justify-end"><p className="font-mono font-semibold">{formatCurrency(line.value)}</p>{permissions.financial?.expenses?.edit && selectedStatement?.status !== "paid" ? <Button size="sm" variant={line.reconciled ? "default" : "outline"} disabled={working === line.lineId} onClick={() => void toggleLine(line, !line.reconciled)}>{working === line.lineId ? <Loader2 className="h-4 w-4 animate-spin" /> : line.reconciled ? <><Check className="mr-1.5 h-4 w-4" />Conferida</> : "Conferir"}</Button> : <span className={cn("text-xs", line.reconciled ? "text-emerald-600" : "text-muted-foreground")}>{line.reconciled ? "Conferida" : "Pendente"}</span>}</div>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-medium">{line.expense.description || "Despesa sem descrição"}</p>
+                                {provision && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] text-cyan-700">Previsão</span>}
+                                {recurring && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700"><Repeat2 className="h-3 w-3" />Recorrente</span>}
+                                {installmentTotal > 1 && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{installmentNumber || 1}/{installmentTotal}</span>}
+                                {issues.length > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">Cadastro incompleto</span>}
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">{line.expense.supplier || "Sem fornecedor"} · cobrança prevista em {format(line.chargeDate, "dd/MM/yyyy")}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+                              <p className="mr-2 font-mono font-semibold">{formatCurrency(line.value)}</p>
+                              {permissions.financial?.expenses?.edit && selectedStatement?.status !== "paid" ? (
+                                <>
+                                  <Button size="sm" variant="ghost" asChild>
+                                    <Link href={expenseEditHref(line.expense.id, returnTo)}><FileSearch className="mr-1.5 h-4 w-4" />Auditar item</Link>
+                                  </Button>
+                                  <Button size="sm" variant={line.reconciled ? "default" : "outline"} disabled={working === line.lineId || issues.length > 0} onClick={() => void toggleLine(line, !line.reconciled)}>{working === line.lineId ? <Loader2 className="h-4 w-4 animate-spin" /> : line.reconciled ? <><Check className="mr-1.5 h-4 w-4" />Conferida</> : "Conferir"}</Button>
+                                </>
+                              ) : <span className={cn("text-xs", line.reconciled ? "text-emerald-600" : "text-muted-foreground")}>{line.reconciled ? "Conferida" : "Pendente"}</span>}
+                            </div>
                           </div>
                         );
                       })}
@@ -468,7 +580,7 @@ export function CardStatementsPage() {
               </Card>
 
               <div className="space-y-4">
-                <Card className="rounded-2xl"><CardHeader><CardTitle className="text-base">Conferência da fatura</CardTitle></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-muted-foreground">Previsto</p><p className="font-mono font-semibold">{formatCurrency(selectedGroup.projectedTotal)}</p></div><div><p className="text-muted-foreground">Conferido</p><p className="font-mono font-semibold">{formatCurrency(selectedGroup.reconciledTotal)}</p></div></div><div><label className="text-xs font-medium">Total oficial da fatura</label><Input className="mt-1" inputMode="decimal" placeholder="0,00" value={officialTotalInput} onChange={(event) => setOfficialTotalInput(event.target.value)} /></div>{difference !== null && <div className={cn("rounded-lg px-3 py-2 text-sm", Math.abs(difference) <= 0.05 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>{Math.abs(difference) <= 0.05 ? <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" />Valores conferem.</span> : <span className="flex items-center gap-2"><TriangleAlert className="h-4 w-4" />Diferença de {formatCurrency(difference)}.</span>}</div>}<div><label className="text-xs font-medium">Observações</label><Input className="mt-1" value={notesInput} onChange={(event) => setNotesInput(event.target.value)} /></div>{permissions.financial?.expenses?.edit && <div className="grid grid-cols-2 gap-2"><Button variant="outline" disabled={working === "statement"} onClick={() => void saveStatement("open")}>{working === "statement" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar</Button><Button disabled={!canClose || working === "statement"} onClick={() => void saveStatement("closed")}>Fechar fatura</Button></div>} {!canClose && selectedGroup.lines.length > 0 && <p className="text-xs leading-relaxed text-muted-foreground">Para fechar, confira todas as cobranças e elimine a diferença entre o total oficial e o previsto.</p>}</CardContent></Card>
+                <Card className="rounded-2xl"><CardHeader><CardTitle className="text-base">Conferência da fatura</CardTitle></CardHeader><CardContent className="space-y-4"><div className="grid grid-cols-3 gap-3 text-sm"><div><p className="text-muted-foreground">Previsto</p><p className="font-mono font-semibold">{formatCurrency(selectedGroup.projectedTotal)}</p></div><div><p className="text-muted-foreground">Provisionado</p><p className="font-mono font-semibold">{formatCurrency(selectedGroup.provisionedTotal)}</p></div><div><p className="text-muted-foreground">Conferido</p><p className="font-mono font-semibold">{formatCurrency(selectedGroup.reconciledTotal)}</p></div></div><div><label className="text-xs font-medium">Total oficial da fatura</label><Input className="mt-1" inputMode="decimal" placeholder="0,00" value={officialTotalInput} onChange={(event) => setOfficialTotalInput(event.target.value)} /></div>{difference !== null && <div className={cn("rounded-lg px-3 py-2 text-sm", Math.abs(difference) <= 0.05 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800")}>{Math.abs(difference) <= 0.05 ? <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" />Valores conferem.</span> : <span className="flex items-center gap-2"><TriangleAlert className="h-4 w-4" />Diferença de {formatCurrency(difference)}.</span>}</div>}<div><label className="text-xs font-medium">Observações</label><Input className="mt-1" value={notesInput} onChange={(event) => setNotesInput(event.target.value)} /></div>{permissions.financial?.expenses?.edit && <div className="grid grid-cols-2 gap-2"><Button variant="outline" disabled={working === "statement"} onClick={() => void saveStatement("open")}>{working === "statement" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar</Button><Button disabled={!canClose || working === "statement"} onClick={() => void saveStatement("closed")}>Fechar fatura</Button></div>} {!canClose && selectedGroup.lines.length > 0 && <p className="text-xs leading-relaxed text-muted-foreground">Para fechar, audite e confira todas as cobranças e elimine a diferença entre o total oficial e o previsto.</p>}</CardContent></Card>
 
                 <Card className="rounded-2xl"><CardHeader><CardTitle className="text-base">Pagamento no extrato</CardTitle></CardHeader><CardContent className="space-y-3">{selectedStatement?.status === "paid" ? <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700"><CheckCircle2 className="mb-2 h-5 w-5" /><p className="font-semibold">Pagamento conciliado</p><p className="mt-1 text-xs">{toDate(selectedStatement.paidAt) ? format(toDate(selectedStatement.paidAt)!, "dd/MM/yyyy") : "Data não informada"}</p></div> : selectedStatement?.status !== "closed" ? <p className="text-sm text-muted-foreground">Feche a fatura antes de procurar a saída bancária correspondente.</p> : paymentCandidates.length === 0 ? <div className="text-sm text-muted-foreground"><RefreshCw className="mb-2 h-5 w-5" /><p>Nenhum débito compatível foi encontrado. Importe ou confira o extrato bancário.</p><Button asChild variant="outline" size="sm" className="mt-3"><Link href={FINANCIAL_ROUTES.importExpenses}>Abrir conferência</Link></Button></div> : paymentCandidates.map((candidate) => <div key={candidate.transaction.id} className="rounded-xl border p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{String(candidate.transaction.description || "Pagamento da fatura")}</p><p className="mt-1 text-xs text-muted-foreground">{toDate(candidate.transaction.date) ? format(toDate(candidate.transaction.date)!, "dd/MM/yyyy") : "—"} · {candidate.confidence === "high" ? "correspondência exata" : "valor próximo"}</p></div><p className="font-mono text-sm font-semibold">{formatCurrency(Math.abs(Number(candidate.transaction.amount) || 0))}</p></div>{permissions.financial?.expenses?.pay && <Button className="mt-3 w-full" size="sm" disabled={!!working} onClick={() => void reconcilePayment(candidate)}>{working === `payment-${candidate.transaction.id}` && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Conciliar pagamento</Button>}</div>)}</CardContent></Card>
               </div>
@@ -478,4 +590,8 @@ export function CardStatementsPage() {
       )}
     </div>
   );
+}
+
+export function CardStatementsPage() {
+  return <CardStatementsWorkspace />;
 }
