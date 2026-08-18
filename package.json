@@ -28,11 +28,6 @@
     "migrate:financial": "node scripts/migrate-financial.mjs",
     "migrate:das-accounts": "node scripts/migrate-das-account-structure.mjs",
     "migrate:dare-accounts": "node scripts/migrate-dare-account-structure.mjs",
-    "register:ct-das-2026-07": "node scripts/register-ct-das-2026-07.mjs",
-    "register:ct-dares-2026-07": "node scripts/register-ct-dares-2026-07.mjs",
-    "create:ct-das-provisions": "node scripts/create-ct-das-provisions-12m.mjs",
-    "schedule:ct-das-2026-07": "node scripts/schedule-ct-das-2026-07.mjs",
-    "schedule:ct-dares-2026-07": "node scripts/schedule-ct-dares-2026-07.mjs",
     "migrate:cash-closure-permissions": "node --import tsx scripts/migrate-cash-closure-permissions.mts",
     "migrate:cash-deposit-inter": "node --import tsx scripts/migrate-cash-deposit-inter-fields.mts",
     "migrate:central-pdv-links": "node --import tsx scripts/migrate-central-pdv-unit-links.mts",
@@ -43,7 +38,8 @@
     "migrate:standard-person-links": "node scripts/migrate-standard-person-links.mjs",
     "migrate:profile-compliance": "node --import tsx scripts/migrate-profile-compliance-v1.mts",
     "sync:profile-compliance-cache": "node --import tsx scripts/sync-profile-compliance-cache.mts",
-    "reprocess:goals": "node scripts/reprocess-goals-pdv.mjs"
+    "reprocess:goals": "node scripts/reprocess-goals-pdv.mjs",
+    "audit:cli": "node scripts/cli-session-audit.mjs"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.4",
