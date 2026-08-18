@@ -1,11 +1,11 @@
 import "server-only";
 
+import { getActiveSystemPrompt, renderSystemPrompt } from "@/ai/prompts/registry";
 import {
   EMPLOYEE_DOCUMENT_TYPE_CATALOG,
   employeeDocumentTypeConfigByCode,
   type EmployeeDocumentTypeConfig,
 } from "@/lib/hr/employee-document-options";
-import { extractionGuideForPrompt } from "@/lib/hr/employee-document-extraction-guide";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_FILES_URL = "https://api.openai.com/v1/files";
@@ -258,8 +258,7 @@ type RawAiResult = {
   warnings?: unknown;
 };
 
-const PROMPT_VERSION = "employee-document-v5";
-const SCHEMA_VERSION = "employee-document-analysis-v5";
+const EMPLOYEE_DOCUMENT_PROMPT = getActiveSystemPrompt("hr.employee-document-analysis");
 
 function normalizeText(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -305,17 +304,6 @@ function parseJsonObject(text: string): RawAiResult {
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as RawAiResult : {};
 }
 
-function catalogForPrompt() {
-  return EMPLOYEE_DOCUMENT_TYPE_CATALOG.map((item) => ({
-    code: item.code,
-    name: item.label,
-    category: item.category,
-    defaultAccessLevel: item.defaultAccessLevel,
-    aliases: item.aliases,
-    hints: item.classificationHints,
-  }));
-}
-
 function fallbackByFilename(fileName: string): AiEmployeeDocumentAnalysis {
   const normalizedFile = normalizeText(fileName);
   const ranked = EMPLOYEE_DOCUMENT_TYPE_CATALOG
@@ -352,96 +340,9 @@ function fallbackByFilename(fileName: string): AiEmployeeDocumentAnalysis {
     inputTokens: null,
     outputTokens: null,
     estimatedCostUsd: null,
-    promptVersion: PROMPT_VERSION,
-    schemaVersion: SCHEMA_VERSION,
+    promptVersion: EMPLOYEE_DOCUMENT_PROMPT.version,
+    schemaVersion: EMPLOYEE_DOCUMENT_PROMPT.schemaVersion!,
   };
-}
-
-function buildPrompt({
-  expectedEmployeeName,
-}: {
-  expectedEmployeeName?: string | null;
-}) {
-  return [
-    "Você analisa documentos de RH brasileiros. Retorne somente JSON válido, sem markdown.",
-    "A saída é validada por JSON Schema rígido. Preencha todos os campos do schema; use null quando não houver evidência.",
-    "Princípio obrigatório: a IA interpreta; regras determinísticas validam; o sistema executa.",
-    "Use exclusivamente um documentTypeCode do catálogo. Se nenhum tipo for seguro, use UNKNOWN_DOCUMENT.",
-    "Não invente tipos, pastas, colaboradores ou datas. Use null quando não encontrar campo.",
-    "Para atestado/documento médico, não extraia diagnóstico, CID ou conteúdo clínico; extraia apenas dados operacionais mínimos.",
-    "Para ASO, extraia examDate como a data real de realização do exame, não a data de upload ou arquivamento.",
-    "Para RG, CNH, certidões e documentos com seção de filiação, extraia motherName e fatherName exatamente como aparecem. Se houver apenas uma pessoa na filiação, preencha apenas o campo correspondente quando o rótulo indicar mãe/pai; se o rótulo não distinguir, use null.",
-    "Para CTPS, extraia ctpsNumber, ctpsSeries e ctpsIssueDate quando existirem. Em CTPS digital, número/série podem não existir; nesse caso use null e extraia CPF em cpf quando visível.",
-    "Para comprovante de PIS/PASEP/NIS/NIT, extraia o número em pisPasep, preservando apenas o número legível.",
-    "Para CNH, extraia cnhNumber, cnhCategory, cnhExpiryDate e cnhFirstLicenseDate quando estiverem visíveis.",
-    "Para certidão de nascimento ou casamento, extraia maritalStatus quando houver evidência explícita.",
-    "Para salário-família, trate o cadastro como lista de filhos. Extraia cada filho com nome, nascimento, CPF e RG quando houver. Use relationship como Filho(a), salvo evidência textual diferente.",
-    "Para contrato de experiência, leia a cláusula de prazo. Grave a data impressa depois de 'término em' em probationFirstEndDate e a data impressa depois de 'finaliza em' (ou equivalente) em probationFinalEndDate. Não recalcule datas quando elas estiverem escritas no documento.",
-    "Use o mapa de extração abaixo para localizar cada informação. O mapa orienta a busca, mas nunca substitui evidência visível no arquivo.",
-    JSON.stringify(extractionGuideForPrompt()),
-    "Para certidão, vacinação e frequência escolar, não calcule status final. O sistema deriva Pendente/Enviada/Não exigida pela idade e pelo tipo de documento. Você só deve marcar vaccinationRecordDetected, schoolAttendanceDetected e responsibilityTermDetected como true quando o arquivo enviado comprovar o respectivo documento.",
-    expectedEmployeeName ? `Colaborador esperado no ponto de entrada: ${expectedEmployeeName}. Compare com o conteúdo, mas não force correspondência.` : "Não há colaborador esperado.",
-    "Catálogo fechado:",
-    JSON.stringify(catalogForPrompt()),
-    "Formato obrigatório:",
-    JSON.stringify({
-      documentTypeCode: "PAYSLIP",
-      documentTypeConfidence: 0.98,
-      employeeMatchStatus: "MATCH | POSSIBLE_MATCH | MISMATCH | UNKNOWN",
-      identifiedEmployee: { name: "Nome identificado ou null" },
-      extractedFields: {
-        cpf: "somente se visível; pode mascarar parcialmente",
-        motherName: "nome da mãe quando houver filiação visível",
-        fatherName: "nome do pai quando houver filiação visível",
-        pisPasep: "PIS/PASEP/NIS/NIT quando houver",
-        ctpsNumber: "número da CTPS quando houver",
-        ctpsSeries: "série da CTPS quando houver",
-        ctpsIssueDate: "AAAA-MM-DD quando houver",
-        cnhNumber: "número de registro da CNH quando houver",
-        cnhCategory: "categoria da CNH quando houver",
-        cnhExpiryDate: "AAAA-MM-DD quando houver",
-        cnhFirstLicenseDate: "AAAA-MM-DD quando houver",
-        maritalStatus: "estado civil quando houver",
-        admissionDate: "AAAA-MM-DD; início/admissão quando houver",
-        probationFirstEndDate: "AAAA-MM-DD; término do primeiro período de experiência",
-        probationFinalEndDate: "AAAA-MM-DD; término após a prorrogação",
-        probationInitialDays: "quantidade de dias do primeiro período",
-        probationExtensionDays: "quantidade de dias da prorrogação",
-        referenceMonth: "AAAA-MM quando aplicável",
-        issueDate: "AAAA-MM-DD quando aplicável",
-        startDate: "AAAA-MM-DD quando aplicável",
-        endDate: "AAAA-MM-DD quando aplicável",
-        amountNet: "número quando aplicável",
-        dependentName: "nome do filho quando houver",
-        dependentBirthDate: "AAAA-MM-DD quando houver",
-        dependentCpf: "CPF do filho ou null",
-        dependentRg: "RG do filho ou null",
-        dependents: [{ name: "Nome do filho", birthDate: "AAAA-MM-DD", cpf: "CPF ou null", rg: "RG ou null", relationship: "Filho(a)" }],
-        vaccinationRecordDetected: false,
-        schoolAttendanceDetected: false,
-        responsibilityTermDetected: false,
-        signatureDetected: true,
-        transportVoucherAuthorized: true,
-        transportVoucherDailyValue: 8.4,
-        "demais campos do schema": null,
-      },
-      fieldConfidences: {
-        cpf: 0.99,
-        employeeName: 0.99,
-        motherName: 0.99,
-        fatherName: 0.99,
-        referenceMonth: 0.99,
-        "demais campos do schema": 0,
-      },
-      structure: {
-        legibility: "GOOD | PARTIAL | POOR",
-        multipleDocumentsDetected: false,
-        pageCount: 1,
-      },
-      issues: ["problemas objetivos curtos"],
-      warnings: ["alertas objetivos curtos"],
-    }),
-  ].join("\n\n");
 }
 
 async function uploadFileToOpenAi(file: File, apiKey: string) {
@@ -493,7 +394,7 @@ async function createOpenAiResponse({
           { type: "input_file", file_id: fileId },
           {
             type: "input_text",
-            text: `${buildPrompt({ expectedEmployeeName })}\n\nArquivo original: ${fileName}`,
+            text: `${renderSystemPrompt("hr.employee-document-analysis", { expectedEmployeeName })}\n\nArquivo original: ${fileName}`,
           },
         ],
       },
@@ -563,8 +464,8 @@ function normalizeAiResult(raw: RawAiResult, response: { model: string; inputTok
     inputTokens: response.inputTokens,
     outputTokens: response.outputTokens,
     estimatedCostUsd: response.estimatedCostUsd,
-    promptVersion: PROMPT_VERSION,
-    schemaVersion: SCHEMA_VERSION,
+    promptVersion: EMPLOYEE_DOCUMENT_PROMPT.version,
+    schemaVersion: EMPLOYEE_DOCUMENT_PROMPT.schemaVersion!,
   };
 }
 

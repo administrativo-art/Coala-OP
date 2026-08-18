@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
+import { getActiveSystemPrompt } from "@/ai/prompts/registry";
 import { assertHrAccess } from "@/features/hr/lib/server-access";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
@@ -45,6 +46,7 @@ const BATCHES = "documentUploadBatches";
 const ITEMS = "documentUploadItems";
 const COLLECTION = "employeeDocuments";
 const BATCH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const EMPLOYEE_DOCUMENT_PROMPT = getActiveSystemPrompt("hr.employee-document-analysis");
 
 function tsToIso(value: unknown): string | null {
   if (value && typeof (value as { toDate?: () => Date }).toDate === "function") {
@@ -251,8 +253,8 @@ async function analyzeFreeBatch(request: NextRequest, access: Awaited<ReturnType
       inputTokens: ai?.inputTokens ?? null,
       outputTokens: ai?.outputTokens ?? null,
       estimatedCostUsd: ai?.estimatedCostUsd ?? null,
-      promptVersion: ai?.promptVersion ?? "employee-document-v2",
-      schemaVersion: ai?.schemaVersion ?? "employee-document-analysis-v2",
+      promptVersion: ai?.promptVersion ?? EMPLOYEE_DOCUMENT_PROMPT.version,
+      schemaVersion: ai?.schemaVersion ?? EMPLOYEE_DOCUMENT_PROMPT.schemaVersion,
       warnings: [...(ai?.warnings ?? []), ...duplicateWarnings],
       errors: [...fileErrors, ...(ai?.issues ?? [])],
       duplicateResolution,
