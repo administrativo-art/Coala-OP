@@ -3,6 +3,12 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   transpilePackages: ['@react-pdf/renderer'],
+  experimental: {
+    // App Hosting builds run in a memory-limited container. Next otherwise
+    // derives this from the host CPU count and can spawn enough page-data
+    // workers to exhaust the container after compilation.
+    cpus: 1,
+  },
   outputFileTracingIncludes: {
     '/api/documents/templates/**': [
       './docs/modelos-documentos/admissionais/*.docx',
