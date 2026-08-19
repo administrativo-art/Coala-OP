@@ -84,23 +84,46 @@ function nextEditableStatus(current: ItemStatus, requested: ItemStatus, action: 
   return requested === "completed" ? current : requested;
 }
 
+type AuditPermission = "view" | "import" | "edit" | "ignore" | "effectuate" | "manage";
+
+function hasAuditPermission(
+  actor: Awaited<ReturnType<typeof requireUser>>,
+  permission: AuditPermission
+) {
+  return actor.isDefaultAdmin || (
+    actor.permissions.financial?.view === true &&
+    actor.permissions.financial?.audits?.view === true &&
+    actor.permissions.financial.audits[permission] === true
+  );
+}
+
 function mergeItem(
   current: RawItem,
   incoming: RawItem,
   action: "save" | "finalize",
-  actor: { id: string; name: string }
+  actor: { id: string; name: string },
+  capabilities: { edit: boolean; ignore: boolean; effectuate: boolean; manage: boolean }
 ) {
   const currentStatus = getItemStatus(current);
   const incomingStatus = getItemStatus(incoming);
-  const nextStatus = nextEditableStatus(currentStatus, incomingStatus, action);
+  const requestedStatus = nextEditableStatus(currentStatus, incomingStatus, action);
+  const nextStatus = action === "finalize" && requestedStatus === "completed" && capabilities.effectuate
+    ? "completed"
+    : requestedStatus === "ignored"
+      ? capabilities.ignore ? "ignored" : currentStatus
+      : currentStatus === "ignored"
+        ? requestedStatus === "pending" && capabilities.manage ? "pending" : currentStatus
+        : capabilities.edit
+          ? requestedStatus
+          : currentStatus;
   const next = {
     ...current,
     expenseDraft:
-      incoming.expenseDraft && typeof incoming.expenseDraft === "object"
+      capabilities.edit && incoming.expenseDraft && typeof incoming.expenseDraft === "object"
         ? incoming.expenseDraft
         : current.expenseDraft,
     financialDraft:
-      incoming.financialDraft && typeof incoming.financialDraft === "object"
+      capabilities.edit && incoming.financialDraft && typeof incoming.financialDraft === "object"
         ? incoming.financialDraft
         : current.financialDraft,
     status: nextStatus,
@@ -139,24 +162,25 @@ function mergeSessionItems(
   incomingItems: RawItem[],
   action: "save" | "finalize",
   automated: boolean,
-  actor: { id: string; name: string }
+  actor: { id: string; name: string },
+  capabilities: { edit: boolean; ignore: boolean; effectuate: boolean; manage: boolean }
 ) {
   const incomingById = new Map(incomingItems.map((item) => [getItemId(item), item]));
   const mergedCurrent = currentItems.map((current) => {
     const incoming = incomingById.get(getItemId(current));
-    return incoming ? mergeItem(current, incoming, action, actor) : current;
+    return incoming ? mergeItem(current, incoming, action, actor, capabilities) : current;
   });
 
   if (automated) return mergedCurrent;
 
   const currentIds = new Set(currentItems.map(getItemId));
-  return [
+  return capabilities.edit ? [
     ...mergedCurrent,
     ...incomingItems.filter((item) => {
       const id = getItemId(item);
       return id && !currentIds.has(id);
     }),
-  ];
+  ] : mergedCurrent;
 }
 
 function updateLinkedTransaction(
@@ -207,13 +231,9 @@ export async function PATCH(
     ) {
       const snapshot = await sessionRef.get();
       if (!snapshot.exists) throw new Error("NOT_FOUND");
-      const current = snapshot.data() ?? {};
-      const isAutomated = current.syncSource === "inter_api";
-      const canImport = actor.isDefaultAdmin || actor.permissions.financial?.expenses?.import === true;
-      const isOwner = current.createdBy === actor.decoded.uid;
-      if (!isOwner && !(isAutomated && canImport)) throw new Error("FORBIDDEN");
 
       if (parsed.data.action === "effectuate_item") {
+        if (!hasAuditPermission(actor, "effectuate")) throw new Error("FORBIDDEN");
         return NextResponse.json({
           ok: true,
           ...(await effectuateImportSessionItem({
@@ -225,6 +245,7 @@ export async function PATCH(
         });
       }
       if (parsed.data.action === "reopen_item") {
+        if (!hasAuditPermission(actor, "manage")) throw new Error("FORBIDDEN");
         return NextResponse.json({
           ok: true,
           ...(await reopenImportSessionItem({
@@ -236,6 +257,7 @@ export async function PATCH(
           })),
         });
       }
+      if (!hasAuditPermission(actor, "manage")) throw new Error("FORBIDDEN");
       return NextResponse.json({
         ok: true,
         ...(await closeImportStatement({ sessionId, actorId: actor.decoded.uid, actorName })),
@@ -247,11 +269,7 @@ export async function PATCH(
       const statusResult = await financialDbAdmin.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(sessionRef);
         if (!snapshot.exists) throw new Error("NOT_FOUND");
-        const current = snapshot.data() ?? {};
-        const isAutomated = current.syncSource === "inter_api";
-        const canImport = actor.isDefaultAdmin || actor.permissions.financial?.expenses?.import === true;
-        const isOwner = current.createdBy === actor.decoded.uid;
-        if (!isOwner && !(isAutomated && canImport)) throw new Error("FORBIDDEN");
+        if (!hasAuditPermission(actor, "manage")) throw new Error("FORBIDDEN");
         transaction.update(sessionRef, {
           status: statusData.status,
           updatedAt: FieldValue.serverTimestamp(),
@@ -270,9 +288,15 @@ export async function PATCH(
 
       const current = snapshot.data() ?? {};
       const isAutomated = current.syncSource === "inter_api";
-      const canImport = actor.isDefaultAdmin || actor.permissions.financial?.expenses?.import === true;
-      const isOwner = current.createdBy === actor.decoded.uid;
-      if (!isOwner && !(isAutomated && canImport)) throw new Error("FORBIDDEN");
+      const capabilities = {
+        edit: hasAuditPermission(actor, "edit"),
+        ignore: hasAuditPermission(actor, "ignore"),
+        effectuate: hasAuditPermission(actor, "effectuate"),
+        manage: hasAuditPermission(actor, "manage"),
+      };
+      if (saveData.action === "finalize" ? !capabilities.effectuate : !Object.values(capabilities).some(Boolean)) {
+        throw new Error("FORBIDDEN");
+      }
 
       if (current.status !== "open") throw new Error("SESSION_CLOSED");
 
@@ -282,7 +306,8 @@ export async function PATCH(
         saveData.items,
         saveData.action,
         isAutomated,
-        { id: actor.decoded.uid, name: actorName }
+        { id: actor.decoded.uid, name: actorName },
+        capabilities
       );
       const previousById = new Map(currentItems.map((item) => [getItemId(item), item]));
       nextItems.forEach((item) => {
@@ -292,8 +317,8 @@ export async function PATCH(
 
       const summary = buildSummary(nextItems);
       transaction.update(sessionRef, {
-        statementAccountId: saveData.statementAccountId,
-        statementAccountName: saveData.statementAccountName,
+        statementAccountId: capabilities.edit ? saveData.statementAccountId : current.statementAccountId,
+        statementAccountName: capabilities.edit ? saveData.statementAccountName : current.statementAccountName,
         items: nextItems,
         summary,
         updatedAt: FieldValue.serverTimestamp(),

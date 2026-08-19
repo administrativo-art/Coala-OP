@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Box, ChevronRight, Group, Loader2, Menu, Package, Settings2, SlidersHorizontal, Users2, UsersRound } from "lucide-react";
+import { ArrowLeft, Box, BrainCircuit, ChevronRight, Group, Loader2, Menu, Package, Settings2, SlidersHorizontal, Users2, UsersRound } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
 import { DPRuntimeGuard } from "@/components/dp-runtime-guard";
 import dynamic from "next/dynamic";
@@ -153,6 +153,10 @@ const AssetBarcodeLabelsPanel = dynamic(
 );
 const RecruitmentFormsView = dynamic(
   () => import("@/components/hr/recruitment/recruitment-shell").then((m) => m.RecruitmentFormsView),
+  { ssr: false }
+);
+const AiBillingSettings = dynamic(
+  () => import("@/components/ai-management/ai-billing-settings").then((m) => m.AiBillingSettings),
   { ssr: false }
 );
 
@@ -839,6 +843,25 @@ export default function SettingsPage() {
     return !!permissions.financial?.settings?.view;
   });
 
+  const aiManagementTabs: NestedTab[] = permissions.settings.viewAiCosts
+    ? [
+        {
+          value: "gpt-credits",
+          label: "Créditos GPT",
+          title: "Créditos GPT",
+          description: "Acompanhe o limite mensal disponível, o consumo e o volume de uso dos modelos GPT.",
+          content: <AiBillingSettings view="credits" />,
+        },
+        {
+          value: "app-cost",
+          label: "Custo Google Cloud",
+          title: "Custo Google Cloud",
+          description: "Acompanhe o custo de infraestrutura do projeto Firebase e dos serviços Google Cloud vinculados.",
+          content: <AiBillingSettings view="costs" />,
+        },
+      ]
+    : [];
+
   const departmentTabs: DepartmentTab[] = [
     {
       value: "operacional",
@@ -868,6 +891,15 @@ export default function SettingsPage() {
       tabs: financialTabs,
       emptyLabel: "Financeiro",
     },
+    ...(aiManagementTabs.length
+      ? [{
+          value: "ai-management",
+          label: "Gerenciamento de IA",
+          icon: <BrainCircuit className="h-3.5 w-3.5" />,
+          tabs: aiManagementTabs,
+          emptyLabel: "Gerenciamento de IA",
+        }]
+      : []),
   ];
   const departmentStructureKey = getSettingsTabStructureKey(departmentTabs);
   const departmentTabsRef = useRef(departmentTabs);

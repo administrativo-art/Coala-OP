@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { brand } from "@/config/brand";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
@@ -15,7 +14,7 @@ import {
   ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
-  LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck,
+  DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
   Files, Building2, FileStack, Banknote
 } from "lucide-react";
@@ -81,7 +80,7 @@ interface SidebarProps {
 
 export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const pathname = usePathname();
-  const { user, permissions, logout } = useAuth();
+  const { user, permissions } = useAuth();
   const { pendingTaskCount } = useAllTasks();
   const canAccessPurchasing = canViewPurchasing(permissions);
   const [hoverExpanded, setHoverExpanded] = useState(false);
@@ -247,9 +246,13 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             label: "Contas a pagar",
             href: "__group:accounts-payable",
             icon: ReceiptText,
-            show: permissions.financial?.expenses?.view || permissions.financial?.paymentRequests?.view,
+            show: permissions.financial?.expenses?.view
+              || permissions.financial?.audits?.view
+              || permissions.financial?.cardStatements?.view
+              || permissions.financial?.paymentRequests?.view,
             children: [
-              { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
+              { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view || permissions.financial?.audits?.view },
+              { label: "Faturas de cartão", href: "/dashboard/financial/expenses/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
               { label: "Autorizações bancárias", href: "/dashboard/financial/payment-requests", icon: Wallet, show: permissions.financial?.paymentRequests?.view },
             ],
           },
@@ -389,9 +392,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  const userName = user?.username ?? user?.email?.split("@")[0] ?? "Usuário";
-  const userEmail = user?.email ?? "";
-  const userInitial = (user?.username?.[0] ?? user?.email?.[0] ?? "U").toUpperCase();
   const expanded = open || hoverExpanded;
 
   return (
@@ -756,37 +756,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           )}
         </nav>
 
-        <div className={cn("h-px bg-slate-200", expanded ? "mx-3 mb-2" : "mx-2 mb-2")} />
-
-        {/* Footer */}
-        <div className={cn("flex-shrink-0 pb-2", expanded ? "px-2.5" : "px-1.5")}>
-          <div className={cn("flex items-center", expanded ? "gap-2.5" : "justify-center")}>
-            <div
-              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
-              style={{ background: "linear-gradient(135deg, #f43f5e, #14b8a6)" }}
-            >
-              {userInitial}
-            </div>
-            {expanded ? (
-              <>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold leading-tight">{userName}</p>
-                  <p className="truncate text-[10px] text-muted-foreground leading-tight">{userEmail}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <ThemeToggle />
-                  <button
-                    onClick={logout}
-                    className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label="Sair"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
-        </div>
       </aside>
     </>
   );

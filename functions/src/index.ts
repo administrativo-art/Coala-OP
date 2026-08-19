@@ -28,6 +28,7 @@ setGlobalOptions({ maxInstances: 10 });
 const db = getFirestore('coala');
 const checklistDb = getFirestore('coala-checklist');
 const hrDb = getFirestore('coala-rh');
+const financialDb = getFirestore('coala-financeiro');
 const auth = getAuth();
 const STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET ?? 'smart-converter-752gf.firebasestorage.app';
 const BIZNEO_BASE_URL = 'https://coala.bizneohr.com/api/v1';
@@ -1096,11 +1097,22 @@ export const onProfileChange = onDocumentWritten(
 
     const profileData = event.data?.after.exists ? event.data.after.data() : null;
     const isDefaultAdmin = profileData?.isDefaultAdmin === true;
+    const financialPermissions = profileData?.permissions?.financial ?? { view: false };
 
-    const promises = usersSnap.docs.map(userDoc =>
-      auth.setCustomUserClaims(userDoc.id, { profileId, isDefaultAdmin })
-        .then(() => console.log(`✅ ${userDoc.data().username || userDoc.id} atualizado`))
-    );
+    const promises = usersSnap.docs.map(async (userDoc) => {
+      const active = userDoc.data().isActive !== false && userDoc.data().active !== false;
+      await Promise.all([
+        auth.setCustomUserClaims(userDoc.id, { profileId, isDefaultAdmin, financial: financialPermissions }),
+        financialDb.collection('users').doc(userDoc.id).set({
+          profileId,
+          active,
+          isDefaultAdmin,
+          permissions: financialPermissions,
+          syncedAt: FieldValue.serverTimestamp(),
+        }, { merge: true }),
+      ]);
+      console.log(`✅ ${userDoc.data().username || userDoc.id} atualizado`);
+    });
 
     await Promise.all(promises);
     console.log(`🎉 ${promises.length} usuário(s) atualizados para profileId=${profileId}`);

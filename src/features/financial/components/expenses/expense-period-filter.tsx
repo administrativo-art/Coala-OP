@@ -52,6 +52,7 @@ function rangeForPreset(preset: ExpensePeriodPreset, now = new Date()): DateRang
 }
 
 function triggerLabel(preset: ExpensePeriodPreset, from: string, to: string) {
+  if (!from && !to) return "Todos";
   if (preset !== "custom") return PRESETS.find((item) => item.value === preset)?.label || "Período";
 
   const parsedFrom = parseFilterDate(from);
@@ -115,9 +116,10 @@ export function ExpensePeriodFilter({
       <PopoverTrigger asChild>
         <Button
           type="button"
+          data-testid="expense-due-date-filter"
           variant="outline"
-          className={cn(
-            "h-8 w-[225px] shrink-0 justify-between rounded-lg border-border/70 bg-background px-3 text-xs font-medium",
+        className={cn(
+            "h-8 w-full min-w-0 justify-between rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] font-medium sm:text-xs",
             open && "border-primary"
           )}
         >

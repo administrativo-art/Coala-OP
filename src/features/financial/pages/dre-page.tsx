@@ -3,13 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChevronLeft, ChevronRight, Download, LayoutDashboard, Table2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, LayoutDashboard, Table2, UsersRound } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
 import { expenseAccountAllocationsForResultCenter } from "@/features/financial/lib/expense-account-allocations";
+import { buildDrePersonAnalysis, type DrePersonAccountMeta } from "@/features/financial/lib/dre-person-analysis";
+import { DrePeopleView } from "@/features/financial/components/dre/dre-people-view";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
@@ -45,7 +47,13 @@ export function DrePage() {
 
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [unitFilter, setUnitFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"dashboard" | "classic">("dashboard");
+  const [viewMode, setViewMode] = useState<"dashboard" | "classic" | "people">("dashboard");
+  const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
+  const canExportPersonnelCosts = canViewPersonnelCosts && permissions.financial?.personnelCosts?.export === true;
+
+  useEffect(() => {
+    if (!canViewPersonnelCosts && viewMode === "people") setViewMode("dashboard");
+  }, [canViewPersonnelCosts, viewMode]);
 
   const { data: transactions, loading: loadingTx } = useFinancialCollection<any>(financialCollection("transactions"));
   const { data: expenses, loading: loadingExp } = useFinancialCollection<any>(financialCollection("expenses"));
@@ -95,6 +103,19 @@ export function DrePage() {
     const map: Record<string, string> = {};
     (resultCenters || []).forEach((center: any) => {
       if (typeof center?.name !== "string") return;
+      (Array.isArray(center.unitIds) ? center.unitIds : []).forEach((unitId: unknown) => {
+        if (typeof unitId === "string" && unitId) map[unitId] = center.name;
+      });
+    });
+    return map;
+  }, [resultCenters]);
+
+  const resultCenterNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (resultCenters || []).forEach((center: any) => {
+      if (typeof center?.name !== "string") return;
+      if (typeof center.id === "string" && center.id) map[center.id] = center.name;
+      map[center.name] = center.name;
       (Array.isArray(center.unitIds) ? center.unitIds : []).forEach((unitId: unknown) => {
         if (typeof unitId === "string" && unitId) map[unitId] = center.name;
       });
@@ -227,6 +248,26 @@ export function DrePage() {
     return m;
   }, [accounts]);
 
+  const accountMetaById = useMemo(() => {
+    const map: Record<string, DrePersonAccountMeta> = {};
+    (accounts || []).forEach((account: any) => {
+      map[account.id] = {
+        name: account.name || account.id,
+        drePosition: account.dre_position ?? null,
+        isDreAccount: account.is_dre_account !== false,
+      };
+    });
+    return map;
+  }, [accounts]);
+
+  const personAnalysis = useMemo(() => buildDrePersonAnalysis({
+    expenses: canViewPersonnelCosts ? (expenses || []) : [],
+    accounts: accountMetaById,
+    monthKey: selectedMonth,
+    resultCenter: selectedUnitName,
+    resultCenterNames: resultCenterNameMap,
+  }), [canViewPersonnelCosts, expenses, accountMetaById, selectedMonth, selectedUnitName, resultCenterNameMap]);
+
   const topExpensePlans = useMemo(() => {
     const totals: Record<string, number> = {};
     (expenses || []).forEach((exp: any) => {
@@ -275,6 +316,32 @@ export function DrePage() {
   // ── export ───────────────────────────────────────────────────────────────────
 
   function exportCsv() {
+    if (viewMode === "people") {
+      if (!canExportPersonnelCosts) return;
+      const rows = [
+        ["DRE por colaborador —", selectedMonthLabel, unitFilter === "all" ? "Todas as unidades" : (kioskNameById[unitFilter] ?? unitFilter)],
+        [],
+        ["Colaborador", "Unidade", "Rubrica", "Natureza", "Compõe a DRE", "Valor"],
+        ...personAnalysis.people.flatMap((person) => person.rubrics.map((rubric) => [
+          person.employeeName,
+          rubric.resultCenters.join(" · ") || person.resultCenters.join(" · "),
+          rubric.accountPlanName,
+          rubric.analysisType === "employer_cost"
+            ? "Custo da empresa"
+            : rubric.analysisType === "employee_deduction" ? "Desconto do colaborador" : "Informativo",
+          rubric.countsInDre ? "Sim" : "Não",
+          formatCurrency(rubric.amount),
+        ])),
+      ];
+      const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(";")).join("\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      const anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = `dre-colaboradores-${selectedMonth}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(anchor.href);
+      return;
+    }
     const { revBruta, impostos, recLiq, cmv, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
     const rows = [
       ["DRE —", selectedMonthLabel, unitFilter === "all" ? "Todas as unidades" : (kioskNameById[unitFilter] ?? unitFilter)],
@@ -357,9 +424,17 @@ export function DrePage() {
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "classic" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               <Table2 className="h-3.5 w-3.5" /> DRE Clássica
             </button>
+            {canViewPersonnelCosts ? (
+              <button type="button" onClick={() => setViewMode("people")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "people" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                <UsersRound className="h-3.5 w-3.5" /> Por colaborador
+              </button>
+            ) : null}
           </div>
 
-          <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+          {(viewMode !== "people" || canExportPersonnelCosts) ? (
+            <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+          ) : null}
         </div>
       </div>
 
@@ -597,6 +672,16 @@ export function DrePage() {
             })()}
           </CardContent>
         </Card>
+      )}
+
+      {viewMode === "people" && canViewPersonnelCosts && (
+        <DrePeopleView
+          analysis={personAnalysis}
+          drePersonnelTotal={metrics.pessoal}
+          loading={loading}
+          monthLabel={selectedMonthLabel}
+          unitLabel={selectedUnitName || "Todas as unidades"}
+        />
       )}
     </div>
   );

@@ -49,6 +49,8 @@ export type CardExpenseEntry = {
   plannedPaymentMethodId?: unknown;
   plannedPaymentMethodLabel?: unknown;
   cardReconciliationStatus?: unknown;
+  cardStatementKey?: unknown;
+  cardStatementMonthKey?: unknown;
 };
 
 export type CardStatementCycle = {
@@ -227,6 +229,36 @@ export function resolveCardStatementCycleFromMonth(
   };
 }
 
+export function resolveCardStatementDatesFromDueDate(
+  dueDate: Date,
+  card: Pick<CreditCardInstrument, "closingDay" | "dueDay">
+) {
+  const closingDay = positiveDay(card.closingDay, 25);
+  const dueDay = positiveDay(card.dueDay, 5);
+  const closingMonthOffset = closingDay > dueDay ? -1 : 0;
+  return {
+    closingDate: dateAtDay(dueDate.getFullYear(), dueDate.getMonth() + closingMonthOffset, closingDay),
+    dueDate: dateAtDay(dueDate.getFullYear(), dueDate.getMonth(), dueDay),
+  };
+}
+
+function explicitExpenseCycle(
+  expense: CardExpenseEntry,
+  card: Pick<CreditCardInstrument, "accountId" | "methodId" | "closingDay" | "dueDay">
+) {
+  const explicitMonth = String(expense.cardStatementMonthKey ?? "").trim();
+  if (/^\d{4}-\d{2}$/.test(explicitMonth)) {
+    return resolveCardStatementCycleFromMonth(explicitMonth, card);
+  }
+
+  const statementKey = String(expense.cardStatementKey ?? "").trim();
+  const prefix = `${card.accountId}:${card.methodId}:`;
+  const statementMonth = statementKey.startsWith(prefix) ? statementKey.slice(prefix.length) : "";
+  return /^\d{4}-\d{2}$/.test(statementMonth)
+    ? resolveCardStatementCycleFromMonth(statementMonth, card)
+    : null;
+}
+
 export function buildCardStatementGroups(
   expenses: CardExpenseEntry[],
   cards: CreditCardInstrument[]
@@ -244,6 +276,7 @@ export function buildCardStatementGroups(
     const methodId = String(expense.plannedPaymentMethodId ?? "");
     const card = cardByKey.get(`${accountId}:${methodId}`);
     if (!card) continue;
+    const storedCycle = explicitExpenseCycle(expense, card);
 
     const installmentEntries =
       expense.paymentMethod === "installments" && Array.isArray(expense.installments) && expense.installments.length > 1
@@ -266,7 +299,9 @@ export function buildCardStatementGroups(
 
     for (const entry of installmentEntries) {
       if (!entry.chargeDate || !Number.isFinite(entry.value) || entry.value <= 0) continue;
-      const cycle = resolveCardStatementCycle(entry.chargeDate, card);
+      const cycle = installmentEntries.length === 1 && storedCycle
+        ? storedCycle
+        : resolveCardStatementCycle(entry.chargeDate, card);
       const current = groups.get(cycle.key) ?? {
         ...cycle,
         card,

@@ -410,9 +410,9 @@ export function FinancialDashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
-        {permissions.financial?.expenses?.view && (
+        {(permissions.financial?.expenses?.view || permissions.financial?.audits?.view || permissions.financial?.cardStatements?.view) && (
           <ShortcutCard
-            href={FINANCIAL_ROUTES.expenses}
+            href={permissions.financial?.expenses?.view || permissions.financial?.audits?.view ? FINANCIAL_ROUTES.expenses : FINANCIAL_ROUTES.cardStatements}
             title="Despesas"
             description="Lançamento, edição, contas a pagar e importação de extratos."
           />

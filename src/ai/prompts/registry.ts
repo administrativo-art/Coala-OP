@@ -2,6 +2,7 @@ import { goalsAnalysisPrompt } from "@/ai/prompts/commercial/goals-analysis";
 import { companyDocumentPrompt } from "@/ai/prompts/documents/company-document";
 import { documentTemplatePlanPrompt } from "@/ai/prompts/documents/template-plan";
 import { dasExtractionPrompt } from "@/ai/prompts/financial/das-extraction";
+import { cardStatementExtractionPrompt } from "@/ai/prompts/financial/card-statement-extraction";
 import { payrollGuideExtractionPrompt } from "@/ai/prompts/financial/payroll-guide-extraction";
 import { payslipExtractionPrompt } from "@/ai/prompts/financial/payslip-extraction";
 import { provisionDocumentExtractionPrompt } from "@/ai/prompts/financial/provision-document-extraction";
@@ -19,6 +20,7 @@ const definitions = [
   goalsAnalysisPrompt,
   companyDocumentPrompt,
   documentTemplatePlanPrompt,
+  cardStatementExtractionPrompt,
   dasExtractionPrompt,
   payrollGuideExtractionPrompt,
   payslipExtractionPrompt,

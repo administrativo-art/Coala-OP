@@ -10,7 +10,7 @@ import {
 
 test("registra prompts do sistema com IDs e versões únicos", () => {
   const prompts = listSystemPrompts();
-  assert.equal(prompts.length, 9);
+  assert.equal(prompts.length, 10);
   assert.equal(new Set(prompts.map((prompt) => prompt.id)).size, prompts.length);
   assert.equal(new Set(prompts.map((prompt) => `${prompt.id}@${prompt.version}`)).size, prompts.length);
   assert.ok(prompts.every((prompt) => prompt.version.length > 0));
@@ -22,14 +22,16 @@ test("segmenta o catálogo global por módulo e status", () => {
   assert.deepEqual(
     financial.map((prompt) => prompt.id),
     [
+      "financial.card.statement-extraction",
       "financial.payroll.guide-extraction",
       "financial.payroll.payslip-extraction",
       "financial.provision.document-extraction",
       "financial.tax.das-extraction",
     ],
   );
-  assert.ok(financial.every((prompt) => prompt.status === "draft"));
-  assert.equal(listSystemPrompts({ status: "active" }).length, 5);
+  assert.equal(financial.find((prompt) => prompt.id === "financial.card.statement-extraction")?.status, "active");
+  assert.ok(financial.filter((prompt) => prompt.id !== "financial.card.statement-extraction").every((prompt) => prompt.status === "draft"));
+  assert.equal(listSystemPrompts({ status: "active" }).length, 6);
 });
 
 test("renderiza o prompt ativo de RH pelo registro central", () => {

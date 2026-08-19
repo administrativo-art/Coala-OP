@@ -716,7 +716,7 @@ export type PermissionSet = {
       export: boolean;
     };
   };
-  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
+  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; viewAiCosts: boolean; };
   tasks: { view: boolean; manage: boolean; };
   goals: { view: boolean; manage: boolean; };
   help: { view: true };
@@ -749,6 +749,9 @@ export type PermissionSet = {
     financialFlow: boolean;
     dre: boolean;
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
+    audits: { view: boolean; import: boolean; edit: boolean; ignore: boolean; effectuate: boolean; manage: boolean; };
+    cardStatements: { view: boolean; import: boolean; audit: boolean; close: boolean; reconcile: boolean; };
+    personnelCosts: { view: boolean; edit: boolean; export: boolean; };
     beneficiaries: { view: boolean; viewMaskedPaymentData: boolean; managePaymentData: boolean; };
     paymentRequests: { view: boolean; create: boolean; authorize: boolean; submit: boolean; refresh: boolean; viewProof: boolean; };
     cashClosures: { view: boolean; edit: boolean; approve: boolean; reopen: boolean; resync: boolean; };
@@ -2729,7 +2732,7 @@ export const defaultGuestPermissions: PermissionSet = {
     commercial: {
       technicalSheets: { view: false, create: false, edit: false, delete: false, export: false },
     },
-    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
+    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, viewAiCosts: false },
     tasks: { view: false, manage: false },
     goals: { view: false, manage: false },
     help: { view: true },
@@ -2753,6 +2756,9 @@ export const defaultGuestPermissions: PermissionSet = {
       financialFlow: false,
       dre: false,
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
+      audits: { view: false, import: false, edit: false, ignore: false, effectuate: false, manage: false },
+      cardStatements: { view: false, import: false, audit: false, close: false, reconcile: false },
+      personnelCosts: { view: false, edit: false, export: false },
       beneficiaries: { view: false, viewMaskedPaymentData: false, managePaymentData: false },
       paymentRequests: { view: false, create: false, authorize: false, submit: false, refresh: false, viewProof: false },
       cashClosures: { view: false, edit: false, approve: false, reopen: false, resync: false },
@@ -2835,7 +2841,7 @@ export const defaultAdminPermissions: PermissionSet = {
     commercial: {
       technicalSheets: { view: true, create: true, edit: true, delete: true, export: true },
     },
-    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
+    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true, viewAiCosts: true },
     tasks: { view: true, manage: true },
     goals: { view: true, manage: true },
     reposition: { view: true, prepareDispatch: true, receive: true, finalize: true, cancel: true },
@@ -2858,6 +2864,9 @@ export const defaultAdminPermissions: PermissionSet = {
       financialFlow: true,
       dre: true,
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
+      audits: { view: true, import: true, edit: true, ignore: true, effectuate: true, manage: true },
+      cardStatements: { view: true, import: true, audit: true, close: true, reconcile: true },
+      personnelCosts: { view: true, edit: true, export: true },
       beneficiaries: { view: true, viewMaskedPaymentData: true, managePaymentData: true },
       paymentRequests: { view: true, create: true, authorize: true, submit: true, refresh: true, viewProof: true },
       cashClosures: { view: true, edit: true, approve: true, reopen: true, resync: true },

@@ -300,6 +300,9 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           import: false,
           delete: false,
         },
+        audits: { view: false, import: false, edit: false, ignore: false, effectuate: false, manage: false },
+        cardStatements: { view: true, import: false, audit: false, close: false, reconcile: true },
+        personnelCosts: { view: false, edit: false, export: false },
         settings: {
           view: false,
           manageAccountPlans: false,
@@ -325,6 +328,33 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           permissions: {
             ...permissions,
             expenses: { ...permissions.expenses, create: true, pay: false },
+          },
+        }),
+        setDoc(doc(db, "users/card-importer"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: {
+            ...permissions,
+            expenses: { ...permissions.expenses, pay: false },
+            cardStatements: { ...permissions.cardStatements, import: true, reconcile: false },
+          },
+        }),
+        setDoc(doc(db, "users/card-closer"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: {
+            ...permissions,
+            expenses: { ...permissions.expenses, pay: false },
+            cardStatements: { ...permissions.cardStatements, close: true, reconcile: false },
+          },
+        }),
+        setDoc(doc(db, "users/personnel-editor"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: {
+            ...permissions,
+            expenses: { ...permissions.expenses, edit: true, pay: false },
+            personnelCosts: { view: true, edit: true, export: false },
           },
         }),
         setDoc(doc(db, "accounts/active-leaf"), {
@@ -365,14 +395,63 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
     const payer = env.authenticatedContext("payer");
     const editor = env.authenticatedContext("editor");
     const creator = env.authenticatedContext("creator");
+    const cardImporter = env.authenticatedContext("card-importer");
+    const cardCloser = env.authenticatedContext("card-closer");
+    const personnelEditor = env.authenticatedContext("personnel-editor");
+    const cardImportDraft = {
+      description: "Compra no cartão",
+      totalValue: 39.9,
+      competenceDate: new Date("2026-08-17T15:00:00.000Z"),
+      dueDate: new Date("2026-09-12T15:00:00.000Z"),
+      paymentMethod: "single",
+      plannedPaymentMethodType: "credit_card",
+      accountPlan: "",
+      accountId: "",
+      accountPlanId: "",
+      hasAccountAllocations: false,
+      accountAllocations: [],
+      hasPersonAllocations: false,
+      personAllocations: [],
+      status: "pending",
+      cardReconciliationStatus: "pending",
+      cardStatementKey: "inter:card-1127:2026-08",
+      cardStatementImportFingerprint: "card-line-1",
+      importedFrom: "card_statement",
+      sourceType: "card_statement_import",
+      createdAt: new Date(),
+      createdBy: "card-importer",
+      updatedAt: new Date(),
+      updatedBy: "card-importer",
+    };
     await assertSucceeds(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       status: "paid",
       paidAt: new Date(),
     }));
-    await assertSucceeds(setDoc(doc(payer.firestore(), "cardStatements/inter__card__2026-08"), {
+    await assertSucceeds(setDoc(doc(cardImporter.firestore(), "cardStatements/inter__card__2026-08"), {
       key: "inter:card:2026-08",
+      accountId: "inter",
+      paymentMethodId: "card",
+      status: "open",
+    }));
+    await assertFails(updateDoc(doc(cardImporter.firestore(), "cardStatements/inter__card__2026-08"), {
+      status: "closed",
+      officialTotal: 1000,
+      allocations: [],
+    }));
+    await assertSucceeds(updateDoc(doc(cardCloser.firestore(), "cardStatements/inter__card__2026-08"), {
+      status: "closed",
+      officialTotal: 1000,
+      allocations: [],
+    }));
+    await assertSucceeds(updateDoc(doc(payer.firestore(), "cardStatements/inter__card__2026-08"), {
       status: "paid",
       linkedBankTransactionId: "transaction-1",
+      linkedBankTransactionIds: ["transaction-1"],
+      settlements: [{ transactionId: "transaction-1", amount: 1000, paidAt: "2026-08-12" }],
+      allocations: [],
+      paidAt: new Date(),
+      paidBy: "payer",
+      updatedAt: new Date(),
     }));
     await assertSucceeds(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       installments: [{ number: 1, value: 1000, status: "paid" }],
@@ -397,12 +476,36 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
     await assertSucceeds(updateDoc(doc(editor.firestore(), "expenses/expense-1"), {
       totalValue: 900,
     }));
+    await assertFails(updateDoc(doc(editor.firestore(), "expenses/expense-1"), {
+      hasPersonAllocations: true,
+      personAllocations: [{ employeeId: "employee-1", employeeName: "Colaborador", amount: 900 }],
+    }));
+    await assertSucceeds(updateDoc(doc(personnelEditor.firestore(), "expenses/expense-1"), {
+      hasPersonAllocations: true,
+      personAllocations: [{ employeeId: "employee-1", employeeName: "Colaborador", amount: 900 }],
+    }));
     await assertSucceeds(setDoc(doc(creator.firestore(), "expenses/valid-account"), {
       description: "Despesa com conta ativa",
       totalValue: 100,
       status: "pending",
       accountPlan: "active-leaf",
       accountId: "active-leaf",
+    }));
+    await assertSucceeds(setDoc(doc(cardImporter.firestore(), "expenses/card-import-pending"), cardImportDraft));
+    await assertFails(setDoc(doc(cardImporter.firestore(), "expenses/card-import-paid"), {
+      ...cardImportDraft,
+      status: "paid",
+    }));
+    await assertFails(setDoc(doc(cardImporter.firestore(), "expenses/card-import-forged-owner"), {
+      ...cardImportDraft,
+      createdBy: "creator",
+    }));
+    await assertFails(setDoc(doc(creator.firestore(), "expenses/unclassified-manual"), {
+      ...cardImportDraft,
+      importedFrom: "manual",
+      sourceType: "manual",
+      createdBy: "creator",
+      updatedBy: "creator",
     }));
     await assertFails(setDoc(doc(creator.firestore(), "expenses/inactive-account"), {
       description: "Despesa com conta inativa",
@@ -488,6 +591,9 @@ test("Financeiro permite auditar sincronização do Inter sem alterar a identida
           import: true,
           delete: false,
         },
+        audits: { view: true, import: true, edit: true, ignore: false, effectuate: false, manage: false },
+        cardStatements: { view: false, import: false, audit: false, close: false, reconcile: false },
+        personnelCosts: { view: false, edit: false, export: false },
         settings: { view: false },
       };
       await Promise.all([
@@ -495,7 +601,7 @@ test("Financeiro permite auditar sincronização do Inter sem alterar a identida
         setDoc(doc(db, "users/viewer"), {
           active: true,
           isDefaultAdmin: false,
-          permissions: { ...permissions, expenses: { ...permissions.expenses, import: false } },
+          permissions: { ...permissions, audits: { ...permissions.audits, import: false, edit: false } },
         }),
         setDoc(doc(db, "transactions/inter-event"), {
           importedFrom: "bank_statement",
@@ -531,7 +637,8 @@ test("Financeiro permite auditar sincronização do Inter sem alterar a identida
     await assertFails(updateDoc(doc(viewer.firestore(), "transactions/inter-event"), {
       auditStatus: "resolved",
     }));
-    await assertSucceeds(updateDoc(doc(importer.firestore(), "importDrafts/inter-2026-08"), {
+    await assertSucceeds(getDoc(doc(importer.firestore(), "importDrafts/inter-2026-08")));
+    await assertFails(updateDoc(doc(importer.firestore(), "importDrafts/inter-2026-08"), {
       items: [{ id: "event-1", status: "completed" }],
     }));
     await assertFails(updateDoc(doc(importer.firestore(), "importDrafts/inter-2026-08"), {

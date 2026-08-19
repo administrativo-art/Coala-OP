@@ -371,6 +371,9 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const financialViewWatch = form.watch('permissions.financial.view' as any);
   const financialCashFlowViewWatch = form.watch('permissions.financial.cashFlow.view' as any);
   const financialExpensesViewWatch = form.watch('permissions.financial.expenses.view' as any);
+  const financialAuditsViewWatch = form.watch('permissions.financial.audits.view' as any);
+  const financialCardStatementsViewWatch = form.watch('permissions.financial.cardStatements.view' as any);
+  const financialPersonnelCostsViewWatch = form.watch('permissions.financial.personnelCosts.view' as any);
   const financialPaymentRequestsViewWatch = form.watch('permissions.financial.paymentRequests.view' as any);
   const financialCashClosuresViewWatch = form.watch('permissions.financial.cashClosures.view' as any);
   const financialCashDepositsViewWatch = form.watch('permissions.financial.cashDeposits.view' as any);
@@ -669,6 +672,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                       <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Users className="h-4 w-4" /> Pessoal</h4>
                                       {renderPermissionSwitch("permissions.settings.manageUsers" as any, "Gerenciar Usuários", "Permite criar, editar, desligar e excluir usuários.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.settings.manageProfiles" as any, "Gerenciar Perfis", "Permite criar, duplicar e editar perfis de permissão.", !settingsViewWatch)}
+                                      {renderPermissionSwitch("permissions.settings.viewAiCosts" as any, "Visualizar custos de IA", "Permite consultar consumo e custos dos serviços de IA e infraestrutura.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Gerenciar Cargos, Funções e Organograma", "Permite manter cadastros do DP usados em cargos, funções e estrutura organizacional.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.collaborators.terminate" as any, "Gerenciar Acesso por Escala", "Permite acessar diagnósticos e auditorias ligados à política de acesso por escala.", !settingsViewWatch)}
                                       {renderPermissionSwitch("permissions.dp.settings.manageShifts" as any, "Gerenciar Turnos", "Permite criar e editar turnos reutilizáveis.", !settingsViewWatch)}
@@ -765,8 +769,30 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.financial.expenses.create" as any, "Criar despesas", "Permite lançar novas despesas e parcelas.", !financialExpensesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.expenses.edit" as any, "Editar despesas", "Permite alterar despesas e classificações.", !financialExpensesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.expenses.pay" as any, "Registrar pagamentos", "Permite liquidar despesas e gerar pagamentos.", !financialExpensesViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.financial.expenses.import" as any, "Importar extratos", "Permite importar extratos bancários e efetivar transações.", !financialExpensesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.expenses.delete" as any, "Excluir despesas", "Permite remover despesas e registros financeiros.", !financialExpensesViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><AuditIcon className="h-4 w-4" /> Auditoria de extratos</h4>
+                                  {renderPermissionSwitch("permissions.financial.audits.view" as any, "Visualizar auditorias", "Permite consultar sessões e itens importados para conferência.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.audits.import" as any, "Importar extratos", "Permite enviar novos extratos para análise.", !financialAuditsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.audits.edit" as any, "Auditar e classificar", "Permite ajustar descrição, favorecido, plano de contas e centro de resultado.", !financialAuditsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.audits.ignore" as any, "Ignorar movimentos", "Permite retirar movimentos da conciliação mediante confirmação.", !financialAuditsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.audits.effectuate" as any, "Efetivar movimentos", "Permite transformar itens auditados em lançamentos financeiros.", !financialAuditsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.audits.manage" as any, "Gerenciar sessões", "Permite reabrir itens e fechar ou reabrir sessões de auditoria.", !financialAuditsViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Receipt className="h-4 w-4" /> Faturas de cartão</h4>
+                                  {renderPermissionSwitch("permissions.financial.cardStatements.view" as any, "Visualizar faturas", "Permite consultar as compras e os totais das faturas corporativas.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.cardStatements.import" as any, "Importar faturas", "Permite enviar PDF ou CSV da fatura e criar despesas pendentes.", !financialCardStatementsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cardStatements.audit" as any, "Auditar itens da fatura", "Permite classificar e conferir individualmente as compras do cartão.", !financialCardStatementsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cardStatements.close" as any, "Fechar fatura", "Permite concluir a conferência após eliminar divergências.", !financialCardStatementsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cardStatements.reconcile" as any, "Conciliar pagamento", "Permite vincular a saída bancária ao pagamento único da fatura.", !financialCardStatementsViewWatch, true)}
                                   </div>
                                 </div>
 
@@ -786,6 +812,11 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><AreaChart className="h-4 w-4" /> Análises</h4>
                                   {renderPermissionSwitch("permissions.financial.dre" as any, "Visualizar DRE", "Permite acessar o demonstrativo de resultado.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.personnelCosts.view" as any, "Visualizar custos por colaborador", "Permite ver salário, FGTS, INSS, consignados e demais rateios individualizados.", !financialViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.personnelCosts.edit" as any, "Editar individualizações", "Permite cadastrar e alterar os valores atribuídos a cada colaborador.", !financialPersonnelCostsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.personnelCosts.export" as any, "Exportar custos por colaborador", "Permite exportar relatórios individualizados de pessoal.", !financialPersonnelCostsViewWatch, true)}
+                                  </div>
                                 </div>
 
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">

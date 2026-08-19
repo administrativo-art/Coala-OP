@@ -6,15 +6,12 @@ import { deleteDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  CalendarRange,
   ChevronDown,
   ChevronUp,
-  CircleDollarSign,
   CreditCard,
   FileCheck2,
   FilePlus2,
   FileUp,
-  Filter,
   Loader2,
   MoreHorizontal,
   ReceiptText,
@@ -366,6 +363,33 @@ function matchesBaseFilters(
   );
 }
 
+function compareCompetenceMonths(left: string, right: string, currentMonth: string) {
+  const leftIsCurrentOrFuture = left >= currentMonth;
+  const rightIsCurrentOrFuture = right >= currentMonth;
+
+  if (leftIsCurrentOrFuture !== rightIsCurrentOrFuture) {
+    return leftIsCurrentOrFuture ? -1 : 1;
+  }
+
+  return leftIsCurrentOrFuture
+    ? left.localeCompare(right)
+    : right.localeCompare(left);
+}
+
+function accountPlanBreadcrumb(plan: any, plansById: Map<string, any>) {
+  const labels: string[] = [];
+  const visited = new Set<string>();
+  let current = plan;
+
+  while (current && !visited.has(String(current.id))) {
+    visited.add(String(current.id));
+    if (typeof current.name === "string" && current.name.trim()) labels.unshift(current.name.trim());
+    current = current.parentId ? plansById.get(String(current.parentId)) : null;
+  }
+
+  return labels.join(" › ");
+}
+
 function getExpenseStatusKey(expense: any, now: Date) {
   const due = toDate(expense.dueDate);
   let statusKey = expense.status;
@@ -408,11 +432,14 @@ export function ExpensesPage() {
   const [finalizingAuditId, setFinalizingAuditId] = useState<string | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const canAccessAudits = !!permissions.financial?.expenses?.import;
-  const currentView = canAccessAudits && searchParams.get("view") === "audits" ? "audits" : "expenses";
+  const canAccessAudits = permissions.financial?.audits?.view === true;
+  const canImportAudits = canAccessAudits && permissions.financial?.audits?.import === true;
+  const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
+  const canViewExpenses = permissions.financial?.expenses?.view === true;
+  const currentView = canAccessAudits && (!canViewExpenses || searchParams.get("view") === "audits") ? "audits" : "expenses";
   const searchParamsKey = searchParams.toString();
 
-  if (!permissions.financial?.expenses?.view) {
+  if (!canViewExpenses && !canAccessAudits) {
     return (
       <FinancialAccessGuard
         title="Despesas"
@@ -467,32 +494,44 @@ export function ExpensesPage() {
     setDateTo(format(endOfMonth(now), "yyyy-MM-dd"));
   }, [searchParamsKey]);
 
-  const accountPlanNames = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          expenses
-            .flatMap((expense) => {
-              const planName = accountPlanMap[expense.accountId ?? expense.accountPlan]
-                || expense.accountPlanName
-                || expense.accountId
-                || expense.accountPlan;
-              return [planName, ...expenseAccountPlanLabels(expense, accountPlanMap)];
-            })
-            .filter(Boolean)
-        )
-      ).sort((a, b) => String(a).localeCompare(String(b), "pt-BR")) as string[],
-    [accountPlanMap, expenses]
-  );
-  const competenceOptions = useMemo(
-    () => Array.from(
+  const accountPlanOptions = useMemo(() => {
+    const plansById = new Map((accountPlans || []).map((plan) => [String(plan.id), plan]));
+    const breadcrumbByName = new Map<string, string>();
+    (accountPlans || []).forEach((plan) => {
+      if (typeof plan?.name !== "string" || !plan.name.trim()) return;
+      breadcrumbByName.set(plan.name.trim(), accountPlanBreadcrumb(plan, plansById) || plan.name.trim());
+    });
+
+    const names = Array.from(
       new Set(
         expenses
-          .map((expense) => toDate(expense.competenceDate))
-          .filter((date): date is Date => Boolean(date))
-          .map((date) => format(date, "yyyy-MM"))
+          .flatMap((expense) => {
+            const planName = accountPlanMap[expense.accountId ?? expense.accountPlan]
+              || expense.accountPlanName
+              || expense.accountId
+              || expense.accountPlan;
+            return [planName, ...expenseAccountPlanLabels(expense, accountPlanMap)];
+          })
+          .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
       )
-    ).sort((left, right) => right.localeCompare(left)),
+    );
+
+    return names
+      .map((value) => ({ value, label: breadcrumbByName.get(value) || value }))
+      .sort((left, right) => left.label.localeCompare(right.label, "pt-BR"));
+  }, [accountPlanMap, accountPlans, expenses]);
+  const competenceOptions = useMemo(
+    () => {
+      const currentMonth = format(new Date(), "yyyy-MM");
+      return Array.from(
+        new Set(
+          expenses
+            .map((expense) => toDate(expense.competenceDate))
+            .filter((date): date is Date => Boolean(date))
+            .map((date) => format(date, "yyyy-MM"))
+        )
+      ).sort((left, right) => compareCompetenceMonths(left, right, currentMonth));
+    },
     [expenses]
   );
 
@@ -739,7 +778,7 @@ export function ExpensesPage() {
           <p className="text-muted-foreground">Painel consolidado de despesas, contas a pagar e histórico de liquidações.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {permissions.financial?.expenses?.import && (
+          {canImportAudits && (
             <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)}>
               <FileUp className="mr-2 h-4 w-4" /> Importar extrato
             </Button>
@@ -756,32 +795,24 @@ export function ExpensesPage() {
 
       {canAccessAudits ? (
         <Tabs value={currentView} onValueChange={(value) => setExpensesView(value as "expenses" | "audits")} className="space-y-6">
-          <TabsList className="grid h-auto w-full grid-cols-2 rounded-none border-0 border-b border-[#ded3c5] bg-transparent p-0 shadow-none">
-            <TabsTrigger
+          <TabsList className={cn("grid h-auto w-full max-w-[360px] rounded-xl border bg-card p-1 shadow-sm", canViewExpenses ? "grid-cols-2" : "grid-cols-1")}>
+            {canViewExpenses ? <TabsTrigger
               value="expenses"
-              className="group relative min-h-16 rounded-none border-0 bg-transparent px-3 py-4 text-[#746961] shadow-none transition-colors data-[state=active]:bg-transparent data-[state=active]:text-[#211814] data-[state=active]:shadow-none"
+              className="group rounded-lg px-4 py-2.5 text-sm font-semibold"
             >
-              <span className="flex items-center justify-center gap-3">
-                <ReceiptText className="h-5 w-5 text-[#a79c93] group-data-[state=active]:text-[#a6325b]" />
-                <span className="text-sm font-bold sm:text-base">Despesas</span>
-                <span className="rounded-full bg-[#e6e0d8] px-2.5 py-1 text-xs font-bold text-[#746961] group-data-[state=active]:bg-[#a6325b] group-data-[state=active]:text-white">
-                  {expenses.length}
-                </span>
+              <span className="flex items-center justify-center gap-2">
+                <ReceiptText className="h-4 w-4 group-data-[state=active]:text-primary" />
+                <span>Despesas</span>
               </span>
-              <span className="absolute inset-x-4 -bottom-px hidden h-1 rounded-full bg-[#a6325b] group-data-[state=active]:block" />
-            </TabsTrigger>
+            </TabsTrigger> : null}
             <TabsTrigger
               value="audits"
-              className="group relative min-h-16 rounded-none border-0 bg-transparent px-3 py-4 text-[#746961] shadow-none transition-colors data-[state=active]:bg-transparent data-[state=active]:text-[#211814] data-[state=active]:shadow-none"
+              className="group rounded-lg px-4 py-2.5 text-sm font-semibold"
             >
-              <span className="flex items-center justify-center gap-3">
-                <FileCheck2 className="h-5 w-5 text-[#a79c93] group-data-[state=active]:text-[#a6325b]" />
-                <span className="text-sm font-bold sm:text-base">Auditorias</span>
-                <span className="rounded-full bg-[#e6e0d8] px-2.5 py-1 text-xs font-bold text-[#746961] group-data-[state=active]:bg-[#a6325b] group-data-[state=active]:text-white">
-                  {pendingAuditCount}
-                </span>
+              <span className="flex items-center justify-center gap-2">
+                <FileCheck2 className="h-4 w-4 group-data-[state=active]:text-primary" />
+                <span>Auditorias</span>
               </span>
-              <span className="absolute inset-x-4 -bottom-px hidden h-1 rounded-full bg-[#a6325b] group-data-[state=active]:block" />
             </TabsTrigger>
           </TabsList>
 
@@ -843,8 +874,8 @@ export function ExpensesPage() {
 
       <Card className="overflow-hidden rounded-2xl border-border/70 shadow-sm">
         <CardHeader className="border-b bg-muted/20 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[220px] flex-1">
+          <div data-testid="expense-filter-bar" className="grid grid-cols-2 items-center gap-2 md:grid-cols-[minmax(170px,1.7fr)_minmax(0,.8fr)_minmax(0,.85fr)_minmax(0,.95fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,.85fr)_auto]">
+            <div className="relative col-span-2 min-w-0 md:col-span-1">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar por descrição, fornecedor..."
@@ -854,8 +885,7 @@ export function ExpensesPage() {
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-8 w-[150px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
-                <Filter className="mr-2 h-3.5 w-3.5 opacity-50" />
+              <SelectTrigger className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
                 <SelectValue placeholder="Filtrar por status" />
               </SelectTrigger>
               <SelectContent>
@@ -871,8 +901,7 @@ export function ExpensesPage() {
               </SelectContent>
             </Select>
             <Select value={originFilter} onValueChange={setOriginFilter}>
-              <SelectTrigger className="h-8 w-[170px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
-                <CircleDollarSign className="mr-2 h-3.5 w-3.5 opacity-50" />
+              <SelectTrigger className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
                 <SelectValue placeholder="Filtrar por origem" />
               </SelectTrigger>
               <SelectContent>
@@ -882,8 +911,7 @@ export function ExpensesPage() {
               </SelectContent>
             </Select>
             <Select value={paymentTypeFilter} onValueChange={setPaymentTypeFilter}>
-              <SelectTrigger className="h-8 w-[175px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
-                <CreditCard className="mr-2 h-3.5 w-3.5 opacity-50" />
+              <SelectTrigger className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
                 <SelectValue placeholder="Forma de pagamento" />
               </SelectTrigger>
               <SelectContent>
@@ -896,9 +924,18 @@ export function ExpensesPage() {
                 <SelectItem value="unassigned">Não informado</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={competenceMonth} onValueChange={setCompetenceMonth}>
-              <SelectTrigger className="h-8 w-[190px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
-                <CalendarRange className="mr-2 h-3.5 w-3.5 opacity-50" />
+            <Select
+              value={competenceMonth}
+              onValueChange={(value) => {
+                setCompetenceMonth(value);
+                if (value !== "all") {
+                  setPeriodPreset("custom");
+                  setDateFrom("");
+                  setDateTo("");
+                }
+              }}
+            >
+              <SelectTrigger data-testid="expense-competence-filter" className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
                 <SelectValue placeholder="Competência" />
               </SelectTrigger>
               <SelectContent>
@@ -921,20 +958,23 @@ export function ExpensesPage() {
                 setPeriodPreset(period.preset);
                 setDateFrom(period.dateFrom);
                 setDateTo(period.dateTo);
+                if (period.dateFrom || period.dateTo) setCompetenceMonth("all");
               }}
             />
             <Select value={accountPlanFilter} onValueChange={setAccountPlanFilter}>
-              <SelectTrigger className="h-8 w-[170px] shrink-0 rounded-lg border-border/70 bg-background text-xs">
+              <SelectTrigger data-testid="expense-account-plan-filter" className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
                 <SelectValue placeholder="Plano de contas" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[360px]">
                 <SelectItem value="all">Todos os planos</SelectItem>
-                {accountPlanNames.map((accountPlan) => (
-                  <SelectItem key={accountPlan} value={accountPlan}>{accountPlan}</SelectItem>
+                {accountPlanOptions.map((accountPlan) => (
+                  <SelectItem key={accountPlan.value} value={accountPlan.value} title={accountPlan.label}>
+                    {accountPlan.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{filteredCountLabel}</span>
+            <span className="col-span-2 justify-self-end whitespace-nowrap text-xs text-muted-foreground md:col-span-1">{filteredCountLabel}</span>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -973,7 +1013,26 @@ export function ExpensesPage() {
                     const isExpanded = expandedExpenseId === expense.id;
                     const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
                     const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
-                    const personAllocations = expensePersonAllocations(expense, accountPlanMap);
+                    const personAllocations = canViewPersonnelCosts
+                      ? expensePersonAllocations(expense, accountPlanMap)
+                      : [];
+                    const personAllocationGroups = Array.from(
+                      personAllocations.reduce((groups, allocation) => {
+                        const key = allocation.accountPlanId;
+                        const current = groups.get(key) || {
+                          accountPlanId: key,
+                          accountPlanName: allocation.accountPlanName || key,
+                          allocations: [] as typeof personAllocations,
+                        };
+                        current.allocations.push(allocation);
+                        groups.set(key, current);
+                        return groups;
+                      }, new Map<string, {
+                        accountPlanId: string;
+                        accountPlanName: string;
+                        allocations: typeof personAllocations;
+                      }>()).values()
+                    ).sort((left, right) => left.accountPlanName.localeCompare(right.accountPlanName, "pt-BR"));
                     const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
                     const installmentSchedule = Array.isArray(expense.installmentSchedule) && expense.installmentSchedule.length > 0
                       ? expense.installmentSchedule
@@ -1058,7 +1117,7 @@ export function ExpensesPage() {
                         {isExpanded && (
                           <tr className="border-b bg-muted/10">
                             <td colSpan={7} className="px-4 pb-4 pt-1">
-                              <div className="grid gap-4 rounded-2xl border border-border/70 bg-background p-4 md:grid-cols-[2fr_1fr]">
+                              <div className="grid gap-4 rounded-2xl border border-border/70 bg-background p-4 md:grid-cols-[minmax(0,1fr)_auto]">
                                 <div className="grid gap-4 sm:grid-cols-3">
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fornecedor</p>
@@ -1093,21 +1152,67 @@ export function ExpensesPage() {
                                           {personAllocations.length} vínculo{personAllocations.length === 1 ? "" : "s"}
                                         </span>
                                       </div>
-                                      <div className="mt-2 space-y-2">
-                                        {personAllocations.map((allocation, index) => (
-                                          <div key={allocation.id || `${allocation.employeeId}-${index}`} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border bg-background px-3 py-2 text-sm">
-                                            <div>
-                                              <p className="font-medium">{allocation.employeeName}</p>
-                                              <p className="text-xs text-muted-foreground">
-                                                {allocation.accountPlanName} · {allocation.analysisType === "employer_cost" ? "Custo da empresa" : allocation.analysisType === "employee_deduction" ? "Desconto do colaborador" : "Informativo"} · {allocation.resultCenter || "Centro pendente"}
-                                                {allocation.contractReference ? ` · ${allocation.contractReference}` : ""}
-                                                {allocation.creditorName ? ` · ${allocation.creditorName}` : ""}
-                                                {allocation.payrollDocumentId ? ` · Documento RH ${allocation.payrollDocumentId}` : ""}
-                                              </p>
+                                      <div className="mt-3 space-y-3">
+                                        {personAllocationGroups.map((group) => {
+                                          const groupTotal = group.allocations.reduce((total, allocation) => total + allocation.amount, 0);
+                                          return (
+                                            <div key={group.accountPlanId} className="overflow-hidden rounded-xl border bg-background">
+                                              <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/35 px-3 py-2.5">
+                                                <div>
+                                                  <p className="text-sm font-semibold">{group.accountPlanName}</p>
+                                                  <p className="text-[10.5px] text-muted-foreground">
+                                                    {group.allocations.length} vínculo{group.allocations.length === 1 ? "" : "s"}
+                                                  </p>
+                                                </div>
+                                                <p className="font-mono text-sm font-semibold">{formatCurrency(groupTotal)}</p>
+                                              </div>
+                                              <div className="overflow-x-auto">
+                                                <table className="min-w-[820px] w-full text-left text-xs">
+                                                  <thead className="border-b text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                                    <tr>
+                                                      <th className="px-3 py-2 font-semibold">Colaborador</th>
+                                                      <th className="px-3 py-2 font-semibold">Classificação</th>
+                                                      <th className="px-3 py-2 font-semibold">Unidade</th>
+                                                      <th className="px-3 py-2 font-semibold">Referência</th>
+                                                      <th className="px-3 py-2 font-semibold">Documento</th>
+                                                      <th className="px-3 py-2 text-right font-semibold">Valor</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody className="divide-y">
+                                                    {group.allocations
+                                                      .slice()
+                                                      .sort((left, right) => (left.employeeName || "").localeCompare(right.employeeName || "", "pt-BR"))
+                                                      .map((allocation, index) => (
+                                                        <tr key={allocation.id || `${allocation.employeeId}-${index}`} className="align-top">
+                                                          <td className="px-3 py-2.5 font-medium">{allocation.employeeName}</td>
+                                                          <td className="px-3 py-2.5 text-muted-foreground">
+                                                            {allocation.analysisType === "employer_cost"
+                                                              ? "Custo da empresa"
+                                                              : allocation.analysisType === "employee_deduction"
+                                                                ? "Desconto do colaborador"
+                                                                : "Informativo"}
+                                                          </td>
+                                                          <td className="px-3 py-2.5 text-muted-foreground">{allocation.resultCenter || "Centro pendente"}</td>
+                                                          <td className="px-3 py-2.5 text-muted-foreground">
+                                                            {allocation.contractReference || allocation.creditorName || "—"}
+                                                            {allocation.contractReference && allocation.creditorName ? (
+                                                              <span className="mt-0.5 block text-[10.5px]">{allocation.creditorName}</span>
+                                                            ) : null}
+                                                          </td>
+                                                          <td className="max-w-[180px] break-all px-3 py-2.5 font-mono text-[10.5px] text-muted-foreground">
+                                                            {allocation.payrollDocumentId ? `RH ${allocation.payrollDocumentId}` : "—"}
+                                                          </td>
+                                                          <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold">
+                                                            {formatCurrency(allocation.amount)}
+                                                          </td>
+                                                        </tr>
+                                                      ))}
+                                                  </tbody>
+                                                </table>
+                                              </div>
                                             </div>
-                                            <span className="font-mono font-semibold">{formatCurrency(allocation.amount)}</span>
-                                          </div>
-                                        ))}
+                                          );
+                                        })}
                                       </div>
                                     </div>
                                   )}
@@ -1247,7 +1352,9 @@ export function ExpensesPage() {
                   const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                   const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
                   const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
-                  const personAllocations = expensePersonAllocations(expense, accountPlanMap);
+                  const personAllocations = canViewPersonnelCosts
+                    ? expensePersonAllocations(expense, accountPlanMap)
+                    : [];
                   const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
 
                   return (

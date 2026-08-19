@@ -50,9 +50,13 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<FinancialBootstrapUser | null>(null);
+  const financialPermissionsKey = useMemo(
+    () => JSON.stringify(permissions.financial ?? null),
+    [permissions.financial]
+  );
 
   const bootstrap = useCallback(async () => {
-    if (!firebaseUser || !permissions.financial?.view) return;
+    if (!firebaseUser) return;
 
     setSyncing(true);
     setError(null);
@@ -91,12 +95,12 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSyncing(false);
     }
-  }, [firebaseUser, permissions.financial?.view]);
+  }, [firebaseUser, financialPermissionsKey]);
 
   useEffect(() => {
     if (loading) return;
 
-    if (!firebaseUser || !permissions.financial?.view) {
+    if (!firebaseUser) {
       setReady(false);
       setUser(null);
       setError(null);
@@ -104,7 +108,7 @@ export function FinancialProvider({ children }: { children: React.ReactNode }) {
     }
 
     void bootstrap();
-  }, [bootstrap, firebaseUser, loading, permissions.financial?.view]);
+  }, [bootstrap, firebaseUser, financialPermissionsKey, loading]);
 
   const value = useMemo<FinancialContextValue>(
     () => ({

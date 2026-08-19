@@ -834,6 +834,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     [expenseDescriptions]
   );
   const canManageExpenseDescriptions = !!permissions.financial?.settings?.manageExpenseDescriptions;
+  const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
+  const canEditPersonnelCosts = canViewPersonnelCosts && permissions.financial?.personnelCosts?.edit === true;
   const canQuickAddExpenseDescriptions =
     !!permissions.financial?.expenses?.create ||
     !!permissions.financial?.expenses?.edit ||
@@ -1379,11 +1381,11 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     () => [
       { id: "identification", label: "Identificação" },
       { id: "classification", label: "Classificação" },
-      { id: "individualization", label: "Individualização" },
+      ...(canEditPersonnelCosts ? [{ id: "individualization", label: "Individualização" } as const] : []),
       { id: "schedule", label: "Vencimento e parcelas" },
       { id: "review", label: "Revisão" },
     ] as const,
-    []
+    [canEditPersonnelCosts]
   );
   const activeStepIndex = steps.findIndex((step) => step.id === currentStep);
   const previewDueDate =
@@ -2801,7 +2803,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                     </div>
                   )}
 
-                  {currentStep === "individualization" && (
+                  {currentStep === "individualization" && canEditPersonnelCosts && (
                     <div className="space-y-4">
                       <div>
                         <h2 className="text-base font-semibold">Individualização</h2>
@@ -3283,7 +3285,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                           </div>
                         ) : null}
 
-                        {hasPersonAllocations && personAllocationFields.length > 0 ? (
+                        {canViewPersonnelCosts && hasPersonAllocations && personAllocationFields.length > 0 ? (
                           <div className="mt-4 rounded-lg border bg-muted/20 p-3">
                             <div className="flex items-center justify-between gap-3">
                               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">

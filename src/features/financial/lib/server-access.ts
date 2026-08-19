@@ -147,24 +147,29 @@ export function canReadFinancialPath(
         permissions.settings.manageExpenseDescriptions
       );
     case "importAliases":
+      return permissions.audits.import || permissions.audits.edit || permissions.settings.manageImportAliases;
     case "importDrafts":
-      return permissions.expenses.import || permissions.settings.manageImportAliases;
+      return permissions.audits.view;
     case "expenses":
       return (
         permissions.expenses.view ||
         permissions.cashFlow.view ||
         permissions.dashboard ||
         permissions.financialFlow ||
-        permissions.dre
+        permissions.dre ||
+        permissions.audits.view ||
+        permissions.cardStatements.view ||
+        permissions.personnelCosts.view
       );
     case "payments":
-    case "cardStatements":
       return (
         permissions.expenses.view ||
         permissions.cashFlow.view ||
         permissions.financialFlow ||
         permissions.dre
       );
+    case "cardStatements":
+      return permissions.cardStatements.view;
     case "bankPaymentRequests":
       return permissions.paymentRequests?.view === true;
     case "cashClosures":
@@ -178,7 +183,9 @@ export function canReadFinancialPath(
         permissions.cashFlow.view ||
         permissions.financialFlow ||
         permissions.dre ||
-        permissions.dashboard
+        permissions.dashboard ||
+        permissions.audits.view ||
+        permissions.cardStatements.reconcile
       );
     case "users":
     case "supplierPaymentProfiles":

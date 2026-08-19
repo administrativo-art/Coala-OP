@@ -69,10 +69,27 @@ service cloud.firestore {
         || (hasFinancialClaims() && financialClaims().expenses.pay == true);
     }
 
-    function canImportExpenses() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.import == true)
-        || (hasFinancialClaims() && financialClaims().expenses.import == true);
+    function financialGroupPerm(group, key) {
+      return isFinancialAdmin()
+        || (hasUserDoc() && hasFinancialAccess()
+          && userData().permissions.get(group, {}).get(key, false) == true)
+        || (hasFinancialClaims()
+          && financialClaims().get(group, {}).get(key, false) == true);
     }
+
+    function canViewAudits() { return financialGroupPerm('audits', 'view'); }
+    function canImportAudits() { return canViewAudits() && financialGroupPerm('audits', 'import'); }
+    function canEditAudits() { return canViewAudits() && financialGroupPerm('audits', 'edit'); }
+    function canIgnoreAudits() { return canViewAudits() && financialGroupPerm('audits', 'ignore'); }
+    function canEffectuateAudits() { return canViewAudits() && financialGroupPerm('audits', 'effectuate'); }
+    function canManageAudits() { return canViewAudits() && financialGroupPerm('audits', 'manage'); }
+    function canViewCardStatements() { return financialGroupPerm('cardStatements', 'view'); }
+    function canImportCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'import'); }
+    function canAuditCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'audit'); }
+    function canCloseCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'close'); }
+    function canReconcileCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'reconcile'); }
+    function canViewPersonnelCosts() { return financialGroupPerm('personnelCosts', 'view'); }
+    function canEditPersonnelCosts() { return canViewPersonnelCosts() && financialGroupPerm('personnelCosts', 'edit'); }
 
     function canDeleteExpenses() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.delete == true)
@@ -161,6 +178,8 @@ service cloud.firestore {
     function canReadExpenseDescriptions() {
       return canCreateExpenses()
         || canEditExpenses()
+        || canEditAudits()
+        || canAuditCardStatements()
         || canManageExpenseDescriptions();
     }
 
@@ -171,15 +190,14 @@ service cloud.firestore {
     }
 
     function isPaymentStatusUpdate() {
-      return canPayExpenses()
-        && request.resource.data.diff(resource.data).affectedKeys()
+      return request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'paidAt', 'updatedAt'])
-        && request.resource.data.status == 'paid';
+        && request.resource.data.status == 'paid'
+        && canPayExpenses();
     }
 
     function isCardStatementPaymentUpdate() {
-      return canPayExpenses()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status',
           'paidAt',
           'installments',
@@ -196,27 +214,20 @@ service cloud.firestore {
         && (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'paidAt'])
           || request.resource.data.status == 'paid'
-        );
+        )
+        && canReconcileCardStatements();
     }
 
     function isBankStatementAuditUpdate() {
-      return canImportExpenses()
-        && resource.data.get('importedFrom', null) == 'bank_statement'
+      return resource.data.get('importedFrom', null) == 'bank_statement'
         && request.resource.data.get('importedFrom', null) == 'bank_statement'
         && request.resource.data.get('importSource', null) == resource.data.get('importSource', null)
         && request.resource.data.get('externalTransactionId', null) == resource.data.get('externalTransactionId', null)
         && request.resource.data.get('amount', null) == resource.data.get('amount', null)
         && request.resource.data.get('date', null) == resource.data.get('date', null)
         && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null)
-        && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null);
-    }
-
-    function isAutomatedImportDraftUpdate() {
-      return canImportExpenses()
-        && resource.data.get('syncSource', null) == 'inter_api'
-        && request.resource.data.get('syncSource', null) == 'inter_api'
-        && request.resource.data.get('syncKey', null) == resource.data.get('syncKey', null)
-        && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null);
+        && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null)
+        && (canEditAudits() || canIgnoreAudits() || canEffectuateAudits() || canManageAudits());
     }
 
     function hasConsistentExpenseAccount(data) {
@@ -254,9 +265,103 @@ service cloud.firestore {
         );
     }
 
+    function isCardStatementImportCreate(data) {
+      return data.get('importedFrom', null) == 'card_statement'
+        && data.get('sourceType', null) == 'card_statement_import'
+        && data.get('status', null) == 'pending'
+        && data.get('cardReconciliationStatus', null) == 'pending'
+        && data.get('plannedPaymentMethodType', null) == 'credit_card'
+        && data.get('createdBy', null) == request.auth.uid
+        && data.get('updatedBy', null) == request.auth.uid
+        && data.get('cardStatementKey', '') is string
+        && data.get('cardStatementKey', '').size() > 0
+        && data.get('cardStatementImportFingerprint', '') is string
+        && data.get('cardStatementImportFingerprint', '').size() > 0
+        && data.get('totalValue', 0) is number
+        && data.get('totalValue', 0) > 0
+        && data.get('competenceDate', null) is timestamp
+        && data.get('dueDate', null) is timestamp
+        && data.get('accountPlan', null) == ''
+        && data.get('accountId', null) == ''
+        && data.get('accountPlanId', null) == ''
+        && data.get('hasAccountAllocations', null) == false
+        && data.get('accountAllocations', null) is list
+        && data.get('accountAllocations', []).size() == 0
+        && data.get('hasPersonAllocations', null) == false
+        && data.get('personAllocations', null) is list
+        && data.get('personAllocations', []).size() == 0
+        && canImportCardStatements();
+    }
+
     function expenseIndividualizationChanged() {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(['hasPersonAllocations', 'personAllocations']);
+    }
+
+    function isCardStatementAuditUpdate() {
+      return resource.data.get('importedFrom', null) == 'card_statement'
+        && request.resource.data.get('importedFrom', null) == 'card_statement'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'description', 'supplier', 'notes',
+          'accountPlan', 'accountId', 'accountPlanId', 'accountPlanName',
+          'resultCenter', 'resultCenterId', 'resultCenterName',
+          'isApportioned', 'apportionments',
+          'hasAccountAllocations', 'accountAllocations',
+          'hasPersonAllocations', 'personAllocations',
+          'cardReconciliationStatus', 'cardReconciledAt', 'cardReconciledBy', 'cardStatementKey',
+          'updatedAt', 'updatedBy'
+        ])
+        && canAuditCardStatements()
+        && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
+        && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data)));
+    }
+
+    function isCardStatementImportWrite(data) {
+      return data.get('status', null) == 'open'
+        && data.get('key', '') is string
+        && data.get('key', '').size() > 0
+        && data.get('accountId', '') is string
+        && data.get('paymentMethodId', '') is string
+        && canImportCardStatements();
+    }
+
+    function isCardStatementImportUpdate() {
+      return isCardStatementImportWrite(request.resource.data)
+        && resource.data.get('status', 'open') == 'open'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'key', 'monthKey', 'accountId', 'accountName', 'paymentMethodId', 'paymentMethodLabel',
+          'closingDate', 'dueDate', 'officialTotal', 'status',
+          'lastImportFileName', 'lastImportAnalysis', 'lastImportedAt', 'lastImportedBy',
+          'updatedAt', 'updatedBy', 'createdAt', 'createdBy'
+        ]);
+    }
+
+    function isCardStatementCloseWrite(data) {
+      return data.get('status', null) == 'closed'
+        && data.get('officialTotal', 0) is number
+        && data.get('officialTotal', 0) > 0
+        && data.get('allocations', null) is list
+        && canCloseCardStatements();
+    }
+
+    function isCardStatementCloseUpdate() {
+      return isCardStatementCloseWrite(request.resource.data)
+        && resource.data.get('status', 'open') == 'open'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'key', 'monthKey', 'accountId', 'accountName', 'paymentMethodId', 'paymentMethodLabel',
+          'closingDate', 'dueDate', 'projectedTotal', 'provisionedTotal', 'officialTotal',
+          'status', 'allocations', 'updatedAt', 'updatedBy', 'createdAt', 'createdBy'
+        ]);
+    }
+
+    function isCardStatementReconcileUpdate() {
+      return resource.data.get('status', null) == 'closed'
+        && request.resource.data.get('status', null) == 'paid'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'linkedBankTransactionId', 'linkedBankTransactionIds', 'settlements',
+          'allocations', 'paidAt', 'paidBy', 'updatedAt'
+        ])
+        && canReconcileCardStatements();
     }
 
     match /users/{userId} {
@@ -297,15 +402,19 @@ service cloud.firestore {
     }
 
     match /expenses/{expenseId} {
-      allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre();
-      allow create: if canCreateExpenses()
-        && hasValidExpenseAccount(request.resource.data)
-        && hasValidExpenseIndividualization(request.resource.data);
+      allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre()
+        || canViewAudits() || canViewCardStatements() || canViewPersonnelCosts();
+      allow create: if isCardStatementImportCreate(request.resource.data)
+        || (canCreateExpenses()
+          && hasValidExpenseAccount(request.resource.data)
+          && (request.resource.data.get('hasPersonAllocations', false) != true || canEditPersonnelCosts())
+          && hasValidExpenseIndividualization(request.resource.data));
       allow update: if (canEditExpenses()
           && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
-          && (!expenseIndividualizationChanged() || hasValidExpenseIndividualization(request.resource.data)))
+          && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data))))
         || isPaymentStatusUpdate()
-        || isCardStatementPaymentUpdate();
+        || isCardStatementPaymentUpdate()
+        || isCardStatementAuditUpdate();
       allow delete: if canDeleteExpenses();
     }
 
@@ -316,27 +425,31 @@ service cloud.firestore {
     }
 
     match /cardStatements/{statementId} {
-      allow read: if canViewExpenses() || canViewCashFlow() || canViewFinancialFlow() || canViewDre();
-      allow create, update: if canEditExpenses() || canPayExpenses() || canImportExpenses();
-      allow delete: if canEditExpenses();
+      allow read: if canViewCardStatements();
+      allow create: if isCardStatementImportWrite(request.resource.data)
+        || isCardStatementCloseWrite(request.resource.data);
+      allow update: if isCardStatementImportUpdate()
+        || isCardStatementCloseUpdate()
+        || isCardStatementReconcileUpdate();
+      allow delete: if false;
     }
 
     match /transactions/{transactionId} {
-      allow read: if canViewCashFlow() || canViewFinancialFlow() || canViewDre() || canViewDashboard();
-      allow create: if canCreateCashFlow() || canImportExpenses() || canPayExpenses();
+      allow read: if canViewCashFlow() || canViewFinancialFlow() || canViewDre() || canViewDashboard()
+        || canViewAudits() || canReconcileCardStatements();
+      allow create: if canCreateCashFlow() || canEffectuateAudits() || canPayExpenses();
       allow update: if isBankStatementAuditUpdate();
       allow delete: if false;
     }
 
     match /importDrafts/{draftId} {
-      allow read: if canImportExpenses() && (
+      allow read: if canViewAudits() && (
         resource.data.status == "open" ||
         resource.data.createdBy == request.auth.uid
       );
-      allow delete: if canImportExpenses() && resource.data.createdBy == request.auth.uid;
-      allow create: if canImportExpenses() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if (canImportExpenses() && resource.data.createdBy == request.auth.uid)
-        || isAutomatedImportDraftUpdate();
+      allow delete: if false;
+      allow create: if canImportAudits() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if false;
     }
 
     // Dados de favorecidos contêm destino bancário criptografado e auditoria.

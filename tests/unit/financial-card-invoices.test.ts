@@ -7,6 +7,7 @@ import {
   findCardStatementPaymentCandidates,
   resolveCardStatementCycle,
   resolveCardStatementCycleFromMonth,
+  resolveCardStatementDatesFromDueDate,
   type CreditCardInstrument,
 } from "../../src/features/financial/lib/card-invoices";
 
@@ -50,6 +51,30 @@ test("reconstrói um ciclo vazio a partir do mês de vencimento", () => {
   assert.equal(cycle.dueDate.getMonth(), 8);
   assert.equal(cycle.closingDate.getMonth(), 7);
   assert.equal(cycle.key, "inter:card-1234:2026-09");
+});
+
+test("mantém a competência explícita da fatura separada do mês de vencimento", () => {
+  const dates = resolveCardStatementDatesFromDueDate(new Date(2026, 8, 12, 12), card);
+  const groups = buildCardStatementGroups([{
+    id: "compra-agosto",
+    description: "Compra de agosto com vencimento em setembro",
+    totalValue: 100,
+    competenceDate: new Date(2026, 7, 18, 12),
+    cardChargeDate: new Date(2026, 7, 18, 12),
+    dueDate: new Date(2026, 8, 12, 12),
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1234",
+    cardStatementKey: "inter:card-1234:2026-08",
+    cardStatementMonthKey: "2026-08",
+  }], [card]);
+
+  assert.equal(groups[0]?.monthKey, "2026-08");
+  assert.equal(groups[0]?.lines[0]?.chargeDate.getMonth(), 7);
+  assert.equal(dates.closingDate.getMonth(), 8);
+  assert.equal(dates.closingDate.getDate(), 5);
+  assert.equal(dates.dueDate.getMonth(), 8);
+  assert.equal(dates.dueDate.getDate(), 12);
 });
 
 test("agrupa despesas recorrentes e parcelas sem transformar a fatura em nova despesa", () => {

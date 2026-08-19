@@ -25,11 +25,10 @@ import {
   FileUp,
   FolderOpen,
   History,
+  Landmark,
   Loader2,
   Maximize2,
   Minimize2,
-  PanelLeftClose,
-  PanelLeftOpen,
   RotateCcw,
   Save,
   SkipForward,
@@ -53,6 +52,11 @@ import {
   buildImportAuditSnapshot,
   diffImportAuditSnapshots,
 } from "@/features/financial/lib/import-audit-history";
+import {
+  getImportAuditProgress,
+  getImportAuditSourceBalance,
+  groupImportAuditItems,
+} from "@/features/financial/lib/import-audit-list";
 import {
   inferStatementPaymentMethodFromText,
   isBoletoPaymentText,
@@ -1469,6 +1473,16 @@ export function FinancialImportPage({
   const { financials: purchaseFinancials } = usePurchaseFinancials();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const auditPermissions = permissions.financial?.audits;
+  const canViewAudits = auditPermissions?.view === true;
+  const canImportAudits = canViewAudits && auditPermissions?.import === true;
+  const canEditAudits = canViewAudits && auditPermissions?.edit === true;
+  const canIgnoreAudits = canViewAudits && auditPermissions?.ignore === true;
+  const canEffectuateAudits = canViewAudits && auditPermissions?.effectuate === true;
+  const canManageAudits = canViewAudits && auditPermissions?.manage === true;
+  const canEditPersonnelCosts = permissions.financial?.personnelCosts?.view === true
+    && permissions.financial.personnelCosts.edit === true;
+  const canViewCardStatements = permissions.financial?.cardStatements?.view === true;
 
   const { data: aliasesData } = useFinancialCollection<any>(financialCollection("importAliases"));
   const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
@@ -1511,13 +1525,13 @@ export function FinancialImportPage({
   );
   const canEditImportSession = useCallback(
     (session: ImportSession | null) =>
-      Boolean(
-        session &&
-        firebaseUser &&
-        (session.createdBy === firebaseUser.uid ||
-          (session.syncSource === "inter_api" && permissions.financial?.expenses?.import))
-      ),
-    [firebaseUser, permissions.financial?.expenses?.import]
+      Boolean(session && firebaseUser && canEditAudits),
+    [canEditAudits, firebaseUser]
+  );
+  const canSaveImportSession = useCallback(
+    (session: ImportSession | null) =>
+      Boolean(session && firebaseUser && (canEditAudits || canIgnoreAudits || canManageAudits)),
+    [canEditAudits, canIgnoreAudits, canManageAudits, firebaseUser]
   );
 
   const aliases = aliasesData || [];
@@ -1690,6 +1704,9 @@ export function FinancialImportPage({
   const [auditStep, setAuditStep] = useState<0 | 1 | 2>(0);
   const [auditDrawerExpanded, setAuditDrawerExpanded] = useState(false);
   const [isSessionDirty, setIsSessionDirty] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [bulkIgnoreDialogOpen, setBulkIgnoreDialogOpen] = useState(false);
+  const [bulkEffectuateDialogOpen, setBulkEffectuateDialogOpen] = useState(false);
   const sessionRevisionRef = useRef(0);
   const currentSessionId = currentSession ? currentSession.id : null;
   const [directionFilter, setDirectionFilter] = useState<"all" | "in" | "out">("all");
@@ -1882,7 +1899,7 @@ export function FinancialImportPage({
   }, [currentSessionId, isSessionDirty, openSessions, replaceSessionUrl, selectedSessionId]);
 
   useEffect(() => {
-    if (!currentSession || !isSessionDirty || !canEditImportSession(currentSession)) return;
+    if (!currentSession || !isSessionDirty || !canSaveImportSession(currentSession)) return;
 
     const revisionAtSchedule = sessionRevisionRef.current;
     const timeout = window.setTimeout(async () => {
@@ -1912,7 +1929,7 @@ export function FinancialImportPage({
     }, 600);
 
     return () => window.clearTimeout(timeout);
-  }, [canEditImportSession, currentSession, isSessionDirty, patchImportSession, refreshImportSessions, toast]);
+  }, [canSaveImportSession, currentSession, isSessionDirty, patchImportSession, refreshImportSessions, toast]);
 
   const updateSession = useCallback((updater: (session: ImportSession) => ImportSession) => {
     setCurrentSession((previous) => {
@@ -1993,7 +2010,7 @@ export function FinancialImportPage({
 
   const processFile = useCallback(
     async (file: File) => {
-      if (!firebaseUser) return;
+      if (!firebaseUser || !canImportAudits) return;
       if (!statementAccountId) {
         toast({ variant: "destructive", title: "Selecione a conta vinculada ao extrato antes de importar." });
         return;
@@ -2121,10 +2138,12 @@ export function FinancialImportPage({
       toast,
       onImportComplete,
       user,
+      canImportAudits,
     ]
   );
 
   function updateItem(itemId: string, updater: (item: ImportSessionItem) => ImportSessionItem) {
+    if (!canEditAudits) return;
     updateSession((session) => ({
       ...session,
       items: session.items.map((item) => {
@@ -2210,7 +2229,15 @@ export function FinancialImportPage({
   }, [supplierSearch, users]);
 
   function setItemStatus(itemId: string, status: ImportSessionItemStatus) {
-    updateItem(itemId, (item) => ({ ...item, status }));
+    const item = currentSession?.items.find((entry) => entry.id === itemId);
+    if (!item) return;
+    if (status === "ignored" && !canIgnoreAudits) return;
+    if (item.status === "ignored" && status === "pending" && !canManageAudits) return;
+    if (status !== "ignored" && item.status !== "ignored" && !canEditAudits) return;
+    updateSession((session) => ({
+      ...session,
+      items: session.items.map((entry) => entry.id === itemId ? { ...entry, status } : entry),
+    }));
   }
 
   async function confirmAuditItem(itemId: string) {
@@ -2591,7 +2618,7 @@ export function FinancialImportPage({
   }
 
   async function finalizeAuditedItems() {
-    if (!firebaseUser || !currentSession) return;
+    if (!firebaseUser || !currentSession || !canEffectuateAudits) return;
     const auditedItems = currentSession.items.filter((item) => item.status === "audited");
 
     if (auditedItems.length === 0) {
@@ -3080,7 +3107,7 @@ export function FinancialImportPage({
   }
 
   async function effectuateItem(itemId: string, openNext = true) {
-    if (!currentSession || !canEditImportSession(currentSession)) return;
+    if (!currentSession || !canEffectuateAudits) return;
     const item = currentSession.items.find((entry) => entry.id === itemId);
     if (!item || item.status !== "audited") return;
 
@@ -3132,7 +3159,7 @@ export function FinancialImportPage({
   }
 
   async function reopenEffectuatedItem(itemId: string, reason: string) {
-    if (!currentSession || !canEditImportSession(currentSession)) return;
+    if (!currentSession || !canManageAudits) return;
     const item = currentSession.items.find((entry) => entry.id === itemId);
     if (!item || item.status !== "completed") return;
 
@@ -3196,7 +3223,7 @@ export function FinancialImportPage({
   }
 
   async function closeStatement() {
-    if (!currentSession || !canEditImportSession(currentSession)) return;
+    if (!currentSession || !canManageAudits) return;
     if (currentSession.summary.pending > 0 || currentSession.summary.audited > 0) {
       toast({
         variant: "destructive",
@@ -3232,7 +3259,7 @@ export function FinancialImportPage({
   }
 
   async function updateSessionStatus(nextStatus: "completed" | "discarded") {
-    if (!currentSession || !canEditImportSession(currentSession)) return;
+    if (!currentSession || !canManageAudits) return;
 
     setIsProcessing(true);
     try {
@@ -3258,7 +3285,7 @@ export function FinancialImportPage({
   }
 
   async function deleteSession(sessionId: string) {
-    if (!firebaseUser) return;
+    if (!firebaseUser || !canManageAudits) return;
 
     setIsProcessing(true);
     try {
@@ -3290,7 +3317,7 @@ export function FinancialImportPage({
   const selectedSessionAccount = selectedSession
     ? accounts.find((account) => account.id === selectedSession.statementAccountId) ?? null
     : null;
-  const selectedSessionCards = (selectedSessionAccount?.paymentMethods || []).filter(
+  const selectedSessionCards = (canViewCardStatements ? selectedSessionAccount?.paymentMethods || [] : []).filter(
     (method) => method.type === "credit_card"
   );
   const selectedLedgerCard = sessionLedgerView.startsWith("credit_card:")
@@ -3348,6 +3375,47 @@ export function FinancialImportPage({
     }),
     [selectedSession]
   );
+  const selectedSessionGroups = useMemo(
+    () => groupImportAuditItems(selectedSessionItems),
+    [selectedSessionItems]
+  );
+  const selectedItemIdSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
+  const selectedItemsForBulk = useMemo(
+    () => selectedSessionItems.filter((item) => selectedItemIdSet.has(item.id)),
+    [selectedItemIdSet, selectedSessionItems]
+  );
+  const bulkEffectuatableItems = useMemo(
+    () => selectedItemsForBulk.filter((item) => item.status === "audited"),
+    [selectedItemsForBulk]
+  );
+  const bulkIgnorableItems = useMemo(
+    () => selectedItemsForBulk.filter((item) => item.status === "pending" || item.status === "audited"),
+    [selectedItemsForBulk]
+  );
+  const selectedBulkAmount = useMemo(
+    () => selectedItemsForBulk.reduce((total, item) => total + item.amount, 0),
+    [selectedItemsForBulk]
+  );
+  const allVisibleItemsSelected = selectedSessionItems.length > 0 &&
+    selectedSessionItems.every((item) => selectedItemIdSet.has(item.id));
+  const someVisibleItemsSelected = selectedSessionItems.some((item) => selectedItemIdSet.has(item.id));
+
+  useEffect(() => {
+    setSelectedItemIds([]);
+    setBulkIgnoreDialogOpen(false);
+    setBulkEffectuateDialogOpen(false);
+  }, [currentSessionId]);
+
+  useEffect(() => {
+    const visibleIds = new Set(selectedSessionItems.map((item) => item.id));
+    setSelectedItemIds((current) => {
+      const next = current.filter((id) => visibleIds.has(id));
+      return next.length === current.length && next.every((id, index) => id === current[index])
+        ? current
+        : next;
+    });
+  }, [selectedSessionItems]);
+
   const selectedDetailItem = useMemo(
     () => (expandedItemId ? selectedSessionItems.find((item) => item.id === expandedItemId) ?? null : null),
     [expandedItemId, selectedSessionItems]
@@ -3676,11 +3744,132 @@ export function FinancialImportPage({
     }
   }, [expandedItemId, selectedSessionItems]);
 
-  if (!permissions.financial?.expenses?.import) {
+  function toggleSelectedItem(itemId: string) {
+    setSelectedItemIds((current) =>
+      current.includes(itemId)
+        ? current.filter((id) => id !== itemId)
+        : [...current, itemId]
+    );
+  }
+
+  function toggleAllVisibleItems() {
+    if (allVisibleItemsSelected) {
+      setSelectedItemIds([]);
+      return;
+    }
+    setSelectedItemIds(selectedSessionItems.map((item) => item.id));
+  }
+
+  async function ignoreSelectedItems() {
+    if (!currentSession || !canIgnoreAudits || bulkIgnorableItems.length === 0) return;
+
+    const previousSession = currentSession;
+    const eligibleIds = new Set(bulkIgnorableItems.map((item) => item.id));
+    const nextItems = currentSession.items.map((item) =>
+      eligibleIds.has(item.id) ? { ...item, status: "ignored" as const } : item
+    );
+    const nextSession = { ...currentSession, items: nextItems, summary: buildSessionSummary(nextItems) };
+
+    sessionRevisionRef.current += 1;
+    setCurrentSession(nextSession);
+    setSelectedItemIds([]);
+    setBulkIgnoreDialogOpen(false);
+    setIsSessionDirty(false);
+    setIsSavingSession(true);
+    try {
+      await patchImportSession(nextSession.id, {
+        action: "save",
+        statementAccountId: nextSession.statementAccountId,
+        statementAccountName: nextSession.statementAccountName,
+        items: serializeSessionItems(nextItems),
+      });
+      refreshImportSessions();
+      toast({
+        title: `${bulkIgnorableItems.length} movimentação(ões) ignorada(s).`,
+        description: "Os itens podem ser reabertos individualmente enquanto o extrato estiver aberto.",
+      });
+    } catch (error) {
+      console.error(error);
+      setCurrentSession(previousSession);
+      setSelectedItemIds([...eligibleIds]);
+      toast({
+        variant: "destructive",
+        title: "Não foi possível ignorar os itens selecionados.",
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsSavingSession(false);
+    }
+  }
+
+  async function effectuateSelectedItems() {
+    if (!currentSession || !canEffectuateAudits || bulkEffectuatableItems.length === 0) return;
+
+    setBulkEffectuateDialogOpen(false);
+    const sessionId = currentSession.id;
+    const actorName = getUserDisplayName(user, firebaseUser?.uid);
+    const successfulIds: string[] = [];
+    const failedIds: string[] = [];
+    setIsProcessing(true);
+    try {
+      for (const item of bulkEffectuatableItems) {
+        try {
+          await patchImportSession(sessionId, { action: "effectuate_item", itemId: item.id });
+          successfulIds.push(item.id);
+        } catch (error) {
+          console.error(error);
+          failedIds.push(item.id);
+        }
+      }
+
+      const successfulIdSet = new Set(successfulIds);
+      if (successfulIds.length > 0) {
+        const at = new Date().toISOString();
+        setCurrentSession((current) => {
+          if (!current || current.id !== sessionId) return current;
+          const items = current.items.map((item) =>
+            successfulIdSet.has(item.id)
+              ? {
+                  ...item,
+                  status: "completed" as const,
+                  auditHistory: [
+                    ...(item.auditHistory ?? []),
+                    {
+                      action: "effectuated" as const,
+                      actorId: firebaseUser?.uid ?? "",
+                      actorName,
+                      at,
+                    },
+                  ].slice(-50),
+                }
+              : item
+          );
+          return { ...current, items, summary: buildSessionSummary(items) };
+        });
+      }
+      setSelectedItemIds(failedIds);
+      setIsSessionDirty(false);
+      refreshImportSessions();
+
+      if (failedIds.length > 0) {
+        toast({
+          variant: "destructive",
+          title: `${successfulIds.length} efetivada(s); ${failedIds.length} não concluída(s).`,
+          description: "Os itens que falharam continuam selecionados para revisão.",
+        });
+      } else {
+        toast({ title: `${successfulIds.length} movimentação(ões) efetivada(s) no financeiro.` });
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  if (!canViewAudits) {
     return (
       <FinancialAccessGuard
         title="Importar extrato"
-        description="Seu perfil não possui permissão para importar extratos e efetivar transações no financeiro."
+        description="Seu perfil não possui permissão para consultar auditorias de extratos."
         backHref={FINANCIAL_ROUTES.expenses}
       />
     );
@@ -3702,10 +3891,10 @@ export function FinancialImportPage({
               <RotateCcw className="mr-2 h-4 w-4" />
               Sincronizar bancos
             </Button>
-            <Button size="sm" className="rounded-xl" onClick={() => fileRef.current?.click()} disabled={isProcessing}>
+            {canImportAudits ? <Button size="sm" className="rounded-xl" onClick={() => fileRef.current?.click()} disabled={isProcessing}>
               <Upload className="mr-2 h-4 w-4" />
               Importar arquivo
-            </Button>
+            </Button> : null}
           </div>
         </div>
       ) : null}
@@ -3726,28 +3915,39 @@ export function FinancialImportPage({
       />
 
       {selectedSession ? (
-        <Card className="h-[min(720px,calc(100vh-215px))] min-h-[590px] overflow-hidden rounded-[30px] border-border/70 bg-background shadow-sm">
+        <Card className="h-[min(720px,calc(100vh-215px))] min-h-[590px] overflow-hidden rounded-[30px] border-border/70 bg-white shadow-sm">
           <div
             className="grid h-full min-h-0 min-w-0"
             style={{
               gridTemplateColumns: `${sessionsSidebarOpen ? "320px" : "40px"} minmax(0, 1fr)`,
             }}
           >
-            <div className="flex min-h-0 flex-col border-r bg-[#fbfbfc]">
+            <div className="flex min-h-0 flex-col border-r bg-white">
               <div className="border-b px-4 py-3">
                 {sessionsSidebarOpen ? (
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Sessões</p>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="secondary" className="rounded-full text-[10px]">{visibleOpenSessions.length}</Badge>
-                      <button type="button" onClick={() => setSessionsSidebarOpen(false)} className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
-                        <PanelLeftClose className="h-3.5 w-3.5" />
+                    <div className="flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => setSessionsSidebarOpen(false)}
+                        className="grid h-7 w-7 place-items-center rounded-lg border bg-white text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary"
+                        title="Recolher sessões"
+                        aria-label="Recolher sessões"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => setSessionsSidebarOpen(true)} className="flex items-center justify-center rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
-                    <PanelLeftOpen className="h-3.5 w-3.5" />
+                  <button
+                    type="button"
+                    onClick={() => setSessionsSidebarOpen(true)}
+                    className="grid h-7 w-7 place-items-center rounded-lg border bg-white text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary"
+                    title="Expandir sessões"
+                    aria-label="Expandir sessões"
+                  >
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 )}
               </div>
@@ -3768,7 +3968,7 @@ export function FinancialImportPage({
                     </Select>
                   )}
                   <Select value={statementAccountId || "none"} onValueChange={(value) => setStatementAccountId(value === "none" ? "" : value)}>
-                    <SelectTrigger className="h-8 text-xs">
+                    <SelectTrigger className="h-auto min-h-12 bg-white px-3 py-2 text-left text-[11px] leading-snug [&>span]:line-clamp-2 [&>span]:whitespace-normal">
                       <SelectValue placeholder="Conta do extrato" />
                     </SelectTrigger>
                     <SelectContent>
@@ -3782,7 +3982,7 @@ export function FinancialImportPage({
                   </Select>
                 </div>
 
-                {showImportControls ? (
+                {showImportControls && canImportAudits ? (
                 <button
                   type="button"
                   onDragOver={(event) => {
@@ -3816,13 +4016,14 @@ export function FinancialImportPage({
                     const periodLabel = getSessionPeriodLabel(session);
                     const sessionFinancialSummary = getSessionFinancialSummary(session);
                     const sessionAccount = accounts.find((account) => account.id === session.statementAccountId);
-                    const sessionCreditCards = (sessionAccount?.paymentMethods || []).filter(
+                    const sessionCreditCards = (canViewCardStatements ? sessionAccount?.paymentMethods || [] : []).filter(
                       (method) => method.type === "credit_card"
                     );
                     const sessionUnitName = sessionAccount?.resultCenterId
                       ? unitNameById[sessionAccount.resultCenterId] ?? ""
                       : "";
                     const sessionAccountName = sessionAccount?.name || session.statementAccountName || session.displayName;
+                    const sessionProgress = getImportAuditProgress(session.summary);
 
                     return (
                       <div
@@ -3830,8 +4031,8 @@ export function FinancialImportPage({
                         className={cn(
                           "overflow-hidden rounded-2xl border transition-colors",
                           isSelected
-                            ? "border-primary/40 bg-background shadow-sm ring-1 ring-primary/10"
-                            : "border-transparent bg-background/70 hover:border-primary/30 hover:bg-background"
+                            ? "border-primary/40 bg-white shadow-sm ring-1 ring-primary/10"
+                            : "border-transparent bg-white hover:border-primary/30"
                         )}
                       >
                         <button
@@ -3873,29 +4074,43 @@ export function FinancialImportPage({
                             </div>
                           </div>
                         </div>
-                        <div className="mt-3 flex items-end justify-between gap-3">
-                          <div className="min-w-0">
-                            {isSelected ? <div className="h-1.5 w-7 rounded-full bg-amber-400" /> : null}
-                            <p className="mt-1 text-[10.5px] text-muted-foreground">
-                              {session.summary.audited + session.summary.completed} de {session.items.length} conciliados
-                            </p>
+                        <div className="mt-3 space-y-1.5">
+                          <div className="flex items-center justify-between gap-3 text-[10.5px]">
+                            <span className="font-medium text-foreground">Conciliação</span>
+                            <span className={cn("font-mono font-semibold", isSelected ? "text-primary" : "text-muted-foreground")}>
+                              {sessionProgress.percentage}%
+                            </span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-[width] duration-300",
+                                sessionProgress.percentage === 100 ? "bg-emerald-500" : "bg-primary"
+                              )}
+                              style={{ width: `${sessionProgress.percentage}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10.5px] text-muted-foreground">
+                              {sessionProgress.treated} de {sessionProgress.total} tratados
+                            </p>
                             {session.summary.pending === 0 ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : null}
                           </div>
                         </div>
                         </button>
                         {isSelected && sessionCreditCards.length > 0 ? (
-                          <div className="border-t p-2">
-                            <div className="flex flex-wrap gap-1 rounded-xl bg-muted/50 p-1">
+                          <div className="grid grid-cols-2 gap-2 border-t bg-white p-2.5">
                               <button
                                 type="button"
                                 onClick={() => selectSessionLedgerView("checking_account")}
                                 className={cn(
-                                  "flex min-w-0 flex-1 items-center justify-center rounded-lg px-2 py-1.5 text-[10.5px] font-medium transition-colors",
-                                  !selectedLedgerCard ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                                  "flex min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[10.5px] font-semibold shadow-sm transition-all",
+                                  !selectedLedgerCard
+                                    ? "border-primary/60 bg-primary/[0.08] text-primary ring-1 ring-primary/15"
+                                    : "border-border bg-white text-muted-foreground hover:border-primary/40 hover:bg-primary/[0.035] hover:text-foreground"
                                 )}
                               >
+                                <Landmark className="h-3.5 w-3.5 shrink-0" />
                                 Conta corrente
                               </button>
                               {sessionCreditCards.map((method) => {
@@ -3907,8 +4122,10 @@ export function FinancialImportPage({
                                     type="button"
                                     onClick={() => selectSessionLedgerView(view)}
                                     className={cn(
-                                      "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[10.5px] font-medium transition-colors",
-                                      active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                                      "flex min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[10.5px] font-semibold shadow-sm transition-all",
+                                      active
+                                        ? "border-primary/60 bg-primary/[0.08] text-primary ring-1 ring-primary/15"
+                                        : "border-border bg-white text-muted-foreground hover:border-primary/40 hover:bg-primary/[0.035] hover:text-foreground"
                                     )}
                                   >
                                     <CreditCard className="h-3.5 w-3.5 shrink-0" />
@@ -3916,7 +4133,6 @@ export function FinancialImportPage({
                                   </button>
                                 );
                               })}
-                            </div>
                           </div>
                         ) : null}
                         {isSelected ? (
@@ -3984,7 +4200,7 @@ export function FinancialImportPage({
             </div>
 
             {selectedLedgerCard ? (
-              <div data-testid="card-statement-pane" className="min-h-0 min-w-0 overflow-hidden bg-muted/10">
+              <div data-testid="card-statement-pane" className="min-h-0 min-w-0 overflow-hidden bg-white">
                 <CardStatementsWorkspace
                   embedded
                   fixedMonthKey={selectedSessionMonthKey || undefined}
@@ -3995,7 +4211,7 @@ export function FinancialImportPage({
               </div>
             ) : (
               <>
-            <div data-testid="transactions-pane" className="flex min-h-0 min-w-0 flex-col">
+            <div data-testid="transactions-pane" className="flex min-h-0 min-w-0 flex-col bg-white">
               <div className="space-y-2 border-b px-4 py-3">
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -4021,30 +4237,66 @@ export function FinancialImportPage({
                 </div>
                 <div className="space-y-2">
                   <div className="space-y-1">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status</p>
-                    <div className="grid grid-cols-5 gap-1 rounded-xl bg-muted/50 p-1">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Status <span className="normal-case tracking-normal text-muted-foreground/60">· fluxo da auditoria</span>
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setItemStatusFilter("all")}
+                        className={cn(
+                          "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10.5px] font-semibold transition-colors",
+                          itemStatusFilter === "all"
+                            ? "border-zinc-300 bg-zinc-100 text-zinc-800"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        Todos
+                        <span className="rounded-full bg-background/80 px-1.5 py-0.5 text-[9px] leading-none">
+                          {selectedSessionCounts.all}
+                        </span>
+                      </button>
                       {([
-                        ["all", "Todos", selectedSession.items.length],
-                        ["pending", "Pendentes", selectedSessionCounts.pending],
-                        ["audited", "Auditadas", selectedSessionCounts.audited],
-                        ["completed", "Efetivadas", selectedSessionCounts.completed],
-                        ["ignored", "Ignoradas", selectedSessionCounts.ignored],
-                      ] as const).map(([value, label, count]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setItemStatusFilter(value)}
-                          className={cn(
-                            "flex min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[10.5px] font-medium transition-colors",
-                            itemStatusFilter === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                          )}
-                        >
-                          <span>{label}</span>
-                          <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[9.5px] leading-none text-muted-foreground">
-                            {count}
-                          </span>
-                        </button>
+                        ["pending", "Pendentes", selectedSessionCounts.pending, "border-amber-300 bg-amber-50 text-amber-700"],
+                        ["audited", "Auditadas", selectedSessionCounts.audited, "border-sky-300 bg-sky-50 text-sky-700"],
+                        ["completed", "Efetivadas", selectedSessionCounts.completed, "border-emerald-300 bg-emerald-50 text-emerald-700"],
+                      ] as const).map(([value, label, count, activeClass], index) => (
+                        <Fragment key={value}>
+                          {index > 0 ? <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" /> : null}
+                          <button
+                            type="button"
+                            onClick={() => setItemStatusFilter(value)}
+                            className={cn(
+                              "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10.5px] font-semibold transition-colors",
+                              itemStatusFilter === value
+                                ? activeClass
+                                : "border-border bg-background text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            <span className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              value === "pending" ? "bg-amber-500" : value === "audited" ? "bg-sky-500" : "bg-emerald-500"
+                            )} />
+                            {label}
+                            <span className="rounded-full bg-background/80 px-1.5 py-0.5 text-[9px] leading-none">{count}</span>
+                          </button>
+                        </Fragment>
                       ))}
+                      <span className="px-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/60">ou</span>
+                      <button
+                        type="button"
+                        onClick={() => setItemStatusFilter("ignored")}
+                        className={cn(
+                          "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10.5px] font-semibold transition-colors",
+                          itemStatusFilter === "ignored"
+                            ? "border-zinc-300 bg-zinc-100 text-zinc-700"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+                        Ignoradas
+                        <span className="rounded-full bg-background/80 px-1.5 py-0.5 text-[9px] leading-none">{selectedSessionCounts.ignored}</span>
+                      </button>
                     </div>
                   </div>
                   <div className="flex items-end justify-between gap-3">
@@ -4077,80 +4329,198 @@ export function FinancialImportPage({
                 </div>
               </div>
 
-              <div
-                className="grid items-center gap-3 border-b bg-muted/20 px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground"
-                style={{ gridTemplateColumns: "28px minmax(0, 1fr) 104px 140px" }}
-              >
-                <span />
-                <span>Descrição</span>
-                <span>Tipo</span>
-                <span className="text-right">Valor</span>
-              </div>
+              {selectedItemsForBulk.length > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/15 bg-primary/5 px-4 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedItemIds([])}
+                      className="grid h-5 w-5 shrink-0 place-items-center rounded-md border border-primary bg-primary text-primary-foreground"
+                      aria-label="Limpar seleção"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="text-xs font-semibold text-primary">{selectedItemsForBulk.length} selecionada(s)</span>
+                    <span className={cn(
+                      "whitespace-nowrap font-mono text-[11px] font-semibold",
+                      selectedBulkAmount < 0 ? "text-rose-700" : "text-emerald-700"
+                    )}>
+                      {selectedBulkAmount < 0 ? "− " : "+ "}{formatCurrency(Math.abs(selectedBulkAmount))}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg px-2.5 text-[10.5px] text-rose-700"
+                      disabled={
+                        !canIgnoreAudits || isProcessing || isSavingSession || isSessionDirty || bulkIgnorableItems.length === 0
+                      }
+                      title="Somente movimentações pendentes ou auditadas podem ser ignoradas."
+                      onClick={() => setBulkIgnoreDialogOpen(true)}
+                    >
+                      Ignorar ({bulkIgnorableItems.length})
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 rounded-lg px-2.5 text-[10.5px]"
+                      disabled={
+                        !canEffectuateAudits || isProcessing || isSavingSession || isSessionDirty || bulkEffectuatableItems.length === 0
+                      }
+                      title="Efetiva somente itens cuja auditoria já foi confirmada."
+                      onClick={() => setBulkEffectuateDialogOpen(true)}
+                    >
+                      {isProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                      Efetivar ({bulkEffectuatableItems.length})
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-[28px_minmax(0,1fr)_104px] items-center gap-2 border-b bg-muted/20 px-4 py-2.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground lg:grid-cols-[28px_minmax(0,1fr)_100px_116px_140px] xl:grid-cols-[28px_minmax(0,1fr)_100px_116px_116px_170px]">
+                  <button
+                    type="button"
+                    onClick={toggleAllVisibleItems}
+                    disabled={selectedSessionItems.length === 0}
+                    aria-label="Selecionar todas as movimentações exibidas"
+                    aria-pressed={allVisibleItemsSelected}
+                    className={cn(
+                      "grid h-5 w-5 place-items-center rounded-md border transition-colors",
+                      allVisibleItemsSelected || someVisibleItemsSelected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-transparent"
+                    )}
+                  >
+                    {allVisibleItemsSelected ? <Check className="h-3.5 w-3.5" /> : someVisibleItemsSelected ? <span className="h-0.5 w-2.5 rounded bg-current" /> : null}
+                  </button>
+                  <span>Descrição</span>
+                  <span className="hidden lg:block">Tipo</span>
+                  <span className="text-right">Valor</span>
+                  <span className="hidden text-right xl:block">Saldo</span>
+                  <span className="hidden text-right lg:block">Status</span>
+                </div>
+              )}
 
               <div className="min-h-0 flex-1 overflow-y-auto">
-                {selectedSessionItems.map((item) => {
-                  const isSelected = selectedDetailItem?.id === item.id;
-                  const isExpense = item.amount < 0;
-                  const primaryDescription = getTransactionPrimaryDescription(item);
-                  const kindLabel = getTransactionKindLabel(item);
-                  const statusMeta = IMPORT_ITEM_STATUS_META[item.status];
+                {selectedSessionGroups.length === 0 ? (
+                  <div className="grid min-h-32 place-items-center px-6 text-center text-xs text-muted-foreground">
+                    Nenhuma movimentação corresponde aos filtros selecionados.
+                  </div>
+                ) : selectedSessionGroups.map((group) => (
+                  <Fragment key={group.date || group.label}>
+                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-[#fbfaf7]/95 px-4 py-2 backdrop-blur">
+                      <span className="text-[11px] font-semibold text-foreground">{group.label}</span>
+                      <span className="text-[10.5px] text-muted-foreground">{group.weekday}</span>
+                      <span className="h-px flex-1 bg-border/60" />
+                      <span className={cn(
+                        "whitespace-nowrap font-mono text-[10.5px] font-medium",
+                        group.netAmount < 0 ? "text-rose-600" : "text-emerald-600"
+                      )}>
+                        Líquido {group.netAmount < 0 ? "−" : "+"}{formatCurrency(Math.abs(group.netAmount))}
+                      </span>
+                    </div>
+                    {group.items.map((item) => {
+                      const isDetailOpen = selectedDetailItem?.id === item.id;
+                      const isBatchSelected = selectedItemIdSet.has(item.id);
+                      const isExpense = item.amount < 0;
+                      const primaryDescription = getTransactionPrimaryDescription(item);
+                      const kindLabel = getTransactionKindLabel(item);
+                      const statusMeta = IMPORT_ITEM_STATUS_META[item.status];
+                      const sourceBalance = getImportAuditSourceBalance(item);
 
-                  return (
-                    <Fragment key={item.id}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
-                          setExpandedItemId(isSelected ? null : item.id);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            setExpandedItemId(isSelected ? null : item.id);
-                          }
-                        }}
-                        className={cn(
-                          "grid w-full cursor-pointer items-center gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/20",
-                          isSelected && "border-l-2 border-l-primary bg-primary/5"
-                        )}
-                        style={{ gridTemplateColumns: "28px minmax(0, 1fr) 104px 140px" }}
-                      >
+                      return (
                         <div
+                          key={item.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setExpandedItemId(isDetailOpen ? null : item.id)}
+                          onKeyDown={(event) => {
+                            if ((event.target as HTMLElement).closest("button")) return;
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setExpandedItemId(isDetailOpen ? null : item.id);
+                            }
+                          }}
                           className={cn(
-                            "grid h-6 w-6 place-items-center rounded-full border bg-background text-muted-foreground",
-                            isSelected && "border-primary/40 bg-primary/10 text-primary"
+                            "group grid grid-cols-[28px_minmax(0,1fr)_104px] items-center gap-2 border-b px-4 py-3 text-left transition-colors hover:bg-primary/[0.035] lg:grid-cols-[28px_minmax(0,1fr)_100px_116px_140px] xl:grid-cols-[28px_minmax(0,1fr)_100px_116px_116px_170px]",
+                            isBatchSelected && "bg-primary/[0.055]",
+                            isDetailOpen && "border-l-2 border-l-primary bg-primary/[0.07]"
                           )}
                         >
-                          {isSelected ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                        </div>
-                        <div className="min-w-0 space-y-1">
-                          <p className="truncate font-sans text-sm font-semibold leading-tight">{primaryDescription}</p>
-                          <p className="truncate text-xs leading-tight text-muted-foreground">
-                            {formatInputDate(item.date)} · {item.rawDescription}
-                          </p>
-                        </div>
-                        <div className="min-w-0 space-y-1">
-                          <Badge className={cn("rounded-full px-2 py-0.5 text-[10.5px] hover:bg-current/0", getTransactionKindClassName(item))}>
-                            {kindLabel}
-                          </Badge>
-                          <div>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleSelectedItem(item.id);
+                            }}
+                            onKeyDown={(event) => event.stopPropagation()}
+                            aria-label={isBatchSelected ? `Remover ${primaryDescription} da seleção` : `Selecionar ${primaryDescription}`}
+                            aria-pressed={isBatchSelected}
+                            className={cn(
+                              "grid h-5 w-5 place-items-center rounded-md border transition-colors",
+                              isBatchSelected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background text-transparent group-hover:border-primary/50"
+                            )}
+                          >
+                            {isBatchSelected ? <Check className="h-3.5 w-3.5" /> : null}
+                          </button>
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <p className="truncate font-sans text-[13px] font-semibold leading-tight">{primaryDescription}</p>
+                              <Badge className={cn("shrink-0 rounded-md px-1.5 py-0 text-[8.5px] lg:hidden", getTransactionKindClassName(item))}>
+                                {kindLabel}
+                              </Badge>
+                            </div>
+                            <p className="truncate text-[10.5px] leading-tight text-muted-foreground">{item.rawDescription}</p>
                             <Badge
                               variant="outline"
-                              className={cn("rounded-full px-2 py-0.5 text-[9.5px] font-semibold", statusMeta.className)}
+                              className={cn("rounded-full px-1.5 py-0 text-[8.5px] font-semibold lg:hidden", statusMeta.className)}
                             >
                               {statusMeta.label}
                             </Badge>
                           </div>
+                          <div className="hidden lg:block">
+                            <Badge className={cn("rounded-full px-2 py-0.5 text-[9.5px] hover:bg-current/0", getTransactionKindClassName(item))}>
+                              {kindLabel}
+                            </Badge>
+                          </div>
+                          <p className={cn("whitespace-nowrap text-right font-mono text-xs font-semibold", isExpense ? "text-rose-600" : "text-emerald-600")}>
+                            {isExpense ? "− " : "+ "}{formatCurrency(Math.abs(item.amount))}
+                          </p>
+                          <p className={cn(
+                            "hidden whitespace-nowrap text-right font-mono text-[11px] font-medium xl:block",
+                            sourceBalance === null ? "text-muted-foreground" : sourceBalance < 0 ? "text-rose-600" : "text-foreground"
+                          )}>
+                            {sourceBalance === null ? "—" : `${sourceBalance < 0 ? "− " : ""}${formatCurrency(Math.abs(sourceBalance))}`}
+                          </p>
+                          <div className="hidden items-center justify-end gap-1.5 lg:flex">
+                            {item.status === "pending" ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setExpandedItemId(item.id);
+                                }}
+                                className="max-w-0 overflow-hidden whitespace-nowrap rounded-lg bg-primary py-1 text-[10px] font-semibold text-primary-foreground opacity-0 transition-all group-hover:max-w-20 group-hover:px-2 group-hover:opacity-100 group-focus-within:max-w-20 group-focus-within:px-2 group-focus-within:opacity-100"
+                              >
+                                Auditar
+                              </button>
+                            ) : null}
+                            <Badge
+                              variant="outline"
+                              className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-semibold", statusMeta.className)}
+                            >
+                              {statusMeta.label}
+                            </Badge>
+                            {isDetailOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+                          </div>
                         </div>
-                        <p className={cn("whitespace-nowrap text-right font-mono text-sm font-semibold", isExpense ? "text-rose-600" : "text-emerald-600")}>
-                          {isExpense ? "− " : "+ "}
-                          {formatCurrency(Math.abs(item.amount))}
-                        </p>
-                      </div>
-
-                    </Fragment>
-                  );
-                })}
+                      );
+                    })}
+                  </Fragment>
+                ))}
               </div>
 
               <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-2.5 text-xs">
@@ -4160,7 +4530,7 @@ export function FinancialImportPage({
                   className="h-8 rounded-xl text-[11px]"
                   onClick={() => setCloseStatementDialogOpen(true)}
                   disabled={
-                    !selectedSessionEditable ||
+                    !canManageAudits ||
                     isProcessing ||
                     selectedSessionCounts.pending > 0 ||
                     selectedSessionCounts.audited > 0
@@ -4545,9 +4915,9 @@ export function FinancialImportPage({
                     </div>
 
                     {auditStep > 0 ? (
-                      <div className="flex items-center justify-between gap-3 rounded-2xl border bg-background px-4 py-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3 shadow-sm">
                         <div className="min-w-0">
-                          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Origem confirmada</p>
+                          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-sky-700">1. Origem bancária confirmada</p>
                           <p className="mt-1 truncate text-xs font-semibold">
                             {item.financialDraft.accountName || "Conta não informada"} · {item.financialDraft.paymentMethodLabel || "Forma não informada"}
                           </p>
@@ -4841,9 +5211,9 @@ export function FinancialImportPage({
                         </p>
                       </div>
                     ) : (
-                      <div className={cn("space-y-4 rounded-2xl border border-amber-100 bg-amber-50/50 p-4", auditStep !== 1 && "hidden")}>
+                      <div className={cn("mt-2 space-y-4 rounded-2xl border border-amber-200 bg-white p-5 shadow-sm", auditStep !== 1 && "hidden")}>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-800">
-                          Como tratar esta despesa
+                          2. Como tratar esta despesa
                         </p>
                         {item.suggestedExpenseId ? (
                           <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-background p-3">
@@ -5336,6 +5706,7 @@ export function FinancialImportPage({
                               </div>
                             ) : null}
 
+                            {canEditPersonnelCosts ? <>
                             <div className="flex items-center justify-between rounded-xl border bg-background px-3 py-2.5 md:col-span-2">
                               <div>
                                 <p className="text-sm font-medium">Individualizar por colaborador ou contrato</p>
@@ -5504,6 +5875,7 @@ export function FinancialImportPage({
                                 </div>
                               </div>
                             ) : null}
+                            </> : null}
 
                             {!item.expenseDraft.isApportioned ? (
                               <div className="space-y-1.5">
@@ -6021,7 +6393,7 @@ export function FinancialImportPage({
                           variant="outline"
                           size="sm"
                           className="rounded-xl text-rose-700"
-                          disabled={!selectedSessionEditable || isSavingSession || isProcessing || item.status === "completed"}
+                            disabled={!canIgnoreAudits || isSavingSession || isProcessing || item.status === "completed"}
                           onClick={() => setItemStatus(item.id, "ignored")}
                         >
                           Ignorar
@@ -6050,7 +6422,7 @@ export function FinancialImportPage({
                             variant="outline"
                             size="sm"
                             className="rounded-xl"
-                            disabled={!selectedSessionEditable || isProcessing}
+                            disabled={!canManageAudits || isProcessing}
                             onClick={() => {
                               setReopenReason("");
                               setReopenItemId(item.id);
@@ -6064,7 +6436,7 @@ export function FinancialImportPage({
                             variant="outline"
                             size="sm"
                             className="rounded-xl"
-                            disabled={!selectedSessionEditable || isSavingSession}
+                            disabled={!canManageAudits || isSavingSession}
                             onClick={() => setItemStatus(item.id, "pending")}
                           >
                             Reabrir item
@@ -6078,7 +6450,7 @@ export function FinancialImportPage({
                                   variant="outline"
                                   size="sm"
                                   className="rounded-xl"
-                                  disabled={!validation.ready || !selectedSessionEditable || isProcessing || isSavingSession}
+                                  disabled={!validation.ready || !canEffectuateAudits || isProcessing || isSavingSession}
                                   onClick={() => void effectuateItem(item.id, false)}
                                 >
                                   Efetivar e fechar
@@ -6087,7 +6459,7 @@ export function FinancialImportPage({
                                   type="button"
                                   size="sm"
                                   className="rounded-xl"
-                                  disabled={!validation.ready || !selectedSessionEditable || isProcessing || isSavingSession}
+                                  disabled={!validation.ready || !canEffectuateAudits || isProcessing || isSavingSession}
                                   onClick={() => void effectuateItem(item.id)}
                                 >
                                   {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -6229,7 +6601,7 @@ export function FinancialImportPage({
           </CardContent>
         </Card>
       ) : (
-        uploadOnly || showImportControls ? (
+        (uploadOnly || showImportControls) && canImportAudits ? (
         <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle>Upload do arquivo</CardTitle>
@@ -6320,6 +6692,55 @@ export function FinancialImportPage({
         </Card>
         )
       )}
+
+      <AlertDialog open={bulkIgnoreDialogOpen} onOpenChange={setBulkIgnoreDialogOpen}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ignorar movimentações selecionadas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkIgnorableItems.length} item(ns) pendente(s) ou auditado(s) deixarão de gerar lançamentos financeiros. Eles poderão ser reabertos individualmente enquanto o extrato estiver aberto.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSavingSession}>Não</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSavingSession || bulkIgnorableItems.length === 0}
+              onClick={(event) => {
+                event.preventDefault();
+                void ignoreSelectedItems();
+              }}
+              className="bg-rose-600 text-white hover:bg-rose-700"
+            >
+              {isSavingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Sim, ignorar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkEffectuateDialogOpen} onOpenChange={setBulkEffectuateDialogOpen}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Efetivar movimentações selecionadas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkEffectuatableItems.length} item(ns) auditado(s) serão registrados no financeiro. Confirme somente se as classificações e os vínculos estiverem corretos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Não</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isProcessing || bulkEffectuatableItems.length === 0}
+              onClick={(event) => {
+                event.preventDefault();
+                void effectuateSelectedItems();
+              }}
+            >
+              {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Sim, efetivar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={reopenItemId !== null}
