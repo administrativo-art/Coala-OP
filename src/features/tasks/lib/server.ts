@@ -578,13 +578,26 @@ export async function listTaskStatuses(projectIds: string[]) {
     .sort((left, right) => left.order - right.order);
 }
 
-export async function listTasks(context: ServerUserContext, options?: { limit?: number }) {
+export async function listTasks(
+  context: ServerUserContext,
+  options: {
+    limit?: number;
+    statuses?: readonly Task["status"][];
+  } = {}
+) {
   let query: FirebaseFirestore.Query = dbAdmin
     .collection("tasks")
     .where("workspace_id", "==", context.workspace_id);
-  if (typeof options?.limit === "number") {
-    query = query.limit(Math.min(Math.max(options.limit, 1), 500));
+
+  const statuses = Array.from(new Set(options.statuses ?? [])).slice(0, 10);
+  if (statuses.length === 1) {
+    query = query.where("status", "==", statuses[0]);
+  } else if (statuses.length > 1) {
+    query = query.where("status", "in", statuses);
   }
+
+  const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
+  query = query.limit(limit);
   const snap = await query.get();
 
   return snap.docs

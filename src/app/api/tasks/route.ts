@@ -7,12 +7,12 @@ import {
 } from "@/features/tasks/lib/server-access";
 import {
   createManualTask,
-  ensureDefaultTaskProject,
   listTaskProjects,
   listTaskStatuses,
   listTaskSubprojects,
   listTasks,
 } from "@/features/tasks/lib/server";
+import { resolveTaskBootstrapPolicy } from "@/features/tasks/lib/query-policy";
 import { type Task, type TaskOrigin } from "@/types";
 import { canAccessUnit } from "@/lib/unit-access";
 
@@ -48,13 +48,16 @@ export async function GET(request: NextRequest) {
       "view"
     );
 
-    await ensureDefaultTaskProject(context);
+    const policy = resolveTaskBootstrapPolicy(request.nextUrl.searchParams.get("scope"));
     const projects = await listTaskProjects(context.workspace_id);
     const subprojects = await listTaskSubprojects(projects.map((project) => project.id));
     const statuses = await listTaskStatuses(projects.map((project) => project.id));
-    const tasks = await listTasks(context);
+    const tasks = await listTasks(context, {
+      limit: policy.limit,
+      statuses: policy.statuses,
+    });
 
-    return NextResponse.json({ projects, subprojects, statuses, tasks });
+    return NextResponse.json({ projects, subprojects, statuses, tasks, scope: policy.scope });
   } catch (error) {
     const status =
       error instanceof Error &&

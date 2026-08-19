@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { doc, setDoc, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
+import { setDoc, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
 import {
   ArrowLeft,
   CalendarDays,
@@ -32,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import {
@@ -47,6 +48,10 @@ import {
 } from "@/features/financial/lib/card-invoices";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import type { CardStatementImportPreview } from "@/features/financial/lib/card-statement-import";
+import {
+  matchCardStatementExpenses,
+  type CardStatementExpenseCandidate,
+} from "@/features/financial/lib/card-statement-expense-matcher";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -191,6 +196,7 @@ export function CardStatementsWorkspace({
   const [importPreview, setImportPreview] = useState<CardStatementImportPreview | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [selectedImportLineIds, setSelectedImportLineIds] = useState<string[]>([]);
+  const [importResolutionByLineId, setImportResolutionByLineId] = useState<Record<string, string>>({});
   const [importingStatement, setImportingStatement] = useState(false);
   const cardStatementFileRef = useRef<HTMLInputElement>(null);
   const cardStatementPermissions = permissions.financial?.cardStatements;
@@ -322,8 +328,44 @@ export function CardStatementsWorkspace({
     [linkedTransactionIds, officialTotal, selectedGroup, transactionsData]
   );
   const existingImportFingerprints = useMemo(
-    () => new Set((expensesData || []).map((expense) => String(expense.cardStatementImportFingerprint || "")).filter(Boolean)),
+    () => new Set((expensesData || []).flatMap((expense) => [
+      String(expense.cardStatementImportFingerprint || ""),
+      ...(Array.isArray(expense.cardStatementImportFingerprints)
+        ? expense.cardStatementImportFingerprints.map(String)
+        : []),
+    ]).filter(Boolean)),
     [expensesData]
+  );
+  const importExpenseCandidates = useMemo<CardStatementExpenseCandidate[]>(
+    () => (selectedGroup?.lines || []).flatMap((line) => {
+      const fingerprints = [
+        String((line.expense as any).cardStatementImportFingerprint || ""),
+        ...(Array.isArray((line.expense as any).cardStatementImportFingerprints)
+          ? (line.expense as any).cardStatementImportFingerprints.map(String)
+          : []),
+      ].filter(Boolean);
+      if (line.reconciled || fingerprints.length > 0 || line.expense.status === "paid") return [];
+      return [{
+        lineId: line.lineId,
+        expenseId: line.expense.id,
+        description: String(line.expense.description || ""),
+        supplier: String(line.expense.supplier || ""),
+        amount: line.value,
+        chargeDate: line.chargeDate,
+        installmentNumber: line.installmentNumber,
+        installmentTotal: line.installmentTotal,
+        isForecast: isCardLineForecast(line),
+      }];
+    }),
+    [selectedGroup]
+  );
+  const importExpenseMatches = useMemo(
+    () => matchCardStatementExpenses(importPreview?.transactions || [], importExpenseCandidates),
+    [importExpenseCandidates, importPreview]
+  );
+  const importExpenseMatchByLineId = useMemo(
+    () => new Map(importExpenseMatches.map((match) => [match.lineId, match])),
+    [importExpenseMatches]
   );
   const selectedImportLineIdSet = useMemo(() => new Set(selectedImportLineIds), [selectedImportLineIds]);
   const selectedImportLines = useMemo(
@@ -332,6 +374,26 @@ export function CardStatementsWorkspace({
     ),
     [existingImportFingerprints, importPreview, selectedImportLineIdSet]
   );
+
+  useEffect(() => {
+    if (!importPreview) {
+      setImportResolutionByLineId({});
+      return;
+    }
+    setImportResolutionByLineId((current) => Object.fromEntries(
+      importPreview.transactions.map((line) => {
+        const match = importExpenseMatchByLineId.get(line.id);
+        const currentValue = current[line.id];
+        const available = match?.candidates.some((candidate) => candidate.lineId === currentValue);
+        return [
+          line.id,
+          available ? currentValue : match?.confidence === "high" && match.recommendedCandidateId
+            ? match.recommendedCandidateId
+            : "create",
+        ];
+      })
+    ));
+  }, [importExpenseMatchByLineId, importPreview]);
 
   useEffect(() => {
     if (fixedMonthKey && fixedMonthKey !== monthKey) setMonthKey(fixedMonthKey);
@@ -583,109 +645,70 @@ export function CardStatementsWorkspace({
     if (!firebaseUser || !selectedGroup || !importPreview || selectedImportLines.length === 0 || !canImportCardStatements) return;
     setImportingStatement(true);
     try {
-      const batch = writeBatch(financialDb);
-      const now = Timestamp.now();
       const importedDueDate = importPreview.dueDate
         ? new Date(`${importPreview.dueDate}T12:00:00`)
         : selectedGroup.dueDate;
       const importedClosingDate = importPreview.closingDate
         ? new Date(`${importPreview.closingDate}T12:00:00`)
         : resolveCardStatementDatesFromDueDate(importedDueDate, selectedGroup.card).closingDate;
-      for (const line of selectedImportLines) {
-        const chargeDate = new Date(`${line.date}T12:00:00`);
-        const expenseRef = doc(financialCollection("expenses"));
-        batch.set(expenseRef, {
-          description: line.description,
-          supplier: line.supplier,
-          notes: `Importado da fatura ${selectedGroup.card.methodLabel} · ${selectedGroup.monthKey}. Arquivo: ${importPreview.fileName}.`,
-          totalValue: line.amount,
-          competenceDate: Timestamp.fromDate(chargeDate),
-          dueDate: Timestamp.fromDate(importedDueDate),
-          cardChargeDate: Timestamp.fromDate(chargeDate),
-          originalCardChargeDate: line.date,
-          paymentMethod: "single",
-          plannedPaymentMethodType: "credit_card",
-          plannedBankAccountId: selectedGroup.card.accountId,
-          plannedBankAccountName: selectedGroup.card.accountName,
-          plannedPaymentMethodId: selectedGroup.card.methodId,
-          plannedPaymentMethodLabel: selectedGroup.card.methodLabel,
-          installmentNumber: line.installmentNumber,
-          installmentTotal: line.installmentTotal,
-          accountPlan: "",
-          accountId: "",
-          accountPlanId: "",
-          accountPlanName: "",
-          resultCenter: null,
-          resultCenterId: "",
-          resultCenterName: "",
-          isApportioned: false,
-          apportionments: [],
-          hasAccountAllocations: false,
-          accountAllocations: [],
-          hasPersonAllocations: false,
-          personAllocations: [],
-          status: "pending",
-          cardReconciliationStatus: "pending",
-          cardStatementKey: selectedGroup.key,
-          cardStatementMonthKey: selectedGroup.monthKey,
-          cardStatementImportFingerprint: line.fingerprint,
-          cardStatementImportFileName: importPreview.fileName,
-          cardStatementImportSourceReference: line.sourceReference,
-          cardStatementImportConfidence: line.confidence,
-          cardStatementImportReviewNotes: line.reviewNotes,
-          cardStatementImportPromptVersion: importPreview.analysis.promptVersion,
-          cardStatementImportSchemaVersion: importPreview.analysis.schemaVersion,
-          cardStatementImportAnalyzedBy: "financial_copilot",
-          importedFrom: "card_statement",
-          sourceType: "card_statement_import",
-          createdAt: now,
-          createdBy: firebaseUser.uid,
-          updatedAt: now,
-          updatedBy: firebaseUser.uid,
-        });
-      }
-      batch.set(
-        financialDoc("cardStatements", statementDocumentId(selectedGroup.key)),
-        {
-          key: selectedGroup.key,
-          monthKey: selectedGroup.monthKey,
+      const response = await fetch("/api/financial/card-statements/import", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${await firebaseUser.getIdToken()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           accountId: selectedGroup.card.accountId,
           accountName: selectedGroup.card.accountName,
           paymentMethodId: selectedGroup.card.methodId,
           paymentMethodLabel: selectedGroup.card.methodLabel,
-          closingDate: Timestamp.fromDate(importedClosingDate),
-          dueDate: Timestamp.fromDate(importedDueDate),
-          ...(importPreview.officialTotal ? { officialTotal: importPreview.officialTotal } : {}),
-          status: "open",
-          lastImportFileName: importPreview.fileName,
-          lastImportAnalysis: {
-            source: "financial_copilot",
-            status: importPreview.analysis.status,
-            summary: importPreview.analysis.summary,
-            detectedFormat: importPreview.analysis.detectedFormat,
-            includedCount: selectedImportLines.length,
-            includedTotal: Number(selectedImportLines.reduce((total, line) => total + line.amount, 0).toFixed(2)),
-            excludedCount: importPreview.analysis.excludedCount,
-            promptVersion: importPreview.analysis.promptVersion,
-            schemaVersion: importPreview.analysis.schemaVersion,
-          },
-          lastImportedAt: now,
-          lastImportedBy: firebaseUser.uid,
-          updatedAt: now,
-          updatedBy: firebaseUser.uid,
-          ...(selectedStatement ? {} : { createdAt: now, createdBy: firebaseUser.uid }),
-        },
-        { merge: true },
-      );
-      await batch.commit();
+          monthKey: selectedGroup.monthKey,
+          statementKey: selectedGroup.key,
+          fileName: importPreview.fileName,
+          officialTotal: importPreview.officialTotal,
+          dueDate: format(importedDueDate, "yyyy-MM-dd"),
+          closingDate: format(importedClosingDate, "yyyy-MM-dd"),
+          analysis: importPreview.analysis,
+          lines: selectedImportLines.map((line) => {
+            const selectedCandidateId = importResolutionByLineId[line.id] || "create";
+            const candidate = importExpenseMatchByLineId.get(line.id)?.candidates
+              .find((entry) => entry.lineId === selectedCandidateId);
+            return {
+              ...line,
+              resolution: candidate
+                ? {
+                    mode: "existing",
+                    expenseId: candidate.expenseId,
+                    candidateLineId: candidate.lineId,
+                    installmentNumber: candidate.installmentNumber ?? null,
+                  }
+                : { mode: "create" },
+            };
+          }),
+        }),
+      });
+      const result = await response.json().catch(() => null) as {
+        error?: string;
+        created?: number;
+        linked?: number;
+        replacedForecasts?: number;
+        skipped?: number;
+      } | null;
+      if (!response.ok) throw new Error(result?.error || "Não foi possível registrar os itens da fatura.");
       setImportDialogOpen(false);
       setImportPreview(null);
       setSelectedImportLineIds([]);
+      setImportResolutionByLineId({});
       refreshStatements();
       refreshExpenses();
       toast({
         title: "Fatura importada para auditoria.",
-        description: `${selectedImportLines.length} compra(s) adicionada(s) como pendentes, sem efetivação automática.`,
+        description: [
+          result?.created ? `${result.created} nova(s)` : null,
+          result?.linked ? `${result.linked} vinculada(s)` : null,
+          result?.replacedForecasts ? `${result.replacedForecasts} previsão(ões) substituída(s)` : null,
+          result?.skipped ? `${result.skipped} já importada(s)` : null,
+        ].filter(Boolean).join(" · ") || "Itens registrados sem efetivação automática.",
       });
     } catch (error) {
       console.error(error);
@@ -1087,6 +1110,7 @@ export function CardStatementsWorkspace({
         if (!open) {
           setImportPreview(null);
           setSelectedImportLineIds([]);
+          setImportResolutionByLineId({});
         }
       }}>
         <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-3xl flex-col gap-0 overflow-hidden rounded-2xl p-0">
@@ -1182,11 +1206,12 @@ export function CardStatementsWorkspace({
                 </details>
               ) : null}
 
-              <div className="max-h-[340px] overflow-y-auto rounded-xl border">
-                <div className="grid grid-cols-[28px_82px_minmax(0,1fr)_110px] gap-2 border-b bg-muted/25 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="max-h-[380px] overflow-y-auto rounded-xl border">
+                <div className="grid grid-cols-[28px_70px_minmax(170px,1fr)_minmax(210px,260px)_100px] gap-2 border-b bg-muted/25 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   <span />
                   <span>Data</span>
                   <span>Descrição</span>
+                  <span>Tratamento</span>
                   <span className="text-right">Valor</span>
                 </div>
                 {importPreview.transactions.length === 0 ? (
@@ -1194,8 +1219,10 @@ export function CardStatementsWorkspace({
                 ) : importPreview.transactions.map((line) => {
                   const duplicate = existingImportFingerprints.has(line.fingerprint);
                   const selected = selectedImportLineIdSet.has(line.id) && !duplicate;
+                  const match = importExpenseMatchByLineId.get(line.id);
+                  const resolution = importResolutionByLineId[line.id] || "create";
                   return (
-                    <label key={line.id} className={cn("grid grid-cols-[28px_82px_minmax(0,1fr)_110px] items-center gap-2 border-b px-3 py-3 text-xs last:border-b-0", duplicate ? "bg-muted/35 text-muted-foreground" : "cursor-pointer hover:bg-primary/[0.03]")}>
+                    <div key={line.id} className={cn("grid grid-cols-[28px_70px_minmax(170px,1fr)_minmax(210px,260px)_100px] items-center gap-2 border-b px-3 py-3 text-xs last:border-b-0", duplicate ? "bg-muted/35 text-muted-foreground" : "hover:bg-primary/[0.03]")}>
                       <input
                         type="checkbox"
                         checked={selected}
@@ -1221,8 +1248,52 @@ export function CardStatementsWorkspace({
                           <span className="mt-0.5 block truncate text-[10px] text-amber-700">{line.reviewNotes.join(" · ")}</span>
                         ) : null}
                       </span>
+                      <span className="min-w-0">
+                        {duplicate ? (
+                          <span className="text-[10px]">Já vinculada</span>
+                        ) : (
+                          <>
+                            <Select
+                              value={resolution}
+                              onValueChange={(value) => setImportResolutionByLineId((current) => ({
+                                ...Object.fromEntries(Object.entries(current).map(([currentLineId, currentValue]) => [
+                                  currentLineId,
+                                  value !== "create" && currentLineId !== line.id && currentValue === value ? "create" : currentValue,
+                                ])),
+                                [line.id]: value,
+                              }))}
+                            >
+                              <SelectTrigger className="h-8 rounded-lg text-[10.5px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="create">Criar nova despesa</SelectItem>
+                                {(match?.candidates || []).map((candidate) => (
+                                  <SelectItem key={candidate.lineId} value={candidate.lineId}>
+                                    {candidate.isForecast ? "Substituir previsão" : "Vincular existente"} · {candidate.description} · {formatCurrency(candidate.amount)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {match?.confidence ? (
+                              <span className={cn(
+                                "mt-1 block truncate text-[9.5px]",
+                                match.ambiguous ? "text-amber-700" : match.confidence === "high" ? "text-emerald-700" : "text-sky-700",
+                              )}>
+                                {match.ambiguous
+                                  ? "Mais de uma correspondência possível"
+                                  : match.confidence === "high"
+                                    ? "Correspondência forte sugerida"
+                                    : "Correspondência possível para revisão"}
+                              </span>
+                            ) : (
+                              <span className="mt-1 block text-[9.5px] text-muted-foreground">Nenhuma correspondência segura</span>
+                            )}
+                          </>
+                        )}
+                      </span>
                       <span className="text-right font-mono font-semibold">{formatCurrency(line.amount)}</span>
-                    </label>
+                    </div>
                   );
                 })}
               </div>

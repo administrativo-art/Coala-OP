@@ -557,6 +557,7 @@ function serializeSessionItem(item: ImportSessionItem) {
     suggestedExpenseDescription: item.suggestedExpenseDescription ?? null,
     suggestedInstallmentNumber: item.suggestedInstallmentNumber ?? null,
     suggestedInstallmentValue: item.suggestedInstallmentValue ?? null,
+    suggestedAdditionalCharges: item.suggestedAdditionalCharges ?? null,
     suggestedConfidence: item.suggestedConfidence ?? null,
     expenseDraft: {
       mode: item.expenseDraft.mode,
@@ -564,6 +565,12 @@ function serializeSessionItem(item: ImportSessionItem) {
       purchaseOrderId: item.expenseDraft.purchaseOrderId,
       purchaseLinkMode: item.expenseDraft.purchaseLinkMode,
       allocatedAmount: item.expenseDraft.allocatedAmount,
+      settlementBaseValue: item.expenseDraft.settlementBaseValue,
+      settlementInstallmentNumber: item.expenseDraft.settlementInstallmentNumber,
+      interest: item.expenseDraft.interest,
+      fine: item.expenseDraft.fine,
+      chargesAccountPlanId: item.expenseDraft.chargesAccountPlanId,
+      chargesAccountPlanName: item.expenseDraft.chargesAccountPlanName,
       description: item.expenseDraft.description,
       supplier: item.expenseDraft.supplier,
       accountPlanId: item.expenseDraft.accountPlanId,
@@ -699,6 +706,7 @@ function createSessionItem(transaction: ImportedTransaction): ImportSessionItem 
     suggestedExpenseDescription: transaction.suggestedExpenseDescription,
     suggestedInstallmentNumber: transaction.suggestedInstallmentNumber,
     suggestedInstallmentValue: transaction.suggestedInstallmentValue,
+    suggestedAdditionalCharges: transaction.suggestedAdditionalCharges,
     suggestedConfidence: transaction.suggestedConfidence,
     expenseDraft: {
       mode: transaction.linkedExpenseId || transaction.suggestedExpenseId ? "existing" : "new",
@@ -706,6 +714,12 @@ function createSessionItem(transaction: ImportedTransaction): ImportSessionItem 
       purchaseOrderId: "",
       purchaseLinkMode: "goods",
       allocatedAmount: Math.abs(transaction.amount),
+      settlementBaseValue: transaction.suggestedInstallmentValue || Math.abs(transaction.amount),
+      settlementInstallmentNumber: transaction.suggestedInstallmentNumber || 0,
+      interest: 0,
+      fine: 0,
+      chargesAccountPlanId: "",
+      chargesAccountPlanName: "",
       description: transaction.suggestedExpenseDescription || preferredDescription,
       supplier: transaction.supplier,
       accountPlanId: transaction.accountPlanId,
@@ -784,6 +798,8 @@ function normalizeSession(doc: any): ImportSession {
             typeof item.suggestedInstallmentNumber === "number" ? item.suggestedInstallmentNumber : undefined,
           suggestedInstallmentValue:
             typeof item.suggestedInstallmentValue === "number" ? item.suggestedInstallmentValue : undefined,
+          suggestedAdditionalCharges:
+            typeof item.suggestedAdditionalCharges === "number" ? item.suggestedAdditionalCharges : undefined,
           suggestedConfidence:
             item.suggestedConfidence === "high" || item.suggestedConfidence === "medium"
               ? item.suggestedConfidence
@@ -797,6 +813,12 @@ function normalizeSession(doc: any): ImportSession {
                 ? item.expenseDraft.purchaseLinkMode
                 : "goods",
             allocatedAmount: Number(item.expenseDraft?.allocatedAmount ?? Math.abs(Number(item.amount ?? 0))),
+            settlementBaseValue: Number(item.expenseDraft?.settlementBaseValue ?? item.suggestedInstallmentValue ?? Math.abs(Number(item.amount ?? 0))),
+            settlementInstallmentNumber: Number(item.expenseDraft?.settlementInstallmentNumber ?? item.suggestedInstallmentNumber ?? 0),
+            interest: Number(item.expenseDraft?.interest ?? 0),
+            fine: Number(item.expenseDraft?.fine ?? 0),
+            chargesAccountPlanId: String(item.expenseDraft?.chargesAccountPlanId ?? ""),
+            chargesAccountPlanName: String(item.expenseDraft?.chargesAccountPlanName ?? ""),
             description: String(item.expenseDraft?.description ?? ""),
             supplier: String(item.expenseDraft?.supplier ?? ""),
             accountPlanId: String(item.expenseDraft?.accountPlanId ?? ""),
@@ -1327,7 +1349,18 @@ function validateItem(item: ImportSessionItem, purchaseCandidatesByOrderId: Map<
 
   if (requiresExpense) {
     if (item.expenseDraft.mode === "existing") {
-      expenseValid = item.expenseDraft.linkedExpenseId.trim().length > 0;
+      const paymentTotal = Math.abs(item.amount);
+      const baseValue = Number(item.expenseDraft.settlementBaseValue || paymentTotal);
+      const chargeDifference = Number(Math.max(paymentTotal - baseValue, 0).toFixed(2));
+      const classifiedCharges = Number((Number(item.expenseDraft.interest || 0) + Number(item.expenseDraft.fine || 0)).toFixed(2));
+      expenseValid =
+        item.expenseDraft.linkedExpenseId.trim().length > 0 &&
+        baseValue > 0 &&
+        baseValue <= paymentTotal + 0.01 &&
+        (chargeDifference <= 0.05 || (
+          Math.abs(classifiedCharges - chargeDifference) <= 0.01 &&
+          item.expenseDraft.chargesAccountPlanId.trim().length > 0
+        ));
     } else if (item.expenseDraft.mode === "purchase") {
       const candidate = purchaseCandidatesByOrderId.get(item.expenseDraft.purchaseOrderId);
       const eligibleAmount = getEligibleAllocationAmount(item, candidate || null);
@@ -1541,6 +1574,16 @@ export function FinancialImportPage({
     if (!accountPlans) return [];
     return flattenAccountTree(buildAccountTree(accountPlans));
   }, [accountPlans]);
+  const financialChargesPlan = useMemo(() => {
+    const selectable = flattenedAccounts.filter((account) => account.active !== false && !account.isParent);
+    const normalize = (value: unknown) => String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("pt-BR");
+    return selectable.find((account) => normalize(account.name).includes("juros e multas"))
+      || selectable.find((account) => normalize(account.name).includes("juros") && normalize(account.name).includes("multa"))
+      || null;
+  }, [flattenedAccounts]);
   const accountTree = useMemo(() => buildAccountTree(accountPlans || []), [accountPlans]);
   const activeExpenseDescriptions = useMemo(
     () =>
@@ -1608,6 +1651,7 @@ export function FinancialImportPage({
             return installments.map((installment: any, index: number) => ({
               expenseId: expense.id,
               expenseDescription: expense.description,
+              supplier: expense.supplier,
               installmentNumber: Number(installment.number) || index + 1,
               dueDate: toDate(installment.dueDate) || toDate(expense.dueDate) || new Date(),
               value: Number(installment.value) || 0,
@@ -1617,6 +1661,7 @@ export function FinancialImportPage({
           return [{
             expenseId: expense.id,
             expenseDescription: expense.description,
+            supplier: expense.supplier,
             installmentNumber: expense.installmentNumber,
             dueDate: toDate(expense.dueDate) || new Date(),
             value: Number(expense.totalValue) || 0,
@@ -3528,13 +3573,42 @@ export function FinancialImportPage({
   }
 
   function applyExistingExpense(itemId: string, expense: any) {
-    updateItem(itemId, (current) => ({
-      ...current,
-      expenseDraft: {
+    updateItem(itemId, (current) => {
+      const suggestionApplies = current.suggestedExpenseId === expense.id;
+      const openInstallments = (Array.isArray(expense.installments) ? expense.installments : []).filter(
+        (installment: any) => installment?.status !== "paid" && installment?.status !== "cancelled" && Number(installment?.value) > 0,
+      );
+      const targetInstallment = suggestionApplies && current.suggestedInstallmentNumber
+        ? openInstallments.find(
+            (installment: any, index: number) => (Number(installment?.number) || index + 1) === current.suggestedInstallmentNumber,
+          )
+        : openInstallments.length === 1 ? openInstallments[0] : null;
+      const settlementBaseValue = Number(
+        (suggestionApplies ? current.suggestedInstallmentValue : 0)
+        || targetInstallment?.value
+        || expense.totalValue
+        || Math.abs(current.amount),
+      );
+      const chargeDifference = Number(Math.max(Math.abs(current.amount) - settlementBaseValue, 0).toFixed(2));
+      const currentCharges = Number((current.expenseDraft.interest + current.expenseDraft.fine).toFixed(2));
+      const preserveBreakdown = chargeDifference > 0.05 && Math.abs(currentCharges - chargeDifference) <= 0.01;
+      return {
+        ...current,
+        expenseDraft: {
         ...current.expenseDraft,
         mode: "existing",
         linkedExpenseId: expense.id,
         purchaseOrderId: "",
+        settlementBaseValue,
+        settlementInstallmentNumber: Number(targetInstallment?.number || (suggestionApplies ? current.suggestedInstallmentNumber : 0) || 0),
+        interest: preserveBreakdown ? current.expenseDraft.interest : 0,
+        fine: preserveBreakdown ? current.expenseDraft.fine : 0,
+        chargesAccountPlanId: chargeDifference > 0.05
+          ? current.expenseDraft.chargesAccountPlanId || String(financialChargesPlan?.id || "")
+          : "",
+        chargesAccountPlanName: chargeDifference > 0.05
+          ? current.expenseDraft.chargesAccountPlanName || String(financialChargesPlan?.name || "")
+          : "",
         description: expense.description || current.expenseDraft.description,
         supplier: expense.supplier || current.expenseDraft.supplier,
         accountPlanId: expense.accountPlan || expense.accountPlanId || current.expenseDraft.accountPlanId,
@@ -3571,8 +3645,9 @@ export function FinancialImportPage({
         resultCenterName: expense.resultCenter || expense.resultCenterName || current.expenseDraft.resultCenterName,
         isApportioned: false,
         apportionments: [],
-      },
-    }));
+        },
+      };
+    });
   }
 
   function switchToNewExpense(itemId: string) {
@@ -3583,6 +3658,12 @@ export function FinancialImportPage({
         mode: "new",
         linkedExpenseId: "",
         purchaseOrderId: "",
+        settlementBaseValue: Math.abs(current.amount),
+        settlementInstallmentNumber: 0,
+        interest: 0,
+        fine: 0,
+        chargesAccountPlanId: "",
+        chargesAccountPlanName: "",
         description: current.expenseDraft.description || current.rawDescription,
         allocatedAmount: Math.abs(current.amount),
         dueDate: current.expenseDraft.dueDate || current.date || current.financialDraft.date,
@@ -4690,6 +4771,12 @@ export function FinancialImportPage({
                 const selectedExistingExpense = item.expenseDraft.linkedExpenseId
                   ? linkableExpenses.find((expense) => expense.id === item.expenseDraft.linkedExpenseId) ?? null
                   : null;
+                const settlementBaseValue = Number(item.expenseDraft.settlementBaseValue || Math.abs(item.amount));
+                const paymentChargeDifference = Number(Math.max(Math.abs(item.amount) - settlementBaseValue, 0).toFixed(2));
+                const classifiedPaymentCharges = Number((
+                  Number(item.expenseDraft.interest || 0) + Number(item.expenseDraft.fine || 0)
+                ).toFixed(2));
+                const unclassifiedPaymentCharges = Number(Math.max(paymentChargeDifference - classifiedPaymentCharges, 0).toFixed(2));
                 const suggestedExistingExpense = item.suggestedExpenseId
                   ? linkableExpenses.find((expense) => expense.id === item.suggestedExpenseId) ?? null
                   : null;
@@ -4754,6 +4841,14 @@ export function FinancialImportPage({
                 } else if (item.amount < 0 && !isCardStatementSettlementItem(item)) {
                   if (item.expenseDraft.mode === "existing") {
                     reviewRows.push(["Despesa vinculada", selectedExistingExpense?.description || "—"]);
+                    if (paymentChargeDifference > 0.05) {
+                      reviewRows.push(
+                        ["Valor principal", formatCurrency(settlementBaseValue)],
+                        ["Juros", formatCurrency(item.expenseDraft.interest)],
+                        ["Multa", formatCurrency(item.expenseDraft.fine)],
+                        ["Plano dos encargos", item.expenseDraft.chargesAccountPlanName || "—"],
+                      );
+                    }
                   } else if (item.expenseDraft.mode === "purchase") {
                     reviewRows.push(
                       ["Compra vinculada", selectedPurchaseCandidate?.label || "—"],
@@ -4803,6 +4898,9 @@ export function FinancialImportPage({
                   : item.expenseDraft.mode === "existing"
                   ? [
                       "Dá baixa na despesa já provisionada.",
+                      ...(paymentChargeDifference > 0.05
+                        ? [`Registra ${formatCurrency(paymentChargeDifference)} de juros e multa em despesa financeira separada.`]
+                        : []),
                       "Não cria uma despesa duplicada.",
                       "Marca a movimentação do extrato como efetivada.",
                     ]
@@ -5235,6 +5333,9 @@ export function FinancialImportPage({
                                 {typeof item.suggestedInstallmentValue === "number"
                                   ? ` · ${formatCurrency(item.suggestedInstallmentValue)}`
                                   : ""}
+                                {typeof item.suggestedAdditionalCharges === "number" && item.suggestedAdditionalCharges > 0.05
+                                  ? ` · possível encargo de ${formatCurrency(item.suggestedAdditionalCharges)}`
+                                  : ""}
                                 {item.suggestedConfidence === "high"
                                   ? " · valor exato e vencimento compatível"
                                   : " · valor ou vencimento aproximado"}
@@ -5360,6 +5461,86 @@ export function FinancialImportPage({
                                   <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Observações</p>
                                   <p className="mt-1 text-xs text-muted-foreground">{selectedExistingExpense.notes || "—"}</p>
                                 </div>
+                              </div>
+                            ) : null}
+                            {selectedExistingExpense && paymentChargeDifference > 0.05 ? (
+                              <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-semibold text-amber-900">Diferença tratada como juros e multa</p>
+                                    <p className="mt-1 text-[10.5px] leading-relaxed text-amber-800">
+                                      O principal de {formatCurrency(settlementBaseValue)} baixa a despesa. Os {formatCurrency(paymentChargeDifference)} excedentes serão lançados separadamente no resultado financeiro.
+                                    </p>
+                                  </div>
+                                  <span className="rounded-full border border-amber-300 bg-white px-2.5 py-1 font-mono text-xs font-semibold text-amber-900">
+                                    Total pago {formatCurrency(Math.abs(item.amount))}
+                                  </span>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div className="space-y-1.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-900">Juros</p>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={item.expenseDraft.interest}
+                                      onChange={(event) => updateItem(item.id, (current) => ({
+                                        ...current,
+                                        expenseDraft: { ...current.expenseDraft, interest: Number(event.target.value) || 0 },
+                                      }))}
+                                      className="h-9 rounded-xl bg-white text-xs"
+                                    />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-900">Multa</p>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={item.expenseDraft.fine}
+                                      onChange={(event) => updateItem(item.id, (current) => ({
+                                        ...current,
+                                        expenseDraft: { ...current.expenseDraft, fine: Number(event.target.value) || 0 },
+                                      }))}
+                                      className="h-9 rounded-xl bg-white text-xs"
+                                    />
+                                  </div>
+                                  <div className="space-y-1.5 sm:col-span-2">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-900">Plano de contas dos encargos</p>
+                                    <Select
+                                      value={item.expenseDraft.chargesAccountPlanId || "none"}
+                                      onValueChange={(value) => {
+                                        const account = accountAllocationOptions.find((entry) => entry.id === value);
+                                        updateItem(item.id, (current) => ({
+                                          ...current,
+                                          expenseDraft: {
+                                            ...current.expenseDraft,
+                                            chargesAccountPlanId: account?.id || "",
+                                            chargesAccountPlanName: account?.name || "",
+                                          },
+                                        }));
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-9 rounded-xl bg-white text-xs">
+                                        <SelectValue placeholder="Selecione o plano de juros e multas" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">Selecione o plano</SelectItem>
+                                        {accountAllocationOptions.map((account) => (
+                                          <SelectItem key={account.id} value={account.id}>{account.order} · {account.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                                <p className={cn(
+                                  "text-[10.5px] font-medium",
+                                  unclassifiedPaymentCharges <= 0.01 ? "text-emerald-700" : "text-amber-800",
+                                )}>
+                                  {unclassifiedPaymentCharges <= 0.01
+                                    ? "Diferença totalmente classificada."
+                                    : `Ainda falta classificar ${formatCurrency(unclassifiedPaymentCharges)} entre juros e multa.`}
+                                </p>
                               </div>
                             ) : null}
                           </div>

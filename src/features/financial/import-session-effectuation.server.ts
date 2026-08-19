@@ -119,6 +119,19 @@ function assertItemReadyForEffectuation(item: RawRecord) {
   const mode = asString(expense.mode) || "new";
   if (mode === "existing") {
     if (!hasText(expense.linkedExpenseId)) throw new Error("INCOMPLETE_EXPENSE_LINK");
+    const paymentTotal = Math.abs(asNumber(item.amount));
+    const principal = asNumber(expense.settlementBaseValue) || paymentTotal;
+    const interest = asNumber(expense.interest);
+    const fine = asNumber(expense.fine);
+    const chargeDifference = Number(Math.max(paymentTotal - principal, 0).toFixed(2));
+    if (
+      principal <= 0 ||
+      principal > paymentTotal + 0.01 ||
+      (chargeDifference > 0.05 && (
+        Math.abs(interest + fine - chargeDifference) > 0.01 ||
+        !hasText(expense.chargesAccountPlanId)
+      ))
+    ) throw new Error("INCOMPLETE_PAYMENT_CHARGES");
     return;
   }
   if (mode === "purchase") {
@@ -501,6 +514,11 @@ export async function effectuateImportSessionItem(params: {
   } else if (asNumber(item.amount) < 0) {
     const mode = asString(expenseDraft.mode) || "new";
     const splitExpenses = asArray(expenseDraft.splitExpenses).map(asRecord);
+    const principal = mode === "existing" ? asNumber(expenseDraft.settlementBaseValue) || amount : amount;
+    const interest = mode === "existing" ? asNumber(expenseDraft.interest) : 0;
+    const fine = mode === "existing" ? asNumber(expenseDraft.fine) : 0;
+    const charges = Number((interest + fine).toFixed(2));
+    let chargeExpenseId = "";
     let expenseId = asString(expenseDraft.linkedExpenseId);
 
     if (mode === "split") {
@@ -627,8 +645,14 @@ export async function effectuateImportSessionItem(params: {
       const expenseSnapshot = await expenseRef.get();
       if (!expenseSnapshot.exists) throw new Error("EXPENSE_NOT_FOUND");
       const expense = expenseSnapshot.data() ?? {};
-      const installmentNumber = asNumber(item.suggestedInstallmentNumber);
+      const installmentNumber = asNumber(expenseDraft.settlementInstallmentNumber) || asNumber(item.suggestedInstallmentNumber);
       const installments = asArray(expense.installments).map(asRecord);
+      const targetInstallment = installmentNumber > 0
+        ? installments.find((installment, index) => (asNumber(installment.number) || index + 1) === installmentNumber)
+        : null;
+      const storedPrincipal = targetInstallment ? asNumber(targetInstallment.value) : asNumber(expense.totalValue);
+      if (Math.abs(storedPrincipal - principal) > 0.05) throw new Error("EXPENSE_VALUE_CHANGED");
+      if (Math.abs(principal + charges - amount) > 0.01) throw new Error("INCOMPLETE_PAYMENT_CHARGES");
       const nextInstallments = installmentNumber > 0
         ? installments.map((installment, index) => (asNumber(installment.number) || index + 1) === installmentNumber
             ? { ...installment, status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }
@@ -644,6 +668,58 @@ export async function effectuateImportSessionItem(params: {
         updatedAt: now,
         ...(fullyPaid ? { status: "paid", paidAt: date } : {}),
       }, { merge: true });
+
+      if (charges > 0.009) {
+        const chargeAccountRef = financialDbAdmin.collection("accounts").doc(asString(expenseDraft.chargesAccountPlanId));
+        const chargeAccountSnapshot = await chargeAccountRef.get();
+        const chargeAccount = chargeAccountSnapshot.data() ?? {};
+        if (!chargeAccountSnapshot.exists || chargeAccount.active === false || chargeAccount.isGroup === true) {
+          throw new Error("INVALID_PAYMENT_CHARGE_ACCOUNT");
+        }
+        chargeExpenseId = `audit_charge_${effectuationId}`;
+        expenseIds.push(chargeExpenseId);
+        createdExpenseIds.push(chargeExpenseId);
+        const chargeRef = financialDbAdmin.collection("expenses").doc(chargeExpenseId);
+        batch.set(chargeRef, {
+          accountPlan: asString(expenseDraft.chargesAccountPlanId),
+          accountId: asString(expenseDraft.chargesAccountPlanId),
+          accountPlanId: asString(expenseDraft.chargesAccountPlanId),
+          accountPlanName: asString(chargeAccount.name) || asString(expenseDraft.chargesAccountPlanName),
+          description: `Juros e multa | ${asString(expense.description) || asString(expenseDraft.description)}`,
+          supplier: asString(expense.supplier) || asString(expenseDraft.supplier),
+          notes: `Encargos identificados na conciliação do extrato. Principal: ${principal.toFixed(2)}.`,
+          totalValue: charges,
+          competenceDate: date,
+          dueDate: date,
+          paymentMethod: "single",
+          type: "encargo",
+          originExpenseId: expenseId,
+          interest,
+          fine,
+          hasAccountAllocations: false,
+          accountAllocations: null,
+          hasPersonAllocations: false,
+          personAllocations: null,
+          isApportioned: expense.isApportioned === true,
+          resultCenter: expense.isApportioned === true ? null : asString(expense.resultCenter) || asString(expense.resultCenterName) || null,
+          resultCenterId: expense.isApportioned === true ? null : asString(expense.resultCenterId) || null,
+          resultCenterName: expense.isApportioned === true ? null : asString(expense.resultCenterName) || asString(expense.resultCenter) || null,
+          apportionments: expense.isApportioned === true ? expense.apportionments || null : null,
+          installments: [{ number: 1, dueDate: date, value: charges, status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }],
+          status: "paid",
+          paidAt: date,
+          paidByImport: true,
+          linkedBankTransactionId: primaryTransactionId,
+          importedFrom: imported,
+          rawBankDescription: asString(item.rawDescription),
+          importSessionId: params.sessionId,
+          importSessionItemId: params.itemId,
+          effectuationId,
+          createdBy: params.actorId,
+          createdAt: now,
+          updatedAt: now,
+        }, { merge: true });
+      }
     }
 
     if (mode === "purchase") {
@@ -694,10 +770,15 @@ export async function effectuateImportSessionItem(params: {
       supplier: asString(expenseDraft.supplier) || null,
       expenseId: expenseId || null,
       linkedExpenseId: expenseId || null,
-      splitExpenseIds: expenseIds.length > 1 ? expenseIds : null,
+      splitExpenseIds: mode === "split" && expenseIds.length > 1 ? expenseIds : null,
       purchaseOrderId: asString(expenseDraft.purchaseOrderId) || null,
       purchaseLinkMode: mode === "purchase" ? asString(expenseDraft.purchaseLinkMode) : null,
       allocatedAmount: mode === "purchase" ? asNumber(expenseDraft.allocatedAmount) || amount : null,
+      baseValue: principal,
+      interest,
+      fine,
+      charges,
+      chargeExpenseId: chargeExpenseId || null,
       ...(linkedTransactionId ? {} : { createdBy: params.actorId, createdAt: now }),
     }, { merge: true });
   } else {

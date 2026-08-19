@@ -33,6 +33,7 @@ export type ImportedTransaction = {
   suggestedExpenseDescription?: string;
   suggestedInstallmentNumber?: number;
   suggestedInstallmentValue?: number;
+  suggestedAdditionalCharges?: number;
   suggestedConfidence?: "high" | "medium";
   status: "pending" | "confirmed" | "skipped";
   linkedExpenseId?: string;
@@ -101,6 +102,12 @@ export type ImportSessionExpenseDraft = {
   purchaseOrderId: string;
   purchaseLinkMode: ImportSessionPurchaseLinkMode;
   allocatedAmount: number;
+  settlementBaseValue: number;
+  settlementInstallmentNumber: number;
+  interest: number;
+  fine: number;
+  chargesAccountPlanId: string;
+  chargesAccountPlanName: string;
   description: string;
   supplier: string;
   accountPlanId: string;
@@ -188,6 +195,7 @@ export type ImportSessionItem = {
   suggestedExpenseDescription?: string;
   suggestedInstallmentNumber?: number;
   suggestedInstallmentValue?: number;
+  suggestedAdditionalCharges?: number;
   suggestedConfidence?: "high" | "medium";
   expenseDraft: ImportSessionExpenseDraft;
   financialDraft: ImportSessionFinancialDraft;

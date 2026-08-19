@@ -7,8 +7,10 @@ import {
   type InterStatementEntry,
 } from "@/lib/integrations/inter/statements.server";
 import {
+  findExpenseMatchSuggestion,
   findUniqueExactExpenseMatch,
   type StatementExpenseMatchCandidate,
+  type StatementExpenseMatchSuggestion,
 } from "@/features/financial/lib/inter-statement-reconciliation";
 import { inferStatementPaymentMethodFromText } from "@/features/financial/lib/statement-payment-method";
 
@@ -164,6 +166,30 @@ function statementMetadata(entry: InterStatementEntry) {
   };
 }
 
+function numericBankValue(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? Math.abs(value) : 0;
+  if (typeof value !== "string") return 0;
+  const normalized = value.replace(/R\$/gi, "").replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+  const parsed = Number(normalized.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? Math.abs(parsed) : 0;
+}
+
+function extractBankCharges(value: unknown) {
+  let interest = 0;
+  let fine = 0;
+  function visit(current: unknown, depth = 0) {
+    if (!current || typeof current !== "object" || depth > 5) return;
+    for (const [key, entry] of Object.entries(current as Record<string, unknown>)) {
+      const normalizedKey = normalizedText(key);
+      if (/JUROS|MORA/.test(normalizedKey)) interest = Math.max(interest, numericBankValue(entry));
+      else if (/MULTA/.test(normalizedKey)) fine = Math.max(fine, numericBankValue(entry));
+      else visit(entry, depth + 1);
+    }
+  }
+  visit(value);
+  return { interest: Number(interest.toFixed(2)), fine: Number(fine.toFixed(2)) };
+}
+
 function buildSessionItem(params: {
   entry: InterStatementEntry;
   transactionId: string;
@@ -171,15 +197,21 @@ function buildSessionItem(params: {
   accountName: string;
   alias?: ImportAliasData;
   match?: PendingExpenseMatch | null;
+  suggestion?: StatementExpenseMatchSuggestion | null;
   existingLedger?: ExistingInterLedgerCandidate | null;
   paymentMethod?: StatementPaymentMethod | null;
 }) {
-  const { entry, transactionId, accountId, accountName, alias, match, existingLedger, paymentMethod } = params;
+  const { entry, transactionId, accountId, accountName, alias, match, suggestion, existingLedger, paymentMethod } = params;
   const isDebit = entry.amount < 0;
   const linkedExpenseId = match?.expenseId || existingLedger?.expenseId || "";
-  const linkedExpenseDescription = match?.expenseDescription || existingLedger?.description || "";
-  const linkedInstallmentNumber = match?.installmentNumber || existingLedger?.installmentNumber;
+  const suggestedExpense = match || suggestion;
+  const linkedExpenseDescription = suggestedExpense?.expenseDescription || existingLedger?.description || "";
+  const linkedInstallmentNumber = suggestedExpense?.installmentNumber || existingLedger?.installmentNumber;
   const description = alias?.descriptionOverride || linkedExpenseDescription || entry.description;
+  const additionalCharges = suggestion?.additionalCharges || 0;
+  const bankCharges = extractBankCharges(entry.raw);
+  const bankChargeTotal = bankCharges.interest + bankCharges.fine;
+  const chargesMatchBankBreakdown = additionalCharges > 0 && Math.abs(bankChargeTotal - additionalCharges) <= 0.05;
 
   return {
     id: transactionId,
@@ -192,19 +224,26 @@ function buildSessionItem(params: {
     amount: entry.amount,
     rawDescription: entry.description,
     matchedAliasId: alias?.id || null,
-    suggestedExpenseId: linkedExpenseId || null,
+    suggestedExpenseId: suggestedExpense?.expenseId || linkedExpenseId || null,
     suggestedExpenseDescription: linkedExpenseDescription || null,
     suggestedInstallmentNumber: linkedInstallmentNumber || null,
-    suggestedInstallmentValue: match?.value || (existingLedger ? Math.abs(entry.amount) : null),
-    suggestedConfidence: match || existingLedger ? "high" : null,
+    suggestedInstallmentValue: suggestedExpense?.value || (existingLedger ? Math.abs(entry.amount) : null),
+    suggestedAdditionalCharges: additionalCharges || null,
+    suggestedConfidence: suggestion?.confidence || (match || existingLedger ? "high" : null),
     expenseDraft: {
       mode: linkedExpenseId ? "existing" : "new",
       linkedExpenseId,
       purchaseOrderId: "",
       purchaseLinkMode: "goods",
       allocatedAmount: Math.abs(entry.amount),
+      settlementBaseValue: suggestedExpense?.value || Math.abs(entry.amount),
+      settlementInstallmentNumber: suggestedExpense?.installmentNumber || 0,
+      interest: chargesMatchBankBreakdown ? bankCharges.interest : 0,
+      fine: chargesMatchBankBreakdown ? bankCharges.fine : 0,
+      chargesAccountPlanId: "",
+      chargesAccountPlanName: "",
       description,
-      supplier: alias?.supplier || "",
+      supplier: alias?.supplier || suggestion?.supplier || "",
       accountPlanId: alias?.accountPlanId || "",
       accountPlanName: alias?.accountPlanName || "",
       hasAccountAllocations: false,
@@ -258,6 +297,7 @@ async function loadPendingExpenseMatches() {
         return [{
           expenseId: document.id,
           expenseDescription: String(expense.description || "Despesa"),
+          supplier: String(expense.supplier || ""),
           installmentNumber: Number(installment.number) || index + 1,
           dueDate,
           value: Number(installment.value) || 0,
@@ -271,6 +311,7 @@ async function loadPendingExpenseMatches() {
     return [{
       expenseId: document.id,
       expenseDescription: String(expense.description || "Despesa"),
+      supplier: String(expense.supplier || ""),
       installmentNumber: typeof expense.installmentNumber === "number" ? expense.installmentNumber : undefined,
       dueDate,
       value,
@@ -633,9 +674,16 @@ export async function syncInterStatement(): Promise<SyncResult> {
 
   for (const entry of entries) {
     const existingLedger = findExistingLedgerMatch(entry, existingLedgerCandidates, claimedLedgerTransactions);
-    const match = existingLedger || !canAutoMatchExpense(entry)
+    const suggestion = existingLedger || !canAutoMatchExpense(entry)
       ? null
-      : findUniqueExactExpenseMatch(entry, candidates, claimed);
+      : findExpenseMatchSuggestion({
+          date: entry.date,
+          amount: entry.amount,
+          description: entry.description,
+        }, candidates, claimed);
+    const match = suggestion?.confidence === "high"
+      ? findUniqueExactExpenseMatch(entry, candidates, claimed)
+      : null;
     const alias = aliases.find((candidate) => aliasMatches(entry.description, candidate));
     const result = await registerEntry({ entry, accountId, accountName, alias, match, existingLedger });
     if (!result.inserted) {
@@ -664,6 +712,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
       accountName,
       alias,
       match: result.matched ? result.appliedMatch : null,
+      suggestion,
       existingLedger: result.reconciledExisting ? existingLedger : null,
       paymentMethod: inferStatementPaymentMethodFromText<StatementPaymentMethod>(
         `${entry.description} ${entry.operationType} ${entry.transactionType} ${JSON.stringify(entry.raw)}`,

@@ -3,6 +3,7 @@ import type {
   ImportedTransaction,
   ParsedBankEntry,
 } from "@/features/financial/types/import";
+import { findExpenseMatchSuggestion } from "@/features/financial/lib/inter-statement-reconciliation";
 
 function textMatches(text: string, alias: ImportAlias): boolean {
   const haystack = alias.caseSensitive ? text : text.toLowerCase();
@@ -25,6 +26,7 @@ function textMatches(text: string, alias: ImportAlias): boolean {
 export type PendingInstallment = {
   expenseId: string;
   expenseDescription: string;
+  supplier?: string;
   installmentNumber?: number;
   dueDate: Date;
   value: number;
@@ -39,6 +41,14 @@ function dateDiff(a: Date, b: Date): number {
   return Math.abs(a.getTime() - b.getTime()) / 86_400_000;
 }
 
+function localDateKey(value: Date) {
+  return [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, "0"),
+    String(value.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 export function findInstallmentMatch(
   entry: ParsedBankEntry,
   pendingInstallments: PendingInstallment[]
@@ -48,6 +58,7 @@ export function findInstallmentMatch(
   | "suggestedExpenseDescription"
   | "suggestedInstallmentNumber"
   | "suggestedInstallmentValue"
+  | "suggestedAdditionalCharges"
   | "suggestedConfidence"
 > | null {
   if (entry.amount >= 0) return null;
@@ -66,6 +77,24 @@ export function findInstallmentMatch(
     exactCandidates.length === 1 ? { ...exactCandidates[0], confidence: "high" } : null;
 
   if (!best) {
+    const chargeSuggestion = findExpenseMatchSuggestion({
+      date: localDateKey(entry.date),
+      amount: entry.amount,
+      description: entry.description,
+    }, pendingInstallments);
+    if (chargeSuggestion?.additionalCharges) {
+      return {
+        suggestedExpenseId: chargeSuggestion.expenseId,
+        suggestedExpenseDescription: chargeSuggestion.expenseDescription,
+        suggestedInstallmentNumber: chargeSuggestion.installmentNumber,
+        suggestedInstallmentValue: chargeSuggestion.value,
+        suggestedAdditionalCharges: chargeSuggestion.additionalCharges,
+        suggestedConfidence: "medium",
+      };
+    }
+  }
+
+  if (!best) {
     const mediumCandidates = pendingInstallments
       .filter((installment) => valueMatch(entry.amount, installment.value, 0.05))
       .sort((left, right) => {
@@ -81,11 +110,14 @@ export function findInstallmentMatch(
 
   if (!best) return null;
 
+  const additionalCharges = Math.max(Math.abs(entry.amount) - best.value, 0);
+
   return {
     suggestedExpenseId: best.expenseId,
     suggestedExpenseDescription: best.expenseDescription,
     suggestedInstallmentNumber: best.installmentNumber,
     suggestedInstallmentValue: best.value,
+    suggestedAdditionalCharges: Number(additionalCharges.toFixed(2)),
     suggestedConfidence: best.confidence,
   };
 }

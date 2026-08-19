@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findUniqueExactExpenseMatch } from "../../src/features/financial/lib/inter-statement-reconciliation";
+import {
+  findExpenseMatchSuggestion,
+  findUniqueExactExpenseMatch,
+} from "../../src/features/financial/lib/inter-statement-reconciliation";
 import {
   inferStatementPaymentMethodFromText,
   isBoletoPaymentText,
@@ -115,6 +118,42 @@ test("baixa automaticamente apenas quando existe um único candidato exato", () 
     ),
     null
   );
+});
+
+test("sugere principal e encargos quando o pagamento vencido é maior que a despesa", () => {
+  const suggestion = findExpenseMatchSuggestion({
+    date: "2026-08-20",
+    amount: -110,
+    description: "Pagamento TVN Telecomunicacoes",
+  }, [{
+    expenseId: "internet-admin",
+    expenseDescription: "Internet - Administrativo | TVN",
+    supplier: "TVN Telecomunicações Nordeste",
+    dueDate: new Date("2026-08-15T12:00:00-03:00"),
+    value: 100,
+  }]);
+
+  assert.equal(suggestion?.expenseId, "internet-admin");
+  assert.equal(suggestion?.confidence, "medium");
+  assert.equal(suggestion?.additionalCharges, 10);
+});
+
+test("não sugere encargos quando existem dois candidatos equivalentes", () => {
+  const base = {
+    expenseDescription: "Internet",
+    supplier: "TVN",
+    dueDate: new Date("2026-08-15T12:00:00-03:00"),
+    value: 100,
+  };
+  const suggestion = findExpenseMatchSuggestion({
+    date: "2026-08-20",
+    amount: -110,
+    description: "Pagamento TVN",
+  }, [
+    { ...base, expenseId: "internet-admin" },
+    { ...base, expenseId: "internet-jp" },
+  ]);
+  assert.equal(suggestion, null);
 });
 
 test("classifica as formas de saída do extrato sem confundir pagamento de fatura com despesa", () => {

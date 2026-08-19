@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ListTodo, CheckCircle2, History, AlertCircle, Plus, Settings2, Trash2, RotateCcw, Clock } from 'lucide-react';
+import { ListTodo, CheckCircle2, History, AlertCircle, Plus, Settings2, Trash2, RotateCcw, Clock, RefreshCw } from 'lucide-react';
 import { TaskList, type TaskListItem } from './task-list';
 import { TaskDetailModal } from './task-detail-modal';
 import { type Task, type LegacyTask, type TaskStatusDoc } from '@/types';
@@ -133,6 +133,8 @@ export function TaskManager() {
         createStatus,
         updateStatusDoc,
         deleteStatusDoc,
+        refreshTasks,
+        refreshing,
     } = useTasks();
     const { toast } = useToast();
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -660,6 +662,14 @@ export function TaskManager() {
                             </CardDescription>
                         </div>
                         <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => void refreshTasks()}
+                                disabled={refreshing}
+                            >
+                                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                                Atualizar
+                            </Button>
                             <Button variant="outline" onClick={() => setIsManageOpen(true)}>
                                 <Settings2 className="mr-2 h-4 w-4" />
                                 Projetos e quadros

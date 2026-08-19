@@ -1,7 +1,8 @@
 
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import { type Task, type TaskProject, type TaskStatusDoc, type TaskSubproject } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -20,6 +21,7 @@ import {
   updateTaskStatus,
   updateTaskStatusDoc,
 } from '@/features/tasks/lib/client';
+import { taskBootstrapScopeForPathname } from '@/features/tasks/lib/query-policy';
 
 export interface TaskContextType {
   tasks: Task[];
@@ -62,50 +64,72 @@ export interface TaskContextType {
     }
   ) => Promise<void>;
   deleteStatusDoc: (statusId: string) => Promise<void>;
+  refreshTasks: () => Promise<void>;
+  refreshing: boolean;
 }
 
 export const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 export function TaskProvider({ children }: { children: React.ReactNode }) {
+    const pathname = usePathname();
     const { firebaseUser } = useAuth();
     const [tasks, setTasks] = useState<Task[]>([]);
     const [projects, setProjects] = useState<TaskProject[]>([]);
     const [subprojects, setSubprojects] = useState<TaskSubproject[]>([]);
     const [statuses, setStatuses] = useState<TaskStatusDoc[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const requestIdRef = useRef(0);
+    const taskScope = taskBootstrapScopeForPathname(pathname);
 
-    useEffect(() => {
-        let isMounted = true;
+    const loadTasks = useCallback(async (showInitialLoading: boolean) => {
+        const requestId = ++requestIdRef.current;
 
-        async function load() {
-            if (!firebaseUser) return;
-            try {
-                const payload = await fetchTasksBootstrap(firebaseUser);
-                if (isMounted) {
-                    setProjects(payload.projects);
-                    setSubprojects(payload.subprojects ?? []);
-                    setStatuses(payload.statuses);
-                    setTasks(payload.tasks);
-                }
-            } catch (error) {
-                console.warn("Error fetching tasks:", error);
-            } finally {
-                if (isMounted) {
-                    setLoading(false);
-                }
-            }
+        if (!firebaseUser) {
+            setTasks([]);
+            setProjects([]);
+            setSubprojects([]);
+            setStatuses([]);
+            setLoading(false);
+            setRefreshing(false);
+            return;
         }
 
-        load();
-        const intervalId = window.setInterval(() => {
-            if (document.visibilityState === 'visible') void load();
-        }, 60000);
+        if (showInitialLoading) setLoading(true);
+        setRefreshing(true);
 
+        try {
+            const payload = await fetchTasksBootstrap(firebaseUser, { scope: taskScope });
+            if (requestId !== requestIdRef.current) return;
+            setProjects(payload.projects);
+            setSubprojects(payload.subprojects ?? []);
+            setStatuses(payload.statuses);
+            setTasks(payload.tasks);
+        } catch (error) {
+            if (requestId === requestIdRef.current) {
+                console.warn("Error fetching tasks:", error);
+            }
+        } finally {
+            if (requestId === requestIdRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
+        }
+    }, [firebaseUser, taskScope]);
+
+    const refreshTasks = useCallback(
+        () => loadTasks(false),
+        [loadTasks]
+    );
+
+    // Não use timer aqui: cada bootstrap é cobrado por documento retornado.
+    // A central oferece atualização manual e as mutações atualizam o estado localmente.
+    useEffect(() => {
+        void loadTasks(true);
         return () => {
-            isMounted = false;
-            window.clearInterval(intervalId);
+            requestIdRef.current += 1;
         };
-    }, [firebaseUser]);
+    }, [loadTasks]);
 
     const addTask = useCallback(async (task: Omit<Task, 'id'>): Promise<string | null> => {
         if (!firebaseUser) return null;
@@ -333,6 +357,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         createStatus: createStatusDoc,
         updateStatusDoc: updateStatus,
         deleteStatusDoc,
+        refreshTasks,
+        refreshing,
     }), [
         tasks,
         projects,
@@ -351,6 +377,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         createStatusDoc,
         updateStatus,
         deleteStatusDoc,
+        refreshTasks,
+        refreshing,
     ]);
 
     return (

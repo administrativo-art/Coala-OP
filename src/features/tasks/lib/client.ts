@@ -1,6 +1,7 @@
 "use client";
 
 import { type Task, type TaskOrigin, type TaskProject, type TaskStatusDoc, type TaskSubproject } from "@/types";
+import { type TaskBootstrapScope } from "@/features/tasks/lib/query-policy";
 
 type FirebaseUserLike = {
   getIdToken: (forceRefresh?: boolean) => Promise<string>;
@@ -53,13 +54,18 @@ async function authedFetch(
   });
 }
 
-export async function fetchTasksBootstrap(firebaseUser: FirebaseUserLike) {
-  let response = await authedFetch(firebaseUser, "/api/tasks", {
+export async function fetchTasksBootstrap(
+  firebaseUser: FirebaseUserLike,
+  options: { scope?: TaskBootstrapScope } = {}
+) {
+  const scope = options.scope ?? "active";
+  const url = `/api/tasks?scope=${scope}`;
+  let response = await authedFetch(firebaseUser, url, {
     method: "GET",
   });
   if (TRANSIENT_STATUSES.has(response.status)) {
     await sleep(600);
-    response = await authedFetch(firebaseUser, "/api/tasks", {
+    response = await authedFetch(firebaseUser, url, {
       method: "GET",
     });
   }
