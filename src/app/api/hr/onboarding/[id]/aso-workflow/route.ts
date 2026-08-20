@@ -24,6 +24,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const PUBLIC_URL = process.env.NEXT_PUBLIC_RECRUITMENT_URL?.trim() || 'https://vagas.coalashakes.com';
+const ASO_INBOUND_DOMAIN = process.env.ASO_INBOUND_DOMAIN?.trim() || '';
 
 function text(value: unknown, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -32,6 +33,13 @@ function text(value: unknown, max = 500) {
 function email(value: unknown) {
   const normalized = text(value, 320).toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : '';
+}
+
+function formatCpf(value: unknown) {
+  const digits = text(value, 24).replace(/\D/g, '').slice(0, 11);
+  return digits.length === 11
+    ? digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+    : text(value, 24);
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -84,7 +92,7 @@ async function buildAsoRequestSnapshot(process: Record<string, unknown>, clinicE
   const snapshot = {
     candidateName: text(process.candidateName, 240),
     candidateEmail,
-    candidateCpf: text(answers.cpf, 24),
+    candidateCpf: formatCpf(answers.cpf),
     jobFunction: text(process.functionName, 240) || text(process.jobRoleName, 240),
     expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
     examType: process.asoExamType === 'dismissal' ? 'dismissal' : 'admission',
@@ -269,7 +277,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const submissionAt = formSubmissionMarker(process);
     const formDataValidation = record(workflow.formDataValidation);
     const missing = missingAsoEmailPrerequisites({
-      documents: Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [],
       expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
       formDataConfirmed: Boolean(submissionAt && text(formDataValidation.submissionAt, 40) === submissionAt),
       paymentPaid: payment.status === 'paid' && Boolean(payment.proofStoragePath),
@@ -343,7 +350,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         const result = await sendEmail({
           from: EMAIL_SENDERS.formalization,
           to: currentRequest.clinicEmail,
-          ...(process.env.ASO_INBOUND_DOMAIN?.trim() ? { replyTo: `aso+${replyToken.token}@${process.env.ASO_INBOUND_DOMAIN.trim()}` } : {}),
+          ...(ASO_INBOUND_DOMAIN ? { replyTo: `aso+${replyToken.token}@${ASO_INBOUND_DOMAIN}` } : {}),
           subject: clinicContent.subject,
           html: renderClinicAsoRequestEmail({
             candidateName: currentRequest.candidateName,
@@ -559,7 +566,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const submissionAt = formSubmissionMarker(process);
     const formDataValidation = record(workflow.formDataValidation);
     const missing = missingAsoEmailPrerequisites({
-      documents: Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [],
       expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
       formDataConfirmed: Boolean(submissionAt && text(formDataValidation.submissionAt, 40) === submissionAt),
       paymentPaid: true,
@@ -581,7 +587,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       bucket.file(text(socialContract.storagePath, 1500)).download().then(([contents]) => contents),
       bucket.file(payment.proofStoragePath).download().then(([contents]) => contents),
     ]);
-    const inboundDomain = process.env.ASO_INBOUND_DOMAIN?.trim();
+    const inboundDomain = ASO_INBOUND_DOMAIN;
     if (!inboundDomain) return NextResponse.json({ error: 'O domínio de recebimento das respostas do ASO ainda não foi configurado.' }, { status: 503 });
     const replyToken = createAsoToken();
     const replyUrl = `${PUBLIC_URL}/aso/clinica/${replyToken.token}`;

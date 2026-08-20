@@ -1457,6 +1457,13 @@ export type OnboardingProcess = {
   publicFormSubmittedAt?: string | null;
   publicFormLastSubmittedAt?: string | null;
   publicPrivacyAcceptance?: OnboardingPrivacyAcceptance | null;
+  consentimento_imagem_voz?: {
+    autorizado?: boolean;
+    status?: 'granted' | 'denied' | null;
+    decisionAt?: string | null;
+    respondido_em?: string | null;
+    termVersion?: string | null;
+  } | null;
   asoWorkflow?: {
     status?: 'pending' | 'request_validated' | 'process_started' | 'guide_generated' | 'guide_validated' | 'email_sent' | 'clinic_response_received' | 'appointment_pending_review' | 'appointment_confirmed' | 'candidate_notified' | 'awaiting_exam' | 'aso_received' | 'aso_under_review' | 'completed';
     latestGuideId?: string | null;

@@ -10,6 +10,10 @@ const nextConfig = {
     cpus: 1,
   },
   outputFileTracingIncludes: {
+    '/api/hr/onboarding/*/aso-guide': [
+      './src/features/hr/aso/assets/medclinc-logo.jpg',
+      './src/features/hr/aso/assets/coala-shakes-letterhead-v1.png',
+    ],
     '/api/documents/templates/**': [
       './docs/modelos-documentos/admissionais/*.docx',
       './src/features/hr/documents/assets/coala-shakes-letterhead-a4-v2.png',

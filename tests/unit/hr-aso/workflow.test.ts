@@ -3,15 +3,6 @@ import { describe, test } from 'node:test';
 
 import { createAsoToken, extractAppointmentProposal, hashAsoToken, missingAsoEmailPrerequisites } from '../../../src/features/hr/aso/workflow';
 import { engagementStatusFromResendEvent } from '../../../src/lib/email/resend-events';
-import type { OnboardingDocument } from '../../../src/types';
-
-const approvedDocument: OnboardingDocument = {
-  id: 'identity',
-  label: 'Documento de identificação',
-  required: true,
-  status: 'approved',
-  filePath: 'hr/onboarding/id.pdf',
-};
 
 describe('fluxo do ASO', () => {
   test('gera token opaco e persiste somente o hash', () => {
@@ -43,31 +34,21 @@ describe('fluxo do ASO', () => {
     assert.equal(engagementStatusFromResendEvent('email.delivered'), null);
   });
 
-  test('envio exige documentos, formulário, admissão e pagamento', () => {
+  test('envio exige somente formulário, admissão e pagamento', () => {
     assert.deepEqual(missingAsoEmailPrerequisites({
-      documents: [approvedDocument],
       expectedAdmissionDate: '2026-08-10',
       formDataConfirmed: true,
       paymentPaid: true,
     }), []);
 
-    assert.equal(missingAsoEmailPrerequisites({
-      documents: [{ ...approvedDocument, status: 'received' }],
+    assert.deepEqual(missingAsoEmailPrerequisites({
       expectedAdmissionDate: null,
       formDataConfirmed: false,
       paymentPaid: false,
-    }).length, 4);
-  });
-
-  test('ASO não entra na validação documental anterior ao envio dos e-mails', () => {
-    assert.deepEqual(missingAsoEmailPrerequisites({
-      documents: [
-        approvedDocument,
-        { id: 'aso_admission', label: 'ASO', required: true, status: 'pending', documentTypeCode: 'ASO_ADMISSION' },
-      ],
-      expectedAdmissionDate: '2026-08-10',
-      formDataConfirmed: true,
-      paymentPaid: true,
-    }), []);
+    }), [
+      'conferência dos dados do formulário',
+      'data de admissão',
+      'confirmação do pagamento do ASO',
+    ]);
   });
 });

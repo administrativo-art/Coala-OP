@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { cwd } from 'node:process';
 import { NextRequest, NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { getStorage } from 'firebase-admin/storage';
@@ -27,6 +28,13 @@ function safeFilePart(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'colaborador';
 }
 
+function formatCpf(value: unknown) {
+  const digits = text(value).replace(/\D/g, '').slice(0, 11);
+  return digits.length === 11
+    ? digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+    : text(value);
+}
+
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const access = await assertFormalizationAccess(request, 'aso.manage').catch(() => null);
   if (!access) return NextResponse.json({ error: 'Sem permissão para gerar a guia do ASO.' }, { status: 403 });
@@ -45,7 +53,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   }
 
   const employeeName = text(answers.fullName) || text(process.candidateName);
-  const employeeCpf = text(answers.cpf);
+  const employeeCpf = formatCpf(answers.cpf);
   const jobFunction = text(process.functionName) || text(process.jobRoleName);
   const examType = process.asoExamType === 'dismissal' ? 'dismissal' : 'admission';
   const missing = [
@@ -58,8 +66,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   }
 
   const [logo, letterheadLogo] = await Promise.all([
-    readFile(path.join(process.cwd(), 'src/features/hr/aso/assets/medclinc-logo.jpg')),
-    readFile(path.join(process.cwd(), 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png')),
+    readFile(path.join(cwd(), 'src/features/hr/aso/assets/medclinc-logo.jpg')),
+    readFile(path.join(cwd(), 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png')),
   ]);
   const pdf = await renderToBuffer(<MedclincReferralPdf data={{
     companyName: text(process.employerUnitName) || text(process.unitName) || 'Empresa responsável',
