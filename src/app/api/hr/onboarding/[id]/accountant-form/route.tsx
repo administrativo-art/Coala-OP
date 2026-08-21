@@ -109,7 +109,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const process = snapshot.data() ?? {};
   const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
   const aso = record(record(process.asoWorkflow).asoDocument);
-  const missing = missingAccountantPrerequisites({ documents, asoApproved: text(aso.status) === 'approved', expectedAdmissionDate: text(process.expectedAdmissionDate, 10) });
+  const missing = missingAccountantPrerequisites({ documents, asoApproved: text(aso.status) === 'approved', expectedAdmissionDate: text(process.expectedAdmissionDate, 10), publicFormAnswers: process.publicFormAnswers });
   if (missing.length) return NextResponse.json({ error: `A etapa do contador ainda não pode começar. Falta: ${missing.join('; ')}.` }, { status: 409 });
 
   const [roleSnapshot, functionSnapshot] = await Promise.all([

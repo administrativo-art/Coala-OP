@@ -3,6 +3,11 @@
 import React, { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, FileUp, Loader2, Paperclip, Send, X } from "lucide-react";
+import {
+  shouldRestoreImageVoiceAuthorization,
+  type PublicImageVoiceConsentDecision,
+} from '@/features/hr/onboarding/image-voice-consent-state';
+import { presentOnboardingDocumentForAnswers } from '@/features/hr/onboarding/document-applicability';
 import { PjPublicOnboardingForm } from '@/features/hr/onboarding-pj/public-form';
 
 type PublicOnboardingDocument = {
@@ -67,6 +72,7 @@ type PublicOnboarding = {
     checkboxText: string;
     termText: string;
   };
+  imageVoiceConsentDecision?: PublicImageVoiceConsentDecision;
   publicPrivacyAcceptance?: {
     noticeVersion?: string;
     noticeHash?: string;
@@ -270,12 +276,13 @@ function documentIsSubmitted(document: PublicOnboardingDocument) {
   return Boolean(document.status && document.status !== "pending" && document.status !== "rejected");
 }
 
-function Logo({ size = 28 }: { size?: number }) {
+function Logo() {
   return (
-    <span className="inline-flex items-baseline gap-[0.3em] leading-none">
-      <span className="fd text-[#EE6FA8]" style={{ fontSize: size, letterSpacing: "-0.04em" }}>coala</span>
-      <span className="fd text-[#3FBCD9]" style={{ fontSize: size * 0.62 }}>shakes</span>
-    </span>
+    <img
+      src="/logosidebar.png"
+      alt="Coala Shakes"
+      className="h-10 w-10 rounded-lg object-contain"
+    />
   );
 }
 
@@ -332,7 +339,6 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
   const [submitted, setSubmitted] = useState(false);
   const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
   const [allergyAcknowledged, setAllergyAcknowledged] = useState(false);
-  // Consentimento facultativo: cada abertura da tela começa sem autorização.
   const [imageVoiceAuthorized, setImageVoiceAuthorized] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -403,6 +409,10 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
           currentAcceptance?.allergyNoticeHash === payload.privacyNotice?.allergyNoticeHash
         );
         setAllergyAcknowledged(allergyAcceptanceMatches && currentAcceptance?.allergyAcknowledged === true);
+        setImageVoiceAuthorized(shouldRestoreImageVoiceAuthorization(
+          payload.imageVoiceConsentDecision,
+          payload.imageVoiceConsentTerm,
+        ));
       })
       .catch(error => {
         setUnavailableMessage(error instanceof Error ? error.message : "Link de onboarding não encontrado.");
@@ -423,6 +433,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
       return true;
     });
     return [...baseDocuments, ...dynamicDocuments]
+      .map(document => presentOnboardingDocumentForAnswers(document, answers))
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [answers.children, answers.hasCnh, answers.identityDocumentType, data?.documents]);
   const linkExpired = Boolean(data?.publicTokenExpiresAt && new Date(data.publicTokenExpiresAt).getTime() <= clockNow);
@@ -631,7 +642,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
       </div>
 
       <main className="mx-auto grid max-w-6xl gap-6 px-5 py-8 lg:grid-cols-[0.85fr_1.15fr]">
-        <section className="stk rounded-[30px] bg-[#2A1F2A] p-7 text-white md:p-8">
+        <section className="stk rounded-[30px] bg-[#2A1F2A] p-7 text-white md:p-8 lg:sticky lg:top-6 lg:self-start">
           <div className="px-5">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-white/40">Próximo passo</p>
             <h1 className="fd text-[36px] leading-none md:text-[44px]">Formalização</h1>
@@ -760,7 +771,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
               </div>
               {answers.hasCnh === "yes" && (
                 <p className="mt-3 rounded-2xl border border-[#EE6FA8]/20 bg-white px-4 py-3 text-xs font-semibold leading-relaxed text-[#5B4C5B]">
-                  Anexe sua CNH no campo <strong className="text-[#2A1F2A]">Documento de identidade ou CNH</strong>, na seção de documentos pessoais abaixo.
+                  Anexe sua CNH no campo <strong className="text-[#2A1F2A]">CNH</strong>, na seção de documentos pessoais abaixo.
                 </p>
               )}
             </section>

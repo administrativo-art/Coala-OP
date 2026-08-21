@@ -1,5 +1,6 @@
 import type { OnboardingDocument, OnboardingProcess, PjOnboardingStepId } from '@/types';
 import { PJ_ONBOARDING_STEP_LABELS, PJ_ONBOARDING_STEP_ORDER } from '@/features/hr/onboarding-pj/core';
+import { applicableOnboardingDocuments } from '@/features/hr/onboarding/document-applicability';
 import { DEFAULT_ONBOARDING_STAGES } from '@/lib/recruitment-onboarding';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -98,7 +99,10 @@ function daysSince(value: string | null, now: Date) {
 }
 
 function requiredDocuments(process: OnboardingProcess) {
-  return (process.documents ?? []).filter(document => (
+  return applicableOnboardingDocuments(
+    process.documents ?? [],
+    process.publicFormAnswers,
+  ).filter(document => (
     document.required !== false
     && document.id !== 'aso_admission'
     && document.documentTypeCode !== 'ASO_ADMISSION'

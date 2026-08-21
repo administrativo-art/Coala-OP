@@ -1,5 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 
+import {
+  applicableOnboardingDocuments,
+  presentOnboardingDocumentForAnswers,
+} from '@/features/hr/onboarding/document-applicability';
 import type { OnboardingDocument } from '@/types';
 
 export function createAccountantToken() {
@@ -15,25 +19,35 @@ export function accountantTokenExpiresAt(days = 30) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-export function candidateDocumentsForAccountant(documents: OnboardingDocument[], selectedDocumentIds?: string[]) {
+export function candidateDocumentsForAccountant(
+  documents: OnboardingDocument[],
+  selectedDocumentIds?: string[],
+  publicFormAnswers?: unknown,
+) {
   const selectedIds = selectedDocumentIds ? new Set(selectedDocumentIds) : null;
-  return documents.filter((document) => (
-    document.status === 'approved'
-    && document.id !== 'aso_admission'
-    && document.documentTypeCode !== 'ASO_ADMISSION'
-    && typeof document.filePath === 'string'
-    && document.filePath.trim().length > 0
-    && (!selectedIds || selectedIds.has(document.id))
-  ));
+  return applicableOnboardingDocuments(documents, publicFormAnswers)
+    .filter((document) => (
+      document.status === 'approved'
+      && document.id !== 'aso_admission'
+      && document.documentTypeCode !== 'ASO_ADMISSION'
+      && typeof document.filePath === 'string'
+      && document.filePath.trim().length > 0
+      && (!selectedIds || selectedIds.has(document.id))
+    ))
+    .map(document => presentOnboardingDocumentForAnswers(document, publicFormAnswers));
 }
 
 export function missingAccountantPrerequisites(input: {
   documents: OnboardingDocument[];
   asoApproved: boolean;
   expectedAdmissionDate?: string | null;
+  publicFormAnswers?: unknown;
 }) {
   const missing: string[] = [];
-  const requiredCandidateDocuments = input.documents.filter((document) => (
+  const requiredCandidateDocuments = applicableOnboardingDocuments(
+    input.documents,
+    input.publicFormAnswers,
+  ).filter((document) => (
     document.required !== false
     && document.id !== 'aso_admission'
     && document.documentTypeCode !== 'ASO_ADMISSION'

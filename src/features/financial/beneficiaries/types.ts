@@ -68,6 +68,7 @@ export type BeneficiarySnapshot = {
   sourceId: string;
   name: string;
   document: string;
+  documentHash?: string;
   paymentMethod: PaymentMethod;
   pixKeyType?: PixKeyType;
   maskedPaymentDestination: string;

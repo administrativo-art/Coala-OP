@@ -22,6 +22,13 @@ function StatusIcon({ status }: { status: BankPaymentRequestStatus }) {
   return <Clock3 className="h-4 w-4 text-amber-600" />;
 }
 
+function sourceLabel(sourceType: BankPaymentRequest["sourceType"]) {
+  if (sourceType === "aso") return "ASO";
+  if (sourceType === "termination") return "Rescisão CLT";
+  if (sourceType === "purchase_order") return "Pedido de compra";
+  return "Recibo gerado";
+}
+
 export function PaymentRequestsPage() {
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
@@ -81,7 +88,7 @@ export function PaymentRequestsPage() {
     {loading ? <div className="flex h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : items.length === 0 ?
       <Card><CardContent className="p-10 text-center text-sm text-muted-foreground">Nenhuma solicitação bancária foi criada.</CardContent></Card> :
       <div className="grid gap-3">{items.map((item) => <Card key={item.id}>
-        <CardHeader className="pb-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-base">{item.description}</CardTitle><CardDescription>{item.sourceType === "aso" ? "ASO" : item.sourceType === "termination" ? "Rescisão CLT" : "Recibo gerado"} · {item.beneficiarySnapshot.name}</CardDescription></div><div className="flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold"><StatusIcon status={item.status} />{statusLabel[item.status]}</div></div></CardHeader>
+        <CardHeader className="pb-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-base">{item.description}</CardTitle><CardDescription>{sourceLabel(item.sourceType)} · {item.beneficiarySnapshot.name}</CardDescription></div><div className="flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold"><StatusIcon status={item.status} />{statusLabel[item.status]}</div></div></CardHeader>
         <CardContent className="flex flex-wrap items-end justify-between gap-4">
           <div className="grid gap-1 text-sm"><span><strong>Valor:</strong> {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.amount)}</span><span><strong>Destino:</strong> {item.beneficiarySnapshot.maskedPaymentDestination}</span>{item.interRequestId && <span className="text-xs text-muted-foreground">Inter: {item.interRequestId}</span>}{item.lastError && <span className="text-xs text-rose-600">{item.lastError.safeMessage}</span>}</div>
           <div className="flex flex-wrap gap-2">

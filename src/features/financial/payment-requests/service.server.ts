@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { createBeneficiarySnapshot, resolvePaymentBeneficiary } from "../beneficiaries/resolver.server";
-import { normalizeBrazilianDocument } from "../beneficiaries/normalization";
 import type { PaymentBeneficiaryReference } from "../beneficiaries/types";
 import { createAndStoreConfirmedPaymentProof } from "@/lib/integrations/inter/proof.server";
+import { safeInterPaymentError } from "@/lib/integrations/inter/payment-error";
 import { getInterPixStatus, mapInterPixStatus, submitInterPix } from "@/lib/integrations/inter/pix-payments.server";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, transitionPaymentRequest } from "./repository.server";
+import { paymentReceiverMatchesSnapshot } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, BankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot } from "./types";
 
 export async function createPaymentRequest(input: {
@@ -53,11 +55,6 @@ export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
   return request.sourceType === "termination" || request.sourceType === "aso" ? submitPaymentRequest(id, actor) : request;
 }
 
-function safeBankError(error: unknown) {
-  const status = (error as { response?: { status?: number } })?.response?.status;
-  return { code: status ? `INTER_HTTP_${status}` : "INTER_REQUEST_FAILED", safeMessage: "Não foi possível concluir a comunicação com o Banco Inter. Consulte novamente antes de tentar outro envio.", occurredAt: new Date().toISOString() };
-}
-
 export async function submitPaymentRequest(id: string, actor: PaymentActor | "system") {
   const pending = await transitionPaymentRequest(id, ["ready_to_submit", "failed"], "submitting", { lastError: null });
   await addPaymentEvent(id, "INTER_SUBMISSION_STARTED", actor);
@@ -65,6 +62,16 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     const beneficiary = await resolvePaymentBeneficiary(pending.beneficiaryReference);
     if (beneficiary.sourceUpdatedAt !== pending.beneficiarySnapshot.sourceUpdatedAt) {
       throw new Error("Os dados do favorecido mudaram após a criação. Crie uma nova solicitação para revalidar o pagamento.");
+    }
+    if (!pending.beneficiarySnapshot.documentHash) {
+      const refreshedSnapshot = createBeneficiarySnapshot(beneficiary, pending.beneficiarySnapshot.resolvedAt);
+      if (refreshedSnapshot.documentHash) {
+        pending.beneficiarySnapshot = {
+          ...pending.beneficiarySnapshot,
+          documentHash: refreshedSnapshot.documentHash,
+        };
+        await paymentRequestRef(id).set({ beneficiarySnapshot: pending.beneficiarySnapshot }, { merge: true });
+      }
     }
     const result = await submitInterPix({ idempotencyKey: pending.idempotencyKey, amount: pending.amount, description: pending.description, beneficiary });
     const interRequestId = String(result.codigoSolicitacao ?? "");
@@ -75,10 +82,10 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
     await addPaymentEvent(id, approval ? "BANK_APPROVAL_REQUIRED" : "INTER_SUBMISSION_ACCEPTED", actor, { interRequestId, bankReturnType: result.tipoRetorno ?? null });
     return request;
   } catch (error) {
-    const lastError = safeBankError(error);
+    const lastError = safeInterPaymentError(error);
     await transitionPaymentRequest(id, ["submitting"], "failed", { lastError });
     await addPaymentEvent(id, "INTER_SUBMISSION_FAILED", actor, { code: lastError.code });
-    throw error;
+    throw new Error(lastError.safeMessage);
   }
 }
 
@@ -106,6 +113,27 @@ async function completeSource(request: BankPaymentRequest) {
     }, { merge: true });
     return;
   }
+  if (request.sourceType === "purchase_order") {
+    const now = new Date().toISOString();
+    await Promise.all([
+      dbAdmin.collection("purchase_orders").doc(request.sourceId).set({
+        paymentStatus: "paid",
+        paymentRequestId: request.id,
+        paidAt: request.paidAt ?? null,
+        updatedAt: now,
+      }, { merge: true }),
+      dbAdmin.collection("purchase_financials")
+        .where("purchaseOrderId", "==", request.sourceId)
+        .limit(10)
+        .get()
+        .then((snapshot) => Promise.all(snapshot.docs.map((document) => document.ref.set({
+          status: "paid",
+          paymentRequestId: request.id,
+          paidAt: request.paidAt ?? null,
+          updatedAt: now,
+        }, { merge: true })))).then(() => undefined),
+    ]);
+  }
   if (request.expenseId) {
     const now = new Date().toISOString();
     const expenseRef = financialDbAdmin.collection("expenses").doc(request.expenseId);
@@ -126,7 +154,9 @@ async function completeSource(request: BankPaymentRequest) {
       }, { merge: false });
     });
   }
-  await financialDbAdmin.collection("generatedReceipts").doc(request.sourceId).set({ status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: new Date().toISOString() }, { merge: true });
+  if (request.sourceType === "generated_receipt") {
+    await financialDbAdmin.collection("generatedReceipts").doc(request.sourceId).set({ status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: new Date().toISOString() }, { merge: true });
+  }
 }
 
 export async function refreshPaymentRequest(id: string, actor: PaymentActor | "system") {
@@ -154,9 +184,11 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
     await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "amount", bankStatus: rawStatus });
     throw new Error("O valor confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.");
   }
-  const receiverDocument = normalizeBrazilianDocument(transaction.recebedor?.cpfCnpj);
-  const snapshotDocument = normalizeBrazilianDocument(current.beneficiarySnapshot.document);
-  if (receiverDocument && snapshotDocument && receiverDocument !== snapshotDocument) {
+  if (!paymentReceiverMatchesSnapshot({
+    receiverDocument: transaction.recebedor?.cpfCnpj,
+    snapshotDocument: current.beneficiarySnapshot.document,
+    snapshotDocumentHash: current.beneficiarySnapshot.documentHash,
+  })) {
     await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "receiver", bankStatus: rawStatus });
     throw new Error("O favorecido confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.");
   }

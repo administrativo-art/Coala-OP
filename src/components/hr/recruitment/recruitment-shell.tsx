@@ -88,6 +88,11 @@ import {
   type OnboardingSortMode,
 } from '@/features/hr/onboarding/operational-status';
 import { isAsoAppointmentAfterAdmission } from '@/features/hr/aso/dates';
+import { readHrJsonResponse } from '@/features/hr/lib/client-response';
+import {
+  applicableOnboardingDocuments,
+  presentOnboardingDocumentForAnswers,
+} from '@/features/hr/onboarding/document-applicability';
 import {
   onboardingPublicLinkExpiresAt,
   onboardingPublicLinkExpired,
@@ -933,7 +938,10 @@ function getCandidateStageTiming(candidate: Candidate, stage?: RecruitmentStage,
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
-async function apiFetch(path: string, getToken: () => Promise<string>, init?: RequestInit) {
+// The HR endpoints have several response shapes; callers may opt into a precise type.
+// Keep the legacy default for the existing call sites while centralizing safe parsing.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function apiFetch<T = any>(path: string, getToken: () => Promise<string>, init?: RequestInit): Promise<T> {
   const token = await getToken();
   const res = await fetch(path, {
     ...init,
@@ -943,11 +951,19 @@ async function apiFetch(path: string, getToken: () => Promise<string>, init?: Re
       ...(init?.headers ?? {}),
     },
   });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => null);
-    throw new Error(payload?.error ?? `HTTP ${res.status}`);
-  }
-  return res.json();
+  return readHrJsonResponse<T>(res, 'Falha ao concluir a operação.');
+}
+
+function triggerPdfDownload(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 type ResumeUpload = {
@@ -8372,19 +8388,21 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     });
     return sortOnboardingProcesses(matching, onboardingSortMode, now);
   }, [activeProcesses, search, phaseFilter, healthFilter, onboardingSortMode, linkClock]);
+  // The detail must remain mounted even when an action moves the process to a
+  // different list filter (for example, from active to completed).
   const selectedProcess = useMemo(
-    () => activeProcesses.find(process => process.id === selectedId) ?? null,
-    [activeProcesses, selectedId]
+    () => processes.find(process => process.id === selectedId) ?? null,
+    [processes, selectedId]
   );
 
   useEffect(() => {
     const requestedId = new URLSearchParams(window.location.search).get('process');
-    const requested = requestedId ? activeProcesses.find(process => process.id === requestedId) : null;
+    const requested = requestedId ? processes.find(process => process.id === requestedId) : null;
     if (!requested || selectedId === requested.id) return;
     setSelectedId(requested.id);
     setPhaseId(requested.currentStage ?? requested.stages?.[0]?.id ?? null);
     setView('detail');
-  }, [activeProcesses, selectedId]);
+  }, [processes, selectedId]);
 
   const loadSignatureWorkflow = useCallback(async () => {
     if (!selectedProcess?.id || !canViewSignatures) {
@@ -8429,14 +8447,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     const timer = window.setInterval(onRefresh, 10_000);
     return () => window.clearInterval(timer);
   }, [onRefresh, selectedProcess?.accessProvisioning?.status, selectedProcess?.collaboratorUserId, selectedProcess?.status]);
-
-  // Return to the grid if the open process disappears (cancelled/completed refresh).
-  useEffect(() => {
-    if (view === 'detail' && selectedId && !activeProcesses.some(process => process.id === selectedId)) {
-      setView('grid');
-      setSelectedId(null);
-    }
-  }, [view, selectedId, activeProcesses]);
 
   useEffect(() => {
     setFinalizationDraft(getFinalizationDraft(selectedProcess));
@@ -8503,8 +8513,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
   useEffect(() => {
     setAccountantEmail(selectedProcess?.accountantWorkflow?.email?.recipient ?? selectedProcess?.accountantWorkflow?.suggestedRecipientEmail ?? '');
-    setAccountantSelectedDocumentIds(selectedProcess?.accountantWorkflow?.selectedDocumentIds ?? []);
-  }, [selectedProcess?.id, selectedProcess?.accountantWorkflow?.email?.recipient, selectedProcess?.accountantWorkflow?.selectedDocumentIds, selectedProcess?.accountantWorkflow?.suggestedRecipientEmail]);
+    const applicableDocumentIds = new Set(applicableOnboardingDocuments(
+      selectedProcess?.documents ?? [],
+      selectedProcess?.publicFormAnswers,
+    ).map(document => document.id));
+    setAccountantSelectedDocumentIds(
+      (selectedProcess?.accountantWorkflow?.selectedDocumentIds ?? []).filter(documentId => applicableDocumentIds.has(documentId)),
+    );
+  }, [selectedProcess]);
 
   useEffect(() => {
     if (selectedProcess?.currentStage === 'document_review' && phaseId === 'documents') {
@@ -8548,9 +8564,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     if (!result) return;
     setShowCancelModal(false);
     setCancelReasonDraft('');
-    setView('grid');
-    setSelectedId(null);
-    setPhaseId(null);
+    closeProcess();
     setPhaseFilter('all');
     setProcessStateFilter('cancelled');
   }
@@ -8563,17 +8577,15 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       const response = await fetch(`/api/hr/onboarding/${process.id}/aso-guide`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Falha ao gerar a guia do ASO.');
+      if (!response.ok) await readHrJsonResponse(response, 'Falha ao gerar a guia do ASO.');
+      if (!response.headers.get('content-type')?.toLowerCase().includes('application/pdf')) {
+        throw new Error('A guia foi gerada, mas o servidor não devolveu um PDF válido.');
       }
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `solicitacao-aso-${(process.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      triggerPdfDownload(
+        blob,
+        `solicitacao-aso-${(process.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`,
+      );
       onRefresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Falha ao gerar a guia do ASO.');
@@ -8613,17 +8625,21 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     try {
       const token = await getToken();
       const response = await fetch(`/api/hr/onboarding/${selectedProcess.id}/aso-workflow?asset=${asset}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.error || 'Falha ao abrir o documento.'); }
-      const url = URL.createObjectURL(await response.blob());
+      if (!response.ok) await readHrJsonResponse(response, 'Falha ao abrir o documento.');
+      if (!response.headers.get('content-type')?.toLowerCase().includes('application/pdf')) throw new Error('O servidor não devolveu um PDF válido.');
+      const blob = await response.blob();
       if (download) {
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = asset === 'aso'
-          ? `aso-${(selectedProcess.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`
-          : `solicitacao-aso-${(selectedProcess.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`;
-        anchor.click();
-      } else if (previewWindow) previewWindow.location.href = url;
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        triggerPdfDownload(
+          blob,
+          asset === 'aso'
+            ? `aso-${(selectedProcess.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`
+            : `solicitacao-aso-${(selectedProcess.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`,
+        );
+      } else if (previewWindow) {
+        const url = URL.createObjectURL(blob);
+        previewWindow.location.href = url;
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
     } catch (caught) { previewWindow?.close(); setError(caught instanceof Error ? caught.message : 'Falha ao abrir o documento.'); }
   }
 
@@ -8800,6 +8816,18 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     setSelectedId(process.id);
     setPhaseId(process.currentStage ?? process.stages?.[0]?.id ?? null);
     setView('detail');
+    const url = new URL(window.location.href);
+    url.searchParams.set('process', process.id);
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function closeProcess() {
+    setView('grid');
+    setSelectedId(null);
+    setPhaseId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('process');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
   }
 
   function colorForProcess(processId: string) {
@@ -9392,11 +9420,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
           canManage={canManage && selectedProcess.status !== 'cancelled' && selectedProcess.status !== 'completed'}
           getToken={getToken}
           onRefresh={onRefresh}
-          onBack={() => {
-            setView('grid');
-            setSelectedId(null);
-            setPhaseId(null);
-          }}
+          onBack={closeProcess}
         />
         {cancellationModal}
       </div>
@@ -9612,7 +9636,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
   const okAlert = integrationsResolved;
   const selectedProcessId = selectedProcess.id;
-  const reviewDocuments = (selectedProcess.documents ?? []).filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
+  const reviewDocuments = applicableOnboardingDocuments(
+    selectedProcess.documents ?? [],
+    answers,
+  )
+    .map(document => presentOnboardingDocumentForAnswers(document, answers))
+    .filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
   const documentsWithExtraction = reviewDocuments.filter(hasDocumentExtraction).length;
   const auditableDocuments = reviewDocuments.filter(hasAuditableDocumentFile).length;
   const bulkApprovalDocuments = reviewDocuments.filter(document =>
@@ -9771,7 +9800,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
-          onClick={() => setView('grid')}
+          onClick={closeProcess}
           className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-[13px] font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-800"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -10235,7 +10264,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {!asoFormDataReady && canManageAsoProcess ? <button type="button" disabled={!!asoActionBusy || !selectedProcess.publicFormSubmittedAt} onClick={() => void asoAction('confirm_form_data')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3.5 text-xs font-black text-cyan-800 disabled:opacity-50">{asoActionBusy === 'confirm_form_data' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}Confirmar dados do formulário</button> : null}
-                      {canManageAsoProcess && !asoProcessStarted ? <button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('validate_request', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3.5 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'validate_request' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}{asoRequest ? 'Validar novamente' : 'Validar solicitação'}</button> : null}
+                      {canManageAsoProcess && !asoProcessStarted ? <button type="button" title={asoRequest ? 'Atualiza a solicitação com os dados atuais antes do envio à clínica.' : 'Confere e salva os dados que serão enviados à clínica.'} disabled={!!asoActionBusy} onClick={() => void asoAction('validate_request', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3.5 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'validate_request' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}{asoRequest ? 'Atualizar solicitação' : 'Validar solicitação'}</button> : null}
                       {canManageAsoProcess ? <button type="button" disabled={asoGuideBusy || !selectedProcess.employerCnpj || !selectedProcess.publicFormSubmittedAt} onClick={() => void generateAsoGuide(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3.5 text-xs font-black text-cyan-800 disabled:opacity-50">{asoGuideBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <Download className="h-3.5 w-3.5"/>}Baixar solicitação em PDF <span className="font-bold text-slate-400">(opcional)</span></button> : null}
                       {asoWorkflow?.latestGuideId ? <button type="button" onClick={() => void openAsoAsset('guide')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-600"><Eye className="h-3.5 w-3.5"/>Abrir último PDF</button> : null}
                     </div>
@@ -10950,6 +10979,8 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   const [onboardingProcesses, setOnboardingProcesses] = useState<OnboardingProcess[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const hasLoadedDataRef = useRef(false);
 
   const [viewMode, setViewMode] = useState<RecruitmentJobViewMode>('openings');
 
@@ -10995,22 +11026,31 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
 
   const getToken = useCallback(async () => (await firebaseUser?.getIdToken()) ?? '', [firebaseUser]);
 
+  useEffect(() => {
+    hasLoadedDataRef.current = false;
+    setRefreshError(null);
+  }, [firebaseUser?.uid]);
+
   const loadData = useCallback(async () => {
     if (authLoading || !firebaseUser || !canView) { setLoading(false); return; }
-    setLoading(true);
-    setError(null);
+    const isInitialLoad = !hasLoadedDataRef.current;
+    if (isInitialLoad) {
+      setLoading(true);
+      setError(null);
+    }
+    setRefreshError(null);
     try {
       const token = await getToken();
       const [candidatesRes, rolesRes, openingsRes, onboardingRes] = await Promise.all([
         canViewRecruitment
-          ? fetch('/api/hr/candidates', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
+          ? fetch('/api/hr/candidates', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<Candidate[]>(response, 'Falha ao carregar candidatos.'))
           : Promise.resolve([]),
         fetchHrBootstrap(firebaseUser),
         canViewRecruitment
-          ? fetch('/api/hr/openings', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
+          ? fetch('/api/hr/openings', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<JobOpening[]>(response, 'Falha ao carregar vagas.'))
           : Promise.resolve([]),
         canViewFormalization
-          ? fetch('/api/hr/onboarding', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
+          ? fetch('/api/hr/onboarding', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<{ processes?: OnboardingProcess[] }>(response, 'Falha ao carregar integrações.'))
           : Promise.resolve({ processes: [] }),
       ]);
       setCandidates(candidatesRes as Candidate[]);
@@ -11020,10 +11060,14 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
       setShiftDefinitions(rolesRes.shiftDefinitions ?? []);
       setOpenings(openingsRes as JobOpening[]);
       setOnboardingProcesses(Array.isArray(onboardingRes?.processes) ? onboardingRes.processes as OnboardingProcess[] : []);
+      hasLoadedDataRef.current = true;
+      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao carregar.');
+      const message = err instanceof Error ? err.message : 'Falha ao carregar.';
+      if (isInitialLoad) setError(message);
+      else setRefreshError(`${message} Os dados que já estavam na tela foram mantidos.`);
     } finally {
-      setLoading(false);
+      if (isInitialLoad) setLoading(false);
     }
   }, [authLoading, firebaseUser, canView, canViewFormalization, canViewRecruitment, getToken]);
 
@@ -11314,6 +11358,8 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
 
   return (
     <div className="personal-recruitment-density flex min-h-[calc(100vh-5rem)] w-full min-w-0 max-w-full flex-col space-y-3 overflow-x-hidden rounded-xl border border-white/70 bg-white/85 p-3 text-slate-900 shadow-sm backdrop-blur">
+
+      {refreshError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900"><span>{refreshError}</span><button type="button" onClick={() => void loadData()} className="font-black text-amber-800 underline underline-offset-2">Tentar atualizar novamente</button></div> : null}
 
       {/* A integração possui um cabeçalho próprio com status, busca e histórico. */}
       {section !== 'integration' && <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 shadow-sm md:flex-row md:items-center md:justify-between">

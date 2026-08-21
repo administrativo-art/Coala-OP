@@ -7,7 +7,6 @@ import {
 } from 'pdf-lib';
 
 export type MedclincReferralPdfData = {
-  companyName: string;
   employerCnpj: string;
   employeeName: string;
   employeeCpf: string;
@@ -18,6 +17,8 @@ export type MedclincReferralPdfData = {
   letterheadLogoDataUri?: string | null;
   examType?: 'admission' | 'dismissal';
 };
+
+export const MEDCLINC_REFERRAL_COMPANY_NAME = 'CT Sorvetes LTDA';
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
@@ -178,7 +179,7 @@ export async function renderMedclincReferralPdf(data: MedclincReferralPdfData) {
   let top = 664;
   top = drawSectionLabel(page, 1, 'DADOS DA EMPRESA', top, bold);
   top = drawGridRow({ page, top, height: 34, regular, bold, cells: [
-    { label: 'Empresa', value: data.companyName, width: CONTENT_WIDTH * 0.4 },
+    { label: 'Empresa', value: MEDCLINC_REFERRAL_COMPANY_NAME, width: CONTENT_WIDTH * 0.4 },
     { label: 'CNPJ', value: data.employerCnpj, width: CONTENT_WIDTH * 0.3 },
     { label: 'Forma de pagamento', value: 'PIX', width: CONTENT_WIDTH * 0.3 },
   ] }) - 7;

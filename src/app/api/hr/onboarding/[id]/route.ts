@@ -1067,6 +1067,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       documents: update.documents as OnboardingDocument[],
       asoApproved: asoDocument.status === 'approved',
       expectedAdmissionDate: asString(process.expectedAdmissionDate),
+      publicFormAnswers: process.publicFormAnswers,
     });
     if (missing.length === 0) {
       update.currentStage = 'accountant';

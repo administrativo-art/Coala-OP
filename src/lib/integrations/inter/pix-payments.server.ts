@@ -1,4 +1,5 @@
-import type { ResolvedPaymentBeneficiary } from "@/features/financial/beneficiaries/types";
+import { inferPixKeyType, normalizeBrazilianDocument } from "@/features/financial/beneficiaries/normalization";
+import type { PixKeyType, ResolvedPaymentBeneficiary } from "@/features/financial/beneficiaries/types";
 import { createInterClient } from "./client.server";
 
 export type InterPixStatusResponse = {
@@ -15,9 +16,23 @@ export type InterPixStatusResponse = {
   historico?: unknown[];
 };
 
+export function normalizeInterPixKey(value: string, declaredType?: PixKeyType) {
+  const trimmed = value.trim();
+  const type = declaredType ?? inferPixKeyType(trimmed);
+  if (type === 'cpf' || type === 'cnpj') return normalizeBrazilianDocument(trimmed);
+  if (type === 'email' || type === 'random') return trimmed.toLowerCase();
+  if (type === 'phone') {
+    const compact = trimmed.replace(/[\s()-]/g, '');
+    if (compact.startsWith('+')) return `+${compact.slice(1).replace(/\D/g, '')}`;
+    const digits = compact.replace(/\D/g, '');
+    return digits.startsWith('55') ? `+${digits}` : `+55${digits}`;
+  }
+  return trimmed;
+}
+
 function recipient(beneficiary: ResolvedPaymentBeneficiary) {
   if (beneficiary.paymentMethod === "pix_key" && beneficiary.pixKey) {
-    return { tipo: "CHAVE", chave: beneficiary.pixKey };
+    return { tipo: "CHAVE", chave: normalizeInterPixKey(beneficiary.pixKey, beneficiary.pixKeyType) };
   }
   if (beneficiary.paymentMethod === "pix_copy_paste" && beneficiary.pixCopyPaste) {
     return { tipo: "PIX_COPIA_E_COLA", pixCopiaECola: beneficiary.pixCopyPaste };

@@ -8,7 +8,10 @@ import {
   missingAsoEmailPrerequisites,
 } from '../../../src/features/hr/aso/workflow';
 import { isAsoAppointmentAfterAdmission } from '../../../src/features/hr/aso/dates';
-import { renderMedclincReferralPdf } from '../../../src/features/hr/aso/medclinc-referral-pdf';
+import {
+  MEDCLINC_REFERRAL_COMPANY_NAME,
+  renderMedclincReferralPdf,
+} from '../../../src/features/hr/aso/medclinc-referral-pdf';
 import { engagementStatusFromResendEvent } from '../../../src/lib/email/resend-events';
 
 describe('fluxo do ASO', () => {
@@ -43,8 +46,8 @@ describe('fluxo do ASO', () => {
   });
 
   test('gera a guia do ASO como PDF válido sem depender do reconciliador do React', async () => {
+    assert.equal(MEDCLINC_REFERRAL_COMPANY_NAME, 'CT Sorvetes LTDA');
     const pdf = await renderMedclincReferralPdf({
-      companyName: 'Quiosque Tirirical',
       employerCnpj: '14.276.603/0001-25',
       employeeName: 'Thaise Correia Marinho',
       employeeCpf: '058.136.883-58',

@@ -69,7 +69,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     readFile(path.join(cwd(), 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png')),
   ]);
   const pdf = await renderMedclincReferralPdf({
-    companyName: text(process.employerUnitName) || text(process.unitName) || 'Empresa responsável',
     employerCnpj: CnpjValidator.format(employerCnpj),
     employeeName,
     employeeCpf,

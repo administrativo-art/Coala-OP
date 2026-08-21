@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash, randomBytes } from 'crypto';
 
 import { serializeHrValue } from '@/features/hr/lib/server-access';
+import {
+  applicableOnboardingDocuments,
+  presentOnboardingDocumentForAnswers,
+  requiredFamilyDocumentKinds,
+} from '@/features/hr/onboarding/document-applicability';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { DEFAULT_ONBOARDING_DOCUMENTS, instantiateOnboardingDocuments } from '@/lib/recruitment-onboarding';
 import { onboardingPublicLinkExpired, onboardingPublicLinkExpiresAt } from '@/lib/hr/onboarding-public-link';
@@ -59,26 +64,6 @@ function cleanChoices(value: unknown, allowed: readonly string[]) {
 function cleanIsoDate(value: unknown) {
   const cleaned = trimText(value, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(cleaned) ? cleaned : '';
-}
-
-function dependentAge(birthDate: string) {
-  if (!birthDate) return null;
-  const date = new Date(`${birthDate}T12:00:00.000Z`);
-  if (!Number.isFinite(date.getTime())) return null;
-  const today = new Date();
-  let age = today.getUTCFullYear() - date.getUTCFullYear();
-  const monthDelta = today.getUTCMonth() - date.getUTCMonth();
-  if (monthDelta < 0 || (monthDelta === 0 && today.getUTCDate() < date.getUTCDate())) age -= 1;
-  return age;
-}
-
-function familyRequiredDocs(birthDate: string) {
-  const age = dependentAge(birthDate);
-  if (age == null) return [] as const;
-  if (age < 0 || age >= 14) return [] as const;
-  if (age < 4) return ['birth_certificate', 'vaccination'] as const;
-  if (age < 7) return ['birth_certificate', 'vaccination', 'school_attendance'] as const;
-  return ['birth_certificate', 'school_attendance'] as const;
 }
 
 function familyDocumentLabel(kind: string, index: number) {
@@ -175,7 +160,7 @@ function sanitizePjPublicAnswers(raw: Record<string, unknown>) {
 
 function buildChildDocumentTemplates(answers: ReturnType<typeof sanitizePublicAnswers>): OnboardingDocument[] {
   return answers.children.flatMap((child, index) =>
-    familyRequiredDocs(child.birthDate).map((kind, order) => ({
+    requiredFamilyDocumentKinds(child.birthDate).map((kind, order) => ({
       id: `child_${index + 1}_${kind}`,
       label: familyDocumentLabel(kind, index),
       documentTypeCode: kind === 'birth_certificate'
@@ -460,6 +445,11 @@ async function getOnboardingByToken(token: string) {
 
 function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
   const processDocuments = Array.isArray(data.documents) ? data.documents as OnboardingDocument[] : [];
+  const storedImageVoiceConsent = data.consentimento_imagem_voz
+    && typeof data.consentimento_imagem_voz === 'object'
+    && !Array.isArray(data.consentimento_imagem_voz)
+      ? data.consentimento_imagem_voz as Record<string, unknown>
+      : null;
   const documents = data.employmentRelationshipType === 'pj'
     ? processDocuments
     : withUniversalDocuments(processDocuments);
@@ -478,22 +468,42 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
     pjWorkflow: data.pjWorkflow ?? null,
     status: data.status ?? null,
     currentStage: data.currentStage ?? null,
-    documents: documents.filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION').map(document => ({
-      id: document.id,
-      label: document.label,
-      description: document.description ?? null,
-      required: document.required !== false,
-      order: document.order ?? 0,
-      status: document.status ?? 'pending',
-      fileUrl: document.fileUrl ?? null,
-      updatedAt: document.updatedAt ?? null,
-    })),
+    documents: documents
+      .filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION')
+      .map(document => presentOnboardingDocumentForAnswers(document, data.publicFormAnswers))
+      .map(document => ({
+        id: document.id,
+        label: document.label,
+        description: document.description ?? null,
+        required: document.required !== false,
+        order: document.order ?? 0,
+        status: document.status ?? 'pending',
+        fileUrl: document.fileUrl ?? null,
+        updatedAt: document.updatedAt ?? null,
+      })),
     publicFormAnswers: data.publicFormAnswers ?? {},
     publicFormSubmittedAt: data.publicFormSubmittedAt ?? null,
     publicTokenExpiresAt: onboardingPublicLinkExpiresAt(data)?.toISOString() ?? null,
     publicTokenExtensionUsed: data.publicTokenExtensionUsed === true,
     privacyNotice: publicPrivacyNotice(),
     imageVoiceConsentTerm: publicImageVoiceConsentTerm(),
+    imageVoiceConsentDecision: storedImageVoiceConsent ? {
+      authorized: storedImageVoiceConsent.autorizado === true,
+      status: typeof storedImageVoiceConsent.status === 'string' ? storedImageVoiceConsent.status : null,
+      termVersion: typeof storedImageVoiceConsent.termVersion === 'string'
+        ? storedImageVoiceConsent.termVersion
+        : typeof storedImageVoiceConsent.versao_termo === 'string'
+          ? storedImageVoiceConsent.versao_termo
+          : null,
+      termHash: typeof storedImageVoiceConsent.termHash === 'string'
+        ? storedImageVoiceConsent.termHash
+        : typeof storedImageVoiceConsent.hash_termo_exibido === 'string'
+          ? storedImageVoiceConsent.hash_termo_exibido
+          : null,
+      revokedAt: typeof storedImageVoiceConsent.revokedAt === 'string'
+        ? storedImageVoiceConsent.revokedAt
+        : null,
+    } : null,
     publicPrivacyAcceptance: data.publicPrivacyAcceptance ?? null,
   };
 }
@@ -747,7 +757,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       updatedAt: now,
     };
   });
-  const allRequiredDocumentsSubmitted = requiredDocumentsSubmitted(nextDocuments);
+  const allRequiredDocumentsSubmitted = requiredDocumentsSubmitted(
+    applicableOnboardingDocuments(nextDocuments, publicFormAnswers),
+  );
   const shouldMoveToReview = data.currentStage === 'documents' || !data.currentStage;
   const submittedAt = new Date(now);
   const protocol = createSubmissionProtocol(submittedAt);

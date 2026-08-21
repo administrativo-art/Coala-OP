@@ -18,6 +18,19 @@ test('pré-requisitos exigem documentos, ASO e data de admissão', () => {
   assert.equal(missingAccountantPrerequisites({ documents: [{ ...approvedDocument, status: 'received' }], asoApproved: false, expectedAdmissionDate: null }).length, 3);
 });
 
+test('documento condicional inaplicável não bloqueia a contabilidade', () => {
+  const missing = missingAccountantPrerequisites({
+    documents: [
+      approvedDocument,
+      { id: 'cnh', label: 'CNH', required: true, status: 'pending', filePath: null },
+    ],
+    asoApproved: true,
+    expectedAdmissionDate: '2026-09-22',
+    publicFormAnswers: { hasCnh: 'no', identityDocumentType: 'identity' },
+  });
+  assert.deepEqual(missing, []);
+});
+
 test('pacote inclui somente documentos aprovados com arquivo e exclui o ASO duplicado', () => {
   const selected = candidateDocumentsForAccountant([
     approvedDocument,
