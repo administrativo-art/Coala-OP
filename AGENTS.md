@@ -7,7 +7,8 @@
 - O navegador é bloqueado por padrão para as IAs deste projeto. A IA só pode acessá-lo quando o desenvolvedor autorizar expressamente e o acesso for realmente necessário, ou quando o próprio desenvolvedor solicitar o uso do navegador, ainda que exista alternativa por CLI/API.
 - A autorização vale apenas para a tarefa em que foi concedida e não deve ser presumida em tarefas seguintes.
 - Não repita no navegador uma alteração que o script já confirmou. Quando o uso tiver sido autorizado, limite-o ao escopo solicitado e confira somente os dados necessários, como descrição, valor, competência, vencimento, unidade/centro de resultado, plano de contas e status.
-- Se a autenticação da CLI depender de senha, código ou confirmação pessoal, pause e peça ao usuário para concluir a autenticação; nunca solicite nem manipule senhas no chat.
+- Quando uma ação necessária e segura estiver bloqueada por permissão, reautenticação ou confirmação pessoal, peça explicitamente ao desenvolvedor a autorização necessária pelo mecanismo disponível; não presuma recusa nem encerre a operação sem antes solicitar essa autorização.
+- Depois de autorizado, a IA pode iniciar o fluxo de autenticação da CLI e deve aguardar o desenvolvedor concluir diretamente no provedor. Nunca solicite nem manipule senhas, códigos ou outros segredos no chat.
 
 ## Limpeza de scripts operacionais
 
