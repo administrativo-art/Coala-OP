@@ -66,21 +66,24 @@ describe('fluxo do ASO', () => {
     assert.equal(engagementStatusFromResendEvent('email.delivered'), null);
   });
 
-  test('envio exige somente formulário, admissão e pagamento', () => {
+  test('envio exige formulário, admissão, pagamento e solicitação em PDF', () => {
     assert.deepEqual(missingAsoEmailPrerequisites({
       expectedAdmissionDate: '2026-08-10',
       formDataConfirmed: true,
       paymentPaid: true,
+      requestPdfReady: true,
     }), []);
 
     assert.deepEqual(missingAsoEmailPrerequisites({
       expectedAdmissionDate: null,
       formDataConfirmed: false,
       paymentPaid: false,
+      requestPdfReady: false,
     }), [
       'conferência dos dados do formulário',
       'data de admissão',
       'confirmação do pagamento do ASO',
+      'solicitação do ASO em PDF',
     ]);
   });
 });

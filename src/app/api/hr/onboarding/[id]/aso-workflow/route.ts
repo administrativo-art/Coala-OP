@@ -7,6 +7,7 @@ import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
 import { createAsoToken, formatAsoAppointment, isoAfterDays, missingAsoEmailPrerequisites } from '@/features/hr/aso/workflow';
 import { candidateAsoEmailContent, candidateAsoProcessStartedEmailContent, clinicAsoEmailContent, renderCandidateAsoAppointmentEmail, renderCandidateAsoProcessStartedEmail, renderClinicAsoRequestEmail } from '@/features/hr/aso/emails';
 import { selectLatestSocialContract, type CompanyDocumentMetadata } from '@/features/hr/aso/company-document-selection';
+import { ASO_GUIDE_TEMPLATE_VERSION } from '@/features/hr/aso/guide-version';
 import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
 import { adminApp } from '@/lib/firebase-admin';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -61,7 +62,7 @@ async function latestGuide(processId: string, workflow: Record<string, unknown>)
 }
 
 async function latestSocialContract() {
-  const snapshot = await dbAdmin.collection('companyDocuments').where('category', '==', 'Societário').get();
+  const snapshot = await dbAdmin.collection('companyDocuments').where('category', '==', 'Societário').limit(25).get();
   const documents = snapshot.docs.map((document) => ({
     id: document.id,
     ref: document.ref,
@@ -191,6 +192,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (!text(aso.storagePath, 1500)) return NextResponse.json({ error: 'ASO ainda não recebido.' }, { status: 404 });
     return fileResponse(text(aso.storagePath, 1500), text(aso.fileName, 300) || 'aso.pdf', text(aso.mimeType, 100) || 'application/pdf');
   }
+  if (asset === 'payment_proof') {
+    const paymentRequestId = text(workflow.paymentRequestId, 180);
+    if (!paymentRequestId) return NextResponse.json({ error: 'O pagamento do ASO ainda não foi solicitado.' }, { status: 404 });
+    const payment = await getPaymentRequest(paymentRequestId);
+    if (!payment.proofStoragePath) return NextResponse.json({ error: 'Comprovante de pagamento ainda não disponível.' }, { status: 404 });
+    return fileResponse(payment.proofStoragePath, 'Comprovante de pagamento.pdf', 'application/pdf');
+  }
+  if (asset === 'social_contract') {
+    const contract = await latestSocialContract();
+    if (!contract) return NextResponse.json({ error: 'Contrato social em PDF não encontrado.' }, { status: 404 });
+    const fileName = text(contract.standardizedName, 300) || text(contract.originalName, 300) || 'Contrato social.pdf';
+    return fileResponse(text(contract.storagePath, 1500), fileName, 'application/pdf');
+  }
   const events = await snapshot.ref.collection('asoEvents').orderBy('at', 'desc').limit(50).get();
   return NextResponse.json({ workflow, events: events.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
 }
@@ -302,14 +316,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
     const submissionAt = formSubmissionMarker(process);
     const formDataValidation = record(workflow.formDataValidation);
+    const guide = await latestGuide(id, workflow);
     const missing = missingAsoEmailPrerequisites({
       expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
       formDataConfirmed: Boolean(submissionAt && text(formDataValidation.submissionAt, 40) === submissionAt),
       paymentPaid: payment.status === 'paid' && Boolean(payment.proofStoragePath),
+      requestPdfReady: Boolean(guide && text(guide.templateVersion, 80) === ASO_GUIDE_TEMPLATE_VERSION),
     });
     if (missing.length > 0) {
       return NextResponse.json({ error: `Conclua os pré-requisitos antes de enviar os e-mails: ${missing.join('; ')}.` }, { status: 409 });
     }
+    if (!guide) return NextResponse.json({ error: 'Gere a solicitação do ASO em PDF antes de enviar os e-mails.' }, { status: 409 });
 
     const clinicCommunicationRef = hrDbAdmin.collection('emailCommunications').doc(`aso_clinic_start_${id}`);
     const clinicCommunicationSnapshot = await clinicCommunicationRef.get();
@@ -327,11 +344,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       const socialContract = await latestSocialContract();
       const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
       let paymentProofContents: Buffer;
+      let guideContents: Buffer;
       try {
-        [paymentProofContents] = await bucket.file(payment.proofStoragePath!).download();
+        const [paymentProofDownload, guideDownload] = await Promise.all([
+          bucket.file(payment.proofStoragePath!).download(),
+          bucket.file(text(guide.storagePath, 1500)).download(),
+        ]);
+        [paymentProofContents] = paymentProofDownload;
+        [guideContents] = guideDownload;
       } catch {
-        return NextResponse.json({ error: 'O pagamento foi confirmado, mas o comprovante ainda não está disponível para o envio.' }, { status: 409 });
+        return NextResponse.json({ error: 'A solicitação ou o comprovante de pagamento não está disponível para o envio.' }, { status: 409 });
       }
+      const guideAttachment = { filename: 'Solicitação do ASO.pdf', content: guideContents.toString('base64'), contentType: 'application/pdf' };
       const paymentAttachment = { filename: 'Comprovante de pagamento.pdf', content: paymentProofContents.toString('base64'), contentType: 'application/pdf' };
       let contractAttachment: { filename: string; content: string; contentType: string } | null = null;
       if (socialContract) {
@@ -343,8 +367,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         }
       }
       const attachmentDescriptions = [
-        ...(contractAttachment ? [{ label: 'Contrato social', fileName: contractAttachment.filename }] : []),
+        { label: 'Solicitação do ASO', fileName: guideAttachment.filename },
         { label: 'Comprovante de pagamento', fileName: paymentAttachment.filename },
+        ...(contractAttachment ? [{ label: 'Contrato social', fileName: contractAttachment.filename }] : []),
       ];
       const clinicContent = clinicAsoEmailContent({
         candidateName: currentRequest.candidateName,
@@ -367,6 +392,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           subject: clinicContent.subject,
           status: 'pending',
           requestValidationId: text(requestValidation.id, 180) || null,
+          generatedDocumentId: guide.id,
           socialContractDocumentId: socialContract?.id ?? null,
           createdAt: clinicCommunicationSnapshot.get('createdAt') ?? now,
           updatedAt: now,
@@ -391,7 +417,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
             examType: currentRequest.examType,
           }),
           text: `${clinicContent.text}\n\nInforme o agendamento: ${replyUrl}`,
-          attachments: [...(contractAttachment ? [contractAttachment] : []), paymentAttachment],
+          attachments: [guideAttachment, paymentAttachment, ...(contractAttachment ? [contractAttachment] : [])],
           tags: [{ name: 'category', value: 'aso_clinic_request' }, { name: 'onboarding_id', value: id.slice(0, 256) }],
         });
         clinicEmailResult = { ...clinicEmailResult, status: 'accepted', providerId: result.id };
@@ -591,10 +617,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (payment.status !== 'paid' || !payment.proofStoragePath) return NextResponse.json({ error: 'O e-mail só será liberado após o Banco Inter confirmar o pagamento e o comprovante estar disponível.' }, { status: 409 });
     const submissionAt = formSubmissionMarker(process);
     const formDataValidation = record(workflow.formDataValidation);
+    const guide = await latestGuide(id, workflow);
     const missing = missingAsoEmailPrerequisites({
       expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
       formDataConfirmed: Boolean(submissionAt && text(formDataValidation.submissionAt, 40) === submissionAt),
       paymentPaid: true,
+      requestPdfReady: Boolean(guide && text(guide.templateVersion, 80) === ASO_GUIDE_TEMPLATE_VERSION),
     });
     if (missing.length > 0) return NextResponse.json({ error: `Conclua os pré-requisitos antes de enviar o e-mail: ${missing.join('; ')}.` }, { status: 409 });
     const clinicEntityId = text(workflow.clinicEntityId, 180);
@@ -602,7 +630,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const clinicEmail = email(clinicConfig?.get('schedulingEmail'));
     if (!clinicEmail) return NextResponse.json({ error: 'O e-mail da clínica não está configurado.' }, { status: 409 });
     const clinicName = payment.beneficiarySnapshot.name;
-    const guide = await latestGuide(id, workflow);
     const validation = record(workflow.guideValidation);
     if (!guide || text(validation.documentId) !== guide.id) return NextResponse.json({ error: 'Valide a versão atual da guia antes do envio.' }, { status: 409 });
     const socialContract = await latestSocialContract();

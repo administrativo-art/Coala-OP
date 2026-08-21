@@ -41,10 +41,12 @@ export function missingAsoEmailPrerequisites(input: {
   expectedAdmissionDate?: string | null;
   formDataConfirmed: boolean;
   paymentPaid: boolean;
+  requestPdfReady: boolean;
 }) {
   const missing: string[] = [];
   if (!input.formDataConfirmed) missing.push('conferência dos dados do formulário');
   if (!input.expectedAdmissionDate) missing.push('data de admissão');
   if (!input.paymentPaid) missing.push('confirmação do pagamento do ASO');
+  if (!input.requestPdfReady) missing.push('solicitação do ASO em PDF');
   return missing;
 }

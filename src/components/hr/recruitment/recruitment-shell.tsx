@@ -956,18 +956,6 @@ async function apiFetch<T = any>(path: string, getToken: () => Promise<string>, 
   return readHrJsonResponse<T>(res, 'Falha ao concluir a operação.');
 }
 
-function triggerPdfDownload(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.style.display = 'none';
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
 type ResumeUpload = {
   url: string;
   path?: string;
@@ -8613,6 +8601,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }
 
   async function generateAsoGuide(process: OnboardingProcess) {
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) {
+      setError('O navegador bloqueou a nova aba. Libere pop-ups para gerar a solicitação.');
+      return;
+    }
     setAsoGuideBusy(true);
     setError(null);
     try {
@@ -8626,12 +8619,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
         throw new Error('A guia foi gerada, mas o servidor não devolveu um PDF válido.');
       }
       const blob = await response.blob();
-      triggerPdfDownload(
-        blob,
-        `solicitacao-aso-${(process.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`,
-      );
+      const url = URL.createObjectURL(blob);
+      previewWindow.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       await refreshAsoWorkflow(process.id);
     } catch (caught) {
+      previewWindow.close();
       setError(caught instanceof Error ? caught.message : 'Falha ao gerar a guia do ASO.');
     } finally {
       setAsoGuideBusy(false);
@@ -8664,27 +8657,22 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     } finally { setAsoActionBusy(null); }
   }
 
-  async function openAsoAsset(asset: 'guide' | 'aso', download = false) {
+  async function openAsoAsset(asset: 'guide' | 'aso' | 'payment_proof' | 'social_contract') {
     if (!selectedProcess) return;
-    const previewWindow = download ? null : window.open('', '_blank');
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) {
+      setError('O navegador bloqueou a nova aba. Libere pop-ups para visualizar o PDF.');
+      return;
+    }
     try {
       const token = await getToken();
       const response = await fetch(`/api/hr/onboarding/${selectedProcess.id}/aso-workflow?asset=${asset}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) await readHrJsonResponse(response, 'Falha ao abrir o documento.');
       if (!response.headers.get('content-type')?.toLowerCase().includes('application/pdf')) throw new Error('O servidor não devolveu um PDF válido.');
       const blob = await response.blob();
-      if (download) {
-        triggerPdfDownload(
-          blob,
-          asset === 'aso'
-            ? `aso-${(selectedProcess.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`
-            : `solicitacao-aso-${(selectedProcess.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`,
-        );
-      } else if (previewWindow) {
-        const url = URL.createObjectURL(blob);
-        previewWindow.location.href = url;
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      }
+      const url = URL.createObjectURL(blob);
+      previewWindow.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (caught) { previewWindow?.close(); setError(caught instanceof Error ? caught.message : 'Falha ao abrir o documento.'); }
   }
 
@@ -9717,7 +9705,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     && asoWorkflow?.formDataValidation?.submissionAt === asoFormSubmissionMarker
   );
   const asoPaymentReady = asoWorkflow?.paymentStatus === 'paid' && Boolean(asoWorkflow.paymentProofStoragePath);
-  const asoEmailPrerequisitesReady = asoFormDataReady && accountantAdmissionDateReady && asoPaymentReady;
+  const asoGuideIsCurrent = asoWorkflow?.latestGuideTemplateVersion === ASO_GUIDE_TEMPLATE_VERSION;
+  const asoEmailPrerequisitesReady = asoFormDataReady && accountantAdmissionDateReady && asoPaymentReady && asoGuideIsCurrent;
   const asoSelectedClinic = asoClinics.find(clinic => clinic.id === asoClinicEntityId) ?? null;
   const asoRequestMatchesDraft = Boolean(asoRequest)
     && asoRequest?.clinicEntityId === asoClinicEntityId
@@ -9736,7 +9725,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   );
   const asoRequestReady = Boolean(asoRequest && asoRequestMatchesDraft && asoFormDataReady && accountantAdmissionDateReady);
   const asoPaymentPolling = shouldPollAsoPayment(asoWorkflow?.paymentRequestId, asoWorkflow?.paymentStatus);
-  const asoGuideIsCurrent = asoWorkflow?.latestGuideTemplateVersion === ASO_GUIDE_TEMPLATE_VERSION;
   const asoEmailTrackingReady = Boolean(asoProcessStarted && !asoHasPendingStartDelivery);
   const asoDocumentReady = asoWorkflow?.asoDocument?.status === 'approved';
   const asoProgressSteps = [asoRequestReady, asoPaymentReady, asoEmailTrackingReady, asoDocumentReady];
@@ -10263,7 +10251,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <div className="min-w-0">
                       <p className="text-[10.5px] font-black uppercase tracking-wide text-cyan-700">ASO admissional · etapa obrigatória</p>
                       <h4 className="mt-1 text-sm font-black text-slate-900">Solicitação e acompanhamento do exame</h4>
-                      <p className="mt-1 max-w-2xl text-xs font-semibold leading-relaxed text-slate-600">A solicitação é validada dentro do sistema e o PDF é opcional. A clínica confirma a data do exame; a empresa define a data de admissão.</p>
+                      <p className="mt-1 max-w-2xl text-xs font-semibold leading-relaxed text-slate-600">A solicitação é validada dentro do sistema e o PDF segue anexado ao e-mail da clínica. A clínica confirma a data do exame; a empresa define a data de admissão.</p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${asoWorkflow?.asoDocument?.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : asoProcessStarted ? 'bg-blue-100 text-blue-700' : asoRequest ? 'bg-violet-100 text-violet-700' : 'bg-amber-100 text-amber-700'}`}>
                       {asoWorkflow?.asoDocument?.status === 'approved' ? 'Concluído' : asoProcessStarted ? 'Em andamento' : asoRequest ? 'Solicitação validada' : 'Aguardando validação'}
@@ -10300,7 +10288,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="text-[9.5px] font-black uppercase text-slate-400">Exame e admissão</span><p className="mt-1 text-xs font-black text-slate-800">ASO {asoRequest?.examType === 'dismissal' ? 'demissional' : 'admissional'}</p><p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">Admissão prevista: {formatOnboardingDateOnly(asoRequest?.expectedAdmissionDate ?? selectedProcess.expectedAdmissionDate)}</p></div>
                       <label className="rounded-xl border border-slate-100 bg-slate-50 p-3 sm:col-span-2"><span className="text-[9.5px] font-black uppercase text-slate-400">CNPJ responsável</span>{canManageAsoProcess && !asoConfigurationLocked ? <select value={selectedProcess.employerUnitId ?? ''} disabled={updating === `${selectedProcess.id}:set_employer_unit`} onChange={event => { if (event.target.value) void patchProcess(selectedProcess.id, { action: 'set_employer_unit', employerUnitId: event.target.value }); }} className="mt-1 h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-[11.5px] font-bold text-slate-700"><option value="">Selecione o CNPJ responsável</option>{availableEmployerUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</option>)}</select> : <p className="mt-1 text-xs font-black text-slate-800">{asoRequest?.companyName ?? selectedProcess.employerUnitName ?? 'Não selecionado'} · {CnpjValidator.format(asoRequest?.companyCnpj ?? selectedProcess.employerCnpj ?? '')}</p>}</label>
                       <label className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="text-[9.5px] font-black uppercase text-slate-400">Clínica do ASO</span>{canManageAsoProcess && !asoConfigurationLocked ? <><select value={asoClinicEntityId} disabled={asoClinicsLoading || asoClinics.length === 0} onChange={event => setAsoClinicEntityId(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-[11.5px] font-bold text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"><option value="">{asoClinicsLoading ? 'Carregando clínicas...' : asoClinicsError ? 'Clínicas indisponíveis' : asoClinics.length === 0 ? 'Nenhuma clínica configurada' : 'Selecione a clínica'}</option>{asoClinics.map(clinic => <option key={clinic.id} value={clinic.id} disabled={!clinic.paymentProfile?.configured || !clinic.paymentProfile?.validated}>{clinic.entity?.name ?? 'Clínica'} · {Number(clinic.asoPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}{!clinic.paymentProfile?.validated ? ' · PIX pendente' : ''}</option>)}</select>{asoClinicsError ? <span className="mt-1 block text-[10px] font-semibold text-rose-600">{asoClinicsError}</span> : null}</> : <p className="mt-1 text-xs font-black text-slate-800">{asoRequest?.clinicName ?? asoWorkflow?.clinic?.name ?? 'Não selecionada'}</p>}</label>
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 sm:col-span-2"><span className="text-[9.5px] font-black uppercase text-slate-400">Envio à clínica</span><p className="mt-1 break-all text-xs font-black text-slate-800">{asoRequest?.clinicEmail ?? asoSelectedClinic?.schedulingEmail ?? 'Selecione a clínica'}</p><p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">A solicitação seguirá no corpo do e-mail; a guia em PDF não é obrigatória.</p></div>
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 sm:col-span-2"><span className="text-[9.5px] font-black uppercase text-slate-400">Envio à clínica</span><p className="mt-1 break-all text-xs font-black text-slate-800">{asoRequest?.clinicEmail ?? asoSelectedClinic?.schedulingEmail ?? 'Selecione a clínica'}</p><p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">A solicitação em PDF seguirá anexada ao e-mail da clínica.</p></div>
                       <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="text-[9.5px] font-black uppercase text-slate-400">Valor do ASO</span><p className="mt-1 text-xs font-black text-slate-800">{Number(asoRequest?.clinicPrice ?? asoSelectedClinic?.asoPrice ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p><p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">PIX conforme cadastro validado da clínica</p></div>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -10312,8 +10300,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {!asoFormDataReady && canManageAsoProcess ? <button type="button" disabled={!!asoActionBusy || !selectedProcess.publicFormSubmittedAt} onClick={() => void asoAction('confirm_form_data')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3.5 text-xs font-black text-cyan-800 disabled:opacity-50">{asoActionBusy === 'confirm_form_data' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}Confirmar dados do formulário</button> : null}
                       {canManageAsoProcess && !asoProcessStarted && (!asoRequest || !asoRequestMatchesDraft) ? <button type="button" title={asoRequest ? 'Os dados mudaram; confira e salve novamente a solicitação.' : 'Confere e salva os dados que serão enviados à clínica.'} disabled={!!asoActionBusy} onClick={() => void asoAction('validate_request', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3.5 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'validate_request' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}{asoRequest ? 'Revalidar solicitação' : 'Validar solicitação'}</button> : asoRequestMatchesDraft ? <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Solicitação validada</span> : null}
-                      {canManageAsoProcess ? <button type="button" disabled={asoGuideBusy || !selectedProcess.employerCnpj || !selectedProcess.publicFormSubmittedAt} onClick={() => void generateAsoGuide(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3.5 text-xs font-black text-cyan-800 disabled:opacity-50">{asoGuideBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <Download className="h-3.5 w-3.5"/>}{asoWorkflow?.latestGuideId ? 'Gerar novamente' : 'Gerar solicitação em PDF'} <span className="font-bold text-slate-400">(opcional)</span></button> : null}
-                      {asoWorkflow?.latestGuideId && asoGuideIsCurrent ? <button type="button" onClick={() => void openAsoAsset('guide')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-600"><Eye className="h-3.5 w-3.5"/>Abrir último PDF</button> : null}
+                      {canManageAsoProcess ? <button type="button" disabled={asoGuideBusy || !selectedProcess.employerCnpj || !selectedProcess.publicFormSubmittedAt} onClick={() => void generateAsoGuide(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3.5 text-xs font-black text-cyan-800 disabled:opacity-50">{asoGuideBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <FileText className="h-3.5 w-3.5"/>}{asoWorkflow?.latestGuideId ? 'Gerar novamente' : 'Gerar solicitação em PDF'}</button> : null}
                       {asoWorkflow?.latestGuideId && !asoGuideIsCurrent ? <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-700"><AlertTriangle className="h-3.5 w-3.5"/>PDF anterior desatualizado; gere novamente</span> : null}
                     </div>
                   </section>
@@ -10341,7 +10328,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
                   <section className={`rounded-xl border border-l-4 p-4 ${asoEmailTrackingReady ? 'border-emerald-300 border-l-emerald-600 bg-white' : asoProcessStarted ? 'border-blue-200 border-l-blue-600 bg-white' : 'border-slate-200 border-l-slate-300 bg-slate-50/80'}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-start gap-2.5"><span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${asoEmailTrackingReady ? 'bg-emerald-600 text-white' : asoProcessStarted ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-500'}`}>{asoEmailTrackingReady ? <Check className="h-3.5 w-3.5" /> : <span className="text-[10px] font-black">3</span>}</span><div><p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-700">Envio dos e-mails e acompanhamento</p><p className="mt-1 text-[11px] font-semibold text-slate-500">O sistema registra envio, entrega, abertura, agendamento e recebimento do ASO.</p></div></div>{canManageAsoProcess && asoRequest && (!asoProcessStarted || asoHasPendingStartDelivery) ? <button type="button" disabled={!!asoActionBusy || !asoRequestMatchesDraft || !asoEmailPrerequisitesReady} onClick={() => void asoAction('start_process')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3.5 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'start_process' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <Send className="h-3.5 w-3.5"/>}{asoProcessStarted ? 'Tentar envios pendentes' : 'Enviar e-mails'}</button> : null}</div>
-                    {!asoProcessStarted ? <div className={`mt-3 flex items-start gap-2 rounded-xl border p-3 text-xs font-semibold ${asoEmailPrerequisitesReady ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>{asoEmailPrerequisitesReady ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0"/> : <Clock className="mt-0.5 h-4 w-4 shrink-0"/>}{asoEmailPrerequisitesReady ? 'Pré-requisitos concluídos. O envio dos e-mails está liberado.' : 'Aguardando pagamento, conferência dos dados e data de admissão.'}</div> : <>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" disabled={!asoWorkflow?.latestGuideId || !asoGuideIsCurrent} onClick={() => void openAsoAsset('guide')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 text-xs font-black text-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"><Eye className="h-3.5 w-3.5"/>Ver solicitação</button>
+                      <button type="button" disabled={!asoWorkflow?.paymentProofStoragePath} onClick={() => void openAsoAsset('payment_proof')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 text-xs font-black text-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"><Eye className="h-3.5 w-3.5"/>Ver comprovante de pagamento</button>
+                      <button type="button" onClick={() => void openAsoAsset('social_contract')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 text-xs font-black text-cyan-800"><Eye className="h-3.5 w-3.5"/>Ver contrato social</button>
+                    </div>
+                    {!asoProcessStarted ? <div className={`mt-3 flex items-start gap-2 rounded-xl border p-3 text-xs font-semibold ${asoEmailPrerequisitesReady ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>{asoEmailPrerequisitesReady ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0"/> : <Clock className="mt-0.5 h-4 w-4 shrink-0"/>}{asoEmailPrerequisitesReady ? 'Pré-requisitos concluídos. O envio dos e-mails está liberado.' : 'Aguardando solicitação em PDF, pagamento, conferência dos dados e data de admissão.'}</div> : <>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {[
                           { label: 'Solicitação à clínica', done: Boolean(asoWorkflow?.clinic?.sentAt), failed: asoClinicCommunicationFailed, detail: asoWorkflow?.clinic?.openedAt ? 'E-mail aberto pela clínica' : asoWorkflow?.clinic?.deliveredAt ? 'E-mail entregue à clínica' : `${asoCommunicationStatusLabel(asoWorkflow?.clinic?.emailStatus)} · ${asoWorkflow?.clinic?.email ?? ''}` },
@@ -10358,7 +10350,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         {asoAppointmentDraftAfterAdmission ? <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/><p className="text-[10.5px] font-bold leading-relaxed">O exame está depois da admissão prevista para {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}. O registro será permitido, mas o RH deverá revisar o cronograma.</p></div> : null}
                         {canManageAsoProcess ? <div className="mt-2 flex flex-wrap gap-2"><button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('register_clinic_response', asoAppointmentDraft)} className="h-9 rounded-lg border border-violet-200 bg-white px-3 text-xs font-black text-violet-700">Registrar retorno manual</button><button type="button" disabled={!!asoActionBusy || !asoAppointmentDraft.date || !asoAppointmentDraft.time || !asoAppointmentDraft.location} onClick={() => void asoAction('confirm_appointment', asoAppointmentDraft)} className="h-9 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'confirm_appointment' ? 'Enviando aviso...' : 'Confirmar e avisar colaboradora'}</button></div> : null}
                       </div>
-                      {asoWorkflow?.asoDocument?.storagePath ? <div className={`mt-3 rounded-xl border border-l-4 p-3 ${asoDocumentReady ? 'border-emerald-300 border-l-emerald-600 bg-emerald-50/70' : 'border-amber-200 border-l-amber-500 bg-amber-50/70'}`}><div className="flex items-center gap-2"><span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${asoDocumentReady ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-700'}`}>{asoDocumentReady ? <Check className="h-3.5 w-3.5" /> : <span className="text-[10px] font-black">4</span>}</span><p className="text-[10px] font-black uppercase tracking-wide text-slate-700">ASO recebido e validado</p></div><p className="mt-2 text-xs font-black text-slate-800">{asoWorkflow.asoDocument.fileName}</p><p className="mt-1 text-[11px] text-slate-600">Situação: {asoWorkflow.asoDocument.status}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => void openAsoAsset('aso')} className="h-9 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-700">Ver ASO anexado</button><button type="button" onClick={() => void openAsoAsset('aso', true)} className="h-9 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-700">Baixar PDF</button>{canManageAsoProcess && asoWorkflow.asoDocument.status !== 'approved' ? <><button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('review_aso', { decision: 'approved' })} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar ASO</button><button type="button" disabled={!!asoActionBusy} onClick={() => { const reason = window.prompt('Motivo da rejeição:'); if (reason) void asoAction('review_aso', { decision: 'rejected', reason }); }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Rejeitar</button></> : null}</div><p className="mt-2 text-[10.5px] font-semibold text-emerald-700">Ao aprovar, o sistema verifica os demais documentos e libera automaticamente a etapa do Contador quando tudo estiver concluído.</p></div> : <div className="mt-3 flex items-start gap-2 rounded-xl border border-l-4 border-dashed border-slate-300 border-l-slate-400 bg-slate-50 p-3 text-xs font-semibold text-slate-600"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-200 text-[10px] font-black text-slate-500">4</span><span><strong className="text-slate-700">ASO recebido e validado</strong> — aguardando o upload da colaboradora após a realização do exame.</span></div>}
+                      {asoWorkflow?.asoDocument?.storagePath ? <div className={`mt-3 rounded-xl border border-l-4 p-3 ${asoDocumentReady ? 'border-emerald-300 border-l-emerald-600 bg-emerald-50/70' : 'border-amber-200 border-l-amber-500 bg-amber-50/70'}`}><div className="flex items-center gap-2"><span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${asoDocumentReady ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-700'}`}>{asoDocumentReady ? <Check className="h-3.5 w-3.5" /> : <span className="text-[10px] font-black">4</span>}</span><p className="text-[10px] font-black uppercase tracking-wide text-slate-700">ASO recebido e validado</p></div><p className="mt-2 text-xs font-black text-slate-800">{asoWorkflow.asoDocument.fileName}</p><p className="mt-1 text-[11px] text-slate-600">Situação: {asoWorkflow.asoDocument.status}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => void openAsoAsset('aso')} className="h-9 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-700">Ver ASO anexado</button>{canManageAsoProcess && asoWorkflow.asoDocument.status !== 'approved' ? <><button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('review_aso', { decision: 'approved' })} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar ASO</button><button type="button" disabled={!!asoActionBusy} onClick={() => { const reason = window.prompt('Motivo da rejeição:'); if (reason) void asoAction('review_aso', { decision: 'rejected', reason }); }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Rejeitar</button></> : null}</div><p className="mt-2 text-[10.5px] font-semibold text-emerald-700">Ao aprovar, o sistema verifica os demais documentos e libera automaticamente a etapa do Contador quando tudo estiver concluído.</p></div> : <div className="mt-3 flex items-start gap-2 rounded-xl border border-l-4 border-dashed border-slate-300 border-l-slate-400 bg-slate-50 p-3 text-xs font-semibold text-slate-600"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-200 text-[10px] font-black text-slate-500">4</span><span><strong className="text-slate-700">ASO recebido e validado</strong> — aguardando o upload da colaboradora após a realização do exame.</span></div>}
                     </>}
                   </section>
                 </div> : null}
