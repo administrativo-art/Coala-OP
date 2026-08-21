@@ -1519,6 +1519,7 @@ export type OnboardingProcess = {
       clinicName?: string | null;
       clinicEmail?: string | null;
       clinicPrice?: number | null;
+      clinicLocation?: import('@/features/hr/aso/clinic-location').AsoClinicLocation | null;
       validatedAt?: string | null;
       validatedBy?: string | null;
       validatedByEmail?: string | null;
@@ -1533,6 +1534,7 @@ export type OnboardingProcess = {
     clinic?: {
       email?: string | null;
       name?: string | null;
+      location?: import('@/features/hr/aso/clinic-location').AsoClinicLocation | null;
       communicationId?: string | null;
       providerId?: string | null;
       emailStatus?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | null;

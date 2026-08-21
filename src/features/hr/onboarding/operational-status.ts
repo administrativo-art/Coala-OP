@@ -267,7 +267,6 @@ function resolveCltStatus(process: OnboardingProcess, now: Date) {
   if (
     signatureFailure
     || failedCommunication(aso?.clinic?.emailStatus)
-    || failedCommunication(aso?.candidateStartNotification?.emailStatus)
     || ['failed', 'rejected', 'approval_expired'].includes(aso?.paymentStatus ?? '')
     || failedCommunication(accountant?.email?.status)
     || process.accessProvisioning?.status === 'failed'

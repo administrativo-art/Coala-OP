@@ -1,4 +1,5 @@
 import { renderEmailIconBox } from "@/lib/email/email-icon";
+import type { AsoClinicLocation } from "@/features/hr/aso/clinic-location";
 
 export const ASO_CLINIC_EMAIL_CIDS = {
   logo: "coala-email-logo",
@@ -27,33 +28,6 @@ function escapeHtml(value: string) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
-}
-
-export function candidateAsoProcessStartedEmailContent(input: {
-  candidateName: string;
-  clinicName: string;
-  examType?: 'admission' | 'dismissal';
-}) {
-  const examLabel = input.examType === 'dismissal' ? 'demissional' : 'admissional';
-  const message = [
-    `Olá, ${input.candidateName}.`,
-    '',
-    `O RH iniciou a solicitação do seu exame ${examLabel} junto à ${input.clinicName}.`,
-    'Assim que a clínica informar a data e o horário, você receberá um novo e-mail com o agendamento e as orientações para o exame.',
-  ].join('\n');
-  return {
-    subject: `Seu exame ${examLabel} foi solicitado`,
-    text: message,
-  };
-}
-
-export function renderCandidateAsoProcessStartedEmail(input: {
-  candidateName: string;
-  clinicName: string;
-  examType?: 'admission' | 'dismissal';
-}) {
-  const examLabel = input.examType === 'dismissal' ? 'demissional' : 'admissional';
-  return `<!doctype html><html lang="pt-BR"><body style="margin:0;background:#eee8f3;font-family:Arial,sans-serif;color:#202137"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:28px 12px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#fff;border-radius:24px;overflow:hidden"><tr><td style="padding:24px 30px;border-bottom:1px solid #eee9ee"><div style="font-size:11px;font-weight:900;letter-spacing:1.2px;color:#d92778">COALA SHAKES · ASO</div></td></tr><tr><td style="padding:30px"><h1 style="margin:0;font-size:22px;line-height:1.3">Olá, ${escapeHtml(input.candidateName)}.</h1><p style="margin:15px 0 0;font-size:14px;line-height:1.65;color:#596079">O RH iniciou a solicitação do seu exame <strong style="color:#202137">${escapeHtml(examLabel)}</strong> junto à <strong style="color:#202137">${escapeHtml(input.clinicName)}</strong>.</p><div style="margin-top:20px;padding:17px 18px;border-radius:16px;background:#e9f8fc;border:1px solid #b8e5ef;font-size:13px;line-height:1.6;color:#24566a"><strong>Próximo passo</strong><br />Assim que a clínica informar a data e o horário, você receberá um novo e-mail com o agendamento, o local e as orientações para o exame.</div></td></tr><tr><td style="padding:17px 30px 22px;border-top:1px solid #eee9ee;font-size:10px;line-height:1.6;color:#918999">Mensagem automática do processo de formalização.</td></tr></table></td></tr></table></body></html>`;
 }
 
 export function clinicAsoEmailContent(input: {
@@ -198,11 +172,11 @@ export function renderClinicAsoRequestEmail(input: {
 export function candidateAsoEmailContent(input: {
   candidateName: string;
   appointmentLabel: string;
-  instructions?: string | null;
   uploadUrl: string;
+  location?: AsoClinicLocation;
   examType?: 'admission' | 'dismissal';
 }) {
-  const location = MEDCLINIC_CANDIDATE_LOCATION;
+  const location = input.location ?? MEDCLINIC_CANDIDATE_LOCATION;
   const message = [
     `Olá, ${input.candidateName}.`,
     '',
@@ -213,12 +187,9 @@ export function candidateAsoEmailContent(input: {
     `Clínica: ${location.name}`,
     `Endereço: ${location.address}`,
     location.city,
-    `Referência: ${location.reference}`,
-  ].join('\n');
-  const afterActionMessage = [
-    ...(input.instructions ? [`Orientações adicionais: ${input.instructions}`, ''] : []),
-    'Apresente-se com antecedência e leve um documento oficial com foto, como CIN ou RG, CNH ou passaporte.',
-  ].join('\n');
+    location.reference ? `Referência: ${location.reference}` : null,
+  ].filter(Boolean).join('\n');
+  const afterActionMessage = 'Apresente-se com antecedência e leve um documento oficial com foto, como CIN ou RG, CNH ou passaporte.';
   return {
     subject: `ASO ${input.examType === 'dismissal' ? 'demissional' : 'admissional'} - Agendamento`,
     title: undefined,
@@ -235,10 +206,10 @@ export function renderCandidateAsoAppointmentEmail(input: {
   appointmentDate: string;
   appointmentTime: string;
   uploadUrl: string;
-  instructions?: string | null;
+  location?: AsoClinicLocation;
   examType?: 'admission' | 'dismissal';
 }) {
-  const location = MEDCLINIC_CANDIDATE_LOCATION;
+  const location = input.location ?? MEDCLINIC_CANDIDATE_LOCATION;
   const examLabel = input.examType === 'dismissal' ? 'Exame demissional' : 'Exame admissional';
   const examDescription = input.examType === 'dismissal'
     ? 'Tudo pronto para o seu exame demissional. Guarde este bilhete — é só apresentar na recepção.'
@@ -258,9 +229,6 @@ export function renderCandidateAsoAppointmentEmail(input: {
     timeZone: 'America/Belem',
   }).format(appointment);
   const name = escapeHtml(input.candidateName || 'candidato(a)');
-  const extraInstructions = input.instructions
-    ? `<tr><td width="30" align="center" valign="top" style="padding-top:13px">${renderEmailIconBox({ src: "https://op.coalashakes.com/email/icons/info-gray.png", iconSize: 13, boxSize: 26, background: "#fff1f7", radius: 8 })}</td><td valign="top" style="padding:13px 0 0 8px;font-size:13px;line-height:1.55;color:#22233b;word-break:normal;overflow-wrap:break-word"><strong>Orientação da clínica:</strong> ${escapeHtml(input.instructions)}</td></tr>`
-    : '';
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -301,7 +269,7 @@ export function renderCandidateAsoAppointmentEmail(input: {
                   <div style="font-size:9px;font-weight:900;letter-spacing:1.3px;color:#20aeca">LOCAL DO EXAME</div>
                   <div style="margin-top:8px;font-size:16px;font-weight:900;color:#202137">${escapeHtml(location.name)}</div>
                   <div style="margin-top:14px;font-size:12px;line-height:1.65;color:#394057"><img src="https://op.coalashakes.com/email/icons/map-pin-pink.png" width="13" height="13" alt="" style="display:inline-block;vertical-align:-2px;border:0" />&nbsp; ${escapeHtml(location.address)}<br />&nbsp;&nbsp;&nbsp;&nbsp;${escapeHtml(location.city)}</div>
-                  <div style="margin-top:3px;font-size:11px;color:#8a8fa2">&nbsp;&nbsp;&nbsp;&nbsp;Referência: ${escapeHtml(location.reference)}</div>
+                  ${location.reference ? `<div style="margin-top:3px;font-size:11px;color:#8a8fa2">&nbsp;&nbsp;&nbsp;&nbsp;Referência: ${escapeHtml(location.reference)}</div>` : ''}
                 </td>
               </tr>
             </table>
@@ -314,7 +282,6 @@ export function renderCandidateAsoAppointmentEmail(input: {
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:11px">
               <tr><td width="30" align="center" valign="top">${renderEmailIconBox({ src: "https://op.coalashakes.com/email/icons/file-text-pink.png", iconSize: 13, boxSize: 26, background: "#fff1f7", radius: 8 })}</td><td style="padding-left:8px;font-size:13px;line-height:1.5;color:#22233b"><strong>Documento oficial com foto</strong> — CIN ou RG, CNH ou passaporte.</td></tr>
               <tr><td width="30" align="center" valign="top" style="padding-top:13px">${renderEmailIconBox({ src: "https://op.coalashakes.com/email/icons/clock-3-teal.png", iconSize: 13, boxSize: 26, background: "#e9f9fd", radius: 8 })}</td><td style="padding:13px 0 0 8px;font-size:13px;line-height:1.5;color:#22233b"><strong>Chegue com antecedência</strong> para o cadastro na recepção.</td></tr>
-              ${extraInstructions}
             </table>
           </td></tr>
           <tr><td style="padding:24px 32px 28px">
