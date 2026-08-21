@@ -308,7 +308,7 @@ export function EmployeeResignationDetail({
   const nextActionOwner = ownerLabel(nextPrimaryStep?.owner);
   return (
     <div className="min-h-full bg-[#f0eee9] px-4 py-5 text-slate-950 sm:px-7 sm:py-7">
-      <div className="mx-auto max-w-[1380px] space-y-5">
+      <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-3"><Button asChild variant="outline" className="rounded-xl bg-white"><Link href="/dashboard/dp/terminations"><ArrowLeft className="h-4 w-4" />Voltar</Link></Button><Badge className="bg-pink-100 text-pink-700 hover:bg-pink-100">{isEmployerDismissal ? "Dispensa sem justa causa" : "Pedido de demissão"}</Badge><span className="ml-auto font-mono text-xs text-slate-400">{process.request.protocol}</span></div>
         {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{error}</div> : null}
         <section className="overflow-hidden rounded-[24px] border bg-white shadow-sm">

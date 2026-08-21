@@ -1267,7 +1267,7 @@ export type OnboardingAccessProvisioningState = {
     };
   };
   email?: {
-    status?: 'not_sent' | 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained';
+    status?: 'not_sent' | 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed';
     providerId?: string | null;
     recipient?: string | null;
     acceptedAt?: string | null;
@@ -1537,10 +1537,11 @@ export type OnboardingProcess = {
       location?: import('@/features/hr/aso/clinic-location').AsoClinicLocation | null;
       communicationId?: string | null;
       providerId?: string | null;
-      emailStatus?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | null;
+      emailStatus?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed' | null;
       sentAt?: string | null;
       deliveredAt?: string | null;
       openedAt?: string | null;
+      clickedAt?: string | null;
       repliedAt?: string | null;
       lastError?: string | null;
     } | null;
@@ -1562,7 +1563,9 @@ export type OnboardingProcess = {
       sentAt?: string | null;
       deliveredAt?: string | null;
       openedAt?: string | null;
+      clickedAt?: string | null;
       uploadExpiresAt?: string | null;
+      lastError?: string | null;
     } | null;
     candidateStartNotification?: {
       communicationId?: string | null;
@@ -1571,6 +1574,7 @@ export type OnboardingProcess = {
       sentAt?: string | null;
       deliveredAt?: string | null;
       openedAt?: string | null;
+      clickedAt?: string | null;
       lastError?: string | null;
     } | null;
     asoDocument?: {
@@ -1606,7 +1610,7 @@ export type OnboardingProcess = {
       recipient?: string | null;
       communicationId?: string | null;
       providerId?: string | null;
-      status?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | null;
+      status?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed' | null;
       sentAt?: string | null;
       deliveredAt?: string | null;
       openedAt?: string | null;

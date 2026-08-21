@@ -9,6 +9,7 @@ import {
 } from '@/features/hr/onboarding/image-voice-consent-state';
 import { presentOnboardingDocumentForAnswers } from '@/features/hr/onboarding/document-applicability';
 import { PjPublicOnboardingForm } from '@/features/hr/onboarding-pj/public-form';
+import { PageContainer } from '@/components/layout/page-container';
 
 type PublicOnboardingDocument = {
   id: string;
@@ -623,10 +624,10 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
     <div className="onboarding-publico min-h-screen bg-[#F4ECD8] text-[#2A1F2A]">
       <PageStyles />
       <header className="border-b border-[#2A1F2A]/10 bg-[#F4ECD8]/95">
-        <div className="mx-auto flex h-[68px] max-w-6xl items-center justify-between px-5">
+        <PageContainer variant="compact" className="flex h-[68px] items-center justify-between px-5">
           <Link href="/vagas" aria-label="Coala Shakes vagas"><Logo /></Link>
           <span className="rounded-full bg-white px-4 py-2 text-xs font-bold text-[#5B4C5B] stk">Onboarding</span>
-        </div>
+        </PageContainer>
       </header>
 
       <div
@@ -643,7 +644,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
         <strong className="whitespace-nowrap text-[11px]">{formatCompactRemainingTime(data.publicTokenExpiresAt, clockNow)}</strong>
       </div>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-5 py-8 lg:grid-cols-[0.85fr_1.15fr]">
+      <PageContainer as="main" variant="compact" className="grid gap-6 px-5 py-8 lg:grid-cols-[0.85fr_1.15fr]">
         <section className="stk rounded-[30px] bg-[#2A1F2A] p-7 text-white md:p-8 lg:sticky lg:top-6 lg:self-start">
           <div className="px-5">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-white/40">Próximo passo</p>
@@ -1287,7 +1288,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                   : "Enviar informações"}
           </button>
         </form>
-      </main>
+      </PageContainer>
     </div>
   );
 }

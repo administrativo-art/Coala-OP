@@ -18,6 +18,10 @@ import {
 } from '@/features/hr/lib/client';
 import { isPublicRecruitmentHost as isRecruitmentHost } from '@/lib/public-recruitment-host';
 import { LockKeyhole, ShieldAlert } from 'lucide-react';
+import {
+  PageContainer,
+  type PageContainerVariant,
+} from '@/components/layout/page-container';
 
 function shouldSurfaceLoginAccessNotice(payload: HrLoginAccessPayload) {
   return (
@@ -67,6 +71,18 @@ function shouldOpenLoginAccessGate(payload: HrLoginAccessPayload | null) {
   );
 }
 
+function resolvePersonalPageContainerVariant(pathname: string): PageContainerVariant {
+  if (pathname === '/dashboard/hr/org-chart') {
+    return 'fluid';
+  }
+
+  if (pathname === '/dashboard/dp/schedules' || pathname.startsWith('/dashboard/dp/schedules/')) {
+    return 'wide';
+  }
+
+  return 'default';
+}
+
 function LoadingSkeleton() {
     return (
       <div className="flex h-screen w-full">
@@ -106,6 +122,7 @@ export default function DashboardLayout({
     || pathname.startsWith('/dashboard/hr/recruitment')
     || pathname === '/dashboard/hr/org-chart'
     || pathname.startsWith('/dashboard/stock/uniforms');
+  const personalPageContainerVariant = resolvePersonalPageContainerVariant(pathname);
 
   useEffect(() => {
     document.body.classList.toggle('personal-density-active', personalSection);
@@ -247,6 +264,20 @@ export default function DashboardLayout({
     return <LoadingSkeleton />;
   }
 
+  const loginAccessNotice = loginAccessState && shouldSurfaceLoginAccessNotice(loginAccessState) ? (
+    <Alert variant={loginAccessState.evaluation.status === 'blocked' ? 'destructive' : 'default'}>
+      {loginAccessState.evaluation.status === 'blocked' ? (
+        <ShieldAlert className="h-4 w-4" />
+      ) : (
+        <LockKeyhole className="h-4 w-4" />
+      )}
+      <AlertTitle>{buildLoginAccessMessage(loginAccessState).title}</AlertTitle>
+      <AlertDescription>
+        {buildLoginAccessMessage(loginAccessState).description}
+      </AlertDescription>
+    </Alert>
+  ) : null;
+
   return (
     <div className="flex min-h-screen w-full flex-col bg-[var(--bg)]">
       <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
@@ -256,20 +287,21 @@ export default function DashboardLayout({
           className={`min-w-0 flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 ${personalSection ? 'personal-section-density' : ''}`}
           data-section={personalSection ? 'personal' : undefined}
         >
-          {loginAccessState && shouldSurfaceLoginAccessNotice(loginAccessState) && (
-            <Alert variant={loginAccessState.evaluation.status === 'blocked' ? 'destructive' : 'default'}>
-              {loginAccessState.evaluation.status === 'blocked' ? (
-                <ShieldAlert className="h-4 w-4" />
-              ) : (
-                <LockKeyhole className="h-4 w-4" />
-              )}
-              <AlertTitle>{buildLoginAccessMessage(loginAccessState).title}</AlertTitle>
-              <AlertDescription>
-                {buildLoginAccessMessage(loginAccessState).description}
-              </AlertDescription>
-            </Alert>
+          {personalSection ? (
+            <PageContainer
+              variant={personalPageContainerVariant}
+              className="flex min-h-0 flex-1 flex-col gap-4 md:gap-8"
+              data-page-container={personalPageContainerVariant}
+            >
+              {loginAccessNotice}
+              {children}
+            </PageContainer>
+          ) : (
+            <>
+              {loginAccessNotice}
+              {children}
+            </>
           )}
-          {children}
         </main>
         {process.env.NODE_ENV === 'development' ? (
           <DebugPanel dataLoadTime={dataLoadTime} />

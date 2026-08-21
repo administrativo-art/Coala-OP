@@ -606,7 +606,7 @@ export function TerminationDetailPage({ id }: { id: string }) {
 
   return (
     <div className="min-h-full bg-[#f0eee9] px-4 py-5 text-[#1d1d26] sm:px-7 sm:py-7">
-      <div className="mx-auto max-w-[1280px] space-y-5">
+      <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-3">
           <Button asChild variant="outline" className="h-10 rounded-xl border-[#e2e0da] bg-white px-4 font-bold text-slate-700 shadow-sm">
             <Link href="/dashboard/dp/terminations">

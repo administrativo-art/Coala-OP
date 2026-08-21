@@ -188,7 +188,7 @@ function status(
 }
 
 function failedCommunication(value?: string | null) {
-  return ['failed', 'bounced', 'complained'].includes(value ?? '');
+  return ['failed', 'bounced', 'complained', 'suppressed'].includes(value ?? '');
 }
 
 function resolvePjStatus(process: OnboardingProcess, now: Date) {
