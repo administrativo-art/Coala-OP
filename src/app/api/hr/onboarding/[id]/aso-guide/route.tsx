@@ -3,11 +3,10 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cwd } from 'node:process';
 import { NextRequest, NextResponse } from 'next/server';
-import { renderToBuffer } from '@react-pdf/renderer';
 import { getStorage } from 'firebase-admin/storage';
 
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
-import { MedclincReferralPdf } from '@/features/hr/aso/medclinc-referral-pdf';
+import { renderMedclincReferralPdf } from '@/features/hr/aso/medclinc-referral-pdf';
 import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -69,7 +68,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     readFile(path.join(cwd(), 'src/features/hr/aso/assets/medclinc-logo.jpg')),
     readFile(path.join(cwd(), 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png')),
   ]);
-  const pdf = await renderToBuffer(<MedclincReferralPdf data={{
+  const pdf = await renderMedclincReferralPdf({
     companyName: text(process.employerUnitName) || text(process.unitName) || 'Empresa responsável',
     employerCnpj: CnpjValidator.format(employerCnpj),
     employeeName,
@@ -80,7 +79,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     logoDataUri: `data:image/jpeg;base64,${logo.toString('base64')}`,
     letterheadLogoDataUri: `data:image/png;base64,${letterheadLogo.toString('base64')}`,
     examType,
-  }} />);
+  });
   const buffer = Buffer.from(pdf);
   const hashSha256 = createHash('sha256').update(buffer).digest('hex');
   const generatedId = randomUUID();

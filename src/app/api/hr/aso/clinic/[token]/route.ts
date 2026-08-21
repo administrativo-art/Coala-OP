@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { MEDCLINIC_CANDIDATE_LOCATION } from '@/features/hr/aso/emails';
+import { isAsoAppointmentAfterAdmission } from '@/features/hr/aso/dates';
 import { hashAsoToken } from '@/features/hr/aso/workflow';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 
@@ -27,7 +28,11 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ to
   const process = snapshot.data();
   if (expired(process.asoClinicTokenExpiresAt)) return NextResponse.json({ error: 'Este link expirou. Entre em contato com o RH.' }, { status: 410 });
   const workflow = record(process.asoWorkflow); const appointment = record(workflow.appointment);
-  return NextResponse.json({ candidateName: text(process.candidateName, 240), alreadyResponded: Boolean(text(appointment.proposedAt, 40)) });
+  return NextResponse.json({
+    candidateName: text(process.candidateName, 240),
+    expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
+    alreadyResponded: Boolean(text(appointment.proposedAt, 40)),
+  });
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ token: string }> }) {
@@ -44,5 +49,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     snapshot.ref.set({ asoWorkflow: { ...workflow, status: 'appointment_pending_review', appointmentStatus: 'awaiting_clinic', appointment: { date, time, location, instructions: null, source: 'clinic_form', responseText: null, confidence: 1, proposedAt: now }, clinic: { ...record(workflow.clinic), repliedAt: now }, updatedAt: now }, updatedAt: now }, { merge: true }),
     snapshot.ref.collection('asoEvents').doc(randomUUID()).set({ type: 'CLINIC_SCHEDULE_SUBMITTED', at: now, actorId: null, actorEmail: null, source: 'clinic_form', date, time }),
   ]);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    appointmentAfterAdmission: isAsoAppointmentAfterAdmission(date, text(process.expectedAdmissionDate, 10) || null),
+  });
 }

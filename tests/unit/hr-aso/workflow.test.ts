@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { createAsoToken, extractAppointmentProposal, hashAsoToken, missingAsoEmailPrerequisites } from '../../../src/features/hr/aso/workflow';
+import {
+  createAsoToken,
+  extractAppointmentProposal,
+  hashAsoToken,
+  missingAsoEmailPrerequisites,
+} from '../../../src/features/hr/aso/workflow';
+import { isAsoAppointmentAfterAdmission } from '../../../src/features/hr/aso/dates';
+import { renderMedclincReferralPdf } from '../../../src/features/hr/aso/medclinc-referral-pdf';
 import { engagementStatusFromResendEvent } from '../../../src/lib/email/resend-events';
 
 describe('fluxo do ASO', () => {
@@ -26,6 +33,26 @@ describe('fluxo do ASO', () => {
     assert.equal(result.date, '2026-07-24');
     assert.equal(result.time, null);
     assert.ok(result.confidence < 1);
+  });
+
+  test('alerta quando o exame fica depois da admissão prevista', () => {
+    assert.equal(isAsoAppointmentAfterAdmission('2026-09-23', '2026-09-22'), true);
+    assert.equal(isAsoAppointmentAfterAdmission('2026-09-22', '2026-09-22'), false);
+    assert.equal(isAsoAppointmentAfterAdmission('2026-09-21', '2026-09-22'), false);
+    assert.equal(isAsoAppointmentAfterAdmission(null, '2026-09-22'), false);
+  });
+
+  test('gera a guia do ASO como PDF válido sem depender do reconciliador do React', async () => {
+    const pdf = await renderMedclincReferralPdf({
+      companyName: 'Quiosque Tirirical',
+      employerCnpj: '14.276.603/0001-25',
+      employeeName: 'Thaise Correia Marinho',
+      employeeCpf: '058.136.883-58',
+      jobFunction: 'Atendente de balcão',
+      examType: 'admission',
+    });
+    assert.equal(Buffer.from(pdf).subarray(0, 5).toString(), '%PDF-');
+    assert.ok(pdf.length > 5_000);
   });
 
   test('mapeia abertura e clique como engajamento', () => {
