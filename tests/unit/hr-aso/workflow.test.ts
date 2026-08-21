@@ -8,6 +8,7 @@ import {
   missingAsoEmailPrerequisites,
 } from '../../../src/features/hr/aso/workflow';
 import { isAsoAppointmentAfterAdmission } from '../../../src/features/hr/aso/dates';
+import { ASO_GUIDE_TEMPLATE_VERSION } from '../../../src/features/hr/aso/guide-version';
 import {
   MEDCLINC_REFERRAL_COMPANY_NAME,
   renderMedclincReferralPdf,
@@ -47,6 +48,7 @@ describe('fluxo do ASO', () => {
 
   test('gera a guia do ASO como PDF válido sem depender do reconciliador do React', async () => {
     assert.equal(MEDCLINC_REFERRAL_COMPANY_NAME, 'CT Sorvetes LTDA');
+    assert.equal(ASO_GUIDE_TEMPLATE_VERSION, 'medclinic-v3');
     const pdf = await renderMedclincReferralPdf({
       employerCnpj: '14.276.603/0001-25',
       employeeName: 'Thaise Correia Marinho',

@@ -7,6 +7,7 @@ import { getStorage } from 'firebase-admin/storage';
 
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
 import { renderMedclincReferralPdf } from '@/features/hr/aso/medclinc-referral-pdf';
+import { ASO_GUIDE_TEMPLATE_VERSION } from '@/features/hr/aso/guide-version';
 import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -34,7 +35,7 @@ function formatCpf(value: unknown) {
     : text(value);
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const access = await assertFormalizationAccess(request, 'aso.manage').catch(() => null);
   if (!access) return NextResponse.json({ error: 'Sem permissão para gerar a guia do ASO.' }, { status: 403 });
 
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     id: generatedId,
     kind: examType === 'dismissal' ? 'aso_dismissal_referral' : 'aso_admission_referral',
     provider: 'MedClinic',
-    templateVersion: 'medclinic-v2',
+    templateVersion: ASO_GUIDE_TEMPLATE_VERSION,
     mimeType: 'application/pdf',
     fileName,
     storagePath,
@@ -121,6 +122,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       latestGuideId: generatedId,
       latestGuideHashSha256: hashSha256,
       latestGuideGeneratedAt: now,
+      latestGuideTemplateVersion: ASO_GUIDE_TEMPLATE_VERSION,
       updatedAt: now,
     },
     updatedAt: now,

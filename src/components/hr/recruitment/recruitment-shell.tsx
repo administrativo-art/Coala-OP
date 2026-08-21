@@ -88,6 +88,8 @@ import {
   type OnboardingSortMode,
 } from '@/features/hr/onboarding/operational-status';
 import { isAsoAppointmentAfterAdmission } from '@/features/hr/aso/dates';
+import { ASO_GUIDE_TEMPLATE_VERSION } from '@/features/hr/aso/guide-version';
+import { shouldPollAsoPayment } from '@/features/hr/aso/payment-status';
 import { readHrJsonResponse } from '@/features/hr/lib/client-response';
 import {
   applicableOnboardingDocuments,
@@ -6902,6 +6904,10 @@ type AsoProcessStartResult = {
   warning?: string | null;
 };
 
+type AsoPaymentWorkflowPatch = Pick<NonNullable<OnboardingProcess['asoWorkflow']>,
+  'paymentRequestId' | 'paymentStatus' | 'paymentProofStoragePath' | 'paymentConfirmedAt'
+>;
+
 function asoCommunicationStatusLabel(status?: string | null) {
   const labels: Record<string, string> = {
     pending: 'Preparando envio',
@@ -8290,7 +8296,7 @@ function TrainingPanel({ process, getToken, canManage, onRefresh }: { process: O
   );
 }
 
-function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh }: {
+function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh, onProcessUpdated, onAsoPaymentUpdated, onAsoWorkflowUpdated }: {
   processes: OnboardingProcess[];
   roles: JobRole[];
   jobFunctions: JobFunction[];
@@ -8307,6 +8313,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   canReviewDocuments: boolean;
   canSendSignatures: boolean;
   onRefresh: () => void;
+  onProcessUpdated: (process: OnboardingProcess) => void;
+  onAsoPaymentUpdated: (processId: string, workflow: AsoPaymentWorkflowPatch) => void;
+  onAsoWorkflowUpdated: (processId: string, workflow: NonNullable<OnboardingProcess['asoWorkflow']>) => void;
 }) {
   const [search, setSearch] = useState('');
   const [phaseFilter, setPhaseFilter] = useState<string>('all');
@@ -8493,6 +8502,32 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }, [selectedProcess?.id]);
 
   useEffect(() => {
+    const processId = selectedProcess?.id;
+    const workflow = selectedProcess?.asoWorkflow;
+    if (view !== 'detail' || !canViewAso || !processId || !shouldPollAsoPayment(workflow?.paymentRequestId, workflow?.paymentStatus)) return;
+    let disposed = false;
+    let requestRunning = false;
+    const refreshPaymentStatus = async () => {
+      if (requestRunning) return;
+      requestRunning = true;
+      try {
+        const payload = await apiFetch(`/api/hr/onboarding/${processId}/aso-workflow?view=payment`, getToken) as { workflow?: AsoPaymentWorkflowPatch };
+        if (!disposed && payload.workflow) onAsoPaymentUpdated(processId, payload.workflow);
+      } catch {
+        // O reconciliador do servidor continua ativo; a próxima leitura da tela tenta novamente.
+      } finally {
+        requestRunning = false;
+      }
+    };
+    void refreshPaymentStatus();
+    const timer = window.setInterval(() => void refreshPaymentStatus(), 30_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [canViewAso, getToken, onAsoPaymentUpdated, selectedProcess?.asoWorkflow?.paymentRequestId, selectedProcess?.asoWorkflow?.paymentStatus, selectedProcess?.id, view]);
+
+  useEffect(() => {
     if (!canViewAso || view !== 'detail') return;
     let cancelled = false;
     setAsoClinicsLoading(true);
@@ -8535,11 +8570,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       const payload = await apiFetch(`/api/hr/onboarding/${processId}`, getToken, {
         method: 'PATCH',
         body: JSON.stringify(body),
-      }) as { process?: { currentStage?: OnboardingStageId | null } };
+      }) as { process?: OnboardingProcess };
       if (payload.process?.currentStage === 'accountant' && ['document_status', 'document_status_bulk'].includes(String(body.action))) {
         setPhaseId('accountant');
       }
-      onRefresh();
+      if (payload.process) onProcessUpdated(payload.process);
+      else onRefresh();
       return payload;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao atualizar integração.');
@@ -8555,6 +8591,13 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       action: 'update_expected_admission_date',
       expectedAdmissionDate: expectedAdmissionDateDraft,
     });
+  }
+
+  async function refreshAsoWorkflow(processId: string) {
+    const payload = await apiFetch(`/api/hr/onboarding/${processId}/aso-workflow?view=workflow`, getToken) as {
+      workflow?: NonNullable<OnboardingProcess['asoWorkflow']>;
+    };
+    if (payload.workflow) onAsoWorkflowUpdated(processId, payload.workflow);
   }
 
   async function cancelOnboardingProcess(process: OnboardingProcess) {
@@ -8575,6 +8618,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     try {
       const token = await getToken();
       const response = await fetch(`/api/hr/onboarding/${process.id}/aso-guide`, {
+        method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) await readHrJsonResponse(response, 'Falha ao gerar a guia do ASO.');
@@ -8586,7 +8630,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
         blob,
         `solicitacao-aso-${(process.candidateName ?? 'colaborador').replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase()}.pdf`,
       );
-      onRefresh();
+      await refreshAsoWorkflow(process.id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Falha ao gerar a guia do ASO.');
     } finally {
@@ -8607,7 +8651,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
         setAsoStartResult({ ...payload.result, warning: payload.warning ?? null });
       }
       if (payload.advancedToAccountant) setPhaseId('accountant');
-      onRefresh();
+      await refreshAsoWorkflow(selectedProcess.id);
+      if (payload.advancedToAccountant) onRefresh();
       return payload;
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Falha ao atualizar o fluxo do ASO.';
@@ -9690,6 +9735,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     selectedProcess.expectedAdmissionDate,
   );
   const asoRequestReady = Boolean(asoRequest && asoRequestMatchesDraft && asoFormDataReady && accountantAdmissionDateReady);
+  const asoPaymentPolling = shouldPollAsoPayment(asoWorkflow?.paymentRequestId, asoWorkflow?.paymentStatus);
+  const asoGuideIsCurrent = asoWorkflow?.latestGuideTemplateVersion === ASO_GUIDE_TEMPLATE_VERSION;
   const asoEmailTrackingReady = Boolean(asoProcessStarted && !asoHasPendingStartDelivery);
   const asoDocumentReady = asoWorkflow?.asoDocument?.status === 'approved';
   const asoProgressSteps = [asoRequestReady, asoPaymentReady, asoEmailTrackingReady, asoDocumentReady];
@@ -10264,9 +10311,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {!asoFormDataReady && canManageAsoProcess ? <button type="button" disabled={!!asoActionBusy || !selectedProcess.publicFormSubmittedAt} onClick={() => void asoAction('confirm_form_data')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3.5 text-xs font-black text-cyan-800 disabled:opacity-50">{asoActionBusy === 'confirm_form_data' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}Confirmar dados do formulário</button> : null}
-                      {canManageAsoProcess && !asoProcessStarted ? <button type="button" title={asoRequest ? 'Atualiza a solicitação com os dados atuais antes do envio à clínica.' : 'Confere e salva os dados que serão enviados à clínica.'} disabled={!!asoActionBusy} onClick={() => void asoAction('validate_request', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3.5 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'validate_request' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}{asoRequest ? 'Atualizar solicitação' : 'Validar solicitação'}</button> : null}
-                      {canManageAsoProcess ? <button type="button" disabled={asoGuideBusy || !selectedProcess.employerCnpj || !selectedProcess.publicFormSubmittedAt} onClick={() => void generateAsoGuide(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3.5 text-xs font-black text-cyan-800 disabled:opacity-50">{asoGuideBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <Download className="h-3.5 w-3.5"/>}Baixar solicitação em PDF <span className="font-bold text-slate-400">(opcional)</span></button> : null}
-                      {asoWorkflow?.latestGuideId ? <button type="button" onClick={() => void openAsoAsset('guide')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-600"><Eye className="h-3.5 w-3.5"/>Abrir último PDF</button> : null}
+                      {canManageAsoProcess && !asoProcessStarted && (!asoRequest || !asoRequestMatchesDraft) ? <button type="button" title={asoRequest ? 'Os dados mudaram; confira e salve novamente a solicitação.' : 'Confere e salva os dados que serão enviados à clínica.'} disabled={!!asoActionBusy} onClick={() => void asoAction('validate_request', { clinicEntityId: asoClinicEntityId })} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-700 px-3.5 text-xs font-black text-white disabled:opacity-50">{asoActionBusy === 'validate_request' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}{asoRequest ? 'Revalidar solicitação' : 'Validar solicitação'}</button> : asoRequestMatchesDraft ? <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Solicitação validada</span> : null}
+                      {canManageAsoProcess ? <button type="button" disabled={asoGuideBusy || !selectedProcess.employerCnpj || !selectedProcess.publicFormSubmittedAt} onClick={() => void generateAsoGuide(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-white px-3.5 text-xs font-black text-cyan-800 disabled:opacity-50">{asoGuideBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <Download className="h-3.5 w-3.5"/>}Gerar e baixar solicitação em PDF <span className="font-bold text-slate-400">(opcional)</span></button> : null}
+                      {asoWorkflow?.latestGuideId && asoGuideIsCurrent ? <button type="button" onClick={() => void openAsoAsset('guide')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-600"><Eye className="h-3.5 w-3.5"/>Abrir último PDF</button> : null}
+                      {asoWorkflow?.latestGuideId && !asoGuideIsCurrent ? <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-black text-amber-700"><AlertTriangle className="h-3.5 w-3.5"/>PDF anterior desatualizado; gere novamente</span> : null}
                     </div>
                   </section>
 
@@ -10279,7 +10327,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                           <p className="mt-1 text-[11px] font-semibold text-slate-500">O PIX usa o valor e os dados bancários validados no cadastro da clínica.</p>
                         </div>
                       </div>
-                      {asoWorkflow?.paymentRequestId && !asoPaymentReady && canManageAsoProcess ? <button type="button" disabled={!!asoActionBusy} onClick={() => void asoAction('refresh_payment')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 text-[11px] font-black text-amber-800 disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5"/>{asoActionBusy === 'refresh_payment' ? 'Consultando...' : 'Atualizar PIX'}</button> : null}
+                      {asoPaymentPolling ? <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 text-[11px] font-black text-cyan-800"><RefreshCw className="h-3.5 w-3.5 animate-spin"/>Atualização automática</span> : null}
                     </div>
                     <div className={`mt-3 flex items-start gap-3 rounded-xl border p-3 ${asoPaymentReady ? 'border-emerald-200 bg-emerald-50' : asoWorkflow?.paymentRequestId ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
                       <Wallet className={`mt-0.5 h-4 w-4 shrink-0 ${asoPaymentReady ? 'text-emerald-600' : asoWorkflow?.paymentRequestId ? 'text-amber-600' : 'text-slate-400'}`}/>
@@ -11073,6 +11121,30 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const updateOnboardingProcess = useCallback((updated: OnboardingProcess) => {
+    setOnboardingProcesses(current => current.map(process => process.id === updated.id ? updated : process));
+  }, []);
+
+  const updateOnboardingAsoPayment = useCallback((processId: string, workflow: AsoPaymentWorkflowPatch) => {
+    setOnboardingProcesses(current => current.map(process => {
+      if (process.id !== processId) return process;
+      const previous = process.asoWorkflow;
+      if (
+        previous?.paymentRequestId === workflow.paymentRequestId &&
+        previous?.paymentStatus === workflow.paymentStatus &&
+        previous?.paymentProofStoragePath === workflow.paymentProofStoragePath &&
+        previous?.paymentConfirmedAt === workflow.paymentConfirmedAt
+      ) return process;
+      return { ...process, asoWorkflow: { ...previous, ...workflow } };
+    }));
+  }, []);
+
+  const updateOnboardingAsoWorkflow = useCallback((processId: string, workflow: NonNullable<OnboardingProcess['asoWorkflow']>) => {
+    setOnboardingProcesses(current => current.map(process => process.id === processId
+      ? { ...process, asoWorkflow: { ...process.asoWorkflow, ...workflow } }
+      : process));
+  }, []);
+
   // ── Filters ────────────────────────────────────────────────────────────────
 
   const locationOptions = useMemo(() => {
@@ -11837,6 +11909,9 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           canReviewDocuments={canReviewDocuments}
           canSendSignatures={canSendSignatures}
           onRefresh={loadData}
+          onProcessUpdated={updateOnboardingProcess}
+          onAsoPaymentUpdated={updateOnboardingAsoPayment}
+          onAsoWorkflowUpdated={updateOnboardingAsoWorkflow}
         />
       )}
 

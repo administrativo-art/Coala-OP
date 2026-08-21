@@ -1469,6 +1469,7 @@ export type OnboardingProcess = {
     latestGuideId?: string | null;
     latestGuideHashSha256?: string | null;
     latestGuideGeneratedAt?: string | null;
+    latestGuideTemplateVersion?: string | null;
     clinicEntityId?: string | null;
     paymentRequestId?: string | null;
     paymentStatus?: 'draft' | 'awaiting_financial_authorization' | 'ready_to_submit' | 'submitting' | 'awaiting_bank_approval' | 'processing' | 'paid' | 'rejected' | 'approval_expired' | 'failed' | 'cancelled' | null;

@@ -155,6 +155,32 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const process = snapshot.data() ?? {};
   const workflow = record(process.asoWorkflow);
   const asset = request.nextUrl.searchParams.get('asset');
+  const view = request.nextUrl.searchParams.get('view');
+  if (view === 'workflow') {
+    return NextResponse.json({ workflow }, { headers: { 'Cache-Control': 'private, no-store' } });
+  }
+  if (view === 'payment') {
+    const paymentRequestId = text(workflow.paymentRequestId, 180);
+    if (!paymentRequestId) {
+      return NextResponse.json({
+        workflow: {
+          paymentRequestId: null,
+          paymentStatus: workflow.paymentStatus ?? null,
+          paymentProofStoragePath: workflow.paymentProofStoragePath ?? null,
+          paymentConfirmedAt: workflow.paymentConfirmedAt ?? null,
+        },
+      }, { headers: { 'Cache-Control': 'private, no-store' } });
+    }
+    const payment = await getPaymentRequest(paymentRequestId);
+    return NextResponse.json({
+      workflow: {
+        paymentRequestId,
+        paymentStatus: payment.status,
+        paymentProofStoragePath: payment.proofStoragePath ?? null,
+        paymentConfirmedAt: payment.paidAt ?? null,
+      },
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
+  }
   if (asset === 'guide') {
     const guide = await latestGuide(id, workflow);
     if (!guide) return NextResponse.json({ error: 'Guia não encontrada.' }, { status: 404 });
