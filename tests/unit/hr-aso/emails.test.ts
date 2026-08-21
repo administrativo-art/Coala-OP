@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { candidateAsoEmailContent, candidateAsoProcessStartedEmailContent, clinicAsoEmailContent, renderCandidateAsoProcessStartedEmail, renderClinicAsoRequestEmail } from '../../../src/features/hr/aso/emails';
+import { ASO_CLINIC_EMAIL_CIDS, candidateAsoEmailContent, candidateAsoProcessStartedEmailContent, clinicAsoEmailContent, renderCandidateAsoProcessStartedEmail, renderClinicAsoRequestEmail } from '../../../src/features/hr/aso/emails';
 import { renderCoalaEmail } from '../../../src/lib/email/template';
 
 test('e-mail da clínica usa dados dinâmicos e não repete o assunto como título', () => {
@@ -63,4 +63,13 @@ test('solicitação da clínica funciona sem guia em PDF e inclui o CPF no corpo
   assert.match(html, /CPF 123\.456\.789-00/);
   assert.doesNotMatch(html, /ANEXOS · 0/);
   assert.match(html, /Informar data e horário/);
+  const htmlWithAttachment = renderClinicAsoRequestEmail({
+    ...input,
+    attachments: [{ label: 'Solicitação do ASO', fileName: 'solicitacao.pdf' }],
+    replyUrl: 'https://exemplo/aso/clinica/token',
+  });
+  for (const cid of Object.values(ASO_CLINIC_EMAIL_CIDS)) {
+    assert.match(htmlWithAttachment, new RegExp(`src="cid:${cid}"`));
+  }
+  assert.doesNotMatch(htmlWithAttachment, /https:\/\/op\.coalashakes\.com/);
 });

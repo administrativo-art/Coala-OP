@@ -8,6 +8,8 @@ import { createAsoToken, formatAsoAppointment, isoAfterDays, missingAsoEmailPrer
 import { candidateAsoEmailContent, candidateAsoProcessStartedEmailContent, clinicAsoEmailContent, renderCandidateAsoAppointmentEmail, renderCandidateAsoProcessStartedEmail, renderClinicAsoRequestEmail } from '@/features/hr/aso/emails';
 import { selectLatestSocialContract, type CompanyDocumentMetadata } from '@/features/hr/aso/company-document-selection';
 import { ASO_GUIDE_TEMPLATE_VERSION } from '@/features/hr/aso/guide-version';
+import { asoClinicEmailInlineAttachments } from '@/features/hr/aso/clinic-email-assets.server';
+import { resolveAsoClinicEmailCompany } from '@/features/hr/aso/clinic-email-company.server';
 import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
 import { adminApp } from '@/lib/firebase-admin';
 import { dbAdmin } from '@/lib/firebase-admin';
@@ -341,7 +343,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!emailWasAccepted(clinicCommunicationSnapshot.get('status'), clinicCommunicationSnapshot.get('providerId'))) {
       const replyToken = createAsoToken();
       const replyUrl = `${PUBLIC_URL}/aso/clinica/${replyToken.token}`;
-      const socialContract = await latestSocialContract();
+      const [socialContract, emailCompany, inlineAttachments] = await Promise.all([
+        latestSocialContract(),
+        resolveAsoClinicEmailCompany(),
+        asoClinicEmailInlineAttachments(),
+      ]);
       const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
       let paymentProofContents: Buffer;
       let guideContents: Buffer;
@@ -375,10 +381,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         candidateName: currentRequest.candidateName,
         candidateCpf: currentRequest.candidateCpf,
         jobFunction: currentRequest.jobFunction,
-        companyName: currentRequest.companyName,
-        companyCnpj: CnpjValidator.format(currentRequest.companyCnpj),
-        companyAddress: currentRequest.companyAddress,
-        companyContacts: currentRequest.companyContacts,
+        ...emailCompany,
         attachments: attachmentDescriptions,
         examType: currentRequest.examType,
       });
@@ -408,16 +411,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
             candidateName: currentRequest.candidateName,
             candidateCpf: currentRequest.candidateCpf,
             jobFunction: currentRequest.jobFunction,
-            companyName: currentRequest.companyName,
-            companyCnpj: CnpjValidator.format(currentRequest.companyCnpj),
-            companyAddress: currentRequest.companyAddress,
-            companyContacts: currentRequest.companyContacts,
+            ...emailCompany,
             attachments: attachmentDescriptions,
             replyUrl,
             examType: currentRequest.examType,
           }),
           text: `${clinicContent.text}\n\nInforme o agendamento: ${replyUrl}`,
-          attachments: [guideAttachment, paymentAttachment, ...(contractAttachment ? [contractAttachment] : [])],
+          attachments: [guideAttachment, paymentAttachment, ...(contractAttachment ? [contractAttachment] : []), ...inlineAttachments],
           tags: [{ name: 'category', value: 'aso_clinic_request' }, { name: 'onboarding_id', value: id.slice(0, 256) }],
         });
         clinicEmailResult = { ...clinicEmailResult, status: 'accepted', providerId: result.id };
@@ -632,7 +632,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const clinicName = payment.beneficiarySnapshot.name;
     const validation = record(workflow.guideValidation);
     if (!guide || text(validation.documentId) !== guide.id) return NextResponse.json({ error: 'Valide a versão atual da guia antes do envio.' }, { status: 409 });
-    const socialContract = await latestSocialContract();
+    const [socialContract, emailCompany, inlineAttachments] = await Promise.all([
+      latestSocialContract(),
+      resolveAsoClinicEmailCompany(),
+      asoClinicEmailInlineAttachments(),
+    ]);
     if (!socialContract) return NextResponse.json({ error: 'Nenhum contrato social em PDF ativo foi encontrado em Documentos da empresa.' }, { status: 409 });
     const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
     const [pdf, socialContractPdf, paymentProofPdf] = await Promise.all([
@@ -645,21 +649,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const replyToken = createAsoToken();
     const replyUrl = `${PUBLIC_URL}/aso/clinica/${replyToken.token}`;
     const communicationId = `aso_clinic_${id}_${guide.id}`;
-    const employerUnit = text(process.employerUnitId)
-      ? (await dbAdmin.collection('dp_units').doc(text(process.employerUnitId)).get()).data() ?? {}
-      : {};
-    const companyCnpj = text(process.employerCnpj, 30);
-    const companyAddress = text(process.employerAddress, 600) || text(employerUnit.address, 600) || 'Endereço não informado';
-    const companyContacts = text(process.asoCompanyContacts, 500) || (companyCnpj.replace(/\D/g, '') === '14276603000125'
-      ? '(99) 9-8111-1119 (Tiago Brasil) ou (98) 9-8809-0880 (Cesar Thimótheo)'
-      : 'Contato do RH não informado');
     const contractAttachmentName = 'Anexo 1 - Contrato social.pdf';
     const proofAttachmentName = 'Anexo 2 - Comprovante de pagamento.pdf';
     const guideAttachmentName = 'Anexo 3 - Guia de solicitação do ASO.pdf';
     const clinicEmailContent = clinicAsoEmailContent({
       candidateName: text(process.candidateName, 240), jobFunction: text(process.functionName, 240) || text(process.jobRoleName, 240),
-      companyName: text(process.employerUnitName, 240) || text(process.unitName, 240), companyCnpj,
-      companyAddress, companyContacts,
+      ...emailCompany,
       attachments: [
         { label: 'Contrato social', fileName: contractAttachmentName },
         { label: 'Comprovante de pagamento', fileName: proofAttachmentName },
@@ -686,10 +681,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         html: renderClinicAsoRequestEmail({
           candidateName: text(process.candidateName, 240),
           jobFunction: text(process.functionName, 240) || text(process.jobRoleName, 240),
-          companyName: text(process.employerUnitName, 240) || text(process.unitName, 240),
-          companyCnpj,
-          companyAddress,
-          companyContacts,
+          ...emailCompany,
           attachments: [
             { label: 'Contrato social', fileName: contractAttachmentName },
             { label: 'Comprovante de pagamento', fileName: proofAttachmentName },
@@ -703,6 +695,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           { filename: contractAttachmentName, content: socialContractPdf.toString('base64'), contentType: 'application/pdf' },
           { filename: proofAttachmentName, content: paymentProofPdf.toString('base64'), contentType: 'application/pdf' },
           { filename: guideAttachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' },
+          ...inlineAttachments,
         ],
         tags: [{ name: 'category', value: 'aso_clinic_request' }, { name: 'onboarding_id', value: id.slice(0, 256) }],
       });
