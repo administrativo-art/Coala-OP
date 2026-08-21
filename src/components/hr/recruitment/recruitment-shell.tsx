@@ -17,6 +17,7 @@ import {
   DEFAULT_PROBATION_FIRST_PERIOD_DAYS,
   probationConfigForFirstPeriod,
 } from '@/features/hr/integration/probation';
+import { probationIsReleasedAfterFormalization } from '@/features/hr/integration/probation-process';
 import { PjOnboardingDetailPanel } from '@/features/hr/onboarding-pj/detail-panel';
 import type { IntegrationBlock, IntegrationRule, IntegrationStage, IntegrationSubfield, IntegrationTemplateVersion } from '@/features/hr/integration/schemas';
 import type {
@@ -111,7 +112,7 @@ import {
   Globe, PauseCircle, Archive, Plus, Pencil, SlidersHorizontal,
   FolderOpen, Copy, ArrowLeft, MapPin, Sparkles, Users, RotateCw,
   Download, Send, Eye, Wallet, RefreshCw, GraduationCap, Check, FileCheck2,
-  Info,
+  Info, LockKeyhole,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -8250,14 +8251,19 @@ function IntegrationV2Runner({ process, getToken, canManage, onRefresh }: { proc
   );
 }
 
-function ProbationV2Panel({ process, getToken, canManage, onRefresh }: { process: OnboardingProcess; getToken: () => Promise<string>; canManage: boolean; onRefresh: () => void }) {
+function ProbationV2Panel({ process, getToken, canManage, formalizationComplete, onRefresh }: { process: OnboardingProcess; getToken: () => Promise<string>; canManage: boolean; formalizationComplete: boolean; onRefresh: () => void }) {
   const [state, setState] = useState(process.probationV2 ?? null);
   const [busy, setBusy] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    setState(process.probationV2 ?? null);
+    if (!formalizationComplete) return;
     if (!process.probationV2) return;
     void apiFetch(`/api/hr/onboarding/${process.id}/probation`, getToken).then(payload => setState(payload.probation)).catch(() => undefined);
-  }, [getToken, process.id, process.probationV2]);
+  }, [formalizationComplete, getToken, process.id, process.probationV2]);
   if (!state) return null;
+  if (!formalizationComplete) {
+    return <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-400"><LockKeyhole className="h-4 w-4" /></span><div><p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Experiência ainda não iniciada</p><h3 className="mt-1 text-base font-black text-slate-900">Aguardando conclusão da formalização</h3><p className="mt-1 text-xs font-semibold text-slate-500">As avaliações e seus alertas serão liberados somente após a conclusão de todas as etapas da formalização.</p></div></div></section>;
+  }
   const activeState = state;
   async function patch(action: string, body: Record<string, unknown> = {}) { setBusy(action); setError(null); try { const payload = await apiFetch(`/api/hr/onboarding/${process.id}/probation`, getToken, { method: 'PATCH', body: JSON.stringify({ action, ...body }) }); setState(payload.probation); onRefresh(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao atualizar experiência.'); } finally { setBusy(null); } }
   async function generateExtensionTerm() {
@@ -9602,8 +9608,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const trainingItems = [...(selectedProcess.trainingItems ?? [])].sort((a, b) => a.order - b.order);
   const trainingDoneCount = trainingItems.filter(item => item.status === 'done').length;
   const probationV2 = selectedProcess.probationV2 ?? null;
+  const probationReleased = probationIsReleasedAfterFormalization(selectedProcess);
   const probationRowState: 'done' | 'active' | 'pending' = !probationV2
     ? 'pending'
+    : !probationReleased
+      ? 'pending'
     : probationV2.status === 'effective' || probationV2.status === 'terminated'
       ? 'done'
       : probationV2.status === 'awaiting_admission'
@@ -10192,7 +10201,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
             <div className="mt-4 border-t border-dashed border-slate-300 pt-3">
               <div className="flex items-center gap-2"><p className="text-[9.5px] font-black uppercase tracking-[0.08em] text-slate-500">Experiência</p><span className="rounded-full bg-violet-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-violet-600">Paralelo</span></div>
-              <p className="mt-1 text-[8.5px] font-semibold text-slate-400">Começa após a admissão, fora da sequência</p>
+              <p className="mt-1 text-[8.5px] font-semibold text-slate-400">Avaliações liberadas após concluir a formalização</p>
             </div>
             <div className="mt-3 space-y-2">
               {(() => {
@@ -10221,13 +10230,13 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         }`}>
                           Avaliações de experiência
                         </span>
-                        {probationV2?.schedule?.totalDays ? (
+                        {probationReleased && probationV2?.schedule?.totalDays ? (
                           <span className="shrink-0 text-[8.5px] font-bold text-slate-400">
                             {probationV2.schedule.totalDays}d
                           </span>
                         ) : null}
                       </span>
-                      <span className="mt-0.5 block text-[8.5px] font-semibold text-slate-400">Liderança{probationV2?.schedule?.totalDays ? ` · ${probationV2.schedule.totalDays} dias` : ''}</span>
+                      <span className="mt-0.5 block text-[8.5px] font-semibold text-slate-400">{probationReleased ? `Liderança${probationV2?.schedule?.totalDays ? ` · ${probationV2.schedule.totalDays} dias` : ''}` : 'Aguardando formalização'}</span>
                     </span>
                   </button>
                 );
@@ -11226,7 +11235,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <ProbationV2Panel
                     process={selectedProcess}
                     getToken={getToken}
-                    canManage={canManage && !processIsReadOnly}
+                    canManage={canManage && selectedProcess.status !== 'cancelled'}
+                    formalizationComplete={probationReleased}
                     onRefresh={onRefresh}
                   />
                 </div>

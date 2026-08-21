@@ -13,6 +13,15 @@ export type ProbationProcessState = { status: "awaiting_admission" | "active" | 
 
 export const DEFAULT_PROBATION_RUNTIME_CONFIG: ProbationRuntimeConfig = { ...DEFAULT_PROBATION_CONFIG, alertsBeforeDays: [10, 5, 1], extensionTermRequired: false, evaluator: { strategy: "direct_manager", fallback: "hr_pool" }, effectivenessRule: "manual" };
 
+export function probationIsReleasedAfterFormalization(process: {
+  status?: string | null;
+  currentStage?: string | null;
+  completedAt?: string | null;
+}) {
+  if (process.status === "cancelled") return false;
+  return process.status === "completed" || process.currentStage === "done" || Boolean(process.completedAt);
+}
+
 export function createProbationProcess(admissionDate: string | null, input: Partial<ProbationRuntimeConfig> | undefined, now: string): ProbationProcessState {
   const config: ProbationRuntimeConfig = { ...DEFAULT_PROBATION_RUNTIME_CONFIG, ...input, extensionTermRequired: false, evaluator: { ...DEFAULT_PROBATION_RUNTIME_CONFIG.evaluator, ...(input?.evaluator ?? {}) }, alertsBeforeDays: Array.from(new Set(input?.alertsBeforeDays ?? DEFAULT_PROBATION_RUNTIME_CONFIG.alertsBeforeDays)).sort((a, b) => b - a) };
   if (!admissionDate) return { status: "awaiting_admission", admissionDate: null, config, schedule: null, evaluations: [], alerts: [], extensionTerm: { required: config.extensionTermRequired && config.secondPeriodDays > 0, generatedDocumentId: null, signedAt: null }, decision: { result: null, decidedAt: null, decidedBy: null, notes: null }, updatedAt: now };

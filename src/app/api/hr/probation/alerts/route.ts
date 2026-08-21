@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 
-import { refreshProbationProcess, type ProbationProcessState } from "@/features/hr/integration/probation-process";
+import { probationIsReleasedAfterFormalization, refreshProbationProcess, type ProbationProcessState } from "@/features/hr/integration/probation-process";
 import { assertHrAccess } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 
@@ -10,8 +10,15 @@ export async function POST(request: NextRequest) {
   const authorization = request.headers.get("authorization");
   const cronAllowed = !!process.env.CRON_SECRET && authorization === `Bearer ${process.env.CRON_SECRET}`;
   if (!cronAllowed) { const access = await assertHrAccess(request, "manage").catch(() => null); if (!access) return NextResponse.json({ error: "Sem permissão." }, { status: 403 }); }
-  const today = new Date().toISOString().slice(0, 10); const snapshot = await hrDbAdmin.collection("onboardingProcesses").get(); let sent = 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const snapshot = await hrDbAdmin.collection("onboardingProcesses")
+    .where("status", "==", "completed")
+    .where("probationV2.status", "in", ["active", "decision_pending"])
+    .limit(200)
+    .get();
+  let sent = 0;
   for (const document of snapshot.docs) {
+    if (!probationIsReleasedAfterFormalization(document.data())) continue;
     const current = document.get("probationV2") as ProbationProcessState | undefined; if (!current || ["effective", "terminated", "awaiting_admission"].includes(current.status)) continue;
     let next = refreshProbationProcess(current, today); const due = next.alerts.filter((alert) => alert.status === "due"); if (!due.length) { if (JSON.stringify(next) !== JSON.stringify(current)) await document.ref.update({ probationV2: next }); continue; }
     const batch = hrDbAdmin.batch(); const now = Timestamp.now();

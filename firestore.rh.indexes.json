@@ -119,6 +119,14 @@
       ]
     },
     {
+      "collectionGroup": "onboardingProcesses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "probationV2.status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "field_values",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
