@@ -37,7 +37,6 @@ import type { PjOnboardingWorkflow } from '@/types';
 import { pjRequiredRegistrationFieldsMissing, setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
 import {
   changedIdentityFields,
-  formDataValidationIsCurrent,
   nextPublicFormRevision,
   publicFormAnswersEqual,
 } from '@/features/hr/onboarding/public-form-revision';
@@ -869,28 +868,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
 
   const identityCorrectionConsumed = identityChanges.length > 0 && identityCorrectionAuthorized;
   const asoWorkflow = record(data.asoWorkflow);
-  const formDataValidation = record(asoWorkflow.formDataValidation);
   const candidateNotification = record(asoWorkflow.candidateNotification);
   const schedulingEmailSentAt = trimText(candidateNotification.sentAt, 40);
-  const preserveCurrentValidation = !formAnswersChanged && formDataValidationIsCurrent({
-    publicFormRevision: data.publicFormRevision,
-    publicFormLastSubmittedAt: data.publicFormLastSubmittedAt,
-    publicFormSubmittedAt: data.publicFormSubmittedAt,
-    validationRevision: formDataValidation.revision,
-    validationSubmissionAt: formDataValidation.submissionAt,
-    schedulingEmailSentAt,
-  });
   const guideBecameOutdated = identityChanges.length > 0 && !schedulingEmailSentAt;
-  const shouldUpdateAsoWorkflow = preserveCurrentValidation || guideBecameOutdated;
+  const shouldUpdateAsoWorkflow = guideBecameOutdated;
   const nextAsoWorkflow = {
     ...asoWorkflow,
-    ...(preserveCurrentValidation ? {
-      formDataValidation: {
-        ...formDataValidation,
-        submissionAt: now,
-        revision: publicFormRevision,
-      },
-    } : {}),
     ...(guideBecameOutdated ? { latestGuideRequiresRegeneration: true } : {}),
   };
 

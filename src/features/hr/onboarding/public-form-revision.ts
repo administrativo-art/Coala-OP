@@ -39,24 +39,16 @@ export function nextPublicFormRevision(params: {
   return (current ?? 1) + 1;
 }
 
-export function formDataValidationIsCurrent(params: {
-  publicFormRevision?: unknown;
-  publicFormLastSubmittedAt?: unknown;
+export function essentialPublicFormDataReady(params: {
   publicFormSubmittedAt?: unknown;
-  validationRevision?: unknown;
-  validationSubmissionAt?: unknown;
-  schedulingEmailSentAt?: unknown;
+  candidateName?: unknown;
+  publicFormAnswers?: unknown;
 }) {
-  if (typeof params.schedulingEmailSentAt === 'string' && params.schedulingEmailSentAt.trim()) return true;
-
-  const publicRevision = asPositiveInteger(params.publicFormRevision);
-  const validationRevision = asPositiveInteger(params.validationRevision);
-  if (publicRevision !== null && validationRevision !== null) return publicRevision === validationRevision;
-
-  const submissionMarker = typeof params.publicFormLastSubmittedAt === 'string' && params.publicFormLastSubmittedAt.trim()
-    ? params.publicFormLastSubmittedAt
-    : typeof params.publicFormSubmittedAt === 'string'
-      ? params.publicFormSubmittedAt
-      : '';
-  return Boolean(submissionMarker && params.validationSubmissionAt === submissionMarker);
+  const submitted = typeof params.publicFormSubmittedAt === 'string' && Boolean(params.publicFormSubmittedAt.trim());
+  const answers = params.publicFormAnswers && typeof params.publicFormAnswers === 'object' && !Array.isArray(params.publicFormAnswers)
+    ? params.publicFormAnswers as FormRecord
+    : {};
+  const name = String(answers.fullName ?? '').trim() || String(params.candidateName ?? '').trim();
+  const cpf = String(answers.cpf ?? '').replace(/\D/g, '');
+  return submitted && Boolean(name) && cpf.length === 11;
 }

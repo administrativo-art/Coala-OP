@@ -22,7 +22,7 @@ import { applyAccountantReadiness, patchStep } from '@/features/hr/termination/c
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { missingAccountantPrerequisites } from '@/features/hr/accountant/workflow';
 import type { OnboardingDocument } from '@/types';
-import { formDataValidationIsCurrent } from '@/features/hr/onboarding/public-form-revision';
+import { essentialPublicFormDataReady } from '@/features/hr/onboarding/public-form-revision';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -122,7 +122,7 @@ async function buildAsoRequestSnapshot(process: Record<string, unknown>, clinicE
     !snapshot.clinicEmail ? 'e-mail de agendamento da clínica' : null,
     !Number.isFinite(snapshot.clinicPrice) || snapshot.clinicPrice <= 0 ? 'valor do ASO na clínica' : null,
   ].filter((value): value is string => Boolean(value));
-  if (missing.length) throw new Error(`Complete a solicitação antes de validar. Falta: ${missing.join('; ')}.`);
+  if (missing.length) throw new Error(`Complete os dados da solicitação. Falta: ${missing.join('; ')}.`);
   const fingerprint = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
   return { ...snapshot, fingerprint };
 }
@@ -131,20 +131,11 @@ function emailWasAccepted(status: unknown, providerId: unknown) {
   return Boolean(text(providerId, 300)) && ['accepted', 'delivered', 'delayed'].includes(text(status, 40));
 }
 
-function formSubmissionMarker(process: Record<string, unknown>) {
-  return text(process.publicFormLastSubmittedAt, 40) || text(process.publicFormSubmittedAt, 40);
-}
-
-function formDataConfirmed(process: Record<string, unknown>, workflow: Record<string, unknown>) {
-  const validation = record(workflow.formDataValidation);
-  const candidateNotification = record(workflow.candidateNotification);
-  return formDataValidationIsCurrent({
-    publicFormRevision: process.publicFormRevision,
-    publicFormLastSubmittedAt: process.publicFormLastSubmittedAt,
+function essentialFormDataReady(process: Record<string, unknown>) {
+  return essentialPublicFormDataReady({
     publicFormSubmittedAt: process.publicFormSubmittedAt,
-    validationRevision: validation.revision,
-    validationSubmissionAt: validation.submissionAt,
-    schedulingEmailSentAt: candidateNotification.sentAt,
+    candidateName: process.candidateName,
+    publicFormAnswers: process.publicFormAnswers,
   });
 }
 
@@ -239,6 +230,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const now = new Date().toISOString();
 
   if (action === 'validate_request') {
+    if (text(workflow.startedAt, 40)) {
+      return NextResponse.json({ error: 'A solicitação não pode ser alterada depois que o processo do ASO foi iniciado.' }, { status: 409 });
+    }
     const clinicEntityId = text(body.clinicEntityId, 180) || text(workflow.clinicEntityId, 180);
     if (!clinicEntityId) return NextResponse.json({ error: 'Selecione a clínica responsável pelo ASO.' }, { status: 409 });
     if (text(workflow.paymentRequestId, 180) && clinicEntityId !== text(workflow.clinicEntityId, 180)) {
@@ -277,27 +271,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       ]);
       return NextResponse.json({ ok: true, requestValidation });
     } catch (error) {
-      return NextResponse.json({ error: errorMessage(error, 'Não foi possível validar a solicitação do ASO.') }, { status: 409 });
+      return NextResponse.json({ error: errorMessage(error, 'Não foi possível preparar a solicitação do ASO.') }, { status: 409 });
     }
-  }
-
-  if (action === 'confirm_form_data') {
-    const submissionAt = formSubmissionMarker(process);
-    if (!submissionAt) return NextResponse.json({ error: 'A candidata ainda não enviou o formulário da integração.' }, { status: 409 });
-    const formDataValidation = {
-      submissionAt,
-      revision: Number.isInteger(Number(process.publicFormRevision)) && Number(process.publicFormRevision) > 0
-        ? Number(process.publicFormRevision)
-        : null,
-      validatedAt: now,
-      validatedBy: access.decoded.uid,
-      validatedByEmail: access.decoded.email ?? null,
-    };
-    await Promise.all([
-      processRef.set({ asoWorkflow: { ...workflow, formDataValidation, updatedAt: now }, updatedAt: now }, { merge: true }),
-      addEvent(id, 'ASO_FORM_DATA_VALIDATED', access, { submissionAt }),
-    ]);
-    return NextResponse.json({ ok: true, formDataValidation });
   }
 
   if (action === 'start_process') {
@@ -307,17 +282,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const requestValidation = record(workflow.requestValidation);
     const clinicEntityId = text(requestValidation.clinicEntityId, 180) || text(workflow.clinicEntityId, 180);
     if (!clinicEntityId || !text(requestValidation.fingerprint, 128)) {
-      return NextResponse.json({ error: 'Valide a solicitação antes de iniciar o processo do ASO.' }, { status: 409 });
+      return NextResponse.json({ error: 'Atualize as guias antes de iniciar o processo do ASO.' }, { status: 409 });
     }
 
     let currentRequest: Awaited<ReturnType<typeof buildAsoRequestSnapshot>>;
     try {
       currentRequest = await buildAsoRequestSnapshot(process, clinicEntityId);
     } catch (error) {
-      return NextResponse.json({ error: errorMessage(error, 'A solicitação precisa ser validada novamente.') }, { status: 409 });
+      return NextResponse.json({ error: errorMessage(error, 'A solicitação precisa ser atualizada novamente.') }, { status: 409 });
     }
     if (currentRequest.fingerprint !== text(requestValidation.fingerprint, 128)) {
-      return NextResponse.json({ error: 'Os dados da solicitação mudaram após a validação. Valide novamente antes de iniciar.' }, { status: 409 });
+      return NextResponse.json({ error: 'Os dados da solicitação mudaram. Atualize as guias antes de iniciar.' }, { status: 409 });
     }
 
     const paymentRequestId = text(workflow.paymentRequestId, 180);
@@ -336,7 +311,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const guide = await latestGuide(id, workflow);
     const missing = missingAsoEmailPrerequisites({
       expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
-      formDataConfirmed: formDataConfirmed(process, workflow),
+      essentialFormDataReady: essentialFormDataReady(process),
       paymentPaid: payment.status === 'paid' && Boolean(payment.proofStoragePath),
       requestPdfReady: Boolean(
         guide
@@ -583,13 +558,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const requestValidation = record(workflow.requestValidation);
     const clinicEntityId = text(requestValidation.clinicEntityId, 180) || text(workflow.clinicEntityId, 180);
     if (!clinicEntityId || !text(requestValidation.fingerprint, 128)) {
-      return NextResponse.json({ error: 'Valide a solicitação antes de enviar o PIX para pagamento.' }, { status: 409 });
+      return NextResponse.json({ error: 'Atualize as guias antes de enviar o PIX para pagamento.' }, { status: 409 });
     }
     let currentRequest: Awaited<ReturnType<typeof buildAsoRequestSnapshot>>;
     try {
       currentRequest = await buildAsoRequestSnapshot(process, clinicEntityId);
     } catch (error) {
-      return NextResponse.json({ error: errorMessage(error, 'A solicitação precisa ser validada novamente.') }, { status: 409 });
+      return NextResponse.json({ error: errorMessage(error, 'A solicitação precisa ser atualizada novamente.') }, { status: 409 });
     }
     if (currentRequest.fingerprint !== text(requestValidation.fingerprint, 128)) {
       return NextResponse.json({ error: 'Os dados da solicitação mudaram. Valide novamente antes de enviar o PIX para pagamento.' }, { status: 409 });
@@ -637,7 +612,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const guide = await latestGuide(id, workflow);
     const missing = missingAsoEmailPrerequisites({
       expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
-      formDataConfirmed: formDataConfirmed(process, workflow),
+      essentialFormDataReady: essentialFormDataReady(process),
       paymentPaid: true,
       requestPdfReady: Boolean(
         guide

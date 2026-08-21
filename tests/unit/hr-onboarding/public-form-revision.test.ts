@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import {
   changedIdentityFields,
-  formDataValidationIsCurrent,
+  essentialPublicFormDataReady,
   nextPublicFormRevision,
   publicFormAnswersEqual,
 } from '../../../src/features/hr/onboarding/public-form-revision';
@@ -21,13 +21,21 @@ test('mudança de nome ou CPF é identificada e incrementa a revisão', () => {
   assert.equal(nextPublicFormRevision({ currentRevision: 3, hasPreviousSubmission: true, answersChanged: true }), 4);
 });
 
-test('a validação usa a revisão e mantém a fase depois do e-mail de agendamento', () => {
-  assert.equal(formDataValidationIsCurrent({ publicFormRevision: 2, validationRevision: 2 }), true);
-  assert.equal(formDataValidationIsCurrent({ publicFormRevision: 3, validationRevision: 2 }), false);
-  assert.equal(formDataValidationIsCurrent({
-    publicFormRevision: 3,
-    validationRevision: 2,
-    schedulingEmailSentAt: '2026-08-21T15:00:00.000Z',
+test('o envio dos dados essenciais libera o formulário sem confirmação manual do RH', () => {
+  assert.equal(essentialPublicFormDataReady({
+    publicFormSubmittedAt: '2026-08-21T14:37:30.747Z',
+    candidateName: 'Thaise Correia Marinho',
+    publicFormAnswers: { cpf: '058.136.883-58' },
+  }), true);
+  assert.equal(essentialPublicFormDataReady({
+    publicFormSubmittedAt: null,
+    candidateName: 'Thaise Correia Marinho',
+    publicFormAnswers: { cpf: '05813688358' },
+  }), false);
+  assert.equal(essentialPublicFormDataReady({
+    publicFormSubmittedAt: '2026-08-21T14:37:30.747Z',
+    candidateName: 'Thaise Correia Marinho',
+    publicFormAnswers: { fullName: '', cpf: '05813688358' },
   }), true);
 });
 
@@ -36,9 +44,15 @@ test('o envio inicial começa na revisão um e a primeira correção vai para a 
   assert.equal(nextPublicFormRevision({ currentRevision: null, hasPreviousSubmission: true, answersChanged: true }), 2);
 });
 
-test('formalizações legadas continuam usando o marcador de submissão', () => {
-  assert.equal(formDataValidationIsCurrent({
-    publicFormLastSubmittedAt: '2026-08-21T14:37:30.747Z',
-    validationSubmissionAt: '2026-08-21T14:37:30.747Z',
-  }), true);
+test('dados essenciais incompletos não liberam o envio', () => {
+  assert.equal(essentialPublicFormDataReady({
+    publicFormSubmittedAt: '2026-08-21T14:37:30.747Z',
+    candidateName: '',
+    publicFormAnswers: { cpf: '05813688358' },
+  }), false);
+  assert.equal(essentialPublicFormDataReady({
+    publicFormSubmittedAt: '2026-08-21T14:37:30.747Z',
+    candidateName: 'Thaise Correia Marinho',
+    publicFormAnswers: { cpf: '123' },
+  }), false);
 });

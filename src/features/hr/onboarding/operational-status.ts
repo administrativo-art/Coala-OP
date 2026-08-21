@@ -316,7 +316,7 @@ function resolveCltStatus(process: OnboardingProcess, now: Date) {
     if (aso?.startedAt) {
       return status(process, 'waiting_person', 'Aguardando retorno da clínica', 'O processo do ASO está em acompanhamento.', 'third_party', now);
     }
-    return status(process, 'hr_action', 'RH precisa conduzir o ASO', 'Valide a solicitação, selecione a clínica e inicie o processo.', 'rh', now);
+    return status(process, 'hr_action', 'RH precisa conduzir o ASO', 'Selecione a clínica, gere as guias e inicie o processo.', 'rh', now);
   }
   if (stage === 'accountant') {
     if (accountant?.registryDocument?.status === 'received' || accountant?.registryDocument?.status === 'rejected') {
