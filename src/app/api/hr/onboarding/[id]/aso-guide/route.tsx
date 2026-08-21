@@ -109,6 +109,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     serviceDateStatus: 'to_be_defined_by_clinic',
     examType,
     examProgram: 'PCMSO',
+    publicFormRevision: Number.isInteger(Number(process.publicFormRevision)) && Number(process.publicFormRevision) > 0
+      ? Number(process.publicFormRevision)
+      : null,
     generatedAt: now,
     generatedBy: access.decoded.uid,
     generatedByEmail: access.decoded.email ?? null,
@@ -123,6 +126,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       latestGuideHashSha256: hashSha256,
       latestGuideGeneratedAt: now,
       latestGuideTemplateVersion: ASO_GUIDE_TEMPLATE_VERSION,
+      latestGuidePublicFormRevision: Number.isInteger(Number(process.publicFormRevision)) && Number(process.publicFormRevision) > 0
+        ? Number(process.publicFormRevision)
+        : null,
+      latestGuideRequiresRegeneration: false,
       updatedAt: now,
     },
     updatedAt: now,

@@ -753,6 +753,35 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       selectedBy: access.decoded.uid,
       selectedByEmail: access.decoded.email ?? null,
     };
+  } else if (action === 'allow_identity_correction') {
+    if (process.employmentRelationshipType === 'pj') {
+      return jsonError('Esta liberação se aplica somente ao formulário de contratação de pessoa física.', 409);
+    }
+    if (!process.publicFormSubmittedAt) {
+      return jsonError('Nome e CPF ainda não foram enviados pela candidata.', 409);
+    }
+    if (!process.publicToken || process.publicTokenClosedAt || process.status === 'completed') {
+      return jsonError('O formulário público não está disponível para correção.', 409);
+    }
+    const reason = asString(body.reason);
+    if (!reason || reason.length < 5) return jsonError('Informe o motivo da liberação com pelo menos 5 caracteres.');
+    const currentCorrection = asRecord(process.identityCorrection);
+    const currentVersion = Number(currentCorrection.version);
+    update.identityCorrection = currentCorrection.status === 'authorized'
+      ? currentCorrection
+      : {
+          status: 'authorized',
+          allowedFields: ['fullName', 'cpf'],
+          version: Number.isInteger(currentVersion) && currentVersion > 0 ? currentVersion + 1 : 1,
+          reason,
+          authorizedAt: now,
+          authorizedBy: access.decoded.uid,
+          authorizedByEmail: access.decoded.email ?? null,
+          consumedAt: null,
+          submissionProtocol: null,
+          changedFields: [],
+          clinicRevalidationRequired: null,
+        };
   } else if (action === 'document_status') {
     const documentId = asString(body.documentId);
     const status = asString(body.status) as OnboardingDocument['status'] | null;

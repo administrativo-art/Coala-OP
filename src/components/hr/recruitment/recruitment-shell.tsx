@@ -78,6 +78,7 @@ import {
 } from '@/lib/recruitment-onboarding';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { formatPersonName } from '@/lib/person-name';
+import { formDataValidationIsCurrent } from '@/features/hr/onboarding/public-form-revision';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import {
   ONBOARDING_HEALTH_META,
@@ -8581,6 +8582,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     });
   }
 
+  async function allowIdentityCorrection(process: OnboardingProcess) {
+    const reason = window.prompt('Informe o motivo para liberar a correção de nome e CPF:')?.trim();
+    if (!reason) return;
+    await patchProcess(process.id, { action: 'allow_identity_correction', reason });
+  }
+
   async function refreshAsoWorkflow(processId: string) {
     const payload = await apiFetch(`/api/hr/onboarding/${processId}/aso-workflow?view=workflow`, getToken) as {
       workflow?: NonNullable<OnboardingProcess['asoWorkflow']>;
@@ -9699,19 +9706,31 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const asoRequest = asoWorkflow?.requestValidation;
   const asoProcessStarted = Boolean(asoWorkflow?.startedAt);
   const asoConfigurationLocked = Boolean(asoWorkflow?.paymentRequestId || asoProcessStarted);
-  const asoFormSubmissionMarker = selectedProcess.publicFormLastSubmittedAt ?? selectedProcess.publicFormSubmittedAt ?? null;
-  const asoFormDataReady = Boolean(
-    asoFormSubmissionMarker
-    && asoWorkflow?.formDataValidation?.submissionAt === asoFormSubmissionMarker
-  );
+  const asoFormDataReady = formDataValidationIsCurrent({
+    publicFormRevision: selectedProcess.publicFormRevision,
+    publicFormLastSubmittedAt: selectedProcess.publicFormLastSubmittedAt,
+    publicFormSubmittedAt: selectedProcess.publicFormSubmittedAt,
+    validationRevision: asoWorkflow?.formDataValidation?.revision,
+    validationSubmissionAt: asoWorkflow?.formDataValidation?.submissionAt,
+    schedulingEmailSentAt: asoWorkflow?.candidateNotification?.sentAt,
+  });
   const asoPaymentReady = asoWorkflow?.paymentStatus === 'paid' && Boolean(asoWorkflow.paymentProofStoragePath);
-  const asoGuideIsCurrent = asoWorkflow?.latestGuideTemplateVersion === ASO_GUIDE_TEMPLATE_VERSION;
+  const asoSchedulingEmailSent = Boolean(asoWorkflow?.candidateNotification?.sentAt);
+  const asoGuideRevisionMatches = !asoWorkflow?.latestGuidePublicFormRevision
+    || !selectedProcess.publicFormRevision
+    || asoWorkflow.latestGuidePublicFormRevision === selectedProcess.publicFormRevision;
+  const asoGuideIsCurrent = asoWorkflow?.latestGuideTemplateVersion === ASO_GUIDE_TEMPLATE_VERSION
+    && asoWorkflow?.latestGuideRequiresRegeneration !== true
+    && (asoSchedulingEmailSent || asoGuideRevisionMatches);
   const asoEmailPrerequisitesReady = asoFormDataReady && accountantAdmissionDateReady && asoPaymentReady && asoGuideIsCurrent;
   const asoSelectedClinic = asoClinics.find(clinic => clinic.id === asoClinicEntityId) ?? null;
-  const asoRequestMatchesDraft = Boolean(asoRequest)
-    && asoRequest?.clinicEntityId === asoClinicEntityId
+  const asoRequestMatchesDraft = Boolean(asoRequest) && (asoSchedulingEmailSent || (
+    asoRequest?.clinicEntityId === asoClinicEntityId
     && CnpjValidator.clean(asoRequest?.companyCnpj ?? '') === CnpjValidator.clean(selectedProcess.employerCnpj ?? '')
-    && (asoRequest?.expectedAdmissionDate ?? null) === (selectedProcess.expectedAdmissionDate ?? null);
+    && (asoRequest?.expectedAdmissionDate ?? null) === (selectedProcess.expectedAdmissionDate ?? null)
+    && (asoRequest?.candidateName ?? '').trim() === (selectedProcess.candidateName ?? '').trim()
+    && String(asoRequest?.candidateCpf ?? '').replace(/\D/g, '') === String(answers?.cpf ?? '').replace(/\D/g, '')
+  ));
   const asoClinicCommunicationFailed = ['failed', 'bounced', 'complained'].includes(asoWorkflow?.clinic?.emailStatus ?? '');
   const asoCandidateCommunicationFailed = ['failed', 'bounced', 'complained'].includes(asoWorkflow?.candidateStartNotification?.emailStatus ?? '');
   const asoHasPendingStartDelivery = asoClinicCommunicationFailed || asoCandidateCommunicationFailed;
@@ -10401,6 +10420,21 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {canManage && selectedProcess.publicFormSubmittedAt && selectedProcess.identityCorrection?.status !== 'authorized' && linkActive ? (
+                      <button
+                        type="button"
+                        disabled={updating === `${selectedProcess.id}:allow_identity_correction`}
+                        onClick={() => void allowIdentityCorrection(selectedProcess)}
+                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3.5 text-[12.5px] font-bold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                      >
+                        {updating === `${selectedProcess.id}:allow_identity_correction` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+                        Permitir correção de nome/CPF
+                      </button>
+                    ) : selectedProcess.identityCorrection?.status === 'authorized' ? (
+                      <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 text-[12.5px] font-bold text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Correção de nome/CPF liberada
+                      </span>
+                    ) : null}
                     {publicLink ? (
                       <button
                         type="button"

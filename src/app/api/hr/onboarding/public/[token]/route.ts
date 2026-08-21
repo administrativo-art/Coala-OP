@@ -35,6 +35,12 @@ import {
 import type { OnboardingDocument } from '@/types';
 import type { PjOnboardingWorkflow } from '@/types';
 import { pjRequiredRegistrationFieldsMissing, setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
+import {
+  changedIdentityFields,
+  formDataValidationIsCurrent,
+  nextPublicFormRevision,
+  publicFormAnswersEqual,
+} from '@/features/hr/onboarding/public-form-revision';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,6 +55,10 @@ function jsonError(message: string, status = 400) {
 
 function trimText(value: unknown, maxLength: number) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function cleanChoice(value: unknown, allowed: readonly string[]) {
@@ -483,6 +493,7 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
       })),
     publicFormAnswers: data.publicFormAnswers ?? {},
     publicFormSubmittedAt: data.publicFormSubmittedAt ?? null,
+    identityCorrectionAllowed: record(data.identityCorrection).status === 'authorized',
     publicTokenExpiresAt: onboardingPublicLinkExpiresAt(data)?.toISOString() ?? null,
     publicTokenExtensionUsed: data.publicTokenExtensionUsed === true,
     privacyNotice: publicPrivacyNotice(),
@@ -689,6 +700,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   } else if (!publicFormAnswers.foodRestrictions.includes('Outro ingrediente')) {
     publicFormAnswers = { ...publicFormAnswers, foodRestrictionOther: '' };
   }
+  const previousPublicFormAnswers = sanitizePublicAnswers(record(data.publicFormAnswers));
+  const hasPreviousSubmission = Boolean(data.publicFormSubmittedAt);
+  const identityChanges = hasPreviousSubmission
+    ? changedIdentityFields(previousPublicFormAnswers, publicFormAnswers)
+    : [];
+  const identityCorrection = record(data.identityCorrection);
+  const identityCorrectionAuthorized = identityCorrection.status === 'authorized';
+  if (identityChanges.length > 0 && !identityCorrectionAuthorized) {
+    return jsonError('Nome e CPF ficam bloqueados após o primeiro envio. Solicite ao RH a liberação para corrigir esses dados.', 403);
+  }
+  const formAnswersChanged = hasPreviousSubmission
+    ? !publicFormAnswersEqual(previousPublicFormAnswers, publicFormAnswers)
+    : true;
+  const publicFormRevision = nextPublicFormRevision({
+    currentRevision: data.publicFormRevision,
+    hasPreviousSubmission,
+    answersChanged: formAnswersChanged,
+  });
   if (!publicFormAnswers.fullName) return jsonError('Informe o nome completo.');
   if (publicFormAnswers.cpf.length !== 11) return jsonError('Informe um CPF com 11 dígitos.');
   if (!publicFormAnswers.hasChildren) return jsonError('Informe se possui filhos.');
@@ -838,12 +867,51 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     usages: [],
   };
 
+  const identityCorrectionConsumed = identityChanges.length > 0 && identityCorrectionAuthorized;
+  const asoWorkflow = record(data.asoWorkflow);
+  const formDataValidation = record(asoWorkflow.formDataValidation);
+  const candidateNotification = record(asoWorkflow.candidateNotification);
+  const schedulingEmailSentAt = trimText(candidateNotification.sentAt, 40);
+  const preserveCurrentValidation = !formAnswersChanged && formDataValidationIsCurrent({
+    publicFormRevision: data.publicFormRevision,
+    publicFormLastSubmittedAt: data.publicFormLastSubmittedAt,
+    publicFormSubmittedAt: data.publicFormSubmittedAt,
+    validationRevision: formDataValidation.revision,
+    validationSubmissionAt: formDataValidation.submissionAt,
+    schedulingEmailSentAt,
+  });
+  const guideBecameOutdated = identityChanges.length > 0 && !schedulingEmailSentAt;
+  const shouldUpdateAsoWorkflow = preserveCurrentValidation || guideBecameOutdated;
+  const nextAsoWorkflow = {
+    ...asoWorkflow,
+    ...(preserveCurrentValidation ? {
+      formDataValidation: {
+        ...formDataValidation,
+        submissionAt: now,
+        revision: publicFormRevision,
+      },
+    } : {}),
+    ...(guideBecameOutdated ? { latestGuideRequiresRegeneration: true } : {}),
+  };
+
   await doc.ref.set({
     documents: nextDocuments,
     candidateName: publicFormAnswers.fullName,
     publicFormAnswers,
-    publicFormSubmittedAt: now,
+    publicFormSubmittedAt: data.publicFormSubmittedAt ?? now,
     publicFormLastSubmittedAt: now,
+    publicFormRevision,
+    ...(identityCorrectionConsumed ? {
+      identityCorrection: {
+        ...identityCorrection,
+        status: 'consumed',
+        consumedAt: now,
+        submissionProtocol: protocol,
+        changedFields: identityChanges,
+        clinicRevalidationRequired: schedulingEmailSentAt ? false : null,
+      },
+    } : {}),
+    ...(shouldUpdateAsoWorkflow ? { asoWorkflow: nextAsoWorkflow } : {}),
     publicPrivacyAcceptance,
     consentimento_imagem_voz: imageVoiceConsent,
     currentStage: shouldMoveToReview
@@ -904,6 +972,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     submittedDocumentIds: Object.keys(rawDocuments),
     allRequiredDocumentsSubmitted,
     movedToReview: shouldMoveToReview,
+    publicFormRevision,
+    formAnswersChanged,
+    identityCorrectionApplied: identityCorrectionConsumed,
+    identityCorrectionChangedFields: identityChanges,
+    clinicRevalidationRequired: identityCorrectionConsumed && schedulingEmailSentAt ? false : null,
+    asoGuideRequiresRegeneration: guideBecameOutdated,
     existing_employee_consent_synced: Boolean(existingEmployeeId),
     existing_employee_id: existingEmployeeId,
     formalization_id: doc.id,

@@ -22,6 +22,7 @@ import { applyAccountantReadiness, patchStep } from '@/features/hr/termination/c
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { missingAccountantPrerequisites } from '@/features/hr/accountant/workflow';
 import type { OnboardingDocument } from '@/types';
+import { formDataValidationIsCurrent } from '@/features/hr/onboarding/public-form-revision';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -132,6 +133,19 @@ function emailWasAccepted(status: unknown, providerId: unknown) {
 
 function formSubmissionMarker(process: Record<string, unknown>) {
   return text(process.publicFormLastSubmittedAt, 40) || text(process.publicFormSubmittedAt, 40);
+}
+
+function formDataConfirmed(process: Record<string, unknown>, workflow: Record<string, unknown>) {
+  const validation = record(workflow.formDataValidation);
+  const candidateNotification = record(workflow.candidateNotification);
+  return formDataValidationIsCurrent({
+    publicFormRevision: process.publicFormRevision,
+    publicFormLastSubmittedAt: process.publicFormLastSubmittedAt,
+    publicFormSubmittedAt: process.publicFormSubmittedAt,
+    validationRevision: validation.revision,
+    validationSubmissionAt: validation.submissionAt,
+    schedulingEmailSentAt: candidateNotification.sentAt,
+  });
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -272,6 +286,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!submissionAt) return NextResponse.json({ error: 'A candidata ainda não enviou o formulário da integração.' }, { status: 409 });
     const formDataValidation = {
       submissionAt,
+      revision: Number.isInteger(Number(process.publicFormRevision)) && Number(process.publicFormRevision) > 0
+        ? Number(process.publicFormRevision)
+        : null,
       validatedAt: now,
       validatedBy: access.decoded.uid,
       validatedByEmail: access.decoded.email ?? null,
@@ -316,14 +333,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (Math.abs(Number(payment.amount) - currentRequest.clinicPrice) > 0.005) {
       return NextResponse.json({ error: 'O valor da clínica mudou depois da criação do PIX. Revise o cadastro antes de continuar.' }, { status: 409 });
     }
-    const submissionAt = formSubmissionMarker(process);
-    const formDataValidation = record(workflow.formDataValidation);
     const guide = await latestGuide(id, workflow);
     const missing = missingAsoEmailPrerequisites({
       expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
-      formDataConfirmed: Boolean(submissionAt && text(formDataValidation.submissionAt, 40) === submissionAt),
+      formDataConfirmed: formDataConfirmed(process, workflow),
       paymentPaid: payment.status === 'paid' && Boolean(payment.proofStoragePath),
-      requestPdfReady: Boolean(guide && text(guide.templateVersion, 80) === ASO_GUIDE_TEMPLATE_VERSION),
+      requestPdfReady: Boolean(
+        guide
+        && text(guide.templateVersion, 80) === ASO_GUIDE_TEMPLATE_VERSION
+        && workflow.latestGuideRequiresRegeneration !== true
+      ),
     });
     if (missing.length > 0) {
       return NextResponse.json({ error: `Conclua os pré-requisitos antes de enviar os e-mails: ${missing.join('; ')}.` }, { status: 409 });
@@ -615,14 +634,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!paymentRequestId) return NextResponse.json({ error: 'Solicite e confirme o pagamento do ASO antes do envio à clínica.' }, { status: 409 });
     const payment = await getPaymentRequest(paymentRequestId);
     if (payment.status !== 'paid' || !payment.proofStoragePath) return NextResponse.json({ error: 'O e-mail só será liberado após o Banco Inter confirmar o pagamento e o comprovante estar disponível.' }, { status: 409 });
-    const submissionAt = formSubmissionMarker(process);
-    const formDataValidation = record(workflow.formDataValidation);
     const guide = await latestGuide(id, workflow);
     const missing = missingAsoEmailPrerequisites({
       expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
-      formDataConfirmed: Boolean(submissionAt && text(formDataValidation.submissionAt, 40) === submissionAt),
+      formDataConfirmed: formDataConfirmed(process, workflow),
       paymentPaid: true,
-      requestPdfReady: Boolean(guide && text(guide.templateVersion, 80) === ASO_GUIDE_TEMPLATE_VERSION),
+      requestPdfReady: Boolean(
+        guide
+        && text(guide.templateVersion, 80) === ASO_GUIDE_TEMPLATE_VERSION
+        && workflow.latestGuideRequiresRegeneration !== true
+      ),
     });
     if (missing.length > 0) return NextResponse.json({ error: `Conclua os pré-requisitos antes de enviar o e-mail: ${missing.join('; ')}.` }, { status: 409 });
     const clinicEntityId = text(workflow.clinicEntityId, 180);

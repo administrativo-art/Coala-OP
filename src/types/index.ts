@@ -1456,6 +1456,20 @@ export type OnboardingProcess = {
   publicFormAnswers?: Record<string, unknown>;
   publicFormSubmittedAt?: string | null;
   publicFormLastSubmittedAt?: string | null;
+  publicFormRevision?: number | null;
+  identityCorrection?: {
+    status?: 'authorized' | 'consumed';
+    allowedFields?: Array<'fullName' | 'cpf'>;
+    version?: number | null;
+    reason?: string | null;
+    authorizedAt?: string | null;
+    authorizedBy?: string | null;
+    authorizedByEmail?: string | null;
+    consumedAt?: string | null;
+    submissionProtocol?: string | null;
+    changedFields?: Array<'fullName' | 'cpf'>;
+    clinicRevalidationRequired?: boolean | null;
+  } | null;
   publicPrivacyAcceptance?: OnboardingPrivacyAcceptance | null;
   consentimento_imagem_voz?: {
     autorizado?: boolean;
@@ -1470,6 +1484,8 @@ export type OnboardingProcess = {
     latestGuideHashSha256?: string | null;
     latestGuideGeneratedAt?: string | null;
     latestGuideTemplateVersion?: string | null;
+    latestGuidePublicFormRevision?: number | null;
+    latestGuideRequiresRegeneration?: boolean | null;
     clinicEntityId?: string | null;
     paymentRequestId?: string | null;
     paymentStatus?: 'draft' | 'awaiting_financial_authorization' | 'ready_to_submit' | 'submitting' | 'awaiting_bank_approval' | 'processing' | 'paid' | 'rejected' | 'approval_expired' | 'failed' | 'cancelled' | null;
@@ -1509,6 +1525,7 @@ export type OnboardingProcess = {
     } | null;
     formDataValidation?: {
       submissionAt?: string | null;
+      revision?: number | null;
       validatedAt?: string | null;
       validatedBy?: string | null;
       validatedByEmail?: string | null;

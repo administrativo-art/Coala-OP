@@ -47,6 +47,7 @@ type PublicOnboarding = {
   documents?: PublicOnboardingDocument[];
   publicFormAnswers?: Record<string, unknown>;
   publicFormSubmittedAt?: string | null;
+  identityCorrectionAllowed?: boolean;
   publicTokenExpiresAt?: string | null;
   publicTokenExtensionUsed?: boolean;
   privacyNotice?: {
@@ -437,6 +438,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [answers.children, answers.hasCnh, answers.identityDocumentType, data?.documents]);
   const linkExpired = Boolean(data?.publicTokenExpiresAt && new Date(data.publicTokenExpiresAt).getTime() <= clockNow);
+  const identityFieldsLocked = Boolean(data?.publicFormSubmittedAt && !data.identityCorrectionAllowed);
   const set = (field: keyof FormalizationAnswers) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setAnswers(current => ({ ...current, [field]: event.target.value }));
@@ -731,6 +733,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                     className="fld"
                     placeholder="Nome completo"
                     autoComplete="name"
+                    disabled={identityFieldsLocked}
                     required
                   />
                 </div>
@@ -744,12 +747,20 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                     inputMode="numeric"
                     autoComplete="off"
                     maxLength={14}
+                    disabled={identityFieldsLocked}
                     pattern="\d{3}\.\d{3}\.\d{3}-\d{2}"
                     title="Informe os 11 dígitos do CPF"
                     required
                   />
                 </div>
               </div>
+              {data.publicFormSubmittedAt ? (
+                <p className={`mb-4 rounded-2xl border px-4 py-3 text-xs font-semibold leading-relaxed ${identityFieldsLocked ? 'border-[#2A1F2A]/10 bg-white/70 text-[#5B4C5B]' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+                  {identityFieldsLocked
+                    ? 'Nome e CPF foram bloqueados após o primeiro envio. Para corrigir, solicite uma liberação ao RH.'
+                    : 'O RH liberou a correção de nome e CPF. Depois do próximo envio, esses campos serão bloqueados novamente.'}
+                </p>
+              ) : null}
               <div>
                   <label className="mb-1.5 block text-xs font-bold">Você possui CNH?</label>
                   <select
