@@ -184,6 +184,26 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
     await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "amount", bankStatus: rawStatus });
     throw new Error("O valor confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.");
   }
+  if (!current.beneficiarySnapshot.documentHash) {
+    const beneficiary = await resolvePaymentBeneficiary(current.beneficiaryReference);
+    if (beneficiary.sourceUpdatedAt !== current.beneficiarySnapshot.sourceUpdatedAt) {
+      await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "beneficiary_source", bankStatus: rawStatus });
+      throw new Error("Os dados do favorecido mudaram após o envio. O pagamento exige conferência manual antes da baixa.");
+    }
+    const refreshedSnapshot = createBeneficiarySnapshot(beneficiary, current.beneficiarySnapshot.resolvedAt);
+    if (!refreshedSnapshot.documentHash) {
+      throw new Error("Não foi possível validar com segurança o documento do favorecido confirmado pelo banco.");
+    }
+    current = {
+      ...current,
+      beneficiarySnapshot: {
+        ...current.beneficiarySnapshot,
+        documentHash: refreshedSnapshot.documentHash,
+      },
+    };
+    await paymentRequestRef(id).set({ beneficiarySnapshot: current.beneficiarySnapshot }, { merge: true });
+    await addPaymentEvent(id, "BENEFICIARY_DOCUMENT_HASH_BACKFILLED", "system", { sourceType: current.beneficiaryReference.sourceType });
+  }
   if (!paymentReceiverMatchesSnapshot({
     receiverDocument: transaction.recebedor?.cpfCnpj,
     snapshotDocument: current.beneficiarySnapshot.document,
