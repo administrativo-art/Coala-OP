@@ -35,7 +35,7 @@ export async function maybeAdvanceAfterFirstAccess(onboardingId: string) {
     if (!userCreated || !emailDelivered || !passwordCreated) {
       const status = !userCreated
         ? "pending"
-        : ["failed", "bounced", "complained"].includes(String(email.status ?? ""))
+        : ["failed", "bounced", "complained", "suppressed"].includes(String(email.status ?? ""))
           ? "failed"
           : !emailDelivered
             ? "awaiting_delivery"

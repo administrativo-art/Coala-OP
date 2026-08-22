@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { candidateAsoEmailContent, candidateAsoProcessStartedEmailContent, clinicAsoEmailContent, renderCandidateAsoProcessStartedEmail, renderClinicAsoRequestEmail } from '../../../src/features/hr/aso/emails';
+import { ASO_CLINIC_EMAIL_CIDS, candidateAsoEmailContent, clinicAsoEmailContent, renderCandidateAsoAppointmentEmail, renderClinicAsoRequestEmail } from '../../../src/features/hr/aso/emails';
+import { clinicLocationFromConfig, clinicLocationLabel } from '../../../src/features/hr/aso/clinic-location';
 import { renderCoalaEmail } from '../../../src/lib/email/template';
 
 test('e-mail da clínica usa dados dinâmicos e não repete o assunto como título', () => {
@@ -34,15 +35,18 @@ test('e-mail do candidato contém endereço, mapa e link exclusivo do ASO', () =
   assert.match(locationHtml, /border:1px solid #86efac/);
 });
 
-test('início do ASO avisa a colaboradora sem antecipar um agendamento', () => {
-  const content = candidateAsoProcessStartedEmailContent({ candidateName: 'Maria Silva', clinicName: 'MedClinic' });
-  assert.match(content.subject, /exame admissional foi solicitado/i);
-  assert.match(content.text, /RH iniciou a solicitação/i);
-  assert.match(content.text, /novo e-mail com o agendamento/i);
-  assert.doesNotMatch(content.text, /agendado para/i);
-  const html = renderCandidateAsoProcessStartedEmail({ candidateName: '<Maria>', clinicName: 'MedClinic' });
-  assert.match(html, /&lt;Maria&gt;/);
-  assert.doesNotMatch(html, /coala-email-logo|<img/i);
+test('agendamento usa automaticamente o endereço cadastrado da clínica', () => {
+  const location = clinicLocationFromConfig('Clínica Teste', {
+    street: 'Rua das Flores', number: '10', district: 'Centro', city: 'São Luís', state: 'MA', postalCode: '65000-000', reference: 'Ao lado da praça',
+  });
+  assert.ok(location);
+  assert.match(clinicLocationLabel(location), /Clínica Teste · Rua das Flores, 10/);
+  const content = candidateAsoEmailContent({ candidateName: 'Maria Silva', appointmentLabel: '24/07/2026 às 08:30', uploadUrl: 'https://exemplo/aso', location });
+  assert.match(content.locationBlock, /Rua das Flores, 10/);
+  assert.match(content.text, /google\.com\/maps\/search/);
+  const html = renderCandidateAsoAppointmentEmail({ candidateName: 'Maria Silva', appointmentDate: '2026-07-24', appointmentTime: '08:30', uploadUrl: 'https://exemplo/aso', location });
+  assert.match(html, /Rua das Flores, 10/);
+  assert.doesNotMatch(html, /Orientação da clínica/);
 });
 
 test('solicitação da clínica funciona sem guia em PDF e inclui o CPF no corpo', () => {
@@ -63,4 +67,13 @@ test('solicitação da clínica funciona sem guia em PDF e inclui o CPF no corpo
   assert.match(html, /CPF 123\.456\.789-00/);
   assert.doesNotMatch(html, /ANEXOS · 0/);
   assert.match(html, /Informar data e horário/);
+  const htmlWithAttachment = renderClinicAsoRequestEmail({
+    ...input,
+    attachments: [{ label: 'Solicitação do ASO', fileName: 'solicitacao.pdf' }],
+    replyUrl: 'https://exemplo/aso/clinica/token',
+  });
+  for (const cid of Object.values(ASO_CLINIC_EMAIL_CIDS)) {
+    assert.match(htmlWithAttachment, new RegExp(`src="cid:${cid}"`));
+  }
+  assert.doesNotMatch(htmlWithAttachment, /https:\/\/op\.coalashakes\.com/);
 });

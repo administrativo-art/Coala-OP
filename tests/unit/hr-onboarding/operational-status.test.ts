@@ -50,6 +50,23 @@ test('CLT diferencia espera da pessoa e ação do RH', () => {
   assert.match(review.headline, /revisar documentos/i);
 });
 
+test('CLT antecipa link próximo do vencimento sem classificar links saudáveis como atraso', () => {
+  const expiring = resolveOnboardingOperationalStatus(process({
+    publicToken: 'token-curto',
+    publicTokenExpiresAt: '2026-08-06T21:00:00.000Z',
+  }), NOW);
+  assert.equal(expiring.health, 'overdue');
+  assert.equal(expiring.responsible, 'rh');
+  assert.match(expiring.headline, /6 h/i);
+  assert.match(expiring.detail, /prorrogar/i);
+
+  const healthy = resolveOnboardingOperationalStatus(process({
+    publicToken: 'token-saudavel',
+    publicTokenExpiresAt: '2026-08-07T15:00:00.000Z',
+  }), NOW);
+  assert.equal(healthy.health, 'waiting_person');
+});
+
 test('falha operacional tem precedência sobre atraso', () => {
   const result = resolveOnboardingOperationalStatus(process({
     currentStageStartedAt: '2026-07-01T12:00:00.000Z',

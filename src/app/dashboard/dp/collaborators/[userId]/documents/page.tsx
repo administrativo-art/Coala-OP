@@ -975,7 +975,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ us
 
   if (!canAccessThisProfile) {
     return (
-      <div className="mx-auto w-full max-w-[calc(100vw-4rem)] p-4 md:p-8">
+      <div className="w-full p-4 md:p-8">
         <div className="rounded-2xl border bg-white p-5 text-sm font-semibold text-slate-600">
           Este perfil permite visualizar apenas os próprios documentos da Gestão do colaborador.
         </div>

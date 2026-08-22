@@ -3,11 +3,11 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cwd } from 'node:process';
 import { NextRequest, NextResponse } from 'next/server';
-import { renderToBuffer } from '@react-pdf/renderer';
 import { getStorage } from 'firebase-admin/storage';
 
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
-import { MedclincReferralPdf } from '@/features/hr/aso/medclinc-referral-pdf';
+import { renderMedclincReferralPdf } from '@/features/hr/aso/medclinc-referral-pdf';
+import { ASO_GUIDE_TEMPLATE_VERSION } from '@/features/hr/aso/guide-version';
 import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -35,7 +35,7 @@ function formatCpf(value: unknown) {
     : text(value);
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const access = await assertFormalizationAccess(request, 'aso.manage').catch(() => null);
   if (!access) return NextResponse.json({ error: 'Sem permissão para gerar a guia do ASO.' }, { status: 403 });
 
@@ -69,8 +69,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     readFile(path.join(cwd(), 'src/features/hr/aso/assets/medclinc-logo.jpg')),
     readFile(path.join(cwd(), 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png')),
   ]);
-  const pdf = await renderToBuffer(<MedclincReferralPdf data={{
-    companyName: text(process.employerUnitName) || text(process.unitName) || 'Empresa responsável',
+  const pdf = await renderMedclincReferralPdf({
     employerCnpj: CnpjValidator.format(employerCnpj),
     employeeName,
     employeeCpf,
@@ -80,7 +79,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     logoDataUri: `data:image/jpeg;base64,${logo.toString('base64')}`,
     letterheadLogoDataUri: `data:image/png;base64,${letterheadLogo.toString('base64')}`,
     examType,
-  }} />);
+  });
   const buffer = Buffer.from(pdf);
   const hashSha256 = createHash('sha256').update(buffer).digest('hex');
   const generatedId = randomUUID();
@@ -97,7 +96,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     id: generatedId,
     kind: examType === 'dismissal' ? 'aso_dismissal_referral' : 'aso_admission_referral',
     provider: 'MedClinic',
-    templateVersion: 'medclinic-v2',
+    templateVersion: ASO_GUIDE_TEMPLATE_VERSION,
     mimeType: 'application/pdf',
     fileName,
     storagePath,
@@ -110,6 +109,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     serviceDateStatus: 'to_be_defined_by_clinic',
     examType,
     examProgram: 'PCMSO',
+    publicFormRevision: Number.isInteger(Number(process.publicFormRevision)) && Number(process.publicFormRevision) > 0
+      ? Number(process.publicFormRevision)
+      : null,
     generatedAt: now,
     generatedBy: access.decoded.uid,
     generatedByEmail: access.decoded.email ?? null,
@@ -123,6 +125,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       latestGuideId: generatedId,
       latestGuideHashSha256: hashSha256,
       latestGuideGeneratedAt: now,
+      latestGuideTemplateVersion: ASO_GUIDE_TEMPLATE_VERSION,
+      latestGuidePublicFormRevision: Number.isInteger(Number(process.publicFormRevision)) && Number(process.publicFormRevision) > 0
+        ? Number(process.publicFormRevision)
+        : null,
+      latestGuideRequiresRegeneration: false,
       updatedAt: now,
     },
     updatedAt: now,

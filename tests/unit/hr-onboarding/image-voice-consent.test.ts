@@ -10,6 +10,7 @@ import {
   parseImageVoiceConsentDecision,
   publicImageVoiceConsentTerm,
 } from "../../../src/lib/hr/image-voice-consent";
+import { shouldRestoreImageVoiceAuthorization } from "../../../src/features/hr/onboarding/image-voice-consent-state";
 
 test("publica o consentimento de imagem e voz como facultativo e específico", () => {
   assert.match(IMAGE_VOICE_CONSENT_TITLE, /imagem e voz/i);
@@ -47,4 +48,21 @@ test("expõe versão e hash estáveis do termo exibido", () => {
   assert.match(term.hash, /^[a-f0-9]{64}$/);
   assert.match(term.termText, /revogada a qualquer momento/i);
   assert.match(term.termText, /materiais impressos.*distribuídos/i);
+});
+
+test("restaura somente uma autorização vigente para o termo atual", () => {
+  const term = publicImageVoiceConsentTerm();
+  const granted = {
+    authorized: true,
+    status: "granted",
+    termVersion: term.version,
+    termHash: term.hash,
+    revokedAt: null,
+  };
+
+  assert.equal(shouldRestoreImageVoiceAuthorization(granted, term), true);
+  assert.equal(shouldRestoreImageVoiceAuthorization({ ...granted, authorized: false, status: "denied" }, term), false);
+  assert.equal(shouldRestoreImageVoiceAuthorization({ ...granted, termHash: "hash-antigo" }, term), false);
+  assert.equal(shouldRestoreImageVoiceAuthorization({ ...granted, status: "revoked" }, term), false);
+  assert.equal(shouldRestoreImageVoiceAuthorization({ ...granted, revokedAt: "2026-08-21T12:00:00.000Z" }, term), false);
 });

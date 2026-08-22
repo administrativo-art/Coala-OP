@@ -33,6 +33,8 @@ env:
     value: "365"
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
+  - variable: RESEND_WEBHOOK_SECRET
+    secret: RESEND_WEBHOOK_SECRET
   - variable: PAYMENT_DATA_ENCRYPTION_KEY
     secret: PAYMENT_DATA_ENCRYPTION_KEY
   - variable: INTER_CLIENT_ID

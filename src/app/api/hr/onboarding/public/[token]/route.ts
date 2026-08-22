@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash, randomBytes } from 'crypto';
 
 import { serializeHrValue } from '@/features/hr/lib/server-access';
+import {
+  applicableOnboardingDocuments,
+  presentOnboardingDocumentForAnswers,
+  requiredFamilyDocumentKinds,
+} from '@/features/hr/onboarding/document-applicability';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { DEFAULT_ONBOARDING_DOCUMENTS, instantiateOnboardingDocuments } from '@/lib/recruitment-onboarding';
 import { onboardingPublicLinkExpired, onboardingPublicLinkExpiresAt } from '@/lib/hr/onboarding-public-link';
@@ -30,6 +35,11 @@ import {
 import type { OnboardingDocument } from '@/types';
 import type { PjOnboardingWorkflow } from '@/types';
 import { pjRequiredRegistrationFieldsMissing, setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
+import {
+  changedIdentityFields,
+  nextPublicFormRevision,
+  publicFormAnswersEqual,
+} from '@/features/hr/onboarding/public-form-revision';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,6 +56,10 @@ function trimText(value: unknown, maxLength: number) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function cleanChoice(value: unknown, allowed: readonly string[]) {
   const cleaned = trimText(value, 40);
   return allowed.includes(cleaned) ? cleaned : '';
@@ -59,26 +73,6 @@ function cleanChoices(value: unknown, allowed: readonly string[]) {
 function cleanIsoDate(value: unknown) {
   const cleaned = trimText(value, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(cleaned) ? cleaned : '';
-}
-
-function dependentAge(birthDate: string) {
-  if (!birthDate) return null;
-  const date = new Date(`${birthDate}T12:00:00.000Z`);
-  if (!Number.isFinite(date.getTime())) return null;
-  const today = new Date();
-  let age = today.getUTCFullYear() - date.getUTCFullYear();
-  const monthDelta = today.getUTCMonth() - date.getUTCMonth();
-  if (monthDelta < 0 || (monthDelta === 0 && today.getUTCDate() < date.getUTCDate())) age -= 1;
-  return age;
-}
-
-function familyRequiredDocs(birthDate: string) {
-  const age = dependentAge(birthDate);
-  if (age == null) return [] as const;
-  if (age < 0 || age >= 14) return [] as const;
-  if (age < 4) return ['birth_certificate', 'vaccination'] as const;
-  if (age < 7) return ['birth_certificate', 'vaccination', 'school_attendance'] as const;
-  return ['birth_certificate', 'school_attendance'] as const;
 }
 
 function familyDocumentLabel(kind: string, index: number) {
@@ -175,7 +169,7 @@ function sanitizePjPublicAnswers(raw: Record<string, unknown>) {
 
 function buildChildDocumentTemplates(answers: ReturnType<typeof sanitizePublicAnswers>): OnboardingDocument[] {
   return answers.children.flatMap((child, index) =>
-    familyRequiredDocs(child.birthDate).map((kind, order) => ({
+    requiredFamilyDocumentKinds(child.birthDate).map((kind, order) => ({
       id: `child_${index + 1}_${kind}`,
       label: familyDocumentLabel(kind, index),
       documentTypeCode: kind === 'birth_certificate'
@@ -460,6 +454,11 @@ async function getOnboardingByToken(token: string) {
 
 function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
   const processDocuments = Array.isArray(data.documents) ? data.documents as OnboardingDocument[] : [];
+  const storedImageVoiceConsent = data.consentimento_imagem_voz
+    && typeof data.consentimento_imagem_voz === 'object'
+    && !Array.isArray(data.consentimento_imagem_voz)
+      ? data.consentimento_imagem_voz as Record<string, unknown>
+      : null;
   const documents = data.employmentRelationshipType === 'pj'
     ? processDocuments
     : withUniversalDocuments(processDocuments);
@@ -478,22 +477,43 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
     pjWorkflow: data.pjWorkflow ?? null,
     status: data.status ?? null,
     currentStage: data.currentStage ?? null,
-    documents: documents.filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION').map(document => ({
-      id: document.id,
-      label: document.label,
-      description: document.description ?? null,
-      required: document.required !== false,
-      order: document.order ?? 0,
-      status: document.status ?? 'pending',
-      fileUrl: document.fileUrl ?? null,
-      updatedAt: document.updatedAt ?? null,
-    })),
+    documents: documents
+      .filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION')
+      .map(document => presentOnboardingDocumentForAnswers(document, data.publicFormAnswers))
+      .map(document => ({
+        id: document.id,
+        label: document.label,
+        description: document.description ?? null,
+        required: document.required !== false,
+        order: document.order ?? 0,
+        status: document.status ?? 'pending',
+        fileUrl: document.fileUrl ?? null,
+        updatedAt: document.updatedAt ?? null,
+      })),
     publicFormAnswers: data.publicFormAnswers ?? {},
     publicFormSubmittedAt: data.publicFormSubmittedAt ?? null,
+    identityCorrectionAllowed: record(data.identityCorrection).status === 'authorized',
     publicTokenExpiresAt: onboardingPublicLinkExpiresAt(data)?.toISOString() ?? null,
     publicTokenExtensionUsed: data.publicTokenExtensionUsed === true,
     privacyNotice: publicPrivacyNotice(),
     imageVoiceConsentTerm: publicImageVoiceConsentTerm(),
+    imageVoiceConsentDecision: storedImageVoiceConsent ? {
+      authorized: storedImageVoiceConsent.autorizado === true,
+      status: typeof storedImageVoiceConsent.status === 'string' ? storedImageVoiceConsent.status : null,
+      termVersion: typeof storedImageVoiceConsent.termVersion === 'string'
+        ? storedImageVoiceConsent.termVersion
+        : typeof storedImageVoiceConsent.versao_termo === 'string'
+          ? storedImageVoiceConsent.versao_termo
+          : null,
+      termHash: typeof storedImageVoiceConsent.termHash === 'string'
+        ? storedImageVoiceConsent.termHash
+        : typeof storedImageVoiceConsent.hash_termo_exibido === 'string'
+          ? storedImageVoiceConsent.hash_termo_exibido
+          : null,
+      revokedAt: typeof storedImageVoiceConsent.revokedAt === 'string'
+        ? storedImageVoiceConsent.revokedAt
+        : null,
+    } : null,
     publicPrivacyAcceptance: data.publicPrivacyAcceptance ?? null,
   };
 }
@@ -679,6 +699,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   } else if (!publicFormAnswers.foodRestrictions.includes('Outro ingrediente')) {
     publicFormAnswers = { ...publicFormAnswers, foodRestrictionOther: '' };
   }
+  const previousPublicFormAnswers = sanitizePublicAnswers(record(data.publicFormAnswers));
+  const hasPreviousSubmission = Boolean(data.publicFormSubmittedAt);
+  const identityChanges = hasPreviousSubmission
+    ? changedIdentityFields(previousPublicFormAnswers, publicFormAnswers)
+    : [];
+  const identityCorrection = record(data.identityCorrection);
+  const identityCorrectionAuthorized = identityCorrection.status === 'authorized';
+  if (identityChanges.length > 0 && !identityCorrectionAuthorized) {
+    return jsonError('Nome e CPF ficam bloqueados após o primeiro envio. Solicite ao RH a liberação para corrigir esses dados.', 403);
+  }
+  const formAnswersChanged = hasPreviousSubmission
+    ? !publicFormAnswersEqual(previousPublicFormAnswers, publicFormAnswers)
+    : true;
+  const publicFormRevision = nextPublicFormRevision({
+    currentRevision: data.publicFormRevision,
+    hasPreviousSubmission,
+    answersChanged: formAnswersChanged,
+  });
   if (!publicFormAnswers.fullName) return jsonError('Informe o nome completo.');
   if (publicFormAnswers.cpf.length !== 11) return jsonError('Informe um CPF com 11 dígitos.');
   if (!publicFormAnswers.hasChildren) return jsonError('Informe se possui filhos.');
@@ -747,7 +785,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       updatedAt: now,
     };
   });
-  const allRequiredDocumentsSubmitted = requiredDocumentsSubmitted(nextDocuments);
+  const allRequiredDocumentsSubmitted = requiredDocumentsSubmitted(
+    applicableOnboardingDocuments(nextDocuments, publicFormAnswers),
+  );
   const shouldMoveToReview = data.currentStage === 'documents' || !data.currentStage;
   const submittedAt = new Date(now);
   const protocol = createSubmissionProtocol(submittedAt);
@@ -826,12 +866,35 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     usages: [],
   };
 
+  const identityCorrectionConsumed = identityChanges.length > 0 && identityCorrectionAuthorized;
+  const asoWorkflow = record(data.asoWorkflow);
+  const candidateNotification = record(asoWorkflow.candidateNotification);
+  const schedulingEmailSentAt = trimText(candidateNotification.sentAt, 40);
+  const guideBecameOutdated = identityChanges.length > 0 && !schedulingEmailSentAt;
+  const shouldUpdateAsoWorkflow = guideBecameOutdated;
+  const nextAsoWorkflow = {
+    ...asoWorkflow,
+    ...(guideBecameOutdated ? { latestGuideRequiresRegeneration: true } : {}),
+  };
+
   await doc.ref.set({
     documents: nextDocuments,
     candidateName: publicFormAnswers.fullName,
     publicFormAnswers,
-    publicFormSubmittedAt: now,
+    publicFormSubmittedAt: data.publicFormSubmittedAt ?? now,
     publicFormLastSubmittedAt: now,
+    publicFormRevision,
+    ...(identityCorrectionConsumed ? {
+      identityCorrection: {
+        ...identityCorrection,
+        status: 'consumed',
+        consumedAt: now,
+        submissionProtocol: protocol,
+        changedFields: identityChanges,
+        clinicRevalidationRequired: schedulingEmailSentAt ? false : null,
+      },
+    } : {}),
+    ...(shouldUpdateAsoWorkflow ? { asoWorkflow: nextAsoWorkflow } : {}),
     publicPrivacyAcceptance,
     consentimento_imagem_voz: imageVoiceConsent,
     currentStage: shouldMoveToReview
@@ -892,6 +955,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     submittedDocumentIds: Object.keys(rawDocuments),
     allRequiredDocumentsSubmitted,
     movedToReview: shouldMoveToReview,
+    publicFormRevision,
+    formAnswersChanged,
+    identityCorrectionApplied: identityCorrectionConsumed,
+    identityCorrectionChangedFields: identityChanges,
+    clinicRevalidationRequired: identityCorrectionConsumed && schedulingEmailSentAt ? false : null,
+    asoGuideRequiresRegeneration: guideBecameOutdated,
     existing_employee_consent_synced: Boolean(existingEmployeeId),
     existing_employee_id: existingEmployeeId,
     formalization_id: doc.id,

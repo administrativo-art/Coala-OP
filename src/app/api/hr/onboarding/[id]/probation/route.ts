@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { completeProbationEvaluation, createProbationProcess, decideProbation, refreshProbationProcess, type ProbationProcessState } from "@/features/hr/integration/probation-process";
+import { completeProbationEvaluation, createProbationProcess, decideProbation, probationIsReleasedAfterFormalization, refreshProbationProcess, type ProbationProcessState } from "@/features/hr/integration/probation-process";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 
@@ -13,15 +13,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const { id } = await context.params; const reference = hrDbAdmin.collection("onboardingProcesses").doc(id); const document = await reference.get();
   if (!document.exists) return error("Integração não encontrada.", 404);
   const current = document.get("probationV2") as ProbationProcessState | undefined; if (!current) return error("Experiência não configurada.", 409);
+  const released = probationIsReleasedAfterFormalization(document.data() ?? {});
+  if (!released) return NextResponse.json({ probation: serializeHrValue(current), released: false });
   const next = refreshProbationProcess(current, new Date().toISOString().slice(0, 10));
-  if (JSON.stringify(next) !== JSON.stringify(current)) await reference.update({ probationV2: next });
-  return NextResponse.json({ probation: serializeHrValue(next) });
+  return NextResponse.json({ probation: serializeHrValue(next), released: true });
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const access = await assertFormalizationAccess(request, "onboarding.manage").catch(() => null); if (!access) return error("Sem permissão.", 403);
   const { id } = await context.params; const reference = hrDbAdmin.collection("onboardingProcesses").doc(id); const document = await reference.get();
   if (!document.exists) return error("Integração não encontrada.", 404);
+  if (!probationIsReleasedAfterFormalization(document.data() ?? {})) {
+    return error("As avaliações de experiência serão liberadas após a conclusão da formalização.", 409);
+  }
   const body = await request.json().catch(() => ({})); const action = text(body.action); const now = new Date().toISOString();
   let current = document.get("probationV2") as ProbationProcessState | undefined;
   try {

@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { createAsoToken, extractAppointmentProposal, hashAsoToken, missingAsoEmailPrerequisites } from '../../../src/features/hr/aso/workflow';
+import {
+  createAsoToken,
+  extractAppointmentProposal,
+  hashAsoToken,
+  missingAsoEmailPrerequisites,
+} from '../../../src/features/hr/aso/workflow';
+import { isAsoAppointmentAfterAdmission } from '../../../src/features/hr/aso/dates';
+import { ASO_GUIDE_TEMPLATE_VERSION } from '../../../src/features/hr/aso/guide-version';
+import {
+  MEDCLINC_REFERRAL_COMPANY_NAME,
+  renderMedclincReferralPdf,
+} from '../../../src/features/hr/aso/medclinc-referral-pdf';
 import { engagementStatusFromResendEvent } from '../../../src/lib/email/resend-events';
 
 describe('fluxo do ASO', () => {
@@ -28,27 +39,51 @@ describe('fluxo do ASO', () => {
     assert.ok(result.confidence < 1);
   });
 
+  test('alerta quando o exame fica depois da admissão prevista', () => {
+    assert.equal(isAsoAppointmentAfterAdmission('2026-09-23', '2026-09-22'), true);
+    assert.equal(isAsoAppointmentAfterAdmission('2026-09-22', '2026-09-22'), false);
+    assert.equal(isAsoAppointmentAfterAdmission('2026-09-21', '2026-09-22'), false);
+    assert.equal(isAsoAppointmentAfterAdmission(null, '2026-09-22'), false);
+  });
+
+  test('gera a guia do ASO como PDF válido sem depender do reconciliador do React', async () => {
+    assert.equal(MEDCLINC_REFERRAL_COMPANY_NAME, 'CT Sorvetes LTDA');
+    assert.equal(ASO_GUIDE_TEMPLATE_VERSION, 'medclinic-v3');
+    const pdf = await renderMedclincReferralPdf({
+      employerCnpj: '14.276.603/0001-25',
+      employeeName: 'Thaise Correia Marinho',
+      employeeCpf: '058.136.883-58',
+      jobFunction: 'Atendente de balcão',
+      examType: 'admission',
+    });
+    assert.equal(Buffer.from(pdf).subarray(0, 5).toString(), '%PDF-');
+    assert.ok(pdf.length > 5_000);
+  });
+
   test('mapeia abertura e clique como engajamento', () => {
     assert.equal(engagementStatusFromResendEvent('email.opened'), 'opened');
     assert.equal(engagementStatusFromResendEvent('email.clicked'), 'clicked');
     assert.equal(engagementStatusFromResendEvent('email.delivered'), null);
   });
 
-  test('envio exige somente formulário, admissão e pagamento', () => {
+  test('envio exige formulário, admissão, pagamento e solicitação em PDF', () => {
     assert.deepEqual(missingAsoEmailPrerequisites({
       expectedAdmissionDate: '2026-08-10',
-      formDataConfirmed: true,
+      essentialFormDataReady: true,
       paymentPaid: true,
+      requestPdfReady: true,
     }), []);
 
     assert.deepEqual(missingAsoEmailPrerequisites({
       expectedAdmissionDate: null,
-      formDataConfirmed: false,
+      essentialFormDataReady: false,
       paymentPaid: false,
+      requestPdfReady: false,
     }), [
-      'conferência dos dados do formulário',
+      'dados essenciais do formulário',
       'data de admissão',
       'confirmação do pagamento do ASO',
+      'solicitação do ASO em PDF',
     ]);
   });
 });

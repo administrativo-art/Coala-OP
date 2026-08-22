@@ -1268,7 +1268,7 @@ export type OnboardingAccessProvisioningState = {
     };
   };
   email?: {
-    status?: 'not_sent' | 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained';
+    status?: 'not_sent' | 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed';
     providerId?: string | null;
     recipient?: string | null;
     acceptedAt?: string | null;
@@ -1457,6 +1457,20 @@ export type OnboardingProcess = {
   publicFormAnswers?: Record<string, unknown>;
   publicFormSubmittedAt?: string | null;
   publicFormLastSubmittedAt?: string | null;
+  publicFormRevision?: number | null;
+  identityCorrection?: {
+    status?: 'authorized' | 'consumed';
+    allowedFields?: Array<'fullName' | 'cpf'>;
+    version?: number | null;
+    reason?: string | null;
+    authorizedAt?: string | null;
+    authorizedBy?: string | null;
+    authorizedByEmail?: string | null;
+    consumedAt?: string | null;
+    submissionProtocol?: string | null;
+    changedFields?: Array<'fullName' | 'cpf'>;
+    clinicRevalidationRequired?: boolean | null;
+  } | null;
   publicPrivacyAcceptance?: OnboardingPrivacyAcceptance | null;
   consentimento_imagem_voz?: {
     autorizado?: boolean;
@@ -1470,6 +1484,9 @@ export type OnboardingProcess = {
     latestGuideId?: string | null;
     latestGuideHashSha256?: string | null;
     latestGuideGeneratedAt?: string | null;
+    latestGuideTemplateVersion?: string | null;
+    latestGuidePublicFormRevision?: number | null;
+    latestGuideRequiresRegeneration?: boolean | null;
     clinicEntityId?: string | null;
     paymentRequestId?: string | null;
     paymentStatus?: 'draft' | 'awaiting_financial_authorization' | 'ready_to_submit' | 'submitting' | 'awaiting_bank_approval' | 'processing' | 'paid' | 'rejected' | 'approval_expired' | 'failed' | 'cancelled' | null;
@@ -1503,12 +1520,14 @@ export type OnboardingProcess = {
       clinicName?: string | null;
       clinicEmail?: string | null;
       clinicPrice?: number | null;
+      clinicLocation?: import('@/features/hr/aso/clinic-location').AsoClinicLocation | null;
       validatedAt?: string | null;
       validatedBy?: string | null;
       validatedByEmail?: string | null;
     } | null;
     formDataValidation?: {
       submissionAt?: string | null;
+      revision?: number | null;
       validatedAt?: string | null;
       validatedBy?: string | null;
       validatedByEmail?: string | null;
@@ -1516,12 +1535,14 @@ export type OnboardingProcess = {
     clinic?: {
       email?: string | null;
       name?: string | null;
+      location?: import('@/features/hr/aso/clinic-location').AsoClinicLocation | null;
       communicationId?: string | null;
       providerId?: string | null;
-      emailStatus?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | null;
+      emailStatus?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed' | null;
       sentAt?: string | null;
       deliveredAt?: string | null;
       openedAt?: string | null;
+      clickedAt?: string | null;
       repliedAt?: string | null;
       lastError?: string | null;
     } | null;
@@ -1543,7 +1564,9 @@ export type OnboardingProcess = {
       sentAt?: string | null;
       deliveredAt?: string | null;
       openedAt?: string | null;
+      clickedAt?: string | null;
       uploadExpiresAt?: string | null;
+      lastError?: string | null;
     } | null;
     candidateStartNotification?: {
       communicationId?: string | null;
@@ -1552,6 +1575,7 @@ export type OnboardingProcess = {
       sentAt?: string | null;
       deliveredAt?: string | null;
       openedAt?: string | null;
+      clickedAt?: string | null;
       lastError?: string | null;
     } | null;
     asoDocument?: {
@@ -1587,7 +1611,7 @@ export type OnboardingProcess = {
       recipient?: string | null;
       communicationId?: string | null;
       providerId?: string | null;
-      status?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | null;
+      status?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed' | null;
       sentAt?: string | null;
       deliveredAt?: string | null;
       openedAt?: string | null;

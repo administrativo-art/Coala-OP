@@ -10,6 +10,15 @@ const nextConfig = {
     cpus: 1,
   },
   outputFileTracingIncludes: {
+    '/api/hr/onboarding/*/aso-workflow': [
+      './public/coala-email-logo.jpg',
+      './public/email/icons/file-text-pink.png',
+      './public/email/icons/calendar-days-white.png',
+      './public/email/icons/boxes/file-text-pink-14-in-28-fff0f6-r8.png',
+      './public/email/icons/boxes/stethoscope-white-20-in-36-28b3d0-r11.png',
+      './public/email/icons/boxes/building-2-pink-14-in-28-fff0f6-r9.png',
+      './public/email/icons/boxes/user-round-pink-14-in-28-fff0f6-r9.png',
+    ],
     '/api/hr/onboarding/*/aso-guide': [
       './src/features/hr/aso/assets/medclinc-logo.jpg',
       './src/features/hr/aso/assets/coala-shakes-letterhead-v1.png',

@@ -20,6 +20,8 @@ export function renderEmailIconBox({
 }: EmailIconBoxOptions) {
   const sourceName = src.split("/").at(-1)?.replace(/\.png$/i, "") ?? "icon";
   const backgroundName = background.replace("#", "").toLowerCase();
-  const composedSrc = `https://op.coalashakes.com/email/icons/boxes/${sourceName}-${iconSize}-in-${boxSize}-${backgroundName}-r${radius}.png`;
+  const composedSrc = src.startsWith("cid:")
+    ? src
+    : `https://op.coalashakes.com/email/icons/boxes/${sourceName}-${iconSize}-in-${boxSize}-${backgroundName}-r${radius}.png`;
   return `<img src="${composedSrc}" width="${boxSize}" height="${boxSize}" alt="" style="display:block;width:${boxSize}px;height:${boxSize}px;margin:0 auto;border:0" />`;
 }

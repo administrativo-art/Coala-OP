@@ -10,6 +10,7 @@ test("mapeia os eventos de entrega do Resend", () => {
   assert.equal(deliveryStatusFromResendEvent("email.bounced"), "bounced");
   assert.equal(deliveryStatusFromResendEvent("email.failed"), "failed");
   assert.equal(deliveryStatusFromResendEvent("email.complained"), "complained");
+  assert.equal(deliveryStatusFromResendEvent("email.suppressed"), "suppressed");
   assert.equal(deliveryStatusFromResendEvent("email.opened"), null);
 });
 
@@ -17,6 +18,7 @@ test("distingue falhas definitivas de atraso e entrega", () => {
   assert.equal(isDeliveryFailure("bounced"), true);
   assert.equal(isDeliveryFailure("failed"), true);
   assert.equal(isDeliveryFailure("complained"), true);
+  assert.equal(isDeliveryFailure("suppressed"), true);
   assert.equal(isDeliveryFailure("delayed"), false);
   assert.equal(isDeliveryFailure("delivered"), false);
 });

@@ -2870,7 +2870,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
 
   return (
     <div className="min-h-[calc(100vh-6rem)] bg-[var(--bg)] p-2 text-[#1d1d26] md:p-3">
-      <div className="mx-auto w-full max-w-[1600px] space-y-2.5">
+      <div className="w-full space-y-2.5">
         <TerminationDialog
           user={collaborator}
           units={units}

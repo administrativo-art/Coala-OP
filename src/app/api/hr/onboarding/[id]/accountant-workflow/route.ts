@@ -107,15 +107,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const selectedDocumentIds: string[] = [...new Set<string>((body.selectedDocumentIds as unknown[]).map((value) => text(value, 180)).filter(Boolean))].slice(0, 120);
     const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
     const aso = record(record(process.asoWorkflow).asoDocument);
-    const missing = missingAccountantPrerequisites({ documents, asoApproved: text(aso.status) === 'approved', expectedAdmissionDate: text(process.expectedAdmissionDate, 10) });
+    const missing = missingAccountantPrerequisites({ documents, asoApproved: text(aso.status) === 'approved', expectedAdmissionDate: text(process.expectedAdmissionDate, 10), publicFormAnswers: process.publicFormAnswers });
     if (missing.length) return NextResponse.json({ error: `O pacote ainda não pode ser enviado. Falta: ${missing.join('; ')}.` }, { status: 409 });
     const form = await latestForm(id, workflow); const validation = record(workflow.formValidation);
     if (!form || text(validation.documentId) !== form.id) return NextResponse.json({ error: 'Valide a versão atual do formulário antes do envio.' }, { status: 409 });
-    const availableCandidateDocuments = candidateDocumentsForAccountant(documents);
+    const availableCandidateDocuments = candidateDocumentsForAccountant(documents, undefined, process.publicFormAnswers);
     const availableDocumentIds = new Set(availableCandidateDocuments.map((document) => document.id));
     const unavailableSelection = selectedDocumentIds.filter((documentId) => !availableDocumentIds.has(documentId));
     if (unavailableSelection.length) return NextResponse.json({ error: 'A seleção contém documento indisponível, sem aprovação ou sem arquivo auditável. Atualize a página e revise os anexos.' }, { status: 409 });
-    const candidateDocuments = candidateDocumentsForAccountant(documents, selectedDocumentIds);
+    const candidateDocuments = candidateDocumentsForAccountant(documents, selectedDocumentIds, process.publicFormAnswers);
     const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
     const sourceFiles = [
       { label: 'Formulário de admissão para a contabilidade', storagePath: text(form.storagePath, 1500), mimeType: 'application/pdf' },

@@ -143,13 +143,12 @@
 /* Densidade operacional compartilhada por toda a árvore de Pessoal. */
 .personal-section-density {
   gap: 0.625rem !important;
-  padding: 0.75rem !important;
+  padding: 1rem !important;
   overflow-x: clip;
 }
 
 .personal-section-density > * {
   min-width: 0;
-  max-width: 100%;
 }
 
 .personal-section-density h1 {
@@ -248,9 +247,15 @@
   padding-bottom: 0.5rem;
 }
 
-@media (max-width: 767px) {
+@media (min-width: 768px) {
   .personal-section-density {
-    padding: 0.625rem !important;
+    padding: 1.5rem !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  .personal-section-density {
+    padding: 2rem !important;
   }
 }
 

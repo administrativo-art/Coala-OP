@@ -1,8 +1,10 @@
 import type { OnboardingDocument, OnboardingProcess, PjOnboardingStepId } from '@/types';
 import { PJ_ONBOARDING_STEP_LABELS, PJ_ONBOARDING_STEP_ORDER } from '@/features/hr/onboarding-pj/core';
+import { applicableOnboardingDocuments } from '@/features/hr/onboarding/document-applicability';
 import { DEFAULT_ONBOARDING_STAGES } from '@/lib/recruitment-onboarding';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
 export type OnboardingHealth =
   | 'on_track'
@@ -98,7 +100,10 @@ function daysSince(value: string | null, now: Date) {
 }
 
 function requiredDocuments(process: OnboardingProcess) {
-  return (process.documents ?? []).filter(document => (
+  return applicableOnboardingDocuments(
+    process.documents ?? [],
+    process.publicFormAnswers,
+  ).filter(document => (
     document.required !== false
     && document.id !== 'aso_admission'
     && document.documentTypeCode !== 'ASO_ADMISSION'
@@ -184,7 +189,15 @@ function status(
 }
 
 function failedCommunication(value?: string | null) {
-  return ['failed', 'bounced', 'complained'].includes(value ?? '');
+  return ['failed', 'bounced', 'complained', 'suppressed'].includes(value ?? '');
+}
+
+function publicLinkHoursRemaining(process: OnboardingProcess, now: Date) {
+  if (process.publicTokenClosedAt) return null;
+  const expiresAt = validDate(process.publicTokenExpiresAt);
+  if (!expiresAt) return null;
+  const remaining = expiresAt.getTime() - now.getTime();
+  return remaining > 0 ? Math.max(1, Math.ceil(remaining / HOUR_MS)) : null;
 }
 
 function resolvePjStatus(process: OnboardingProcess, now: Date) {
@@ -263,7 +276,6 @@ function resolveCltStatus(process: OnboardingProcess, now: Date) {
   if (
     signatureFailure
     || failedCommunication(aso?.clinic?.emailStatus)
-    || failedCommunication(aso?.candidateStartNotification?.emailStatus)
     || ['failed', 'rejected', 'approval_expired'].includes(aso?.paymentStatus ?? '')
     || failedCommunication(accountant?.email?.status)
     || process.accessProvisioning?.status === 'failed'
@@ -279,6 +291,22 @@ function resolveCltStatus(process: OnboardingProcess, now: Date) {
         ?? process.pdvAccess?.lastError
         ?? 'Há uma falha de envio, pagamento, assinatura ou integração.',
       'system',
+      now,
+    );
+  }
+
+  const linkHoursRemaining = publicLinkHoursRemaining(process, now);
+  const candidateStillNeedsLink = !process.publicFormSubmittedAt || missingRequired.length > 0 || rejected.length > 0;
+  if (candidateStillNeedsLink && linkHoursRemaining !== null && linkHoursRemaining <= 12) {
+    const extensionUsed = process.publicTokenExtensionUsed === true || Boolean(validDate(process.publicTokenExtendedAt));
+    return status(
+      process,
+      'overdue',
+      `Link expira em ${linkHoursRemaining} h`,
+      extensionUsed
+        ? 'A formalização ainda está pendente e a prorrogação única já foi utilizada.'
+        : 'A formalização ainda está pendente. Considere prorrogar o acesso por 24 h.',
+      'rh',
       now,
     );
   }
@@ -312,7 +340,7 @@ function resolveCltStatus(process: OnboardingProcess, now: Date) {
     if (aso?.startedAt) {
       return status(process, 'waiting_person', 'Aguardando retorno da clínica', 'O processo do ASO está em acompanhamento.', 'third_party', now);
     }
-    return status(process, 'hr_action', 'RH precisa conduzir o ASO', 'Valide a solicitação, selecione a clínica e inicie o processo.', 'rh', now);
+    return status(process, 'hr_action', 'RH precisa conduzir o ASO', 'Selecione a clínica, gere as guias e inicie o processo.', 'rh', now);
   }
   if (stage === 'accountant') {
     if (accountant?.registryDocument?.status === 'received' || accountant?.registryDocument?.status === 'rejected') {

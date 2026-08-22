@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { completeProbationEvaluation, createProbationProcess, decideProbation, refreshProbationProcess } from "../../../src/features/hr/integration/probation-process";
+import { completeProbationEvaluation, createProbationProcess, decideProbation, probationIsReleasedAfterFormalization, refreshProbationProcess } from "../../../src/features/hr/integration/probation-process";
 
 describe("acompanhamento da experiência", () => {
+  it("libera as avaliações somente depois da formalização", () => {
+    assert.equal(probationIsReleasedAfterFormalization({ status: "in_progress", currentStage: "documents" }), false);
+    assert.equal(probationIsReleasedAfterFormalization({ status: "completed", currentStage: "done" }), true);
+    assert.equal(probationIsReleasedAfterFormalization({ status: "cancelled", currentStage: "done", completedAt: "2026-01-01T10:00:00.000Z" }), false);
+  });
   it("abre avaliações somente dentro da janela e gera alertas", () => {
     const created = createProbationProcess("2026-01-01", undefined, "2026-01-01T10:00:00.000Z");
     assert.equal(created.evaluations[0].windowStartDate, "2026-01-21");

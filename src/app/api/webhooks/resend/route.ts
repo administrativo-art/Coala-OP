@@ -28,6 +28,7 @@ function eventErrorMessage(event: ResendWebhookEvent, status: string) {
   if (status === "bounced") return "O servidor do destinatário recusou permanentemente o e-mail.";
   if (status === "complained") return "O destinatário marcou a mensagem como spam.";
   if (status === "failed") return "O Resend informou uma falha definitiva no envio.";
+  if (status === "suppressed") return "O Resend suprimiu o envio para proteger a reputação do domínio.";
   return null;
 }
 
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
           ? "candidateStartNotification"
           : "candidateNotification";
       const current = workflow[key] && typeof workflow[key] === "object" ? workflow[key] as Record<string, unknown> : {};
-      await processRef.set({ asoWorkflow: { ...workflow, [key]: { ...current, ...(deliveryStatus ? { emailStatus: deliveryStatus } : {}), ...(deliveryStatus === "delivered" ? { deliveredAt: eventAt } : {}), ...(engagementStatus === "opened" ? { openedAt: eventAt } : {}), ...(deliveryStatus && isDeliveryFailure(deliveryStatus) ? { lastError } : {}) }, updatedAt: eventAt }, updatedAt: eventAt }, { merge: true });
+      await processRef.set({ asoWorkflow: { ...workflow, [key]: { ...current, ...(deliveryStatus ? { emailStatus: deliveryStatus } : {}), ...(deliveryStatus === "delivered" ? { deliveredAt: eventAt } : {}), ...(engagementStatus === "opened" ? { openedAt: eventAt } : {}), ...(engagementStatus === "clicked" ? { clickedAt: eventAt } : {}), ...(deliveryStatus && isDeliveryFailure(deliveryStatus) ? { lastError } : {}) }, updatedAt: eventAt }, updatedAt: eventAt }, { merge: true });
     }
 
     if (onboardingId && data.category === "accountant_admission_request") {

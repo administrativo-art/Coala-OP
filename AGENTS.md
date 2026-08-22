@@ -37,3 +37,16 @@
 - Agendar ou preparar um pagamento não autoriza sua execução.
 - Nunca autorize, aprove ou confirme definitivamente um pagamento bancário sem uma solicitação específica e inequívoca do usuário para essa ação.
 - No Banco Inter, a autorização final pertence ao usuário no aplicativo, salvo se ele der uma nova instrução explícita em sentido diferente.
+
+## Largura e aproveitamento das telas
+
+- Toda página interna deve usar o componente central `PageContainer`. Não crie larguras máximas arbitrárias na raiz de uma tela.
+- A variante padrão é `default`, com largura máxima de `1440px`. Ela se aplica a dashboards, integrações, perfis, detalhes operacionais, gestão de pessoas, cards, listas e fluxos por etapas.
+- Use `compact`, com largura máxima de `1220px`, em formulários, cadastros, conferências e páginas predominantemente lineares ou de leitura.
+- Use `wide`, com largura máxima de `1600px`, em relatórios, escalas e tabelas densas que precisam manter várias colunas simultaneamente visíveis.
+- Use `fluid`, sem largura máxima, somente quando a dimensão horizontal fizer parte da funcionalidade da tela. Exemplos permitidos: mapas, organogramas navegáveis, kanbans extensos, calendários operacionais, planilhas, editores com painéis simultâneos e comparações lado a lado.
+- `fluid` é excepcional e deve atender a pelo menos um destes critérios: reduzir a largura oculta informação indispensável; exige rolagem horizontal recorrente mesmo em `1600px`; prejudica uma interação espacial como arrastar ou comparar; ou a dimensão horizontal representa dados, tempo, localização ou sequência operacional.
+- Não use `fluid` para formulários, perfis, detalhes de integração, listas simples, faixas de status, alertas, grids comuns de indicadores ou páginas com apenas duas ou três colunas.
+- Mesmo em páginas `fluid`, cabeçalhos, textos, filtros e mensagens devem manter largura de leitura adequada quando não dependem do espaço horizontal.
+- Os contêineres devem permanecer responsivos e centralizados, com margens horizontais de `16px` no celular, `24px` no tablet e `32px` no desktop. As margens pertencem ao shell da página e não devem ser duplicadas pelos filhos.
+- `max-w-full` ou `max-w-none` na raiz da página só é permitido por meio da variante `fluid`. Modais e componentes internos seguem dimensões próprias e não definem a largura da página.
