@@ -26,33 +26,55 @@ export function useFinancialDashboardIndicators() {
     const now = startOfDay(new Date());
     const in30Days = endOfDay(addDays(now, 30));
 
+    const outstandingValue = (expense: any) => expense.status === "partially_paid" && expense.settlementSummary?.balanceAmountCents != null
+      ? Number(expense.settlementSummary.balanceAmountCents) / 100
+      : Number(expense.totalValue) || 0;
     const openExpenses = expenses
-      .filter((expense) => expense.status === "pending")
-      .reduce((sum, expense) => sum + (expense.totalValue ?? 0), 0);
+      .filter((expense) => ["pending", "partially_paid"].includes(expense.status))
+      .reduce((sum, expense) => sum + outstandingValue(expense), 0);
 
     const upcomingDue = expenses
       .filter((expense) => {
-        if (expense.status !== "pending") return false;
+        if (!["pending", "partially_paid"].includes(expense.status)) return false;
         const due = toDate(expense.dueDate);
         return due && due >= now && due <= in30Days;
       })
-      .reduce((sum, expense) => sum + (expense.totalValue ?? 0), 0);
+      .reduce((sum, expense) => sum + outstandingValue(expense), 0);
 
     const totalRevenue = transactions
       .filter((transaction: any) => transaction.direction === "in" && transaction.type !== "transfer_in")
       .reduce((sum, transaction) => sum + (transaction.amount ?? 0), 0);
 
-    const totalPaid = payments.reduce((sum, payment) => sum + (payment.totalPaid ?? 0), 0);
+    const transactionExpenseIds = new Set(
+      transactions
+        .filter((transaction: any) => transaction.reversed !== true && transaction.auditStatus !== "reversed")
+        .flatMap((transaction: any) => [transaction.expenseId, transaction.linkedExpenseId, ...(Array.isArray(transaction.splitExpenseIds) ? transaction.splitExpenseIds : [])])
+        .filter(Boolean),
+    );
+    const totalReportedPayments = payments
+      .filter((payment: any) =>
+        payment.status !== "MATCHED" &&
+        payment.reconciliationStatus !== "MATCHED" &&
+        !payment.bankTransactionId &&
+        !transactionExpenseIds.has(payment.expenseId)
+      )
+      .reduce((sum, payment) => sum + (payment.totalPaid ?? 0), 0);
 
     const totalOutgoingTransactions = transactions
-      .filter((transaction: any) => transaction.direction === "out" && transaction.type !== "transfer_out")
+      .filter((transaction: any) => transaction.direction === "out" && transaction.type !== "transfer_out" && transaction.reversed !== true && transaction.auditStatus !== "reversed")
       .reduce((sum, transaction) => sum + (transaction.amount ?? 0), 0);
+    const economicExpenses = expenses
+      .filter((expense) =>
+        expense.provisionType !== "forecast" &&
+        !["draft", "cancelled", "reconciled"].includes(expense.status)
+      )
+      .reduce((sum, expense) => sum + (Number(expense.totalValue) || 0), 0);
 
     return {
       openExpenses,
       upcomingDue,
-      dre: totalRevenue - totalPaid,
-      cash: totalRevenue - totalPaid - totalOutgoingTransactions,
+      dre: totalRevenue - economicExpenses,
+      cash: totalRevenue - totalReportedPayments - totalOutgoingTransactions,
     };
   }, [expenses, transactions, payments]);
 

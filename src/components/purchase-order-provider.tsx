@@ -51,6 +51,8 @@ export interface CreatePurchasePayload {
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
   freightPaymentMode?: PurchaseFreightPaymentMode;
+  freightSupplierId?: string | null;
+  freightSupplierName?: string | null;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -96,6 +98,8 @@ export type OrderEdits = {
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
   freightPaymentMode?: PurchaseFreightPaymentMode;
+  freightSupplierId?: string | null;
+  freightSupplierName?: string | null;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;

@@ -750,6 +750,7 @@ export type PermissionSet = {
     dre: boolean;
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
     audits: { view: boolean; import: boolean; edit: boolean; ignore: boolean; effectuate: boolean; manage: boolean; };
+    reconciliation: { view: boolean; confirm: boolean; correct: boolean; classifyAdjustments: boolean; administer: boolean; };
     cardStatements: { view: boolean; import: boolean; audit: boolean; close: boolean; reconcile: boolean; };
     personnelCosts: { view: boolean; edit: boolean; export: boolean; };
     beneficiaries: { view: boolean; viewMaskedPaymentData: boolean; managePaymentData: boolean; };
@@ -2344,6 +2345,8 @@ export type PurchaseOrder = {
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
   freightPaymentMode?: PurchaseFreightPaymentMode;
+  freightSupplierId?: string | null;
+  freightSupplierName?: string | null;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -2352,6 +2355,7 @@ export type PurchaseOrder = {
   trackingInfo?: string;
   notes?: string;
   linkedExpenseId?: string;
+  linkedFreightExpenseId?: string;
   archivedLinkedExpenseId?: string;
   financialArchiveRunId?: string;
   financialExpenseArchivedAt?: string;
@@ -2519,6 +2523,8 @@ export type PurchaseFinancial = {
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
   freightPaymentMode?: PurchaseFreightPaymentMode;
+  freightSupplierId?: string | null;
+  freightSupplierName?: string | null;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -2533,6 +2539,7 @@ export type PurchaseFinancial = {
   paymentCondition?: PurchasePaymentCondition;
   installmentsCount?: number;
   linkedExpenseId?: string;
+  linkedFreightExpenseId?: string;
   paidAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -2764,6 +2771,7 @@ export const defaultGuestPermissions: PermissionSet = {
       dre: false,
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
       audits: { view: false, import: false, edit: false, ignore: false, effectuate: false, manage: false },
+      reconciliation: { view: false, confirm: false, correct: false, classifyAdjustments: false, administer: false },
       cardStatements: { view: false, import: false, audit: false, close: false, reconcile: false },
       personnelCosts: { view: false, edit: false, export: false },
       beneficiaries: { view: false, viewMaskedPaymentData: false, managePaymentData: false },
@@ -2872,6 +2880,7 @@ export const defaultAdminPermissions: PermissionSet = {
       dre: true,
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
       audits: { view: true, import: true, edit: true, ignore: true, effectuate: true, manage: true },
+      reconciliation: { view: true, confirm: true, correct: true, classifyAdjustments: true, administer: true },
       cardStatements: { view: true, import: true, audit: true, close: true, reconcile: true },
       personnelCosts: { view: true, edit: true, export: true },
       beneficiaries: { view: true, viewMaskedPaymentData: true, managePaymentData: true },

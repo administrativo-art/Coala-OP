@@ -26,6 +26,7 @@
     "mcp": "node server.js",
     "migrate:dp": "node scripts/migrate-dp.mjs",
     "migrate:financial": "node scripts/migrate-financial.mjs",
+    "migrate:financial-obligations": "node --import tsx scripts/migrate-financial-obligations.mts",
     "migrate:das-accounts": "node scripts/migrate-das-account-structure.mjs",
     "migrate:dare-accounts": "node scripts/migrate-dare-account-structure.mjs",
     "migrate:cash-closure-permissions": "node --import tsx scripts/migrate-cash-closure-permissions.mts",

@@ -99,7 +99,7 @@ function ShortcutCard({
 
 function getComputedStatus(expense: any, now: Date) {
   const due = toDate(expense.dueDate);
-  if (expense.status === "pending") {
+  if (["pending", "partially_paid"].includes(expense.status)) {
     if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") {
       return "pending_audit";
     }
@@ -200,6 +200,7 @@ function ExpenseFiltersBar({
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="pending">Em aberto</SelectItem>
+            <SelectItem value="partially_paid">Parcialmente pago</SelectItem>
             <SelectItem value="overdue">Vencido</SelectItem>
             <SelectItem value="pending_audit">Pendente auditoria</SelectItem>
             <SelectItem value="paid">Pago</SelectItem>

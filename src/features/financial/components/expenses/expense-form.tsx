@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { addMonths, addWeeks, format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { addDoc, getDoc, getDocs, query, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { addDoc, doc, getDoc, getDocs, query, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import type { FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -456,6 +456,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
+  const [loadedObligationId, setLoadedObligationId] = useState<string | null>(null);
   const [loadedRecurrenceGroupId, setLoadedRecurrenceGroupId] = useState<string | null>(null);
   const [loadedSeriesEntry, setLoadedSeriesEntry] = useState<ExpenseSeriesEntry | null>(null);
   const [loadedSeriesTotal, setLoadedSeriesTotal] = useState<number | null>(null);
@@ -1274,6 +1275,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
         form.reset(resetData);
         setLoadedStatus(data.status ?? null);
+        setLoadedObligationId(data.obligationId ?? `obl_${editId}`);
         setLoadedProvisionIdentity(data.provisionSeriesKey ? {
           provisionSeriesKey: String(data.provisionSeriesKey),
           provisionType: String(data.provisionType || "actual"),
@@ -1474,6 +1476,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       accountPlanName: account?.name,
       competenceDate: values.competenceDate,
       provisionType: "actual",
+      personAllocations: values.hasPersonAllocations ? values.personAllocations : null,
     });
     const provisionIdentity = loadedProvisionIdentity?.provisionType === "forecast"
       ? {
@@ -1595,8 +1598,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     if (consultation.status !== "matched" || !consultation.provision.id) return consultation.status;
 
     const now = Timestamp.now();
+    const obligationId = String((consultation.provision as any).obligationId || `obl_${consultation.provision.id}`);
     const batch = writeBatch(financialDb);
     batch.update(financialDoc("expenses", expenseId), {
+      obligationId,
       reconciledProvisionId: consultation.provision.id,
       provisionReconciliationStatus: "reconciled",
       provisionedValue: consultation.provisionedValue,
@@ -1606,6 +1611,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       updatedAt: now,
     });
     batch.update(financialDoc("expenses", consultation.provision.id), {
+      obligationId,
       status: "reconciled",
       replacedByExpenseId: expenseId,
       actualValue: consultation.actualValue,
@@ -1676,10 +1682,15 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       };
 
       if (editId) {
-        await updateDoc(financialDoc("expenses", editId), payload);
-      } else {
-        await addDoc(financialCollection("expenses"), {
+        await updateDoc(financialDoc("expenses", editId), {
           ...payload,
+          obligationId: loadedObligationId || `obl_${editId}`,
+        });
+      } else {
+        const expenseRef = doc(financialCollection("expenses"));
+        await setDoc(expenseRef, {
+          ...payload,
+          obligationId: `obl_${expenseRef.id}`,
           createdAt: Timestamp.now(),
         });
       }
@@ -1736,10 +1747,13 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         ...buildExpensePayload(values),
         ...importPaymentMetadata,
       };
-      const editPayload =
-        editId && !importTransactionId
-          ? { ...payload, status: loadedStatus || "pending" }
-          : payload;
+      const editPayload = editId
+        ? {
+            ...payload,
+            obligationId: loadedObligationId || `obl_${editId}`,
+            ...(!importTransactionId ? { status: loadedStatus || "pending" } : {}),
+          }
+        : payload;
       const rateioVersionId = values.isApportioned ? crypto.randomUUID() : null;
       const rateioPolicy = rateioVersionId ? buildRateioPolicy(values, rateioVersionId) : null;
 
@@ -1906,15 +1920,17 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
             };
           });
 
-        await Promise.all(
-          occurrenceDocuments.map((occurrenceDocument) =>
-            addDoc(financialCollection("expenses"), occurrenceDocument)
-          )
-        );
+        const occurrenceRefs = occurrenceDocuments.map(() => doc(financialCollection("expenses")));
+        await Promise.all(occurrenceDocuments.map((occurrenceDocument, index) => setDoc(occurrenceRefs[index], {
+          ...occurrenceDocument,
+          obligationId: `obl_${occurrenceRefs[index].id}`,
+        })));
         toast({ title: "Despesas recorrentes lançadas." });
       } else {
-        const createdExpense = await addDoc(financialCollection("expenses"), {
+        const createdExpense = doc(financialCollection("expenses"));
+        await setDoc(createdExpense, {
           ...payload,
+          obligationId: `obl_${createdExpense.id}`,
           rateioVersionId,
           rateioPolicy,
           createdBy: firebaseUser.uid,

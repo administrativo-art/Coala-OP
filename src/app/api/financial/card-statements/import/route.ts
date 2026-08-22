@@ -90,6 +90,34 @@ function inheritedExpenseFields(expense: Record<string, unknown>) {
   return Object.fromEntries(fields.filter((field) => expense[field] !== undefined).map((field) => [field, expense[field]]));
 }
 
+function importedStatementAllocation(
+  line: z.infer<typeof lineSchema>,
+  expenseId: string,
+  monthKey: string,
+  expense: Record<string, unknown> = {},
+) {
+  const installmentNumber = line.resolution.mode === "existing"
+    ? line.resolution.installmentNumber
+    : line.installmentNumber;
+  return {
+    lineId: installmentNumber ? `${expenseId}:installment:${installmentNumber}` : expenseId,
+    expenseId,
+    installmentNumber: installmentNumber ?? null,
+    description: line.description,
+    supplier: line.supplier,
+    amount: line.amount,
+    competenceDate: `${monthKey}-01`,
+    accountPlanId: String(expense.accountPlanId || expense.accountId || expense.accountPlan || ""),
+    accountPlanName: String(expense.accountPlanName || ""),
+    resultCenterId: String(expense.resultCenterId || expense.resultCenter || ""),
+    resultCenterName: String(expense.resultCenterName || ""),
+    accountAllocations: Array.isArray(expense.accountAllocations) ? expense.accountAllocations : [],
+    apportionments: Array.isArray(expense.apportionments) ? expense.apportionments : [],
+    importFingerprint: line.fingerprint,
+    sourceReference: line.sourceReference,
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const actor = await requireUser(request);
@@ -136,7 +164,8 @@ export async function POST(request: NextRequest) {
       : [];
     const linkedById = new Map(linkedSnapshots.filter((snapshot) => snapshot.exists).map((snapshot) => [snapshot.id, snapshot.data() ?? {}]));
     const relevantSnapshot = await financialDbAdmin.collection("expenses")
-      .where("plannedBankAccountId", "==", input.accountId)
+      .where("cardStatementKey", "==", input.statementKey)
+      .limit(500)
       .get();
     const alreadyImported = new Set(
       relevantSnapshot.docs.flatMap((document) => [...existingFingerprints(document.data())])
@@ -148,6 +177,8 @@ export async function POST(request: NextRequest) {
     let linked = 0;
     let replacedForecasts = 0;
     let skipped = 0;
+    const importedAllocations: ReturnType<typeof importedStatementAllocation>[] = [];
+    const statementId = statementDocumentId(input.statementKey);
 
     for (const line of normalizedLines) {
       if (alreadyImported.has(line.fingerprint)) {
@@ -166,6 +197,7 @@ export async function POST(request: NextRequest) {
         plannedPaymentMethodId: input.paymentMethodId,
         plannedPaymentMethodLabel: input.paymentMethodLabel,
         cardReconciliationStatus: "pending",
+        cardStatementId: statementId,
         cardStatementKey: input.statementKey,
         cardStatementMonthKey: input.monthKey,
         cardStatementImportFingerprint: line.fingerprint,
@@ -220,6 +252,7 @@ export async function POST(request: NextRequest) {
             createdAt: now,
             createdBy: actor.decoded.uid,
           }, { merge: true });
+          importedAllocations.push(importedStatementAllocation(line, actualRef.id, input.monthKey, expense));
           batch.set(expenseRef, {
             status: "reconciled",
             replacedByExpenseId: actualRef.id,
@@ -254,6 +287,7 @@ export async function POST(request: NextRequest) {
             dueDate,
             ...(nextInstallments.length > 0 ? { installments: nextInstallments } : {}),
           }, { merge: true });
+          importedAllocations.push(importedStatementAllocation(line, expenseRef.id, input.monthKey, expense));
           linked += 1;
         }
         continue;
@@ -288,11 +322,20 @@ export async function POST(request: NextRequest) {
         createdAt: now,
         createdBy: actor.decoded.uid,
       }, { merge: true });
+      importedAllocations.push(importedStatementAllocation(line, expenseRef.id, input.monthKey));
       created += 1;
     }
 
-    const statementRef = financialDbAdmin.collection("cardStatements").doc(statementDocumentId(input.statementKey));
+    const statementRef = financialDbAdmin.collection("cardStatements").doc(statementId);
     const statementSnapshot = await statementRef.get();
+    const statementData = statementSnapshot.data() ?? {};
+    const allocationByLineId = new Map(
+      (Array.isArray(statementData.allocations) ? statementData.allocations : [])
+        .map(asRecord)
+        .filter((allocation) => typeof allocation.lineId === "string")
+        .map((allocation) => [String(allocation.lineId), allocation])
+    );
+    importedAllocations.forEach((allocation) => allocationByLineId.set(allocation.lineId, allocation));
     const includedTotal = Number(normalizedLines.reduce((total, line) => total + line.amount, 0).toFixed(2));
     batch.set(statementRef, {
       key: input.statementKey,
@@ -304,7 +347,8 @@ export async function POST(request: NextRequest) {
       closingDate: timestamp(input.closingDate),
       dueDate: timestamp(input.dueDate),
       ...(input.officialTotal ? { officialTotal: input.officialTotal } : {}),
-      status: "open",
+      status: statementData.status === "paid" || statementData.status === "closed" ? statementData.status : "open",
+      allocations: [...allocationByLineId.values()],
       lastImportFileName: input.fileName,
       lastImportAnalysis: {
         source: "financial_copilot",

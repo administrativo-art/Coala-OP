@@ -99,6 +99,8 @@ export type ImportSessionSplitExpense = {
 export type ImportSessionExpenseDraft = {
   mode: ImportSessionExpenseMode;
   linkedExpenseId: string;
+  reportedPaymentId?: string;
+  reportedLinkId?: string;
   purchaseOrderId: string;
   purchaseLinkMode: ImportSessionPurchaseLinkMode;
   allocatedAmount: number;
@@ -106,6 +108,8 @@ export type ImportSessionExpenseDraft = {
   settlementInstallmentNumber: number;
   interest: number;
   fine: number;
+  discount: number;
+  abatement: number;
   chargesAccountPlanId: string;
   chargesAccountPlanName: string;
   description: string;
@@ -196,6 +200,8 @@ export type ImportSessionItem = {
   suggestedInstallmentNumber?: number;
   suggestedInstallmentValue?: number;
   suggestedAdditionalCharges?: number;
+  suggestedReportedPaymentId?: string;
+  suggestedReportedLinkId?: string;
   suggestedConfidence?: "high" | "medium";
   expenseDraft: ImportSessionExpenseDraft;
   financialDraft: ImportSessionFinancialDraft;

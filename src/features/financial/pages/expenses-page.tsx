@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { deleteDoc, Timestamp, updateDoc } from "firebase/firestore";
-import { format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth } from "date-fns";
+import { addMonths, format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ArrowDown,
+  ArrowUp,
+  CalendarDays,
   ChevronDown,
   ChevronUp,
   CreditCard,
@@ -14,6 +17,7 @@ import {
   FileUp,
   Loader2,
   MoreHorizontal,
+  Pencil,
   ReceiptText,
   Search,
   Trash2,
@@ -24,6 +28,8 @@ import {
   type ExpensePeriodPreset,
 } from "@/features/financial/components/expenses/expense-period-filter";
 import { KpiFlowStrip } from "@/features/financial/components/expenses/kpi-flow-strip";
+import { ExpenseFinancialSummary } from "@/features/financial/components/expenses/expense-financial-summary";
+import { ExpenseCompetencePicker } from "@/features/financial/components/expenses/expense-competence-picker";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FinancialImportPage } from "@/features/financial/pages/import-page";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
@@ -41,13 +47,29 @@ import {
 } from "@/features/financial/lib/expense-account-allocations";
 import {
   expensePersonAllocations,
+  personAllocationDistinctPeopleCount,
   personAllocationsAreValid,
 } from "@/features/financial/lib/expense-person-allocations";
-import { compareExpensesByDueDate } from "@/features/financial/lib/expense-order";
 import {
+  compareExpensesByDueDateDirection,
+  compareExpensesByValue,
+  type ExpenseSortDirection,
+} from "@/features/financial/lib/expense-order";
+import {
+  compareExpenseCompetenceMonths,
+  consolidateExpenseObligations,
+  groupExpensesByDueWeek,
+  type ExpenseDueWeekGroup,
+} from "@/features/financial/lib/expense-list";
+import {
+  cardExpenseAuditIssues,
   PLANNED_PAYMENT_METHOD_LABELS,
   type PlannedPaymentMethodType,
 } from "@/features/financial/lib/card-invoices";
+import {
+  groupExpensesByCardStatement,
+  type ExpenseCardStatementListEntry,
+} from "@/features/financial/lib/expense-card-statement-groups";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
@@ -86,6 +108,9 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho",
   pending_audit: "Pendente auditoria",
   paid: "Pago",
+  reported_paid: "Pago informado",
+  partially_paid: "Parcialmente pago",
+  paid_divergent: "Pagamento divergente",
   cancelled: "Cancelado",
   overdue: "Vencido",
   pending: "Em aberto",
@@ -98,6 +123,9 @@ const STATUS_COLORS: Record<string, string> = {
   draft: "border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-950/30 dark:text-slate-400 dark:border-slate-800",
   pending_audit: "border-violet-200 bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-800",
   paid: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800",
+  reported_paid: "border-sky-300 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-800",
+  partially_paid: "border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
+  paid_divergent: "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
   cancelled: "border-zinc-300 bg-zinc-50 text-zinc-500 dark:bg-zinc-900/50 dark:text-zinc-400 dark:border-zinc-800",
   overdue: "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
   pending: "border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
@@ -110,6 +138,9 @@ const STATUS_ACCENT_COLORS: Record<string, string> = {
   draft: "bg-slate-400",
   pending_audit: "bg-violet-500",
   paid: "bg-emerald-500",
+  reported_paid: "bg-sky-500",
+  partially_paid: "bg-amber-500",
+  paid_divergent: "bg-rose-500",
   cancelled: "bg-zinc-300",
   overdue: "bg-rose-500",
   pending: "bg-blue-500",
@@ -363,18 +394,13 @@ function matchesBaseFilters(
   );
 }
 
-function compareCompetenceMonths(left: string, right: string, currentMonth: string) {
-  const leftIsCurrentOrFuture = left >= currentMonth;
-  const rightIsCurrentOrFuture = right >= currentMonth;
+type ExpenseDisplayEntry = ExpenseCardStatementListEntry<any>;
 
-  if (leftIsCurrentOrFuture !== rightIsCurrentOrFuture) {
-    return leftIsCurrentOrFuture ? -1 : 1;
-  }
+type ExpenseListRow =
+  | { kind: "week"; group: ExpenseDueWeekGroup<ExpenseDisplayEntry> }
+  | ExpenseDisplayEntry;
 
-  return leftIsCurrentOrFuture
-    ? left.localeCompare(right)
-    : right.localeCompare(left);
-}
+type ExpenseSortKey = "dueDate" | "value";
 
 function accountPlanBreadcrumb(plan: any, plansById: Map<string, any>) {
   const labels: string[] = [];
@@ -393,6 +419,10 @@ function accountPlanBreadcrumb(plan: any, plansById: Map<string, any>) {
 function getExpenseStatusKey(expense: any, now: Date) {
   const due = toDate(expense.dueDate);
   let statusKey = expense.status;
+
+  if (expense.paymentState === "reported_paid") return "reported_paid";
+  if (expense.paymentState === "paid_divergent") return "paid_divergent";
+  if (expense.status === "partially_paid") return "partially_paid";
 
   if (expense.status === "pending") {
     if (expense.originModule === "purchasing" && expense.originStatus === "pending_audit") {
@@ -427,10 +457,15 @@ export function ExpensesPage() {
   const [accountPlanFilter, setAccountPlanFilter] = useState(searchParams.get("account_plan") ?? "all");
   const [unitFilter, setUnitFilter] = useState(searchParams.get("unit") ?? "all");
   const [paymentTypeFilter, setPaymentTypeFilter] = useState(searchParams.get("payment_type") ?? "all");
+  const [expenseSort, setExpenseSort] = useState<{ key: ExpenseSortKey; direction: ExpenseSortDirection }>({
+    key: "dueDate",
+    direction: "asc",
+  });
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [finalizingAuditId, setFinalizingAuditId] = useState<string | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+  const [expandedCardStatementKey, setExpandedCardStatementKey] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const canAccessAudits = permissions.financial?.audits?.view === true;
   const canImportAudits = canAccessAudits && permissions.financial?.audits?.import === true;
@@ -449,6 +484,14 @@ export function ExpensesPage() {
   }
 
   const expenses = expensesData || [];
+  const expenseById = useMemo(
+    () => new Map(expenses.map((expense) => [String(expense.id), expense])),
+    [expenses]
+  );
+  const consolidatedExpenses = useMemo(
+    () => consolidateExpenseObligations(expenses),
+    [expenses]
+  );
   const transactions = transactionsData || [];
   const accountPlanMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -504,7 +547,7 @@ export function ExpensesPage() {
 
     const names = Array.from(
       new Set(
-        expenses
+        consolidatedExpenses
           .flatMap((expense) => {
             const planName = accountPlanMap[expense.accountId ?? expense.accountPlan]
               || expense.accountPlanName
@@ -519,20 +562,26 @@ export function ExpensesPage() {
     return names
       .map((value) => ({ value, label: breadcrumbByName.get(value) || value }))
       .sort((left, right) => left.label.localeCompare(right.label, "pt-BR"));
-  }, [accountPlanMap, accountPlans, expenses]);
+  }, [accountPlanMap, accountPlans, consolidatedExpenses]);
   const competenceOptions = useMemo(
     () => {
-      const currentMonth = format(new Date(), "yyyy-MM");
+      const rollingPastMonths = Array.from({ length: 13 }, (_, offset) =>
+        format(addMonths(startOfMonth(new Date()), -offset), "yyyy-MM")
+      );
       return Array.from(
         new Set(
-          expenses
+          [
+            ...rollingPastMonths,
+            ...(competenceMonth !== "all" ? [competenceMonth] : []),
+            ...consolidatedExpenses
             .map((expense) => toDate(expense.competenceDate))
             .filter((date): date is Date => Boolean(date))
-            .map((date) => format(date, "yyyy-MM"))
+            .map((date) => format(date, "yyyy-MM")),
+          ]
         )
-      ).sort((left, right) => compareCompetenceMonths(left, right, currentMonth));
+      ).sort(compareExpenseCompetenceMonths);
     },
-    [expenses]
+    [competenceMonth, consolidatedExpenses]
   );
 
   const units = useMemo(
@@ -557,7 +606,7 @@ export function ExpensesPage() {
 
   const filtered = useMemo(() => {
     const now = startOfDay(new Date());
-    return expenses
+    return consolidatedExpenses
       .filter((expense) => {
         if (
           !matchesBaseFilters(expense, {
@@ -581,18 +630,21 @@ export function ExpensesPage() {
 
         const matchesStatus =
           statusFilter === "all" ||
+          (statusFilter === "reconciled" && Boolean(expense.reconciledProvisionId)) ||
           (statusFilter === "pending" && ["pending", "due_soon", "overdue"].includes(computedStatus)) ||
           computedStatus === "pending_audit" && statusFilter === "pending_audit" ||
           computedStatus === statusFilter;
 
         return matchesStatus;
       })
-      .sort(compareExpensesByDueDate);
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
+      .sort((left, right) => expenseSort.key === "value"
+        ? compareExpensesByValue(left, right, expenseSort.direction)
+        : compareExpensesByDueDateDirection(left, right, expenseSort.direction));
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, consolidatedExpenses, dateFrom, dateTo, expenseSort, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, statusFilter, supplierFilter]);
 
   const scopedExpenses = useMemo(() => {
     const now = startOfDay(new Date());
-    return expenses.filter((expense) =>
+    return consolidatedExpenses.filter((expense) =>
       matchesBaseFilters(expense, {
         accountPlanMap,
         resultCenterNameById,
@@ -608,21 +660,77 @@ export function ExpensesPage() {
         now,
       })
     );
-  }, [accountPlanFilter, accountPlanMap, competenceMonth, dateFrom, dateTo, expenses, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, supplierFilter]);
+  }, [accountPlanFilter, accountPlanMap, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, supplierFilter]);
+  const scopedDisplayEntries = useMemo(
+    () => groupExpensesByCardStatement(scopedExpenses),
+    [scopedExpenses]
+  );
   const unitCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    scopedExpenses.forEach((expense) => {
+    scopedDisplayEntries.forEach((entry) => {
+      const expensesInEntry = entry.kind === "expense" ? [entry.expense] : entry.statement.expenses;
       units.forEach((unit) => {
         const financialCenterName = resultCenterNameByUnitName[unit.name] || unit.name;
-        if (expenseReferencesResultCenter(expense, financialCenterName, resultCenterNameById)) {
+        if (expensesInEntry.some((expense) => expenseReferencesResultCenter(expense, financialCenterName, resultCenterNameById))) {
           counts.set(unit.name, (counts.get(unit.name) || 0) + 1);
         }
       });
     });
     return counts;
-  }, [resultCenterNameById, resultCenterNameByUnitName, scopedExpenses, units]);
+  }, [resultCenterNameById, resultCenterNameByUnitName, scopedDisplayEntries, units]);
 
-  const filteredCountLabel = `${filtered.length} de ${scopedExpenses.length}`;
+  const filteredDisplayEntries = useMemo(() => {
+    const entries = groupExpensesByCardStatement(filtered);
+    return entries.sort((left, right) => {
+      const leftComparable = left.kind === "expense"
+        ? left.expense
+        : {
+            id: left.statement.id,
+            description: left.statement.title,
+            dueDate: left.statement.dueDate,
+            totalValue: left.statement.totalValue,
+          };
+      const rightComparable = right.kind === "expense"
+        ? right.expense
+        : {
+            id: right.statement.id,
+            description: right.statement.title,
+            dueDate: right.statement.dueDate,
+            totalValue: right.statement.totalValue,
+          };
+      return expenseSort.key === "value"
+        ? compareExpensesByValue(leftComparable, rightComparable, expenseSort.direction)
+        : compareExpensesByDueDateDirection(leftComparable, rightComparable, expenseSort.direction);
+    });
+  }, [expenseSort, filtered]);
+  const scopedDisplayEntryCount = scopedDisplayEntries.length;
+  const filteredCountLabel = `${filteredDisplayEntries.length} de ${scopedDisplayEntryCount}`;
+  const activeCompetenceLabel = competenceMonth !== "all"
+    ? `${competenceMonth.slice(5, 7)}/${competenceMonth.slice(0, 4)}`
+    : null;
+  const expenseListRows = useMemo<ExpenseListRow[]>(() => {
+    if (!activeCompetenceLabel) {
+      return filteredDisplayEntries;
+    }
+
+    const groups = groupExpensesByDueWeek(
+      filteredDisplayEntries,
+      (entry) => entry.kind === "expense" ? toDate(entry.expense.dueDate) : entry.statement.dueDate,
+      (entry) => entry.kind === "expense" ? Number(entry.expense.totalValue) || 0 : entry.statement.totalValue,
+    );
+    if (expenseSort.key === "dueDate" && expenseSort.direction === "desc") groups.reverse();
+
+    return groups.flatMap((group) => [
+      { kind: "week" as const, group },
+      ...group.expenses,
+    ]);
+  }, [activeCompetenceLabel, expenseSort, filteredDisplayEntries]);
+
+  function toggleExpenseSort(key: ExpenseSortKey) {
+    setExpenseSort((current) => current.key === key
+      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: "asc" });
+  }
 
   const kpis = useMemo(() => {
     const now = startOfDay(new Date());
@@ -645,6 +753,20 @@ export function ExpensesPage() {
         open += scopedValue;
         if (due && due < now) overdue += scopedValue;
         if (due && due >= now && due <= in7Days) dueSoon += scopedValue;
+      }
+      if (expense.status === "partially_paid") {
+        const totalValue = Number(expense.totalValue) || 0;
+        const scopedRatio = totalValue > 0 ? scopedValue / totalValue : 1;
+        const balance = expense.settlementSummary?.balanceAmountCents != null
+          ? Number(expense.settlementSummary.balanceAmountCents) / 100 * scopedRatio
+          : scopedValue;
+        const settled = expense.settlementSummary?.principalSettledAmountCents != null
+          ? Number(expense.settlementSummary.principalSettledAmountCents) / 100 * scopedRatio
+          : Math.max(0, scopedValue - balance);
+        open += balance;
+        paid += settled;
+        if (due && due < now) overdue += balance;
+        if (due && due >= now && due <= in7Days) dueSoon += balance;
       }
       if (expense.status === "paid") {
         paid += scopedValue;
@@ -819,7 +941,7 @@ export function ExpensesPage() {
           <TabsContent value="expenses" className="space-y-6">
       <KpiFlowStrip
         kpis={kpis}
-        openCount={scopedExpenses.filter((expense) => expense.status === "pending").length}
+        openCount={scopedExpenses.filter((expense) => ["pending", "partially_paid"].includes(expense.status)).length}
         auditCount={pendingAuditCount}
         auditHref={FINANCIAL_ROUTES.pendingAuditExpenses}
       />
@@ -844,7 +966,7 @@ export function ExpensesPage() {
                 unitFilter === "all" ? "bg-white/20 text-primary-foreground" : "bg-muted text-muted-foreground"
               )}
             >
-              {scopedExpenses.length}
+              {scopedDisplayEntryCount}
             </span>
           </button>
           {units.map((unit) => {
@@ -896,7 +1018,7 @@ export function ExpensesPage() {
                 <SelectItem value="overdue">Vencidos</SelectItem>
                 <SelectItem value="paid">Pagos</SelectItem>
                 <SelectItem value="provisioned">Provisionados</SelectItem>
-                <SelectItem value="reconciled">Previsões conciliadas</SelectItem>
+                <SelectItem value="reconciled">Com previsão conciliada</SelectItem>
                 <SelectItem value="cancelled">Cancelados</SelectItem>
               </SelectContent>
             </Select>
@@ -924,8 +1046,9 @@ export function ExpensesPage() {
                 <SelectItem value="unassigned">Não informado</SelectItem>
               </SelectContent>
             </Select>
-            <Select
+            <ExpenseCompetencePicker
               value={competenceMonth}
+              options={competenceOptions}
               onValueChange={(value) => {
                 setCompetenceMonth(value);
                 if (value !== "all") {
@@ -934,22 +1057,10 @@ export function ExpensesPage() {
                   setDateTo("");
                 }
               }}
-            >
-              <SelectTrigger data-testid="expense-competence-filter" className="h-8 w-full min-w-0 rounded-lg border-border/70 bg-background px-2.5 text-[10.5px] sm:text-xs [&>span]:truncate [&>span]:whitespace-nowrap">
-                <SelectValue placeholder="Competência" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Competência: todas</SelectItem>
-                {competenceOptions.map((competence) => {
-                  const [year, month] = competence.split("-");
-                  return (
-                    <SelectItem key={competence} value={competence}>
-                      Competência: {month}/{year}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+              className={cn(
+                activeCompetenceLabel && "border-primary/60 bg-primary/[0.06] text-primary ring-1 ring-primary/15"
+              )}
+            />
             <ExpensePeriodFilter
               preset={periodPreset}
               dateFrom={dateFrom}
@@ -976,6 +1087,22 @@ export function ExpensesPage() {
             </Select>
             <span className="col-span-2 justify-self-end whitespace-nowrap text-xs text-muted-foreground md:col-span-1">{filteredCountLabel}</span>
           </div>
+          {activeCompetenceLabel ? (
+            <div
+              data-testid="active-expense-competence"
+              className="mt-3 inline-flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.045] px-2.5 py-1.5"
+            >
+              <CalendarDays className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary/75">
+                Competência
+              </span>
+              <span className="text-xs font-semibold text-foreground">{activeCompetenceLabel}</span>
+              <span className="h-3.5 w-px bg-primary/15" />
+              <span className="text-[10.5px] text-muted-foreground">
+                {filteredDisplayEntries.length} {filteredDisplayEntries.length === 1 ? "obrigação" : "obrigações"}
+              </span>
+            </div>
+          ) : null}
         </CardHeader>
         <CardContent className="p-0">
           <div className="hidden overflow-x-auto md:block">
@@ -985,8 +1112,40 @@ export function ExpensesPage() {
                   <th className="px-4 py-3 font-medium">Descrição</th>
                   <th className="px-4 py-3 font-medium">Fornecedor</th>
                   <th className="px-4 py-3 font-medium">Unidade</th>
-                  <th className="px-4 py-3 font-medium">Vencimento</th>
-                  <th className="px-4 py-3 text-right font-medium">Valor</th>
+                  <th
+                    className="px-4 py-3 font-medium"
+                    aria-sort={expenseSort.key === "dueDate" ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"}
+                  >
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded-md transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => toggleExpenseSort("dueDate")}
+                    >
+                      Vencimento
+                      {expenseSort.key === "dueDate"
+                        ? expenseSort.direction === "asc"
+                          ? <ArrowUp className="h-3.5 w-3.5" />
+                          : <ArrowDown className="h-3.5 w-3.5" />
+                        : null}
+                    </button>
+                  </th>
+                  <th
+                    className="px-4 py-3 text-right font-medium"
+                    aria-sort={expenseSort.key === "value" ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"}
+                  >
+                    <button
+                      type="button"
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-md transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => toggleExpenseSort("value")}
+                    >
+                      Valor
+                      {expenseSort.key === "value"
+                        ? expenseSort.direction === "asc"
+                          ? <ArrowUp className="h-3.5 w-3.5" />
+                          : <ArrowDown className="h-3.5 w-3.5" />
+                        : null}
+                    </button>
+                  </th>
                   <th className="w-[160px] px-4 py-3 text-center font-medium">Status</th>
                   <th className="w-[52px] px-4 py-3 text-right font-medium" />
                 </tr>
@@ -1000,14 +1159,187 @@ export function ExpensesPage() {
                       </td>
                     </tr>
                   ))
-                ) : filtered.length === 0 ? (
+                ) : filteredDisplayEntries.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-16 text-center text-muted-foreground">
                       Nenhuma despesa encontrada.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((expense) => {
+                  expenseListRows.map((row) => {
+                    if (row.kind === "week") {
+                      return (
+                        <tr key={`week-${row.group.key}`} className="border-b border-primary/10 bg-primary/[0.035]">
+                          <td colSpan={7} className="px-4 py-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                <CalendarDays className="h-3.5 w-3.5 text-primary" />
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/75">
+                                  Semana de vencimento
+                                </span>
+                                <span className="text-xs font-semibold text-foreground">{row.group.label}</span>
+                                <span className="text-[10.5px] text-muted-foreground">
+                                  {row.group.expenses.length} {row.group.expenses.length === 1 ? "obrigação" : "obrigações"}
+                                </span>
+                              </div>
+                              <span className="font-mono text-xs font-semibold text-foreground">
+                                {formatCurrency(row.group.totalValue)}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    if (row.kind === "card_statement") {
+                      const statement = row.statement;
+                      const due = statement.dueDate;
+                      const isExpanded = expandedCardStatementKey === statement.key;
+                      const statementUnits = Array.from(new Set(
+                        statement.expenses
+                          .map((expense) => getExpenseUnitLabel(expense, resultCenterNameById))
+                          .filter((unit) => unit && unit !== "—")
+                      ));
+                      const unitLabel = statementUnits.length === 0
+                        ? "Classificação pendente"
+                        : statementUnits.length === 1
+                          ? statementUnits[0]
+                          : `${statementUnits.length} unidades`;
+                      const auditSummary = statement.auditCounts.pending > 0
+                        ? `${statement.auditCounts.pending} pendente${statement.auditCounts.pending === 1 ? "" : "s"} de auditoria`
+                        : statement.auditCounts.reconciled === statement.expenses.length
+                          ? `${statement.expenses.length} conferida${statement.expenses.length === 1 ? "" : "s"}`
+                          : `${statement.auditCounts.audited} auditada${statement.auditCounts.audited === 1 ? "" : "s"} · ${statement.auditCounts.reconciled} conferida${statement.auditCounts.reconciled === 1 ? "" : "s"}`;
+                      const firstExpense = statement.expenses[0];
+                      const statementHref = `${FINANCIAL_ROUTES.cardStatements}?month=${encodeURIComponent(statement.monthKey)}&accountId=${encodeURIComponent(String(firstExpense?.plannedBankAccountId || ""))}&paymentMethodId=${encodeURIComponent(String(firstExpense?.plannedPaymentMethodId || ""))}`;
+
+                      return (
+                        <Fragment key={`card-statement-${statement.key}`}>
+                          <tr
+                            className={cn("border-b cursor-pointer bg-sky-50/25 transition-colors hover:bg-sky-50/50", isExpanded && "bg-sky-50/50")}
+                            onClick={() => setExpandedCardStatementKey((current) => current === statement.key ? null : statement.key)}
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex items-start gap-3">
+                                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
+                                  <CreditCard className="h-4 w-4" />
+                                </span>
+                                <div className="min-w-0 space-y-1">
+                                  <p className="line-clamp-2 font-semibold leading-5">{statement.title}</p>
+                                  <span className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                                    Fatura de cartão
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p>{statement.expenses.length} {statement.expenses.length === 1 ? "compra" : "compras"}</p>
+                              <p className={cn("mt-1 text-xs", statement.auditCounts.pending > 0 ? "text-amber-700" : "text-muted-foreground")}>
+                                {auditSummary}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="line-clamp-2 leading-5">{unitLabel}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p>{due ? format(due, "dd/MM/yyyy") : "—"}</p>
+                              {due && statement.status !== "paid" ? (
+                                <p className={cn("mt-1 text-xs", due < startOfDay(new Date()) ? "text-rose-600" : "text-muted-foreground")}>
+                                  {due < startOfDay(new Date())
+                                    ? `${Math.abs(Math.round((startOfDay(new Date()).getTime() - due.getTime()) / 86400000))}d atraso`
+                                    : `em ${Math.round((due.getTime() - startOfDay(new Date()).getTime()) / 86400000)}d`}
+                                </p>
+                              ) : null}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-semibold">{formatCurrency(statement.totalValue)}</td>
+                            <td className="w-[160px] px-4 py-3 text-center">
+                              <span className={cn("inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px]", STATUS_COLORS[statement.status])}>
+                                {STATUS_LABELS[statement.status]}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {isExpanded ? <ChevronUp className="ml-auto h-4 w-4 text-muted-foreground" /> : <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />}
+                            </td>
+                          </tr>
+                          {isExpanded ? (
+                            <tr className="border-b bg-sky-50/15">
+                              <td colSpan={7} className="px-4 pb-4 pt-2">
+                                <div className="overflow-hidden rounded-xl border bg-background">
+                                  <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/25 px-4 py-3">
+                                    <div>
+                                      <p className="text-sm font-semibold">Compras desta fatura</p>
+                                      <p className="mt-0.5 text-xs text-muted-foreground">
+                                        A fatura é a obrigação de pagamento; cada compra permanece como despesa individual na DRE.
+                                      </p>
+                                    </div>
+                                    {canAccessAudits ? (
+                                      <Button asChild variant="outline" size="sm" className="h-8 rounded-lg text-xs">
+                                        <Link href={statementHref} onClick={(event) => event.stopPropagation()}>
+                                          Abrir auditoria do cartão
+                                        </Link>
+                                      </Button>
+                                    ) : null}
+                                  </div>
+                                  <div className="overflow-x-auto">
+                                    <table className="min-w-[920px] w-full text-left text-xs">
+                                      <thead className="border-b bg-muted/10 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                        <tr>
+                                          <th className="px-3 py-2.5 font-semibold">Compra</th>
+                                          <th className="px-3 py-2.5 font-semibold">Data</th>
+                                          <th className="px-3 py-2.5 font-semibold">Plano de contas</th>
+                                          <th className="px-3 py-2.5 font-semibold">Unidade</th>
+                                          <th className="px-3 py-2.5 text-right font-semibold">Valor</th>
+                                          <th className="px-3 py-2.5 text-center font-semibold">Auditoria</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y">
+                                        {statement.expenses.map((expense) => {
+                                          const issues = cardExpenseAuditIssues(expense);
+                                          const auditStatus = expense.cardReconciliationStatus === "reconciled"
+                                            ? "reconciled"
+                                            : issues.length === 0 ? "audited" : "pending";
+                                          const auditMeta = auditStatus === "reconciled"
+                                            ? { label: "Conferida", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
+                                            : auditStatus === "audited"
+                                              ? { label: "Auditada", className: "border-sky-200 bg-sky-50 text-sky-700" }
+                                              : { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" };
+                                          const planName = accountPlanMap[expense.accountId ?? expense.accountPlan]
+                                            || expense.accountPlanName || expense.accountId || expense.accountPlan || "Pendente";
+                                          const matchedExisting = Boolean(expense.reconciledProvisionId || expense.cardStatementRegisteredValue != null);
+                                          const chargeDate = toDate(expense.cardChargeDate);
+                                          return (
+                                            <tr key={expense.id} className="align-top hover:bg-muted/15">
+                                              <td className="px-3 py-3">
+                                                <p className="max-w-[300px] font-medium">{expense.description || "Compra sem descrição"}</p>
+                                                <p className="mt-0.5 text-[10.5px] text-muted-foreground">{expense.supplier || "Favorecido pendente"}</p>
+                                                <p className="mt-1 text-[9.5px] font-medium text-sky-700">
+                                                  {matchedExisting ? "Correspondência encontrada" : "Importada da fatura"}
+                                                </p>
+                                              </td>
+                                              <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
+                                                {chargeDate ? format(chargeDate, "dd/MM/yyyy") : "—"}
+                                              </td>
+                                              <td className={cn("px-3 py-3", planName === "Pendente" && "text-amber-700")}>{planName}</td>
+                                              <td className="px-3 py-3">{getExpenseUnitLabel(expense, resultCenterNameById)}</td>
+                                              <td className="whitespace-nowrap px-3 py-3 text-right font-mono font-semibold">{formatCurrency(Number(expense.totalValue) || 0)}</td>
+                                              <td className="px-3 py-3 text-center">
+                                                <span className={cn("inline-flex rounded-full border px-2 py-1 text-[10px] font-medium", auditMeta.className)} title={issues.length ? `Revisar: ${issues.join(", ")}` : undefined}>
+                                                  {auditMeta.label}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      );
+                    }
+                    const expense = row.expense;
                     const due = toDate(expense.dueDate);
                     const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                     const isExpanded = expandedExpenseId === expense.id;
@@ -1016,6 +1348,8 @@ export function ExpensesPage() {
                     const personAllocations = canViewPersonnelCosts
                       ? expensePersonAllocations(expense, accountPlanMap)
                       : [];
+                    const personAllocationPeopleCount = personAllocationDistinctPeopleCount(personAllocations);
+                    const showPersonIndividualization = personAllocationPeopleCount > 1;
                     const personAllocationGroups = Array.from(
                       personAllocations.reduce((groups, allocation) => {
                         const key = allocation.accountPlanId;
@@ -1043,6 +1377,9 @@ export function ExpensesPage() {
                       ...installmentSchedule.map((installment: any) => Number(installment?.number) || 0)
                     );
                     const installmentLabel = `${installmentNumber}/${installmentTotal}`;
+                    const relatedPurchaseExpense = expense.relatedPurchaseExpenseId
+                      ? expenseById.get(String(expense.relatedPurchaseExpenseId))
+                      : null;
 
                     return (
                       <Fragment key={expense.id}>
@@ -1093,11 +1430,9 @@ export function ExpensesPage() {
                           <td className="px-4 py-3">
                             <div className="space-y-1 text-center md:text-left">
                               <p>{due ? format(due, "dd/MM/yyyy") : "—"}</p>
-                              {due ? (
+                              {due && expense.status !== "paid" && expense.status !== "reconciled" ? (
                                 <p className={cn("text-xs", due < startOfDay(new Date()) ? "text-rose-600" : "text-muted-foreground")}>
-                                  {expense.status === "paid"
-                                    ? "Pago"
-                                    : due < startOfDay(new Date())
+                                  {due < startOfDay(new Date())
                                     ? `${Math.abs(Math.round((startOfDay(new Date()).getTime() - due.getTime()) / 86400000))}d atraso`
                                     : `em ${Math.round((due.getTime() - startOfDay(new Date()).getTime()) / 86400000)}d`}
                                 </p>
@@ -1111,7 +1446,24 @@ export function ExpensesPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            {isExpanded ? <ChevronUp className="ml-auto h-4 w-4 text-muted-foreground" /> : <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground" />}
+                            <div className="flex items-center justify-end gap-1">
+                              {permissions.financial?.expenses?.edit && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  asChild
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`} title="Editar despesa">
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    <span className="sr-only">Editar despesa</span>
+                                  </Link>
+                                </Button>
+                              )}
+                              {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                            </div>
                           </td>
                         </tr>
                         {isExpanded && (
@@ -1119,6 +1471,7 @@ export function ExpensesPage() {
                             <td colSpan={7} className="px-4 pb-4 pt-1">
                               <div className="grid gap-4 rounded-2xl border border-border/70 bg-background p-4 md:grid-cols-[minmax(0,1fr)_auto]">
                                 <div className="grid gap-4 sm:grid-cols-3">
+                                  <ExpenseFinancialSummary expense={expense} />
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fornecedor</p>
                                     <p className="mt-1 text-sm font-medium">{expense.supplier || "—"}</p>
@@ -1142,19 +1495,36 @@ export function ExpensesPage() {
                                       </div>
                                     </div>
                                   )}
-                                  {personAllocations.length > 0 && (
+                                  {showPersonIndividualization && (
                                     <div className="sm:col-span-3 rounded-xl border bg-muted/20 p-3">
                                       <div className="flex items-center justify-between gap-3">
                                         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                                           Individualização auditável
                                         </p>
                                         <span className="text-xs text-muted-foreground">
-                                          {personAllocations.length} vínculo{personAllocations.length === 1 ? "" : "s"}
+                                          {personAllocationPeopleCount} pessoas · {personAllocations.length} vínculos
                                         </span>
                                       </div>
                                       <div className="mt-3 space-y-3">
                                         {personAllocationGroups.map((group) => {
                                           const groupTotal = group.allocations.reduce((total, allocation) => total + allocation.amount, 0);
+                                          const people = Array.from(
+                                            group.allocations.reduce((peopleMap, allocation) => {
+                                              const key = allocation.employeeId || allocation.employeeName;
+                                              const current = peopleMap.get(key) || {
+                                                employeeId: allocation.employeeId,
+                                                employeeName: allocation.employeeName,
+                                                allocations: [] as typeof group.allocations,
+                                              };
+                                              current.allocations.push(allocation);
+                                              peopleMap.set(key, current);
+                                              return peopleMap;
+                                            }, new Map<string, {
+                                              employeeId: string;
+                                              employeeName: string;
+                                              allocations: typeof group.allocations;
+                                            }>()).values()
+                                          ).sort((left, right) => left.employeeName.localeCompare(right.employeeName, "pt-BR"));
                                           return (
                                             <div key={group.accountPlanId} className="overflow-hidden rounded-xl border bg-background">
                                               <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/35 px-3 py-2.5">
@@ -1166,49 +1536,65 @@ export function ExpensesPage() {
                                                 </div>
                                                 <p className="font-mono text-sm font-semibold">{formatCurrency(groupTotal)}</p>
                                               </div>
-                                              <div className="overflow-x-auto">
-                                                <table className="min-w-[820px] w-full text-left text-xs">
-                                                  <thead className="border-b text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                                    <tr>
-                                                      <th className="px-3 py-2 font-semibold">Colaborador</th>
-                                                      <th className="px-3 py-2 font-semibold">Classificação</th>
-                                                      <th className="px-3 py-2 font-semibold">Unidade</th>
-                                                      <th className="px-3 py-2 font-semibold">Referência</th>
-                                                      <th className="px-3 py-2 font-semibold">Documento</th>
-                                                      <th className="px-3 py-2 text-right font-semibold">Valor</th>
-                                                    </tr>
-                                                  </thead>
-                                                  <tbody className="divide-y">
-                                                    {group.allocations
-                                                      .slice()
-                                                      .sort((left, right) => (left.employeeName || "").localeCompare(right.employeeName || "", "pt-BR"))
-                                                      .map((allocation, index) => (
-                                                        <tr key={allocation.id || `${allocation.employeeId}-${index}`} className="align-top">
-                                                          <td className="px-3 py-2.5 font-medium">{allocation.employeeName}</td>
-                                                          <td className="px-3 py-2.5 text-muted-foreground">
-                                                            {allocation.analysisType === "employer_cost"
-                                                              ? "Custo da empresa"
-                                                              : allocation.analysisType === "employee_deduction"
-                                                                ? "Desconto do colaborador"
-                                                                : "Informativo"}
-                                                          </td>
-                                                          <td className="px-3 py-2.5 text-muted-foreground">{allocation.resultCenter || "Centro pendente"}</td>
-                                                          <td className="px-3 py-2.5 text-muted-foreground">
-                                                            {allocation.contractReference || allocation.creditorName || "—"}
-                                                            {allocation.contractReference && allocation.creditorName ? (
-                                                              <span className="mt-0.5 block text-[10.5px]">{allocation.creditorName}</span>
-                                                            ) : null}
-                                                          </td>
-                                                          <td className="max-w-[180px] break-all px-3 py-2.5 font-mono text-[10.5px] text-muted-foreground">
-                                                            {allocation.payrollDocumentId ? `RH ${allocation.payrollDocumentId}` : "—"}
-                                                          </td>
-                                                          <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold">
-                                                            {formatCurrency(allocation.amount)}
-                                                          </td>
-                                                        </tr>
-                                                      ))}
-                                                  </tbody>
-                                                </table>
+                                              <div className="divide-y">
+                                                {people.map((person) => {
+                                                  const personTotal = person.allocations.reduce((total, allocation) => total + allocation.amount, 0);
+                                                  return (
+                                                    <details key={person.employeeId || person.employeeName} className="group/person">
+                                                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 transition-colors hover:bg-muted/20 [&::-webkit-details-marker]:hidden">
+                                                        <div className="min-w-0">
+                                                          <p className="truncate text-sm font-medium">{person.employeeName}</p>
+                                                          <p className="mt-0.5 text-[10.5px] text-muted-foreground">
+                                                            {person.allocations.length} lançamento{person.allocations.length === 1 ? "" : "s"}
+                                                          </p>
+                                                        </div>
+                                                        <div className="flex shrink-0 items-center gap-2">
+                                                          <p className="font-mono text-sm font-semibold">{formatCurrency(personTotal)}</p>
+                                                          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/person:rotate-180" />
+                                                        </div>
+                                                      </summary>
+                                                      <div className="overflow-x-auto border-t bg-muted/10">
+                                                        <table className="min-w-[700px] w-full text-left text-xs">
+                                                          <thead className="border-b text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                                            <tr>
+                                                              <th className="px-3 py-2 font-semibold">Classificação</th>
+                                                              <th className="px-3 py-2 font-semibold">Unidade</th>
+                                                              <th className="px-3 py-2 font-semibold">Referência</th>
+                                                              <th className="px-3 py-2 font-semibold">Documento</th>
+                                                              <th className="px-3 py-2 text-right font-semibold">Valor</th>
+                                                            </tr>
+                                                          </thead>
+                                                          <tbody className="divide-y">
+                                                            {person.allocations.map((allocation, index) => (
+                                                              <tr key={allocation.id || `${allocation.employeeId}-${index}`} className="align-top">
+                                                                <td className="px-3 py-2.5 text-muted-foreground">
+                                                                  {allocation.analysisType === "employer_cost"
+                                                                    ? "Custo da empresa"
+                                                                    : allocation.analysisType === "employee_deduction"
+                                                                      ? "Desconto do colaborador"
+                                                                      : "Informativo"}
+                                                                </td>
+                                                                <td className="px-3 py-2.5 text-muted-foreground">{allocation.resultCenter || "Centro pendente"}</td>
+                                                                <td className="px-3 py-2.5 text-muted-foreground">
+                                                                  {allocation.contractReference || allocation.creditorName || "—"}
+                                                                  {allocation.contractReference && allocation.creditorName ? (
+                                                                    <span className="mt-0.5 block text-[10.5px]">{allocation.creditorName}</span>
+                                                                  ) : null}
+                                                                </td>
+                                                                <td className="max-w-[180px] break-all px-3 py-2.5 font-mono text-[10.5px] text-muted-foreground">
+                                                                  {allocation.payrollDocumentId ? `RH ${allocation.payrollDocumentId}` : "—"}
+                                                                </td>
+                                                                <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold">
+                                                                  {formatCurrency(allocation.amount)}
+                                                                </td>
+                                                              </tr>
+                                                            ))}
+                                                          </tbody>
+                                                        </table>
+                                                      </div>
+                                                    </details>
+                                                  );
+                                                })}
                                               </div>
                                             </div>
                                           );
@@ -1260,6 +1646,37 @@ export function ExpensesPage() {
                                       />
                                     </div>
                                   )}
+                                  {relatedPurchaseExpense && (
+                                    <div className="sm:col-span-3 rounded-xl border bg-muted/20 p-3">
+                                      <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                            {expense.purchaseExpenseRole === "freight"
+                                              ? "Mercadoria relacionada"
+                                              : "Frete pago separadamente"}
+                                          </p>
+                                          <p className="mt-1 truncate text-sm font-medium">
+                                            {relatedPurchaseExpense.description || "Despesa vinculada à compra"}
+                                          </p>
+                                          <p className="mt-0.5 text-xs text-muted-foreground">
+                                            {relatedPurchaseExpense.supplier || "Favorecido não informado"}
+                                          </p>
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-3">
+                                          <p className="font-mono text-sm font-semibold">
+                                            {formatCurrency(Number(relatedPurchaseExpense.totalValue) || 0)}
+                                          </p>
+                                          {permissions.financial?.expenses?.view && (
+                                            <Button type="button" variant="outline" size="sm" asChild onClick={(event) => event.stopPropagation()}>
+                                              <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${relatedPurchaseExpense.id}`}>
+                                                Abrir despesa
+                                              </Link>
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
                                   {expense.notes && (
                                     <div className="sm:col-span-3 rounded-xl bg-muted/50 p-3 text-sm text-muted-foreground">
                                       <span className="font-medium text-foreground">Observações:</span> {expense.notes}
@@ -1289,7 +1706,7 @@ export function ExpensesPage() {
                                         Finalizar auditoria
                                       </Button>
                                     )}
-                                  {permissions.financial?.expenses?.pay && expense.status === "pending" && (
+                                  {permissions.financial?.expenses?.pay && ["pending", "partially_paid"].includes(expense.status) && (
                                     <Button
                                       type="button"
                                       size="sm"
@@ -1343,11 +1760,98 @@ export function ExpensesPage() {
                   <Skeleton key={index} className="h-24 w-full rounded-xl" />
                 ))}
               </div>
-            ) : filtered.length === 0 ? (
+            ) : filteredDisplayEntries.length === 0 ? (
               <div className="py-16 text-center text-sm text-muted-foreground">Nenhuma despesa encontrada.</div>
             ) : (
               <div className="flex flex-col">
-                {filtered.map((expense) => {
+                {expenseListRows.map((row) => {
+                  if (row.kind === "week") {
+                    return (
+                      <div key={`mobile-week-${row.group.key}`} className="border-b border-primary/10 bg-primary/[0.04] px-4 py-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary/75">
+                              <CalendarDays className="h-3.5 w-3.5" />
+                              Semana de vencimento
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-foreground">{row.group.label}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="font-mono text-xs font-semibold">{formatCurrency(row.group.totalValue)}</p>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">
+                              {row.group.expenses.length} {row.group.expenses.length === 1 ? "obrigação" : "obrigações"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (row.kind === "card_statement") {
+                    const statement = row.statement;
+                    const isExpanded = expandedCardStatementKey === statement.key;
+                    const pendingAudit = statement.auditCounts.pending;
+                    return (
+                      <div key={`mobile-card-statement-${statement.key}`} className="border-b border-sky-100 bg-sky-50/20">
+                        <button
+                          type="button"
+                          className="w-full px-4 py-3 text-left"
+                          onClick={() => setExpandedCardStatementKey((current) => current === statement.key ? null : statement.key)}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-start gap-2.5">
+                              <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700">
+                                <CreditCard className="h-3.5 w-3.5" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold leading-5">{statement.title}</p>
+                                <p className={cn("mt-1 text-[10.5px]", pendingAudit > 0 ? "text-amber-700" : "text-muted-foreground")}>
+                                  {statement.expenses.length} {statement.expenses.length === 1 ? "compra" : "compras"}
+                                  {pendingAudit > 0 ? ` · ${pendingAudit} pendente${pendingAudit === 1 ? "" : "s"} de auditoria` : " · auditoria concluída"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="font-mono text-sm font-semibold">{formatCurrency(statement.totalValue)}</p>
+                              <span className={cn("mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px]", STATUS_COLORS[statement.status])}>
+                                {STATUS_LABELS[statement.status]}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between text-[10.5px] text-muted-foreground">
+                            <span>{statement.dueDate ? `Venc. ${format(statement.dueDate, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </div>
+                        </button>
+                        {isExpanded ? (
+                          <div className="border-t bg-background px-3 py-2">
+                            <div className="divide-y rounded-lg border">
+                              {statement.expenses.map((expense) => {
+                                const issues = cardExpenseAuditIssues(expense);
+                                const auditLabel = expense.cardReconciliationStatus === "reconciled"
+                                  ? "Conferida"
+                                  : issues.length === 0 ? "Auditada" : "Pendente";
+                                return (
+                                  <div key={expense.id} className="px-3 py-2.5">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-medium leading-4">{expense.description || "Compra sem descrição"}</p>
+                                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                          {toDate(expense.cardChargeDate) ? format(toDate(expense.cardChargeDate)!, "dd/MM/yyyy") : "Data pendente"}
+                                          {` · ${auditLabel}`}
+                                        </p>
+                                      </div>
+                                      <p className="shrink-0 font-mono text-xs font-semibold">{formatCurrency(Number(expense.totalValue) || 0)}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  }
+                  const expense = row.expense;
                   const due = toDate(expense.dueDate);
                   const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                   const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
@@ -1355,7 +1859,11 @@ export function ExpensesPage() {
                   const personAllocations = canViewPersonnelCosts
                     ? expensePersonAllocations(expense, accountPlanMap)
                     : [];
+                  const personAllocationPeopleCount = personAllocationDistinctPeopleCount(personAllocations);
                   const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
+                  const relatedPurchaseExpense = expense.relatedPurchaseExpenseId
+                    ? expenseById.get(String(expense.relatedPurchaseExpenseId))
+                    : null;
 
                   return (
                     <div key={expense.id} className="border-b border-border/50 px-4 py-3 last:border-b-0 hover:bg-muted/10">
@@ -1373,7 +1881,7 @@ export function ExpensesPage() {
                         <span className="text-border">·</span>
                         <span>{planName}</span>
                         {accountingAllocations.length > 1 && <span>· {accountingAllocations.length} apropriações</span>}
-                        {personAllocations.length > 0 && <span>· {personAllocations.length} vínculos</span>}
+                        {personAllocationPeopleCount > 1 && <span>· {personAllocationPeopleCount} pessoas</span>}
                         <span className="text-border">·</span>
                         <span>{due ? `Venc. ${format(due, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
                       </div>
@@ -1389,6 +1897,13 @@ export function ExpensesPage() {
                               href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(FINANCIAL_ROUTES.pendingAuditExpenses)}`}
                               label="Abrir pedido"
                             />
+                          )}
+                          {relatedPurchaseExpense && (
+                            <Button variant="outline" size="sm" className="h-7 text-[10px]" asChild>
+                              <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${relatedPurchaseExpense.id}`}>
+                                {expense.purchaseExpenseRole === "freight" ? "Ver mercadoria" : "Ver frete separado"}
+                              </Link>
+                            </Button>
                           )}
                           <span className={cn("text-[11px]", statusKey === "pending_audit" ? "text-amber-700" : "text-muted-foreground")}>
                             {statusKey === "cancelled"
@@ -1424,7 +1939,7 @@ export function ExpensesPage() {
                                   Finalizar auditoria
                                 </DropdownMenuItem>
                               )}
-                            {permissions.financial?.expenses?.pay && expense.status === "pending" && (
+                            {permissions.financial?.expenses?.pay && ["pending", "partially_paid"].includes(expense.status) && (
                               <DropdownMenuItem
                                 onClick={() =>
                                   setPayTarget({

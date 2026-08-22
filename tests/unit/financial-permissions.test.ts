@@ -25,6 +25,13 @@ describe("permissões financeiras especializadas", () => {
       edit: false,
       export: false,
     });
+    assert.deepEqual(defaultGuestPermissions.financial.reconciliation, {
+      view: false,
+      confirm: false,
+      correct: false,
+      classifyAdjustments: false,
+      administer: false,
+    });
     assert.equal(defaultGuestPermissions.settings.viewAiCosts, false);
   });
 
@@ -32,6 +39,7 @@ describe("permissões financeiras especializadas", () => {
     assert.ok(Object.values(defaultAdminPermissions.financial.audits).every(Boolean));
     assert.ok(Object.values(defaultAdminPermissions.financial.cardStatements).every(Boolean));
     assert.ok(Object.values(defaultAdminPermissions.financial.personnelCosts).every(Boolean));
+    assert.ok(Object.values(defaultAdminPermissions.financial.reconciliation).every(Boolean));
     assert.equal(defaultAdminPermissions.settings.viewAiCosts, true);
   });
 

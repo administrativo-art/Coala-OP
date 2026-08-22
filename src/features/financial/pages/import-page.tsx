@@ -558,10 +558,14 @@ function serializeSessionItem(item: ImportSessionItem) {
     suggestedInstallmentNumber: item.suggestedInstallmentNumber ?? null,
     suggestedInstallmentValue: item.suggestedInstallmentValue ?? null,
     suggestedAdditionalCharges: item.suggestedAdditionalCharges ?? null,
+    suggestedReportedPaymentId: item.suggestedReportedPaymentId ?? null,
+    suggestedReportedLinkId: item.suggestedReportedLinkId ?? null,
     suggestedConfidence: item.suggestedConfidence ?? null,
     expenseDraft: {
       mode: item.expenseDraft.mode,
       linkedExpenseId: item.expenseDraft.linkedExpenseId,
+      reportedPaymentId: item.expenseDraft.reportedPaymentId ?? "",
+      reportedLinkId: item.expenseDraft.reportedLinkId ?? "",
       purchaseOrderId: item.expenseDraft.purchaseOrderId,
       purchaseLinkMode: item.expenseDraft.purchaseLinkMode,
       allocatedAmount: item.expenseDraft.allocatedAmount,
@@ -569,6 +573,8 @@ function serializeSessionItem(item: ImportSessionItem) {
       settlementInstallmentNumber: item.expenseDraft.settlementInstallmentNumber,
       interest: item.expenseDraft.interest,
       fine: item.expenseDraft.fine,
+      discount: item.expenseDraft.discount,
+      abatement: item.expenseDraft.abatement,
       chargesAccountPlanId: item.expenseDraft.chargesAccountPlanId,
       chargesAccountPlanName: item.expenseDraft.chargesAccountPlanName,
       description: item.expenseDraft.description,
@@ -711,6 +717,8 @@ function createSessionItem(transaction: ImportedTransaction): ImportSessionItem 
     expenseDraft: {
       mode: transaction.linkedExpenseId || transaction.suggestedExpenseId ? "existing" : "new",
       linkedExpenseId: transaction.linkedExpenseId || (canPrelinkPayment ? transaction.suggestedExpenseId : "") || "",
+      reportedPaymentId: "",
+      reportedLinkId: "",
       purchaseOrderId: "",
       purchaseLinkMode: "goods",
       allocatedAmount: Math.abs(transaction.amount),
@@ -718,6 +726,8 @@ function createSessionItem(transaction: ImportedTransaction): ImportSessionItem 
       settlementInstallmentNumber: transaction.suggestedInstallmentNumber || 0,
       interest: 0,
       fine: 0,
+      discount: 0,
+      abatement: 0,
       chargesAccountPlanId: "",
       chargesAccountPlanName: "",
       description: transaction.suggestedExpenseDescription || preferredDescription,
@@ -800,6 +810,8 @@ function normalizeSession(doc: any): ImportSession {
             typeof item.suggestedInstallmentValue === "number" ? item.suggestedInstallmentValue : undefined,
           suggestedAdditionalCharges:
             typeof item.suggestedAdditionalCharges === "number" ? item.suggestedAdditionalCharges : undefined,
+          suggestedReportedPaymentId: item.suggestedReportedPaymentId ? String(item.suggestedReportedPaymentId) : undefined,
+          suggestedReportedLinkId: item.suggestedReportedLinkId ? String(item.suggestedReportedLinkId) : undefined,
           suggestedConfidence:
             item.suggestedConfidence === "high" || item.suggestedConfidence === "medium"
               ? item.suggestedConfidence
@@ -807,6 +819,8 @@ function normalizeSession(doc: any): ImportSession {
           expenseDraft: {
             mode,
             linkedExpenseId: String(item.expenseDraft?.linkedExpenseId ?? ""),
+            reportedPaymentId: String(item.expenseDraft?.reportedPaymentId ?? item.suggestedReportedPaymentId ?? ""),
+            reportedLinkId: String(item.expenseDraft?.reportedLinkId ?? item.suggestedReportedLinkId ?? ""),
             purchaseOrderId: String(item.expenseDraft?.purchaseOrderId ?? ""),
             purchaseLinkMode:
               item.expenseDraft?.purchaseLinkMode === "freight" || item.expenseDraft?.purchaseLinkMode === "combined"
@@ -817,6 +831,8 @@ function normalizeSession(doc: any): ImportSession {
             settlementInstallmentNumber: Number(item.expenseDraft?.settlementInstallmentNumber ?? item.suggestedInstallmentNumber ?? 0),
             interest: Number(item.expenseDraft?.interest ?? 0),
             fine: Number(item.expenseDraft?.fine ?? 0),
+            discount: Number(item.expenseDraft?.discount ?? 0),
+            abatement: Number(item.expenseDraft?.abatement ?? 0),
             chargesAccountPlanId: String(item.expenseDraft?.chargesAccountPlanId ?? ""),
             chargesAccountPlanName: String(item.expenseDraft?.chargesAccountPlanName ?? ""),
             description: String(item.expenseDraft?.description ?? ""),
@@ -1351,16 +1367,13 @@ function validateItem(item: ImportSessionItem, purchaseCandidatesByOrderId: Map<
     if (item.expenseDraft.mode === "existing") {
       const paymentTotal = Math.abs(item.amount);
       const baseValue = Number(item.expenseDraft.settlementBaseValue || paymentTotal);
-      const chargeDifference = Number(Math.max(paymentTotal - baseValue, 0).toFixed(2));
       const classifiedCharges = Number((Number(item.expenseDraft.interest || 0) + Number(item.expenseDraft.fine || 0)).toFixed(2));
+      const classifiedReductions = Number((Number(item.expenseDraft.discount || 0) + Number(item.expenseDraft.abatement || 0)).toFixed(2));
       expenseValid =
         item.expenseDraft.linkedExpenseId.trim().length > 0 &&
         baseValue > 0 &&
-        baseValue <= paymentTotal + 0.01 &&
-        (chargeDifference <= 0.05 || (
-          Math.abs(classifiedCharges - chargeDifference) <= 0.01 &&
-          item.expenseDraft.chargesAccountPlanId.trim().length > 0
-        ));
+        Math.abs(baseValue + classifiedCharges - classifiedReductions - paymentTotal) <= 0.01 &&
+        (classifiedCharges <= 0.009 || item.expenseDraft.chargesAccountPlanId.trim().length > 0);
     } else if (item.expenseDraft.mode === "purchase") {
       const candidate = purchaseCandidatesByOrderId.get(item.expenseDraft.purchaseOrderId);
       const eligibleAmount = getEligibleAllocationAmount(item, candidate || null);
@@ -3583,26 +3596,38 @@ export function FinancialImportPage({
             (installment: any, index: number) => (Number(installment?.number) || index + 1) === current.suggestedInstallmentNumber,
           )
         : openInstallments.length === 1 ? openInstallments[0] : null;
+      const outstandingBalance = Number(expense.settlementSummary?.balanceAmountCents) / 100;
+      const availablePrincipal = Number(
+        targetInstallment?.value ||
+        (outstandingBalance > 0 ? outstandingBalance : expense.totalValue) ||
+        Math.abs(current.amount),
+      );
       const settlementBaseValue = Number(
         (suggestionApplies ? current.suggestedInstallmentValue : 0)
-        || targetInstallment?.value
-        || expense.totalValue
+        || Math.min(Math.abs(current.amount), availablePrincipal)
         || Math.abs(current.amount),
       );
       const chargeDifference = Number(Math.max(Math.abs(current.amount) - settlementBaseValue, 0).toFixed(2));
+      const reductionDifference = Number(Math.max(settlementBaseValue - Math.abs(current.amount), 0).toFixed(2));
       const currentCharges = Number((current.expenseDraft.interest + current.expenseDraft.fine).toFixed(2));
       const preserveBreakdown = chargeDifference > 0.05 && Math.abs(currentCharges - chargeDifference) <= 0.01;
+      const currentReductions = Number((current.expenseDraft.discount + current.expenseDraft.abatement).toFixed(2));
+      const preserveReductionBreakdown = reductionDifference > 0.05 && Math.abs(currentReductions - reductionDifference) <= 0.01;
       return {
         ...current,
         expenseDraft: {
         ...current.expenseDraft,
         mode: "existing",
         linkedExpenseId: expense.id,
+        reportedPaymentId: suggestionApplies ? current.suggestedReportedPaymentId || "" : "",
+        reportedLinkId: suggestionApplies ? current.suggestedReportedLinkId || "" : "",
         purchaseOrderId: "",
         settlementBaseValue,
         settlementInstallmentNumber: Number(targetInstallment?.number || (suggestionApplies ? current.suggestedInstallmentNumber : 0) || 0),
         interest: preserveBreakdown ? current.expenseDraft.interest : 0,
         fine: preserveBreakdown ? current.expenseDraft.fine : 0,
+        discount: preserveReductionBreakdown ? current.expenseDraft.discount : 0,
+        abatement: preserveReductionBreakdown ? current.expenseDraft.abatement : 0,
         chargesAccountPlanId: chargeDifference > 0.05
           ? current.expenseDraft.chargesAccountPlanId || String(financialChargesPlan?.id || "")
           : "",
@@ -3662,6 +3687,8 @@ export function FinancialImportPage({
         settlementInstallmentNumber: 0,
         interest: 0,
         fine: 0,
+        discount: 0,
+        abatement: 0,
         chargesAccountPlanId: "",
         chargesAccountPlanName: "",
         description: current.expenseDraft.description || current.rawDescription,
@@ -4550,6 +4577,14 @@ export function FinancialImportPage({
                           <div className="min-w-0 space-y-1">
                             <div className="flex min-w-0 items-center gap-1.5">
                               <p className="truncate font-sans text-[13px] font-semibold leading-tight">{primaryDescription}</p>
+                              {item.expenseDraft.mode === "existing" && item.expenseDraft.linkedExpenseId ? (
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 rounded-full border-emerald-200 bg-emerald-50 px-1.5 py-0 text-[8.5px] font-semibold text-emerald-700"
+                                >
+                                  Vinculada
+                                </Badge>
+                              ) : null}
                               <Badge className={cn("shrink-0 rounded-md px-1.5 py-0 text-[8.5px] lg:hidden", getTransactionKindClassName(item))}>
                                 {kindLabel}
                               </Badge>
@@ -4772,11 +4807,16 @@ export function FinancialImportPage({
                   ? linkableExpenses.find((expense) => expense.id === item.expenseDraft.linkedExpenseId) ?? null
                   : null;
                 const settlementBaseValue = Number(item.expenseDraft.settlementBaseValue || Math.abs(item.amount));
-                const paymentChargeDifference = Number(Math.max(Math.abs(item.amount) - settlementBaseValue, 0).toFixed(2));
                 const classifiedPaymentCharges = Number((
                   Number(item.expenseDraft.interest || 0) + Number(item.expenseDraft.fine || 0)
                 ).toFixed(2));
+                const classifiedPaymentReductions = Number((
+                  Number(item.expenseDraft.discount || 0) + Number(item.expenseDraft.abatement || 0)
+                ).toFixed(2));
+                const paymentChargeDifference = Number(Math.max(Math.abs(item.amount) + classifiedPaymentReductions - settlementBaseValue, 0).toFixed(2));
+                const paymentReductionDifference = Number(Math.max(settlementBaseValue + classifiedPaymentCharges - Math.abs(item.amount), 0).toFixed(2));
                 const unclassifiedPaymentCharges = Number(Math.max(paymentChargeDifference - classifiedPaymentCharges, 0).toFixed(2));
+                const unclassifiedPaymentReductions = Number(Math.max(paymentReductionDifference - classifiedPaymentReductions, 0).toFixed(2));
                 const suggestedExistingExpense = item.suggestedExpenseId
                   ? linkableExpenses.find((expense) => expense.id === item.suggestedExpenseId) ?? null
                   : null;
@@ -4847,6 +4887,13 @@ export function FinancialImportPage({
                         ["Juros", formatCurrency(item.expenseDraft.interest)],
                         ["Multa", formatCurrency(item.expenseDraft.fine)],
                         ["Plano dos encargos", item.expenseDraft.chargesAccountPlanName || "—"],
+                      );
+                    }
+                    if (paymentReductionDifference > 0.05) {
+                      reviewRows.push(
+                        ["Valor da obrigação", formatCurrency(settlementBaseValue)],
+                        ["Desconto", formatCurrency(item.expenseDraft.discount)],
+                        ["Abatimento", formatCurrency(item.expenseDraft.abatement)],
                       );
                     }
                   } else if (item.expenseDraft.mode === "purchase") {
@@ -5441,6 +5488,25 @@ export function FinancialImportPage({
                                   <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Valor</p>
                                   <p className="mt-1 font-mono text-xs font-semibold">{formatCurrency(Number(selectedExistingExpense.totalValue) || 0)}</p>
                                 </div>
+                                <div>
+                                  <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Principal liquidado agora</p>
+                                  <Input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={item.expenseDraft.settlementBaseValue}
+                                    onChange={(event) => updateItem(item.id, (current) => ({
+                                      ...current,
+                                      expenseDraft: {
+                                        ...current.expenseDraft,
+                                        reportedPaymentId: "",
+                                        reportedLinkId: "",
+                                        settlementBaseValue: Number(event.target.value) || 0,
+                                      },
+                                    }))}
+                                    className="mt-1 h-9 rounded-xl bg-white font-mono text-xs"
+                                  />
+                                </div>
                                 <div className="sm:col-span-2">
                                   <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Plano de contas</p>
                                   <p className="mt-1 text-xs">{selectedExistingExpense.accountPlanName || selectedExistingExpense.accountName || "—"}</p>
@@ -5540,6 +5606,31 @@ export function FinancialImportPage({
                                   {unclassifiedPaymentCharges <= 0.01
                                     ? "Diferença totalmente classificada."
                                     : `Ainda falta classificar ${formatCurrency(unclassifiedPaymentCharges)} entre juros e multa.`}
+                                </p>
+                              </div>
+                            ) : null}
+                            {selectedExistingExpense && paymentReductionDifference > 0.05 ? (
+                              <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-semibold text-emerald-900">Diferença tratada como desconto ou abatimento</p>
+                                    <p className="mt-1 text-[10.5px] leading-relaxed text-emerald-800">
+                                      O pagamento de {formatCurrency(Math.abs(item.amount))} e os créditos de {formatCurrency(paymentReductionDifference)} liquidam a obrigação de {formatCurrency(settlementBaseValue)}.
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div className="space-y-1.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-900">Desconto</p>
+                                    <Input type="number" min="0" step="0.01" value={item.expenseDraft.discount} onChange={(event) => updateItem(item.id, (current) => ({ ...current, expenseDraft: { ...current.expenseDraft, discount: Number(event.target.value) || 0 } }))} className="h-9 rounded-xl bg-white text-xs" />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-900">Abatimento</p>
+                                    <Input type="number" min="0" step="0.01" value={item.expenseDraft.abatement} onChange={(event) => updateItem(item.id, (current) => ({ ...current, expenseDraft: { ...current.expenseDraft, abatement: Number(event.target.value) || 0 } }))} className="h-9 rounded-xl bg-white text-xs" />
+                                  </div>
+                                </div>
+                                <p className={cn("text-[10.5px] font-medium", unclassifiedPaymentReductions <= 0.01 ? "text-emerald-700" : "text-amber-800")}>
+                                  {unclassifiedPaymentReductions <= 0.01 ? "Diferença totalmente classificada." : `Ainda falta classificar ${formatCurrency(unclassifiedPaymentReductions)} entre desconto e abatimento.`}
                                 </p>
                               </div>
                             ) : null}

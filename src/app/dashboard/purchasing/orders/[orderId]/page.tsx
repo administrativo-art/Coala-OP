@@ -141,6 +141,7 @@ type EditForm = {
   accountPlanId: string;
   freightAccountPlanId: string;
   freightPaymentMode: PurchaseFreightPaymentMode;
+  freightSupplierName: string;
   resultCenterId: string;
   paymentCardKey: string;
   trackingInfo: string;
@@ -378,7 +379,11 @@ export default function PurchaseOrderPage() {
     !!order?.accountPlanId &&
     !!order?.resultCenterId &&
     unregisteredStockItems.length === 0 &&
-    ((order?.deliveryFee ?? 0) <= 0 || (!!order?.freightAccountPlanId && !!order?.freightPaymentMode));
+    ((order?.deliveryFee ?? 0) <= 0 || (
+      !!order?.freightAccountPlanId &&
+      !!order?.freightPaymentMode &&
+      (order.freightPaymentMode !== 'separate' || String(order.freightSupplierName || '').trim().length >= 2)
+    ));
   const canEditOrder = !!order && canEdit && !isCancelled && !isReceived;
   const canConfirmOrder = !!order && isCreated && canEdit && !isCancelled;
   const canMarkReceivedElsewhere = !!order && order.status === 'confirmed' && !isReceived && canReceive;
@@ -415,6 +420,7 @@ export default function PurchaseOrderPage() {
       accountPlanId: order.accountPlanId ?? purchasingDefaults.goodsAccountPlanId ?? '',
       freightAccountPlanId: order.freightAccountPlanId ?? purchasingDefaults.freightAccountPlanId ?? '',
       freightPaymentMode: order.freightPaymentMode ?? 'separate',
+      freightSupplierName: order.freightSupplierName ?? '',
       resultCenterId: order.resultCenterId ?? '',
       paymentCardKey: getPaymentCardKey(order.paymentAccountId, order.paymentMethodId),
       trackingInfo: order.trackingInfo ?? '',
@@ -434,6 +440,13 @@ export default function PurchaseOrderPage() {
     if (!editForm.accountPlanId) pending.push('Plano de contas da mercadoria');
     if (!editForm.resultCenterId) pending.push('Centro de resultado');
     if (editForm.deliveryFee > 0 && !editForm.freightAccountPlanId) pending.push('Plano de contas do frete');
+    if (
+      editForm.deliveryFee > 0 &&
+      editForm.freightPaymentMode === 'separate' &&
+      editForm.freightSupplierName.trim().length < 2
+    ) {
+      pending.push('Favorecido do frete');
+    }
     return pending;
   }, [editForm]);
 
@@ -467,6 +480,10 @@ export default function PurchaseOrderPage() {
         freightAccountPlanId: editForm.deliveryFee > 0 ? editForm.freightAccountPlanId : '',
         freightAccountPlanName: editForm.deliveryFee > 0 ? selectedFreightAccountPlan?.name : '',
         freightPaymentMode: editForm.deliveryFee > 0 ? editForm.freightPaymentMode : undefined,
+        freightSupplierName:
+          editForm.deliveryFee > 0 && editForm.freightPaymentMode === 'separate'
+            ? editForm.freightSupplierName.trim()
+            : null,
         resultCenterId: editForm.resultCenterId,
         resultCenterName: selectedResultCenter?.name,
         trackingInfo: editForm.trackingInfo,
@@ -572,20 +589,30 @@ export default function PurchaseOrderPage() {
                 )}
               </div>
 
-              {order.quotationId && (
+              {(order.quotationId || order.linkedExpenseId || order.linkedFreightExpenseId || order.archivedLinkedExpenseId) && (
                 <div className="flex flex-wrap gap-3">
+                  {order.quotationId && (
                   <Link
                     href={`/dashboard/purchasing/quotations/${order.quotationId}`}
                     className="inline-flex text-xs text-primary hover:underline"
                   >
                     Ver cotação de origem
                   </Link>
+                  )}
                   {order.linkedExpenseId && (
                     <Link
                       href={`/dashboard/financial/expenses/new?edit=${order.linkedExpenseId}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}
                       className="inline-flex text-xs text-primary hover:underline"
                     >
-                      Abrir despesa no financeiro
+                      Abrir despesa da mercadoria
+                    </Link>
+                  )}
+                  {order.linkedFreightExpenseId && (
+                    <Link
+                      href={`/dashboard/financial/expenses/new?edit=${order.linkedFreightExpenseId}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}
+                      className="inline-flex text-xs text-primary hover:underline"
+                    >
+                      Abrir despesa do frete
                     </Link>
                   )}
                   {!order.linkedExpenseId && order.archivedLinkedExpenseId && (
@@ -1036,6 +1063,19 @@ export default function PurchaseOrderPage() {
                       : 'Sem frete'}
                   </p>
                 </div>
+                {order.deliveryFee && order.deliveryFee > 0 && order.freightPaymentMode === 'separate' && (
+                  <div>
+                    <p className="text-muted-foreground">Favorecido do frete</p>
+                    {order.freightSupplierName ? (
+                      <p className="font-medium">{order.freightSupplierName}</p>
+                    ) : (
+                      <p className={MISSING_VALUE_CLASS}>
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Não definido
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1299,6 +1339,23 @@ export default function PurchaseOrderPage() {
                           Use "junto" quando o pagamento cobrir mercadoria e frete no mesmo lançamento bancário.
                         </p>
                       </div>
+
+                      {editForm.deliveryFee > 0 && editForm.freightPaymentMode === 'separate' && (
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>Favorecido do frete</Label>
+                          <Input
+                            value={editForm.freightSupplierName}
+                            onChange={(event) =>
+                              setEditForm((current) => current && { ...current, freightSupplierName: event.target.value })
+                            }
+                            placeholder="Ex.: transportadora ou motorista"
+                            className={cn(editForm.freightSupplierName.trim().length < 2 && PENDING_FIELD_CLASS)}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            O financeiro criará uma despesa própria para o frete, vinculada à despesa da mercadoria.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </section>
 

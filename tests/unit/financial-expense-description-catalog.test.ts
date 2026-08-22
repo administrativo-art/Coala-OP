@@ -19,19 +19,35 @@ test("monta os padrões financeiros aprovados", () => {
     "Internet - Tirirical | TVN",
   );
   assert.equal(
-    buildFinancialDescription("salary", { month: "2026-07", employee: "Aliny Rodrigues" }),
+    buildFinancialDescription("salary", { competence: "2026-07", employee: "Aliny Rodrigues" }),
     "Salário - 07/2026 | Aliny Rodrigues",
   );
   assert.equal(
-    buildFinancialDescription("fgts", { month: "2026-08", hasPayrollLoan: true }),
-    "FGTS - 08/2026 | FGTS + empréstimo consignado",
+    buildFinancialDescription("das", { competence: "2026-07" }),
+    "DAS - Única - 07/2026",
   );
   assert.equal(
-    buildFinancialDescription("inss", { month: "2026-08" }),
-    "INSS - 08/2026 | Folha de pagamento",
+    buildFinancialDescription("fgts", { competence: "2026-07", hasPayrollLoan: true }),
+    "FGTS - 07/2026 | FGTS + empréstimo consignado",
+  );
+  assert.equal(
+    buildFinancialDescription("inss", { competence: "2026-07" }),
+    "INSS - 07/2026 | Folha de pagamento",
   );
   assert.equal(
     buildFinancialDescription("shopping_cart"),
     "Compra do carrinho - Shopping do Automóvel",
+  );
+  assert.equal(
+    buildFinancialDescription("pdv_system", { unit: "Quiosque Tirirical", beneficiary: "PDV Legal" }),
+    "Sistema PDV - Tirirical | PDV Legal",
+  );
+  assert.equal(
+    buildFinancialDescription("digital_signage", { beneficiary: "Wiplay" }),
+    "Publicidade digital - Signage | Wiplay",
+  );
+  assert.equal(
+    buildFinancialDescription("pdv_implementation", { unit: "Shopping do Automóvel", beneficiary: "PDV Legal" }),
+    "Implantação do Sistema PDV - Shopping do Automóvel | PDV Legal",
   );
 });

@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 
+import { payrollSalaryProvisionSeriesKey } from "@/features/financial/lib/payroll-provisions";
 import { toDate } from "@/features/financial/lib/utils";
 
 export const DAS_PROVISION_SERIES_KEY = "das-simples-nacional";
@@ -15,6 +16,9 @@ type ExpenseProvisionLike = {
   status?: string | null;
   totalValue?: number | null;
   reconciledProvisionId?: string | null;
+  employeeId?: string | null;
+  employeeUserId?: string | null;
+  personAllocations?: Array<{ employeeId?: string | null }> | null;
 };
 
 export type ExpenseProvisionConsultation =
@@ -66,6 +70,16 @@ export function inferExpenseProvisionSeriesKey(expense: ExpenseProvisionLike) {
 
   const description = String(expense.description ?? "").trim();
   const normalizedDescription = normalized(description);
+  if (/^sal[aá]rio\s*-/i.test(description)) {
+    const allocationEmployeeIds = Array.from(new Set(
+      (expense.personAllocations || [])
+        .map((allocation) => String(allocation.employeeId || "").trim())
+        .filter(Boolean),
+    ));
+    const employeeId = String(expense.employeeId || expense.employeeUserId || "").trim()
+      || (allocationEmployeeIds.length === 1 ? allocationEmployeeIds[0] : "");
+    if (employeeId) return payrollSalaryProvisionSeriesKey(employeeId);
+  }
   if (normalized(expense.accountPlanName) === "das" || normalizedDescription.startsWith("das - unica -")) {
     return DAS_PROVISION_SERIES_KEY;
   }
@@ -86,6 +100,18 @@ export function inferExpenseProvisionSeriesKey(expense: ExpenseProvisionLike) {
 
   const gpt = description.match(/^GPT\/Codex\s*\|\s*(.+)$/i);
   if (gpt) return recurringSeries(["gpt-codex", gpt[1]]);
+
+  const digitalSignage = description.match(/^Publicidade digital\s*-\s*Signage\s*\|\s*(.+)$/i);
+  if (digitalSignage) return recurringSeries(["publicidade-digital", "signage", digitalSignage[1]]);
+
+  const pdvSystem = description.match(/^Sistema PDV\s*-\s*(.+?)\s*\|\s*(.+)$/i);
+  if (pdvSystem) return recurringSeries(["sistema-pdv", pdvSystem[1], pdvSystem[2]]);
+
+  const pdvImplementation = description.match(/^Implanta[cç][aã]o do Sistema PDV\s*-\s*(.+?)\s*\|\s*(.+)$/i);
+  if (pdvImplementation) {
+    const parts = [pdvImplementation[1], pdvImplementation[2]].map(slug).filter(Boolean);
+    return parts.length === 2 ? `one-time:implantacao-sistema-pdv:${parts.join(":")}` : null;
+  }
 
   return null;
 }

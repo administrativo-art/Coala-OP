@@ -2,6 +2,7 @@ export type PlannedPaymentMethodType =
   | "credit_card"
   | "debit_card"
   | "pix"
+  | "boleto"
   | "transfer"
   | "cash";
 
@@ -46,9 +47,11 @@ export type CardExpenseEntry = {
   }>;
   plannedPaymentMethodType?: unknown;
   plannedBankAccountId?: unknown;
+  plannedBankAccountName?: unknown;
   plannedPaymentMethodId?: unknown;
   plannedPaymentMethodLabel?: unknown;
   cardReconciliationStatus?: unknown;
+  cardStatementId?: unknown;
   cardStatementKey?: unknown;
   cardStatementMonthKey?: unknown;
 };
@@ -69,6 +72,8 @@ export type CardStatementLine = {
   installmentNumber?: number;
   installmentTotal?: number;
 };
+
+export type CardStatementLineAuditStatus = "pending" | "audited" | "reconciled";
 
 export type CardStatementAllocation = {
   lineId: string;
@@ -143,6 +148,35 @@ export function cardExpenseChargeDate(expense: CardExpenseEntry) {
     cardDateFromUnknown(expense.dueDate) ??
     cardDateFromUnknown(expense.competenceDate)
   );
+}
+
+export function cardExpenseAuditIssues(expense: CardExpenseEntry) {
+  const issues: string[] = [];
+  if (String(expense.description || "").trim().length < 10) issues.push("descrição");
+  if (String(expense.supplier || "").trim().length < 3) issues.push("favorecido");
+  if (
+    !String(expense.accountPlanId || "").trim() &&
+    (!Array.isArray(expense.accountAllocations) || expense.accountAllocations.length === 0)
+  ) {
+    issues.push("plano de contas");
+  }
+  if (
+    !String(expense.resultCenterId || "").trim() &&
+    (!Array.isArray(expense.apportionments) || expense.apportionments.length === 0)
+  ) {
+    issues.push("centro de resultado");
+  }
+  if (!cardDateFromUnknown(expense.competenceDate)) issues.push("competência");
+  return issues;
+}
+
+export function cardStatementLineAuditIssues(line: CardStatementLine) {
+  return cardExpenseAuditIssues(line.expense);
+}
+
+export function cardStatementLineAuditStatus(line: CardStatementLine): CardStatementLineAuditStatus {
+  if (line.reconciled) return "reconciled";
+  return cardStatementLineAuditIssues(line).length === 0 ? "audited" : "pending";
 }
 
 function dateKey(value: unknown) {
@@ -390,6 +424,7 @@ export const PLANNED_PAYMENT_METHOD_LABELS: Record<PlannedPaymentMethodType, str
   credit_card: "Cartão de crédito",
   debit_card: "Cartão de débito",
   pix: "PIX",
+  boleto: "Boleto",
   transfer: "Transferência",
   cash: "Dinheiro",
 };

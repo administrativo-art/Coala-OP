@@ -2,7 +2,7 @@ import { z } from "zod";
 import { paymentBeneficiaryReferenceSchema } from "../beneficiaries/schemas";
 
 export const createPaymentRequestSchema = z.object({
-  sourceType: z.enum(["aso", "generated_receipt", "termination"]),
+  sourceType: z.enum(["aso", "generated_receipt", "termination", "purchase_order"]),
   sourceId: z.string().trim().min(1).max(180),
   expenseId: z.string().trim().min(1).max(180).optional(),
   beneficiaryReference: paymentBeneficiaryReferenceSchema,

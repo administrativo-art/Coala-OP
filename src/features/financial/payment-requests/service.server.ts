@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { createBeneficiarySnapshot, resolvePaymentBeneficiary } from "../beneficiaries/resolver.server";
@@ -106,13 +107,34 @@ async function completeSource(request: BankPaymentRequest) {
     }, { merge: true });
     return;
   }
+  if (request.sourceType === "purchase_order") {
+    const now = new Date().toISOString();
+    await Promise.all([
+      dbAdmin.collection("purchase_orders").doc(request.sourceId).set({
+        paymentStatus: "paid",
+        paymentRequestId: request.id,
+        paidAt: request.paidAt ?? null,
+        updatedAt: now,
+      }, { merge: true }),
+      dbAdmin.collection("purchase_financials")
+        .where("purchaseOrderId", "==", request.sourceId)
+        .limit(10)
+        .get()
+        .then((snapshot) => Promise.all(snapshot.docs.map((document) => document.ref.set({
+          status: "paid",
+          paymentRequestId: request.id,
+          paidAt: request.paidAt ?? null,
+          updatedAt: now,
+        }, { merge: true })))).then(() => undefined),
+    ]);
+  }
   if (request.expenseId) {
     const now = new Date().toISOString();
     const expenseRef = financialDbAdmin.collection("expenses").doc(request.expenseId);
     const paymentRef = financialDbAdmin.collection("payments").doc(`inter_${request.id}`);
     await financialDbAdmin.runTransaction(async (transaction) => {
       const expense = await transaction.get(expenseRef);
-      if (!expense.exists) throw new Error("A despesa vinculada ao recibo não foi encontrada.");
+      if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
       transaction.set(paymentRef, {
         expenseId: request.expenseId, paymentRequestId: request.id, paidAt: request.paidAt,
         totalPaid: request.amount, paymentMethodLabel: "Pix Banco Inter", proofStoragePath: request.proofStoragePath,
@@ -126,7 +148,9 @@ async function completeSource(request: BankPaymentRequest) {
       }, { merge: false });
     });
   }
-  await financialDbAdmin.collection("generatedReceipts").doc(request.sourceId).set({ status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: new Date().toISOString() }, { merge: true });
+  if (request.sourceType === "generated_receipt") {
+    await financialDbAdmin.collection("generatedReceipts").doc(request.sourceId).set({ status: "paid", paidAt: request.paidAt, paymentRequestId: request.id, paymentProofStoragePath: request.proofStoragePath, updatedAt: new Date().toISOString() }, { merge: true });
+  }
 }
 
 export async function refreshPaymentRequest(id: string, actor: PaymentActor | "system") {
@@ -156,7 +180,15 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
   }
   const receiverDocument = normalizeBrazilianDocument(transaction.recebedor?.cpfCnpj);
   const snapshotDocument = normalizeBrazilianDocument(current.beneficiarySnapshot.document);
-  if (receiverDocument && snapshotDocument && receiverDocument !== snapshotDocument) {
+  const receiverHash = receiverDocument
+    ? createHash("sha256").update(receiverDocument).digest("hex")
+    : "";
+  const snapshotDocumentMatches = current.beneficiarySnapshot.documentHash
+    ? receiverHash === current.beneficiarySnapshot.documentHash
+    : snapshotDocument.length === receiverDocument.length
+      ? receiverDocument === snapshotDocument
+      : receiverDocument.endsWith(snapshotDocument);
+  if (receiverDocument && snapshotDocument && !snapshotDocumentMatches) {
     await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "receiver", bankStatus: rawStatus });
     throw new Error("O favorecido confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.");
   }

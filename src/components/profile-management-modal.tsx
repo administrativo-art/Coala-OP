@@ -372,6 +372,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const financialCashFlowViewWatch = form.watch('permissions.financial.cashFlow.view' as any);
   const financialExpensesViewWatch = form.watch('permissions.financial.expenses.view' as any);
   const financialAuditsViewWatch = form.watch('permissions.financial.audits.view' as any);
+  const financialReconciliationViewWatch = form.watch('permissions.financial.reconciliation.view' as any);
   const financialCardStatementsViewWatch = form.watch('permissions.financial.cardStatements.view' as any);
   const financialPersonnelCostsViewWatch = form.watch('permissions.financial.personnelCosts.view' as any);
   const financialPaymentRequestsViewWatch = form.watch('permissions.financial.paymentRequests.view' as any);
@@ -782,6 +783,17 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.financial.audits.ignore" as any, "Ignorar movimentos", "Permite retirar movimentos da conciliação mediante confirmação.", !financialAuditsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.audits.effectuate" as any, "Efetivar movimentos", "Permite transformar itens auditados em lançamentos financeiros.", !financialAuditsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.audits.manage" as any, "Gerenciar sessões", "Permite reabrir itens e fechar ou reabrir sessões de auditoria.", !financialAuditsViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><AuditIcon className="h-4 w-4" /> Conciliação de obrigações</h4>
+                                  {renderPermissionSwitch("permissions.financial.reconciliation.view" as any, "Visualizar liquidações", "Permite consultar previsão, valor real, pagamentos, saldo, ajustes e histórico.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.reconciliation.confirm" as any, "Confirmar vínculos", "Permite confirmar que uma transação bancária liquida uma obrigação.", !financialReconciliationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.reconciliation.correct" as any, "Corrigir conciliações", "Permite desfazer ou substituir vínculos preservando o histórico.", !financialReconciliationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.reconciliation.classifyAdjustments" as any, "Classificar ajustes", "Permite classificar juros, multa, desconto, abatimento, motivo e responsabilidade.", !financialReconciliationViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.reconciliation.administer" as any, "Administrar exceções", "Permite executar correções excepcionais e consultar toda a trilha de auditoria.", !financialReconciliationViewWatch, true)}
                                   </div>
                                 </div>
 

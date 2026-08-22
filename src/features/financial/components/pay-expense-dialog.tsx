@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { addDoc, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,7 +9,7 @@ import { ptBR } from "date-fns/locale";
 import { AlertCircle, CalendarIcon, Check, CheckCircle2, Loader2, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
+import { financialCollection } from "@/features/financial/lib/repositories";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { formatCurrency } from "@/features/financial/lib/utils";
 import { consultExpenseProvision } from "@/features/financial/lib/expense-provisions";
@@ -31,7 +30,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { PaymentBeneficiaryReference } from "@/features/financial/beneficiaries/types";
-import { financialDb } from "@/lib/firebase-financial";
 
 const splitSchema = z.object({
   accountId: z.string().min(1, "Selecione uma conta."),
@@ -46,7 +44,16 @@ const paySchema = z.object({
   interest: z.coerce.number().min(0).default(0),
   fine: z.coerce.number().min(0).default(0),
   notes: z.string().optional(),
+  chargesAccountPlanId: z.string().optional(),
   splits: z.array(splitSchema).min(1, "Adicione ao menos uma forma de pagamento."),
+}).superRefine((value, context) => {
+  if (value.interest + value.fine > 0.009 && !value.chargesAccountPlanId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["chargesAccountPlanId"],
+      message: "Selecione o plano dos encargos.",
+    });
+  }
 });
 
 type PayFormValues = z.infer<typeof paySchema>;
@@ -55,6 +62,7 @@ type ExpenseRecord = {
   id: string;
   description: string;
   totalValue: number;
+  netPayableValue?: number;
   supplier?: string;
   accountPlanName?: string;
   resultCenter?: string;
@@ -83,7 +91,9 @@ export function PayExpenseDialog({
   const { firebaseUser, permissions } = useAuth();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
   const { data: accountsData } = useFinancialCollection<any>(financialCollection("bankAccounts"));
+  const { data: accountPlansData } = useFinancialCollection<any>(financialCollection("accounts"));
   const { data: expensesData } = useFinancialCollection<any>(financialCollection("expenses"));
 
   const activeAccounts = (accountsData || []).filter((account) => account.active);
@@ -95,6 +105,7 @@ export function PayExpenseDialog({
       interest: 0,
       fine: 0,
       notes: "",
+      chargesAccountPlanId: "",
       splits: [
         {
           accountId: "",
@@ -111,7 +122,8 @@ export function PayExpenseDialog({
   const splits = form.watch("splits");
   const interest = Number(form.watch("interest")) || 0;
   const fine = Number(form.watch("fine")) || 0;
-  const baseValue = expense?.totalValue ?? 0;
+  const chargesAccountPlanId = form.watch("chargesAccountPlanId") || "";
+  const baseValue = expense?.netPayableValue ?? expense?.totalValue ?? 0;
   const totalDue = baseValue + interest + fine;
   const totalPaid = splits.reduce((sum, split) => sum + (Number(split.amount) || 0), 0);
   const remaining = totalDue - totalPaid;
@@ -120,6 +132,19 @@ export function PayExpenseDialog({
     () => expense ? consultExpenseProvision(expense, expensesData || []) : { status: "not_applicable" as const },
     [expense, expensesData],
   );
+  const financialChargePlans = useMemo(() => (accountPlansData || []).filter((plan) => {
+    if (plan.active === false || plan.isGroup === true) return false;
+    const normalized = String(plan.name || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    return plan.dre_position === "despesas_financeiras" || /juros|multa|despesas financeiras/.test(normalized);
+  }), [accountPlansData]);
+
+  useEffect(() => {
+    if (interest + fine <= 0.009 || chargesAccountPlanId || financialChargePlans.length !== 1) return;
+    form.setValue("chargesAccountPlanId", financialChargePlans[0].id);
+  }, [chargesAccountPlanId, financialChargePlans, fine, form, interest]);
 
   if (!expense) return null;
 
@@ -153,37 +178,6 @@ export function PayExpenseDialog({
     }
   }
 
-  async function reconcileProvisionIfNeeded() {
-    if (!expense || !firebaseUser || provisionConsultation.status !== "matched") return;
-    if (!permissions.financial?.expenses?.edit) {
-      throw new Error("A provisão precisa ser conciliada por alguém com permissão de editar despesas antes da baixa.");
-    }
-    if (!provisionConsultation.provision.id) throw new Error("A provisão encontrada não possui identificador válido.");
-
-    const now = Timestamp.now();
-    const batch = writeBatch(financialDb);
-    batch.update(financialDoc("expenses", expense.id), {
-      reconciledProvisionId: provisionConsultation.provision.id,
-      provisionReconciliationStatus: "reconciled",
-      provisionedValue: provisionConsultation.provisionedValue,
-      provisionVariance: provisionConsultation.variance,
-      provisionReconciledAt: now,
-      provisionReconciledBy: firebaseUser.uid,
-      updatedAt: now,
-    });
-    batch.update(financialDoc("expenses", provisionConsultation.provision.id), {
-      status: "reconciled",
-      replacedByExpenseId: expense.id,
-      actualValue: provisionConsultation.actualValue,
-      provisionVariance: provisionConsultation.variance,
-      provisionReconciliationStatus: "reconciled",
-      provisionReconciledAt: now,
-      provisionReconciledBy: firebaseUser.uid,
-      updatedAt: now,
-    });
-    await batch.commit();
-  }
-
   async function onSubmit(values: PayFormValues) {
     if (!expense || !firebaseUser) return;
     if (isOver) {
@@ -196,50 +190,33 @@ export function PayExpenseDialog({
       if (provisionConsultation.status === "ambiguous") {
         throw new Error("Há mais de uma provisão para esta série e competência. Revise-as antes do pagamento.");
       }
-      await reconcileProvisionIfNeeded();
-      const paidAt = Timestamp.fromDate(values.paidAt);
-      const now = Timestamp.now();
-      const basePayload = {
-        expenseId: expense.id,
-        paidAt,
-        baseValue,
-        interest: values.interest ?? 0,
-        fine: values.fine ?? 0,
-        charges: values.interest + values.fine,
-        totalPaid,
-        splits: values.splits,
-        notes: values.notes ?? "",
-        createdBy: firebaseUser.uid,
-        createdAt: now,
-      };
-
-      await addDoc(financialCollection("payments"), basePayload);
-      await updateDoc(financialDoc("expenses", expense.id), {
-        status: "paid",
-        paidAt,
-      });
-
-      if (values.interest + values.fine > 0.009) {
-        await addDoc(financialCollection("expenses"), {
-          description: `Juros/Multa — ${expense.description}`,
-          accountPlanName: "Despesas Financeiras",
-          accountPlan: "despesas-financeiras",
-          totalValue: Number.parseFloat((values.interest + values.fine).toFixed(2)),
-          status: "paid",
-          type: "encargo",
-          originExpenseId: expense.id,
-          supplier: expense.supplier ?? "",
-          dueDate: paidAt,
-          competenceDate: paidAt,
-          paidAt,
-          createdBy: firebaseUser.uid,
-          createdAt: now,
+      const token = await firebaseUser.getIdToken();
+      idempotencyKeyRef.current ||= crypto.randomUUID();
+      const response = await fetch(`/api/financial/expenses/${encodeURIComponent(expense.id)}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          idempotencyKey: idempotencyKeyRef.current,
+          paidAt: values.paidAt.toISOString(),
+          forecastExpenseId: provisionConsultation.status === "matched"
+            ? provisionConsultation.provision.id
+            : null,
           interest: values.interest ?? 0,
           fine: values.fine ?? 0,
-        });
-      }
+          notes: values.notes ?? "",
+          splits: values.splits,
+          chargesAccountPlanId: values.chargesAccountPlanId || null,
+          chargesAccountPlanName: financialChargePlans.find((plan) => plan.id === values.chargesAccountPlanId)?.name || null,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Falha ao informar o pagamento.");
 
-      toast({ title: "Pagamento registrado com sucesso!" });
+      toast({
+        title: "Pagamento informado com sucesso.",
+        description: "A despesa foi baixada gerencialmente e ficará aguardando a confirmação no extrato.",
+      });
+      idempotencyKeyRef.current = null;
       form.reset();
       onOpenChange(false);
       onSuccess?.();
@@ -336,7 +313,7 @@ export function PayExpenseDialog({
                                 previsto {formatCurrency(provisionConsultation.provisionedValue)}, real {formatCurrency(provisionConsultation.actualValue)}.
                                 Diferença {formatCurrency(provisionConsultation.variance)}.
                                 {provisionConsultation.status === "matched"
-                                  ? " A previsão será substituída automaticamente antes da baixa."
+                        ? " A previsão será conciliada na mesma operação do registro."
                                   : " Conciliação já registrada."}
                               </p>
                             ) : provisionConsultation.status === "ambiguous" ? (
@@ -408,6 +385,31 @@ export function PayExpenseDialog({
                       )}
                     />
                   </div>
+
+                  {interest + fine > 0.009 && (
+                    <FormField
+                      control={form.control}
+                      name="chargesAccountPlanId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Plano de contas dos encargos</FormLabel>
+                          <Select value={field.value || ""} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger className="h-9 rounded-xl">
+                                <SelectValue placeholder="Selecione juros e multas" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {financialChargePlans.map((plan) => (
+                                <SelectItem key={plan.id} value={plan.id}>{plan.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <div className="rounded-2xl border border-border/70 p-3">
                     <div className="mb-3 flex items-start justify-between gap-4">
@@ -607,15 +609,15 @@ export function PayExpenseDialog({
                     <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">
                         <Check className="h-4 w-4 text-emerald-600" />
-                        Despesa marcada como paga
+                        Obrigação liquidada gerencialmente
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="h-4 w-4 text-emerald-600" />
-                        Lançamento no fluxo de caixa
+                        Saída informada no fluxo de caixa
                       </div>
                       <div className="flex items-center gap-2">
                         <Check className="h-4 w-4 text-emerald-600" />
-                        Saldo das contas atualizado
+                        Confirmação bancária aguardará o extrato
                       </div>
                     </div>
                   </div>

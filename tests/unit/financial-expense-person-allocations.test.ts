@@ -5,6 +5,7 @@ import {
   expensePersonAllocations,
   personAllocationAccountTotals,
   personAllocationDifference,
+  personAllocationDistinctPeopleCount,
   personAllocationsAreValid,
 } from "../../src/features/financial/lib/expense-person-allocations";
 
@@ -85,4 +86,12 @@ test("rejeita conta sem fechamento individual ou colaborador sem centro", () => 
     hasPersonAllocations: true,
     personAllocations: personAllocations.map((entry, index) => index === 0 ? { ...entry, resultCenter: "" } : entry),
   }), false);
+});
+
+test("conta pessoas distintas sem confundir múltiplos vínculos da mesma pessoa", () => {
+  assert.equal(personAllocationDistinctPeopleCount(personAllocations), 2);
+  assert.equal(personAllocationDistinctPeopleCount([
+    personAllocations[1],
+    personAllocations[2],
+  ]), 1);
 });

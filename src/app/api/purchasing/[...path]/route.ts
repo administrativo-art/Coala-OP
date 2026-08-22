@@ -26,6 +26,7 @@ import {
   purchaseTreatmentCreatesAsset,
   purchaseTreatmentSkipsOperationalEntry,
 } from '@/lib/purchasing-item-treatment';
+import { buildPurchaseExpenseComponents } from '@/lib/purchase-financial-expenses';
 import {
   UNIFORM_STOCK_ID,
   UNIFORM_STOCK_NAME,
@@ -399,73 +400,134 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
   const financialSnap = await financialDbAdmin
     .collection('expenses')
     .where('purchaseOrderId', '==', orderId)
-    .limit(1)
+    .limit(10)
     .get();
 
   const totalValue = Number(orderData.totalEstimated ?? 0);
-  const basePayload = {
-    description: `Compra ${supplier?.fantasyName || supplier?.name || orderData.supplierId || orderId}`,
-    supplier: supplier?.fantasyName || supplier?.name || '',
-    accountPlan: orderData.accountPlanId ?? '',
-    accountPlanName: orderData.accountPlanName ?? '',
+  const goodsSupplierName = supplier?.fantasyName || supplier?.name || orderData.supplierName || orderData.supplierId || orderId;
+  const components = buildPurchaseExpenseComponents({
+    totalValue,
+    deliveryFee: orderData.deliveryFee,
+    freightPaymentMode: normalizeFreightPaymentMode(Number(orderData.deliveryFee ?? 0), orderData.freightPaymentMode),
+    goodsSupplier: goodsSupplierName,
+    freightSupplier: orderData.freightSupplierName,
+    goodsAccountPlanId: orderData.accountPlanId,
+    goodsAccountPlanName: orderData.accountPlanName,
+    freightAccountPlanId: orderData.freightAccountPlanId,
+    freightAccountPlanName: orderData.freightAccountPlanName,
+  });
+  const existingExpenses = financialSnap.docs;
+  const linkedGoodsId = String(orderData.linkedExpenseId || '').trim();
+  const linkedFreightId = String(orderData.linkedFreightExpenseId || '').trim();
+  const existingGoods = existingExpenses.find((document) => document.id === linkedGoodsId)
+    ?? existingExpenses.find((document) => ['goods', 'combined'].includes(String(document.data().purchaseExpenseRole || '')))
+    ?? existingExpenses.find((document) => document.data().purchaseExpenseRole !== 'freight');
+  const existingFreight = existingExpenses.find((document) => document.id === linkedFreightId)
+    ?? existingExpenses.find((document) => document.data().purchaseExpenseRole === 'freight');
+  const goodsRef = existingGoods?.ref ?? financialDbAdmin.collection('expenses').doc();
+  const freightRef = existingFreight?.ref ?? financialDbAdmin.collection('expenses').doc(`purchase_freight_${orderId}`);
+  const freightComponent = components.find((component) => component.role === 'freight');
+  const primaryComponent = components.find((component) => component.role !== 'freight');
+  if (!primaryComponent) throw new Error('A compra não gerou uma despesa principal válida.');
+
+  const sharedPayload = {
     paymentAccountId: orderData.paymentAccountId ?? null,
     paymentAccountName: orderData.paymentAccountName ?? null,
     paymentMethodId: orderData.paymentMethodId ?? null,
     paymentMethodLabel: orderData.paymentMethodLabel ?? null,
-    totalValue,
     dueDate: Timestamp.fromDate(new Date(orderData.paymentDueDate)),
     competenceDate: Timestamp.fromDate(new Date(orderData.createdAt ?? orderData.paymentDueDate)),
-    paymentMethod: orderData.paymentCondition === 'installments' ? 'installments' : 'single',
-    installments:
-      orderData.paymentCondition === 'installments'
-          ? buildExpenseInstallments(
-              totalValue,
-              Number(orderData.installmentsCount ?? 2),
-              orderData.paymentDueDate,
-              orderData.installmentDueDates,
-            )
-        : null,
-    installmentType: orderData.paymentCondition === 'installments' ? 'equal' : null,
-    installmentPeriodicity: orderData.paymentCondition === 'installments' ? 'monthly' : null,
-    firstInstallmentDueDate:
-      orderData.paymentCondition === 'installments' ? Timestamp.fromDate(new Date(orderData.paymentDueDate)) : null,
     isApportioned: false,
     resultCenter: orderData.resultCenterName ?? orderData.resultCenterId ?? null,
     resultCenterId: orderData.resultCenterId ?? null,
+    resultCenterName: orderData.resultCenterName ?? null,
     apportionments: null,
-    notes: buildPurchaseAuditNotes(orderData),
     status: 'pending',
     originModule: 'purchasing',
     originStatus: 'pending_audit',
     purchaseOrderId: orderId,
+    purchaseOrderTotalValue: totalValue,
+    purchaseGoodsAmount: Math.max(totalValue - Number(orderData.deliveryFee ?? 0), 0),
+    purchaseFreightAmount: Number(orderData.deliveryFee ?? 0),
+    freightPaymentMode: normalizeFreightPaymentMode(Number(orderData.deliveryFee ?? 0), orderData.freightPaymentMode),
     purchaseFinancialStatus: orderData.paymentCondition === 'installments' ? 'installments_pending_audit' : 'pending_audit',
-    createdBy: uid,
     updatedAt: Timestamp.now(),
   };
 
-  let expenseId: string;
-  if (financialSnap.empty) {
-    const expenseRef = financialDbAdmin.collection('expenses').doc();
-    expenseId = expenseRef.id;
-    await expenseRef.set({ ...basePayload, createdAt: Timestamp.now() });
-  } else {
-    const existing = financialSnap.docs[0];
-    expenseId = existing.id;
-    await existing.ref.set(basePayload, { merge: true });
+  function componentPayload(component: (typeof components)[number], relatedExpenseId: string | null) {
+    const canInstall = component.role !== 'freight' && orderData.paymentCondition === 'installments';
+    return {
+      ...sharedPayload,
+      description: component.description,
+      supplier: component.supplier,
+      accountPlan: component.accountPlanId,
+      accountId: component.accountPlanId,
+      accountPlanId: component.accountPlanId,
+      accountPlanName: component.accountPlanName,
+      totalValue: component.totalValue,
+      hasAccountAllocations: component.hasAccountAllocations,
+      accountAllocations: component.accountAllocations,
+      paymentMethod: canInstall ? 'installments' : 'single',
+      installments: canInstall
+        ? buildExpenseInstallments(
+            component.totalValue,
+            Number(orderData.installmentsCount ?? 2),
+            orderData.paymentDueDate,
+            orderData.installmentDueDates,
+          )
+        : null,
+      installmentType: canInstall ? 'equal' : null,
+      installmentPeriodicity: canInstall ? 'monthly' : null,
+      firstInstallmentDueDate: canInstall ? Timestamp.fromDate(new Date(orderData.paymentDueDate)) : null,
+      purchaseExpenseRole: component.role,
+      purchaseComponentType: component.role === 'freight' ? 'inbound_freight' : 'goods',
+      relatedPurchaseExpenseId: relatedExpenseId,
+      notes: component.role === 'freight'
+        ? `${buildPurchaseAuditNotes(orderData)}\n\nFrete vinculado à despesa ${goodsRef.id} do pedido ${orderId}.`
+        : buildPurchaseAuditNotes(orderData),
+    };
   }
 
+  const now = Timestamp.now();
+  const expenseBatch = financialDbAdmin.batch();
+  expenseBatch.set(goodsRef, {
+    ...componentPayload(primaryComponent, freightComponent ? freightRef.id : null),
+    ...(existingGoods ? {} : { createdAt: now, createdBy: uid }),
+  }, { merge: true });
+  if (freightComponent) {
+    expenseBatch.set(freightRef, {
+      ...componentPayload(freightComponent, goodsRef.id),
+      ...(existingFreight ? {} : { createdAt: now, createdBy: uid }),
+    }, { merge: true });
+  } else if (existingFreight) {
+    expenseBatch.set(existingFreight.ref, {
+      status: 'cancelled',
+      originStatus: 'superseded_by_purchase_sync',
+      cancelledReason: 'O frete passou a ser pago junto com a mercadoria ou foi removido do pedido.',
+      updatedAt: now,
+    }, { merge: true });
+  }
+  await expenseBatch.commit();
+
   await Promise.all([
-    dbAdmin.collection('purchase_orders').doc(orderId).set({ linkedExpenseId: expenseId }, { merge: true }),
+    dbAdmin.collection('purchase_orders').doc(orderId).set({
+      linkedExpenseId: goodsRef.id,
+      linkedFreightExpenseId: freightComponent ? freightRef.id : FieldValue.delete(),
+    }, { merge: true }),
     dbAdmin
       .collection('purchase_financials')
       .where('purchaseOrderId', '==', orderId)
+      .limit(10)
       .get()
       .then((snapshot) =>
-        Promise.all(snapshot.docs.map((doc) => doc.ref.set({ linkedExpenseId: expenseId }, { merge: true }))),
+        Promise.all(snapshot.docs.map((doc) => doc.ref.set({
+          linkedExpenseId: goodsRef.id,
+          linkedFreightExpenseId: freightComponent ? freightRef.id : FieldValue.delete(),
+        }, { merge: true }))),
       ),
   ]);
 
-  return expenseId;
+  return goodsRef.id;
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
@@ -708,6 +770,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       freightAccountPlanId: body.freightAccountPlanId ?? null,
       freightAccountPlanName: body.freightAccountPlanName ?? null,
       freightPaymentMode,
+      freightSupplierId: freightPaymentMode === 'separate' ? body.freightSupplierId ?? null : null,
+      freightSupplierName: freightPaymentMode === 'separate' ? body.freightSupplierName ?? null : null,
       resultCenterId: body.resultCenterId ?? null,
       resultCenterName: body.resultCenterName ?? null,
       trackingInfo: body.trackingInfo ?? null,
@@ -778,6 +842,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         totalEstimated += (doc.data().totalOrdered || 0);
       });
       totalEstimated += (order.deliveryFee || 0);
+    }
+    const confirmationFreightAmount = Number(order.deliveryFee ?? 0);
+    const confirmationFreightMode = normalizeFreightPaymentMode(
+      confirmationFreightAmount,
+      order.freightPaymentMode,
+    );
+    if (
+      confirmationFreightAmount > 0 &&
+      !String(order.freightAccountPlanId || '').trim()
+    ) {
+      return jsonError('Informe o plano de contas do frete antes de confirmar a compra.');
+    }
+    if (
+      confirmationFreightAmount > 0 &&
+      confirmationFreightMode === 'separate' &&
+      String(order.freightSupplierName || '').trim().length < 2
+    ) {
+      return jsonError('Informe o favorecido do frete antes de confirmar a compra.');
     }
 
     batch.update(orderRef, { 
@@ -856,6 +938,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       goodsAmountEstimated,
       freightAmountEstimated,
       freightPaymentMode,
+      freightSupplierId: freightPaymentMode === 'separate' ? order.freightSupplierId ?? null : null,
+      freightSupplierName: freightPaymentMode === 'separate' ? order.freightSupplierName ?? null : null,
       paymentMethod: order.paymentMethod ?? null,
       paymentAccountId: order.paymentAccountId ?? null,
       paymentAccountName: order.paymentAccountName ?? null,
@@ -2168,6 +2252,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         rest.freightPaymentMode ?? currentOrder.freightPaymentMode,
       );
     }
+    const normalizedFreightPaymentMode =
+      'freightPaymentMode' in rest ? rest.freightPaymentMode : currentOrder.freightPaymentMode ?? null;
+    if (normalizedFreightPaymentMode !== 'separate') {
+      rest.freightSupplierId = null;
+      rest.freightSupplierName = null;
+    }
 
     batch.update(orderRef, { ...rest, updatedAt: now });
     await batch.commit();
@@ -2175,8 +2265,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     const nextTotalEstimated = Number(rest.totalEstimated ?? currentOrder.totalEstimated ?? 0);
     const nextDeliveryFee = normalizedDeliveryFee;
     const nextGoodsAmountEstimated = Math.max(nextTotalEstimated - nextDeliveryFee, 0);
-    const nextFreightPaymentMode =
-      'freightPaymentMode' in rest ? rest.freightPaymentMode : currentOrder.freightPaymentMode ?? null;
+    const nextFreightPaymentMode = normalizedFreightPaymentMode;
+    const nextFreightSupplierId = nextFreightPaymentMode === 'separate'
+      ? rest.freightSupplierId ?? currentOrder.freightSupplierId ?? null
+      : null;
+    const nextFreightSupplierName = nextFreightPaymentMode === 'separate'
+      ? rest.freightSupplierName ?? currentOrder.freightSupplierName ?? null
+      : null;
     const financialSnap = await dbAdmin
       .collection('purchase_financials')
       .where('purchaseOrderId', '==', id)
@@ -2190,6 +2285,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
               goodsAmountEstimated: nextGoodsAmountEstimated,
               freightAmountEstimated: nextDeliveryFee,
               freightPaymentMode: nextFreightPaymentMode,
+              freightSupplierId: nextFreightSupplierId,
+              freightSupplierName: nextFreightSupplierName,
               accountPlanId: rest.accountPlanId ?? currentOrder.accountPlanId ?? null,
               accountPlanName: rest.accountPlanName ?? currentOrder.accountPlanName ?? null,
               freightAccountPlanId: rest.freightAccountPlanId ?? currentOrder.freightAccountPlanId ?? null,

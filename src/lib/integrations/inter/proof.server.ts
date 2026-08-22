@@ -8,6 +8,13 @@ function money(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+function paymentOriginLabel(request: BankPaymentRequest) {
+  if (request.sourceType === "aso") return "Exame admissional (ASO)";
+  if (request.sourceType === "termination") return "Rescisão CLT";
+  if (request.sourceType === "purchase_order") return "Pedido de compra";
+  return "Recibo gerado pelo Coala";
+}
+
 export async function createAndStoreConfirmedPaymentProof(request: BankPaymentRequest) {
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595.28, 841.89]);
@@ -25,7 +32,7 @@ export async function createAndStoreConfirmedPaymentProof(request: BankPaymentRe
     ["Confirmado em", request.paidAt ?? new Date().toISOString()],
     ["Código da solicitação", request.interRequestId ?? "—"],
     ["Identificador End-to-End", request.endToEndId ?? "—"],
-    ["Origem", request.sourceType === "aso" ? "Exame admissional (ASO)" : "Recibo gerado pelo Coala"],
+    ["Origem", paymentOriginLabel(request)],
   ];
   let y = 685;
   for (const [label, value] of rows) {

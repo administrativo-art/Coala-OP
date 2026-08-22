@@ -90,7 +90,6 @@ service cloud.firestore {
     function canReconcileCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'reconcile'); }
     function canViewPersonnelCosts() { return financialGroupPerm('personnelCosts', 'view'); }
     function canEditPersonnelCosts() { return canViewPersonnelCosts() && financialGroupPerm('personnelCosts', 'edit'); }
-
     function canDeleteExpenses() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.delete == true)
         || (hasFinancialClaims() && financialClaims().expenses.delete == true);
@@ -187,35 +186,6 @@ service cloud.firestore {
       return canCreateExpenses()
         || canEditExpenses()
         || canManageExpenseDescriptions();
-    }
-
-    function isPaymentStatusUpdate() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'paidAt', 'updatedAt'])
-        && request.resource.data.status == 'paid'
-        && canPayExpenses();
-    }
-
-    function isCardStatementPaymentUpdate() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status',
-          'paidAt',
-          'installments',
-          'paidByCardStatement',
-          'cardStatementKey',
-          'cardStatementId',
-          'linkedBankTransactionId',
-          'updatedAt'
-        ])
-        && request.resource.data.paidByCardStatement == true
-        && request.resource.data.cardStatementKey is string
-        && request.resource.data.cardStatementId is string
-        && request.resource.data.linkedBankTransactionId is string
-        && (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'paidAt'])
-          || request.resource.data.status == 'paid'
-        )
-        && canReconcileCardStatements();
     }
 
     function isBankStatementAuditUpdate() {
@@ -354,16 +324,6 @@ service cloud.firestore {
         ]);
     }
 
-    function isCardStatementReconcileUpdate() {
-      return resource.data.get('status', null) == 'closed'
-        && request.resource.data.get('status', null) == 'paid'
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'linkedBankTransactionId', 'linkedBankTransactionIds', 'settlements',
-          'allocations', 'paidAt', 'paidBy', 'updatedAt'
-        ])
-        && canReconcileCardStatements();
-    }
-
     match /users/{userId} {
       allow get: if hasFinancialAccess() && request.auth.uid == userId;
       allow list: if isFinancialAdmin();
@@ -412,16 +372,30 @@ service cloud.firestore {
       allow update: if (canEditExpenses()
           && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
           && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data))))
-        || isPaymentStatusUpdate()
-        || isCardStatementPaymentUpdate()
         || isCardStatementAuditUpdate();
       allow delete: if canDeleteExpenses();
     }
 
     match /payments/{paymentId} {
       allow read: if canViewExpenses() || canViewCashFlow() || canViewFinancialFlow() || canViewDre();
-      allow create: if canPayExpenses();
-      allow update, delete: if false;
+      // Registros de pagamento alteram obrigação, vínculo, ajustes e histórico
+      // na mesma operação. Toda escrita ocorre pela API autenticada do servidor.
+      allow create, update, delete: if false;
+    }
+
+    match /financialObligations/{obligationId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /obligationPaymentLinks/{linkId} {
+      allow read, write: if false;
+    }
+
+    match /paymentAdjustments/{adjustmentId} {
+      allow read, write: if false;
     }
 
     match /cardStatements/{statementId} {
@@ -429,8 +403,7 @@ service cloud.firestore {
       allow create: if isCardStatementImportWrite(request.resource.data)
         || isCardStatementCloseWrite(request.resource.data);
       allow update: if isCardStatementImportUpdate()
-        || isCardStatementCloseUpdate()
-        || isCardStatementReconcileUpdate();
+        || isCardStatementCloseUpdate();
       allow delete: if false;
     }
 

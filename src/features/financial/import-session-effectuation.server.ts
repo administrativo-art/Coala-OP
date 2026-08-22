@@ -8,6 +8,11 @@ import {
   consultExpenseProvision,
   expenseProvisionIdentity,
 } from "@/features/financial/lib/expense-provisions";
+import {
+  queueMatchedBankPayment,
+  queueReopenedBankPayment,
+} from "@/features/financial/obligations/service.server";
+import { calculateFinancialObligationSummary, moneyToCents } from "@/features/financial/obligations/calculations";
 
 type RawRecord = Record<string, unknown>;
 type ItemStatus = "pending" | "audited" | "ignored" | "completed";
@@ -123,14 +128,14 @@ function assertItemReadyForEffectuation(item: RawRecord) {
     const principal = asNumber(expense.settlementBaseValue) || paymentTotal;
     const interest = asNumber(expense.interest);
     const fine = asNumber(expense.fine);
-    const chargeDifference = Number(Math.max(paymentTotal - principal, 0).toFixed(2));
+    const discount = asNumber(expense.discount);
+    const abatement = asNumber(expense.abatement);
+    const classifiedCharges = Number((interest + fine).toFixed(2));
+    const classifiedCredits = Number((discount + abatement).toFixed(2));
     if (
       principal <= 0 ||
-      principal > paymentTotal + 0.01 ||
-      (chargeDifference > 0.05 && (
-        Math.abs(interest + fine - chargeDifference) > 0.01 ||
-        !hasText(expense.chargesAccountPlanId)
-      ))
+      Math.abs(principal + classifiedCharges - classifiedCredits - paymentTotal) > 0.01 ||
+      (classifiedCharges > 0.009 && !hasText(expense.chargesAccountPlanId))
     ) throw new Error("INCOMPLETE_PAYMENT_CHARGES");
     return;
   }
@@ -419,6 +424,8 @@ export async function effectuateImportSessionItem(params: {
   const createdExpenseIds: string[] = [];
   const batch = financialDbAdmin.batch();
   let purchaseEffect: Awaited<ReturnType<typeof applyPurchaseAllocation>> | null = null;
+  let bankPaymentMatch: Awaited<ReturnType<typeof queueMatchedBankPayment>> | null = null;
+  const bankPaymentMatches: Awaited<ReturnType<typeof queueMatchedBankPayment>>[] = [];
 
   async function queueProvisionReconciliation(expenseId: string, expense: RawRecord) {
     const identity = expenseProvisionIdentity(expense);
@@ -435,7 +442,9 @@ export async function effectuateImportSessionItem(params: {
         provisionReconciliationStatus: "forecast_not_found",
       };
     }
+    const obligationId = asString((consultation.provision as RawRecord).obligationId) || `obl_${consultation.provision.id}`;
     batch.update(financialDbAdmin.collection("expenses").doc(consultation.provision.id), {
+      obligationId,
       status: "reconciled",
       replacedByExpenseId: expenseId,
       actualValue: consultation.actualValue,
@@ -447,6 +456,7 @@ export async function effectuateImportSessionItem(params: {
     });
     return {
       ...identity,
+      obligationId,
       reconciledProvisionId: consultation.provision.id,
       provisionReconciliationStatus: "reconciled",
       provisionedValue: consultation.provisionedValue,
@@ -517,7 +527,11 @@ export async function effectuateImportSessionItem(params: {
     const principal = mode === "existing" ? asNumber(expenseDraft.settlementBaseValue) || amount : amount;
     const interest = mode === "existing" ? asNumber(expenseDraft.interest) : 0;
     const fine = mode === "existing" ? asNumber(expenseDraft.fine) : 0;
+    const discount = mode === "existing" ? asNumber(expenseDraft.discount) : 0;
+    const abatement = mode === "existing" ? asNumber(expenseDraft.abatement) : 0;
     const charges = Number((interest + fine).toFixed(2));
+    const settlementCredits = Number((discount + abatement).toFixed(2));
+    const principalPaid = Number(Math.max(amount - charges, 0).toFixed(2));
     let chargeExpenseId = "";
     let expenseId = asString(expenseDraft.linkedExpenseId);
 
@@ -533,6 +547,26 @@ export async function effectuateImportSessionItem(params: {
           totalValue: asNumber(split.value),
           provisionType: "actual",
         });
+        const splitPaymentMatch = await queueMatchedBankPayment({
+          batch,
+          expenseId: id,
+          expense: {
+            obligationId: `obl_${id}`,
+            description: asString(split.description),
+            supplier: asString(split.supplier),
+            totalValue: asNumber(split.value),
+            competenceDate,
+            dueDate,
+            provisionType: "actual",
+            ...provisionFields,
+          },
+          bankTransactionId: primaryTransactionId,
+          principalAmount: asNumber(split.value),
+          cashAmount: asNumber(split.value),
+          paidAt: date,
+          actor: { uid: params.actorId, name: params.actorName },
+        });
+        bankPaymentMatches.push(splitPaymentMatch);
         expenseIds.push(id);
         createdExpenseIds.push(id);
         batch.set(financialDbAdmin.collection("expenses").doc(id), {
@@ -563,6 +597,7 @@ export async function effectuateImportSessionItem(params: {
           importSessionItemId: params.itemId,
           effectuationId,
           ...provisionFields,
+          ...splitPaymentMatch.expensePatch,
           createdBy: params.actorId,
           createdAt: now,
           updatedAt: now,
@@ -580,6 +615,26 @@ export async function effectuateImportSessionItem(params: {
         totalValue: amount,
         provisionType: "actual",
       });
+      bankPaymentMatch = await queueMatchedBankPayment({
+        batch,
+        expenseId,
+        expense: {
+          obligationId: `obl_${expenseId}`,
+          description: asString(expenseDraft.description),
+          supplier: asString(expenseDraft.supplier),
+          totalValue: amount,
+          competenceDate,
+          dueDate,
+          provisionType: "actual",
+          ...provisionFields,
+        },
+        bankTransactionId: primaryTransactionId,
+        principalAmount: amount,
+        cashAmount: amount,
+        paidAt: date,
+        actor: { uid: params.actorId, name: params.actorName },
+      });
+      bankPaymentMatches.push(bankPaymentMatch);
       expenseIds.push(expenseId);
       createdExpenseIds.push(expenseId);
       batch.set(financialDbAdmin.collection("expenses").doc(expenseId), {
@@ -635,6 +690,7 @@ export async function effectuateImportSessionItem(params: {
         importSessionItemId: params.itemId,
         effectuationId,
         ...provisionFields,
+        ...bankPaymentMatch.expensePatch,
         createdBy: params.actorId,
         createdAt: now,
         updatedAt: now,
@@ -650,25 +706,51 @@ export async function effectuateImportSessionItem(params: {
       const targetInstallment = installmentNumber > 0
         ? installments.find((installment, index) => (asNumber(installment.number) || index + 1) === installmentNumber)
         : null;
-      const storedPrincipal = targetInstallment ? asNumber(targetInstallment.value) : asNumber(expense.totalValue);
-      if (Math.abs(storedPrincipal - principal) > 0.05) throw new Error("EXPENSE_VALUE_CHANGED");
-      if (Math.abs(principal + charges - amount) > 0.01) throw new Error("INCOMPLETE_PAYMENT_CHARGES");
+      const reportedPaymentId = asString(expenseDraft.reportedPaymentId);
+      const reportedLinkId = asString(expenseDraft.reportedLinkId);
+      const reportedPaymentSnapshot = reportedPaymentId
+        ? await financialDbAdmin.collection("payments").doc(reportedPaymentId).get()
+        : null;
+      const reportedPayment = reportedPaymentSnapshot?.data() ?? null;
+      if (reportedPaymentId && (
+        !reportedPaymentSnapshot?.exists ||
+        asString(reportedPayment?.expenseId) !== expenseId ||
+        asString(reportedPayment?.status) !== "REPORTED" ||
+        (reportedLinkId && asString(reportedPayment?.linkId) !== reportedLinkId)
+      )) {
+        throw new Error("REPORTED_PAYMENT_CHANGED");
+      }
+      const outstandingBalance = Number(expense.settlementSummary?.balanceAmountCents) / 100;
+      const availablePrincipal = reportedPayment
+        ? Number(reportedPayment.principalAmountCents) / 100 || asNumber(reportedPayment.baseValue)
+        : targetInstallment
+          ? asNumber(targetInstallment.value)
+          : outstandingBalance > 0
+            ? outstandingBalance
+            : asNumber(expense.totalValue);
+      if (
+        principal <= 0 ||
+        principal - availablePrincipal > 0.01 ||
+        (reportedPayment && Math.abs(availablePrincipal - principalPaid) > 0.01)
+      ) {
+        throw new Error("EXPENSE_VALUE_CHANGED");
+      }
+      if (Math.abs(principalPaid + settlementCredits - principal) > 0.01) throw new Error("INCOMPLETE_PAYMENT_ADJUSTMENTS");
       const nextInstallments = installmentNumber > 0
         ? installments.map((installment, index) => (asNumber(installment.number) || index + 1) === installmentNumber
-            ? { ...installment, status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }
+            ? principal >= asNumber(installment.value) - 0.01
+              ? { ...installment, status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }
+              : {
+                  ...installment,
+                  status: "partially_paid",
+                  paidValue: Number((asNumber(installment.paidValue) + principalPaid).toFixed(2)),
+                  settlementCreditValue: Number((asNumber(installment.settlementCreditValue) + settlementCredits).toFixed(2)),
+                  lastPaymentAt: date,
+                  linkedBankTransactionId: primaryTransactionId,
+                }
             : installment)
         : installments;
       const fullyPaid = nextInstallments.length === 0 || nextInstallments.every((installment) => installment.status === "paid" || installment.status === "cancelled");
-      batch.set(expenseRef, {
-        ...(nextInstallments.length > 0 ? { installments: nextInstallments } : {}),
-        linkedBankTransactionId: primaryTransactionId,
-        linkedBankTransactionIds: FieldValue.arrayUnion(primaryTransactionId),
-        lastPaymentAt: date,
-        paidByImport: true,
-        updatedAt: now,
-        ...(fullyPaid ? { status: "paid", paidAt: date } : {}),
-      }, { merge: true });
-
       if (charges > 0.009) {
         const chargeAccountRef = financialDbAdmin.collection("accounts").doc(asString(expenseDraft.chargesAccountPlanId));
         const chargeAccountSnapshot = await chargeAccountRef.get();
@@ -676,9 +758,12 @@ export async function effectuateImportSessionItem(params: {
         if (!chargeAccountSnapshot.exists || chargeAccount.active === false || chargeAccount.isGroup === true) {
           throw new Error("INVALID_PAYMENT_CHARGE_ACCOUNT");
         }
-        chargeExpenseId = `audit_charge_${effectuationId}`;
+        const existingManualChargeExpenseId =
+          asString(reportedPayment?.manualChargeExpenseId) ||
+          asString(expense.manualChargesExpenseId);
+        chargeExpenseId = existingManualChargeExpenseId || `audit_charge_${effectuationId}`;
         expenseIds.push(chargeExpenseId);
-        createdExpenseIds.push(chargeExpenseId);
+        if (!existingManualChargeExpenseId) createdExpenseIds.push(chargeExpenseId);
         const chargeRef = financialDbAdmin.collection("expenses").doc(chargeExpenseId);
         batch.set(chargeRef, {
           accountPlan: asString(expenseDraft.chargesAccountPlanId),
@@ -707,19 +792,52 @@ export async function effectuateImportSessionItem(params: {
           apportionments: expense.isApportioned === true ? expense.apportionments || null : null,
           installments: [{ number: 1, dueDate: date, value: charges, status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }],
           status: "paid",
+          paymentState: "paid",
           paidAt: date,
           paidByImport: true,
+          evidenceSource: "BANK_STATEMENT",
+          obligationId: asString(expense.obligationId) || null,
           linkedBankTransactionId: primaryTransactionId,
           importedFrom: imported,
           rawBankDescription: asString(item.rawDescription),
           importSessionId: params.sessionId,
           importSessionItemId: params.itemId,
           effectuationId,
-          createdBy: params.actorId,
-          createdAt: now,
+          ...(existingManualChargeExpenseId ? {} : { createdBy: params.actorId, createdAt: now }),
           updatedAt: now,
         }, { merge: true });
       }
+
+      bankPaymentMatch = await queueMatchedBankPayment({
+        batch,
+        expenseId,
+        expense,
+        bankTransactionId: primaryTransactionId,
+        reportedPaymentId: reportedPaymentId || null,
+        reportedLinkId: reportedLinkId || null,
+        principalAmount: principalPaid,
+        cashAmount: amount,
+        interest,
+        fine,
+        discount,
+        abatement,
+        paidAt: date,
+        actor: { uid: params.actorId, name: params.actorName },
+        chargesAccountPlanId: asString(expenseDraft.chargesAccountPlanId) || null,
+        chargesAccountPlanName: asString(expenseDraft.chargesAccountPlanName) || null,
+        chargeExpenseId: chargeExpenseId || null,
+      });
+      bankPaymentMatches.push(bankPaymentMatch);
+      batch.set(expenseRef, {
+        ...(nextInstallments.length > 0 ? { installments: nextInstallments } : {}),
+        linkedBankTransactionId: primaryTransactionId,
+        linkedBankTransactionIds: FieldValue.arrayUnion(primaryTransactionId),
+        lastPaymentAt: date,
+        paidByImport: true,
+        updatedAt: now,
+        ...(fullyPaid ? { status: "paid", paidAt: date } : {}),
+        ...bankPaymentMatch.expensePatch,
+      }, { merge: true });
     }
 
     if (mode === "purchase") {
@@ -775,10 +893,24 @@ export async function effectuateImportSessionItem(params: {
       purchaseLinkMode: mode === "purchase" ? asString(expenseDraft.purchaseLinkMode) : null,
       allocatedAmount: mode === "purchase" ? asNumber(expenseDraft.allocatedAmount) || amount : null,
       baseValue: principal,
+      principalPaid,
       interest,
       fine,
+      discount,
+      abatement,
       charges,
       chargeExpenseId: chargeExpenseId || null,
+      obligationId: bankPaymentMatches.length === 1 ? bankPaymentMatches[0].obligationId : null,
+      obligationPaymentLinkId: bankPaymentMatches.length === 1 ? bankPaymentMatches[0].linkId : null,
+      obligationPaymentId: bankPaymentMatches.length === 1 ? bankPaymentMatches[0].paymentId : null,
+      obligationAllocations: bankPaymentMatches.map((entry, index) => ({
+        obligationId: entry.obligationId,
+        linkId: entry.linkId,
+        paymentId: entry.paymentId,
+        expenseId: expenseIds[index] || null,
+        principalAmount: entry.matchedPrincipalAmountCents / 100,
+        cashAmount: entry.matchedCashAmountCents / 100,
+      })),
       ...(linkedTransactionId ? {} : { createdBy: params.actorId, createdAt: now }),
     }, { merge: true });
   } else {
@@ -873,6 +1005,11 @@ export async function reopenImportSessionItem(params: {
       purchaseLinkMode: null,
       allocatedAmount: null,
       awaitingCardStatementReconciliation: false,
+      cardStatementId: FieldValue.delete(),
+      obligationId: FieldValue.delete(),
+      obligationPaymentLinkId: FieldValue.delete(),
+      obligationPaymentId: FieldValue.delete(),
+      obligationAllocations: FieldValue.delete(),
       description: asString(item.rawDescription),
     }, { merge: true });
   } else if (primarySnapshot.exists) {
@@ -897,11 +1034,98 @@ export async function reopenImportSessionItem(params: {
     }, { merge: true });
   }
 
+  const reconciledCardStatementId = asString(primary.cardStatementId);
+  if (reconciledCardStatementId) {
+    const statementRef = financialDbAdmin.collection("cardStatements").doc(reconciledCardStatementId);
+    const statementSnapshot = await statementRef.get();
+    const statement = statementSnapshot.data() ?? {};
+    const obligationId = asString(primary.obligationId) || asString(statement.obligationId);
+    const linkId = asString(primary.obligationPaymentLinkId);
+    const paymentId = asString(primary.obligationPaymentId);
+    const allocations = asArray(statement.allocations).map(asRecord);
+    const cardExpenseIds = [...new Set(allocations.map((allocation) => asString(allocation.expenseId)).filter(Boolean))];
+    for (const cardExpenseId of cardExpenseIds) {
+      const cardExpenseRef = financialDbAdmin.collection("expenses").doc(cardExpenseId);
+      const cardExpenseSnapshot = await cardExpenseRef.get();
+      if (!cardExpenseSnapshot.exists) continue;
+      const cardExpense = cardExpenseSnapshot.data() ?? {};
+      const nextInstallments: RawRecord[] = asArray(cardExpense.installments).map(asRecord).map((installment): RawRecord =>
+        asString(installment.linkedBankTransactionId) === primaryTransactionId
+          ? withoutPaymentFields(installment) as RawRecord
+          : installment
+      );
+      const paidPrincipalCents = nextInstallments
+        .filter((installment) => installment.status === "paid")
+        .reduce((total, installment) => total + moneyToCents(installment.value), 0);
+      const actualAmountCents = moneyToCents(cardExpense.totalValue);
+      const cardSummary = calculateFinancialObligationSummary({
+        forecastAmountCents: cardExpense.provisionedValue == null ? null : moneyToCents(cardExpense.provisionedValue),
+        actualAmountCents,
+        paymentAllocations: paidPrincipalCents > 0 ? [{
+          principalAmountCents: paidPrincipalCents,
+          cashAmountCents: paidPrincipalCents,
+          status: "MATCHED",
+        }] : [],
+      });
+      batch.set(cardExpenseRef, {
+        installments: nextInstallments,
+        status: cardSummary.obligationStatus === "PARTIALLY_PAID" ? "partially_paid" : "pending",
+        paymentState: cardSummary.obligationStatus === "PARTIALLY_PAID" ? "partially_paid" : "open",
+        settlementSummary: cardSummary,
+        paidAt: FieldValue.delete(),
+        linkedBankTransactionId: FieldValue.delete(),
+        linkedBankTransactionIds: FieldValue.arrayRemove(primaryTransactionId),
+        cardStatementObligationIds: obligationId ? FieldValue.arrayRemove(obligationId) : [],
+        latestCardStatementObligationId: FieldValue.delete(),
+        updatedAt: now,
+      }, { merge: true });
+    }
+    if (statementSnapshot.exists) {
+      batch.set(statementRef, {
+        status: "closed",
+        linkedBankTransactionId: FieldValue.delete(),
+        linkedBankTransactionIds: FieldValue.arrayRemove(primaryTransactionId),
+        settlements: asArray(statement.settlements).filter((settlement) => asString(asRecord(settlement).transactionId) !== primaryTransactionId),
+        paidAt: FieldValue.delete(),
+        paidBy: FieldValue.delete(),
+        settlementSummary: FieldValue.delete(),
+        reopenedAt: now,
+        reopenedBy: params.actorId,
+        updatedAt: now,
+      }, { merge: true });
+    }
+    if (linkId) batch.set(financialDbAdmin.collection("obligationPaymentLinks").doc(linkId), { status: "VOIDED", voidReason: "BANK_AUDIT_REOPENED", updatedAt: now }, { merge: true });
+    if (paymentId) batch.set(financialDbAdmin.collection("payments").doc(paymentId), { status: "REVERSED", reconciliationStatus: "NOT_FOUND", updatedAt: now }, { merge: true });
+    if (obligationId) {
+      const reopenedSummary = calculateFinancialObligationSummary({
+        forecastAmountCents: Number(statement.provisionedTotal) > 0 ? moneyToCents(statement.provisionedTotal) : moneyToCents(statement.projectedTotal) || null,
+        actualAmountCents: moneyToCents(statement.officialTotal),
+      });
+      const obligationRef = financialDbAdmin.collection("financialObligations").doc(obligationId);
+      batch.set(obligationRef, { status: reopenedSummary.obligationStatus, reconciliationStatus: reopenedSummary.reconciliationStatus, summary: reopenedSummary, updatedAt: now }, { merge: true });
+      batch.set(obligationRef.collection("events").doc(`reopen_card_${deterministicKey(reconciledCardStatementId, primaryTransactionId)}`), {
+        type: "CARD_STATEMENT_PAYMENT_REOPENED",
+        obligationId,
+        cardStatementId: reconciledCardStatementId,
+        bankTransactionId: primaryTransactionId,
+        actor: { uid: params.actorId, name: params.actorName },
+        occurredAt: now,
+      }, { merge: true });
+    }
+  }
+
   for (const expenseId of expenseIds) {
     const expenseRef = financialDbAdmin.collection("expenses").doc(expenseId);
     const expenseSnapshot = await expenseRef.get();
     if (!expenseSnapshot.exists) continue;
     const expense = expenseSnapshot.data() ?? {};
+    const reopenedPayment = await queueReopenedBankPayment({
+      batch,
+      expenseId,
+      expense,
+      bankTransactionId: primaryTransactionId,
+      actor: { uid: params.actorId, name: params.actorName },
+    });
     const reconciledProvisionId = asString(expense.reconciledProvisionId);
     if (reconciledProvisionId) {
       batch.set(financialDbAdmin.collection("expenses").doc(reconciledProvisionId), {
@@ -922,6 +1146,9 @@ export async function reopenImportSessionItem(params: {
       const belongsToItem = asString(installment.linkedBankTransactionId) === primaryTransactionId || (targetInstallment > 0 && number === targetInstallment);
       return belongsToItem ? withoutPaymentFields(installment) : installment;
     });
+    const restoreManualAdjustment =
+      expense.isPaymentAdjustment === true &&
+      asString(expense.paymentId).startsWith("manual_");
     batch.set(expenseRef, {
       status: "pending",
       auditStatus: "pending",
@@ -938,6 +1165,13 @@ export async function reopenImportSessionItem(params: {
       provisionReconciledBy: FieldValue.delete(),
       reopenedAt: now,
       reopenedBy: params.actorId,
+      ...(reopenedPayment?.expensePatch || {}),
+      ...(restoreManualAdjustment ? {
+        status: "paid",
+        paymentState: "reported_paid",
+        evidenceSource: "MANUAL",
+        paidAt: expense.paidAt || expense.competenceDate || now,
+      } : {}),
       reopenReason: params.reason,
       updatedAt: now,
     }, { merge: true });

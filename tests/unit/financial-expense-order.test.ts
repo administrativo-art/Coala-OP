@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compareExpensesByDueDate } from "../../src/features/financial/lib/expense-order";
+import {
+  compareExpensesByDueDate,
+  compareExpensesByDueDateDirection,
+  compareExpensesByValue,
+} from "../../src/features/financial/lib/expense-order";
 
 test("orders expenses chronologically by due date", () => {
   const expenses = [
@@ -33,4 +37,34 @@ test("puts invalid dates last and uses description as a same-day tie-breaker", (
     "invalid",
     "missing",
   ]);
+});
+
+test("alternates due-date direction while keeping missing dates last", () => {
+  const expenses = [
+    { id: "missing", description: "Sem vencimento" },
+    { id: "aug", description: "Agosto", dueDate: "2026-08-10T12:00:00" },
+    { id: "sep", description: "Setembro", dueDate: "2026-09-10T12:00:00" },
+  ];
+
+  assert.deepEqual(
+    [...expenses].sort((left, right) => compareExpensesByDueDateDirection(left, right, "desc")).map((expense) => expense.id),
+    ["sep", "aug", "missing"],
+  );
+});
+
+test("orders expenses by value in both directions", () => {
+  const expenses = [
+    { id: "medium", description: "Médio", totalValue: 100 },
+    { id: "high", description: "Alto", totalValue: 300 },
+    { id: "low", description: "Baixo", totalValue: 25 },
+  ];
+
+  assert.deepEqual(
+    [...expenses].sort((left, right) => compareExpensesByValue(left, right, "asc")).map((expense) => expense.id),
+    ["low", "medium", "high"],
+  );
+  assert.deepEqual(
+    [...expenses].sort((left, right) => compareExpensesByValue(left, right, "desc")).map((expense) => expense.id),
+    ["high", "medium", "low"],
+  );
 });

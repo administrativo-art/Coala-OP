@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { setDoc, Timestamp, updateDoc, writeBatch } from "firebase/firestore";
+import { setDoc, Timestamp, updateDoc } from "firebase/firestore";
 import {
   ArrowLeft,
   CalendarDays,
@@ -38,6 +39,8 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import {
   buildCardStatementGroups,
   buildCardStatementAllocations,
+  cardStatementLineAuditIssues as cardLineAuditIssues,
+  cardStatementLineAuditStatus as getCardLineAuditStatus,
   findCardStatementPaymentCandidates,
   resolveCardStatementCycleFromMonth,
   resolveCardStatementDatesFromDueDate,
@@ -56,7 +59,6 @@ import { financialCollection, financialDoc } from "@/features/financial/lib/repo
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { financialDb } from "@/lib/firebase-financial";
 import { cn } from "@/lib/utils";
 
 type StatementDocument = {
@@ -141,32 +143,6 @@ function statusLabel(status: StatementDocument["status"]) {
   if (status === "paid") return "Fatura paga";
   if (status === "closed") return "Fatura fechada";
   return "Fatura aberta";
-}
-
-function cardLineAuditIssues(line: CardStatementLine) {
-  const expense = line.expense;
-  const issues: string[] = [];
-  if (String(expense.description || "").trim().length < 10) issues.push("descrição");
-  if (String(expense.supplier || "").trim().length < 3) issues.push("favorecido");
-  if (
-    !String(expense.accountPlanId || "").trim() &&
-    (!Array.isArray(expense.accountAllocations) || expense.accountAllocations.length === 0)
-  ) {
-    issues.push("plano de contas");
-  }
-  if (
-    !String(expense.resultCenterId || "").trim() &&
-    (!Array.isArray(expense.apportionments) || expense.apportionments.length === 0)
-  ) {
-    issues.push("centro de resultado");
-  }
-  if (!toDate(expense.competenceDate)) issues.push("competência");
-  return issues;
-}
-
-function getCardLineAuditStatus(line: CardStatementLine): Exclude<CardLineStatusFilter, "all"> {
-  if (line.reconciled) return "reconciled";
-  return cardLineAuditIssues(line).length === 0 ? "audited" : "pending";
 }
 
 function isCardLineForecast(line: CardStatementLine) {
@@ -509,6 +485,8 @@ export function CardStatementsWorkspace({
         cardReconciledAt: reconciled ? Timestamp.now() : null,
         cardReconciledBy: reconciled ? firebaseUser.uid : null,
         cardStatementKey: selectedGroup?.key || null,
+        cardStatementId: selectedGroup ? statementDocumentId(selectedGroup.key) : null,
+        cardStatementMonthKey: selectedGroup?.monthKey || null,
         updatedAt: Timestamp.now(),
       });
       refreshExpenses();
@@ -527,68 +505,14 @@ export function CardStatementsWorkspace({
 
     setWorking(`payment-${candidate.transaction.id}`);
     try {
-      const batch = writeBatch(financialDb);
-      batch.set(
-        financialDoc("cardStatements", statementDocumentId(selectedGroup.key)),
-        {
-          status: "paid",
-          linkedBankTransactionId: candidate.transaction.id,
-          linkedBankTransactionIds: [candidate.transaction.id],
-          settlements: [{
-            transactionId: candidate.transaction.id,
-            amount: Number(Math.abs(Number(candidate.transaction.amount) || 0).toFixed(2)),
-            paidAt: format(paidAtDate, "yyyy-MM-dd"),
-          }],
-          allocations: buildCardStatementAllocations(selectedGroup.lines),
-          paidAt: Timestamp.fromDate(paidAtDate),
-          paidBy: firebaseUser.uid,
-          updatedAt: Timestamp.now(),
-        },
-        { merge: true }
-      );
-      const linesByExpense = new Map<string, CardStatementLine[]>();
-      selectedGroup.lines.forEach((line) => {
-        const current = linesByExpense.get(line.expense.id) || [];
-        current.push(line);
-        linesByExpense.set(line.expense.id, current);
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/financial/card-statements/${encodeURIComponent(statementDocumentId(selectedGroup.key))}/reconcile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ transactionId: candidate.transaction.id }),
       });
-      linesByExpense.forEach((lines, expenseId) => {
-        const expense = lines[0]!.expense;
-        const installments = Array.isArray(expense.installments) ? expense.installments : [];
-        const paidInstallmentNumbers = new Set(
-          lines
-            .map((line) => line.installmentNumber)
-            .filter((number): number is number => Number.isFinite(number))
-        );
-        if (paidInstallmentNumbers.size === 0 && installments.length === 1) {
-          paidInstallmentNumbers.add(Number(installments[0]?.number) || 1);
-        }
-        const nextInstallments = installments.map((installment, index) =>
-          paidInstallmentNumbers.has(Number(installment.number) || index + 1)
-            ? {
-                ...installment,
-                status: "paid",
-                paidAt: Timestamp.fromDate(paidAtDate),
-                cardReconciliationStatus: "reconciled",
-                cardStatementKey: selectedGroup.key,
-                linkedBankTransactionId: candidate.transaction.id,
-              }
-            : installment
-        );
-        const fullyPaid =
-          nextInstallments.length === 0 ||
-          nextInstallments.every((installment) => installment.status === "paid" || installment.status === "cancelled");
-        batch.update(financialDoc("expenses", expenseId), {
-          ...(nextInstallments.length > 0 ? { installments: nextInstallments } : {}),
-          ...(fullyPaid ? { status: "paid", paidAt: Timestamp.fromDate(paidAtDate) } : {}),
-          paidByCardStatement: true,
-          cardStatementKey: selectedGroup.key,
-          cardStatementId: statementDocumentId(selectedGroup.key),
-          linkedBankTransactionId: candidate.transaction.id,
-          updatedAt: Timestamp.now(),
-        });
-      });
-      await batch.commit();
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Falha ao conciliar o pagamento da fatura.");
       refreshStatements();
       refreshExpenses();
       toast({
@@ -597,7 +521,7 @@ export function CardStatementsWorkspace({
       });
     } catch (error) {
       console.error(error);
-      toast({ variant: "destructive", title: "Não foi possível conciliar o pagamento." });
+      toast({ variant: "destructive", title: "Não foi possível conciliar o pagamento.", description: error instanceof Error ? error.message : undefined });
     } finally {
       setWorking(null);
     }
@@ -1316,5 +1240,12 @@ export function CardStatementsWorkspace({
 }
 
 export function CardStatementsPage() {
-  return <CardStatementsWorkspace />;
+  const searchParams = useSearchParams();
+  return (
+    <CardStatementsWorkspace
+      fixedMonthKey={searchParams.get("month") || undefined}
+      accountId={searchParams.get("accountId") || undefined}
+      paymentMethodId={searchParams.get("paymentMethodId") || undefined}
+    />
+  );
 }

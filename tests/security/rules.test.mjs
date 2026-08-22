@@ -423,7 +423,9 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
       updatedAt: new Date(),
       updatedBy: "card-importer",
     };
-    await assertSucceeds(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
+    // O botão Registrar pagamento usa uma API autenticada. O cliente não pode
+    // marcar a despesa como paga sem criar obrigação, vínculo e histórico.
+    await assertFails(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       status: "paid",
       paidAt: new Date(),
     }));
@@ -443,7 +445,8 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
       officialTotal: 1000,
       allocations: [],
     }));
-    await assertSucceeds(updateDoc(doc(payer.firestore(), "cardStatements/inter__card__2026-08"), {
+    // A reconciliação da fatura também é atômica e exclusiva da API do servidor.
+    await assertFails(updateDoc(doc(payer.firestore(), "cardStatements/inter__card__2026-08"), {
       status: "paid",
       linkedBankTransactionId: "transaction-1",
       linkedBankTransactionIds: ["transaction-1"],
@@ -453,13 +456,32 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
       paidBy: "payer",
       updatedAt: new Date(),
     }));
-    await assertSucceeds(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
+    await assertFails(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       installments: [{ number: 1, value: 1000, status: "paid" }],
       paidByCardStatement: true,
       cardStatementKey: "inter:card:2026-08",
       cardStatementId: "inter__card__2026-08",
       linkedBankTransactionId: "transaction-1",
       updatedAt: new Date(),
+    }));
+    await assertFails(setDoc(doc(payer.firestore(), "payments/manual-forged"), {
+      expenseId: "expense-1",
+      status: "REPORTED",
+      totalPaid: 1000,
+    }));
+    await assertFails(setDoc(doc(payer.firestore(), "financialObligations/obligation-forged"), {
+      sourceId: "expense-1",
+      status: "PAID",
+    }));
+    await assertFails(setDoc(doc(payer.firestore(), "obligationPaymentLinks/link-forged"), {
+      obligationId: "obligation-forged",
+      expenseId: "expense-1",
+      status: "MATCHED",
+    }));
+    await assertFails(setDoc(doc(payer.firestore(), "paymentAdjustments/adjustment-forged"), {
+      obligationId: "obligation-forged",
+      type: "INTEREST",
+      amount: 10,
     }));
     await assertFails(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       status: "pending",

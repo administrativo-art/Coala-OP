@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   findExpenseMatchSuggestion,
   findUniqueExactExpenseMatch,
+  refreshStatementSessionItem,
 } from "../../src/features/financial/lib/inter-statement-reconciliation";
 import {
   inferStatementPaymentMethodFromText,
@@ -120,6 +121,34 @@ test("baixa automaticamente apenas quando existe um único candidato exato", () 
   );
 });
 
+test("distingue dois pagamentos informados da mesma despesa pela chave do pagamento", () => {
+  const first = {
+    candidateKey: "reported:payment-1",
+    expenseId: "expense-1",
+    expenseDescription: "Pagamento parcial informado",
+    dueDate: new Date("2026-08-15T12:00:00-03:00"),
+    value: 600,
+    settlementPrincipalValue: 600,
+    reportedPaymentId: "payment-1",
+  };
+  const second = {
+    ...first,
+    candidateKey: "reported:payment-2",
+    value: 400,
+    settlementPrincipalValue: 400,
+    reportedPaymentId: "payment-2",
+  };
+
+  const match = findUniqueExactExpenseMatch(
+    { date: "2026-08-15", amount: -400 },
+    [first, second],
+    new Set(["reported:payment-1"]),
+  );
+
+  assert.equal(match?.reportedPaymentId, "payment-2");
+  assert.equal(match?.settlementPrincipalValue, 400);
+});
+
 test("sugere principal e encargos quando o pagamento vencido é maior que a despesa", () => {
   const suggestion = findExpenseMatchSuggestion({
     date: "2026-08-20",
@@ -154,6 +183,53 @@ test("não sugere encargos quando existem dois candidatos equivalentes", () => {
     { ...base, expenseId: "internet-jp" },
   ]);
   assert.equal(suggestion, null);
+});
+
+test("atualiza uma linha pendente quando a conciliação bancária já foi resolvida", () => {
+  const current = {
+    id: "bank-row",
+    status: "pending",
+    expenseDraft: { mode: "new" },
+    auditHistory: [{ action: "audit_confirmed" }],
+  };
+  const incoming = {
+    id: "bank-row",
+    status: "completed",
+    expenseDraft: { mode: "existing", linkedExpenseId: "salary-expense" },
+  };
+
+  assert.deepEqual(refreshStatementSessionItem(current, incoming), {
+    ...current,
+    ...incoming,
+    auditHistory: current.auditHistory,
+    auditSnapshot: undefined,
+    auditRevision: undefined,
+    effectuation: undefined,
+  });
+});
+
+test("preserva a auditoria humana ao refrescar apenas os metadados bancários", () => {
+  const current = {
+    id: "bank-row",
+    status: "audited",
+    expenseDraft: { description: "Descrição confirmada" },
+    bankReferences: ["old"],
+  };
+  const incoming = {
+    id: "bank-row",
+    status: "pending",
+    expenseDraft: { description: "Sugestão nova" },
+    bankReferences: ["new"],
+    bankOperationType: "PIX",
+  };
+
+  assert.deepEqual(refreshStatementSessionItem(current, incoming), {
+    ...current,
+    bankStatementData: undefined,
+    bankReferences: ["new"],
+    bankOperationType: "PIX",
+    bankTransactionType: undefined,
+  });
 });
 
 test("classifica as formas de saída do extrato sem confundir pagamento de fatura com despesa", () => {

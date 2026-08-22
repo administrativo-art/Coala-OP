@@ -12,6 +12,9 @@ export const FINANCIAL_COLLECTIONS = {
   importDrafts: "importDrafts",
   supplierPaymentProfiles: "supplierPaymentProfiles",
   bankPaymentRequests: "bankPaymentRequests",
+  financialObligations: "financialObligations",
+  obligationPaymentLinks: "obligationPaymentLinks",
+  paymentAdjustments: "paymentAdjustments",
 } as const;
 
 export type FinancialCollectionName =

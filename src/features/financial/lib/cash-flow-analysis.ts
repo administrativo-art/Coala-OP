@@ -52,6 +52,11 @@ export function buildExpenseLifecycleData(
     const value = Number(expense.totalValue) || 0;
     point.provisioned += value;
     if (expense.status === "paid") point.paid += value;
+    if (expense.status === "partially_paid") {
+      point.paid += expense.settlementSummary?.principalSettledAmountCents != null
+        ? Number(expense.settlementSummary.principalSettledAmountCents) / 100
+        : 0;
+    }
   });
 
   return Array.from(points.values());

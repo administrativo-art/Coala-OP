@@ -54,6 +54,16 @@ export function personAllocationDifference(
   return (cents(totalValue) - cents(personAllocationTotal(allocations))) / 100;
 }
 
+export function personAllocationDistinctPeopleCount(
+  allocations: ExpensePersonAllocation[] | null | undefined,
+) {
+  return new Set(
+    (allocations || [])
+      .map((allocation) => text(allocation.employeeId) || text(allocation.employeeName).toLocaleLowerCase("pt-BR"))
+      .filter(Boolean),
+  ).size;
+}
+
 export function personAllocationAccountTotals(
   allocations: ExpensePersonAllocation[] | null | undefined,
 ) {

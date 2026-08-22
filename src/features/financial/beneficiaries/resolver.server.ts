@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -97,6 +98,7 @@ export function createBeneficiarySnapshot(
     sourceId: resolved.sourceId,
     name: resolved.name,
     document: maskBrazilianDocument(resolved.document),
+    documentHash: createHash("sha256").update(normalizeBrazilianDocument(resolved.document)).digest("hex"),
     paymentMethod: resolved.paymentMethod,
     pixKeyType: resolved.pixKeyType,
     maskedPaymentDestination: destination,

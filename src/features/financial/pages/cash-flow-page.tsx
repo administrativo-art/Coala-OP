@@ -100,8 +100,23 @@ export function CashFlowPage() {
   );
 
   const realizedMovements = useMemo<Movement[]>(() => {
-    const paymentTransactions = (paymentsData || []).flatMap((payment) =>
-      (payment.splits || []).map((split: any, splitIndex: number) => ({
+    const expensesConfirmedByTransactions = new Set(
+      (transactionsData || [])
+        .filter((transaction: any) => transaction.reversed !== true && transaction.auditStatus !== "reversed")
+        .flatMap((transaction: any) => [
+          transaction.expenseId,
+          transaction.linkedExpenseId,
+          ...(Array.isArray(transaction.splitExpenseIds) ? transaction.splitExpenseIds : []),
+        ])
+        .filter(Boolean),
+    );
+    const paymentTransactions = (paymentsData || []).flatMap((payment) => {
+      const confirmedByBank =
+        payment.status === "MATCHED" ||
+        payment.reconciliationStatus === "MATCHED" ||
+        Boolean(payment.bankTransactionId || payment.linkedBankTransactionId);
+      if (confirmedByBank || expensesConfirmedByTransactions.has(payment.expenseId)) return [];
+      return (payment.splits || []).map((split: any, splitIndex: number) => ({
         id: `payment-${payment.id}-${splitIndex}`,
         type: "expense_payment",
         direction: "out",
@@ -114,8 +129,9 @@ export function CashFlowPage() {
         expenseId: payment.expenseId,
         createdBy: payment.createdBy,
         createdAt: payment.createdAt,
-      }))
-    );
+        paymentEvidenceStatus: payment.status || "REPORTED",
+      }));
+    });
 
     return [...(transactionsData || []), ...paymentTransactions].flatMap((transaction: any) => {
       if (transaction.reversed === true || transaction.auditStatus === "reversed") return [];
@@ -171,7 +187,9 @@ export function CashFlowPage() {
         dueDate: toDate(expense.dueDate),
         direction: "out" as const,
         status: "forecast" as const,
-        amount: Number(expense.totalValue) || 0,
+        amount: expense.status === "partially_paid" && expense.settlementSummary?.balanceAmountCents != null
+          ? Number(expense.settlementSummary.balanceAmountCents) / 100
+          : Number(expense.totalValue) || 0,
       }];
     }), [accountPlanMap, expensesData, periodEnd, periodStart]);
 
