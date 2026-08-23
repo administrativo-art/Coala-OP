@@ -35,6 +35,10 @@ env:
     secret: RESEND_API_KEY
   - variable: RESEND_WEBHOOK_SECRET
     secret: RESEND_WEBHOOK_SECRET
+  - variable: FINANCIAL_INBOUND_ADDRESS
+    value: "cobrancas@entrada.coalashakes.com"
+  - variable: ASO_INBOUND_DOMAIN
+    value: "entrada.coalashakes.com"
   - variable: PAYMENT_DATA_ENCRYPTION_KEY
     secret: PAYMENT_DATA_ENCRYPTION_KEY
   - variable: INTER_CLIENT_ID

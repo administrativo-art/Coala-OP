@@ -5,6 +5,11 @@ import { deliveryStatusFromResendEvent, engagementStatusFromResendEvent, isDeliv
 import { extractAppointmentProposal, hashAsoToken } from "@/features/hr/aso/workflow";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { maybeAdvanceAfterFirstAccess } from "@/lib/hr/onboarding-access-provisioning";
+import {
+  ingestFinancialEmail,
+  isFinancialInboundRecipient,
+  retrieveReceivedEmail,
+} from "@/features/financial/inbox/ingest.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,14 +69,30 @@ export async function POST(request: NextRequest) {
   if (eventType === "email.received") {
     const recipients = Array.isArray(event.data?.to) ? event.data.to : [];
     const token = recipients.map(value => value.match(/aso\+([^@]+)@/i)?.[1] ?? "").find(Boolean);
-    if (!token) return NextResponse.json({ received: true, ignored: true });
-    const matches = await hrDbAdmin.collection("onboardingProcesses").where("asoClinicTokenHash", "==", hashAsoToken(token)).limit(1).get();
-    if (matches.empty) return NextResponse.json({ received: true, ignored: true });
+    const financialRecipient = isFinancialInboundRecipient(recipients);
+    if (!token && !financialRecipient) return NextResponse.json({ received: true, ignored: true });
     const apiKey = process.env.RESEND_API_KEY?.trim();
     if (!apiKey) return NextResponse.json({ error: "RESEND_API_KEY não configurada." }, { status: 503 });
-    const response = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15_000) });
-    const received = await response.json().catch(() => ({})) as { text?: string | null; html?: string | null; subject?: string; from?: string };
-    if (!response.ok) return NextResponse.json({ error: "Falha ao obter o conteúdo do e-mail recebido." }, { status: 502 });
+
+    if (financialRecipient) {
+      try {
+        const received = await retrieveReceivedEmail(emailId, apiKey);
+        const result = await ingestFinancialEmail({ eventId, eventAt, emailId, apiKey, received });
+        return NextResponse.json({ received: true, matched: true, route: "financial_inbox", ...result });
+      } catch (error) {
+        console.error("[resend-webhook] Falha ao arquivar cobrança recebida.", error);
+        return NextResponse.json({ error: "Falha ao arquivar a cobrança recebida." }, { status: 502 });
+      }
+    }
+
+    const matches = await hrDbAdmin.collection("onboardingProcesses").where("asoClinicTokenHash", "==", hashAsoToken(token!)).limit(1).get();
+    if (matches.empty) return NextResponse.json({ received: true, ignored: true });
+    let received;
+    try {
+      received = await retrieveReceivedEmail(emailId, apiKey);
+    } catch {
+      return NextResponse.json({ error: "Falha ao obter o conteúdo do e-mail recebido." }, { status: 502 });
+    }
     const sourceText = received.text?.trim() || received.html?.trim() || "";
     const proposal = extractAppointmentProposal(sourceText);
     const processDoc = matches.docs[0]; const processData = processDoc.data();

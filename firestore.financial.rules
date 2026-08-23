@@ -443,6 +443,15 @@ service cloud.firestore {
       }
     }
 
+    // E-mails financeiros e anexos são expostos somente pelas APIs autenticadas
+    // para evitar acesso direto a documentos de cobrança pelo cliente.
+    match /financialInboxMessages/{messageId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
     match /cashClosures/{closureId} {
       allow read: if canViewCashClosures() && canAccessKiosk(resource.data.kioskId);
       allow create, update, delete: if false;

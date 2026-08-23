@@ -16,7 +16,7 @@ import {
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
-  Files, Building2, FileStack, Banknote
+  Files, Building2, FileStack, Banknote, Inbox
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -251,6 +251,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               || permissions.financial?.cardStatements?.view
               || permissions.financial?.paymentRequests?.view,
             children: [
+              { label: "Caixa de cobranças", href: "/dashboard/financial/inbox", icon: Inbox, show: permissions.financial?.expenses?.view },
               { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view || permissions.financial?.audits?.view },
               { label: "Faturas de cartão", href: "/dashboard/financial/expenses/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
               { label: "Autorizações bancárias", href: "/dashboard/financial/payment-requests", icon: Wallet, show: permissions.financial?.paymentRequests?.view },

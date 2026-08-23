@@ -418,6 +418,13 @@ export function FinancialDashboardPage() {
             description="Lançamento, edição, contas a pagar e importação de extratos."
           />
         )}
+        {permissions.financial?.expenses?.view && (
+          <ShortcutCard
+            href={FINANCIAL_ROUTES.inbox}
+            title="Caixa de cobranças"
+            description="E-mails e documentos recebidos para revisão antes do lançamento."
+          />
+        )}
         {(permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow) && (
           <ShortcutCard
             href={FINANCIAL_ROUTES.cashFlow}

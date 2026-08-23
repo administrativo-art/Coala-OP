@@ -15,6 +15,7 @@ export const FINANCIAL_COLLECTIONS = {
   financialObligations: "financialObligations",
   obligationPaymentLinks: "obligationPaymentLinks",
   paymentAdjustments: "paymentAdjustments",
+  financialInboxMessages: "financialInboxMessages",
 } as const;
 
 export type FinancialCollectionName =
@@ -26,6 +27,7 @@ export const FINANCIAL_ROUTES = {
   financialFlow: "/dashboard/financial/financial-flow",
   dre: "/dashboard/financial/dre",
   expenses: "/dashboard/financial/expenses",
+  inbox: "/dashboard/financial/inbox",
   pendingAuditExpenses: "/dashboard/financial/expenses/pending-audit",
   newExpense: "/dashboard/financial/expenses/new",
   importExpenses: "/dashboard/financial/expenses/import",
