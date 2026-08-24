@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { cwd } from 'node:process';
 import { NextRequest, NextResponse } from 'next/server';
-import { renderToBuffer } from '@react-pdf/renderer';
+import { renderToBuffer } from 'react-pdf-renderer-server';
 import { getStorage } from 'firebase-admin/storage';
 
 import { AccountantAdmissionFormPdf, type AccountantDependentAnalysis } from '@/features/hr/accountant/admission-form-pdf';
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const employerCnpj = CnpjValidator.clean(text(onboarding.employerCnpj, 30));
   const employeeName = text(answers.fullName, 180) || text(onboarding.candidateName, 180);
   const logo = await readFile(path.join(cwd(), 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png'));
-  const pdf = await renderToBuffer(<AccountantAdmissionFormPdf data={{
+  const pdf = await renderToBuffer(AccountantAdmissionFormPdf({ data: {
     companyName: text(onboarding.employerUnitName, 180) || text(onboarding.unitName, 180) || 'Empresa não informada',
     employerCnpj: CnpjValidator.format(employerCnpj), employeeName,
     maritalStatus: text(answers.maritalStatus, 80) || extractedText(documents, 'maritalStatus') || 'Não informado', employeeCpf: text(answers.cpf, 20),
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     workSchedule: text(jobFunction.workSchedule, 400) || text(role.workSchedule, 400) || text(onboarding.shiftDefinitionName, 180) || 'Não informada',
     salaryLimitLabel: currency(1980.38), quotaLabel: currency(67.54), familySalaryConclusion: analysis.conclusion,
     dependents: analysis.dependents, logoDataUri: `data:image/png;base64,${logo.toString('base64')}`,
-  }} />);
+  } }));
   const buffer = Buffer.from(pdf); const hashSha256 = createHash('sha256').update(buffer).digest('hex');
   const generatedId = randomUUID(); const now = new Date().toISOString();
   const fileName = `formulario-admissao-contabilidade-${safeFilePart(employeeName)}.pdf`;

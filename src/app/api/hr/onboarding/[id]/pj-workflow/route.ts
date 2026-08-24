@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { renderToBuffer } from '@react-pdf/renderer';
+import { renderToBuffer } from 'react-pdf-renderer-server';
 import { getStorage } from 'firebase-admin/storage';
 import { NextRequest, NextResponse } from 'next/server';
 

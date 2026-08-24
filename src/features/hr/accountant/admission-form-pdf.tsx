@@ -1,5 +1,6 @@
-import React from 'react';
-import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+/** @jsxImportSource react-pdf-react-server */
+import React from 'react-pdf-react-server';
+import { Document, Image, Page, StyleSheet, Text, View } from 'react-pdf-renderer-server';
 
 export type AccountantDependentAnalysis = {
   name: string;

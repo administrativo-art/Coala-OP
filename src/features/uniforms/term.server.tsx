@@ -2,8 +2,9 @@ import "server-only";
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import React from "react";
-import { renderToBuffer } from "@react-pdf/renderer";
+/** @jsxImportSource react-pdf-react-server */
+import React from "react-pdf-react-server";
+import { renderToBuffer } from "react-pdf-renderer-server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 

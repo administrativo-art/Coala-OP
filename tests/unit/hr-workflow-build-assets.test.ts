@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import React from 'react';
-import { renderToBuffer } from '@react-pdf/renderer';
+import { renderToBuffer } from 'react-pdf-renderer-server';
 
 import nextConfig from '../../next.config.mjs';
 import { AccountantAdmissionFormPdf } from '../../src/features/hr/accountant/admission-form-pdf';
@@ -73,6 +72,31 @@ test('empacota todos os ativos locais usados pelas etapas da integração', () =
   }
 });
 
+test('isola o renderizador de PDF do servidor sem alterar o pacote do navegador', () => {
+  assert.ok(nextConfig.serverExternalPackages?.includes('react-pdf-renderer-server'));
+  assert.ok(nextConfig.serverExternalPackages?.includes('react-pdf-react-server'));
+  const transpilePackages = 'transpilePackages' in nextConfig
+    ? nextConfig.transpilePackages as string[] | undefined
+    : undefined;
+  assert.ok(transpilePackages?.includes('@react-pdf/renderer'));
+
+  const serverPdfSources = [
+    'src/app/api/hr/onboarding/[id]/accountant-form/route.tsx',
+    'src/features/hr/accountant/admission-form-pdf.tsx',
+    'src/app/api/hr/onboarding/[id]/pj-workflow/route.ts',
+    'src/features/hr/onboarding-pj/contract-pdf.tsx',
+    'src/features/hr/termination/server.ts',
+    'src/features/hr/termination/pj-termination-agreement-pdf.tsx',
+    'src/features/hr/documents/system-template-preview.server.tsx',
+    'src/features/uniforms/term.server.tsx',
+    'src/components/pdf/UniformTermDocument.tsx',
+  ];
+  for (const relativePath of serverPdfSources) {
+    const source = readFileSync(path.join(workspace, relativePath), 'utf8');
+    assert.doesNotMatch(source, /from ['"]@react-pdf\/renderer['"]/, `${relativePath} usa o renderizador incompatível no servidor`);
+  }
+});
+
 test('mantém os geradores de PDF da demissão independentes de ativos locais não empacotados', () => {
   const roots = [
     path.join(workspace, 'src/features/hr/termination'),
@@ -88,7 +112,7 @@ test('mantém os geradores de PDF da demissão independentes de ativos locais n�
 
 test('renderiza o formulário do contador com o timbre empacotado', async () => {
   const logo = readFileSync(path.join(workspace, 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png'));
-  const document = React.createElement(AccountantAdmissionFormPdf, { data: {
+  const document = AccountantAdmissionFormPdf({ data: {
     companyName: 'CT Sorvetes Ltda.',
     employerCnpj: '00.000.000/0001-00',
     employeeName: 'Candidata de teste',

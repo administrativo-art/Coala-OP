@@ -75,6 +75,11 @@ const nextConfig = {
     ];
   },
   serverExternalPackages: [
+    // Server-side PDF routes use this isolated package alias so the renderer
+    // resolves the application's React 18 runtime instead of Next's vendored
+    // React reconciler. The browser renderer remains transpiled normally.
+    'react-pdf-renderer-server',
+    'react-pdf-react-server',
     '@genkit-ai/core',
     '@genkit-ai/google-genai',
     '@genkit-ai/next',

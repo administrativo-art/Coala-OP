@@ -1,7 +1,8 @@
+/** @jsxImportSource react-pdf-react-server */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import React from "react";
-import { Document, Image, Page, renderToBuffer, StyleSheet } from "@react-pdf/renderer";
+import React from "react-pdf-react-server";
+import { Document, Image, Page, renderToBuffer, StyleSheet } from "react-pdf-renderer-server";
 
 import { convertDocxToPdf } from "@/features/hr/documents/pdf-converter.server";
 import { generateDocx } from "@/features/hr/documents/docx-generator";

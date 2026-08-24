@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { renderToBuffer } from "@react-pdf/renderer";
+import { renderToBuffer } from "react-pdf-renderer-server";
 import type { DocumentSnapshot } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import type { NextRequest } from "next/server";
