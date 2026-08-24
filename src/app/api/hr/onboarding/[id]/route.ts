@@ -17,6 +17,7 @@ import { findPdvLegalUser } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
 import { requiredOnboardingIntegrationsResolved } from '@/lib/hr/onboarding-integrations';
 import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-documents';
+import { syncApprovedOnboardingPhotoToAvatar } from '@/lib/hr/profile-photo-avatar.server';
 import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
 import { setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
 import { extendOnboardingPublicLink, onboardingPublicLinkExtensionUsed } from '@/lib/hr/onboarding-public-link';
@@ -678,6 +679,11 @@ async function createCollaboratorFromOnboarding(params: {
     process: params.process,
     actorId: params.actorId,
     actorName: params.actorName,
+  });
+  await syncApprovedOnboardingPhotoToAvatar({
+    userId: employeeId,
+    onboardingId: params.processId,
+    documents: promotedDocuments.documents,
   });
   const promotedSignedDocumentIds = await promoteSignedOnboardingDocuments({
     onboardingId: params.processId,

@@ -6747,12 +6747,12 @@ const ONBOARDING_STAGE_DETAILS: Record<OnboardingStageId, { owner: string; focus
     focus: 'Envio do pacote admissional e recebimento da ficha de registro',
   },
   signature_preparation: {
-    owner: 'RH',
-    focus: 'Geração e revisão dos documentos para assinatura',
+    owner: 'RH + Candidato',
+    focus: 'Seleção, geração e revisão dos documentos admissionais; depois, envio e acompanhamento das assinaturas.',
   },
   signature: {
     owner: 'Candidato + RH',
-    focus: 'Assinatura autenticada dos documentos',
+    focus: 'Seleção, geração e revisão dos documentos admissionais; depois, envio e acompanhamento das assinaturas.',
   },
   formalization_validation: {
     owner: 'RH',
@@ -6791,8 +6791,10 @@ const ONBOARDING_STAGE_KIND: Record<
 // Stable per-candidate accent colors used on the grid cards and detail avatar.
 const ONBOARDING_CARD_COLORS = ['#df2f78', '#7c3aed', '#2563eb', '#008f83', '#d17400', '#c026d3'];
 
-function consolidatedDocumentPhaseId(stageId?: OnboardingStageId | null) {
-  return stageId === 'document_review' ? 'documents' : stageId;
+function consolidatedOnboardingPhaseId(stageId?: OnboardingStageId | null) {
+  if (stageId === 'document_review') return 'documents';
+  if (stageId === 'signature') return 'signature_preparation';
+  return stageId;
 }
 
 function consolidatedOnboardingStages(process: OnboardingProcess) {
@@ -6800,16 +6802,38 @@ function consolidatedOnboardingStages(process: OnboardingProcess) {
     normalizeOnboardingStages(process.stages),
     process.generateSignatureDocuments === true
   );
+  let visibleStages = stages;
   const hasCollection = stages.some(stage => stage.id === 'documents');
   const hasReview = stages.some(stage => stage.id === 'document_review');
-  if (!hasCollection || !hasReview) return stages;
+  if (hasCollection && hasReview) {
+    const visibleDocumentStage = process.currentStage === 'documents' ? 'documents' : 'document_review';
+    visibleStages = visibleStages
+      .filter(stage => stage.id !== (visibleDocumentStage === 'documents' ? 'document_review' : 'documents'))
+      .map(stage => stage.id === visibleDocumentStage
+        ? { ...stage, label: 'Formalização · Dados, documentos e ASO' }
+        : stage);
+  }
 
-  const visibleDocumentStage = process.currentStage === 'documents' ? 'documents' : 'document_review';
-  return stages
-    .filter(stage => stage.id !== (visibleDocumentStage === 'documents' ? 'document_review' : 'documents'))
-    .map(stage => stage.id === visibleDocumentStage
-      ? { ...stage, label: 'Formalização · Dados, documentos e ASO' }
-      : stage);
+  const hasSignaturePreparation = stages.some(stage => stage.id === 'signature_preparation');
+  const hasSignature = stages.some(stage => stage.id === 'signature');
+  if (hasSignaturePreparation && hasSignature) {
+    const currentOrder = stages.find(stage => stage.id === process.currentStage)?.order ?? -1;
+    const signatureOrder = stages.find(stage => stage.id === 'signature')?.order ?? Number.POSITIVE_INFINITY;
+    const visibleSignatureStage: OnboardingStageId = process.currentStage === 'signature_preparation'
+      ? 'signature_preparation'
+      : process.currentStage === 'signature' || currentOrder > signatureOrder
+        ? 'signature'
+        : 'signature_preparation';
+    visibleStages = visibleStages
+      .filter(stage => stage.id !== (visibleSignatureStage === 'signature_preparation' ? 'signature' : 'signature_preparation'))
+      .map(stage => stage.id === visibleSignatureStage
+        ? { ...stage, label: 'Documentação admissional' }
+        : stage);
+  }
+
+  return visibleStages.map(stage => stage.id === 'signature_preparation' || stage.id === 'signature'
+    ? { ...stage, label: 'Documentação admissional' }
+    : stage);
 }
 
 type SignatureTemplateOption = {
@@ -8434,10 +8458,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     activeProcesses.forEach(process => {
       const stageId = process.currentStage;
       if (!stageId) return;
-      const consolidatedId = consolidatedDocumentPhaseId(stageId) ?? stageId;
+      const consolidatedId = consolidatedOnboardingPhaseId(stageId) ?? stageId;
       const label = consolidatedId === 'documents'
         ? 'Formalização · Dados, documentos e ASO'
-        : (process.stages ?? []).find(stage => stage.id === stageId)?.label ?? stageId;
+        : consolidatedId === 'signature_preparation'
+          ? 'Documentação admissional'
+          : (process.stages ?? []).find(stage => stage.id === stageId)?.label ?? stageId;
       if (!map.has(consolidatedId)) map.set(consolidatedId, label);
     });
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
@@ -8446,7 +8472,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const filtered = useMemo(() => {
     const now = new Date(linkClock);
     const matching = activeProcesses.filter(process => {
-      if (phaseFilter !== 'all' && consolidatedDocumentPhaseId(process.currentStage) !== phaseFilter) return false;
+      if (phaseFilter !== 'all' && consolidatedOnboardingPhaseId(process.currentStage) !== phaseFilter) return false;
       if (healthFilter !== 'all' && resolveOnboardingOperationalStatus(process, now).health !== healthFilter) return false;
       const text = [
         process.candidateName,
@@ -8626,6 +8652,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   useEffect(() => {
     if (selectedProcess?.currentStage === 'document_review' && phaseId === 'documents') {
       setPhaseId('document_review');
+      return;
+    }
+    if (selectedProcess?.currentStage === 'signature' && phaseId === 'signature_preparation') {
+      setPhaseId('signature');
     }
   }, [phaseId, selectedProcess?.currentStage]);
 
@@ -9483,8 +9513,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
   const canCancelSelectedProcess = canManage &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
-  const cancellationStage = consolidatedDocumentPhaseId(selectedProcess.currentStage) === 'documents'
+  const cancellationStage = consolidatedOnboardingPhaseId(selectedProcess.currentStage) === 'documents'
     ? 'Formalização · Dados, documentos e ASO'
+    : consolidatedOnboardingPhaseId(selectedProcess.currentStage) === 'signature_preparation'
+      ? 'Documentação admissional'
     : consolidatedOnboardingStages(selectedProcess).find(stage => stage.id === selectedProcess.currentStage)?.label
       ?? selectedProcess.currentStage
       ?? 'Etapa não informada';
@@ -9709,6 +9741,26 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const selectedSignatureDocuments = (signatureWorkflow?.documents ?? []).filter(document => document.selected);
   const signatureDocumentsReadyToSend = selectedSignatureDocuments.filter(document => document.status === 'ready_to_send');
+  const signatureGenerated = selectedSignatureDocuments.length > 0
+    && selectedSignatureDocuments.every(document => Boolean(document.generatedDocumentId));
+  const signatureReviewed = selectedSignatureDocuments.length > 0
+    && selectedSignatureDocuments.every(document => [
+      'ready_to_send', 'sending', 'sent', 'viewed', 'partially_signed', 'signed',
+      'signed_archived_pending_employee', 'archived',
+    ].includes(document.status));
+  const signatureSent = selectedSignatureDocuments.length > 0
+    && selectedSignatureDocuments.every(document => [
+      'sent', 'viewed', 'partially_signed', 'signed', 'signed_archived_pending_employee', 'archived',
+    ].includes(document.status));
+  const signatureCompleted = selectedSignatureDocuments.length > 0
+    && selectedSignatureDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status));
+  const signatureMainSteps = [
+    { label: 'Selecionar e gerar', done: signatureGenerated },
+    { label: 'Revisar no RH', done: signatureReviewed },
+    { label: 'Enviar', done: signatureSent },
+    { label: 'Assinar e arquivar', done: signatureCompleted },
+  ];
+  const signatureCurrentStepIndex = signatureMainSteps.findIndex(step => !step.done);
   const signatureSelectionEditable = canGenerateDocumentsProcess && canActOnSignaturePhase && activePhaseId === 'signature_preparation' &&
     !selectedSignatureDocuments.some(document => ['sent', 'viewed', 'partially_signed', 'signed', 'archived'].includes(document.status));
   let selectedOperationalStatus = resolveOnboardingOperationalStatus(selectedProcess, new Date(linkClock));
@@ -9907,6 +9959,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     ? currentFormalizationStageIndex + 1
     : visibleStages.length;
   const pendingRequiredDocumentCount = accountantRequiredDocuments.filter(document => document.status !== 'approved').length;
+  const approvedReviewDocumentCount = reviewDocuments.filter(document => document.status === 'approved').length;
+  const rejectedReviewDocumentCount = reviewDocuments.filter(document => document.status === 'rejected').length;
+  const pendingReviewDocumentCount = reviewDocuments.length - approvedReviewDocumentCount - rejectedReviewDocumentCount;
   const publicLinkExpiresAt = onboardingPublicLinkExpiresAt(selectedProcess);
   const publicLinkHoursRemaining = publicLinkExpiresAt
     ? Math.max(0, Math.ceil((publicLinkExpiresAt.getTime() - linkClock) / 3_600_000))
@@ -10203,6 +10258,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         ) : null}
                       </span>
                       <span className={`mt-1 block text-[8.5px] font-black uppercase tracking-wide ${isActivePhase ? 'text-pink-400' : 'text-slate-400'}`}>{stageStateLabel} <span className="px-0.5">·</span> {details.owner}</span>
+                      <span className={`mt-1.5 block text-[9px] font-semibold leading-snug ${isActivePhase ? 'text-pink-500/80' : 'text-slate-400'}`}>{details.focus}</span>
                     </span>
                   </button>
                 );
@@ -10449,7 +10505,46 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </span>
                   </button>
 
-                  {!asoCollapsed ? <>
+                  {asoCollapsed ? (
+                    <div className="mt-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(112px,1fr))]" aria-label={`${asoCompletedStepCount} de ${asoProgressSteps.length} etapas do ASO concluídas`}>
+                      {asoStepLabels.map((label, index) => {
+                        const state = asoStepStates[index];
+                        const stateLabel = state === 'done' ? 'Concluído' : state === 'current' ? 'Em andamento' : 'Pendente';
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => {
+                              setAsoPhaseIndex(index);
+                              setAsoCollapsed(false);
+                            }}
+                            className={`flex min-w-0 items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition hover:bg-white ${
+                              state === 'done'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : state === 'current'
+                                  ? 'border-cyan-300 bg-white text-cyan-800'
+                                  : 'border-slate-200 bg-white/70 text-slate-500'
+                            }`}
+                            aria-label={`Abrir etapa ${label}: ${stateLabel}`}
+                          >
+                            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-black ${
+                              state === 'done'
+                                ? 'bg-emerald-600 text-white'
+                                : state === 'current'
+                                  ? 'bg-cyan-600 text-white'
+                                  : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {state === 'done' ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-[10.5px] font-black uppercase tracking-wide">{label}</span>
+                              <span className="mt-0.5 block text-[9.5px] font-bold opacity-80">{stateLabel}</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : <>
                     <div className="mt-4 flex items-start" aria-label={`${asoCompletedStepCount} de ${asoProgressSteps.length} etapas do ASO concluídas`}>
                       {asoStepLabels.map((label, index) => {
                         const state = asoStepStates[index];
@@ -10651,7 +10746,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         )}
                       </section>
                     ) : null}
-                  </> : null}
+                  </>}
                 </div> : null}
 
                 <section className="order-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -10666,7 +10761,54 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <ChevronDown className="h-4 w-4" />
                   </span>
                 </button>
-                {!documentsCollapsed ? <>
+                {documentsCollapsed ? (
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> {approvedReviewDocumentCount} aprovado{approvedReviewDocumentCount === 1 ? '' : 's'}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">
+                        <Clock className="h-3.5 w-3.5" /> {pendingReviewDocumentCount} pendente{pendingReviewDocumentCount === 1 ? '' : 's'}
+                      </span>
+                      {rejectedReviewDocumentCount > 0 ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-700">
+                          <XCircle className="h-3.5 w-3.5" /> {rejectedReviewDocumentCount} reprovado{rejectedReviewDocumentCount === 1 ? '' : 's'}
+                        </span>
+                      ) : null}
+                    </div>
+                    {reviewDocuments.length > 0 ? (
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {reviewDocuments.map(document => {
+                          const approved = document.status === 'approved';
+                          const rejected = document.status === 'rejected';
+                          return (
+                            <div key={document.id} className={`flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2.5 ${
+                              approved
+                                ? 'border-emerald-200 bg-emerald-50/70'
+                                : rejected
+                                  ? 'border-rose-200 bg-rose-50/70'
+                                  : 'border-amber-200 bg-amber-50/60'
+                            }`}>
+                              {approved
+                                ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                                : rejected
+                                  ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                                  : <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />}
+                              <span className="min-w-0">
+                                <span className="block truncate text-[10.5px] font-black text-slate-800">{document.label}</span>
+                                <span className={`mt-0.5 block text-[9.5px] font-bold ${approved ? 'text-emerald-700' : rejected ? 'text-rose-700' : 'text-amber-700'}`}>
+                                  {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
+                                </span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="mt-2 rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs font-semibold text-slate-500">Nenhum documento configurado para esta integração.</p>
+                    )}
+                  </div>
+                ) : <>
                 {publicLinkExpiringSoon ? (
                   <div role="alert" className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950">
                     <div className="flex min-w-0 items-start gap-2.5">
@@ -10721,7 +10863,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </p>
                   )}
                 </div>
-                </> : null}
+                </>}
                 </section>
 
                 <div className="order-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm">
@@ -11134,6 +11276,46 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {/* ASSINATURA */}
             {activeKind === 'assinatura' && (
               <div className="mt-4 space-y-4">
+                <div className="rounded-2xl border border-violet-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wide text-violet-800">Documentação admissional</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Selecione os modelos, gere e revise os documentos, envie para assinatura e acompanhe o arquivamento.</p>
+                    </div>
+                    <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-700">
+                      {signatureMainSteps.filter(step => step.done).length} de {signatureMainSteps.length} subetapas
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    {signatureMainSteps.map((step, index) => {
+                      const current = !step.done && index === (signatureCurrentStepIndex < 0 ? signatureMainSteps.length - 1 : signatureCurrentStepIndex);
+                      return (
+                        <div key={step.label} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${
+                          step.done
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                            : current
+                              ? 'border-violet-300 bg-violet-50 text-violet-800'
+                              : 'border-slate-200 bg-slate-50 text-slate-500'
+                        }`}>
+                          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-black ${
+                            step.done
+                              ? 'bg-emerald-600 text-white'
+                              : current
+                                ? 'bg-violet-600 text-white'
+                                : 'bg-white text-slate-400 ring-1 ring-slate-200'
+                          }`}>
+                            {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[10.5px] font-black leading-tight">{step.label}</span>
+                            <span className="mt-0.5 block text-[9px] font-bold opacity-75">{step.done ? 'Concluída' : current ? 'Em andamento' : 'A seguir'}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {activePhaseId === 'signature_preparation' ? (
                   <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
