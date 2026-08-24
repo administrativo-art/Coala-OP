@@ -1,6 +1,16 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const documentPdfRuntimeAssets = [
+  './src/features/hr/documents/assets/coala-shakes-letterhead-overlay-a4-v2.png',
+  './node_modules/@fontsource/caladea/files/caladea-latin-400-normal.woff',
+  './node_modules/@fontsource/caladea/files/caladea-latin-700-normal.woff',
+];
+const systemDocumentTemplateAssets = [
+  './docs/modelos-documentos/**/*.docx',
+  './src/features/hr/documents/assets/coala-shakes-letterhead-a4-v2.png',
+  ...documentPdfRuntimeAssets,
+];
 const nextConfig = {
   transpilePackages: ['@react-pdf/renderer'],
   experimental: {
@@ -23,13 +33,13 @@ const nextConfig = {
       './src/features/hr/aso/assets/medclinc-logo.jpg',
       './src/features/hr/aso/assets/coala-shakes-letterhead-v1.png',
     ],
-    '/api/documents/templates/**': [
-      './docs/modelos-documentos/admissionais/*.docx',
-      './src/features/hr/documents/assets/coala-shakes-letterhead-a4-v2.png',
-      './src/features/hr/documents/assets/coala-shakes-letterhead-overlay-a4-v2.png',
-      './node_modules/@fontsource/caladea/files/caladea-latin-400-normal.woff',
-      './node_modules/@fontsource/caladea/files/caladea-latin-700-normal.woff',
+    '/api/hr/onboarding/*/accountant-form': [
+      './src/features/hr/aso/assets/coala-shakes-letterhead-v1.png',
     ],
+    '/api/hr/onboarding/*/signature-documents': systemDocumentTemplateAssets,
+    '/api/documents/generate': systemDocumentTemplateAssets,
+    '/api/documents/generated/*': documentPdfRuntimeAssets,
+    '/api/documents/templates/**': systemDocumentTemplateAssets,
   },
   async headers() {
     return [

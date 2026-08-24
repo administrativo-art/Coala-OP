@@ -72,7 +72,10 @@ export function middleware(req: NextRequest) {
   // Os links com token do ASO vivem fora da árvore /vagas e devem chegar
   // intactos às páginas públicas correspondentes.
   if (isAllowedPublicAsoPage(normalizedPathname)) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    return response;
   }
 
   if (BLOCKED_SYSTEM_PREFIXES.some((prefix) => normalizedPathname === prefix || normalizedPathname.startsWith(`${prefix}/`))) {

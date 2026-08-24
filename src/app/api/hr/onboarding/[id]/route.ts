@@ -20,7 +20,11 @@ import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-
 import { syncApprovedOnboardingPhotoToAvatar } from '@/lib/hr/profile-photo-avatar.server';
 import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
 import { setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
-import { extendOnboardingPublicLink, onboardingPublicLinkExtensionUsed } from '@/lib/hr/onboarding-public-link';
+import {
+  createOnboardingPublicLinkWindow,
+  extendOnboardingPublicLink,
+  onboardingPublicLinkExtensionUsed,
+} from '@/lib/hr/onboarding-public-link';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import {
   canUpdateExpectedAdmissionDate,
@@ -766,7 +770,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!process.publicFormSubmittedAt) {
       return jsonError('Nome e CPF ainda não foram enviados pela candidata.', 409);
     }
-    if (!process.publicToken || process.publicTokenClosedAt || process.status === 'completed') {
+    if (process.status === 'cancelled' || process.status === 'completed') {
       return jsonError('O formulário público não está disponível para correção.', 409);
     }
     const reason = asString(body.reason);
@@ -788,6 +792,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           changedFields: [],
           clinicRevalidationRequired: null,
         };
+    const expired = !process.publicTokenExpiresAt || new Date(String(process.publicTokenExpiresAt)).getTime() <= Date.now();
+    if (!process.publicToken || process.publicTokenClosedAt || expired) {
+      update.publicToken = randomBytes(32).toString('base64url');
+      Object.assign(update, createOnboardingPublicLinkWindow(new Date(now)), {
+        publicTokenClosedAt: null,
+        publicTokenClosedReason: null,
+        publicTokenReopenedAt: now,
+        publicTokenReopenedBy: access.decoded.uid,
+      });
+    }
   } else if (action === 'document_status') {
     const documentId = asString(body.documentId);
     const status = asString(body.status) as OnboardingDocument['status'] | null;

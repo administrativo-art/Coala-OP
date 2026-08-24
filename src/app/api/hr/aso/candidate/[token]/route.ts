@@ -14,6 +14,12 @@ const MAX_FILE_SIZE = 15 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
 function text(value: unknown, max = 1000) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
 function record(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function json(payload: unknown, status = 200) {
+  return NextResponse.json(payload, {
+    status,
+    headers: { 'Cache-Control': 'private, no-store, max-age=0, must-revalidate' },
+  });
+}
 
 async function findProcess(token: string) {
   const result = await hrDbAdmin.collection('onboardingProcesses').where('asoCandidateTokenHash', '==', hashAsoToken(token)).limit(1).get();
@@ -36,11 +42,11 @@ function validSignature(buffer: Buffer, mimeType: string) {
 export async function GET(_request: NextRequest, context: { params: Promise<{ token: string }> }) {
   const { token } = await context.params;
   const snapshot = await findProcess(token);
-  if (!snapshot) return NextResponse.json({ error: 'Link inválido.' }, { status: 404 });
+  if (!snapshot) return json({ error: 'Link inválido.' }, 404);
   const process = snapshot.data(); const workflow = record(process.asoWorkflow); const appointment = record(workflow.appointment);
   const expiresAt = text(process.asoCandidateTokenExpiresAt, 40);
-  if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) return NextResponse.json({ error: 'Este link expirou. Solicite um novo link ao RH.' }, { status: 410 });
-  return NextResponse.json({
+  if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) return json({ error: 'Este link expirou. Solicite um novo link ao RH.' }, 410);
+  return json({
     candidateName: text(process.candidateName, 240),
     examType: process.asoExamType === 'dismissal' ? 'dismissal' : 'admission',
     uploadEnabled: uploadOpen(text(workflow.appointmentAt, 40)), uploadOpensOn: text(appointment.date, 10),
@@ -51,17 +57,17 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ to
 export async function POST(request: NextRequest, context: { params: Promise<{ token: string }> }) {
   const { token } = await context.params;
   const snapshot = await findProcess(token);
-  if (!snapshot) return NextResponse.json({ error: 'Link inválido.' }, { status: 404 });
+  if (!snapshot) return json({ error: 'Link inválido.' }, 404);
   const process = snapshot.data(); const workflow = record(process.asoWorkflow);
   const expiresAt = text(process.asoCandidateTokenExpiresAt, 40);
-  if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) return NextResponse.json({ error: 'Este link expirou.' }, { status: 410 });
-  if (!uploadOpen(text(workflow.appointmentAt, 40))) return NextResponse.json({ error: 'O envio será liberado no dia do exame.' }, { status: 409 });
+  if (!expiresAt || new Date(expiresAt).getTime() <= Date.now()) return json({ error: 'Este link expirou.' }, 410);
+  if (!uploadOpen(text(workflow.appointmentAt, 40))) return json({ error: 'O envio será liberado no dia do exame.' }, 409);
   const form = await request.formData(); const file = form.get('file');
-  if (!(file instanceof File)) return NextResponse.json({ error: 'Selecione o arquivo do ASO.' }, { status: 400 });
-  if (!ALLOWED_TYPES.has(file.type)) return NextResponse.json({ error: 'Envie o ASO em PDF, JPG ou PNG.' }, { status: 400 });
-  if (file.size <= 0 || file.size > MAX_FILE_SIZE) return NextResponse.json({ error: 'O arquivo deve ter até 15 MB.' }, { status: 400 });
+  if (!(file instanceof File)) return json({ error: 'Selecione o arquivo do ASO.' }, 400);
+  if (!ALLOWED_TYPES.has(file.type)) return json({ error: 'Envie o ASO em PDF, JPG ou PNG.' }, 400);
+  if (file.size <= 0 || file.size > MAX_FILE_SIZE) return json({ error: 'O arquivo deve ter até 15 MB.' }, 400);
   const buffer = Buffer.from(await file.arrayBuffer()); const hashSha256 = createHash('sha256').update(buffer).digest('hex');
-  if (!validSignature(buffer, file.type)) return NextResponse.json({ error: 'O conteúdo do arquivo não corresponde ao formato informado.' }, { status: 400 });
+  if (!validSignature(buffer, file.type)) return json({ error: 'O conteúdo do arquivo não corresponde ao formato informado.' }, 400);
   const now = new Date().toISOString(); const extension = file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : 'jpg';
   const storagePath = `hr/onboarding/${snapshot.id}/aso/returned/${randomUUID()}.${extension}`;
   await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, { resumable: false, metadata: { contentType: file.type, cacheControl: 'private, max-age=0, no-store', metadata: { onboardingId: snapshot.id, hashSha256 } } });
@@ -72,5 +78,5 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     snapshot.ref.collection('asoEvents').doc(randomUUID()).set({ type: 'ASO_UPLOADED_BY_CANDIDATE', at: now, actorId: null, actorEmail: text(process.candidateEmail, 320) || null, fileName: asoDocument.fileName, hashSha256, size: file.size }),
     hrDbAdmin.collection('hrNotifications').doc(`aso_received_${snapshot.id}_${hashSha256.slice(0, 16)}`).set({ type: 'aso_received', status: 'pending', onboardingId: snapshot.id, title: 'ASO recebido para conferência', message: `${text(process.candidateName, 240) || 'O colaborador'} enviou o ASO ${examLabel}.`, channels: ['in_app'], recipient: { strategy: 'hr_pool' }, createdAt: now, updatedAt: now }),
   ]);
-  return NextResponse.json({ ok: true });
+  return json({ ok: true });
 }

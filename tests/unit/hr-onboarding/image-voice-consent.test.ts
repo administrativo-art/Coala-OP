@@ -10,7 +10,11 @@ import {
   parseImageVoiceConsentDecision,
   publicImageVoiceConsentTerm,
 } from "../../../src/lib/hr/image-voice-consent";
-import { shouldRestoreImageVoiceAuthorization } from "../../../src/features/hr/onboarding/image-voice-consent-state";
+import {
+  persistedImageVoiceAuthorization,
+  resolveSubmittedImageVoiceAuthorization,
+  shouldRestoreImageVoiceAuthorization,
+} from "../../../src/features/hr/onboarding/image-voice-consent-state";
 
 test("publica o consentimento de imagem e voz como facultativo e específico", () => {
   assert.match(IMAGE_VOICE_CONSENT_TITLE, /imagem e voz/i);
@@ -65,4 +69,31 @@ test("restaura somente uma autorização vigente para o termo atual", () => {
   assert.equal(shouldRestoreImageVoiceAuthorization({ ...granted, termHash: "hash-antigo" }, term), false);
   assert.equal(shouldRestoreImageVoiceAuthorization({ ...granted, status: "revoked" }, term), false);
   assert.equal(shouldRestoreImageVoiceAuthorization({ ...granted, revokedAt: "2026-08-21T12:00:00.000Z" }, term), false);
+});
+
+test("preserva a decisão anterior quando a candidata não altera o consentimento", () => {
+  const term = publicImageVoiceConsentTerm();
+  const previousDecision = {
+    authorized: true,
+    status: "granted",
+    termVersion: term.version,
+    termHash: term.hash,
+    revokedAt: null,
+  };
+
+  assert.equal(persistedImageVoiceAuthorization(previousDecision, term), true);
+  assert.equal(resolveSubmittedImageVoiceAuthorization({
+    decisionChanged: false,
+    hasPreviousSubmission: true,
+    previousDecision,
+    currentTerm: term,
+    submittedAuthorized: false,
+  }), true);
+  assert.equal(resolveSubmittedImageVoiceAuthorization({
+    decisionChanged: true,
+    hasPreviousSubmission: true,
+    previousDecision,
+    currentTerm: term,
+    submittedAuthorized: false,
+  }), false);
 });

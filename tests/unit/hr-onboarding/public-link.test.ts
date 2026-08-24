@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  closeOnboardingPublicLink,
   createOnboardingPublicLinkWindow,
   extendOnboardingPublicLink,
+  ONBOARDING_PUBLIC_FORM_SUBMITTED_MESSAGE,
+  onboardingPublicLinkClosedMessage,
   onboardingPublicLinkExpired,
   onboardingPublicLinkExpiresAt,
 } from "../../../src/lib/hr/onboarding-public-link";
@@ -40,4 +43,23 @@ test("an expired link receives 24 hours from the extension time", () => {
   const now = new Date("2026-07-16T12:00:00.000Z");
   assert.equal(onboardingPublicLinkExpired(data, now), true);
   assert.equal(extendOnboardingPublicLink(data, now), "2026-07-17T12:00:00.000Z");
+});
+
+test("closes the initial link after the form is submitted", () => {
+  const now = new Date("2026-08-24T20:00:00.000Z");
+  const closed = closeOnboardingPublicLink(now);
+
+  assert.deepEqual(closed, {
+    publicTokenClosedAt: "2026-08-24T20:00:00.000Z",
+    publicTokenClosedReason: "form_submitted",
+  });
+  assert.equal(onboardingPublicLinkClosedMessage({ ...closed }), ONBOARDING_PUBLIC_FORM_SUBMITTED_MESSAGE);
+  assert.equal(onboardingPublicLinkClosedMessage({ publicTokenClosedAt: null }), null);
+});
+
+test("shows the submitted message for legacy closures with a submitted form", () => {
+  assert.equal(onboardingPublicLinkClosedMessage({
+    publicTokenClosedAt: "2026-08-24T20:00:00.000Z",
+    publicFormSubmittedAt: "2026-08-24T19:59:00.000Z",
+  }), ONBOARDING_PUBLIC_FORM_SUBMITTED_MESSAGE);
 });

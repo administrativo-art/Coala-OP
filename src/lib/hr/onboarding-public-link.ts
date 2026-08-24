@@ -1,8 +1,13 @@
 export const ONBOARDING_PUBLIC_LINK_TTL_HOURS = 72;
 export const ONBOARDING_PUBLIC_LINK_EXTENSION_HOURS = 24;
+export const ONBOARDING_PUBLIC_FORM_SUBMITTED_MESSAGE =
+  "Este formulário já foi enviado e o prazo de acesso foi encerrado.";
 
 type PublicLinkData = {
   createdAt?: unknown;
+  publicFormSubmittedAt?: unknown;
+  publicTokenClosedAt?: unknown;
+  publicTokenClosedReason?: unknown;
   publicTokenExpiresAt?: unknown;
   publicTokenExtendedAt?: unknown;
   publicTokenExtensionUsed?: unknown;
@@ -41,6 +46,21 @@ export function onboardingPublicLinkExtensionUsed(data: PublicLinkData) {
 export function onboardingPublicLinkExpired(data: PublicLinkData, now = new Date()) {
   const expiresAt = onboardingPublicLinkExpiresAt(data);
   return !expiresAt || expiresAt.getTime() <= now.getTime();
+}
+
+export function closeOnboardingPublicLink(now = new Date()) {
+  return {
+    publicTokenClosedAt: now.toISOString(),
+    publicTokenClosedReason: "form_submitted",
+  };
+}
+
+export function onboardingPublicLinkClosedMessage(data: PublicLinkData) {
+  if (!validDate(data.publicTokenClosedAt)) return null;
+  if (data.publicTokenClosedReason === "form_submitted" || validDate(data.publicFormSubmittedAt)) {
+    return ONBOARDING_PUBLIC_FORM_SUBMITTED_MESSAGE;
+  }
+  return "Este link de onboarding não está mais disponível.";
 }
 
 export function extendOnboardingPublicLink(data: PublicLinkData, now = new Date()) {

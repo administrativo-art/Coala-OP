@@ -9,7 +9,12 @@ import {
 } from '@/features/hr/onboarding/document-applicability';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { DEFAULT_ONBOARDING_DOCUMENTS, instantiateOnboardingDocuments } from '@/lib/recruitment-onboarding';
-import { onboardingPublicLinkExpired, onboardingPublicLinkExpiresAt } from '@/lib/hr/onboarding-public-link';
+import {
+  closeOnboardingPublicLink,
+  onboardingPublicLinkClosedMessage,
+  onboardingPublicLinkExpired,
+  onboardingPublicLinkExpiresAt,
+} from '@/lib/hr/onboarding-public-link';
 import {
   ONBOARDING_ALLERGY_ACKNOWLEDGEMENT_TEXT,
   ONBOARDING_ALLERGY_CONFIRMATION_NOTE,
@@ -40,6 +45,7 @@ import {
   nextPublicFormRevision,
   publicFormAnswersEqual,
 } from '@/features/hr/onboarding/public-form-revision';
+import { resolveSubmittedImageVoiceAuthorization } from '@/features/hr/onboarding/image-voice-consent-state';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,7 +55,16 @@ const SUBMIT_LIMIT_MAX = 8;
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
 function jsonError(message: string, status = 400) {
-  return NextResponse.json({ error: message }, { status });
+  return NextResponse.json({ error: message }, {
+    status,
+    headers: { 'Cache-Control': 'private, no-store, max-age=0, must-revalidate' },
+  });
+}
+
+function jsonSuccess(payload: unknown) {
+  return NextResponse.json(payload, {
+    headers: { 'Cache-Control': 'private, no-store, max-age=0, must-revalidate' },
+  });
 }
 
 function trimText(value: unknown, maxLength: number) {
@@ -452,13 +467,29 @@ async function getOnboardingByToken(token: string) {
   return snap.docs[0];
 }
 
+function storedImageVoiceConsentDecision(data: FirebaseFirestore.DocumentData) {
+  const stored = record(data.consentimento_imagem_voz);
+  if (Object.keys(stored).length === 0) return null;
+  return {
+    authorized: stored.autorizado === true,
+    status: typeof stored.status === 'string' ? stored.status : null,
+    termVersion: typeof stored.termVersion === 'string'
+      ? stored.termVersion
+      : typeof stored.versao_termo === 'string'
+        ? stored.versao_termo
+        : null,
+    termHash: typeof stored.termHash === 'string'
+      ? stored.termHash
+      : typeof stored.hash_termo_exibido === 'string'
+        ? stored.hash_termo_exibido
+        : null,
+    revokedAt: typeof stored.revokedAt === 'string' ? stored.revokedAt : null,
+  };
+}
+
 function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
   const processDocuments = Array.isArray(data.documents) ? data.documents as OnboardingDocument[] : [];
-  const storedImageVoiceConsent = data.consentimento_imagem_voz
-    && typeof data.consentimento_imagem_voz === 'object'
-    && !Array.isArray(data.consentimento_imagem_voz)
-      ? data.consentimento_imagem_voz as Record<string, unknown>
-      : null;
+  const imageVoiceConsentDecision = storedImageVoiceConsentDecision(data);
   const documents = data.employmentRelationshipType === 'pj'
     ? processDocuments
     : withUniversalDocuments(processDocuments);
@@ -497,23 +528,7 @@ function publicPayload(id: string, data: FirebaseFirestore.DocumentData) {
     publicTokenExtensionUsed: data.publicTokenExtensionUsed === true,
     privacyNotice: publicPrivacyNotice(),
     imageVoiceConsentTerm: publicImageVoiceConsentTerm(),
-    imageVoiceConsentDecision: storedImageVoiceConsent ? {
-      authorized: storedImageVoiceConsent.autorizado === true,
-      status: typeof storedImageVoiceConsent.status === 'string' ? storedImageVoiceConsent.status : null,
-      termVersion: typeof storedImageVoiceConsent.termVersion === 'string'
-        ? storedImageVoiceConsent.termVersion
-        : typeof storedImageVoiceConsent.versao_termo === 'string'
-          ? storedImageVoiceConsent.versao_termo
-          : null,
-      termHash: typeof storedImageVoiceConsent.termHash === 'string'
-        ? storedImageVoiceConsent.termHash
-        : typeof storedImageVoiceConsent.hash_termo_exibido === 'string'
-          ? storedImageVoiceConsent.hash_termo_exibido
-          : null,
-      revokedAt: typeof storedImageVoiceConsent.revokedAt === 'string'
-        ? storedImageVoiceConsent.revokedAt
-        : null,
-    } : null,
+    imageVoiceConsentDecision,
     publicPrivacyAcceptance: data.publicPrivacyAcceptance ?? null,
   };
 }
@@ -527,7 +542,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
   if (!doc) return jsonError('Onboarding não encontrado.', 404);
 
   const data = doc.data();
-  if (data.publicTokenClosedAt || data.status === 'cancelled' || data.status === 'completed') {
+  const closedMessage = onboardingPublicLinkClosedMessage(data);
+  if (closedMessage) return jsonError(closedMessage, 410);
+  if (data.status === 'cancelled' || data.status === 'completed') {
     return jsonError('Este link de onboarding não está mais disponível.', 404);
   }
   if (onboardingPublicLinkExpired(data)) {
@@ -541,7 +558,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
     ...clientEvidence(request),
     at: accessedAt,
   }).catch(error => console.error('[onboarding] Falha ao auditar acesso público.', error));
-  return NextResponse.json(publicPayload(doc.id, serializeHrValue(data) as FirebaseFirestore.DocumentData));
+  return jsonSuccess(publicPayload(doc.id, serializeHrValue(data) as FirebaseFirestore.DocumentData));
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ token: string }> }) {
@@ -559,7 +576,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   const doc = await getOnboardingByToken(cleanToken);
   if (!doc) return jsonError('Onboarding não encontrado.', 404);
   const data = doc.data();
-  if (data.publicTokenClosedAt || data.status === 'cancelled' || data.status === 'completed') {
+  const closedMessage = onboardingPublicLinkClosedMessage(data);
+  if (closedMessage) return jsonError(closedMessage, 410);
+  if (data.status === 'cancelled' || data.status === 'completed') {
     return jsonError('Este onboarding não está aceitando documentos.', 403);
   }
   if (onboardingPublicLinkExpired(data)) {
@@ -665,6 +684,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       publicFormAnswers,
       publicFormSubmittedAt: data.publicFormSubmittedAt ?? now,
       publicFormLastSubmittedAt: now,
+      ...closeOnboardingPublicLink(new Date(now)),
       publicPrivacyAcceptance,
       pjWorkflow: nextWorkflow,
       currentStage: 'document_review',
@@ -685,7 +705,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
       at: now,
     });
     const saved = await doc.ref.get();
-    return NextResponse.json(publicPayload(saved.id, serializeHrValue(saved.data()) as FirebaseFirestore.DocumentData));
+    return jsonSuccess(publicPayload(saved.id, serializeHrValue(saved.data()) as FirebaseFirestore.DocumentData));
   }
 
   let publicFormAnswers = sanitizePublicAnswers(rawAnswers);
@@ -730,12 +750,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     return jsonError('Informe o curso da formação superior.');
   }
   const notice = publicPrivacyNotice();
-  const imageVoiceDecision = parseImageVoiceConsentDecision(input.imageVoiceConsent);
+  const submittedImageVoiceConsent = record(input.imageVoiceConsent);
+  const imageVoiceDecision = parseImageVoiceConsentDecision(submittedImageVoiceConsent);
   const imageVoiceTerm = imageVoiceDecision.term;
   if (!imageVoiceDecision.valid) {
     return jsonError('Não foi possível registrar sua decisão sobre o uso opcional de imagem e voz. Recarregue a página e tente novamente.');
   }
-  const imageVoiceAuthorized = imageVoiceDecision.authorized;
+  const imageVoiceDecisionChanged = submittedImageVoiceConsent.decisionChanged === true || !hasPreviousSubmission;
+  const imageVoiceAuthorized = resolveSubmittedImageVoiceAuthorization({
+    decisionChanged: imageVoiceDecisionChanged,
+    hasPreviousSubmission,
+    previousDecision: storedImageVoiceConsentDecision(data),
+    currentTerm: imageVoiceTerm,
+    submittedAuthorized: imageVoiceDecision.authorized,
+  });
   const acceptanceInput = input.privacyAcceptance && typeof input.privacyAcceptance === 'object' && !Array.isArray(input.privacyAcceptance)
     ? input.privacyAcceptance as Record<string, unknown>
     : {};
@@ -884,6 +912,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     publicFormSubmittedAt: data.publicFormSubmittedAt ?? now,
     publicFormLastSubmittedAt: now,
     publicFormRevision,
+    ...closeOnboardingPublicLink(new Date(now)),
     ...(identityCorrectionConsumed ? {
       identityCorrection: {
         ...identityCorrection,
@@ -999,11 +1028,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     consentimento_imagem_voz_hash: imageVoiceTerm.hash,
     consentimento_imagem_voz_snapshot_id: imageVoiceConsentSnapshotId,
     consentimento_imagem_voz_checkbox_text: imageVoiceTerm.checkboxText,
+    consentimento_imagem_voz_decisao_alterada: imageVoiceDecisionChanged,
     submitted_at: now,
     ...clientEvidence(request),
     at: now,
   });
 
   const saved = await doc.ref.get();
-  return NextResponse.json(publicPayload(saved.id, serializeHrValue(saved.data()) as FirebaseFirestore.DocumentData));
+  return jsonSuccess(publicPayload(saved.id, serializeHrValue(saved.data()) as FirebaseFirestore.DocumentData));
 }

@@ -19,7 +19,10 @@ function assertPassThrough(pathname: string) {
 }
 
 test('preserva as páginas públicas do ASO no host de vagas', () => {
-  assertPassThrough('/aso/candidato/token-candidato');
+  const candidate = middleware(publicRequest('/aso/candidato/token-candidato'));
+  assert.equal(candidate.headers.get('x-middleware-next'), '1');
+  assert.match(candidate.headers.get('cache-control') ?? '', /no-store/);
+  assert.equal(candidate.headers.get('x-robots-tag'), 'noindex, nofollow, noarchive');
   assertPassThrough('/aso/clinica/token-clinica');
 });
 

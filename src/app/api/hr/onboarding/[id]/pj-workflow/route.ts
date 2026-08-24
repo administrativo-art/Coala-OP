@@ -212,9 +212,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       };
       let publicToken = text(process.publicToken, 200);
       const expired = !text(process.publicTokenExpiresAt, 80) || new Date(text(process.publicTokenExpiresAt, 80)).getTime() <= Date.now();
-      if (!publicToken || expired) {
+      if (!publicToken || expired || Boolean(process.publicTokenClosedAt)) {
         publicToken = randomUUID().replace(/-/g, '');
-        Object.assign(update, { publicToken, ...createOnboardingPublicLinkWindow(new Date(now)), publicTokenClosedAt: null });
+        Object.assign(update, {
+          publicToken,
+          ...createOnboardingPublicLinkWindow(new Date(now)),
+          publicTokenClosedAt: null,
+          publicTokenClosedReason: null,
+        });
       }
       update.currentStage = 'documents';
       if (process.currentStage !== 'documents') update.currentStageStartedAt = now;

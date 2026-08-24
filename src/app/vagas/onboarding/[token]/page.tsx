@@ -342,6 +342,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
   const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
   const [allergyAcknowledged, setAllergyAcknowledged] = useState(false);
   const [imageVoiceAuthorized, setImageVoiceAuthorized] = useState(false);
+  const [imageVoiceConsentTouched, setImageVoiceConsentTouched] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -355,7 +356,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
   }, []);
 
   useEffect(() => {
-    fetch(`/api/hr/onboarding/public/${token}`)
+    fetch(`/api/hr/onboarding/public/${token}`, { cache: "no-store" })
       .then(async response => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : "Link de onboarding não encontrado.");
@@ -411,10 +412,12 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
           currentAcceptance?.allergyNoticeHash === payload.privacyNotice?.allergyNoticeHash
         );
         setAllergyAcknowledged(allergyAcceptanceMatches && currentAcceptance?.allergyAcknowledged === true);
-        setImageVoiceAuthorized(shouldRestoreImageVoiceAuthorization(
+        const restoredImageVoiceAuthorization = shouldRestoreImageVoiceAuthorization(
           payload.imageVoiceConsentDecision,
           payload.imageVoiceConsentTerm,
-        ));
+        );
+        setImageVoiceAuthorized(restoredImageVoiceAuthorization);
+        setImageVoiceConsentTouched(false);
       })
       .catch(error => {
         setUnavailableMessage(error instanceof Error ? error.message : "Link de onboarding não encontrado.");
@@ -575,6 +578,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
             authorized: imageVoiceAuthorized,
             termVersion: data.imageVoiceConsentTerm?.version,
             termHash: data.imageVoiceConsentTerm?.hash,
+            decisionChanged: imageVoiceConsentTouched || !data.imageVoiceConsentDecision,
           },
           sessionId,
           website: "",
@@ -586,6 +590,11 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
       }
       const updated = await response.json();
       setData(updated);
+      setImageVoiceAuthorized(shouldRestoreImageVoiceAuthorization(
+        updated.imageVoiceConsentDecision,
+        updated.imageVoiceConsentTerm,
+      ));
+      setImageVoiceConsentTouched(false);
       setFiles({});
       setSubmitted(true);
     } catch (err) {
@@ -612,6 +621,33 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
         <Link href="/vagas" className="inline-flex items-center gap-2 text-sm font-bold text-[#EE6FA8]">
           <ArrowLeft className="h-4 w-4" /> Voltar para vagas
         </Link>
+      </div>
+    );
+  }
+
+  if (submitted) {
+    return (
+      <div className="onboarding-publico flex min-h-screen items-center justify-center bg-[#F4ECD8] px-5 text-[#2A1F2A]">
+        <PageStyles />
+        <PageContainer variant="compact" className="w-full">
+          <div className="mx-auto max-w-xl rounded-[30px] bg-white p-7 text-center shadow-sm md:p-10">
+            <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100 text-emerald-700">
+              <CheckCircle2 className="h-7 w-7" />
+            </span>
+            <h1 className="fd mt-5 text-[34px] leading-tight">Formulário enviado</h1>
+            <p className="mt-3 text-sm font-semibold leading-relaxed text-[#5B4C5B]">
+              Recebemos suas informações e documentos. Este link foi encerrado e o RH seguirá com a conferência.
+            </p>
+            {data.publicPrivacyAcceptance?.lastProtocol ? (
+              <p className="mt-4 text-xs font-bold text-[#5B4C5B]">
+                Protocolo: {data.publicPrivacyAcceptance.lastProtocol}
+              </p>
+            ) : null}
+            <Link href="/vagas" className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-[#EE6FA8]">
+              <ArrowLeft className="h-4 w-4" /> Voltar para vagas
+            </Link>
+          </div>
+        </PageContainer>
       </div>
     );
   }
@@ -694,7 +730,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
               </li>
               <li className="flex gap-2.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-black text-white">3</span>
-                <span><strong className="text-white">Acompanhe o prazo</strong><span className="mt-0.5 block">Este link ficará disponível por 72 horas. Enquanto o prazo estiver ativo, você poderá corrigir os dados do formulário e enviá-los novamente.</span></span>
+                <span><strong className="text-white">Acompanhe o prazo</strong><span className="mt-0.5 block">Este link ficará disponível por até 72 horas ou até o primeiro envio completo, o que acontecer antes.</span></span>
               </li>
               <li className="flex gap-2.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-black text-white">4</span>
@@ -702,7 +738,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
               </li>
               <li className="flex gap-2.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-[10px] font-black text-white">5</span>
-                <span><strong className="text-white">Prorrogação do prazo</strong><span className="mt-0.5 block">O RH poderá conceder uma única prorrogação de 24 horas. Os dados e documentos já enviados serão mantidos, mas os arquivos bloqueados não serão liberados para alteração. Após o encerramento do prazo, o formulário ficará indisponível.</span></span>
+                <span><strong className="text-white">Correções posteriores</strong><span className="mt-0.5 block">Depois do envio, o formulário será encerrado. Se alguma correção for necessária, o RH fará uma liberação específica.</span></span>
               </li>
             </ol>
           </div>
@@ -1225,7 +1261,11 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                 <input
                   type="checkbox"
                   checked={imageVoiceAuthorized}
-                  onChange={event => setImageVoiceAuthorized(event.target.checked)}
+                  onChange={event => {
+                    setImageVoiceAuthorized(event.target.checked);
+                    setImageVoiceConsentTouched(true);
+                  }}
+                  disabled={submitting}
                   className="mt-0.5 h-4 w-4 shrink-0 accent-[#EE6FA8]"
                 />
                 <span>{data.imageVoiceConsentTerm.checkboxText}</span>

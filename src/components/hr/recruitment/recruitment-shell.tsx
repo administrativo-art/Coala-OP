@@ -10875,13 +10875,15 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         : selectedProcess.publicTokenClosedAt ? 'Link encerrado' : 'Prazo expirado'}
                     </div>
                     <div className="mt-1 text-[11px] font-semibold text-slate-500">
-                      {onboardingPublicLinkExtensionUsed(selectedProcess)
+                      {selectedProcess.publicTokenClosedAt && selectedProcess.publicFormSubmittedAt
+                        ? 'Envio concluído. Para corrigir nome ou CPF, gere uma liberação específica com um novo link.'
+                        : onboardingPublicLinkExtensionUsed(selectedProcess)
                         ? 'A prorrogação única de 24h já foi utilizada.'
                         : 'O RH pode conceder uma única prorrogação de 24h. Dados e documentos são preservados.'}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {canManage && selectedProcess.publicFormSubmittedAt && selectedProcess.identityCorrection?.status !== 'authorized' && linkActive ? (
+                    {canManage && selectedProcess.publicFormSubmittedAt && selectedProcess.identityCorrection?.status !== 'authorized' && !processIsReadOnly ? (
                       <button
                         type="button"
                         disabled={updating === `${selectedProcess.id}:allow_identity_correction`}
@@ -10958,16 +10960,31 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <p className="text-[10px] font-black uppercase tracking-wide text-cyan-800">2. Seleção dos documentos</p>
                     <p className="mt-1 text-xs font-semibold text-slate-600">Todos os documentos anexados até o momento aparecem abaixo. Marque quais documentos aprovados irão no e-mail; itens ainda não aprovados ficam visíveis, mas bloqueados. O formulário da contabilidade e o ASO aprovado são anexos fixos.</p>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {['Formulário de admissão para a contabilidade', 'ASO admissional finalizado'].map(label => <div key={label} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><CheckCircle2 className="h-4 w-4 shrink-0"/>{label}<span className="ml-auto text-[9px] uppercase">Fixo</span></div>)}
+                      {[
+                        { label: 'Formulário de admissão para a contabilidade', onOpen: () => openAccountantAsset('form') },
+                        { label: 'ASO admissional finalizado', onOpen: canViewAso ? () => openAsoAsset('aso') : null },
+                      ].map(item => <div key={item.label} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
+                        <CheckCircle2 className="h-4 w-4 shrink-0"/>
+                        <span className="min-w-0 flex-1">{item.label}</span>
+                        <span className="text-[9px] uppercase">Fixo</span>
+                        {item.onOpen ? <button type="button" onClick={() => void item.onOpen?.()} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-[10px] font-black text-emerald-800 hover:bg-emerald-100">
+                          <Eye className="h-3.5 w-3.5" /> Visualizar
+                        </button> : null}
+                      </div>)}
                     </div>
                     {accountantAttachedDocuments.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {accountantAttachedDocuments.map(document => {
                         const checked = accountantSelectedDocumentIds.includes(document.id);
                         const approved = document.status === 'approved';
-                        return <label key={document.id} className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 transition ${approved ? 'cursor-pointer' : 'cursor-not-allowed opacity-65'} ${checked ? 'border-cyan-400 bg-white text-slate-900' : 'border-slate-200 bg-white/70 text-slate-600'}`}>
-                          <input type="checkbox" checked={checked && approved} disabled={!canManageAccountantProcess || !!accountantActionBusy || !approved} onChange={event => setAccountantSelectedDocumentIds(current => event.target.checked ? [...new Set([...current, document.id])] : current.filter(id => id !== document.id))} className="mt-0.5 h-4 w-4 accent-cyan-700" />
-                          <span className="min-w-0"><span className="block text-xs font-black">{document.label}</span><span className={`mt-0.5 block text-[10px] font-bold ${approved ? 'text-emerald-700' : 'text-amber-700'}`}>{approved ? 'Aprovado · arquivo auditável disponível' : 'Aguardando aprovação do RH'}</span></span>
-                        </label>;
+                        return <div key={document.id} className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 transition ${checked ? 'border-cyan-400 bg-white text-slate-900' : 'border-slate-200 bg-white/70 text-slate-600'}`}>
+                          <label className={`flex min-w-0 flex-1 items-start gap-2 ${approved ? 'cursor-pointer' : 'cursor-not-allowed opacity-65'}`}>
+                            <input type="checkbox" checked={checked && approved} disabled={!canManageAccountantProcess || !!accountantActionBusy || !approved} onChange={event => setAccountantSelectedDocumentIds(current => event.target.checked ? [...new Set([...current, document.id])] : current.filter(id => id !== document.id))} className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-700" />
+                            <span className="min-w-0"><span className="block text-xs font-black">{document.label}</span><span className={`mt-0.5 block text-[10px] font-bold ${approved ? 'text-emerald-700' : 'text-amber-700'}`}>{approved ? 'Aprovado · arquivo auditável disponível' : 'Aguardando aprovação do RH'}</span></span>
+                          </label>
+                          <a href={document.fileUrl!} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-cyan-200 bg-white px-2 py-1.5 text-[10px] font-black text-cyan-800 hover:bg-cyan-50" aria-label={`Visualizar ${document.label}`}>
+                            <Eye className="h-3.5 w-3.5" /> Visualizar
+                          </a>
+                        </div>;
                       })}
                     </div> : <p className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white/70 p-3 text-xs font-semibold text-slate-500">Nenhum outro documento aprovado com arquivo está disponível. O pacote poderá conter apenas os dois anexos fixos.</p>}
                     <p className="mt-2 text-[11px] font-bold text-cyan-900">Selecionados pelo RH: {accountantSelectedDocumentIds.length} de {accountantSelectableDocuments.length} documentos opcionais.</p>

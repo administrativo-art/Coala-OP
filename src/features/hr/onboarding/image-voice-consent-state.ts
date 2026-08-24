@@ -24,3 +24,28 @@ export function shouldRestoreImageVoiceAuthorization(
     && decision.termHash === currentTerm.hash
   );
 }
+
+export function persistedImageVoiceAuthorization(
+  decision: PublicImageVoiceConsentDecision | undefined,
+  currentTerm: PublicImageVoiceConsentTermIdentity | undefined,
+) {
+  if (!decision || !currentTerm || typeof decision.authorized !== 'boolean') return null;
+  if (!decision.termVersion || decision.termVersion !== currentTerm.version) return null;
+  if (!decision.termHash || decision.termHash !== currentTerm.hash) return null;
+  if (decision.status === 'revoked' || decision.revokedAt) return false;
+  return decision.authorized;
+}
+
+export function resolveSubmittedImageVoiceAuthorization(input: {
+  decisionChanged: boolean;
+  hasPreviousSubmission: boolean;
+  previousDecision: PublicImageVoiceConsentDecision | undefined;
+  currentTerm: PublicImageVoiceConsentTermIdentity | undefined;
+  submittedAuthorized: boolean;
+}) {
+  const persisted = persistedImageVoiceAuthorization(input.previousDecision, input.currentTerm);
+  if (input.hasPreviousSubmission && !input.decisionChanged && persisted !== null) {
+    return persisted;
+  }
+  return input.submittedAuthorized;
+}

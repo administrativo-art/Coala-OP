@@ -155,6 +155,19 @@ export function PjPublicOnboardingForm({
     finally { setSubmitting(false); }
   }
 
+  if (submitted) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#F4ECD8] px-4 text-[#2A1F2A]">
+      <main className="w-full max-w-xl rounded-[28px] border border-[#2A1F2A]/10 bg-white p-7 text-center shadow-xl md:p-10">
+        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
+        <h1 className="mt-4 text-2xl font-black">Cadastro enviado</h1>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[#5B4C5B]">
+          Recebemos os dados e documentos da prestadora. Este link foi encerrado e o RH seguirá com a conferência.
+        </p>
+        {data.publicPrivacyAcceptance?.lastProtocol ? <p className="mt-4 text-xs font-bold text-[#5B4C5B]">Protocolo: {data.publicPrivacyAcceptance.lastProtocol}</p> : null}
+      </main>
+    </div>;
+  }
+
   return <div className="min-h-screen bg-[#F4ECD8] px-4 py-8 text-[#2A1F2A]">
     <main className="mx-auto max-w-4xl rounded-[28px] border border-[#2A1F2A]/10 bg-white p-5 shadow-xl md:p-8">
       <p className="text-xs font-black uppercase tracking-[0.12em] text-[#EE6FA8]">Integração de prestadora PJ</p>
