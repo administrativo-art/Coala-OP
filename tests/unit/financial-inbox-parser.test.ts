@@ -5,6 +5,7 @@ import {
   classifyFinancialEmail,
   extractEmailAddress,
   extractExternalLinks,
+  extractPaymentBarcode,
   htmlToPlainText,
 } from "../../src/features/financial/inbox/parser";
 
@@ -20,6 +21,17 @@ test("classifica guia de FGTS da Maximus com competência e vencimento", () => {
   assert.equal(parsed.classification.dueDate, "2026-08-20");
   assert.equal(parsed.classification.supplierName, "Maximus Contabilidade / Grupo MSE");
   assert.deepEqual(parsed.classification.links, ["https://documentos.grupomse.com/guia/123"]);
+});
+
+test("extrai e mascara linha digitável sem confundir outros números", () => {
+  const code = "34191.79001 01043.510047 91020.150008 8 95190000003999";
+  const parsed = classifyFinancialEmail({
+    subject: "Boleto disponível",
+    text: `Valor: R$ 39,99. Linha digitável: ${code}`,
+  });
+  assert.equal(extractPaymentBarcode(`Telefone 98999999999. Linha digitável: ${code}`), "34191790010104351004791020150008895190000003999");
+  assert.equal(parsed.classification.barcode, "34191790010104351004791020150008895190000003999");
+  assert.match(parsed.classification.barcodeMasked || "", /^34191.*03999$/);
 });
 
 test("classifica INSS-DARF e extrai valor brasileiro somente como sugestão", () => {

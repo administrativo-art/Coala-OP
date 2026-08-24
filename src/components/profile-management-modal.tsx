@@ -371,6 +371,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
   const financialViewWatch = form.watch('permissions.financial.view' as any);
   const financialCashFlowViewWatch = form.watch('permissions.financial.cashFlow.view' as any);
   const financialExpensesViewWatch = form.watch('permissions.financial.expenses.view' as any);
+  const financialInboxViewWatch = form.watch('permissions.financial.inbox.view' as any);
   const financialAuditsViewWatch = form.watch('permissions.financial.audits.view' as any);
   const financialReconciliationViewWatch = form.watch('permissions.financial.reconciliation.view' as any);
   const financialCardStatementsViewWatch = form.watch('permissions.financial.cardStatements.view' as any);
@@ -775,6 +776,16 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 </div>
 
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Receipt className="h-4 w-4" /> Caixa de cobranças</h4>
+                                  {renderPermissionSwitch("permissions.financial.inbox.view" as any, "Visualizar cobranças recebidas", "Permite consultar e abrir e-mails, boletos e documentos financeiros recebidos.", !financialViewWatch)}
+                                  <div className="pl-6 space-y-2">
+                                    {renderPermissionSwitch("permissions.financial.inbox.analyze" as any, "Analisar provisionamentos", "Permite procurar e atualizar sugestões de vínculo com provisionamentos.", !financialInboxViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.inbox.link" as any, "Vincular cobranças", "Permite vincular cobranças a despesas e provisionamentos; também exige as permissões de criar e editar despesas.", !financialInboxViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.inbox.discard" as any, "Descartar cobranças", "Permite retirar da fila uma cobrança ainda não vinculada, preservando a auditoria.", !financialInboxViewWatch, true)}
+                                  </div>
+                                </div>
+
+                                <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><AuditIcon className="h-4 w-4" /> Auditoria de extratos</h4>
                                   {renderPermissionSwitch("permissions.financial.audits.view" as any, "Visualizar auditorias", "Permite consultar sessões e itens importados para conferência.", !financialViewWatch)}
                                   <div className="pl-6 space-y-2">
@@ -810,10 +821,10 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Autorizações bancárias</h4>
-                                  {renderPermissionSwitch("permissions.financial.paymentRequests.view" as any, "Visualizar autorizações", "Permite acompanhar pagamentos Pix e seus estados bancários.", !financialViewWatch)}
+                                  {renderPermissionSwitch("permissions.financial.paymentRequests.view" as any, "Visualizar autorizações", "Permite acompanhar pagamentos Pix, boletos e cobranças e seus estados bancários.", !financialViewWatch)}
                                   <div className="pl-6 space-y-2">
-                                    {renderPermissionSwitch("permissions.financial.paymentRequests.create" as any, "Criar solicitações", "Permite gerar solicitações a partir de recibos e despesas autorizadas.", !financialPaymentRequestsViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.financial.paymentRequests.authorize" as any, "Autorizar no Financeiro", "Permite aprovar no Coala o envio de pagamentos de recibos.", !financialPaymentRequestsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.paymentRequests.create" as any, "Criar solicitações", "Permite preparar solicitações a partir de recibos, cobranças vinculadas e despesas autorizadas.", !financialPaymentRequestsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.paymentRequests.authorize" as any, "Autorizar no Financeiro", "Permite aprovar no Coala solicitações que poderão ser enviadas ao banco.", !financialPaymentRequestsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.paymentRequests.submit" as any, "Enviar ao Banco Inter", "Permite submeter solicitações já autorizadas ao banco.", !financialPaymentRequestsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.paymentRequests.refresh" as any, "Atualizar situação bancária", "Permite consultar ativamente o estado no Banco Inter.", !financialPaymentRequestsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.paymentRequests.viewProof" as any, "Visualizar comprovantes", "Permite abrir comprovantes confirmados e auditáveis.", !financialPaymentRequestsViewWatch, true)}

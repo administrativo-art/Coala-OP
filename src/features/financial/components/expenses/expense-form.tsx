@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { addMonths, addWeeks, format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { addDoc, doc, getDoc, getDocs, query, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { addDoc, doc, getDoc, getDocs, limit, query, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import type { FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -451,6 +451,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
+  const inboxMessageId = searchParams.get("inbox");
   const returnTo = searchParams.get("returnTo");
   const importTransactionId = searchParams.get("importTransaction");
   const [isSaving, setIsSaving] = useState(false);
@@ -521,6 +522,40 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     },
     mode: "onChange",
   });
+  const inboxPrefillLoadedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!firebaseUser || !inboxMessageId || editId || importTransactionId || inboxPrefillLoadedRef.current === inboxMessageId) return;
+    inboxPrefillLoadedRef.current = inboxMessageId;
+    let cancelled = false;
+    void firebaseUser.getIdToken()
+      .then((token) => fetch(`/api/financial/inbox/${encodeURIComponent(inboxMessageId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }))
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Falha ao carregar a cobrança.");
+        if (cancelled) return;
+        const message = payload.message;
+        const classification = message?.classification || {};
+        form.setValue("description", String(message?.subject || "Cobrança recebida"), { shouldValidate: true });
+        form.setValue("supplier", String(classification.supplierName || message?.from || ""), { shouldValidate: true });
+        form.setValue("notes", `Cobrança recebida por e-mail (${message?.id || inboxMessageId}).`, { shouldValidate: true });
+        if (Number.isInteger(classification.amountCents) && classification.amountCents > 0) {
+          form.setValue("totalValue", classification.amountCents / 100, { shouldValidate: true });
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(classification.dueDate || "")) {
+          form.setValue("dueDate", new Date(`${classification.dueDate}T12:00:00-03:00`), { shouldValidate: true });
+        }
+        if (/^\d{4}-\d{2}$/.test(classification.competence || "")) {
+          form.setValue("competenceDate", new Date(`${classification.competence}-01T12:00:00-03:00`), { shouldValidate: true });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar a cobrança." });
+      });
+    return () => { cancelled = true; };
+  }, [editId, firebaseUser, form, importTransactionId, inboxMessageId, toast]);
   const resultCenterNameById = useMemo(() => {
     const map: ResultCenterNameMap = {};
     (resultCenters || []).forEach((center) => {
@@ -1591,6 +1626,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       query(
         financialCollection("expenses"),
         where("provisionSeriesKey", "==", payload.provisionSeriesKey),
+        where("provisionType", "==", "forecast"),
+        where("provisionCompetence", "==", payload.provisionCompetence),
+        where("status", "==", "provisioned"),
+        limit(11),
       ),
     );
     const related = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
@@ -1963,7 +2002,19 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         });
       }
 
-      leaveExpenseForm();
+      if (inboxMessageId && savedExpenseId) {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch(`/api/financial/inbox/${encodeURIComponent(inboxMessageId)}/link`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ expenseId: savedExpenseId }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "A despesa foi salva, mas não foi possível vinculá-la à cobrança.");
+        toast({ title: "Cobrança vinculada à despesa." });
+      }
+
+      leaveExpenseForm(inboxMessageId ? FINANCIAL_ROUTES.inbox : undefined);
     } catch (error) {
       console.error(error);
       toast({

@@ -5,7 +5,10 @@ import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { serializeFinancialValue } from "@/features/financial/lib/server-access";
 
 const COLLECTION = "financialInboxMessages";
-const LIST_STATUSES = new Set<FinancialInboxStatus>(["pending_review", "document_pending", "linked", "ignored", "error"]);
+const LIST_STATUSES = new Set<FinancialInboxStatus>([
+  "pending_review", "document_pending", "suggestion_available", "under_review", "linked",
+  "awaiting_authorization", "scheduled", "awaiting_statement", "reconciled", "divergent", "ignored", "error",
+]);
 
 function encodeCursor(receivedAt: string, id: string) {
   return Buffer.from(JSON.stringify([receivedAt, id]), "utf8").toString("base64url");
@@ -59,6 +62,7 @@ export async function getFinancialInboxMessage(id: string) {
 export async function reviewFinancialInboxMessage(params: {
   id: string;
   status: "pending_review" | "ignored";
+  workspaceId: string;
   actorId: string;
   actorEmail?: string | null;
 }) {
@@ -67,6 +71,10 @@ export async function reviewFinancialInboxMessage(params: {
   await financialDbAdmin.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(reference);
     if (!snapshot.exists) throw new Error("Mensagem financeira não encontrada.");
+    if (snapshot.get("workspaceId") !== params.workspaceId) throw new Error("Mensagem financeira não encontrada.");
+    if (params.status === "ignored" && (snapshot.get("linkedExpenseId") || snapshot.get("paymentRequestId"))) {
+      throw new Error("Uma cobrança vinculada não pode ser descartada. Cancele ou desvincule o fluxo correspondente primeiro.");
+    }
     transaction.set(reference, {
       status: params.status,
       reviewedAt: now,

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const actor = await requireUser(request);
-    if (!actor.isDefaultAdmin && (!actor.permissions.financial?.view || !actor.permissions.financial?.expenses?.view)) {
+    if (!actor.isDefaultAdmin && (!actor.permissions.financial?.view || !actor.permissions.financial?.inbox?.view)) {
       return NextResponse.json({ error: "Sem permissão para visualizar a caixa de cobranças." }, { status: 403 });
     }
     const result = await listFinancialInboxMessages({

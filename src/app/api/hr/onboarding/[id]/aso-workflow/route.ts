@@ -312,6 +312,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     } catch (error) {
       return NextResponse.json({ error: errorMessage(error, 'Não foi possível consultar o pagamento do ASO.') }, { status: 409 });
     }
+    if (payment.sourceType !== 'aso') return NextResponse.json({ error: 'A solicitação bancária não pertence a este ASO.' }, { status: 409 });
     if (Math.abs(Number(payment.amount) - currentRequest.clinicPrice) > 0.005) {
       return NextResponse.json({ error: 'O valor da clínica mudou depois da criação do PIX. Revise o cadastro antes de continuar.' }, { status: 409 });
     }
@@ -548,8 +549,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const paymentRequestId = text(workflow.paymentRequestId, 180);
     if (!paymentRequestId) return NextResponse.json({ error: 'O pagamento do ASO ainda não foi solicitado.' }, { status: 409 });
     let payment = await getPaymentRequest(paymentRequestId);
+    if (payment.sourceType !== 'aso') return NextResponse.json({ error: 'A solicitação bancária não pertence a este ASO.' }, { status: 409 });
     if (payment.interRequestId && ['awaiting_bank_approval', 'processing', 'failed', 'rejected', 'approval_expired', 'paid'].includes(payment.status)) {
       payment = await refreshPaymentRequest(paymentRequestId, { uid: access.decoded.uid, email: access.decoded.email ?? null, name: access.actorName });
+      if (payment.sourceType !== 'aso') return NextResponse.json({ error: 'A solicitação bancária não pertence a este ASO.' }, { status: 409 });
     }
     await processRef.set({ asoWorkflow: { ...workflow, paymentStatus: payment.status, paymentProofStoragePath: payment.proofStoragePath ?? null, paymentConfirmedAt: payment.paidAt ?? null, updatedAt: now }, updatedAt: now }, { merge: true });
     await addEvent(id, 'ASO_PAYMENT_REFRESHED', access, { paymentRequestId, paymentStatus: payment.status });
@@ -560,6 +563,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const paymentRequestId = text(workflow.paymentRequestId, 180);
     if (!paymentRequestId) return NextResponse.json({ error: 'Solicite e confirme o pagamento do ASO antes do envio à clínica.' }, { status: 409 });
     const payment = await getPaymentRequest(paymentRequestId);
+    if (payment.sourceType !== 'aso') return NextResponse.json({ error: 'A solicitação bancária não pertence a este ASO.' }, { status: 409 });
     if (payment.status !== 'paid' || !payment.proofStoragePath) return NextResponse.json({ error: 'O e-mail só será liberado após o Banco Inter confirmar o pagamento e o comprovante estar disponível.' }, { status: 409 });
     const guide = await latestGuide(id, workflow);
     const missing = missingAsoEmailPrerequisites({

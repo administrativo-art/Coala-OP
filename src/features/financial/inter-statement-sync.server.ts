@@ -13,12 +13,15 @@ import {
   type StatementExpenseMatchSuggestion,
 } from "@/features/financial/lib/inter-statement-reconciliation";
 import { inferStatementPaymentMethodFromText } from "@/features/financial/lib/statement-payment-method";
+import { queueMatchedBankPayment } from "@/features/financial/obligations/service.server";
+import { addPaymentEvent } from "@/features/financial/payment-requests/repository.server";
+import { findExpectedBankDebitMatch, type ExpectedBankDebitCandidate } from "@/features/financial/payment-requests/expected-bank-debits";
 
 const TIME_ZONE = "America/Belem";
 const SYSTEM_ACTOR = "system:inter-statement";
 const SYNC_STATE_DOCUMENT = "inter-statement";
 // O job roda 72 vezes/dia. Estes tetos limitam a busca de candidatos a
-// 1.100 documentos por execução (2,376 milhões/mês no pior caso). Quando um
+// 1.200 documentos por execução (2,592 milhões/mês no pior caso). Quando um
 // teto é alcançado, as sugestões daquele conjunto são desativadas para não
 // inferir unicidade a partir de uma amostra incompleta.
 const MATCH_QUERY_LIMITS = {
@@ -26,6 +29,7 @@ const MATCH_QUERY_LIMITS = {
   partiallyPaidExpenses: 250,
   reportedPayments: 100,
   existingLedgerPerSource: 125,
+  expectedBankDebits: 100,
 } as const;
 const IMPORT_ALIAS_LIMIT = 100;
 
@@ -76,6 +80,7 @@ type SyncResult = {
     existingLedgerComplete: boolean;
     candidateDocumentsRead: number;
     ledgerDocumentsRead: number;
+    expectedDebitDocumentsRead: number;
   };
 };
 
@@ -495,6 +500,126 @@ async function loadExistingInterLedgerCandidates() {
   };
 }
 
+async function loadExpectedBankDebits() {
+  const snapshot = await financialDbAdmin.collection("expectedBankDebits")
+    .where("status", "in", ["active", "awaiting_statement"])
+    .limit(MATCH_QUERY_LIMITS.expectedBankDebits)
+    .get();
+  const complete = snapshot.size < MATCH_QUERY_LIMITS.expectedBankDebits;
+  const candidates = snapshot.docs.flatMap((document): ExpectedBankDebitCandidate[] => {
+    const data = document.data();
+    const expectedDate = asDate(data.expectedDate);
+    const amount = Number(data.amountCents) / 100;
+    const paymentRequestId = String(data.paymentRequestId || "");
+    const financialInboxMessageId = String(data.financialInboxMessageId || "");
+    const expenseId = String(data.expenseId || "");
+    if (!expectedDate || amount <= 0 || !paymentRequestId || !financialInboxMessageId || !expenseId) return [];
+    return [{
+      id: document.id,
+      paymentRequestId,
+      financialInboxMessageId,
+      expenseId,
+      amount,
+      expectedDate,
+      references: [data.bankTransactionCode, data.paymentRequestId]
+        .filter((value): value is string => typeof value === "string" && Boolean(value.trim())),
+    }];
+  });
+  return { candidates: complete ? candidates : [], complete, documentsRead: snapshot.size };
+}
+
+async function reconcileExpectedBankDebit(params: {
+  expected: ExpectedBankDebitCandidate;
+  entry: InterStatementEntry;
+  transactionId: string;
+}) {
+  const expenseRef = financialDbAdmin.collection("expenses").doc(params.expected.expenseId);
+  const expenseSnapshot = await expenseRef.get();
+  if (!expenseSnapshot.exists) throw new Error("A despesa esperada para o débito bancário não foi encontrada.");
+  const expense = expenseSnapshot.data() || {};
+  const principal = Number(expense.totalValue) || params.expected.amount;
+  const cash = Math.abs(params.entry.amount);
+  const difference = Number((cash - principal).toFixed(2));
+  const bankCharges = extractBankCharges(params.entry.raw);
+  const classifiedCharges = difference > 0 && Math.abs(bankCharges.interest + bankCharges.fine - difference) <= 0.05
+    ? bankCharges
+    : { interest: 0, fine: 0 };
+  const paidAt = Timestamp.fromDate(statementDate(params.entry.date));
+  const now = Timestamp.now();
+  const batch = financialDbAdmin.batch();
+  const match = await queueMatchedBankPayment({
+    batch,
+    expenseId: params.expected.expenseId,
+    expense,
+    bankTransactionId: params.transactionId,
+    principalAmount: principal,
+    cashAmount: cash,
+    interest: classifiedCharges.interest,
+    fine: classifiedCharges.fine,
+    paidAt,
+    actor: { uid: SYSTEM_ACTOR, name: "Conciliação Banco Inter" },
+  });
+  const isDivergent = match.summary.reconciliationStatus === "DIVERGENT";
+  const installments = Array.isArray(expense.installments)
+    ? expense.installments.map((installment: Record<string, unknown>) => ({
+        ...installment,
+        ...(match.summary.obligationStatus === "PAID" && installment.status !== "cancelled"
+          ? { status: "paid", paidAt, linkedBankTransactionId: params.transactionId }
+          : {}),
+      }))
+    : expense.installments;
+  batch.set(expenseRef, {
+    ...match.expensePatch,
+    installments,
+    linkedBankTransactionId: params.transactionId,
+    paymentRequestId: params.expected.paymentRequestId,
+    paidAt: match.summary.obligationStatus === "PAID" ? paidAt : expense.paidAt || null,
+  }, { merge: true });
+  batch.set(financialDbAdmin.collection("transactions").doc(params.transactionId), {
+    expenseId: params.expected.expenseId,
+    linkedExpenseId: params.expected.expenseId,
+    paymentRequestId: params.expected.paymentRequestId,
+    auditStatus: "resolved",
+    autoMatched: true,
+    autoMatchConfidence: "expected_bank_debit",
+    bankReconciledAt: now,
+  }, { merge: true });
+  batch.set(financialDbAdmin.collection("bankStatementEvents").doc(params.transactionId), {
+    linkedExpenseId: params.expected.expenseId,
+    reconciliationMode: "expected_bank_debit",
+    updatedAt: now,
+  }, { merge: true });
+  batch.set(financialDbAdmin.collection("expectedBankDebits").doc(params.expected.id), {
+    status: isDivergent ? "divergent" : "matched",
+    statementTransactionId: params.transactionId,
+    matchedAt: now,
+    updatedAt: now,
+  }, { merge: true });
+  batch.set(financialDbAdmin.collection("bankPaymentRequests").doc(params.expected.paymentRequestId), {
+    status: isDivergent ? "awaiting_statement" : "paid",
+    bankStatus: isDivergent ? "STATEMENT_DIVERGENT" : "STATEMENT_MATCHED",
+    statementReconciliationStatus: isDivergent ? "divergent" : "matched",
+    statementTransactionId: params.transactionId,
+    paidAt: paidAt.toDate().toISOString(),
+    sourceCompletedAt: isDivergent ? null : now.toDate().toISOString(),
+    updatedAt: now.toDate().toISOString(),
+  }, { merge: true });
+  batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
+    status: isDivergent ? "divergent" : "reconciled",
+    bankState: isDivergent ? "divergent" : "reconciled",
+    statementTransactionId: params.transactionId,
+    updatedAt: now.toDate().toISOString(),
+  }, { merge: true });
+  await batch.commit();
+  await addPaymentEvent(params.expected.paymentRequestId, isDivergent ? "STATEMENT_DIVERGENCE_FOUND" : "STATEMENT_PAYMENT_MATCHED", "system", {
+    statementTransactionId: params.transactionId,
+    expenseId: params.expected.expenseId,
+    cashAmount: cash,
+    principalAmount: principal,
+  });
+  return { isDivergent };
+}
+
 async function registerEntry(params: {
   entry: InterStatementEntry;
   accountId: string;
@@ -734,16 +859,18 @@ export async function syncInterStatement(): Promise<SyncResult> {
   const startDate = overlapStart < currentMonthStart ? overlapStart : currentMonthStart;
   const boundedStartDate = startDate < addDays(endDate, -89) ? addDays(endDate, -89) : startDate;
 
-  const [entries, candidateLoad, aliases, existingLedgerLoad] = await Promise.all([
+  const [entries, candidateLoad, aliases, existingLedgerLoad, expectedDebitLoad] = await Promise.all([
     listInterStatementEntries(boundedStartDate, endDate),
     loadPendingExpenseMatches(),
     loadAliases(),
     loadExistingInterLedgerCandidates(),
+    loadExpectedBankDebits(),
   ]);
   const candidates = candidateLoad.candidates;
   const existingLedgerCandidates = existingLedgerLoad.candidates;
   const claimed = new Set<string>();
   const claimedLedgerTransactions = new Set<string>();
+  const claimedExpectedDebits = new Set<string>();
   const sessionItems = new Map<string, Record<string, unknown>[]>();
   let inserted = 0;
   let duplicates = 0;
@@ -752,8 +879,9 @@ export async function syncInterStatement(): Promise<SyncResult> {
   let pendingAudit = 0;
 
   for (const entry of entries) {
-    const existingLedger = findExistingLedgerMatch(entry, existingLedgerCandidates, claimedLedgerTransactions);
-    const suggestion = existingLedger || !canAutoMatchExpense(entry)
+    const expectedDebit = findExpectedBankDebitMatch(entry, expectedDebitLoad.candidates, claimedExpectedDebits);
+    const existingLedger = expectedDebit ? null : findExistingLedgerMatch(entry, existingLedgerCandidates, claimedLedgerTransactions);
+    const suggestion = expectedDebit || existingLedger || !canAutoMatchExpense(entry)
       ? null
       : findExpenseMatchSuggestion({
           date: entry.date,
@@ -762,6 +890,11 @@ export async function syncInterStatement(): Promise<SyncResult> {
         }, candidates, claimed);
     const alias = aliases.find((candidate) => aliasMatches(entry.description, candidate));
     const result = await registerEntry({ entry, accountId, accountName, alias, existingLedger });
+    if (expectedDebit) {
+      await reconcileExpectedBankDebit({ expected: expectedDebit, entry, transactionId: result.transactionId });
+      claimedExpectedDebits.add(expectedDebit.id);
+      autoMatched += 1;
+    }
     if (!result.inserted) {
       duplicates += 1;
       const month = entry.date.slice(0, 7);
@@ -774,7 +907,15 @@ export async function syncInterStatement(): Promise<SyncResult> {
         alias,
         match: null,
         suggestion,
-        existingLedger: result.appliedLedger || null,
+        existingLedger: result.appliedLedger || (expectedDebit ? {
+          transactionId: result.transactionId,
+          direction: "out",
+          amount: expectedDebit.amount,
+          date: expectedDebit.expectedDate,
+          description: entry.description,
+          expenseId: expectedDebit.expenseId,
+          references: expectedDebit.references,
+        } : null),
         paymentMethod: inferStatementPaymentMethodFromText<StatementPaymentMethod>(
           `${entry.description} ${entry.operationType} ${entry.transactionType} ${JSON.stringify(entry.raw)}`,
           accountPaymentMethods,
@@ -795,7 +936,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
         `${suggestion.expenseId}:${suggestion.installmentNumber ?? 0}`,
       );
     }
-    if (!result.reconciledExisting && entry.amount < 0) {
+    if (!result.reconciledExisting && !expectedDebit && entry.amount < 0) {
       pendingAudit += 1;
     }
 
@@ -809,7 +950,15 @@ export async function syncInterStatement(): Promise<SyncResult> {
       alias,
       match: null,
       suggestion,
-      existingLedger: result.reconciledExisting ? existingLedger : null,
+      existingLedger: expectedDebit ? {
+        transactionId: result.transactionId,
+        direction: "out",
+        amount: expectedDebit.amount,
+        date: expectedDebit.expectedDate,
+        description: entry.description,
+        expenseId: expectedDebit.expenseId,
+        references: expectedDebit.references,
+      } : result.reconciledExisting ? existingLedger : null,
       paymentMethod: inferStatementPaymentMethodFromText<StatementPaymentMethod>(
         `${entry.description} ${entry.operationType} ${entry.transactionType} ${JSON.stringify(entry.raw)}`,
         accountPaymentMethods,
@@ -841,6 +990,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
       existingLedgerComplete: existingLedgerLoad.complete,
       candidateDocumentsRead: candidateLoad.documentsRead,
       ledgerDocumentsRead: existingLedgerLoad.documentsRead,
+      expectedDebitDocumentsRead: expectedDebitLoad.documentsRead,
     },
     updatedBy: SYSTEM_ACTOR,
   }, { merge: true });
@@ -860,6 +1010,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
       existingLedgerComplete: existingLedgerLoad.complete,
       candidateDocumentsRead: candidateLoad.documentsRead,
       ledgerDocumentsRead: existingLedgerLoad.documentsRead,
+      expectedDebitDocumentsRead: expectedDebitLoad.documentsRead,
     },
   };
 }

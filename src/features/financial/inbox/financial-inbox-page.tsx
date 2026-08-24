@@ -10,10 +10,12 @@ import {
   ExternalLink,
   FileText,
   Inbox,
+  Link2,
   Loader2,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
   XCircle,
 } from "lucide-react";
 
@@ -26,12 +28,20 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const STATUS_LABEL: Record<FinancialInboxStatus, string> = {
   pending_review: "Aguardando revisão",
   document_pending: "Documento pendente",
+  suggestion_available: "Sugestão disponível",
+  under_review: "Em análise",
   linked: "Vinculada",
+  awaiting_authorization: "Aguardando autorização",
+  scheduled: "Agendada",
+  awaiting_statement: "Aguardando extrato",
+  reconciled: "Conciliada",
+  divergent: "Divergente",
   ignored: "Ignorada",
   error: "Erro",
 };
@@ -84,9 +94,25 @@ export function FinancialInboxPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
+  const [paymentDateMode, setPaymentDateMode] = useState<"today" | "due" | "custom">("due");
+  const [customPaymentDate, setCustomPaymentDate] = useState("");
+  const [manualBarcode, setManualBarcode] = useState("");
 
-  const canReview = Boolean(permissions.financial?.expenses?.edit);
+  const canAnalyze = permissions.financial?.inbox?.analyze === true;
+  const canLink = permissions.financial?.inbox?.link === true
+    && permissions.financial?.expenses?.create === true
+    && permissions.financial?.expenses?.edit === true;
+  const canDiscard = permissions.financial?.inbox?.discard === true;
+  const canPreparePayment = permissions.financial?.expenses?.edit === true
+    && permissions.financial?.paymentRequests?.view === true
+    && permissions.financial?.paymentRequests?.create === true;
   const selected = useMemo(() => messages.find((message) => message.id === selectedId) ?? null, [messages, selectedId]);
+
+  useEffect(() => {
+    setManualBarcode("");
+    setCustomPaymentDate("");
+    setPaymentDateMode("due");
+  }, [selectedId]);
 
   const api = useCallback(async (path: string, init?: RequestInit) => {
     if (!firebaseUser) throw new Error("Sessão não disponível.");
@@ -144,6 +170,60 @@ export function FinancialInboxPage() {
     }
   }
 
+  async function analyze(message: FinancialInboxMessage) {
+    setWorking(`analyze:${message.id}`);
+    try {
+      await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/analyze`, { method: "POST" });
+      toast({ title: "Provisionamentos analisados." });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao analisar provisionamentos." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function linkSuggestion(message: FinancialInboxMessage) {
+    setWorking(`link:${message.id}`);
+    try {
+      await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/link`, { method: "POST" });
+      toast({ title: "Cobrança vinculada.", description: "A despesa real foi criada e o provisionamento foi conciliado." });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao vincular a cobrança." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function preparePayment(message: FinancialInboxMessage) {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Belem", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    const scheduledFor = paymentDateMode === "today"
+      ? today
+      : paymentDateMode === "due"
+        ? message.classification.dueDate
+        : customPaymentDate;
+    if (!scheduledFor) {
+      toast({ variant: "destructive", title: "Escolha a data do pagamento." });
+      return;
+    }
+    setWorking(`payment:${message.id}`);
+    try {
+      await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/payment`, {
+        method: "POST",
+        body: JSON.stringify({ scheduledFor, ...(message.classification.barcode ? {} : { barcode: manualBarcode }) }),
+      });
+      toast({ title: "Pagamento preparado.", description: "Nenhum pagamento foi executado. A solicitação aguarda autorização bancária." });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao preparar o pagamento." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function openFile(message: FinancialInboxMessage, fileId: string) {
     if (!firebaseUser) return;
     const preview = window.open("", "_blank");
@@ -168,7 +248,7 @@ export function FinancialInboxPage() {
     }
   }
 
-  if (!permissions.financial?.expenses?.view) {
+  if (!permissions.financial?.inbox?.view) {
     return <FinancialAccessGuard title="Caixa de cobranças" description="Seu perfil não possui permissão para consultar cobranças recebidas." />;
   }
 
@@ -186,6 +266,12 @@ export function FinancialInboxPage() {
               <SelectItem value="all">Todas as mensagens</SelectItem>
               <SelectItem value="pending_review">Aguardando revisão</SelectItem>
               <SelectItem value="document_pending">Documento pendente</SelectItem>
+              <SelectItem value="suggestion_available">Sugestão disponível</SelectItem>
+              <SelectItem value="awaiting_authorization">Aguardando autorização</SelectItem>
+              <SelectItem value="scheduled">Agendadas</SelectItem>
+              <SelectItem value="awaiting_statement">Aguardando extrato</SelectItem>
+              <SelectItem value="reconciled">Conciliadas</SelectItem>
+              <SelectItem value="divergent">Divergentes</SelectItem>
               <SelectItem value="ignored">Ignoradas</SelectItem>
               <SelectItem value="linked">Vinculadas</SelectItem>
               <SelectItem value="error">Com erro</SelectItem>
@@ -266,6 +352,56 @@ export function FinancialInboxPage() {
                   <p className="max-h-56 overflow-auto whitespace-pre-wrap text-sm leading-6">{selected.textContent || "O e-mail não possui conteúdo textual."}</p>
                 </div>
 
+                <div className="rounded-xl border p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-violet-600" />Vinculação ao provisionamento</p>
+                      {selected.provisionSuggestion?.status === "suggested" ? (
+                        <div className="mt-2 space-y-1 text-sm">
+                          <p><strong>{selected.provisionSuggestion.description || "Provisionamento encontrado"}</strong></p>
+                          <p className="text-muted-foreground">{formatAmount(selected.provisionSuggestion.provisionedAmountCents)} · {selected.provisionSuggestion.reasons.join(" · ")}</p>
+                          {selected.classification.amountCents !== selected.provisionSuggestion.provisionedAmountCents ? <p className="text-amber-700">A diferença será registrada como variação entre provisionado e realizado.</p> : null}
+                        </div>
+                      ) : selected.provisionSuggestion?.status === "ambiguous" ? (
+                        <p className="mt-2 text-sm text-amber-700">Há mais de um provisionamento compatível. Faça a vinculação manual.</p>
+                      ) : selected.linkedExpenseId ? (
+                        <p className="mt-2 text-sm text-emerald-700">Cobrança vinculada à despesa {selected.linkedExpenseId}.</p>
+                      ) : (
+                        <p className="mt-2 text-sm text-muted-foreground">Nenhum provisionamento único foi sugerido. Você pode analisar novamente ou tratar manualmente.</p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {!selected.linkedExpenseId && canAnalyze ? <Button variant="outline" size="sm" onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><RefreshCw className="mr-2 h-4 w-4" />Analisar</Button> : null}
+                      {!selected.linkedExpenseId && selected.provisionSuggestion?.status === "suggested" && canLink ? <Button size="sm" onClick={() => void linkSuggestion(selected)} disabled={working === `link:${selected.id}`}><Link2 className="mr-2 h-4 w-4" />Vincular sugestão</Button> : null}
+                    </div>
+                  </div>
+                </div>
+
+                {selected.linkedExpenseId && !selected.paymentRequestId ? (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+                    <p className="text-sm font-semibold">Preparar pagamento no Banco Inter</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{selected.classification.barcodeMasked ? `Linha digitável ${selected.classification.barcodeMasked}. ` : "Cole a linha digitável depois de conferir o documento. "}Preparar não autoriza nem executa o pagamento.</p>
+                    <div className="mt-3 flex flex-wrap items-end gap-2">
+                      {!selected.classification.barcode ? <Input value={manualBarcode} onChange={(event) => setManualBarcode(event.target.value)} placeholder="Linha digitável ou código de barras" className="min-w-[280px] flex-1 bg-background" /> : null}
+                      <Select value={paymentDateMode} onValueChange={(value) => setPaymentDateMode(value as "today" | "due" | "custom")}>
+                        <SelectTrigger className="w-[220px] bg-background"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="due">Agendar no vencimento</SelectItem>
+                          <SelectItem value="today">Pagar hoje</SelectItem>
+                          <SelectItem value="custom">Outra data até o vencimento</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {paymentDateMode === "custom" ? <input type="date" value={customPaymentDate} max={selected.classification.dueDate ?? undefined} onChange={(event) => setCustomPaymentDate(event.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm" /> : null}
+                      {canPreparePayment ? <Button onClick={() => void preparePayment(selected)} disabled={working === `payment:${selected.id}`}><ShieldCheck className="mr-2 h-4 w-4" />Preparar autorização</Button> : null}
+                    </div>
+                  </div>
+                ) : selected.paymentRequestId ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm">
+                    <span>Pagamento preparado · {selected.bankState === "awaiting_authorization" ? "aguardando autorização" : STATUS_LABEL[selected.status]}</span>
+                    {permissions.financial?.paymentRequests?.view ? <Button asChild size="sm"><Link href={FINANCIAL_ROUTES.paymentRequests}>Abrir autorizações bancárias</Link></Button> : null}
+                  </div>
+                ) : null}
+
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">Documentos arquivados</p>
                   <div className="flex flex-wrap gap-2">
@@ -298,11 +434,11 @@ export function FinancialInboxPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                   <Button asChild variant="outline"><Link href={FINANCIAL_ROUTES.expenses}>Consultar provisionamentos</Link></Button>
                   <div className="flex flex-wrap gap-2">
-                    {permissions.financial?.expenses?.create ? <Button asChild><Link href={FINANCIAL_ROUTES.newExpense}>Registrar despesa</Link></Button> : null}
-                    {canReview && selected.status === "ignored" ? (
+                    {canLink && !selected.linkedExpenseId ? <Button asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(selected.id)}`}>Registrar despesa manualmente</Link></Button> : null}
+                    {canDiscard && selected.status === "ignored" ? (
                       <Button variant="outline" onClick={() => void review(selected, "pending_review")} disabled={working === `review:${selected.id}`}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</Button>
-                    ) : canReview ? (
-                      <Button variant="outline" onClick={() => void review(selected, "ignored")} disabled={working === `review:${selected.id}`}><XCircle className="mr-2 h-4 w-4" />Ignorar</Button>
+                    ) : canDiscard && !selected.linkedExpenseId && !selected.paymentRequestId ? (
+                      <Button variant="outline" onClick={() => void review(selected, "ignored")} disabled={working === `review:${selected.id}`}><XCircle className="mr-2 h-4 w-4" />Descartar cobrança</Button>
                     ) : null}
                   </div>
                 </div>

@@ -12,6 +12,7 @@ function paymentOriginLabel(request: BankPaymentRequest) {
   if (request.sourceType === "aso") return "Exame admissional (ASO)";
   if (request.sourceType === "termination") return "Rescisão CLT";
   if (request.sourceType === "purchase_order") return "Pedido de compra";
+  if (request.sourceType === "financial_inbox") return "Cobrança recebida por e-mail";
   return "Recibo gerado pelo Coala";
 }
 
@@ -24,9 +25,9 @@ export async function createAndStoreConfirmedPaymentProof(request: BankPaymentRe
   page.drawText("COALA SHAKES", { x: 42, y: 795, size: 13, font: bold, color: rgb(1, 1, 1) });
   page.drawText("Comprovante de pagamento confirmado pelo Banco Inter", { x: 42, y: 765, size: 16, font: bold, color: rgb(1, 1, 1) });
   const rows = [
-    ["Favorecido", request.beneficiarySnapshot.name],
-    ["CPF/CNPJ", request.beneficiarySnapshot.document],
-    ["Destino", request.beneficiarySnapshot.maskedPaymentDestination],
+    ["Favorecido", request.beneficiarySnapshot?.name ?? "Cobrança por código de barras"],
+    ["CPF/CNPJ", request.beneficiarySnapshot?.document ?? "—"],
+    ["Destino", request.beneficiarySnapshot?.maskedPaymentDestination ?? request.barcodeSnapshot?.maskedCode ?? "—"],
     ["Valor", money(request.amount)],
     ["Descrição", request.description],
     ["Confirmado em", request.paidAt ?? new Date().toISOString()],

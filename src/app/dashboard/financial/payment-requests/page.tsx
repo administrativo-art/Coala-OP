@@ -1,5 +1,5 @@
-import { PaymentRequestsPage } from "@/features/financial/payment-requests/payment-requests-page";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <PaymentRequestsPage />;
+  redirect("/dashboard/financial/expenses/authorizations");
 }

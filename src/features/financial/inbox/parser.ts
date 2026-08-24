@@ -97,6 +97,29 @@ function extractAmount(value: string) {
   return currency ? amountToCents(currency[1]) : null;
 }
 
+export function normalizePaymentBarcode(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return [44, 46, 47, 48].includes(digits.length) ? digits : null;
+}
+
+export function extractPaymentBarcode(value: string) {
+  const labeled = value.match(/(?:linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|c[oó]d(?:igo)?\s+barra)\s*[:\-]?\s*([\d.\s-]{44,70})/i);
+  const candidates = [
+    labeled?.[1],
+    ...Array.from(value.matchAll(/(?<!\d)([\d][\d.\s-]{42,68}[\d])(?!\d)/g), (match) => match[1]),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  for (const candidate of candidates) {
+    const normalized = normalizePaymentBarcode(candidate);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+export function maskPaymentBarcode(value: string | null) {
+  if (!value) return null;
+  return `${value.slice(0, 5)}••••••••••••••••••••••••••••••••••${value.slice(-5)}`;
+}
+
 function documentType(value: string): { type: FinancialInboxDocumentType; confidence: "high" | "medium" | "low" } {
   if (/\bfgts\b/i.test(value)) return { type: "fgts", confidence: "high" };
   if (/\binss\b|\bdarf\b/i.test(value)) return { type: "inss_darf", confidence: "high" };
@@ -121,6 +144,7 @@ export function classifyFinancialEmail(input: {
   const textContent = (input.text?.trim() || htmlToPlainText(input.html ?? "")).slice(0, MAX_TEXT_LENGTH);
   const combined = `${input.subject}\n${textContent}`;
   const identified = documentType(combined);
+  const barcode = extractPaymentBarcode(combined);
   return {
     textContent,
     textPreview: textContent.replace(/\s+/g, " ").trim().slice(0, 500),
@@ -132,6 +156,8 @@ export function classifyFinancialEmail(input: {
       competence: extractCompetence(combined),
       dueDate: extractDueDate(combined),
       amountCents: extractAmount(combined),
+      barcode,
+      barcodeMasked: maskPaymentBarcode(barcode),
       links: extractExternalLinks(input.text ?? "", input.html ?? ""),
     },
   };

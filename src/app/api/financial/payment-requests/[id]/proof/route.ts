@@ -9,7 +9,11 @@ export const runtime = "nodejs";
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const actor = await requireUser(request);
-    if (!actor.isDefaultAdmin && !actor.permissions.financial?.paymentRequests?.viewProof) return NextResponse.json({ error: "Sem permissão para visualizar comprovantes." }, { status: 403 });
+    if (!actor.isDefaultAdmin && (
+      !actor.permissions.financial?.view
+      || !actor.permissions.financial?.paymentRequests?.view
+      || !actor.permissions.financial?.paymentRequests?.viewProof
+    )) return NextResponse.json({ error: "Sem permissão para visualizar comprovantes." }, { status: 403 });
     const { id } = await context.params;
     const payment = await getPaymentRequest(id);
     if (!payment.proofStoragePath) return NextResponse.json({ error: "Comprovante ainda não disponível." }, { status: 404 });

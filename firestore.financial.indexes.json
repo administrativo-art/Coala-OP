@@ -191,6 +191,25 @@
       ]
     },
     {
+      "collectionGroup": "expenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "provisionType", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "provisionCompetence", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "expenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "provisionSeriesKey", "order": "ASCENDING" },
+        { "fieldPath": "provisionType", "order": "ASCENDING" },
+        { "fieldPath": "provisionCompetence", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "financialInboxMessages",
       "queryScope": "COLLECTION",
       "fields": [

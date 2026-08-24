@@ -4,6 +4,7 @@ import { safeInterPaymentError } from "../../../src/lib/integrations/inter/payme
 import { mapInterPixStatus, normalizeInterPixKey } from "../../../src/lib/integrations/inter/pix-payments.server";
 import { paymentReceiverMatchesSnapshot } from "../../../src/features/financial/payment-requests/reconciliation";
 import { createHash } from "node:crypto";
+import { mapInterBarcodeStatus } from "../../../src/lib/integrations/inter/barcode-payments.server";
 
 test("maps confirmed Inter statuses to paid", () => {
   for (const status of ["PROCESSADO", "PAGO", "EFETIVADO", "CONCLUIDO", "LIQUIDADO"]) {
@@ -17,6 +18,13 @@ test("maps approval, rejection and expiration without inventing paid", () => {
   assert.equal(mapInterPixStatus("EXPIRADO"), "approval_expired");
   assert.equal(mapInterPixStatus("STATUS_NOVO_DO_BANCO"), "processing");
   assert.notEqual(mapInterPixStatus(undefined), "paid");
+});
+
+test("separa boleto agendado, aprovação bancária e pagamento efetivado", () => {
+  assert.equal(mapInterBarcodeStatus("AGENDADO", "2026-08-25"), "scheduled");
+  assert.equal(mapInterBarcodeStatus("AGUARDANDO_APROVACAO", "2026-08-25"), "awaiting_bank_approval");
+  assert.equal(mapInterBarcodeStatus("PAGO", "2026-08-25"), "paid");
+  assert.equal(mapInterBarcodeStatus("EMPROCESSAMENTO", null), "processing");
 });
 
 test("normaliza a chave Pix para o formato aceito pelo DICT", () => {

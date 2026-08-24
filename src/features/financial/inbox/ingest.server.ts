@@ -3,6 +3,7 @@ import { getStorage } from "firebase-admin/storage";
 
 import { classifyFinancialEmail, extractEmailAddress } from "./parser";
 import type { FinancialInboxAttachment, FinancialInboxMessage } from "./types";
+import { analyzeFinancialInboxMessage } from "./workflow.server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
@@ -245,6 +246,24 @@ export async function ingestFinancialEmail(params: {
     rawSha256,
     archiveWarnings,
     linkedExpenseId: null,
+    linkedProvisionId: null,
+    obligationId: null,
+    paymentRequestId: null,
+    provisionSuggestion: {
+      status: "not_checked",
+      provisionExpenseId: null,
+      confidence: null,
+      score: null,
+      reasons: [],
+      description: null,
+      supplier: null,
+      competence: parsed.classification.competence,
+      dueDate: null,
+      provisionedAmountCents: null,
+      checkedAt: null,
+    },
+    bankState: "not_prepared",
+    statementTransactionId: null,
     reviewedAt: null,
     reviewedBy: null,
     createdAt: now,
@@ -265,5 +284,13 @@ export async function ingestFinancialEmail(params: {
     if (!isAlreadyExists(error)) throw error;
     return { id: documentId, duplicate: true };
   }
+  await analyzeFinancialInboxMessage(documentId).catch(async (error: unknown) => {
+    await reference.collection("events").doc().create({
+      type: "PROVISION_ANALYSIS_FAILED",
+      at: new Date().toISOString(),
+      actorId: "system:resend",
+      safeMessage: error instanceof Error ? error.message.slice(0, 240) : "Falha não identificada.",
+    });
+  });
   return { id: documentId, duplicate: false, status };
 }

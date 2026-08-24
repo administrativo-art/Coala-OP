@@ -443,6 +443,12 @@ service cloud.firestore {
       }
     }
 
+    // Expectativas de débito ligam uma solicitação bancária ao extrato real.
+    // São internas para impedir que o cliente force uma conciliação.
+    match /expectedBankDebits/{debitId} {
+      allow read, write: if false;
+    }
+
     // E-mails financeiros e anexos são expostos somente pelas APIs autenticadas
     // para evitar acesso direto a documentos de cobrança pelo cliente.
     match /financialInboxMessages/{messageId} {

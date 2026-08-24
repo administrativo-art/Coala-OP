@@ -1,5 +1,5 @@
-import { FinancialInboxPage } from "@/features/financial/inbox/financial-inbox-page";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <FinancialInboxPage />;
+  redirect("/dashboard/financial/expenses/inbox");
 }

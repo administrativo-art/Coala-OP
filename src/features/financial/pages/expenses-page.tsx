@@ -15,12 +15,14 @@ import {
   FileCheck2,
   FilePlus2,
   FileUp,
+  Inbox,
   Loader2,
   MoreHorizontal,
   Pencil,
   ReceiptText,
   Search,
   Trash2,
+  ShieldCheck,
 } from "lucide-react";
 import { PayExpenseDialog } from "@/features/financial/components/pay-expense-dialog";
 import {
@@ -103,6 +105,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
+import { PageContainer } from "@/components/layout/page-container";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho",
@@ -471,15 +474,40 @@ export function ExpensesPage() {
   const canImportAudits = canAccessAudits && permissions.financial?.audits?.import === true;
   const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
   const canViewExpenses = permissions.financial?.expenses?.view === true;
+  const canViewInbox = permissions.financial?.inbox?.view === true;
+  const canViewPaymentRequests = permissions.financial?.paymentRequests?.view === true;
   const currentView = canAccessAudits && (!canViewExpenses || searchParams.get("view") === "audits") ? "audits" : "expenses";
   const searchParamsKey = searchParams.toString();
 
-  if (!canViewExpenses && !canAccessAudits) {
+  if (!canViewExpenses && !canAccessAudits && !canViewInbox && !canViewPaymentRequests) {
     return (
       <FinancialAccessGuard
         title="Despesas"
         description="Seu perfil não possui permissão para consultar despesas, contas a pagar e histórico de liquidações."
       />
+    );
+  }
+
+  if (!canViewExpenses && !canAccessAudits && (canViewInbox || canViewPaymentRequests)) {
+    return (
+      <PageContainer variant="default" className="space-y-6 pb-10">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Despesas</h1>
+          <p className="text-muted-foreground">Seu perfil possui acesso aos fluxos operacionais liberados dentro de contas a pagar.</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {canViewInbox ? <Card><CardContent className="flex flex-col items-start gap-3 p-6">
+            <p className="font-semibold">Cobranças recebidas</p>
+            <p className="text-sm text-muted-foreground">Analise os documentos recebidos e acompanhe seus vínculos com despesas.</p>
+            <Button asChild><Link href={FINANCIAL_ROUTES.inbox}><Inbox className="mr-2 h-4 w-4" />Abrir caixa de cobranças</Link></Button>
+          </CardContent></Card> : null}
+          {canViewPaymentRequests ? <Card><CardContent className="flex flex-col items-start gap-3 p-6">
+            <p className="font-semibold">Autorizações bancárias</p>
+            <p className="text-sm text-muted-foreground">Consulte solicitações, autorize o envio e acompanhe a situação no Banco Inter.</p>
+            <Button asChild><Link href={FINANCIAL_ROUTES.paymentRequests}><ShieldCheck className="mr-2 h-4 w-4" />Abrir autorizações bancárias</Link></Button>
+          </CardContent></Card> : null}
+        </div>
+      </PageContainer>
     );
   }
 
@@ -893,13 +921,27 @@ export function ExpensesPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1220px] space-y-6 pb-10">
+    <PageContainer variant="default" className="space-y-6 pb-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Despesas</h1>
           <p className="text-muted-foreground">Painel consolidado de despesas, contas a pagar e histórico de liquidações.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canViewInbox && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={FINANCIAL_ROUTES.inbox}>
+                <Inbox className="mr-2 h-4 w-4" /> Cobranças recebidas
+              </Link>
+            </Button>
+          )}
+          {permissions.financial?.paymentRequests?.view && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={FINANCIAL_ROUTES.paymentRequests}>
+                <ShieldCheck className="mr-2 h-4 w-4" /> Autorizações bancárias
+              </Link>
+            </Button>
+          )}
           {canImportAudits && (
             <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)}>
               <FileUp className="mr-2 h-4 w-4" /> Importar extrato
@@ -2018,6 +2060,6 @@ export function ExpensesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageContainer>
   );
 }

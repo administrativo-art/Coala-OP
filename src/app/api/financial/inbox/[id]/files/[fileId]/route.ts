@@ -15,7 +15,7 @@ function downloadName(value: string) {
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string; fileId: string }> }) {
   try {
     const actor = await requireUser(request);
-    if (!actor.isDefaultAdmin && (!actor.permissions.financial?.view || !actor.permissions.financial?.expenses?.view)) {
+    if (!actor.isDefaultAdmin && (!actor.permissions.financial?.view || !actor.permissions.financial?.inbox?.view)) {
       return NextResponse.json({ error: "Sem permissão para visualizar documentos financeiros." }, { status: 403 });
     }
     const { id, fileId } = await context.params;

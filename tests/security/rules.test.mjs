@@ -389,6 +389,18 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           totalValue: 1000,
           status: "pending",
         }),
+        setDoc(doc(db, "financialInboxMessages/message-1"), {
+          workspaceId: "coala-shakes",
+          status: "pending_review",
+        }),
+        setDoc(doc(db, "bankPaymentRequests/request-1"), {
+          status: "awaiting_financial_authorization",
+          amount: 1000,
+        }),
+        setDoc(doc(db, "expectedBankDebits/debit-1"), {
+          status: "active",
+          amountCents: 100000,
+        }),
       ]);
     });
 
@@ -425,6 +437,13 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
     };
     // O botão Registrar pagamento usa uma API autenticada. O cliente não pode
     // marcar a despesa como paga sem criar obrigação, vínculo e histórico.
+    await assertFails(getDoc(doc(payer.firestore(), "financialInboxMessages/message-1")));
+    await assertFails(getDoc(doc(payer.firestore(), "bankPaymentRequests/request-1")));
+    await assertFails(getDoc(doc(payer.firestore(), "expectedBankDebits/debit-1")));
+    await assertFails(setDoc(doc(payer.firestore(), "expectedBankDebits/forged"), {
+      status: "matched",
+      statementTransactionId: "forged-transaction",
+    }));
     await assertFails(updateDoc(doc(payer.firestore(), "expenses/expense-1"), {
       status: "paid",
       paidAt: new Date(),

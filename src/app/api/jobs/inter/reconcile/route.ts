@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   if (!secret || !authorized(token, secret)) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   const snapshot = await financialDbAdmin.collection("bankPaymentRequests")
-    .where("status", "in", ["awaiting_bank_approval", "processing"])
+    .where("status", "in", ["awaiting_bank_approval", "scheduled", "processing"])
     .limit(CANDIDATE_LIMIT).get();
   const pending = snapshot.docs
     .sort((left, right) => String(left.get("updatedAt") ?? "").localeCompare(String(right.get("updatedAt") ?? "")))

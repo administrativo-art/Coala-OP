@@ -38,6 +38,13 @@
 - Nunca autorize, aprove ou confirme definitivamente um pagamento bancário sem uma solicitação específica e inequívoca do usuário para essa ação.
 - No Banco Inter, a autorização final pertence ao usuário no aplicativo, salvo se ele der uma nova instrução explícita em sentido diferente.
 
+## Revisão de permissões
+
+- Sempre que uma alteração grande criar, mover ou ampliar módulos, páginas, rotas de API, ações sensíveis ou integrações, revise também o perfil de permissões antes do commit e do rollout.
+- A revisão deve cobrir, no mínimo, visibilidade na navegação, proteção da página, autorização no servidor para cada leitura e escrita, dependência entre permissões pai e filhas, segregação de ações sensíveis e valores padrão para perfis administrativos e restritos.
+- Não considere a ocultação de botões como controle de acesso. Toda operação sensível deve validar a permissão correspondente no servidor e permanecer inacessível por chamada direta à API.
+- Registre no relatório final quais permissões foram criadas, reutilizadas ou alteradas e se perfis existentes precisam de ajuste manual ou migração.
+
 ## Largura e aproveitamento das telas
 
 - Toda página interna deve usar o componente central `PageContainer`. Não crie larguras máximas arbitrárias na raiz de uma tela.

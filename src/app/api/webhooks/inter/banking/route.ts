@@ -19,12 +19,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Webhook não autorizado." }, { status: 401 });
     }
     const body = await request.json();
-    const interRequestId = String(body?.codigoSolicitacao ?? body?.transacaoPix?.codigoSolicitacao ?? "");
-    if (!interRequestId) return NextResponse.json({ error: "Evento sem codigoSolicitacao." }, { status: 400 });
+    const interRequestId = String(body?.codigoTransacao ?? body?.codigoSolicitacao ?? body?.transacaoPix?.codigoSolicitacao ?? "");
+    if (!interRequestId) return NextResponse.json({ error: "Evento sem código bancário da transação." }, { status: 400 });
     const payment = await findPaymentRequestByInterId(interRequestId);
     if (!payment) return NextResponse.json({ accepted: true, matched: false });
     const eventHash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
-    await addPaymentEvent(payment.id, "INTER_WEBHOOK_RECEIVED", "system", { interRequestId, reportedStatus: body?.status ?? null }, `webhook_${eventHash}`);
+    await addPaymentEvent(payment.id, "INTER_WEBHOOK_RECEIVED", "system", { interRequestId, reportedStatus: body?.statusPagamento ?? body?.status ?? null }, `webhook_${eventHash}`);
     await refreshPaymentRequest(payment.id, "system");
     return NextResponse.json({ accepted: true, matched: true });
   } catch (error) {
