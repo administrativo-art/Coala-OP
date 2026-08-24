@@ -112,3 +112,12 @@ test('renderiza o formulário do contador com o timbre empacotado', async () => 
   assert.equal(pdf.subarray(0, 4).toString('ascii'), '%PDF');
   assert.ok(pdf.length > 10_000);
 });
+
+test('a rota do contador não encobre o objeto global process ao localizar o timbre', () => {
+  const route = readFileSync(path.join(workspace, 'src/app/api/hr/onboarding/[id]/accountant-form/route.tsx'), 'utf8');
+
+  assert.match(route, /import \{ cwd \} from 'node:process'/);
+  assert.match(route, /const onboarding = snapshot\.data\(\)/);
+  assert.doesNotMatch(route, /const process = snapshot\.data\(\)/);
+  assert.doesNotMatch(route, /process\.cwd\(\)/);
+});
