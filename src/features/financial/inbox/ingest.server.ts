@@ -58,6 +58,8 @@ function isAllowedResendDownload(rawUrl: string) {
     const hostname = url.hostname.toLowerCase();
     return hostname === "resend.com"
       || hostname.endsWith(".resend.com")
+      || hostname === "resend.app"
+      || hostname.endsWith(".resend.app")
       || hostname === "cloudfront.net"
       || hostname.endsWith(".cloudfront.net");
   } catch {
