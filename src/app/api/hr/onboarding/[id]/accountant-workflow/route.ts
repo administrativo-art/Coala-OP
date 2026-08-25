@@ -4,13 +4,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStorage } from 'firebase-admin/storage';
 
 import { accountantAdmissionEmailContent, renderAccountantAdmissionEmail } from '@/features/hr/accountant/emails';
-import { accountantAttachmentName, accountantTokenExpiresAt, candidateDocumentsForAccountant, createAccountantToken, missingAccountantPrerequisites } from '@/features/hr/accountant/workflow';
+import { accountantAttachmentName, accountantTokenExpiresAt, candidateDocumentsForAccountant, createAccountantToken, missingAccountantPrerequisites, selectableCandidateDocumentsForAccountant } from '@/features/hr/accountant/workflow';
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
 import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
 import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
+import { invalidateAccountantFormVersion } from '@/features/hr/accountant/form-version';
 import { applyOnboardingSignatureMode, normalizeOnboardingStages } from '@/lib/recruitment-onboarding';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { resolveCompanyProcessContact } from '@/lib/company/company-process-contact.server';
@@ -21,6 +22,18 @@ export const dynamic = 'force-dynamic';
 
 const PUBLIC_URL = process.env.NEXT_PUBLIC_RECRUITMENT_URL?.trim() || 'https://vagas.coalashakes.com';
 const MAX_EMAIL_ATTACHMENTS_BYTES = 35 * 1024 * 1024;
+const REVIEWED_FORM_FIELDS = [
+  ['companyName', 'Empresa contratante', 180],
+  ['employerCnpj', 'CNPJ da empresa', 30],
+  ['employeeName', 'Nome da candidata', 180],
+  ['maritalStatus', 'Estado civil', 80],
+  ['employeeCpf', 'CPF da candidata', 30],
+  ['educationLevel', 'Escolaridade', 120],
+  ['jobFunction', 'Função', 180],
+  ['probationContract', 'Contrato de experiência', 120],
+  ['weeklyRest', 'Descanso semanal', 120],
+  ['workSchedule', 'Jornada de trabalho', 400],
+] as const;
 
 function text(value: unknown, max = 500) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
 function email(value: unknown) { const normalized = text(value, 320).toLowerCase(); return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : ''; }
@@ -59,6 +72,22 @@ async function fileResponse(storagePath: string, fileName: string, mimeType: str
 
 function configuredMonthlySalary(process: Record<string, unknown>, workflow: Record<string, unknown>) {
   return numeric(process.monthlySalary) ?? numeric(record(workflow.formData).monthlySalary);
+}
+
+function parseReviewedFormData(value: unknown) {
+  const source = record(value);
+  const data: Record<string, string> = {};
+  for (const [key, label, max] of REVIEWED_FORM_FIELDS) {
+    const normalized = text(source[key], max);
+    if (!normalized) return { error: `Preencha o campo “${label}”.`, data: null };
+    data[key] = normalized;
+  }
+  const cleanCnpj = CnpjValidator.clean(data.employerCnpj);
+  if (!CnpjValidator.validate(cleanCnpj).valid) {
+    return { error: 'Informe um CNPJ válido para a empresa contratante.', data: null };
+  }
+  data.employerCnpj = cleanCnpj;
+  return { error: null, data };
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -106,10 +135,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (numeric(process.monthlySalary) === monthlySalary && numeric(formData.monthlySalary) === monthlySalary) {
       return NextResponse.json({ ok: true, unchanged: true, monthlySalary });
     }
+    const invalidatedWorkflow = invalidateAccountantFormVersion(workflow, 'monthly_salary_changed', now);
     const updatedWorkflow = {
-      ...workflow,
+      ...invalidatedWorkflow,
       status: text(workflow.latestFormId) ? 'form_generated' : 'pending',
-      formValidation: null,
       formData: { ...formData, monthlySalary },
       remunerationUpdatedAt: now,
       remunerationUpdatedBy: access.decoded.uid,
@@ -122,9 +151,38 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ ok: true, monthlySalary });
   }
 
+  if (action === 'set_form_data') {
+    const parsed = parseReviewedFormData(body.formData);
+    if (!parsed.data) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const currentFormData = record(workflow.formData);
+    const changedFields = REVIEWED_FORM_FIELDS
+      .filter(([key, , max]) => text(currentFormData[key], max) !== parsed.data?.[key])
+      .map(([key]) => key);
+    if (!changedFields.length) return NextResponse.json({ ok: true, unchanged: true });
+    const invalidatedWorkflow = invalidateAccountantFormVersion(workflow, 'reviewed_form_data_changed', now);
+    await Promise.all([
+      processRef.set({
+        accountantWorkflow: {
+          ...invalidatedWorkflow,
+          status: text(workflow.latestFormId) ? 'form_generated' : 'pending',
+          formData: { ...currentFormData, ...parsed.data },
+          reviewedFormDataUpdatedAt: now,
+          reviewedFormDataUpdatedBy: access.decoded.uid,
+          updatedAt: now,
+        },
+        updatedAt: now,
+      }, { merge: true }),
+      addEvent(id, 'ACCOUNTANT_FORM_DATA_UPDATED', access, { changedFields }),
+    ]);
+    return NextResponse.json({ ok: true, changedFields });
+  }
+
   if (action === 'validate_form') {
     if (configuredMonthlySalary(process, workflow) == null) {
       return NextResponse.json({ error: 'Informe a remuneração e gere uma nova versão do formulário antes de validá-lo.' }, { status: 409 });
+    }
+    if (workflow.latestFormRequiresRegeneration === true) {
+      return NextResponse.json({ error: 'Os dados foram alterados. Gere uma nova versão do formulário antes de validar.' }, { status: 409 });
     }
     const form = await latestForm(id, workflow);
     if (!form) return NextResponse.json({ error: 'Gere o formulário antes de validá-lo.' }, { status: 409 });
@@ -141,6 +199,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (configuredMonthlySalary(process, workflow) == null) {
       return NextResponse.json({ error: 'Informe a remuneração, gere e valide uma nova versão do formulário antes do envio.' }, { status: 409 });
     }
+    if (workflow.latestFormRequiresRegeneration === true) {
+      return NextResponse.json({ error: 'Os dados foram alterados. Gere e valide uma nova versão do formulário antes do envio.' }, { status: 409 });
+    }
     const configuredContact = await resolveCompanyProcessContact('onboarding');
     const recipient = email(body.accountantEmail) || configuredContact?.email || '';
     if (!recipient) return NextResponse.json({ error: 'Informe um e-mail válido do contador.' }, { status: 400 });
@@ -148,11 +209,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const selectedDocumentIds: string[] = [...new Set<string>((body.selectedDocumentIds as unknown[]).map((value) => text(value, 180)).filter(Boolean))].slice(0, 120);
     const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
     const aso = record(record(process.asoWorkflow).asoDocument);
-    const missing = missingAccountantPrerequisites({ documents, asoApproved: text(aso.status) === 'approved', expectedAdmissionDate: text(process.expectedAdmissionDate, 10), publicFormAnswers: process.publicFormAnswers });
+    const missing = missingAccountantPrerequisites({ documents, asoApproved: text(aso.status) === 'approved', publicFormAnswers: process.publicFormAnswers });
     if (missing.length) return NextResponse.json({ error: `O pacote ainda não pode ser enviado. Falta: ${missing.join('; ')}.` }, { status: 409 });
     const form = await latestForm(id, workflow); const validation = record(workflow.formValidation);
     if (!form || text(validation.documentId) !== form.id) return NextResponse.json({ error: 'Valide a versão atual do formulário antes do envio.' }, { status: 409 });
-    const availableCandidateDocuments = candidateDocumentsForAccountant(documents, undefined, process.publicFormAnswers);
+    const availableCandidateDocuments = selectableCandidateDocumentsForAccountant(documents, process.publicFormAnswers);
     const availableDocumentIds = new Set(availableCandidateDocuments.map((document) => document.id));
     const unavailableSelection = selectedDocumentIds.filter((documentId) => !availableDocumentIds.has(documentId));
     if (unavailableSelection.length) return NextResponse.json({ error: 'A seleção contém documento indisponível, sem aprovação ou sem arquivo auditável. Atualize a página e revise os anexos.' }, { status: 409 });
@@ -198,7 +259,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       });
       await Promise.all([
         communicationRef.set({ status: 'accepted', providerId: result.id, acceptedAt: now, updatedAt: now }, { merge: true }),
-        processRef.set({ accountantTokenHash: uploadToken.hash, accountantTokenExpiresAt: accountantTokenExpiresAt(30), accountantWorkflow: { ...workflow, selectedDocumentIds, status: 'email_sent', email: { recipient, communicationId, providerId: result.id, status: 'accepted', sentAt: now }, package: { attachmentCount: attachments.length, attachmentLabels: attachments.map((attachment) => attachment.label), selectedDocumentIds, attachmentManifest, totalBytes: totalSize, sentAt: now }, updatedAt: now }, updatedAt: now }, { merge: true }),
+        processRef.set({ accountantTokenHash: uploadToken.hash, accountantTokenExpiresAt: accountantTokenExpiresAt(30), accountantWorkflow: { ...workflow, selectedDocumentIds, status: 'email_sent', email: { recipient, communicationId, providerId: result.id, status: 'accepted', sentAt: now }, package: { attachmentCount: attachments.length, attachmentLabels: attachments.map((attachment) => attachment.label), selectedDocumentIds, automaticDocumentIds: candidateDocuments.filter((document) => !selectedDocumentIds.includes(document.id)).map((document) => document.id), attachmentManifest, totalBytes: totalSize, sentAt: now }, updatedAt: now }, updatedAt: now }, { merge: true }),
         addEvent(id, 'ACCOUNTANT_EMAIL_SENT', access, { recipient, providerId: result.id, documentId: form.id, selectedDocumentIds, attachmentCount: attachments.length }),
       ]);
       return NextResponse.json({ ok: true });

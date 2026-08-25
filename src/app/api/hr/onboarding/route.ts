@@ -23,6 +23,10 @@ import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { fetchPdvLegalFiliais, fetchPdvLegalProfiles } from '@/lib/integrations/pdv-legal-admin';
 import { createPjOnboardingWorkflow, sanitizePjServiceItems } from '@/features/hr/onboarding-pj/core';
 import {
+  resolveConfiguredMonthlySalary,
+  salaryBaseFunctionId,
+} from '@/features/hr/compensation/job-function-salary';
+import {
   applyOnboardingSignatureMode,
   instantiateOnboardingDocuments,
   mergeOnboardingDocumentModels,
@@ -53,16 +57,6 @@ function asNumber(value: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function salaryFrom(source: Record<string, unknown>) {
-  const salaryRange = source.salaryRange && typeof source.salaryRange === 'object' && !Array.isArray(source.salaryRange)
-    ? source.salaryRange as Record<string, unknown>
-    : {};
-  const publicRange = source.publicSalaryRange && typeof source.publicSalaryRange === 'object' && !Array.isArray(source.publicSalaryRange)
-    ? source.publicSalaryRange as Record<string, unknown>
-    : {};
-  return asNumber(salaryRange.min) ?? asNumber(publicRange.min);
 }
 
 function asDateString(value: unknown) {
@@ -415,7 +409,18 @@ export async function POST(request: NextRequest) {
 
   const roleData = roleDoc.data() ?? {};
   const functionData = functionDoc.data() ?? {};
-  const monthlySalary = salaryFrom(functionData) ?? salaryFrom(roleData);
+  const baseFunctionId = salaryBaseFunctionId(functionData);
+  const baseFunctionDoc = baseFunctionId
+    ? await hrDbAdmin.collection('jobFunctions').doc(baseFunctionId).get()
+    : null;
+  if (baseFunctionId && !baseFunctionDoc?.exists) {
+    return jsonError('A função-base da regra salarial não foi encontrada. Corrija o cadastro da função antes de iniciar a integração.', 409);
+  }
+  const monthlySalary = resolveConfiguredMonthlySalary({
+    jobFunction: functionData,
+    jobRole: roleData,
+    baseFunction: baseFunctionDoc?.data(),
+  });
   const roleDefaultProfileId = asString(roleData.defaultProfileId);
   if (roleData.isActive !== false && !roleDefaultProfileId) {
     return jsonError('O cargo selecionado não possui um perfil de acesso padrão. Configure o cargo antes de iniciar a integração.', 400);

@@ -742,7 +742,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       && missingAccountantPrerequisites({
         documents: Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [],
         asoApproved: true,
-        expectedAdmissionDate: text(process.expectedAdmissionDate, 10) || null,
         publicFormAnswers: process.publicFormAnswers,
       }).length === 0;
     await Promise.all([

@@ -5,6 +5,30 @@ import {
   presentOnboardingDocumentForAnswers,
 } from '@/features/hr/onboarding/document-applicability';
 import type { OnboardingDocument } from '@/types';
+import { isAutomaticAccountantDocument } from '@/features/hr/accountant/document-selection';
+
+function availableCandidateDocuments(
+  documents: OnboardingDocument[],
+  publicFormAnswers?: unknown,
+) {
+  return applicableOnboardingDocuments(documents, publicFormAnswers)
+    .filter((document) => (
+      document.status === 'approved'
+      && document.id !== 'aso_admission'
+      && document.documentTypeCode !== 'ASO_ADMISSION'
+      && typeof document.filePath === 'string'
+      && document.filePath.trim().length > 0
+    ))
+    .map(document => presentOnboardingDocumentForAnswers(document, publicFormAnswers));
+}
+
+export function selectableCandidateDocumentsForAccountant(
+  documents: OnboardingDocument[],
+  publicFormAnswers?: unknown,
+) {
+  return availableCandidateDocuments(documents, publicFormAnswers)
+    .filter((document) => !isAutomaticAccountantDocument(document));
+}
 
 export function createAccountantToken() {
   const token = randomBytes(32).toString('base64url');
@@ -25,22 +49,17 @@ export function candidateDocumentsForAccountant(
   publicFormAnswers?: unknown,
 ) {
   const selectedIds = selectedDocumentIds ? new Set(selectedDocumentIds) : null;
-  return applicableOnboardingDocuments(documents, publicFormAnswers)
+  return availableCandidateDocuments(documents, publicFormAnswers)
     .filter((document) => (
-      document.status === 'approved'
-      && document.id !== 'aso_admission'
-      && document.documentTypeCode !== 'ASO_ADMISSION'
-      && typeof document.filePath === 'string'
-      && document.filePath.trim().length > 0
-      && (!selectedIds || selectedIds.has(document.id))
-    ))
-    .map(document => presentOnboardingDocumentForAnswers(document, publicFormAnswers));
+      !selectedIds
+      || isAutomaticAccountantDocument(document)
+      || selectedIds.has(document.id)
+    ));
 }
 
 export function missingAccountantPrerequisites(input: {
   documents: OnboardingDocument[];
   asoApproved: boolean;
-  expectedAdmissionDate?: string | null;
   publicFormAnswers?: unknown;
 }) {
   const missing: string[] = [];
@@ -59,7 +78,6 @@ export function missingAccountantPrerequisites(input: {
     missing.push('arquivo auditável dos documentos aprovados');
   }
   if (!input.asoApproved) missing.push('aprovação do ASO admissional');
-  if (!input.expectedAdmissionDate) missing.push('data de admissão');
   return missing;
 }
 

@@ -7,10 +7,11 @@ import {
   normalizeOnboardingDateOnly,
 } from '../../../src/features/hr/onboarding-lifecycle';
 
-test('data prevista pode mudar durante toda a primeira etapa consolidada', () => {
+test('data prevista pode mudar até a conclusão da etapa do contador', () => {
   assert.equal(canUpdateExpectedAdmissionDate({ status: 'collecting_documents', currentStage: 'documents' }), true);
   assert.equal(canUpdateExpectedAdmissionDate({ status: 'reviewing_documents', currentStage: 'document_review' }), true);
-  assert.equal(canUpdateExpectedAdmissionDate({ status: 'accountant_pending', currentStage: 'accountant' }), false);
+  assert.equal(canUpdateExpectedAdmissionDate({ status: 'accountant_pending', currentStage: 'accountant' }), true);
+  assert.equal(canUpdateExpectedAdmissionDate({ status: 'contract_pending', currentStage: 'signature_preparation' }), false);
   assert.equal(canUpdateExpectedAdmissionDate({ status: 'cancelled', currentStage: 'documents' }), false);
   assert.equal(canUpdateExpectedAdmissionDate({ status: 'completed', currentStage: 'document_review' }), false);
 });

@@ -80,6 +80,10 @@ import {
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { formatPersonName } from '@/lib/person-name';
 import { essentialPublicFormDataReady } from '@/features/hr/onboarding/public-form-revision';
+import { canUpdateExpectedAdmissionDate } from '@/features/hr/onboarding-lifecycle';
+import { formatBrlCurrency, parseBrlCurrency } from '@/features/hr/compensation/brl-currency';
+import { isAutomaticAccountantDocument } from '@/features/hr/accountant/document-selection';
+import { isPreviewableDocumentContentType } from '@/features/hr/documents/preview-content-type';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import {
   ONBOARDING_HEALTH_META,
@@ -7069,6 +7073,90 @@ function onboardingAnswerYes(answers: Record<string, unknown> | undefined, key: 
   return answers?.[key] === 'yes';
 }
 
+type AccountantFormTextField =
+  | 'companyName'
+  | 'employerCnpj'
+  | 'employeeName'
+  | 'maritalStatus'
+  | 'employeeCpf'
+  | 'educationLevel'
+  | 'jobFunction'
+  | 'probationContract'
+  | 'weeklyRest'
+  | 'workSchedule';
+
+type AccountantFormTextDraft = Record<AccountantFormTextField, string>;
+
+const EMPTY_ACCOUNTANT_FORM_TEXT_DRAFT: AccountantFormTextDraft = {
+  companyName: '',
+  employerCnpj: '',
+  employeeName: '',
+  maritalStatus: '',
+  employeeCpf: '',
+  educationLevel: '',
+  jobFunction: '',
+  probationContract: '',
+  weeklyRest: '',
+  workSchedule: '',
+};
+const ACCOUNTANT_FORM_TEXT_FIELDS = Object.keys(EMPTY_ACCOUNTANT_FORM_TEXT_DRAFT) as AccountantFormTextField[];
+const ACCOUNTANT_FORM_TEXT_FIELD_CONFIG: Array<{
+  key: AccountantFormTextField;
+  label: string;
+  wide?: boolean;
+}> = [
+  { key: 'companyName', label: 'Empresa contratante' },
+  { key: 'employerCnpj', label: 'CNPJ da empresa' },
+  { key: 'employeeName', label: 'Nome da candidata' },
+  { key: 'employeeCpf', label: 'CPF da candidata' },
+  { key: 'maritalStatus', label: 'Estado civil' },
+  { key: 'educationLevel', label: 'Escolaridade' },
+  { key: 'jobFunction', label: 'Função' },
+  { key: 'probationContract', label: 'Contrato de experiência' },
+  { key: 'weeklyRest', label: 'Descanso semanal' },
+  { key: 'workSchedule', label: 'Jornada de trabalho', wide: true },
+];
+
+function onboardingAnswerText(answers: Record<string, unknown> | undefined, key: string) {
+  const value = answers?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function accountantFormTextDraftFrom(
+  process: OnboardingProcess | null,
+  roles: JobRole[],
+  jobFunctions: JobFunction[],
+): AccountantFormTextDraft {
+  if (!process) return { ...EMPTY_ACCOUNTANT_FORM_TEXT_DRAFT };
+  const stored = process.accountantWorkflow?.formData ?? {};
+  const answers = process.publicFormAnswers;
+  const jobFunction = jobFunctions.find((item) => item.id === process.functionId);
+  const jobRole = roles.find((item) => item.id === process.jobRoleId);
+  const probation = process.probationV2?.config;
+  const probationContract = probation
+    ? probation.secondPeriodDays > 0
+      ? `${probation.firstPeriodDays} dias + ${probation.secondPeriodDays} dias`
+      : `${probation.firstPeriodDays} dias`
+    : 'Não informado';
+  const storedText = (key: AccountantFormTextField) => {
+    const value = stored[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : '';
+  };
+  const cnpj = storedText('employerCnpj') || process.employerCnpj || '';
+  return {
+    companyName: storedText('companyName') || process.employerUnitName || process.unitName || 'Empresa não informada',
+    employerCnpj: CnpjValidator.format(cnpj),
+    employeeName: storedText('employeeName') || onboardingAnswerText(answers, 'fullName') || process.candidateName || 'Não informado',
+    maritalStatus: storedText('maritalStatus') || onboardingAnswerText(answers, 'maritalStatus') || 'Não informado',
+    employeeCpf: storedText('employeeCpf') || formatOnboardingCpf(answers?.cpf),
+    educationLevel: storedText('educationLevel') || onboardingAnswerText(answers, 'educationLevel') || 'Não informado',
+    jobFunction: storedText('jobFunction') || process.functionName || process.jobRoleName || 'Não informada',
+    probationContract: storedText('probationContract') || probationContract,
+    weeklyRest: storedText('weeklyRest') || 'Conforme escala',
+    workSchedule: storedText('workSchedule') || jobFunction?.workSchedule || jobRole?.workSchedule || process.shiftDefinitionName || 'Não informada',
+  };
+}
+
 function getFinalizationDraft(process: OnboardingProcess | null): OnboardingFinalizationSettings {
   if (!process) {
     return {
@@ -8436,6 +8524,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const [accountantActionBusy, setAccountantActionBusy] = useState<string | null>(null);
   const [accountantEmail, setAccountantEmail] = useState('');
   const [accountantSalaryDraft, setAccountantSalaryDraft] = useState('');
+  const [accountantFormTextDraft, setAccountantFormTextDraft] = useState<AccountantFormTextDraft>(() => ({ ...EMPTY_ACCOUNTANT_FORM_TEXT_DRAFT }));
+  const [accountantFormEditing, setAccountantFormEditing] = useState(false);
   const [accountantSelectedDocumentIds, setAccountantSelectedDocumentIds] = useState<string[]>([]);
   const [expectedAdmissionDateDraft, setExpectedAdmissionDateDraft] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -8643,15 +8733,17 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   useEffect(() => {
     setAccountantEmail(selectedProcess?.accountantWorkflow?.email?.recipient ?? selectedProcess?.accountantWorkflow?.suggestedRecipientEmail ?? '');
     const monthlySalary = selectedProcess?.monthlySalary ?? selectedProcess?.accountantWorkflow?.formData?.monthlySalary;
-    setAccountantSalaryDraft(typeof monthlySalary === 'number' && monthlySalary > 0 ? monthlySalary.toFixed(2) : '');
-    const applicableDocumentIds = new Set(applicableOnboardingDocuments(
+    setAccountantSalaryDraft(typeof monthlySalary === 'number' && monthlySalary > 0 ? formatBrlCurrency(monthlySalary) : '');
+    setAccountantFormTextDraft(accountantFormTextDraftFrom(selectedProcess, roles, jobFunctions));
+    setAccountantFormEditing(false);
+    const selectableDocumentIds = new Set(applicableOnboardingDocuments(
       selectedProcess?.documents ?? [],
       selectedProcess?.publicFormAnswers,
-    ).map(document => document.id));
+    ).filter(document => !isAutomaticAccountantDocument(document)).map(document => document.id));
     setAccountantSelectedDocumentIds(
-      (selectedProcess?.accountantWorkflow?.selectedDocumentIds ?? []).filter(documentId => applicableDocumentIds.has(documentId)),
+      (selectedProcess?.accountantWorkflow?.selectedDocumentIds ?? []).filter(documentId => selectableDocumentIds.has(documentId)),
     );
-  }, [selectedProcess]);
+  }, [jobFunctions, roles, selectedProcess]);
 
   useEffect(() => {
     if (selectedProcess?.currentStage === 'document_review' && phaseId === 'documents') {
@@ -8793,7 +8885,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       const token = await getToken();
       const response = await fetch(`/api/hr/onboarding/${selectedProcess.id}/aso-workflow?asset=${asset}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) await readHrJsonResponse(response, 'Falha ao abrir o documento.');
-      if (!response.headers.get('content-type')?.toLowerCase().includes('application/pdf')) throw new Error('O servidor não devolveu um PDF válido.');
+      if (!isPreviewableDocumentContentType(response.headers.get('content-type'), { allowImage: asset === 'aso' })) {
+        throw new Error('O servidor não devolveu um arquivo visualizável.');
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       previewWindow.location.href = url;
@@ -8817,13 +8911,40 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }
 
   async function accountantAction(action: string, body: Record<string, unknown> = {}) {
-    if (!selectedProcess) return;
+    if (!selectedProcess) return false;
     setAccountantActionBusy(action); setError(null);
     try {
       await apiFetch(`/api/hr/onboarding/${selectedProcess.id}/accountant-workflow`, getToken, { method: 'PATCH', body: JSON.stringify({ action, ...body }) });
       onRefresh();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao atualizar a etapa do contador.'); }
+      return true;
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao atualizar a etapa do contador.'); return false; }
     finally { setAccountantActionBusy(null); }
+  }
+
+  async function saveAccountantFormFields() {
+    if (!selectedProcess || !expectedAdmissionDateDraft) return;
+    if (canManageAccountantProcess && !accountantFormTextValid) return;
+    if (canManageAccountantProcess && canViewSensitiveData && (accountantSalaryDraftValue === null || !accountantSalaryDraftValid)) return;
+    if (expectedAdmissionDateDraft !== selectedProcess.expectedAdmissionDate?.slice(0, 10)) {
+      if (!canEditExpectedAdmissionDate) return;
+      const savedDate = await patchProcess(selectedProcess.id, {
+        action: 'update_expected_admission_date',
+        expectedAdmissionDate: expectedAdmissionDateDraft,
+      });
+      if (!savedDate) return;
+    }
+    if (canViewSensitiveData && accountantSalaryDraftChanged && accountantSalaryDraftValue !== null) {
+      if (!canManageAccountantProcess) return;
+      const saved = await accountantAction('set_monthly_salary', { monthlySalary: accountantSalaryDraftValue });
+      if (!saved) return;
+    }
+    if (accountantFormTextChanged) {
+      if (!canManageAccountantProcess) return;
+      const saved = await accountantAction('set_form_data', { formData: accountantFormTextDraft });
+      if (!saved) return;
+    }
+    if (accountantSalaryDraftValue !== null) setAccountantSalaryDraft(formatBrlCurrency(accountantSalaryDraftValue));
+    setAccountantFormEditing(false);
   }
 
   async function openAccountantAsset(asset: 'form' | 'registry') {
@@ -9694,8 +9815,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const canComplete = canManage && userCreated && integrationsResolved &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const canEditExpectedAdmissionDate = canManage &&
-    ['documents', 'document_review'].includes(selectedProcess.currentStage ?? 'documents') &&
-    selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+    canUpdateExpectedAdmissionDate(selectedProcess);
+  const canEditAccountantFormFields = canEditExpectedAdmissionDate
+    || canManageAccountantProcess;
   const deliveryStatus = selectedProcess.accessProvisioning?.email?.status ?? 'not_sent';
   const emailDelivered = deliveryStatus === 'delivered';
   const emailDeliveryFailed = ['bounced', 'failed', 'complained', 'suppressed'].includes(deliveryStatus);
@@ -9893,20 +10015,27 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const canBulkApproveDocuments = canActOnCurrentPhase && bulkApprovalDocuments.length > 0;
   const accountantRequiredDocuments = reviewDocuments.filter(document => document.required !== false && document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
   const accountantAttachedDocuments = reviewDocuments.filter(document => hasAuditableDocumentFile(document) && document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
-  const accountantSelectableDocuments = accountantAttachedDocuments.filter(document => document.status === 'approved');
+  const accountantAutomaticDocuments = accountantAttachedDocuments.filter(document => isAutomaticAccountantDocument(document) && document.status === 'approved');
+  const accountantOptionalDocuments = accountantAttachedDocuments.filter(document => !isAutomaticAccountantDocument(document));
+  const accountantSelectableDocuments = accountantOptionalDocuments.filter(document => document.status === 'approved');
   const accountantDocumentsReady = accountantRequiredDocuments.every(document => document.status === 'approved');
   const accountantAsoReady = selectedProcess.asoWorkflow?.asoDocument?.status === 'approved';
   const accountantAdmissionDateReady = Boolean(selectedProcess.expectedAdmissionDate);
   const accountantConfiguredSalary = selectedProcess.monthlySalary ?? selectedProcess.accountantWorkflow?.formData?.monthlySalary ?? null;
   const accountantSalaryReady = selectedProcess.monthlySalaryConfigured === true
     || (typeof accountantConfiguredSalary === 'number' && accountantConfiguredSalary > 0);
-  const accountantSalaryDraftValue = Number(accountantSalaryDraft);
-  const accountantSalaryDraftValid = Number.isFinite(accountantSalaryDraftValue) && accountantSalaryDraftValue > 0 && accountantSalaryDraftValue <= 1_000_000;
+  const accountantSalaryDraftValue = parseBrlCurrency(accountantSalaryDraft);
+  const accountantSalaryDraftValid = accountantSalaryDraftValue !== null && accountantSalaryDraftValue > 0 && accountantSalaryDraftValue <= 1_000_000;
   const accountantSalaryDraftChanged = accountantSalaryDraftValid
     && Math.round(accountantSalaryDraftValue * 100) !== Math.round((accountantConfiguredSalary ?? 0) * 100);
+  const accountantSavedFormText = accountantFormTextDraftFrom(selectedProcess, roles, jobFunctions);
+  const accountantFormTextValid = ACCOUNTANT_FORM_TEXT_FIELDS.every((key) => accountantFormTextDraft[key].trim().length > 0);
+  const accountantFormTextChanged = ACCOUNTANT_FORM_TEXT_FIELDS.some((key) => accountantFormTextDraft[key].trim() !== accountantSavedFormText[key].trim());
   const accountantPrerequisitesReady = accountantDocumentsReady && accountantAsoReady && accountantAdmissionDateReady && accountantSalaryReady;
+  const accountantFormRequiresRegeneration = selectedProcess.accountantWorkflow?.latestFormRequiresRegeneration === true;
   const accountantFormValidated = Boolean(
     accountantSalaryReady
+    && !accountantFormRequiresRegeneration
     && selectedProcess.accountantWorkflow?.latestFormId
     && selectedProcess.accountantWorkflow.formValidation?.documentId === selectedProcess.accountantWorkflow.latestFormId,
   );
@@ -10943,45 +11072,42 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {/* CONTADOR */}
             {activeKind === 'contador' && canViewAccountant && (
               <div className="mt-4 space-y-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-wide text-slate-700">Pré-requisitos da contabilidade</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">O formulário só é gerado após a conferência documental, o ASO aprovado, a data de admissão e a remuneração.</p>
-                    </div>
-                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${accountantPrerequisitesReady ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{accountantPrerequisitesReady ? 'Liberado' : 'Pendente'}</span>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                    {[
-                      ['Documentos obrigatórios', accountantDocumentsReady],
-                      ['ASO aprovado', accountantAsoReady],
-                      ['Data de admissão', accountantAdmissionDateReady],
-                      ['Remuneração', accountantSalaryReady],
-                    ].map(([label, done]) => <div key={String(label)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{done ? '✓' : '○'} {label}</div>)}
-                  </div>
-                </div>
-
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">1. Formulário da contabilidade</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-600">O sistema popula os dados, gera um PDF timbrado e preserva cada versão para auditoria.</p>
-                  {canViewSensitiveData ? <div className="mt-3 flex max-w-md flex-col gap-2 rounded-xl border border-blue-200 bg-white p-3 sm:flex-row sm:items-end">
-                    <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-wide text-slate-600">Remuneração mensal
-                      <input value={accountantSalaryDraft} onChange={event => setAccountantSalaryDraft(event.target.value)} type="number" min="0.01" max="1000000" step="0.01" placeholder="0,00" className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-900" />
+                  <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">Etapa 1 de 3</p>
+                  <h4 className="mt-1 text-sm font-black text-slate-900">Revise os campos do formulário da contabilidade</h4>
+                  <p className="mt-1 text-xs font-semibold text-slate-600">Os campos começam bloqueados. Use “Editar” para alterar, confirme em “OK” e gere o PDF timbrado; cada versão é preservada para auditoria.</p>
+                  {canEditAccountantFormFields ? <div className="mt-3 flex justify-end">
+                    {accountantFormEditing ? <button type="button" disabled={!!accountantActionBusy || !!updating || !expectedAdmissionDateDraft || (canManageAccountantProcess && !accountantFormTextValid) || (canManageAccountantProcess && canViewSensitiveData && !accountantSalaryDraftValid)} onClick={() => void saveAccountantFormFields()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50">{accountantActionBusy === 'set_monthly_salary' || accountantActionBusy === 'set_form_data' || updating === `${selectedProcess.id}:update_expected_admission_date` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}OK</button> : <button type="button" disabled={!!accountantActionBusy || !!updating} onClick={() => setAccountantFormEditing(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 disabled:opacity-50"><Pencil className="h-3.5 w-3.5" />Editar</button>}
+                  </div> : null}
+                  <div className="mt-2 grid gap-2 rounded-xl border border-blue-200 bg-white p-3 sm:grid-cols-2">
+                    {ACCOUNTANT_FORM_TEXT_FIELD_CONFIG.map((field) => <label key={field.key} className={`min-w-0 text-[10px] font-black uppercase tracking-wide text-slate-600 ${field.wide ? 'sm:col-span-2' : ''}`}>{field.label}
+                      {field.wide ? <textarea value={accountantFormTextDraft[field.key]} onChange={event => setAccountantFormTextDraft(previous => ({ ...previous, [field.key]: event.target.value }))} disabled={!accountantFormEditing || !canManageAccountantProcess || !!accountantActionBusy} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold normal-case text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" /> : <input value={accountantFormTextDraft[field.key]} onChange={event => setAccountantFormTextDraft(previous => ({ ...previous, [field.key]: event.target.value }))} onBlur={() => {
+                        if (field.key === 'employerCnpj') setAccountantFormTextDraft(previous => ({ ...previous, employerCnpj: CnpjValidator.format(previous.employerCnpj) }));
+                        if (field.key === 'employeeCpf') setAccountantFormTextDraft(previous => ({ ...previous, employeeCpf: formatOnboardingCpf(previous.employeeCpf) }));
+                      }} disabled={!accountantFormEditing || !canManageAccountantProcess || !!accountantActionBusy} type="text" className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold normal-case text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" />}
+                    </label>)}
+                    <label className="min-w-0 text-[10px] font-black uppercase tracking-wide text-slate-600">Data prevista para admissão
+                      <input value={expectedAdmissionDateDraft} onChange={event => setExpectedAdmissionDateDraft(event.target.value)} disabled={!accountantFormEditing || !canEditExpectedAdmissionDate || !!accountantActionBusy} type="date" className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" />
                     </label>
-                    {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantSalaryDraftChanged} onClick={() => void accountantAction('set_monthly_salary', { monthlySalary: accountantSalaryDraftValue })} className="h-9 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-black text-blue-700 disabled:opacity-50">{accountantActionBusy === 'set_monthly_salary' ? 'Salvando...' : accountantSalaryReady ? 'Atualizar' : 'Salvar remuneração'}</button> : null}
-                  </div> : !accountantSalaryReady ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">A remuneração precisa ser preenchida por alguém com acesso a dados sensíveis.</p> : null}
+                    {canViewSensitiveData ? <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-wide text-slate-600">Remuneração mensal
+                      <input value={accountantSalaryDraft} onChange={event => setAccountantSalaryDraft(event.target.value)} onBlur={() => { if (accountantSalaryDraftValue !== null) setAccountantSalaryDraft(formatBrlCurrency(accountantSalaryDraftValue)); }} disabled={!accountantFormEditing || !canManageAccountantProcess || !!accountantActionBusy} type="text" inputMode="decimal" placeholder="R$ 0,00" className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" />
+                    </label> : null}
+                  </div>
+                  {!canViewSensitiveData && !accountantSalaryReady ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">A remuneração precisa ser preenchida por alguém com acesso a dados sensíveis.</p> : null}
+                  {accountantFormRequiresRegeneration ? <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">A versão anterior ficou desatualizada após alteração dos dados. Gere uma nova versão para validar e enviar.</p> : null}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantPrerequisitesReady} onClick={() => void generateAccountantForm(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-700 px-3 text-xs font-black text-white disabled:opacity-50">{accountantActionBusy === 'generate_form' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <FileText className="h-3.5 w-3.5"/>}{selectedProcess.accountantWorkflow?.latestFormId ? 'Gerar nova versão' : 'Gerar formulário em PDF'}</button> : null}
-                    {selectedProcess.accountantWorkflow?.latestFormId ? <button type="button" onClick={() => void openAccountantAsset('form')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700"><Eye className="h-3.5 w-3.5"/>Abrir formulário</button> : null}
-                    {selectedProcess.accountantWorkflow?.latestFormId && !accountantFormValidated && canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantSalaryReady} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar versão'}</button> : null}
+                    {selectedProcess.accountantWorkflow?.latestFormId ? <button type="button" onClick={() => void openAccountantAsset('form')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700"><Eye className="h-3.5 w-3.5"/>{accountantFormRequiresRegeneration ? 'Abrir versão anterior' : 'Abrir formulário'}</button> : null}
+                    {selectedProcess.accountantWorkflow?.latestFormId && !accountantFormRequiresRegeneration && !accountantFormValidated && canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantSalaryReady} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar versão'}</button> : null}
                     {accountantFormValidated ? <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-100 px-3 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Versão validada</span> : null}
                   </div>
                 </div>
 
                 {accountantFormValidated ? <>
                   <div className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wide text-cyan-800">2. Seleção dos documentos</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-600">Todos os documentos anexados até o momento aparecem abaixo. Marque quais documentos aprovados irão no e-mail; itens ainda não aprovados ficam visíveis, mas bloqueados. O formulário da contabilidade e o ASO aprovado são anexos fixos.</p>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-cyan-800">Etapa 2 de 3</p>
+                    <h4 className="mt-1 text-sm font-black text-slate-900">Selecione os documentos para enviar junto com o formulário</h4>
+                    <p className="mt-1 text-xs font-semibold text-slate-600">O formulário, o ASO, a identificação da candidata e os documentos dos filhos são anexos automáticos. O RH seleciona abaixo somente os demais documentos; itens ainda não aprovados ficam visíveis, mas bloqueados.</p>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {[
                         { label: 'Formulário de admissão para a contabilidade', onOpen: () => openAccountantAsset('form') },
@@ -10994,9 +11120,17 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                           <Eye className="h-3.5 w-3.5" /> Visualizar
                         </button> : null}
                       </div>)}
+                      {accountantAutomaticDocuments.map(document => <div key={document.id} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
+                        <CheckCircle2 className="h-4 w-4 shrink-0"/>
+                        <span className="min-w-0 flex-1">{document.label}</span>
+                        <span className="text-[9px] uppercase">Fixo</span>
+                        <a href={document.fileUrl!} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-[10px] font-black text-emerald-800 hover:bg-emerald-100" aria-label={`Visualizar ${document.label}`}>
+                          <Eye className="h-3.5 w-3.5" /> Visualizar
+                        </a>
+                      </div>)}
                     </div>
-                    {accountantAttachedDocuments.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {accountantAttachedDocuments.map(document => {
+                    {accountantOptionalDocuments.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {accountantOptionalDocuments.map(document => {
                         const checked = accountantSelectedDocumentIds.includes(document.id);
                         const approved = document.status === 'approved';
                         return <div key={document.id} className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 transition ${checked ? 'border-cyan-400 bg-white text-slate-900' : 'border-slate-200 bg-white/70 text-slate-600'}`}>
@@ -11009,13 +11143,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                           </a>
                         </div>;
                       })}
-                    </div> : <p className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white/70 p-3 text-xs font-semibold text-slate-500">Nenhum outro documento aprovado com arquivo está disponível. O pacote poderá conter apenas os dois anexos fixos.</p>}
+                    </div> : <p className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white/70 p-3 text-xs font-semibold text-slate-500">Nenhum outro documento opcional com arquivo está disponível.</p>}
                     <p className="mt-2 text-[11px] font-bold text-cyan-900">Selecionados pelo RH: {accountantSelectedDocumentIds.length} de {accountantSelectableDocuments.length} documentos opcionais.</p>
                   </div>
 
                   <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wide text-violet-700">3. Envio do pacote admissional</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-600">O e-mail levará os 2 anexos fixos e somente os documentos marcados acima. O contador receberá também o link exclusivo para devolver a Ficha de Registro de Empregado.</p>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-violet-700">Etapa 3 de 3</p>
+                    <h4 className="mt-1 text-sm font-black text-slate-900">Envie e acompanhe a resolução do e-mail para o contador</h4>
+                    <p className="mt-1 text-xs font-semibold text-slate-600">O e-mail levará {2 + accountantAutomaticDocuments.length} anexos automáticos e somente os documentos opcionais marcados acima. Depois do envio, acompanhe entrega, abertura, acesso ao link e retorno da Ficha de Registro de Empregado.</p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                       <input value={accountantEmail} onChange={event => setAccountantEmail(event.target.value)} type="email" placeholder="E-mail do contador" className="h-9 min-w-0 flex-1 rounded-lg border px-3 text-xs font-semibold" />
                       {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantEmail} onClick={() => void accountantAction('send_email', { accountantEmail, selectedDocumentIds: accountantSelectedDocumentIds })} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{accountantActionBusy === 'send_email' ? 'Enviando...' : selectedProcess.accountantWorkflow?.email?.sentAt ? 'Reenviar pacote' : 'Enviar ao contador'}</button> : null}

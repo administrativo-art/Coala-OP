@@ -1140,6 +1140,12 @@ export type JobRoleSalaryRange = {
   visible?: boolean;
 };
 
+export type JobFunctionSalaryCalculation = {
+  type: 'base_plus_percentage';
+  baseFunctionId: string;
+  additionalPercentage: number;
+};
+
 export type RecruitmentDisplaySettings = {
   locationLabel?: string;
   workType?: 'presencial' | 'remoto' | 'hibrido';
@@ -1602,8 +1608,21 @@ export type OnboardingProcess = {
     latestFormId?: string | null;
     latestFormHashSha256?: string | null;
     latestFormGeneratedAt?: string | null;
+    latestFormRequiresRegeneration?: boolean;
+    latestFormStaleReasons?: Array<'monthly_salary_changed' | 'expected_admission_date_changed' | 'reviewed_form_data_changed'>;
+    latestFormInvalidatedAt?: string | null;
     formData?: {
       monthlySalary?: number | null;
+      companyName?: string;
+      employerCnpj?: string;
+      employeeName?: string;
+      maritalStatus?: string;
+      employeeCpf?: string;
+      educationLevel?: string;
+      jobFunction?: string;
+      probationContract?: string;
+      weeklyRest?: string;
+      workSchedule?: string;
       [key: string]: unknown;
     } | null;
     remunerationUpdatedAt?: string | null;
@@ -1630,6 +1649,7 @@ export type OnboardingProcess = {
       attachmentCount?: number;
       attachmentLabels?: string[];
       selectedDocumentIds?: string[];
+      automaticDocumentIds?: string[];
       sentAt?: string | null;
     } | null;
     registryDocument?: {
@@ -1875,6 +1895,7 @@ export type JobFunction = {
   workSchedule?: string;
   salaryRange?: JobRoleSalaryRange;
   publicSalaryRange?: JobRoleSalaryRange;
+  salaryCalculation?: JobFunctionSalaryCalculation;
   recruitmentDisplay?: RecruitmentDisplaySettings;
   applicationSuccessMessage?: string | null;
   lgpdContractText?: string | null;

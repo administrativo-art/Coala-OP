@@ -84,6 +84,7 @@ export async function promoteApprovedOnboardingDocuments(params: {
   process: Record<string, unknown>;
   actorId: string;
   actorName: string;
+  retainedSourceDocumentIds?: string[];
 }): Promise<PromoteOnboardingDocumentsResult> {
   const documents = Array.isArray(params.process.documents)
     ? params.process.documents as OnboardingDocument[]
@@ -91,6 +92,7 @@ export async function promoteApprovedOnboardingDocuments(params: {
   const approved = documents.filter((document) => document.status === "approved" && document.promotedDocumentId == null);
   const promotedByOnboardingId = new Map<string, { documentId: string; promotedAt: string }>();
   const promotedDocumentIds: string[] = [];
+  const retainedSourceDocumentIds = new Set(params.retainedSourceDocumentIds ?? []);
   let duplicateCount = 0;
 
   const existingSnap = await hrDbAdmin.collection(COLLECTION).where("employeeId", "==", params.employeeId).get();
@@ -119,7 +121,7 @@ export async function promoteApprovedOnboardingDocuments(params: {
       if (existingTarget.get("employeeId") !== params.employeeId) {
         throw new Error(`Documento de destino inválido para ${document.label}.`);
       }
-      await removeOnboardingSource(sourcePath);
+      if (!retainedSourceDocumentIds.has(document.id)) await removeOnboardingSource(sourcePath);
       promotedByOnboardingId.set(document.id, { documentId, promotedAt });
       promotedDocumentIds.push(documentId);
       continue;
@@ -165,7 +167,7 @@ export async function promoteApprovedOnboardingDocuments(params: {
         sourcePath,
         at: now,
       });
-      await removeOnboardingSource(sourcePath);
+      if (!retainedSourceDocumentIds.has(document.id)) await removeOnboardingSource(sourcePath);
       promotedByOnboardingId.set(document.id, { documentId: dedupe.existingDocumentId, promotedAt });
       promotedDocumentIds.push(dedupe.existingDocumentId);
       continue;
@@ -248,7 +250,7 @@ export async function promoteApprovedOnboardingDocuments(params: {
       sourcePath,
       at: now,
     });
-    await removeOnboardingSource(sourcePath);
+    if (!retainedSourceDocumentIds.has(document.id)) await removeOnboardingSource(sourcePath);
 
     existing.push({
       id: documentId,
@@ -264,6 +266,14 @@ export async function promoteApprovedOnboardingDocuments(params: {
   const nextDocuments = documents.map((document) => {
     const promotion = promotedByOnboardingId.get(document.id);
     if (!promotion) return document;
+    if (retainedSourceDocumentIds.has(document.id)) {
+      return {
+        ...document,
+        promotedDocumentId: promotion.documentId,
+        promotedAt: promotion.promotedAt,
+        promotedBy: params.actorId,
+      };
+    }
     return {
       ...document,
       fileUrl: null,

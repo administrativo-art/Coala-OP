@@ -53,6 +53,24 @@ export async function PATCH(
         { status: 400 }
       );
     }
+    if (payload.salaryCalculation?.baseFunctionId === functionId) {
+      return NextResponse.json(
+        { error: "Uma função não pode usar a si mesma como base salarial." },
+        { status: 400 }
+      );
+    }
+    if (payload.salaryCalculation) {
+      const baseFunction = await hrDbAdmin
+        .collection("jobFunctions")
+        .doc(payload.salaryCalculation.baseFunctionId)
+        .get();
+      if (!baseFunction.exists) {
+        return NextResponse.json(
+          { error: "A função-base da regra salarial não existe." },
+          { status: 400 }
+        );
+      }
+    }
     const current = existing.data() ?? {};
     const nextData = stripUndefined({
       ...current,

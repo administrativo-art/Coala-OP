@@ -30,6 +30,12 @@ const salaryRangeSchema = z.object({
   }
 });
 
+const jobFunctionSalaryCalculationSchema = z.object({
+  type: z.literal("base_plus_percentage"),
+  baseFunctionId: z.string().trim().min(1),
+  additionalPercentage: z.number().positive().max(1000),
+});
+
 const recruitmentDisplaySchema = z.object({
   locationLabel: z.string().trim().max(120).optional(),
   workType: z.enum(["presencial", "remoto", "hibrido"]).optional(),
@@ -200,6 +206,7 @@ const jobFunctionBaseSchema = z.object({
   workSchedule: z.string().trim().max(250).optional(),
   salaryRange: salaryRangeSchema.optional(),
   publicSalaryRange: salaryRangeSchema.optional(),
+  salaryCalculation: jobFunctionSalaryCalculationSchema.optional(),
   recruitmentDisplay: recruitmentDisplaySchema,
   recruitmentModelSavedAt: z.string().trim().optional().nullable(),
   compatibleRoleIds: z.array(z.string().trim().min(1)).default([]),

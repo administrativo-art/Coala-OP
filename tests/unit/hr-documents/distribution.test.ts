@@ -175,4 +175,16 @@ describe("getDocumentTypeConfig (Fase 4 — fonte única)", () => {
     const c = getDocumentTypeConfig("NAO_EXISTE");
     assert.equal(c.code, "UNKNOWN_DOCUMENT");
   });
+  test("formulário da contabilidade é arquivado no processo de admissão", () => {
+    const c = getDocumentTypeConfig("ADMISSION_DATA_FORM");
+    const destination = resolveDocumentDestination({
+      config: c,
+      employeeCode: "COL-00124",
+      fields: { admissionDate: "2026-08-26" },
+      version: 1,
+    });
+    assert.equal(c.category, "admission");
+    assert.equal(c.duplicateStrategy, "VERSION");
+    assert.deepEqual(destination.pathSegments, ["Admissão", "Admissão 26/08/2026", "Formulário de admissão para contabilidade"]);
+  });
 });

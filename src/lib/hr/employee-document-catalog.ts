@@ -165,6 +165,7 @@ const ENRICHMENT: Record<string, Partial<DocumentTypeEnrichment>> = {
     requiredFields: ["startDate"],
   },
   EMPLOYEE_REGISTRATION: { processCategory: "ADMISSION", duplicateStrategy: "WARN", duplicateKeys: [] },
+  ADMISSION_DATA_FORM: { processCategory: "ADMISSION", duplicateStrategy: "VERSION", duplicateKeys: ["admissionDate"] },
   EMPLOYMENT_CONTRACT: { processCategory: "ADMISSION", duplicateStrategy: "WARN", duplicateKeys: ["startDate"] },
   PROBATION_CONTRACT: { processCategory: "ADMISSION", duplicateStrategy: "WARN", duplicateKeys: ["startDate"] },
   PROBATION_EXTENSION: { processCategory: "ADMISSION", duplicateStrategy: "WARN", duplicateKeys: ["startDate"] },

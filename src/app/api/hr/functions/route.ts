@@ -57,6 +57,15 @@ export async function POST(request: NextRequest) {
     if (scoringBlock) {
       return NextResponse.json({ error: scoringBlock }, { status: 400 });
     }
+    if (payload.salaryCalculation) {
+      const baseFunction = await hrDbAdmin
+        .collection("jobFunctions")
+        .doc(payload.salaryCalculation.baseFunctionId)
+        .get();
+      if (!baseFunction.exists) {
+        return NextResponse.json({ error: "A função-base da regra salarial não existe." }, { status: 400 });
+      }
+    }
 
     const now = new Date().toISOString();
     const data = stripUndefined({

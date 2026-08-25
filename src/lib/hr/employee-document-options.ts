@@ -422,6 +422,15 @@ export const EMPLOYEE_DOCUMENT_TYPE_CATALOG = [
     classificationHints: ["Ficha formal de registro/admissão do empregado."],
   },
   {
+    code: "ADMISSION_DATA_FORM",
+    label: "Formulário de admissão para contabilidade",
+    category: "admission",
+    folderCode: "ADMISSION_REGISTRATION",
+    defaultAccessLevel: "restricted",
+    aliases: ["formulário de admissão", "formulario de admissao", "formulário da contabilidade"],
+    classificationHints: ["Formulário consolidado pelo RH para abertura do registro do empregado na contabilidade."],
+  },
+  {
     code: "WORK_CARD",
     label: "Carteira de trabalho",
     category: "personal",

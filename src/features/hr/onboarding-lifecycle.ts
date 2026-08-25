@@ -23,5 +23,5 @@ export function canUpdateExpectedAdmissionDate(
   process: Pick<OnboardingProcess, 'status' | 'currentStage'>
 ) {
   if (process.status === 'completed' || process.status === 'cancelled') return false;
-  return ['documents', 'document_review'].includes(process.currentStage ?? 'documents');
+  return ['documents', 'document_review', 'accountant'].includes(process.currentStage ?? 'documents');
 }

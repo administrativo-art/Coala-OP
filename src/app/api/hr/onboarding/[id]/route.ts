@@ -33,6 +33,7 @@ import {
   ONBOARDING_CANCELLATION_REASON_MIN_LENGTH,
 } from '@/features/hr/onboarding-lifecycle';
 import { missingAccountantPrerequisites } from '@/features/hr/accountant/workflow';
+import { invalidateAccountantFormVersion } from '@/features/hr/accountant/form-version';
 import type { OnboardingDocument, OnboardingProcess, OnboardingStageId, PjOnboardingWorkflow } from '@/types';
 
 export const runtime = 'nodejs';
@@ -431,6 +432,7 @@ async function createPjUserFromOnboarding(params: {
     employeeId: authUser.uid,
     firstAccessLink,
     promotedDocuments: { documents: Array.isArray(params.process.documents) ? params.process.documents : [], promotedCount: 0, duplicateCount: 0, promotedDocumentIds: [] },
+    promotedArtifactDocumentIds: [] as string[],
     promotedSignedDocumentIds: [] as string[],
   };
 }
@@ -677,17 +679,93 @@ async function createCollaboratorFromOnboarding(params: {
   });
   await batch.commit();
 
+  const sourceDocuments = Array.isArray(params.process.documents)
+    ? params.process.documents as OnboardingDocument[]
+    : [];
+  const sourceDocumentIds = new Set(sourceDocuments.map((document) => document.id));
+  const admissionDate = asString(params.process.expectedAdmissionDate);
+  const employeeName = answerString(publicAnswers, 'fullName') || asString(params.process.candidateName);
+  const archivalDocuments: OnboardingDocument[] = [];
+  const asoWorkflow = asRecord(params.process.asoWorkflow);
+  const asoDocument = asRecord(asoWorkflow.asoDocument);
+  const asoStoragePath = asString(asoDocument.storagePath);
+  if (asoDocument.status === 'approved' && asoStoragePath) {
+    archivalDocuments.push({
+      id: 'workflow_aso_admission',
+      label: 'ASO admissional finalizado',
+      documentTypeCode: 'ASO_ADMISSION',
+      required: true,
+      status: 'approved',
+      filePath: asoStoragePath,
+      fileHashSha256: asString(asoDocument.hashSha256),
+      receivedAt: asString(asoDocument.uploadedAt),
+      approvedAt: asString(asoDocument.reviewedAt),
+      extractedFields: {
+        employeeName,
+        examDate: asString(asRecord(asoWorkflow.appointment).date) || admissionDate,
+      },
+    });
+  }
+  const accountantWorkflow = asRecord(params.process.accountantWorkflow);
+  const latestFormId = asString(accountantWorkflow.latestFormId);
+  const formValidation = asRecord(accountantWorkflow.formValidation);
+  if (latestFormId && formValidation.documentId === latestFormId && accountantWorkflow.latestFormRequiresRegeneration !== true) {
+    const generatedForm = await hrDbAdmin
+      .collection('onboardingProcesses')
+      .doc(params.processId)
+      .collection('generatedDocuments')
+      .doc(latestFormId)
+      .get();
+    const generatedStoragePath = generatedForm.exists ? asString(generatedForm.get('storagePath')) : null;
+    if (generatedStoragePath) {
+      archivalDocuments.push({
+        id: `accountant_admission_form_${latestFormId}`,
+        label: 'Formulário de admissão para contabilidade',
+        documentTypeCode: 'ADMISSION_DATA_FORM',
+        required: true,
+        status: 'approved',
+        filePath: generatedStoragePath,
+        fileHashSha256: asString(generatedForm.get('hashSha256')),
+        receivedAt: asString(generatedForm.get('generatedAt')),
+        approvedAt: asString(formValidation.validatedAt),
+        extractedFields: { employeeName, admissionDate },
+      });
+    }
+  }
+  const registryDocument = asRecord(accountantWorkflow.registryDocument);
+  const registryStoragePath = asString(registryDocument.storagePath);
+  if (registryDocument.status === 'approved' && registryStoragePath) {
+    archivalDocuments.push({
+      id: `accountant_employee_registration_${asString(registryDocument.versionId) || 'approved'}`,
+      label: 'Ficha de registro devolvida pela contabilidade',
+      documentTypeCode: 'EMPLOYEE_REGISTRATION',
+      required: true,
+      status: 'approved',
+      filePath: registryStoragePath,
+      fileHashSha256: asString(registryDocument.hashSha256),
+      receivedAt: asString(registryDocument.uploadedAt),
+      approvedAt: asString(registryDocument.reviewedAt),
+      extractedFields: { employeeName, admissionDate },
+    });
+  }
+  const retainedSourceDocumentIds = archivalDocuments.map((document) => document.id);
   const promotedDocuments = await promoteApprovedOnboardingDocuments({
     onboardingId: params.processId,
     employeeId,
-    process: params.process,
+    process: { ...params.process, documents: [...sourceDocuments, ...archivalDocuments] },
     actorId: params.actorId,
     actorName: params.actorName,
+    retainedSourceDocumentIds,
   });
+  const promotedSourceDocuments = promotedDocuments.documents.filter((document) => sourceDocumentIds.has(document.id));
+  const promotedArtifactDocumentIds = promotedDocuments.documents
+    .filter((document) => retainedSourceDocumentIds.includes(document.id))
+    .map((document) => document.promotedDocumentId)
+    .filter((documentId): documentId is string => Boolean(documentId));
   await syncApprovedOnboardingPhotoToAvatar({
     userId: employeeId,
     onboardingId: params.processId,
-    documents: promotedDocuments.documents,
+    documents: promotedSourceDocuments,
   });
   const promotedSignedDocumentIds = await promoteSignedOnboardingDocuments({
     onboardingId: params.processId,
@@ -702,7 +780,14 @@ async function createCollaboratorFromOnboarding(params: {
     createdByEmail: params.actorEmail,
   });
 
-  return { userId: authUser.uid, employeeId, firstAccessLink, promotedDocuments, promotedSignedDocumentIds };
+  return {
+    userId: authUser.uid,
+    employeeId,
+    firstAccessLink,
+    promotedDocuments: { ...promotedDocuments, documents: promotedSourceDocuments },
+    promotedArtifactDocumentIds,
+    promotedSignedDocumentIds,
+  };
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -733,7 +818,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (action === 'update_expected_admission_date') {
     if (!canUpdateExpectedAdmissionDate(process as OnboardingProcess)) {
-      return jsonError('A data prevista só pode ser alterada até a conclusão da primeira etapa.', 409);
+      return jsonError('A data prevista só pode ser alterada até a conclusão da etapa do contador.', 409);
     }
     const expectedAdmissionDate = normalizeOnboardingDateOnly(body.expectedAdmissionDate);
     if (!expectedAdmissionDate) {
@@ -743,6 +828,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.expectedAdmissionDateUpdatedAt = now;
     update.expectedAdmissionDateUpdatedBy = access.decoded.uid;
     update.expectedAdmissionDateUpdatedByEmail = access.decoded.email ?? null;
+    update.accountantWorkflow = invalidateAccountantFormVersion(
+      process.accountantWorkflow,
+      'expected_admission_date_changed',
+      now,
+    );
   } else if (action === 'set_employer_unit') {
     const employerUnitId = asString(body.employerUnitId);
     if (!employerUnitId) return jsonError('Selecione o CNPJ responsável pela contratação.');
@@ -959,6 +1049,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       promotedCount: created.promotedDocuments.promotedCount,
       duplicateCount: created.promotedDocuments.duplicateCount,
       employeeDocumentIds: created.promotedDocuments.promotedDocumentIds,
+      integrationArtifactDocumentIds: created.promotedArtifactDocumentIds,
       signedEmployeeDocumentIds: created.promotedSignedDocumentIds,
       completedAt: now,
       completedBy: access.decoded.uid,
@@ -1115,7 +1206,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const missing = missingAccountantPrerequisites({
       documents: update.documents as OnboardingDocument[],
       asoApproved: asoDocument.status === 'approved',
-      expectedAdmissionDate: asString(process.expectedAdmissionDate),
       publicFormAnswers: process.publicFormAnswers,
     });
     if (missing.length === 0) {
