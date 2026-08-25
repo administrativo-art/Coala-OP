@@ -6,6 +6,7 @@ import { renderToBuffer } from 'react-pdf-renderer-server';
 
 import nextConfig from '../../next.config.mjs';
 import { AccountantAdmissionFormPdf } from '../../src/features/hr/accountant/admission-form-pdf';
+import { applyCoalaLetterheadToPdf } from '../../src/features/hr/documents/letterhead-pdf.server';
 
 const workspace = process.cwd();
 const tracingIncludes = (nextConfig.outputFileTracingIncludes ?? {}) as Record<string, string[]>;
@@ -35,7 +36,7 @@ const onboardingRuntimeAssets: Record<string, string[]> = {
     './src/features/hr/aso/assets/coala-shakes-letterhead-v1.png',
   ],
   '/api/hr/onboarding/*/accountant-form': [
-    './src/features/hr/aso/assets/coala-shakes-letterhead-v1.png',
+    ...documentPdfRuntimeAssets,
   ],
   '/api/hr/onboarding/*/signature-documents': systemDocumentTemplateAssets,
   '/api/documents/generate': systemDocumentTemplateAssets,
@@ -111,7 +112,6 @@ test('mantém os geradores de PDF da demissão independentes de ativos locais n�
 });
 
 test('renderiza o formulário do contador com o timbre empacotado', async () => {
-  const logo = readFileSync(path.join(workspace, 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png'));
   const document = AccountantAdmissionFormPdf({ data: {
     companyName: 'CT Sorvetes Ltda.',
     employerCnpj: '00.000.000/0001-00',
@@ -129,19 +129,19 @@ test('renderiza o formulário do contador com o timbre empacotado', async () => 
     quotaLabel: 'R$ 67,54',
     familySalaryConclusion: 'SEM DEPENDENTES ELEGÍVEIS',
     dependents: [],
-    logoDataUri: `data:image/png;base64,${logo.toString('base64')}`,
   } }) as Parameters<typeof renderToBuffer>[0];
 
-  const pdf = Buffer.from(await renderToBuffer(document));
+  const pdf = await applyCoalaLetterheadToPdf(Buffer.from(await renderToBuffer(document)));
   assert.equal(pdf.subarray(0, 4).toString('ascii'), '%PDF');
   assert.ok(pdf.length > 10_000);
 });
 
-test('a rota do contador não encobre o objeto global process ao localizar o timbre', () => {
+test('a rota do contador usa o papel timbrado institucional e exige remuneração', () => {
   const route = readFileSync(path.join(workspace, 'src/app/api/hr/onboarding/[id]/accountant-form/route.tsx'), 'utf8');
 
-  assert.match(route, /import \{ cwd \} from 'node:process'/);
+  assert.match(route, /applyCoalaLetterheadToPdf/);
+  assert.match(route, /Informe a remuneração mensal antes de gerar/);
   assert.match(route, /const onboarding = snapshot\.data\(\)/);
+  assert.doesNotMatch(route, /coala-shakes-letterhead-v1/);
   assert.doesNotMatch(route, /const process = snapshot\.data\(\)/);
-  assert.doesNotMatch(route, /process\.cwd\(\)/);
 });

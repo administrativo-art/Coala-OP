@@ -10,6 +10,7 @@ import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
 import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
+import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import { applyOnboardingSignatureMode, normalizeOnboardingStages } from '@/lib/recruitment-onboarding';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { resolveCompanyProcessContact } from '@/lib/company/company-process-contact.server';
@@ -24,6 +25,7 @@ const MAX_EMAIL_ATTACHMENTS_BYTES = 35 * 1024 * 1024;
 function text(value: unknown, max = 500) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
 function email(value: unknown) { const normalized = text(value, 320).toLowerCase(); return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : ''; }
 function record(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function numeric(value: unknown) { const number = typeof value === 'number' ? value : Number(value); return Number.isFinite(number) && number > 0 ? number : null; }
 function dateBr(value: string) { const [year, month, day] = value.slice(0, 10).split('-'); return year && month && day ? `${day}/${month}/${year}` : value; }
 function extensionFrom(mimeType: string, storagePath: string) {
   if (mimeType === 'application/pdf') return 'pdf';
@@ -53,6 +55,10 @@ async function latestForm(processId: string, workflow: Record<string, unknown>):
 async function fileResponse(storagePath: string, fileName: string, mimeType: string) {
   const [buffer] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).download();
   return new NextResponse(new Uint8Array(buffer), { headers: { 'Content-Type': mimeType, 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`, 'Cache-Control': 'private, no-store' } });
+}
+
+function configuredMonthlySalary(process: Record<string, unknown>, workflow: Record<string, unknown>) {
+  return numeric(process.monthlySalary) ?? numeric(record(workflow.formData).monthlySalary);
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -87,7 +93,39 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const process = snapshot.data() ?? {}; const workflow = record(process.accountantWorkflow);
   const body = await request.json().catch(() => ({})); const action = text(body.action, 80); const now = new Date().toISOString();
 
+  if (action === 'set_monthly_salary') {
+    if (!hasFormalizationPermission(access.permissions, 'sensitiveData.view', access.isDefaultAdmin)) {
+      return NextResponse.json({ error: 'Sem permissão para consultar ou alterar a remuneração.' }, { status: 403 });
+    }
+    const parsedSalary = numeric(body.monthlySalary);
+    if (parsedSalary == null || parsedSalary > 1_000_000) {
+      return NextResponse.json({ error: 'Informe uma remuneração mensal válida.' }, { status: 400 });
+    }
+    const monthlySalary = Math.round(parsedSalary * 100) / 100;
+    const formData = record(workflow.formData);
+    if (numeric(process.monthlySalary) === monthlySalary && numeric(formData.monthlySalary) === monthlySalary) {
+      return NextResponse.json({ ok: true, unchanged: true, monthlySalary });
+    }
+    const updatedWorkflow = {
+      ...workflow,
+      status: text(workflow.latestFormId) ? 'form_generated' : 'pending',
+      formValidation: null,
+      formData: { ...formData, monthlySalary },
+      remunerationUpdatedAt: now,
+      remunerationUpdatedBy: access.decoded.uid,
+      updatedAt: now,
+    };
+    await Promise.all([
+      processRef.set({ monthlySalary, accountantWorkflow: updatedWorkflow, updatedAt: now }, { merge: true }),
+      addEvent(id, 'ACCOUNTANT_REMUNERATION_UPDATED', access),
+    ]);
+    return NextResponse.json({ ok: true, monthlySalary });
+  }
+
   if (action === 'validate_form') {
+    if (configuredMonthlySalary(process, workflow) == null) {
+      return NextResponse.json({ error: 'Informe a remuneração e gere uma nova versão do formulário antes de validá-lo.' }, { status: 409 });
+    }
     const form = await latestForm(id, workflow);
     if (!form) return NextResponse.json({ error: 'Gere o formulário antes de validá-lo.' }, { status: 409 });
     const validation = { documentId: form.id, validatedAt: now, validatedBy: access.decoded.uid, validatedByEmail: access.decoded.email ?? null };
@@ -100,6 +138,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (action === 'send_email') {
+    if (configuredMonthlySalary(process, workflow) == null) {
+      return NextResponse.json({ error: 'Informe a remuneração, gere e valide uma nova versão do formulário antes do envio.' }, { status: 409 });
+    }
     const configuredContact = await resolveCompanyProcessContact('onboarding');
     const recipient = email(body.accountantEmail) || configuredContact?.email || '';
     if (!recipient) return NextResponse.json({ error: 'Informe um e-mail válido do contador.' }, { status: 400 });

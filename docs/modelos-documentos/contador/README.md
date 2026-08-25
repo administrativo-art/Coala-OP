@@ -2,15 +2,17 @@
 
 ## Modelo vigente
 
-- Arquivo de referência: `formulario-admissao-contador-v1.pdf`
-- Versão: `1.0`
+- Arquivo de referência: `formulario-admissao-contador-v2.pdf`
+- Versão: `2.0`
 - Status: modelo visual canônico do formulário enviado à contabilidade
-- SHA-256: `7f34b7dd9ed5453d3e1579bda8aab3f70859dd694055e6e3ddd810f89427d32c`
+- SHA-256: `35796bd807939bd05ada81acc336c194d7044a8075af348f6e8ccc83800cb20d`
 - Gerador operacional: `src/features/hr/accountant/admission-form-pdf.tsx`
 - Script de reprodução: `scripts/generate-accountant-form-model.tsx`
 - Saída operacional: somente PDF
 
 O PDF desta pasta é uma referência visual com dados fictícios. Em cada integração, o sistema gera uma nova versão com os dados efetivos do colaborador e preserva o arquivo gerado para visualização e auditoria.
+
+A versão 2.0 aplica o papel timbrado institucional completo e só pode ser gerada quando a remuneração mensal estiver informada. A versão 1.0 permanece preservada como histórico.
 
 ## Conteúdo populado pelo sistema
 

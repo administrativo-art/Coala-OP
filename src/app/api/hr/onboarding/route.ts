@@ -244,6 +244,14 @@ function redactOnboardingProcess(
   const result = structuredClone(process) as Record<string, unknown>;
   const allowed = (action: Parameters<typeof hasFormalizationPermission>[1]) =>
     hasFormalizationPermission(access.permissions, action, access.isDefaultAdmin);
+  const accountantWorkflow = result.accountantWorkflow && typeof result.accountantWorkflow === 'object' && !Array.isArray(result.accountantWorkflow)
+    ? result.accountantWorkflow as Record<string, unknown>
+    : null;
+  const accountantFormData = accountantWorkflow?.formData && typeof accountantWorkflow.formData === 'object' && !Array.isArray(accountantWorkflow.formData)
+    ? accountantWorkflow.formData as Record<string, unknown>
+    : null;
+  const configuredSalary = asNumber(result.monthlySalary) ?? asNumber(accountantFormData?.monthlySalary);
+  result.monthlySalaryConfigured = configuredSalary !== null && configuredSalary > 0;
 
   if (!allowed('aso.view')) delete result.asoWorkflow;
   if (!allowed('accountant.view')) delete result.accountantWorkflow;
@@ -268,6 +276,7 @@ function redactOnboardingProcess(
   }
   if (!allowed('sensitiveData.view')) {
     delete result.monthlySalary;
+    if (accountantFormData) delete accountantFormData.monthlySalary;
     const answers = result.publicFormAnswers && typeof result.publicFormAnswers === 'object' && !Array.isArray(result.publicFormAnswers)
       ? { ...(result.publicFormAnswers as Record<string, unknown>) }
       : null;

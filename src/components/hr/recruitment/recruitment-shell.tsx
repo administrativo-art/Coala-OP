@@ -8382,7 +8382,7 @@ function TrainingPanel({ process, getToken, canManage, onRefresh }: { process: O
   );
 }
 
-function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh, onProcessUpdated, onAsoPaymentUpdated, onAsoWorkflowUpdated }: {
+function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSensitiveData, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh, onProcessUpdated, onAsoPaymentUpdated, onAsoWorkflowUpdated }: {
   processes: OnboardingProcess[];
   roles: JobRole[];
   jobFunctions: JobFunction[];
@@ -8394,6 +8394,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   canManageAso: boolean;
   canViewAccountant: boolean;
   canManageAccountant: boolean;
+  canViewSensitiveData: boolean;
   canViewSignatures: boolean;
   canGenerateDocuments: boolean;
   canReviewDocuments: boolean;
@@ -8434,6 +8435,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const asoAdmissionAlertKeyRef = useRef('');
   const [accountantActionBusy, setAccountantActionBusy] = useState<string | null>(null);
   const [accountantEmail, setAccountantEmail] = useState('');
+  const [accountantSalaryDraft, setAccountantSalaryDraft] = useState('');
   const [accountantSelectedDocumentIds, setAccountantSelectedDocumentIds] = useState<string[]>([]);
   const [expectedAdmissionDateDraft, setExpectedAdmissionDateDraft] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -8640,6 +8642,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
   useEffect(() => {
     setAccountantEmail(selectedProcess?.accountantWorkflow?.email?.recipient ?? selectedProcess?.accountantWorkflow?.suggestedRecipientEmail ?? '');
+    const monthlySalary = selectedProcess?.monthlySalary ?? selectedProcess?.accountantWorkflow?.formData?.monthlySalary;
+    setAccountantSalaryDraft(typeof monthlySalary === 'number' && monthlySalary > 0 ? monthlySalary.toFixed(2) : '');
     const applicableDocumentIds = new Set(applicableOnboardingDocuments(
       selectedProcess?.documents ?? [],
       selectedProcess?.publicFormAnswers,
@@ -9893,7 +9897,19 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const accountantDocumentsReady = accountantRequiredDocuments.every(document => document.status === 'approved');
   const accountantAsoReady = selectedProcess.asoWorkflow?.asoDocument?.status === 'approved';
   const accountantAdmissionDateReady = Boolean(selectedProcess.expectedAdmissionDate);
-  const accountantPrerequisitesReady = accountantDocumentsReady && accountantAsoReady && accountantAdmissionDateReady;
+  const accountantConfiguredSalary = selectedProcess.monthlySalary ?? selectedProcess.accountantWorkflow?.formData?.monthlySalary ?? null;
+  const accountantSalaryReady = selectedProcess.monthlySalaryConfigured === true
+    || (typeof accountantConfiguredSalary === 'number' && accountantConfiguredSalary > 0);
+  const accountantSalaryDraftValue = Number(accountantSalaryDraft);
+  const accountantSalaryDraftValid = Number.isFinite(accountantSalaryDraftValue) && accountantSalaryDraftValue > 0 && accountantSalaryDraftValue <= 1_000_000;
+  const accountantSalaryDraftChanged = accountantSalaryDraftValid
+    && Math.round(accountantSalaryDraftValue * 100) !== Math.round((accountantConfiguredSalary ?? 0) * 100);
+  const accountantPrerequisitesReady = accountantDocumentsReady && accountantAsoReady && accountantAdmissionDateReady && accountantSalaryReady;
+  const accountantFormValidated = Boolean(
+    accountantSalaryReady
+    && selectedProcess.accountantWorkflow?.latestFormId
+    && selectedProcess.accountantWorkflow.formValidation?.documentId === selectedProcess.accountantWorkflow.latestFormId,
+  );
   const asoWorkflow = selectedProcess.asoWorkflow;
   const asoRequest = asoWorkflow?.requestValidation;
   const asoProcessStarted = Boolean(asoWorkflow?.startedAt);
@@ -10931,15 +10947,16 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-black uppercase tracking-wide text-slate-700">Pré-requisitos da contabilidade</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">O formulário só é gerado após a conferência documental, o ASO aprovado e a definição da data de admissão.</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">O formulário só é gerado após a conferência documental, o ASO aprovado, a data de admissão e a remuneração.</p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${accountantPrerequisitesReady ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{accountantPrerequisitesReady ? 'Liberado' : 'Pendente'}</span>
                   </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     {[
                       ['Documentos obrigatórios', accountantDocumentsReady],
                       ['ASO aprovado', accountantAsoReady],
                       ['Data de admissão', accountantAdmissionDateReady],
+                      ['Remuneração', accountantSalaryReady],
                     ].map(([label, done]) => <div key={String(label)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{done ? '✓' : '○'} {label}</div>)}
                   </div>
                 </div>
@@ -10947,15 +10964,21 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
                   <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">1. Formulário da contabilidade</p>
                   <p className="mt-1 text-xs font-semibold text-slate-600">O sistema popula os dados, gera um PDF timbrado e preserva cada versão para auditoria.</p>
+                  {canViewSensitiveData ? <div className="mt-3 flex max-w-md flex-col gap-2 rounded-xl border border-blue-200 bg-white p-3 sm:flex-row sm:items-end">
+                    <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-wide text-slate-600">Remuneração mensal
+                      <input value={accountantSalaryDraft} onChange={event => setAccountantSalaryDraft(event.target.value)} type="number" min="0.01" max="1000000" step="0.01" placeholder="0,00" className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-900" />
+                    </label>
+                    {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantSalaryDraftChanged} onClick={() => void accountantAction('set_monthly_salary', { monthlySalary: accountantSalaryDraftValue })} className="h-9 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-black text-blue-700 disabled:opacity-50">{accountantActionBusy === 'set_monthly_salary' ? 'Salvando...' : accountantSalaryReady ? 'Atualizar' : 'Salvar remuneração'}</button> : null}
+                  </div> : !accountantSalaryReady ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">A remuneração precisa ser preenchida por alguém com acesso a dados sensíveis.</p> : null}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantPrerequisitesReady} onClick={() => void generateAccountantForm(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-700 px-3 text-xs font-black text-white disabled:opacity-50">{accountantActionBusy === 'generate_form' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <FileText className="h-3.5 w-3.5"/>}{selectedProcess.accountantWorkflow?.latestFormId ? 'Gerar nova versão' : 'Gerar formulário em PDF'}</button> : null}
                     {selectedProcess.accountantWorkflow?.latestFormId ? <button type="button" onClick={() => void openAccountantAsset('form')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700"><Eye className="h-3.5 w-3.5"/>Abrir formulário</button> : null}
-                    {selectedProcess.accountantWorkflow?.latestFormId && selectedProcess.accountantWorkflow.formValidation?.documentId !== selectedProcess.accountantWorkflow.latestFormId && canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar versão'}</button> : null}
-                    {selectedProcess.accountantWorkflow?.latestFormId && selectedProcess.accountantWorkflow.formValidation?.documentId === selectedProcess.accountantWorkflow.latestFormId ? <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-100 px-3 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Versão validada</span> : null}
+                    {selectedProcess.accountantWorkflow?.latestFormId && !accountantFormValidated && canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantSalaryReady} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar versão'}</button> : null}
+                    {accountantFormValidated ? <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-100 px-3 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Versão validada</span> : null}
                   </div>
                 </div>
 
-                {selectedProcess.accountantWorkflow?.formValidation?.documentId === selectedProcess.accountantWorkflow?.latestFormId ? <>
+                {accountantFormValidated ? <>
                   <div className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-wide text-cyan-800">2. Seleção dos documentos</p>
                     <p className="mt-1 text-xs font-semibold text-slate-600">Todos os documentos anexados até o momento aparecem abaixo. Marque quais documentos aprovados irão no e-mail; itens ainda não aprovados ficam visíveis, mas bloqueados. O formulário da contabilidade e o ASO aprovado são anexos fixos.</p>
@@ -11610,6 +11633,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   const canManageAso = hasFormalizationPermission(permissions, 'aso.manage');
   const canViewAccountant = hasFormalizationPermission(permissions, 'accountant.view');
   const canManageAccountant = hasFormalizationPermission(permissions, 'accountant.manage');
+  const canViewSensitiveData = hasFormalizationPermission(permissions, 'sensitiveData.view');
   const canViewSignatures = hasFormalizationPermission(permissions, 'signatures.view');
   const canGenerateDocuments = hasFormalizationPermission(permissions, 'documents.generate');
   const canReviewDocuments = hasFormalizationPermission(permissions, 'documents.review');
@@ -12449,6 +12473,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           canManageAso={canManageAso}
           canViewAccountant={canViewAccountant}
           canManageAccountant={canManageAccountant}
+          canViewSensitiveData={canViewSensitiveData}
           canViewSignatures={canViewSignatures}
           canGenerateDocuments={canGenerateDocuments}
           canReviewDocuments={canReviewDocuments}

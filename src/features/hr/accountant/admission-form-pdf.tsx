@@ -1,14 +1,8 @@
 /** @jsxImportSource react-pdf-react-server */
 import React from 'react-pdf-react-server';
-import { Document, Image, Page, StyleSheet, Text, View } from 'react-pdf-renderer-server';
+import { Document, Page, StyleSheet, Text, View } from 'react-pdf-renderer-server';
 
-export type AccountantDependentAnalysis = {
-  name: string;
-  birthDate: string;
-  ageLabel: string;
-  documentDetails: string;
-  eligibility: string;
-};
+import type { AccountantDependentAnalysis } from '@/features/hr/accountant/dependent-analysis';
 
 export type AccountantAdmissionFormData = {
   companyName: string;
@@ -27,7 +21,6 @@ export type AccountantAdmissionFormData = {
   quotaLabel: string;
   familySalaryConclusion: string;
   dependents: AccountantDependentAnalysis[];
-  logoDataUri?: string | null;
 };
 
 const BLUE = '#3E6078';
@@ -36,7 +29,6 @@ const MUTED = '#6B7F91';
 
 const styles = StyleSheet.create({
   page: { padding: 34, fontFamily: 'Helvetica', color: '#24384B', fontSize: 8.5 },
-  logo: { width: 76, height: 48, objectFit: 'contain', alignSelf: 'center' },
   title: { marginTop: 4, textAlign: 'center', fontFamily: 'Helvetica-Bold', fontSize: 18, color: BLUE },
   subtitle: { marginTop: 3, textAlign: 'center', fontSize: 9, color: MUTED },
   divider: { height: 1.5, marginTop: 14, marginBottom: 10, backgroundColor: BLUE },
@@ -59,7 +51,7 @@ const styles = StyleSheet.create({
   dependentEligibility: { width: '18%' },
   tableHeader: { backgroundColor: '#F2F5F7', color: MUTED, fontFamily: 'Helvetica-Bold', fontSize: 6.5, textTransform: 'uppercase' },
   note: { marginTop: 6, color: MUTED, fontSize: 7, lineHeight: 1.3 },
-  footer: { position: 'absolute', left: 34, right: 34, bottom: 18, textAlign: 'center', color: '#8A99A7', fontSize: 6.5 },
+  footer: { position: 'absolute', left: 34, right: 34, bottom: 50, textAlign: 'center', color: '#8A99A7', fontSize: 6.5 },
 });
 
 function Cell({ label, value, width, right = true }: { label: string; value: string; width: string; right?: boolean }) {
@@ -73,7 +65,6 @@ function Section({ number, title, children }: { number: number; title: string; c
 export function AccountantAdmissionFormPdf({ data }: { data: AccountantAdmissionFormData }) {
   return <Document title={`Formulário de admissão - ${data.employeeName}`} author="Coala Shakes">
     <Page size="A4" style={styles.page}>
-      {data.logoDataUri ? <Image src={data.logoDataUri} style={styles.logo} /> : null}
       <Text style={styles.title}>FORMULÁRIO DE ADMISSÃO</Text>
       <Text style={styles.subtitle}>Informações para registro contábil e trabalhista</Text>
       <View style={styles.divider} />

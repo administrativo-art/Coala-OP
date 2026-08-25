@@ -66,8 +66,8 @@ export function childEntitlementEndsAt(birthDate?: string | null) {
   return date.toISOString().slice(0, 10);
 }
 
-export function familyRequiredDocs(birthDate?: string | null): FamilyDocumentLabel[] {
-  const age = dependentAge(birthDate);
+export function familyRequiredDocs(birthDate?: string | null, today = new Date()): FamilyDocumentLabel[] {
+  const age = dependentAge(birthDate, today);
   if (age == null) return ["certidão"];
   if (age < 0 || age >= 14) return [];
   if (age < 4) return ["certidão", "vacinação"];

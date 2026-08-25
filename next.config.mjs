@@ -34,7 +34,7 @@ const nextConfig = {
       './src/features/hr/aso/assets/coala-shakes-letterhead-v1.png',
     ],
     '/api/hr/onboarding/*/accountant-form': [
-      './src/features/hr/aso/assets/coala-shakes-letterhead-v1.png',
+      ...documentPdfRuntimeAssets,
     ],
     '/api/hr/onboarding/*/signature-documents': systemDocumentTemplateAssets,
     '/api/documents/generate': systemDocumentTemplateAssets,

@@ -1,15 +1,16 @@
-import React from 'react';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+/** @jsxImportSource react-pdf-react-server */
+import React from 'react-pdf-react-server';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { renderToBuffer } from '@react-pdf/renderer';
+import { renderToBuffer } from 'react-pdf-renderer-server';
 
 import { AccountantAdmissionFormPdf } from '../src/features/hr/accountant/admission-form-pdf';
+import { applyCoalaLetterheadToPdf } from '../src/features/hr/documents/letterhead-pdf.server';
 
 async function main() {
   const workspace = process.cwd();
   const outputDirectory = path.join(workspace, 'docs/modelos-documentos/contador');
-  const outputPath = path.join(outputDirectory, 'formulario-admissao-contador-v1.pdf');
-  const logo = await readFile(path.join(workspace, 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png'));
+  const outputPath = path.join(outputDirectory, 'formulario-admissao-contador-v2.pdf');
 
   const pdf = await renderToBuffer(<AccountantAdmissionFormPdf data={{
     companyName: 'EMPRESA DE EXEMPLO LTDA',
@@ -38,11 +39,10 @@ async function main() {
       ].join('\n'),
       eligibility: 'Elegível',
     }],
-    logoDataUri: `data:image/png;base64,${logo.toString('base64')}`,
   }} />);
 
   await mkdir(outputDirectory, { recursive: true });
-  await writeFile(outputPath, Buffer.from(pdf));
+  await writeFile(outputPath, await applyCoalaLetterheadToPdf(Buffer.from(pdf)));
   process.stdout.write(`${outputPath}\n`);
 }
 

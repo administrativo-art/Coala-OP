@@ -1,15 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { cwd } from 'node:process';
 import { NextRequest, NextResponse } from 'next/server';
 import { renderToBuffer } from 'react-pdf-renderer-server';
 import { getStorage } from 'firebase-admin/storage';
 
-import { AccountantAdmissionFormPdf, type AccountantDependentAnalysis } from '@/features/hr/accountant/admission-form-pdf';
+import { AccountantAdmissionFormPdf } from '@/features/hr/accountant/admission-form-pdf';
+import {
+  buildAccountantDependentAnalysis,
+  FAMILY_SALARY_LIMIT_2026,
+  FAMILY_SALARY_QUOTA_2026,
+} from '@/features/hr/accountant/dependent-analysis';
 import { missingAccountantPrerequisites } from '@/features/hr/accountant/workflow';
+import { applyCoalaLetterheadToPdf } from '@/features/hr/documents/letterhead-pdf.server';
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
-import { dependentAge, familyRequiredDocs } from '@/features/hr/lib/family-salary';
 import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
@@ -39,12 +41,6 @@ function probationContractLabel(onboarding: Record<string, unknown>) {
   return 'Não informado';
 }
 
-const FAMILY_DOCUMENT_NAMES: Record<string, string> = {
-  'certidão': 'Certidão de nascimento',
-  'vacinação': 'Caderneta de vacinação',
-  'frequência escolar': 'Comprovante de frequência escolar',
-};
-
 function salaryFrom(source: Record<string, unknown>) {
   const salaryRange = record(source.salaryRange);
   const publicRange = record(source.publicSalaryRange);
@@ -58,46 +54,6 @@ function extractedText(documents: OnboardingDocument[], key: string) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
-}
-
-function dependentAnalysis(answers: Record<string, unknown>, documents: OnboardingDocument[], monthlySalary: number | null) {
-  const children = Array.isArray(answers.children) ? answers.children.map(record) : [];
-  const limit = 1980.38;
-  let eligible = 0;
-  let pending = 0;
-  const dependents: AccountantDependentAnalysis[] = children.map((child, index) => {
-    const birthDate = text(child.birthDate, 10);
-    const age = dependentAge(birthDate || null);
-    const required = familyRequiredDocs(birthDate || null);
-    const approved = required.filter((kind) => documents.find((document) => document.id === `child_${index + 1}_${kind}`)?.status === 'approved');
-    const documentsComplete = required.length === approved.length;
-    const ageEligible = age != null && age >= 0 && age < 14;
-    const incomeEligible = monthlySalary != null && monthlySalary <= limit;
-    let eligibility = 'Não elegível pela idade';
-    if (ageEligible && !documentsComplete) { eligibility = 'Pendente de documentação'; pending += 1; }
-    else if (ageEligible && monthlySalary == null) { eligibility = 'Aguardando remuneração'; pending += 1; }
-    else if (ageEligible && !incomeEligible) eligibility = 'Não elegível pela renda';
-    else if (ageEligible) { eligibility = 'Elegível'; eligible += 1; }
-    return {
-      name: text(child.name, 160) || `Dependente ${index + 1}`,
-      birthDate: birthDate ? dateBr(birthDate) : 'Não informada',
-      ageLabel: age == null ? 'Pendente' : `${age} ano${age === 1 ? '' : 's'}`,
-      documentDetails: required.length === 0
-        ? 'Nenhum documento exigido pela idade'
-        : required.map((kind) => `${FAMILY_DOCUMENT_NAMES[kind] ?? kind}: ${approved.includes(kind) ? 'aprovado' : 'pendente'}`).join('\n'),
-      eligibility,
-    };
-  });
-  const conclusion = monthlySalary == null
-    ? 'ANÁLISE PENDENTE: REMUNERAÇÃO NÃO INFORMADA'
-    : monthlySalary > limit
-      ? 'NÃO ELEGÍVEL PELO CRITÉRIO DE RENDA'
-      : eligible > 0
-        ? `ELEGÍVEL: ${eligible} DEPENDENTE${eligible === 1 ? '' : 'S'} VALIDADO${eligible === 1 ? '' : 'S'}`
-        : pending > 0
-          ? 'AGUARDANDO VALIDAÇÃO DOS DEPENDENTES'
-          : 'SEM DEPENDENTES ELEGÍVEIS'
-  return { dependents, conclusion };
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -123,10 +79,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const previousWorkflow = record(onboarding.accountantWorkflow);
   const previousFormData = record(previousWorkflow.formData);
   const monthlySalary = numeric(onboarding.monthlySalary) ?? numeric(previousFormData.monthlySalary) ?? salaryFrom(jobFunction) ?? salaryFrom(role);
-  const analysis = dependentAnalysis(answers, documents, monthlySalary);
+  if (monthlySalary == null) {
+    return NextResponse.json({ error: 'Informe a remuneração mensal antes de gerar o formulário da contabilidade.' }, { status: 409 });
+  }
+  const analysis = buildAccountantDependentAnalysis({ answers, documents, monthlySalary });
   const employerCnpj = CnpjValidator.clean(text(onboarding.employerCnpj, 30));
   const employeeName = text(answers.fullName, 180) || text(onboarding.candidateName, 180);
-  const logo = await readFile(path.join(cwd(), 'src/features/hr/aso/assets/coala-shakes-letterhead-v1.png'));
   const pdf = await renderToBuffer(AccountantAdmissionFormPdf({ data: {
     companyName: text(onboarding.employerUnitName, 180) || text(onboarding.unitName, 180) || 'Empresa não informada',
     employerCnpj: CnpjValidator.format(employerCnpj), employeeName,
@@ -135,15 +93,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     jobFunction: text(onboarding.functionName, 180) || text(onboarding.jobRoleName, 180), salaryLabel: currency(monthlySalary),
     probationContract: probationContractLabel(onboarding), weeklyRest: text(onboarding.weeklyRest, 120) || 'Conforme escala',
     workSchedule: text(jobFunction.workSchedule, 400) || text(role.workSchedule, 400) || text(onboarding.shiftDefinitionName, 180) || 'Não informada',
-    salaryLimitLabel: currency(1980.38), quotaLabel: currency(67.54), familySalaryConclusion: analysis.conclusion,
-    dependents: analysis.dependents, logoDataUri: `data:image/png;base64,${logo.toString('base64')}`,
+    salaryLimitLabel: currency(FAMILY_SALARY_LIMIT_2026), quotaLabel: currency(FAMILY_SALARY_QUOTA_2026), familySalaryConclusion: analysis.conclusion,
+    dependents: analysis.dependents,
   } }));
-  const buffer = Buffer.from(pdf); const hashSha256 = createHash('sha256').update(buffer).digest('hex');
+  const buffer = await applyCoalaLetterheadToPdf(Buffer.from(pdf));
+  const hashSha256 = createHash('sha256').update(buffer).digest('hex');
   const generatedId = randomUUID(); const now = new Date().toISOString();
   const fileName = `formulario-admissao-contabilidade-${safeFilePart(employeeName)}.pdf`;
   const storagePath = `hr/onboarding/${id}/generated/accountant-forms/${generatedId}.pdf`;
   await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(buffer, { resumable: false, metadata: { contentType: 'application/pdf', cacheControl: 'private, max-age=0, no-store', metadata: { onboardingId: id, generatedId, hashSha256 } } });
-  const generated = { id: generatedId, kind: 'accountant_admission_form', templateVersion: '1.0', mimeType: 'application/pdf', fileName, storagePath, hashSha256, generatedAt: now, generatedBy: access.decoded.uid, generatedByEmail: access.decoded.email ?? null };
+  const generated = { id: generatedId, kind: 'accountant_admission_form', templateVersion: '2.0', mimeType: 'application/pdf', fileName, storagePath, hashSha256, generatedAt: now, generatedBy: access.decoded.uid, generatedByEmail: access.decoded.email ?? null };
   await Promise.all([
     processRef.collection('generatedDocuments').doc(generatedId).set(generated),
     processRef.set({
@@ -151,7 +110,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       currentStage: 'accountant',
       ...(onboarding.currentStage === 'accountant' ? {} : { currentStageStartedAt: now }),
       status: 'accountant_pending',
-      accountantWorkflow: { ...previousWorkflow, status: 'form_generated', latestFormId: generatedId, latestFormHashSha256: hashSha256, latestFormGeneratedAt: now, formValidation: null, formData: { monthlySalary }, updatedAt: now }, updatedAt: now,
+      accountantWorkflow: { ...previousWorkflow, status: 'form_generated', latestFormId: generatedId, latestFormHashSha256: hashSha256, latestFormGeneratedAt: now, formValidation: null, formData: { ...previousFormData, monthlySalary }, updatedAt: now }, updatedAt: now,
     }, { merge: true }),
     processRef.collection('accountantEvents').doc(randomUUID()).set({ type: 'ACCOUNTANT_FORM_GENERATED', at: now, actorId: access.decoded.uid, actorEmail: access.decoded.email ?? null, documentId: generatedId, hashSha256 }),
   ]);

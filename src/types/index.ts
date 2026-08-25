@@ -1440,6 +1440,7 @@ export type OnboardingProcess = {
   employerCnpj?: string | null;
   employerAddress?: string | null;
   monthlySalary?: number | null;
+  monthlySalaryConfigured?: boolean;
   shiftDefinitionId?: string | null;
   shiftDefinitionName?: string | null;
   expectedAdmissionDate?: string | null;
@@ -1601,6 +1602,12 @@ export type OnboardingProcess = {
     latestFormId?: string | null;
     latestFormHashSha256?: string | null;
     latestFormGeneratedAt?: string | null;
+    formData?: {
+      monthlySalary?: number | null;
+      [key: string]: unknown;
+    } | null;
+    remunerationUpdatedAt?: string | null;
+    remunerationUpdatedBy?: string | null;
     formValidation?: {
       documentId?: string | null;
       validatedAt?: string | null;
