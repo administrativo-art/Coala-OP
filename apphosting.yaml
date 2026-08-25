@@ -2,6 +2,9 @@
 # https://firebase.google.com/docs/app-hosting/configure
 
 runConfig:
+  # Server-side PDF rendering temporarily holds the rendered document,
+  # letterhead image, and stamped PDF in memory at the same time.
+  memoryMiB: 1024
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1

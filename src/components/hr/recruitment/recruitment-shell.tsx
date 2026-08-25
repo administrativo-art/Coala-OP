@@ -8928,7 +8928,13 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     try {
       const token = await getToken();
       const response = await fetch(`/api/hr/onboarding/${process.id}/accountant-form`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.error || 'Falha ao gerar o formulário do contador.'); }
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const fallback = response.status === 503
+          ? 'O serviço de geração de PDFs ficou temporariamente sem recursos. Tente novamente em instantes.'
+          : 'Falha ao gerar o formulário do contador.';
+        throw new Error(payload.error || fallback);
+      }
       const url = URL.createObjectURL(await response.blob());
       if (previewWindow) previewWindow.location.href = url;
       else if (openPreview) window.open(url, '_blank', 'noopener,noreferrer');
