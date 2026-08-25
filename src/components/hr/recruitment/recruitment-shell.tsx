@@ -7213,6 +7213,16 @@ function candidateInitials(name?: string | null) {
     .toUpperCase() || 'IN';
 }
 
+function onboardingProfilePhotoUrl(process: OnboardingProcess) {
+  const photo = process.documents?.find(document => (
+    document.status === 'approved'
+    && (document.id === 'profile_photo' || document.documentTypeCode === 'PROFILE_PHOTO')
+    && typeof document.fileUrl === 'string'
+    && document.fileUrl.trim().length > 0
+  ));
+  return photo?.fileUrl?.trim() || null;
+}
+
 function OnboardingFinalizationControls({
   value,
   onChange,
@@ -9546,6 +9556,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               const healthMeta = ONBOARDING_HEALTH_META[operationalStatus.health];
               const isPj = process.employmentRelationshipType === 'pj' && Boolean(process.pjWorkflow);
               const color = colorForProcess(process.id);
+              const profilePhotoUrl = onboardingProfilePhotoUrl(process);
               return (
                 <article
                   key={process.id}
@@ -9562,10 +9573,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 >
                   <div className="flex items-center gap-3">
                     <span
-                      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-sm font-black text-white"
+                      className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black text-white"
                       style={{ backgroundColor: color }}
                     >
-                      {candidateInitials(process.candidateName)}
+                      {profilePhotoUrl ? (
+                        <img src={profilePhotoUrl} alt={process.candidateName ?? 'Foto da candidata'} className="h-full w-full object-cover" />
+                      ) : candidateInitials(process.candidateName)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[15px] font-black text-slate-900">{process.candidateName ?? 'Candidato sem nome'}</div>
@@ -9843,6 +9856,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
       ? 'experiencia' as const
       : (activePhaseId ? ONBOARDING_STAGE_KIND[activePhaseId as OnboardingStageId] : 'generico');
   const accent = colorForProcess(selectedProcess.id);
+  const profilePhotoUrl = onboardingProfilePhotoUrl(selectedProcess);
   const processIsReadOnly = selectedProcess.status === 'completed' || selectedProcess.status === 'cancelled';
   const canManageAsoProcess = canManageAso && !processIsReadOnly;
   const canManageAccountantProcess = canManageAccountant && !processIsReadOnly;
@@ -10313,10 +10327,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             </div>
             <div className="mt-3.5 flex items-center gap-3">
               <span
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-[15px] font-black text-white"
+                className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl text-[15px] font-black text-white"
                 style={{ backgroundColor: accent }}
               >
-                {candidateInitials(selectedProcess.candidateName)}
+                {profilePhotoUrl ? (
+                  <img src={profilePhotoUrl} alt={selectedProcess.candidateName ?? 'Foto da candidata'} className="h-full w-full object-cover" />
+                ) : candidateInitials(selectedProcess.candidateName)}
               </span>
               <div className="min-w-0">
                 <h2 className="text-xl font-black tracking-tight text-slate-900">{selectedProcess.candidateName ?? 'Candidato sem nome'}</h2>
