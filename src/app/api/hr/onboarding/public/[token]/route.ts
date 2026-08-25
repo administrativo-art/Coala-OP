@@ -46,6 +46,7 @@ import {
   publicFormAnswersEqual,
 } from '@/features/hr/onboarding/public-form-revision';
 import { resolveSubmittedImageVoiceAuthorization } from '@/features/hr/onboarding/image-voice-consent-state';
+import { ONBOARDING_MARITAL_STATUSES } from '@/features/hr/onboarding/marital-status';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -126,6 +127,7 @@ function sanitizePublicAnswers(rawAnswers: Record<string, unknown>) {
   return {
     fullName: trimText(rawAnswers.fullName, 120),
     cpf: trimText(rawAnswers.cpf, 14).replace(/\D/g, '').slice(0, 11),
+    maritalStatus: cleanChoice(rawAnswers.maritalStatus, ONBOARDING_MARITAL_STATUSES),
     identityDocumentType: cleanChoice(rawAnswers.identityDocumentType, ['identity', 'cnh']),
     bankName: trimText(rawAnswers.bankName, 80),
     bankAgency: trimText(rawAnswers.bankAgency, 40),
@@ -739,6 +741,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   });
   if (!publicFormAnswers.fullName) return jsonError('Informe o nome completo.');
   if (publicFormAnswers.cpf.length !== 11) return jsonError('Informe um CPF com 11 dígitos.');
+  if (!publicFormAnswers.maritalStatus) return jsonError('Informe o estado civil.');
   if (!publicFormAnswers.hasChildren) return jsonError('Informe se possui filhos.');
   if (publicFormAnswers.hasChildren === 'yes' && publicFormAnswers.childrenCount < 1) {
     return jsonError('Informe a quantidade de filhos.');

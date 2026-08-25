@@ -15,6 +15,7 @@ import {
   salaryBaseFunctionId,
 } from '@/features/hr/compensation/job-function-salary';
 import { applyCoalaLetterheadToPdf } from '@/features/hr/documents/letterhead-pdf.server';
+import { maritalStatusIsInformed } from '@/features/hr/onboarding/marital-status';
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
 import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     employeeName: text(previousFormData.employeeName, 180)
       || text(answers.fullName, 180)
       || text(onboarding.candidateName, 180),
-    maritalStatus: text(previousFormData.maritalStatus, 80)
+    maritalStatus: (maritalStatusIsInformed(previousFormData.maritalStatus) ? text(previousFormData.maritalStatus, 80) : '')
       || text(answers.maritalStatus, 80)
       || extractedText(documents, 'maritalStatus')
       || 'Não informado',
@@ -120,6 +121,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       || text(onboarding.shiftDefinitionName, 180)
       || 'Não informada',
   };
+  if (!maritalStatusIsInformed(reviewedFormData.maritalStatus)) {
+    return NextResponse.json({ error: 'Confirme o estado civil na revisão dos campos antes de gerar o formulário.' }, { status: 409 });
+  }
   const employeeName = reviewedFormData.employeeName;
   const pdf = await renderToBuffer(AccountantAdmissionFormPdf({ data: {
     companyName: reviewedFormData.companyName,

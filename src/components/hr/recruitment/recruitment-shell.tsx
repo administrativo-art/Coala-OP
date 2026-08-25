@@ -80,6 +80,7 @@ import {
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
 import { formatPersonName } from '@/lib/person-name';
 import { essentialPublicFormDataReady } from '@/features/hr/onboarding/public-form-revision';
+import { maritalStatusIsInformed, ONBOARDING_MARITAL_STATUSES } from '@/features/hr/onboarding/marital-status';
 import { canUpdateExpectedAdmissionDate } from '@/features/hr/onboarding-lifecycle';
 import { formatBrlCurrency, parseBrlCurrency } from '@/features/hr/compensation/brl-currency';
 import { isAutomaticAccountantDocument } from '@/features/hr/accountant/document-selection';
@@ -7104,12 +7105,13 @@ const ACCOUNTANT_FORM_TEXT_FIELD_CONFIG: Array<{
   key: AccountantFormTextField;
   label: string;
   wide?: boolean;
+  options?: readonly string[];
 }> = [
   { key: 'companyName', label: 'Empresa contratante' },
   { key: 'employerCnpj', label: 'CNPJ da empresa' },
   { key: 'employeeName', label: 'Nome da candidata' },
   { key: 'employeeCpf', label: 'CPF da candidata' },
-  { key: 'maritalStatus', label: 'Estado civil' },
+  { key: 'maritalStatus', label: 'Estado civil', options: ONBOARDING_MARITAL_STATUSES },
   { key: 'educationLevel', label: 'Escolaridade' },
   { key: 'jobFunction', label: 'Função' },
   { key: 'probationContract', label: 'Contrato de experiência' },
@@ -7147,7 +7149,7 @@ function accountantFormTextDraftFrom(
     companyName: storedText('companyName') || process.employerUnitName || process.unitName || 'Empresa não informada',
     employerCnpj: CnpjValidator.format(cnpj),
     employeeName: storedText('employeeName') || onboardingAnswerText(answers, 'fullName') || process.candidateName || 'Não informado',
-    maritalStatus: storedText('maritalStatus') || onboardingAnswerText(answers, 'maritalStatus') || 'Não informado',
+    maritalStatus: (storedText('maritalStatus').toLocaleLowerCase('pt-BR') === 'não informado' ? '' : storedText('maritalStatus')) || onboardingAnswerText(answers, 'maritalStatus') || 'Não informado',
     employeeCpf: storedText('employeeCpf') || formatOnboardingCpf(answers?.cpf),
     educationLevel: storedText('educationLevel') || onboardingAnswerText(answers, 'educationLevel') || 'Não informado',
     jobFunction: storedText('jobFunction') || process.functionName || process.jobRoleName || 'Não informada',
@@ -10029,7 +10031,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const accountantSalaryDraftChanged = accountantSalaryDraftValid
     && Math.round(accountantSalaryDraftValue * 100) !== Math.round((accountantConfiguredSalary ?? 0) * 100);
   const accountantSavedFormText = accountantFormTextDraftFrom(selectedProcess, roles, jobFunctions);
-  const accountantFormTextValid = ACCOUNTANT_FORM_TEXT_FIELDS.every((key) => accountantFormTextDraft[key].trim().length > 0);
+  const accountantFormTextValid = ACCOUNTANT_FORM_TEXT_FIELDS.every((key) => accountantFormTextDraft[key].trim().length > 0)
+    && maritalStatusIsInformed(accountantFormTextDraft.maritalStatus);
   const accountantFormTextChanged = ACCOUNTANT_FORM_TEXT_FIELDS.some((key) => accountantFormTextDraft[key].trim() !== accountantSavedFormText[key].trim());
   const accountantPrerequisitesReady = accountantDocumentsReady && accountantAsoReady && accountantAdmissionDateReady && accountantSalaryReady;
   const accountantFormRequiresRegeneration = selectedProcess.accountantWorkflow?.latestFormRequiresRegeneration === true;
@@ -10038,6 +10041,17 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     && !accountantFormRequiresRegeneration
     && selectedProcess.accountantWorkflow?.latestFormId
     && selectedProcess.accountantWorkflow.formValidation?.documentId === selectedProcess.accountantWorkflow.latestFormId,
+  );
+  const confirmedAccountantDocumentIds = selectedProcess.accountantWorkflow?.documentSelection?.selectedDocumentIds ?? [];
+  const currentAccountantDocumentIds = [...accountantSelectedDocumentIds].sort();
+  const accountantDocumentSelectionConfirmed = Boolean(
+    selectedProcess.accountantWorkflow?.email?.sentAt
+    || (
+      accountantFormValidated
+      && selectedProcess.accountantWorkflow?.documentSelection?.documentId === selectedProcess.accountantWorkflow?.latestFormId
+      && confirmedAccountantDocumentIds.length === currentAccountantDocumentIds.length
+      && [...confirmedAccountantDocumentIds].sort().every((documentId, index) => documentId === currentAccountantDocumentIds[index])
+    ),
   );
   const asoWorkflow = selectedProcess.asoWorkflow;
   const asoRequest = asoWorkflow?.requestValidation;
@@ -11073,7 +11087,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             {activeKind === 'contador' && canViewAccountant && (
               <div className="mt-4 space-y-4">
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">Etapa 1 de 3</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">Etapa 1 de 3</p>
+                    <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${accountantFormValidated ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{accountantFormValidated ? 'Concluída' : 'Etapa atual'}</span>
+                  </div>
                   <h4 className="mt-1 text-sm font-black text-slate-900">Revise os campos do formulário da contabilidade</h4>
                   <p className="mt-1 text-xs font-semibold text-slate-600">Os campos começam bloqueados. Use “Editar” para alterar, confirme em “OK” e gere o PDF timbrado; cada versão é preservada para auditoria.</p>
                   {canEditAccountantFormFields ? <div className="mt-3 flex justify-end">
@@ -11081,7 +11098,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   </div> : null}
                   <div className="mt-2 grid gap-2 rounded-xl border border-blue-200 bg-white p-3 sm:grid-cols-2">
                     {ACCOUNTANT_FORM_TEXT_FIELD_CONFIG.map((field) => <label key={field.key} className={`min-w-0 text-[10px] font-black uppercase tracking-wide text-slate-600 ${field.wide ? 'sm:col-span-2' : ''}`}>{field.label}
-                      {field.wide ? <textarea value={accountantFormTextDraft[field.key]} onChange={event => setAccountantFormTextDraft(previous => ({ ...previous, [field.key]: event.target.value }))} disabled={!accountantFormEditing || !canManageAccountantProcess || !!accountantActionBusy} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold normal-case text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" /> : <input value={accountantFormTextDraft[field.key]} onChange={event => setAccountantFormTextDraft(previous => ({ ...previous, [field.key]: event.target.value }))} onBlur={() => {
+                      {field.wide ? <textarea value={accountantFormTextDraft[field.key]} onChange={event => setAccountantFormTextDraft(previous => ({ ...previous, [field.key]: event.target.value }))} disabled={!accountantFormEditing || !canManageAccountantProcess || !!accountantActionBusy} rows={2} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold normal-case text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" /> : field.options ? <select value={accountantFormTextDraft[field.key]} onChange={event => setAccountantFormTextDraft(previous => ({ ...previous, [field.key]: event.target.value }))} disabled={!accountantFormEditing || !canManageAccountantProcess || !!accountantActionBusy} className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold normal-case text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700"><option value="Não informado">Selecione</option>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select> : <input value={accountantFormTextDraft[field.key]} onChange={event => setAccountantFormTextDraft(previous => ({ ...previous, [field.key]: event.target.value }))} onBlur={() => {
                         if (field.key === 'employerCnpj') setAccountantFormTextDraft(previous => ({ ...previous, employerCnpj: CnpjValidator.format(previous.employerCnpj) }));
                         if (field.key === 'employeeCpf') setAccountantFormTextDraft(previous => ({ ...previous, employeeCpf: formatOnboardingCpf(previous.employeeCpf) }));
                       }} disabled={!accountantFormEditing || !canManageAccountantProcess || !!accountantActionBusy} type="text" className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold normal-case text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" />}
@@ -11094,20 +11111,24 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </label> : null}
                   </div>
                   {!canViewSensitiveData && !accountantSalaryReady ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">A remuneração precisa ser preenchida por alguém com acesso a dados sensíveis.</p> : null}
+                  {!maritalStatusIsInformed(accountantFormTextDraft.maritalStatus) ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">O formulário inicial não coletou o estado civil desta candidata. Clique em “Editar”, confirme o estado civil e pressione “OK” antes de gerar o formulário.</p> : null}
                   {accountantFormRequiresRegeneration ? <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">A versão anterior ficou desatualizada após alteração dos dados. Gere uma nova versão para validar e enviar.</p> : null}
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantPrerequisitesReady} onClick={() => void generateAccountantForm(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-700 px-3 text-xs font-black text-white disabled:opacity-50">{accountantActionBusy === 'generate_form' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <FileText className="h-3.5 w-3.5"/>}{selectedProcess.accountantWorkflow?.latestFormId ? 'Gerar nova versão' : 'Gerar formulário em PDF'}</button> : null}
-                    {selectedProcess.accountantWorkflow?.latestFormId ? <button type="button" onClick={() => void openAccountantAsset('form')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700"><Eye className="h-3.5 w-3.5"/>{accountantFormRequiresRegeneration ? 'Abrir versão anterior' : 'Abrir formulário'}</button> : null}
-                    {selectedProcess.accountantWorkflow?.latestFormId && !accountantFormRequiresRegeneration && !accountantFormValidated && canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantSalaryReady} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar versão'}</button> : null}
+                    {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantPrerequisitesReady || !accountantFormTextValid} onClick={() => void generateAccountantForm(selectedProcess)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-blue-700 px-3 text-xs font-black text-white disabled:opacity-50">{accountantActionBusy === 'generate_form' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <FileText className="h-3.5 w-3.5"/>}Gerar/atualizar formulário</button> : null}
+                    {selectedProcess.accountantWorkflow?.latestFormId ? <button type="button" onClick={() => void openAccountantAsset('form')} className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700"><Eye className="h-3.5 w-3.5"/>Visualizar</button> : null}
+                    {selectedProcess.accountantWorkflow?.latestFormId && !accountantFormRequiresRegeneration && !accountantFormValidated && canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantSalaryReady} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar e avançar para documentos'}</button> : null}
                     {accountantFormValidated ? <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-100 px-3 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Versão validada</span> : null}
                   </div>
                 </div>
 
-                {accountantFormValidated ? <>
                   <div className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wide text-cyan-800">Etapa 2 de 3</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-cyan-800">Etapa 2 de 3</p>
+                      <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${accountantDocumentSelectionConfirmed ? 'bg-emerald-100 text-emerald-700' : accountantFormValidated ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-200 text-slate-600'}`}>{accountantDocumentSelectionConfirmed ? 'Concluída' : accountantFormValidated ? 'Etapa atual' : 'Bloqueada'}</span>
+                    </div>
                     <h4 className="mt-1 text-sm font-black text-slate-900">Selecione os documentos para enviar junto com o formulário</h4>
                     <p className="mt-1 text-xs font-semibold text-slate-600">O formulário, o ASO, a identificação da candidata e os documentos dos filhos são anexos automáticos. O RH seleciona abaixo somente os demais documentos; itens ainda não aprovados ficam visíveis, mas bloqueados.</p>
+                    {!accountantFormValidated ? <p className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white/80 p-3 text-xs font-bold text-slate-600"><LockKeyhole className="h-4 w-4 shrink-0"/>Gere e valide o formulário na etapa 1 para liberar a confirmação dos documentos.</p> : null}
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {[
                         { label: 'Formulário de admissão para a contabilidade', onOpen: () => openAccountantAsset('form') },
@@ -11135,7 +11156,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         const approved = document.status === 'approved';
                         return <div key={document.id} className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 transition ${checked ? 'border-cyan-400 bg-white text-slate-900' : 'border-slate-200 bg-white/70 text-slate-600'}`}>
                           <label className={`flex min-w-0 flex-1 items-start gap-2 ${approved ? 'cursor-pointer' : 'cursor-not-allowed opacity-65'}`}>
-                            <input type="checkbox" checked={checked && approved} disabled={!canManageAccountantProcess || !!accountantActionBusy || !approved} onChange={event => setAccountantSelectedDocumentIds(current => event.target.checked ? [...new Set([...current, document.id])] : current.filter(id => id !== document.id))} className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-700" />
+                            <input type="checkbox" checked={checked && approved} disabled={!accountantFormValidated || !canManageAccountantProcess || !!accountantActionBusy || !approved} onChange={event => setAccountantSelectedDocumentIds(current => event.target.checked ? [...new Set([...current, document.id])] : current.filter(id => id !== document.id))} className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-700" />
                             <span className="min-w-0"><span className="block text-xs font-black">{document.label}</span><span className={`mt-0.5 block text-[10px] font-bold ${approved ? 'text-emerald-700' : 'text-amber-700'}`}>{approved ? 'Aprovado · arquivo auditável disponível' : 'Aguardando aprovação do RH'}</span></span>
                           </label>
                           <a href={document.fileUrl!} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-cyan-200 bg-white px-2 py-1.5 text-[10px] font-black text-cyan-800 hover:bg-cyan-50" aria-label={`Visualizar ${document.label}`}>
@@ -11145,21 +11166,25 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       })}
                     </div> : <p className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white/70 p-3 text-xs font-semibold text-slate-500">Nenhum outro documento opcional com arquivo está disponível.</p>}
                     <p className="mt-2 text-[11px] font-bold text-cyan-900">Selecionados pelo RH: {accountantSelectedDocumentIds.length} de {accountantSelectableDocuments.length} documentos opcionais.</p>
+                    {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantFormValidated} onClick={() => void accountantAction('confirm_documents', { selectedDocumentIds: accountantSelectedDocumentIds })} className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">{accountantActionBusy === 'confirm_documents' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}{accountantDocumentSelectionConfirmed ? 'Documentos confirmados' : 'Confirmar documentos e avançar'}</button> : null}
                   </div>
 
                   <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wide text-violet-700">Etapa 3 de 3</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-violet-700">Etapa 3 de 3</p>
+                      <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${selectedProcess.accountantWorkflow?.email?.sentAt ? 'bg-emerald-100 text-emerald-700' : accountantDocumentSelectionConfirmed ? 'bg-violet-100 text-violet-700' : 'bg-slate-200 text-slate-600'}`}>{selectedProcess.accountantWorkflow?.email?.sentAt ? 'Enviado' : accountantDocumentSelectionConfirmed ? 'Etapa atual' : 'Bloqueada'}</span>
+                    </div>
                     <h4 className="mt-1 text-sm font-black text-slate-900">Envie e acompanhe a resolução do e-mail para o contador</h4>
                     <p className="mt-1 text-xs font-semibold text-slate-600">O e-mail levará {2 + accountantAutomaticDocuments.length} anexos automáticos e somente os documentos opcionais marcados acima. Depois do envio, acompanhe entrega, abertura, acesso ao link e retorno da Ficha de Registro de Empregado.</p>
+                    {!accountantDocumentSelectionConfirmed ? <p className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white/80 p-3 text-xs font-bold text-slate-600"><LockKeyhole className="h-4 w-4 shrink-0"/>Confirme os documentos na etapa 2 para liberar o envio ao contador.</p> : null}
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                      <input value={accountantEmail} onChange={event => setAccountantEmail(event.target.value)} type="email" placeholder="E-mail do contador" className="h-9 min-w-0 flex-1 rounded-lg border px-3 text-xs font-semibold" />
-                      {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantEmail} onClick={() => void accountantAction('send_email', { accountantEmail, selectedDocumentIds: accountantSelectedDocumentIds })} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{accountantActionBusy === 'send_email' ? 'Enviando...' : selectedProcess.accountantWorkflow?.email?.sentAt ? 'Reenviar pacote' : 'Enviar ao contador'}</button> : null}
+                      <input value={accountantEmail} onChange={event => setAccountantEmail(event.target.value)} disabled={!accountantDocumentSelectionConfirmed || !!accountantActionBusy} type="email" placeholder="E-mail do contador" className="h-9 min-w-0 flex-1 rounded-lg border px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:bg-slate-100" />
+                      {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantEmail || !accountantDocumentSelectionConfirmed} onClick={() => void accountantAction('send_email', { accountantEmail, selectedDocumentIds: accountantSelectedDocumentIds })} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{accountantActionBusy === 'send_email' ? 'Enviando...' : selectedProcess.accountantWorkflow?.email?.sentAt ? 'Reenviar pacote' : 'Enviar ao contador'}</button> : null}
                     </div>
                     {selectedProcess.accountantWorkflow?.suggestedRecipientEmail ? <p className="mt-2 text-[11px] font-semibold text-violet-700">Contato sugerido pelo cadastro: {selectedProcess.accountantWorkflow.suggestedRecipientDepartment ?? 'Setor'} · {selectedProcess.accountantWorkflow.suggestedRecipientCompanyName ?? 'Empresa'}.</p> : null}
                     {selectedProcess.accountantWorkflow?.email?.sentAt ? <p className="mt-2 text-[11px] font-bold text-slate-600">E-mail: {selectedProcess.accountantWorkflow.email.status ?? 'accepted'}{selectedProcess.accountantWorkflow.email.deliveredAt ? ' · entregue' : ''}{selectedProcess.accountantWorkflow.email.openedAt ? ' · aberto' : ''}{selectedProcess.accountantWorkflow.email.clickedAt ? ' · link acessado' : ''}.</p> : null}
                     {selectedProcess.accountantWorkflow?.package?.attachmentCount ? <p className="mt-1 text-[11px] font-semibold text-slate-500">Último pacote: {selectedProcess.accountantWorkflow.package.attachmentCount} anexos, com {selectedProcess.accountantWorkflow.package.selectedDocumentIds?.length ?? 0} selecionados pelo RH.</p> : null}
                   </div>
-                </> : null}
 
                 {selectedProcess.accountantWorkflow?.registryDocument?.storagePath ? <div className="rounded-2xl border border-pink-200 bg-pink-50/60 p-4">
                   <p className="text-[10px] font-black uppercase tracking-wide text-pink-700">4. Ficha de Registro de Empregado</p>

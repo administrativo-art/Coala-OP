@@ -1633,6 +1633,13 @@ export type OnboardingProcess = {
       validatedBy?: string | null;
       validatedByEmail?: string | null;
     } | null;
+    documentSelection?: {
+      documentId?: string | null;
+      selectedDocumentIds?: string[];
+      confirmedAt?: string | null;
+      confirmedBy?: string | null;
+      confirmedByEmail?: string | null;
+    } | null;
     selectedDocumentIds?: string[];
     email?: {
       recipient?: string | null;

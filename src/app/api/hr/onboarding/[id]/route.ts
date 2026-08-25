@@ -627,6 +627,7 @@ async function createCollaboratorFromOnboarding(params: {
 
   const textAnswers: Array<[string, string]> = [
     ['employee.cpf', answerString(publicAnswers, 'cpf')],
+    ['employee.marital_status', answerString(publicAnswers, 'maritalStatus')],
     ['employee.bank_name', answerString(publicAnswers, 'bankName')],
     ['employee.bank_agency', answerString(publicAnswers, 'bankAgency')],
     ['employee.bank_account', answerString(publicAnswers, 'bankAccount')],

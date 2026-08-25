@@ -12,6 +12,7 @@ import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import { invalidateAccountantFormVersion } from '@/features/hr/accountant/form-version';
+import { maritalStatusIsInformed } from '@/features/hr/onboarding/marital-status';
 import { applyOnboardingSignatureMode, normalizeOnboardingStages } from '@/lib/recruitment-onboarding';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { resolveCompanyProcessContact } from '@/lib/company/company-process-contact.server';
@@ -81,6 +82,9 @@ function parseReviewedFormData(value: unknown) {
     const normalized = text(source[key], max);
     if (!normalized) return { error: `Preencha o campo “${label}”.`, data: null };
     data[key] = normalized;
+  }
+  if (!maritalStatusIsInformed(data.maritalStatus)) {
+    return { error: 'Confirme o campo “Estado civil”.', data: null };
   }
   const cleanCnpj = CnpjValidator.clean(data.employerCnpj);
   if (!CnpjValidator.validate(cleanCnpj).valid) {
@@ -195,6 +199,40 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ ok: true });
   }
 
+  if (action === 'confirm_documents') {
+    if (workflow.latestFormRequiresRegeneration === true) {
+      return NextResponse.json({ error: 'Os dados foram alterados. Gere e valide a nova versão antes de confirmar os documentos.' }, { status: 409 });
+    }
+    const form = await latestForm(id, workflow);
+    const validation = record(workflow.formValidation);
+    if (!form || text(validation.documentId) !== form.id) {
+      return NextResponse.json({ error: 'Valide a versão atual do formulário antes de confirmar os documentos.' }, { status: 409 });
+    }
+    if (!Array.isArray(body.selectedDocumentIds)) {
+      return NextResponse.json({ error: 'Confirme quais documentos opcionais devem compor o e-mail.' }, { status: 400 });
+    }
+    const selectedDocumentIds: string[] = [...new Set<string>((body.selectedDocumentIds as unknown[])
+      .map((value) => text(value, 180))
+      .filter(Boolean))].slice(0, 120);
+    const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
+    const availableDocumentIds = new Set(selectableCandidateDocumentsForAccountant(documents, process.publicFormAnswers).map((document) => document.id));
+    if (selectedDocumentIds.some((documentId) => !availableDocumentIds.has(documentId))) {
+      return NextResponse.json({ error: 'A seleção contém documento indisponível, sem aprovação ou sem arquivo auditável. Atualize a página e revise os anexos.' }, { status: 409 });
+    }
+    const documentSelection = {
+      documentId: form.id,
+      selectedDocumentIds,
+      confirmedAt: now,
+      confirmedBy: access.decoded.uid,
+      confirmedByEmail: access.decoded.email ?? null,
+    };
+    await Promise.all([
+      processRef.set({ accountantWorkflow: { ...workflow, selectedDocumentIds, documentSelection, updatedAt: now }, updatedAt: now }, { merge: true }),
+      addEvent(id, 'ACCOUNTANT_DOCUMENTS_CONFIRMED', access, { documentId: form.id, selectedDocumentIds }),
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
   if (action === 'send_email') {
     if (configuredMonthlySalary(process, workflow) == null) {
       return NextResponse.json({ error: 'Informe a remuneração, gere e valide uma nova versão do formulário antes do envio.' }, { status: 409 });
@@ -207,6 +245,24 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!recipient) return NextResponse.json({ error: 'Informe um e-mail válido do contador.' }, { status: 400 });
     if (!Array.isArray(body.selectedDocumentIds)) return NextResponse.json({ error: 'Confirme quais documentos do candidato devem compor o e-mail.' }, { status: 400 });
     const selectedDocumentIds: string[] = [...new Set<string>((body.selectedDocumentIds as unknown[]).map((value) => text(value, 180)).filter(Boolean))].slice(0, 120);
+    const documentSelection = record(workflow.documentSelection);
+    const confirmedDocumentIds = Array.isArray(documentSelection.selectedDocumentIds)
+      ? [...new Set<string>((documentSelection.selectedDocumentIds as unknown[]).map((value) => text(value, 180)).filter(Boolean))].sort()
+      : [];
+    const requestedDocumentIds = [...selectedDocumentIds].sort();
+    const previousSelectedDocumentIds = Array.isArray(workflow.selectedDocumentIds)
+      ? [...new Set<string>((workflow.selectedDocumentIds as unknown[]).map((value) => text(value, 180)).filter(Boolean))].sort()
+      : [];
+    const legacyConfirmedSelection = Boolean(record(workflow.email).sentAt)
+      && previousSelectedDocumentIds.length === requestedDocumentIds.length
+      && previousSelectedDocumentIds.every((documentId, index) => documentId === requestedDocumentIds[index]);
+    if (!legacyConfirmedSelection && (
+      text(documentSelection.documentId) !== text(workflow.latestFormId)
+      || confirmedDocumentIds.length !== requestedDocumentIds.length
+      || confirmedDocumentIds.some((documentId, index) => documentId !== requestedDocumentIds[index])
+    )) {
+      return NextResponse.json({ error: 'Confirme a seleção de documentos na etapa 2 antes de enviar ao contador.' }, { status: 409 });
+    }
     const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
     const aso = record(record(process.asoWorkflow).asoDocument);
     const missing = missingAccountantPrerequisites({ documents, asoApproved: text(aso.status) === 'approved', publicFormAnswers: process.publicFormAnswers });

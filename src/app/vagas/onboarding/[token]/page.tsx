@@ -8,6 +8,7 @@ import {
   type PublicImageVoiceConsentDecision,
 } from '@/features/hr/onboarding/image-voice-consent-state';
 import { presentOnboardingDocumentForAnswers } from '@/features/hr/onboarding/document-applicability';
+import { ONBOARDING_MARITAL_STATUSES } from '@/features/hr/onboarding/marital-status';
 import { PjPublicOnboardingForm } from '@/features/hr/onboarding-pj/public-form';
 import { PageContainer } from '@/components/layout/page-container';
 
@@ -91,6 +92,7 @@ type ChildAnswer = { birthDate: string; name: string; cpf: string };
 type FormalizationAnswers = {
   fullName: string;
   cpf: string;
+  maritalStatus: string;
   identityDocumentType: string;
   bankName: string;
   bankAgency: string;
@@ -121,6 +123,7 @@ type FormalizationAnswers = {
 const EMPTY_ANSWERS: FormalizationAnswers = {
   fullName: "",
   cpf: "",
+  maritalStatus: "",
   identityDocumentType: "",
   bankName: "",
   bankAgency: "",
@@ -373,6 +376,7 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
         setAnswers({
           fullName: asString(saved.fullName) || asString(payload.candidateName),
           cpf: formatCpf(asString(saved.cpf)),
+          maritalStatus: asChoice(saved.maritalStatus, ONBOARDING_MARITAL_STATUSES),
           identityDocumentType: asChoice(saved.identityDocumentType, ["identity", "cnh"]),
           bankName: asString(saved.bankName),
           bankAgency: asString(saved.bankAgency),
@@ -789,6 +793,13 @@ export default function OnboardingPublicPage({ params }: { params: Promise<{ tok
                     title="Informe os 11 dígitos do CPF"
                     required
                   />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold">Estado civil</label>
+                  <select value={answers.maritalStatus} onChange={set("maritalStatus")} className="fld" required>
+                    <option value="">Selecione</option>
+                    {ONBOARDING_MARITAL_STATUSES.map(status => <option key={status} value={status}>{status}</option>)}
+                  </select>
                 </div>
               </div>
               {data.publicFormSubmittedAt ? (
