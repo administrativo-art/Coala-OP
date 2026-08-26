@@ -98,6 +98,9 @@ import { isAsoAppointmentAfterAdmission } from '@/features/hr/aso/dates';
 import { clinicLocationFromConfig, clinicLocationLabel } from '@/features/hr/aso/clinic-location';
 import { ASO_GUIDE_TEMPLATE_VERSION } from '@/features/hr/aso/guide-version';
 import { shouldPollAsoPayment } from '@/features/hr/aso/payment-status';
+import { OnboardingProductionLine } from '@/features/hr/onboarding/production-line';
+import { OnboardingDetailNavigation } from '@/features/hr/onboarding/detail-navigation';
+import { OnboardingDocumentWorkbench } from '@/features/hr/onboarding/document-workbench';
 import { readHrJsonResponse } from '@/features/hr/lib/client-response';
 import {
   applicableOnboardingDocuments,
@@ -3260,7 +3263,7 @@ function DeleteConfirmModal({ candidate, getToken, onClose, onDeleted }: {
           </div>
         </div>
         <p className="text-sm text-slate-400">Esta ação é permanente e não pode ser desfeita.</p>
-        {error && <ErrorLine msg={error} />}
+        {error ? <ErrorLine msg={error} /> : null}
         <div className="flex gap-2 pt-1">
           <button onClick={onClose} className="flex-1 px-3 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-xl">
             Cancelar
@@ -7565,7 +7568,7 @@ function StartOnboardingModal({
   const [integrationTemplateId, setIntegrationTemplateId] = useState('');
   const [compatibleTemplates, setCompatibleTemplates] = useState<IntegrationTemplateMetadataClient[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
-  const [formStep, setFormStep] = useState<1 | 2>(1);
+  const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
   const [candidateName, setCandidateName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
   const [jobRoleId, setJobRoleId] = useState('');
@@ -7700,6 +7703,23 @@ function StartOnboardingModal({
       return;
     }
     setFormStep(2);
+  }
+
+  function continueToReviewStep() {
+    setError(null);
+    if (finalizationSettings.transportVoucherValue == null) {
+      setError('Informe o valor diário do vale-transporte, mesmo quando for R$ 0,00.');
+      return;
+    }
+    if (requiresPdvAccess && !activeUnits.find(unit => unit.id === unitId)?.pdvFilialId) {
+      setError('A unidade selecionada ainda não possui uma filial do PDV Legal vinculada.');
+      return;
+    }
+    if (requiresPdvAccess && !pdvProfileId) {
+      setError('Selecione o perfil de acesso do PDV Legal.');
+      return;
+    }
+    setFormStep(3);
   }
 
   useEffect(() => {
@@ -7858,17 +7878,22 @@ function StartOnboardingModal({
               {error ? <div className="mt-4"><ErrorLine msg={error} /></div> : null}
             </div>
           </div>
-        ) : <form onSubmit={formStep === 1 ? event => { event.preventDefault(); continueToAccessStep(); } : handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        ) : <form onSubmit={formStep === 1 ? event => { event.preventDefault(); continueToAccessStep(); } : formStep === 2 ? event => { event.preventDefault(); continueToReviewStep(); } : handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="border-b border-slate-100 px-5 py-3">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 sm:gap-3">
               <button type="button" onClick={() => setFormStep(1)} className={`flex items-center gap-2 text-left ${formStep === 1 ? 'text-pink-700' : 'text-slate-500'}`}>
-                <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${formStep === 1 ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-500'}`}>1</span>
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${formStep === 1 ? 'bg-pink-600 text-white' : 'bg-emerald-100 text-emerald-700'}`}>{formStep > 1 ? '✓' : '1'}</span>
                 <span><span className="block text-xs font-black">Identificação</span><span className="hidden text-[10px] font-medium sm:block">Pessoa, cargo e vínculo</span></span>
               </button>
-              <span className="h-px w-10 bg-slate-200 sm:w-20" />
-              <div className={`flex items-center justify-end gap-2 text-left ${formStep === 2 ? 'text-pink-700' : 'text-slate-400'}`}>
-                <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${formStep === 2 ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-400'}`}>2</span>
+              <span className="h-px w-5 bg-slate-200 sm:w-10" />
+              <button type="button" disabled={formStep === 1} onClick={() => setFormStep(2)} className={`flex items-center justify-center gap-2 text-left ${formStep === 2 ? 'text-pink-700' : formStep > 2 ? 'text-slate-500' : 'text-slate-400'}`}>
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${formStep === 2 ? 'bg-pink-600 text-white' : formStep > 2 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>{formStep > 2 ? '✓' : '2'}</span>
                 <span><span className="block text-xs font-black">Acessos e comportamento</span><span className="hidden text-[10px] font-medium sm:block">Sistema, PDV e benefícios</span></span>
+              </button>
+              <span className="h-px w-5 bg-slate-200 sm:w-10" />
+              <div className={`flex items-center justify-end gap-2 text-left ${formStep === 3 ? 'text-pink-700' : 'text-slate-400'}`}>
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${formStep === 3 ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-400'}`}>3</span>
+                <span><span className="block text-xs font-black">Revisão</span><span className="hidden text-[10px] font-medium sm:block">Confira antes de iniciar</span></span>
               </div>
             </div>
           </div>
@@ -7962,7 +7987,7 @@ function StartOnboardingModal({
                 )}
                 {error ? <ErrorLine msg={error} /> : null}
               </div>
-            ) : (
+            ) : formStep === 2 ? (
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-4">
                   <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
@@ -8002,14 +8027,46 @@ function StartOnboardingModal({
                 </div>
                 {error ? <div className="lg:col-span-2"><ErrorLine msg={error} /></div> : null}
               </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-700">Pronto para iniciar</p>
+                  <p className="mt-1 text-sm font-bold text-emerald-950">Confira os dados e os acessos. A criação envia o convite imediatamente.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    ['Pessoa', candidateName],
+                    ['E-mail', candidateEmail],
+                    ['Cargo e função', `${activeRoles.find(role => role.id === jobRoleId)?.name ?? '—'} · ${availableFunctions.find(item => item.id === functionId)?.name ?? '—'}`],
+                    ['Unidade', activeUnits.find(unit => unit.id === unitId)?.name ?? '—'],
+                    ['Empresa contratante', employerUnits.find(unit => unit.id === employerUnitId)?.name ?? '—'],
+                    ['Admissão prevista', expectedAdmissionDate ? formatOnboardingDateOnly(expectedAdmissionDate) : 'A definir'],
+                    ['Período de experiência', probationPreview ? `${probationPreview.config.firstPeriodDays} + ${probationPreview.config.secondPeriodDays} dias` : '—'],
+                    ['PDV Legal', requiresPdvAccess ? pdvProfiles.find(profile => profile.id === pdvProfileId)?.name ?? 'Perfil não definido' : 'Não solicitado'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</span>
+                      <span className="mt-1 block text-sm font-bold text-slate-800">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <span className={`rounded-xl border px-3 py-2.5 text-xs font-bold ${generateSignatureDocuments ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>Documentos para assinatura: {generateSignatureDocuments ? 'sim' : 'não'}</span>
+                  <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600">Operacional: {finalizationSettings.operational ? 'sim' : 'não'}</span>
+                  <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600">Participa de metas: {finalizationSettings.participatesInGoals ? 'sim' : 'não'}</span>
+                </div>
+                {error ? <ErrorLine msg={error} /> : null}
+              </div>
             )}
           </div>
 
           <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-white px-5 py-3 sm:flex-row sm:justify-end">
             <button type="button" onClick={onClose} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
-            {formStep === 2 ? <button type="button" onClick={() => { setFormStep(1); setError(null); }} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">Voltar</button> : null}
+            {formStep > 1 ? <button type="button" onClick={() => { setFormStep(current => current === 3 ? 2 : 1); setError(null); }} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">Voltar</button> : null}
             {formStep === 1 ? (
               <button type="submit" className="inline-flex h-9 items-center justify-center rounded-lg bg-pink-600 px-4 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700">Continuar</button>
+            ) : formStep === 2 ? (
+              <button type="submit" className="inline-flex h-9 items-center justify-center rounded-lg bg-pink-600 px-4 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700">Revisar integração</button>
             ) : (
               <button type="submit" disabled={submitting || finalizationSettings.transportVoucherValue == null || (requiresPdvAccess && (!pdvProfileId || !activeUnits.find(unit => unit.id === unitId)?.pdvFilialId))} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-4 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}Iniciar integração
@@ -8504,8 +8561,17 @@ function TrainingPanel({ process, getToken, canManage, onRefresh }: { process: O
   );
 }
 
-function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSensitiveData, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh, onProcessUpdated, onAsoPaymentUpdated, onAsoWorkflowUpdated }: {
+type OnboardingProcessScope = 'active' | 'completed' | 'cancelled';
+type OnboardingPageInfo = Record<OnboardingProcessScope, {
+  limit: number;
+  hasMore: boolean;
+  cursorId: string | null;
+}>;
+
+function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSensitiveData, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh, onLoadMore, onProcessUpdated, onAsoPaymentUpdated, onAsoWorkflowUpdated }: {
   processes: OnboardingProcess[];
+  pageInfo: OnboardingPageInfo;
+  loadingMoreScope: OnboardingProcessScope | null;
   roles: JobRole[];
   jobFunctions: JobFunction[];
   units: DPUnit[];
@@ -8522,6 +8588,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   canReviewDocuments: boolean;
   canSendSignatures: boolean;
   onRefresh: () => void;
+  onLoadMore: (scope: OnboardingProcessScope) => void;
   onProcessUpdated: (process: OnboardingProcess) => void;
   onAsoPaymentUpdated: (processId: string, workflow: AsoPaymentWorkflowPatch) => void;
   onAsoWorkflowUpdated: (processId: string, workflow: NonNullable<OnboardingProcess['asoWorkflow']>) => void;
@@ -8548,7 +8615,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const [asoStartResult, setAsoStartResult] = useState<AsoProcessStartResult | null>(null);
   const [asoPhaseIndex, setAsoPhaseIndex] = useState<number | null>(null);
   const [asoCollapsed, setAsoCollapsed] = useState(false);
-  const [documentsCollapsed, setDocumentsCollapsed] = useState(false);
   const [asoClinics, setAsoClinics] = useState<Array<{ id: string; active: boolean; asoPrice: number; schedulingEmail: string; address?: { street?: string; number?: string; complement?: string; district?: string; city?: string; state?: string; postalCode?: string; reference?: string; mapsUrl?: string } | null; entity?: { name?: string } | null; paymentProfile?: { configured?: boolean; validated?: boolean } }>>([]);
   const [asoClinicsLoading, setAsoClinicsLoading] = useState(false);
   const [asoClinicsError, setAsoClinicsError] = useState<string | null>(null);
@@ -8630,7 +8696,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     setPhaseId(requested.currentStage ?? requested.stages?.[0]?.id ?? null);
     setAsoPhaseIndex(null);
     setAsoCollapsed(false);
-    setDocumentsCollapsed(false);
     setAccountantCollapsedSteps(defaultAccountantCollapsedSteps(requested));
     setView('detail');
   }, [processes, selectedId]);
@@ -8654,30 +8719,39 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     }
   }, [canViewSignatures, getToken, selectedProcess?.id]);
 
+  const refreshSelectedProcess = useCallback(async () => {
+    if (!selectedProcess?.id) return;
+    try {
+      const payload = await apiFetch(`/api/hr/onboarding/${selectedProcess.id}`, getToken) as { process?: OnboardingProcess };
+      if (payload.process) onProcessUpdated(payload.process);
+    } catch {
+      // O próximo ciclo tenta novamente sem substituir os dados já exibidos.
+    }
+  }, [getToken, onProcessUpdated, selectedProcess?.id]);
+
   useEffect(() => {
     if (view !== 'detail' || !selectedProcess?.id) return;
     void loadSignatureWorkflow();
   }, [loadSignatureWorkflow, selectedProcess?.id, view]);
 
   useEffect(() => {
-    const pending = signatureWorkflow?.documents.some(document =>
+    const signaturePending = signatureWorkflow?.documents.some(document =>
       document.selected && ['sent', 'viewed', 'partially_signed', 'signed'].includes(document.status)
+    ) ?? false;
+    const accessPending = Boolean(
+      selectedProcess?.collaboratorUserId
+      && selectedProcess.accessProvisioning?.status !== 'completed'
+      && selectedProcess.status !== 'cancelled'
+      && selectedProcess.status !== 'completed'
     );
-    if (!pending || !selectedProcess?.id) return;
-    const timer = window.setInterval(() => {
-      void loadSignatureWorkflow();
-      onRefresh();
-    }, 10_000);
+    if ((!signaturePending && !accessPending) || !selectedProcess?.id || view !== 'detail') return;
+    const refreshPendingState = () => {
+      if (signaturePending) void loadSignatureWorkflow();
+      void refreshSelectedProcess();
+    };
+    const timer = window.setInterval(refreshPendingState, 10_000);
     return () => window.clearInterval(timer);
-  }, [loadSignatureWorkflow, onRefresh, selectedProcess?.id, signatureWorkflow?.documents]);
-
-  useEffect(() => {
-    if (!selectedProcess?.collaboratorUserId) return;
-    if (selectedProcess.accessProvisioning?.status === 'completed') return;
-    if (selectedProcess.status === 'cancelled' || selectedProcess.status === 'completed') return;
-    const timer = window.setInterval(onRefresh, 10_000);
-    return () => window.clearInterval(timer);
-  }, [onRefresh, selectedProcess?.accessProvisioning?.status, selectedProcess?.collaboratorUserId, selectedProcess?.status]);
+  }, [loadSignatureWorkflow, refreshSelectedProcess, selectedProcess?.accessProvisioning?.status, selectedProcess?.collaboratorUserId, selectedProcess?.id, selectedProcess?.status, signatureWorkflow?.documents, view]);
 
   useEffect(() => {
     setFinalizationDraft(getFinalizationDraft(selectedProcess));
@@ -9154,7 +9228,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     setPhaseId(process.currentStage ?? process.stages?.[0]?.id ?? null);
     setAsoPhaseIndex(null);
     setAsoCollapsed(false);
-    setDocumentsCollapsed(false);
     setAccountantCollapsedSteps(defaultAccountantCollapsedSteps(process));
     setView('detail');
     const url = new URL(window.location.href);
@@ -9168,7 +9241,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     setPhaseId(null);
     setAsoPhaseIndex(null);
     setAsoCollapsed(false);
-    setDocumentsCollapsed(false);
     setAccountantCollapsedSteps(new Set([2, 3]));
     const url = new URL(window.location.href);
     url.searchParams.delete('process');
@@ -9192,495 +9264,36 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     return typeof document.fileUrl === 'string' && document.fileUrl.trim().length > 0;
   }
 
-  function hasMeaningfulExtractionRecord(value: unknown) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-    return Object.values(value as Record<string, unknown>).some(entry => {
-      if (entry === null || entry === undefined) return false;
-      if (typeof entry === 'string') return entry.trim().length > 0;
-      if (Array.isArray(entry)) return entry.length > 0;
-      if (typeof entry === 'object') return Object.keys(entry as Record<string, unknown>).length > 0;
-      return true;
-    });
-  }
-
-  function hasDocumentExtraction(document: OnboardingDocument) {
-    const legacy = document as OnboardingDocument & {
-      extractedData?: unknown;
-      aiExtractedData?: unknown;
-    };
-    return hasMeaningfulExtractionRecord(document.extractedFields) ||
-      hasMeaningfulExtractionRecord(legacy.extractedData) ||
-      hasMeaningfulExtractionRecord(legacy.aiExtractedData);
-  }
-
-  function DocumentRow({ process, document, mode }: {
-    process: OnboardingProcess;
-    document: OnboardingDocument;
-    mode: 'collect' | 'review';
-  }) {
-    const actionKey = `${process.id}:document_status`;
-    const isApproved = document.status === 'approved';
-    const isRejected = document.status === 'rejected';
-    const hasFile = hasAuditableDocumentFile(document);
-    const canChangeDocumentStatus = canActOnCurrentPhase && mode === 'review';
-    const statusColor = isApproved
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      : document.status === 'ai_approved'
-        ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
-        : document.status === 'review_required'
-          ? 'bg-amber-50 text-amber-700 border-amber-200'
-          : document.status === 'received'
-            ? 'bg-blue-50 text-blue-700 border-blue-200'
-            : document.status === 'rejected'
-              ? 'bg-red-50 text-red-700 border-red-200'
-              : 'bg-slate-100 text-slate-400 border-slate-200';
-    const statusText = isApproved
-      ? 'text-emerald-700'
-      : document.status === 'ai_approved'
-        ? 'text-cyan-700'
-        : document.status === 'review_required'
-          ? 'text-amber-700'
-          : document.status === 'received'
-            ? 'text-blue-700'
-              : document.status === 'rejected'
-                ? 'text-red-600'
-                : 'text-slate-400';
-
-    if (mode === 'review' && isApproved) {
-      return (
-        <div className="flex min-w-0 items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-emerald-200 bg-emerald-100 text-emerald-600">
-            <Check className="h-3.5 w-3.5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-black text-slate-900">
-              {document.label}
-              {document.required !== false && <span className="ml-0.5 text-pink-600">*</span>}
-            </p>
-            <p className="mt-0.5 truncate text-[10px] font-bold text-emerald-700">
-              Aprovado{document.updatedAt ? ` · ${formatOnboardingDate(document.updatedAt)}` : ''}
-            </p>
-          </div>
-          {document.fileUrl ? (
-            <a
-              href={document.fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Ver documento"
-              aria-label={`Ver ${document.label}`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-100"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </a>
-          ) : (
-            <span title="Arquivo indisponível" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-300">
-              <FileText className="h-3.5 w-3.5" />
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 ${mode === 'review' ? 'sm:col-span-2' : ''}`}>
-        <div className="flex min-w-0 items-center gap-3">
-          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${statusColor}`}>
-            {isApproved
-              ? <CheckCircle2 className="h-4 w-4" />
-              : isRejected
-                ? <XCircle className="h-4 w-4" />
-                : <FileText className="h-4 w-4" />}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900">
-              {document.label}
-              {document.required !== false && <span className="ml-0.5 text-pink-600">*</span>}
-            </p>
-            <p className={`mt-0.5 text-xs font-semibold ${statusText}`}>
-              {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
-              {document.updatedAt ? ` · ${formatOnboardingDate(document.updatedAt)}` : ''}
-            </p>
-            {document.fileUrl ? (
-              <a
-                href={document.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-500"
-              >
-                <ExternalLink className="h-3 w-3" /> Ver arquivo enviado
-              </a>
-            ) : (
-              <p className="mt-1 text-xs font-semibold text-slate-400">Nenhum arquivo enviado</p>
-            )}
-          </div>
-        </div>
-        {canManage && (
-          <div className="flex shrink-0 gap-1.5">
-            {mode === 'collect' ? (
-              document.fileUrl ? (
-                <a
-                  href={document.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Abrir documento
-                </a>
-              ) : (
-                <span className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-400">
-                  Aguardando envio
-                </span>
-              )
-            ) : (
-              <>
-                {document.fileUrl ? (
-                  <a
-                    href={document.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Abrir documento
-                  </a>
-                ) : (
-                  <span className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-400">
-                    Sem arquivo
-                  </span>
-                )}
-                <button
-                  type="button"
-                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus || isApproved}
-                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
-                  className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-[11px] font-bold ${isApproved
-                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50'}`}
-                  title={isApproved ? 'Documento já aprovado.' : !hasFile ? 'Envie ou abra um arquivo antes de aprovar.' : !canChangeDocumentStatus ? 'A aprovação só fica ativa na fase atual de Conferência.' : undefined}
-                >
-                  {isApproved ? <CheckCircle2 className="h-3 w-3" /> : null}
-                  {isApproved ? 'Aprovado' : 'Aprovar'}
-                </button>
-                <button
-                  type="button"
-                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus || isRejected}
-                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'rejected' })}
-                  className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-[11px] font-bold ${isRejected
-                    ? 'border border-red-200 bg-red-50 text-red-700'
-                    : 'bg-red-600 text-white hover:bg-red-500 disabled:opacity-50'}`}
-                  title={isRejected ? 'Documento já reprovado.' : !hasFile ? 'Não há arquivo anexado para reprovar.' : !canChangeDocumentStatus ? 'A reprovação só fica ativa na fase atual de Conferência.' : undefined}
-                >
-                  {isRejected ? <XCircle className="h-3 w-3" /> : null}
-                  {isRejected ? 'Reprovado' : 'Reprovar'}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
   // ── Grid landing ──────────────────────────────────────────────────────────
   if (view === 'grid' || !selectedProcess) {
     return (
-      <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
-        <div className="flex flex-wrap items-end justify-between gap-5">
-          <div className="min-w-0">
-            <span className="text-[11px] font-black uppercase tracking-[0.09em] text-pink-600">
-              {processStateFilter === 'active' ? 'Pessoal · Integração' : 'Pessoal · Histórico'}
-            </span>
-            <h1 className="mt-0.5 text-lg font-black tracking-tight text-slate-900">
-              {processStateFilter === 'completed'
-                ? 'Integrações concluídas'
-                : processStateFilter === 'cancelled'
-                  ? 'Integrações encerradas'
-                  : 'Candidatos em formalização'}
-            </h1>
-            <p className="mt-1 max-w-xl text-xs font-medium text-slate-500">
-              {processStateFilter === 'completed'
-                ? `${activeProcesses.length} processo${activeProcesses.length === 1 ? '' : 's'} finalizado${activeProcesses.length === 1 ? '' : 's'}. Consulte a linha do tempo e os registros de auditoria.`
-                : processStateFilter === 'cancelled'
-                  ? `${activeProcesses.length} processo${activeProcesses.length === 1 ? '' : 's'} encerrado${activeProcesses.length === 1 ? '' : 's'} sem finalização. Consulte o motivo, a etapa e os registros de auditoria.`
-                  : `${activeProcesses.length} pessoa${activeProcesses.length === 1 ? '' : 's'} em processo. Selecione um card para abrir a linha do tempo e conduzir cada fase da integração.`}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2.5">
-            {canManage && (
-              <a
-                href="/dashboard/settings?department=pessoal&tab=recruitment&section=integration"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-              >
-                <FolderOpen className="h-4 w-4 text-pink-600" />
-                Modelos de integração
-              </a>
-            )}
-            {canManage && (
-              <button
-                type="button"
-                onClick={() => setShowStartModal(true)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700"
-              >
-                <Plus className="h-4 w-4" />
-                Nova integração
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative min-w-[240px] flex-1">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-              placeholder="Buscar candidato, cargo ou unidade…"
-              className="h-[46px] w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-900 placeholder-slate-400 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-            />
-          </div>
-          <div className="relative min-w-[170px]">
-            <select
-              value={processStateFilter}
-              onChange={event => {
-                setProcessStateFilter(event.target.value as 'active' | 'completed' | 'cancelled');
-                setPhaseFilter('all');
-                setHealthFilter('all');
-              }}
-              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-            >
-              <option value="active">Em andamento</option>
-              <option value="completed">Concluídas</option>
-              <option value="cancelled">Encerradas</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-          <div className="relative min-w-[180px]">
-            <select
-              value={phaseFilter}
-              onChange={event => setPhaseFilter(event.target.value)}
-              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-            >
-              <option value="all">Todas as fases</option>
-              {phaseOptions.map(option => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-          {processStateFilter === 'active' ? (
-            <div className="relative min-w-[175px]">
-              <select
-                value={healthFilter}
-                onChange={event => setHealthFilter(event.target.value as 'all' | OnboardingHealth)}
-                className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-                aria-label="Filtrar por situação operacional"
-              >
-                <option value="all">Todas as situações</option>
-                <option value="overdue">Atrasados</option>
-                <option value="blocked">Bloqueados</option>
-                <option value="hr_action">Ação do RH</option>
-                <option value="waiting_person">Aguardando pessoa</option>
-                <option value="on_track">Em dia</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </div>
-          ) : null}
-          <div className="relative min-w-[200px]">
-            <select
-              value={onboardingSortMode}
-              onChange={event => setOnboardingSortMode(event.target.value as OnboardingSortMode)}
-              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-              aria-label="Ordenar integrações"
-            >
-              <option value="priority">Prioridade operacional</option>
-              <option value="admission">Admissão mais próxima</option>
-              <option value="stalled">Parado há mais tempo</option>
-              <option value="name">Nome</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            aria-label="Atualizar"
-            className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
-          >
-            <RotateCw className="h-4 w-4" />
-          </button>
-        </div>
-
-        {processStateFilter === 'active' ? (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm" aria-label="Legenda das situações operacionais">
-            <span className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Saúde do processo</span>
-            {(['on_track', 'waiting_person', 'hr_action', 'blocked', 'overdue'] as OnboardingHealth[]).map(health => (
-              <button
-                key={health}
-                type="button"
-                onClick={() => setHealthFilter(current => current === health ? 'all' : health)}
-                className={`inline-flex items-center gap-1.5 text-[11.5px] font-bold transition ${
-                  healthFilter === health ? ONBOARDING_HEALTH_META[health].textClass : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <span className={`h-2.5 w-2.5 rounded-full ${ONBOARDING_HEALTH_META[health].dotClass}`} />
-                {ONBOARDING_HEALTH_META[health].label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {error && <ErrorLine msg={error} />}
-
-        {filtered.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
-            <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-            <p className="text-sm font-medium text-slate-500">
-              {search
-                ? 'Nenhum candidato corresponde à busca.'
-                : processStateFilter === 'completed'
-                  ? 'Nenhuma integração concluída.'
-                  : processStateFilter === 'cancelled'
-                    ? 'Nenhuma integração encerrada.'
-                    : 'Nenhuma integração em andamento.'}
-            </p>
-            {!search && processStateFilter === 'active' && (
-              <p className="mt-1 text-xs text-slate-400">Use “Nova integração” para iniciar uma formalização.</p>
-            )}
-          </div>
-        ) : (
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
-            {filtered.map(process => {
-              const documentProgress = processDocProgress(process);
-              const processProgress = onboardingProgress(process);
-              const operationalStatus = resolveOnboardingOperationalStatus(process, new Date(linkClock));
-              const healthMeta = ONBOARDING_HEALTH_META[operationalStatus.health];
-              const isPj = process.employmentRelationshipType === 'pj' && Boolean(process.pjWorkflow);
-              const color = colorForProcess(process.id);
-              const profilePhotoUrl = onboardingProfilePhotoUrl(process);
-              return (
-                <article
-                  key={process.id}
-                  onClick={() => openProcess(process)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      openProcess(process);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  className={`group flex w-full flex-col rounded-2xl border border-l-4 border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md ${healthMeta.borderClass}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black text-white"
-                      style={{ backgroundColor: color }}
-                    >
-                      {profilePhotoUrl ? (
-                        <img src={profilePhotoUrl} alt={process.candidateName ?? 'Foto da candidata'} className="h-full w-full object-cover" />
-                      ) : candidateInitials(process.candidateName)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[15px] font-black text-slate-900">{process.candidateName ?? 'Candidato sem nome'}</div>
-                      <div className="mt-0.5 truncate text-xs font-medium text-slate-500">{process.candidateEmail ?? 'E-mail não informado'}</div>
-                    </div>
-                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[9.5px] font-black uppercase tracking-wide ${healthMeta.badgeClass}`}>
-                      {healthMeta.label}
-                    </span>
-                  </div>
-
-                  <div className="mt-3.5 rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <div className="truncate text-[13px] font-bold text-slate-700">
-                      {isPj ? 'Prestadora de serviços · PJ' : process.jobRoleName ?? 'Cargo não informado'}
-                      {!isPj && process.functionName ? ` · ${process.functionName}` : ''}
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                      <MapPin className="h-3.5 w-3.5" />
-                      {isPj ? process.employerUnitName ?? 'Contratante não definida' : process.unitName ?? 'Unidade não definida'}
-                    </div>
-                  </div>
-
-                  <div className={`mt-3 rounded-xl border px-3 py-3 ${healthMeta.badgeClass}`}>
-                    <div className="flex items-start gap-2.5">
-                      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${healthMeta.dotClass}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12.5px] font-black leading-snug">{operationalStatus.headline}</p>
-                        <p className="mt-1 line-clamp-2 text-[10.5px] font-semibold leading-relaxed opacity-80">{operationalStatus.detail}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate text-[10.5px] font-black uppercase tracking-wide text-slate-400">{processProgress.label}</span>
-                      <span className="shrink-0 text-xs font-black text-pink-600">Fase {processProgress.current} de {processProgress.total}</span>
-                    </div>
-                    <div
-                      className="mt-2 grid gap-1"
-                      style={{ gridTemplateColumns: `repeat(${Math.max(processProgress.total, 1)}, minmax(0, 1fr))` }}
-                      role="img"
-                      aria-label={`${processProgress.current} de ${processProgress.total} fases`}
-                    >
-                      {processProgress.steps.map(stage => (
-                        <span
-                          key={stage.id}
-                          className={`h-1.5 rounded-full ${
-                            stage.state === 'done'
-                              ? 'bg-emerald-500'
-                              : stage.state === 'active'
-                                ? 'bg-pink-600'
-                                : 'bg-slate-200'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[10.5px] font-bold text-slate-500">
-                    <span className={`rounded-lg px-2.5 py-1 ${documentProgress.approved === documentProgress.total && documentProgress.total > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100'}`}>
-                      {documentProgress.approved}/{documentProgress.total} aprovados
-                    </span>
-                    {operationalStatus.daysInStage > 0 ? (
-                      <span className="rounded-lg bg-slate-50 px-2.5 py-1">{operationalStatus.daysInStage}d nesta etapa</span>
-                    ) : null}
-                  </div>
-
-                  {process.status === 'cancelled' ? (
-                    <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50/70 px-3 py-2.5">
-                      <p className="text-[10px] font-black uppercase tracking-wide text-rose-600">Motivo do encerramento</p>
-                      <p className="mt-1 line-clamp-2 text-xs font-semibold leading-relaxed text-rose-900">
-                        {process.cancelReason ?? 'Motivo não registrado.'}
-                      </p>
-                      <p className="mt-1.5 text-[10.5px] font-bold text-rose-500">
-                        {process.cancelledAt ? `Encerrada em ${formatOnboardingDate(process.cancelledAt)}` : 'Data não registrada'}
-                        {process.cancelledByEmail ? ` · por ${process.cancelledByEmail}` : ''}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
-                      <Clock className="h-3.5 w-3.5" />
-                      Atualizado em {formatOnboardingDate(process.updatedAt)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={event => {
-                        event.stopPropagation();
-                        openProcess(process);
-                      }}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-pink-600"
-                    >
-                      Abrir<ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-
-        {showStartModal && (
+      <>
+        <OnboardingProductionLine
+          processes={filtered}
+          now={linkClock}
+          processStateFilter={processStateFilter}
+          phaseFilter={phaseFilter}
+          healthFilter={healthFilter}
+          sortMode={onboardingSortMode}
+          search={search}
+          canManage={canManage}
+          hasMore={pageInfo[processStateFilter].hasMore}
+          loadingMore={loadingMoreScope === processStateFilter}
+          onProcessStateFilterChange={(next) => {
+            setProcessStateFilter(next);
+            setPhaseFilter('all');
+            setHealthFilter('all');
+          }}
+          onPhaseFilterChange={setPhaseFilter}
+          onHealthFilterChange={setHealthFilter}
+          onSortModeChange={setOnboardingSortMode}
+          onSearchChange={setSearch}
+          onRefresh={onRefresh}
+          onOpen={openProcess}
+          onNew={() => setShowStartModal(true)}
+          onLoadMore={() => onLoadMore(processStateFilter)}
+        />
+        {showStartModal ? (
           <StartOnboardingModal
             roles={roles}
             jobFunctions={jobFunctions}
@@ -9694,9 +9307,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               openProcess(process);
             }}
           />
-        )}
-      </div>
+        ) : null}
+      </>
     );
+
   }
 
   const canCancelSelectedProcess = canManage &&
@@ -10064,19 +9678,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   )
     .map(document => presentOnboardingDocumentForAnswers(document, answers))
     .filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
-  const documentsWithExtraction = reviewDocuments.filter(hasDocumentExtraction).length;
-  const auditableDocuments = reviewDocuments.filter(hasAuditableDocumentFile).length;
-  const bulkApprovalDocuments = reviewDocuments.filter(document =>
-    hasAuditableDocumentFile(document) &&
-    document.status !== 'approved' &&
-    document.status !== 'rejected'
-  );
-  const approvedAuditableDocuments = reviewDocuments.filter(document =>
-    hasAuditableDocumentFile(document) && document.status === 'approved'
-  ).length;
-  const allAuditableDocumentsApproved = auditableDocuments > 0 && approvedAuditableDocuments === auditableDocuments;
-  const bulkApprovalActionKey = `${selectedProcessId}:document_status_bulk`;
-  const canBulkApproveDocuments = canActOnCurrentPhase && bulkApprovalDocuments.length > 0;
   const accountantRequiredDocuments = reviewDocuments.filter(document => document.required !== false && document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
   const accountantAttachedDocuments = reviewDocuments.filter(document => hasAuditableDocumentFile(document) && document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
   const accountantAutomaticDocuments = accountantAttachedDocuments.filter(document => isAutomaticAccountantDocument(document) && document.status === 'approved');
@@ -10180,17 +9781,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     ? currentFormalizationStageIndex + 1
     : visibleStages.length;
   const pendingRequiredDocumentCount = accountantRequiredDocuments.filter(document => document.status !== 'approved').length;
-  const approvedReviewDocumentCount = reviewDocuments.filter(document => document.status === 'approved').length;
-  const rejectedReviewDocumentCount = reviewDocuments.filter(document => document.status === 'rejected').length;
-  const pendingReviewDocumentCount = reviewDocuments.length - approvedReviewDocumentCount - rejectedReviewDocumentCount;
-  const publicLinkExpiresAt = onboardingPublicLinkExpiresAt(selectedProcess);
-  const publicLinkHoursRemaining = publicLinkExpiresAt
-    ? Math.max(0, Math.ceil((publicLinkExpiresAt.getTime() - linkClock) / 3_600_000))
-    : null;
-  const publicLinkExpiringSoon = linkActive
-    && publicLinkHoursRemaining !== null
-    && publicLinkHoursRemaining <= 12
-    && (!selectedProcess.publicFormSubmittedAt || pendingRequiredDocumentCount > 0);
   const firstStageChecklist = [
     {
       label: selectedProcess.publicFormSubmittedAt ? 'Dados do formulário recebidos' : 'Dados do formulário aguardando envio',
@@ -10214,61 +9804,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     },
   ];
 
-  async function approveReviewDocumentsInBulk() {
-    if (!canBulkApproveDocuments) return;
-    const documentCount = bulkApprovalDocuments.length;
-    const countLabel = `${documentCount} documento${documentCount === 1 ? '' : 's'}`;
-    const confirmed = window.confirm(`Aprovar ${countLabel} em lote? Confirme apenas se você já abriu e verificou os arquivos.`);
-    if (!confirmed) return;
-
-    await patchProcess(selectedProcessId, {
-      action: 'document_status_bulk',
-      documentIds: bulkApprovalDocuments.map(document => document.id),
-      status: 'approved',
-    });
-  }
-
-  function renderBulkApproveDocumentsButton() {
-    if (!canManage || reviewDocuments.length === 0) return null;
-    if (bulkApprovalDocuments.length === 0) {
-      if (!allAuditableDocumentsApproved) return null;
-      return (
-        <div
-          aria-live="polite"
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Todos aprovados
-          <span className="ml-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] leading-none">
-            {approvedAuditableDocuments}
-          </span>
-        </div>
-      );
-    }
-    const isLoading = updating === bulkApprovalActionKey;
-    return (
-      <button
-        type="button"
-        disabled={isLoading || !canBulkApproveDocuments}
-        onClick={() => void approveReviewDocumentsInBulk()}
-        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-        title={!canActOnCurrentPhase
-          ? 'A aprovação em lote só fica ativa na fase atual de Conferência.'
-          : bulkApprovalDocuments.length === 0
-            ? 'Não há documentos enviados pendentes para aprovar.'
-            : undefined}
-      >
-        {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-        Aprovar em lote
-        {bulkApprovalDocuments.length > 0 ? (
-          <span className="ml-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] leading-none">
-            {bulkApprovalDocuments.length}
-          </span>
-        ) : null}
-      </button>
-    );
-  }
-
   let genericStatus = 'Etapa concluída';
   let genericDesc = activeDetails?.focus ?? '';
   if (activePhaseId === 'signature_preparation') {
@@ -10284,7 +9819,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[1240px] space-y-4 overflow-x-hidden" style={{ animation: 'none' }}>
+    <div className="w-full min-w-0 space-y-4 overflow-x-hidden" style={{ animation: 'none' }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
@@ -10349,18 +9884,26 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               Admissão prevista: {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Recebidos</div>
-              <div className="mt-1 text-[19px] font-black text-slate-900">{progress.received}/{progress.total}</div>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <div className="min-w-[92px] rounded-2xl border border-[#eeebe4] bg-[#faf9f6] px-4 py-2.5">
+              <div className="text-[9.5px] font-black uppercase tracking-wide text-stone-400">Documentos</div>
+              <div className="mt-1 text-[19px] font-black text-emerald-600">{progress.approved}/{progress.total}</div>
+              <div className="text-[10px] font-semibold text-stone-400">aprovados</div>
             </div>
-            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Aprovados</div>
-              <div className="mt-1 text-[19px] font-black text-emerald-600">{progress.approved}</div>
+            <div className="min-w-[92px] rounded-2xl border border-[#eeebe4] bg-[#faf9f6] px-4 py-2.5">
+              <div className="text-[9.5px] font-black uppercase tracking-wide text-stone-400">Etapa</div>
+              <div className="mt-1 text-[19px] font-black text-slate-950">{currentFormalizationStageNumber}/{visibleStages.length}</div>
+              <div className="text-[10px] font-semibold text-stone-400">formalização</div>
             </div>
-            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Pendentes</div>
-              <div className="mt-1 text-[19px] font-black text-amber-600">{progress.pending}</div>
+            <div className="min-w-[92px] rounded-2xl border border-[#eeebe4] bg-[#faf9f6] px-4 py-2.5">
+              <div className="text-[9.5px] font-black uppercase tracking-wide text-stone-400">Parada</div>
+              <div className={`mt-1 text-[19px] font-black ${selectedOperationalStatus.daysInStage > 2 ? 'text-amber-600' : 'text-slate-950'}`}>{selectedOperationalStatus.daysInStage}d</div>
+              <div className="text-[10px] font-semibold text-stone-400">nesta etapa</div>
+            </div>
+            <div className="min-w-[92px] rounded-2xl border border-[#eeebe4] bg-[#faf9f6] px-4 py-2.5">
+              <div className="text-[9.5px] font-black uppercase tracking-wide text-stone-400">Responsável</div>
+              <div className="mt-2 text-[13px] font-black text-slate-950">{selectedOperationalStatus.responsible === 'rh' ? 'RH' : selectedOperationalStatus.responsible === 'person' ? 'Pessoa' : selectedOperationalStatus.responsible === 'third_party' ? 'Terceiro' : selectedOperationalStatus.responsible === 'system' ? 'Sistema' : 'Concluído'}</div>
+              <div className="mt-1 text-[10px] font-semibold text-stone-400">próxima ação</div>
             </div>
           </div>
         </div>
@@ -10385,6 +9928,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             </div>
           </div>
         ) : null}
+
+        <div className="px-6 pt-4">
+          <OnboardingDetailNavigation
+            process={selectedProcess}
+            activePhaseId={activePhaseId}
+            onSelect={setPhaseId}
+          />
+        </div>
 
         <div className="px-6 pt-4">
           <section className={`rounded-2xl border p-4 ${selectedHealthMeta.badgeClass}`} aria-labelledby="onboarding-next-action-title">
@@ -10432,156 +9983,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
         <div className="flex flex-wrap items-start gap-5 p-6">
           {/* timeline */}
-          <aside className="w-full min-w-[250px] flex-[0_1_280px] rounded-2xl border border-slate-100 bg-slate-50/90 p-4 lg:max-w-[280px]">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[10.5px] font-black uppercase tracking-[0.08em] text-slate-600">Formalização e acessos</p>
-              {visibleStages.length > 0 ? <span className="shrink-0 rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[9px] font-black text-pink-600">Etapa {currentFormalizationStageNumber} de {visibleStages.length}</span> : null}
-            </div>
-            <p className="mt-1 text-[9.5px] font-semibold text-slate-400">Sequência obrigatória — uma etapa por vez</p>
-            <div className="mt-3 space-y-0.5">
-              {visibleStages.map((stage, index, stages) => {
-                const state = stageState(selectedProcess, stage.id);
-                const details = ONBOARDING_STAGE_DETAILS[stage.id];
-                const isActivePhase = stage.id === activePhaseId;
-                const stageStateLabel = state === 'done' ? 'Concluída' : state === 'active' ? 'Etapa atual' : 'A seguir';
-                return (
-                  <button
-                    key={stage.id}
-                    type="button"
-                    onClick={() => setPhaseId(stage.id)}
-                    className={`flex w-full gap-2.5 rounded-xl border px-2 py-2 text-left transition ${
-                      isActivePhase ? 'border-pink-200 bg-pink-50/80 shadow-sm' : 'border-transparent hover:border-slate-100 hover:bg-white/70'
-                    }`}
-                  >
-                    <span className="flex flex-col items-center">
-                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[10px] font-black ${
-                        state === 'done'
-                          ? 'border-emerald-500 bg-emerald-500 text-white'
-                          : state === 'active'
-                            ? 'border-pink-600 bg-pink-600 text-white'
-                            : 'border-slate-200 bg-white text-slate-400'
-                      }`}>
-                        {state === 'done' ? <Check className="h-3.5 w-3.5" /> : index + 1}
-                      </span>
-                      {index < stages.length - 1 ? (
-                        <span className={`my-0.5 min-h-[18px] w-px flex-1 ${state === 'done' ? 'bg-emerald-300' : 'bg-slate-200'}`} />
-                      ) : null}
-                    </span>
-                    <span className="min-w-0 flex-1 pb-2">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className={`text-[11px] font-black leading-snug ${
-                          isActivePhase ? 'text-pink-600' : state === 'done' ? 'text-slate-700' : 'text-slate-400'
-                        }`}>
-                          {stage.label}
-                        </span>
-                        {stage.dueDays ? (
-                          <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[8.5px] font-bold text-slate-400">
-                            {stage.dueDays}d
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className={`mt-1 block text-[8.5px] font-black uppercase tracking-wide ${isActivePhase ? 'text-pink-400' : 'text-slate-400'}`}>{stageStateLabel} <span className="px-0.5">·</span> {details.owner}</span>
-                      <span className={`mt-1.5 block text-[9px] font-semibold leading-snug ${isActivePhase ? 'text-pink-500/80' : 'text-slate-400'}`}>{details.focus}</span>
-                    </span>
-                  </button>
-                );
-              })}
-              {visibleStages.length === 0 && (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
-                  Nenhuma etapa configurada.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-4 border-t border-dashed border-slate-300 pt-3">
-              <div className="flex items-center gap-2"><p className="text-[9.5px] font-black uppercase tracking-[0.08em] text-slate-500">Experiência</p><span className="rounded-full bg-violet-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-violet-600">Paralelo</span></div>
-              <p className="mt-1 text-[8.5px] font-semibold text-slate-400">Avaliações liberadas após concluir a formalização</p>
-            </div>
-            <div className="mt-3 space-y-2">
-              {(() => {
-                const isActivePhase = isProbationPhase;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setPhaseId('probation')}
-                    className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${
-                      isActivePhase ? 'border-pink-200 bg-pink-50/70 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${
-                        probationRowState === 'done'
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-                          : probationRowState === 'active'
-                            ? 'border-pink-200 bg-pink-50 text-pink-600'
-                            : 'border-slate-100 bg-slate-50 text-slate-400'
-                      }`}>
-                      {probationRowState === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <FileCheck2 className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className={`text-[10.5px] font-black ${
-                          isActivePhase ? 'text-pink-600' : probationRowState === 'done' ? 'text-slate-700' : 'text-slate-600'
-                        }`}>
-                          Avaliações de experiência
-                        </span>
-                        {probationReleased && probationV2?.schedule?.totalDays ? (
-                          <span className="shrink-0 text-[8.5px] font-bold text-slate-400">
-                            {probationV2.schedule.totalDays}d
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="mt-0.5 block text-[8.5px] font-semibold text-slate-400">{probationReleased ? `Liderança${probationV2?.schedule?.totalDays ? ` · ${probationV2.schedule.totalDays} dias` : ''}` : 'Aguardando formalização'}</span>
-                    </span>
-                  </button>
-                );
-              })()}
-              {(() => {
-                const trainingState = trainingItems.length === 0
-                  ? 'pending'
-                  : trainingDoneCount === trainingItems.length
-                    ? 'done'
-                    : 'active';
-                const isActivePhase = isTrainingPhase;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setPhaseId('training')}
-                    className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${
-                      isActivePhase ? 'border-pink-200 bg-pink-50/70 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${
-                        trainingState === 'done'
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-                          : trainingState === 'active'
-                            ? 'border-pink-200 bg-pink-50 text-pink-600'
-                            : 'border-slate-100 bg-slate-50 text-slate-400'
-                      }`}>
-                        {trainingState === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <GraduationCap className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className={`text-[10.5px] font-black ${
-                          isActivePhase ? 'text-pink-600' : trainingState === 'done' ? 'text-slate-700' : 'text-slate-600'
-                        }`}>
-                          Treinamento
-                        </span>
-                        {trainingItems.length > 0 && (
-                          <span className="shrink-0 text-[8.5px] font-bold text-slate-400">
-                            {trainingDoneCount}/{trainingItems.length}
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-0.5 block text-[8.5px] font-semibold text-slate-400">Liderança · {trainingDoneCount}/{trainingItems.length} trilhas</span>
-                    </span>
-                  </button>
-                );
-              })()}
-            </div>
-          </aside>
 
           {/* phase panel */}
-          <div className="min-w-[320px] flex-[100_1_380px]">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
               <div className="min-w-0">
                 <span className="text-[11px] font-black uppercase tracking-[0.07em] text-pink-600">
@@ -10972,122 +10376,32 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   </>}
                 </div> : null}
 
-                <section className="order-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <button
-                  type="button"
-                  onClick={() => setDocumentsCollapsed(current => !current)}
-                  className="flex w-full items-center justify-between gap-3 text-left"
-                  aria-expanded={!documentsCollapsed}
-                >
-                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Documentação obrigatória{activeKind === 'revisao' ? ' · conferência' : ''}</p>
-                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-transform ${documentsCollapsed ? '-rotate-90' : ''}`}>
-                    <ChevronDown className="h-4 w-4" />
-                  </span>
-                </button>
-                {documentsCollapsed ? (
-                  <div className="mt-3 border-t border-slate-100 pt-3">
-                    <div className="flex flex-wrap gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> {approvedReviewDocumentCount} aprovado{approvedReviewDocumentCount === 1 ? '' : 's'}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">
-                        <Clock className="h-3.5 w-3.5" /> {pendingReviewDocumentCount} pendente{pendingReviewDocumentCount === 1 ? '' : 's'}
-                      </span>
-                      {rejectedReviewDocumentCount > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-700">
-                          <XCircle className="h-3.5 w-3.5" /> {rejectedReviewDocumentCount} reprovado{rejectedReviewDocumentCount === 1 ? '' : 's'}
-                        </span>
-                      ) : null}
-                    </div>
-                    {reviewDocuments.length > 0 ? (
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        {reviewDocuments.map(document => {
-                          const approved = document.status === 'approved';
-                          const rejected = document.status === 'rejected';
-                          return (
-                            <div key={document.id} className={`flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2.5 ${
-                              approved
-                                ? 'border-emerald-200 bg-emerald-50/70'
-                                : rejected
-                                  ? 'border-rose-200 bg-rose-50/70'
-                                  : 'border-amber-200 bg-amber-50/60'
-                            }`}>
-                              {approved
-                                ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                                : rejected
-                                  ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
-                                  : <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />}
-                              <span className="min-w-0">
-                                <span className="block truncate text-[10.5px] font-black text-slate-800">{document.label}</span>
-                                <span className={`mt-0.5 block text-[9.5px] font-bold ${approved ? 'text-emerald-700' : rejected ? 'text-rose-700' : 'text-amber-700'}`}>
-                                  {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
-                                </span>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="mt-2 rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs font-semibold text-slate-500">Nenhum documento configurado para esta integração.</p>
-                    )}
-                  </div>
-                ) : <>
-                {publicLinkExpiringSoon ? (
-                  <div role="alert" className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950">
-                    <div className="flex min-w-0 items-start gap-2.5">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-black">Link expira em {publicLinkHoursRemaining}h</p>
-                        <p className="mt-0.5 text-[11px] font-semibold leading-relaxed text-amber-800">
-                          {pendingRequiredDocumentCount > 0
-                            ? `${pendingRequiredDocumentCount} documento${pendingRequiredDocumentCount === 1 ? '' : 's'} obrigatório${pendingRequiredDocumentCount === 1 ? '' : 's'} ainda ${pendingRequiredDocumentCount === 1 ? 'está pendente' : 'estão pendentes'}.`
-                            : 'O formulário ainda não foi concluído.'}
-                          {' '}{onboardingPublicLinkExtensionUsed(selectedProcess) ? 'A prorrogação única já foi utilizada.' : 'Considere prorrogar o acesso por 24h.'}
-                        </p>
-                      </div>
-                    </div>
-                    {canManage && !onboardingPublicLinkExtensionUsed(selectedProcess) ? (
-                      <button
-                        type="button"
-                        disabled={updating === `${selectedProcess.id}:extend_public_link`}
-                        onClick={() => patchProcess(selectedProcess.id, { action: 'extend_public_link' })}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 text-[11px] font-black text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-                      >
-                        {updating === `${selectedProcess.id}:extend_public_link` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
-                        Prorrogar 24h
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {activeKind === 'revisao' ? (documentsWithExtraction > 0 ? (
-                  <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white"><Sparkles className="h-4 w-4" /></span>
-                      <div className="min-w-0"><div className="text-[13px] font-black text-blue-800">Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}</div><div className="mt-0.5 text-xs font-semibold text-blue-700">Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.</div></div>
-                    </div>
-                    {renderBulkApproveDocumentsButton()}
-                  </div>
-                ) : (
-                  <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500"><FileText className="h-4 w-4" /></span>
-                      <div className="min-w-0"><div className="text-[13px] font-black text-slate-800">Conferência manual de documentos</div><div className="mt-0.5 text-xs font-semibold text-slate-500">{auditableDocuments > 0 ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.` : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}</div></div>
-                    </div>
-                    {renderBulkApproveDocumentsButton()}
-                  </div>
-                )) : null}
-                <div className={`mt-3 ${activeKind === 'revisao' ? 'grid gap-2 sm:grid-cols-2' : 'space-y-2'}`}>
-                  {reviewDocuments.map(document => (
-                    <DocumentRow key={document.id} process={selectedProcess} document={document} mode={activeKind === 'revisao' ? 'review' : 'collect'} />
-                  ))}
-                  {reviewDocuments.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
-                      Nenhum documento configurado para esta integração.
-                    </p>
-                  )}
+                <div className="order-3">
+                  <OnboardingDocumentWorkbench
+                    documents={reviewDocuments}
+                    canReview={canReviewDocuments}
+                    disabled={activeKind !== 'revisao' || !canActOnCurrentPhase || processIsReadOnly}
+                    busyAction={updating}
+                    onStatusChange={(documentId, status, note) => patchProcess(selectedProcess.id, {
+                      action: 'document_status',
+                      documentId,
+                      status,
+                      note,
+                    })}
+                    onBulkStatusChange={(documentIds, status, note) => patchProcess(selectedProcess.id, {
+                      action: 'document_status_bulk',
+                      documentIds,
+                      status,
+                      note,
+                    })}
+                    onConfirmField={(documentId, fieldKey) => patchProcess(selectedProcess.id, {
+                      action: 'confirm_document_field',
+                      documentId,
+                      fieldKey,
+                    })}
+                  />
                 </div>
-                </>}
-                </section>
+
 
                 <div className="order-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm">
                   <div className="min-w-0">
@@ -11872,6 +11186,12 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   const [shiftDefinitions, setShiftDefinitions] = useState<DPShiftDefinition[]>([]);
   const [openings, setOpenings] = useState<JobOpening[]>([]);
   const [onboardingProcesses, setOnboardingProcesses] = useState<OnboardingProcess[]>([]);
+  const [onboardingPageInfo, setOnboardingPageInfo] = useState<OnboardingPageInfo>({
+    active: { limit: 120, hasMore: false, cursorId: null },
+    completed: { limit: 40, hasMore: false, cursorId: null },
+    cancelled: { limit: 40, hasMore: false, cursorId: null },
+  });
+  const [loadingMoreOnboardingScope, setLoadingMoreOnboardingScope] = useState<OnboardingProcessScope | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -11945,9 +11265,9 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
         canViewRecruitment
           ? fetch('/api/hr/openings', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<JobOpening[]>(response, 'Falha ao carregar vagas.'))
           : Promise.resolve([]),
-        canViewFormalization
-          ? fetch('/api/hr/onboarding', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<{ processes?: OnboardingProcess[] }>(response, 'Falha ao carregar integrações.'))
-          : Promise.resolve({ processes: [] }),
+        canViewFormalization && section === 'integration'
+          ? fetch('/api/hr/onboarding', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<{ processes?: OnboardingProcess[]; pageInfo?: OnboardingPageInfo }>(response, 'Falha ao carregar integrações.'))
+          : Promise.resolve({ processes: [], pageInfo: undefined }),
       ]);
       setCandidates(candidatesRes as Candidate[]);
       setRoles(rolesRes.roles);
@@ -11956,6 +11276,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
       setShiftDefinitions(rolesRes.shiftDefinitions ?? []);
       setOpenings(openingsRes as JobOpening[]);
       setOnboardingProcesses(Array.isArray(onboardingRes?.processes) ? onboardingRes.processes as OnboardingProcess[] : []);
+      if (onboardingRes?.pageInfo) setOnboardingPageInfo(onboardingRes.pageInfo);
       hasLoadedDataRef.current = true;
       setError(null);
     } catch (err) {
@@ -11965,7 +11286,34 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
     } finally {
       if (isInitialLoad) setLoading(false);
     }
-  }, [authLoading, firebaseUser, canView, canViewFormalization, canViewRecruitment, getToken]);
+  }, [authLoading, firebaseUser, canView, canViewFormalization, canViewRecruitment, getToken, section]);
+
+  const loadMoreOnboarding = useCallback(async (scope: OnboardingProcessScope) => {
+    if (!firebaseUser || loadingMoreOnboardingScope || !onboardingPageInfo[scope].hasMore) return;
+    const cursorId = onboardingPageInfo[scope].cursorId;
+    if (!cursorId) return;
+    setLoadingMoreOnboardingScope(scope);
+    setRefreshError(null);
+    try {
+      const token = await getToken();
+      const params = new URLSearchParams({ scope, cursorId });
+      const payload = await fetch(`/api/hr/onboarding?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then(response => readHrJsonResponse<{ processes?: OnboardingProcess[]; pageInfo?: Partial<OnboardingPageInfo> }>(response, 'Falha ao carregar mais integrações.'));
+      const received = Array.isArray(payload.processes) ? payload.processes : [];
+      setOnboardingProcesses(current => {
+        const byId = new Map(current.map(process => [process.id, process]));
+        received.forEach(process => byId.set(process.id, process));
+        return Array.from(byId.values());
+      });
+      const nextPageInfo = payload.pageInfo?.[scope];
+      if (nextPageInfo) setOnboardingPageInfo(current => ({ ...current, [scope]: nextPageInfo }));
+    } catch (caught) {
+      setRefreshError(caught instanceof Error ? caught.message : 'Falha ao carregar mais integrações.');
+    } finally {
+      setLoadingMoreOnboardingScope(null);
+    }
+  }, [firebaseUser, getToken, loadingMoreOnboardingScope, onboardingPageInfo]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -12742,6 +12090,8 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
       {section === 'integration' && (
         <OnboardingView
           processes={onboardingProcesses}
+          pageInfo={onboardingPageInfo}
+          loadingMoreScope={loadingMoreOnboardingScope}
           roles={roles}
           jobFunctions={functions}
           units={units}
@@ -12758,6 +12108,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           canReviewDocuments={canReviewDocuments}
           canSendSignatures={canSendSignatures}
           onRefresh={loadData}
+          onLoadMore={loadMoreOnboarding}
           onProcessUpdated={updateOnboardingProcess}
           onAsoPaymentUpdated={updateOnboardingAsoPayment}
           onAsoWorkflowUpdated={updateOnboardingAsoWorkflow}
