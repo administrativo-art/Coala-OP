@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, Download, ExternalLink, FileText, Loader2, RotateCcw, Sparkles, XCircle } from "lucide-react";
 
+import { onboardingDocumentPreviewKind } from "@/features/hr/onboarding/document-preview";
 import type { OnboardingDocument } from "@/types";
 
 type DocumentFilter = "all" | "pending" | "approved" | "rejected" | "waiting";
@@ -112,6 +113,7 @@ export function OnboardingDocumentWorkbench({
   const extracted = selected ? Object.entries(selected.extractedFields ?? {}) : [];
   const selectedHasFile = selected ? hasFile(selected) : false;
   const selectedCanAct = Boolean(selected && selectedHasFile && canReview && !disabled);
+  const selectedPreviewKind = selected ? onboardingDocumentPreviewKind(selected) : "unknown";
 
   return (
     <section className="overflow-hidden rounded-[20px] border border-[#e2ded6] bg-white shadow-sm">
@@ -159,8 +161,12 @@ export function OnboardingDocumentWorkbench({
         {selected ? (
           <div className="space-y-3 bg-[#faf9f6] p-3.5">
             <div className="flex items-center gap-2"><h5 className="min-w-0 flex-1 truncate text-xs font-black text-slate-900">{selected.label}</h5>{selected.fileUrl ? <><a href={selected.fileUrl} target="_blank" rel="noreferrer" className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-stone-600" aria-label="Abrir documento em nova aba"><ExternalLink className="h-3.5 w-3.5" /></a><a href={selected.fileUrl} download className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-stone-600" aria-label="Baixar documento"><Download className="h-3.5 w-3.5" /></a></> : null}</div>
-            <div className="min-h-[260px] overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
-              {selected.fileUrl ? <iframe src={selected.fileUrl} title={`Pré-visualização de ${selected.label}`} className="h-[330px] w-full bg-white" /> : <div className="grid h-[260px] place-items-center p-8 text-center"><span><FileText className="mx-auto h-8 w-8 text-stone-300" /><span className="mt-2 block text-xs font-bold text-stone-500">Aguardando o envio deste documento.</span></span></div>}
+            <div className="min-h-[260px] overflow-hidden rounded-xl border border-stone-200 bg-stone-100 shadow-sm">
+              {selected.fileUrl ? selectedPreviewKind === "image" ? (
+                <img src={selected.fileUrl} alt={`Pré-visualização de ${selected.label}`} className="block h-[420px] w-full object-contain p-3" />
+              ) : (
+                <iframe src={selected.fileUrl} title={`Pré-visualização de ${selected.label}`} className="h-[420px] w-full bg-white" />
+              ) : <div className="grid h-[260px] place-items-center p-8 text-center"><span><FileText className="mx-auto h-8 w-8 text-stone-300" /><span className="mt-2 block text-xs font-bold text-stone-500">Aguardando o envio deste documento.</span></span></div>}
             </div>
 
             {extracted.length ? (
