@@ -2,38 +2,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "onboardingProcesses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "onboardingProcesses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "providerCnpj",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "userPresence",
       "queryScope": "COLLECTION",
       "fields": [

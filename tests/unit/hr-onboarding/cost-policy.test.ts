@@ -22,3 +22,30 @@ test('mantém a linha de produção limitada, paginada e sem polling da lista co
   assert.doesNotMatch(shellSource, /setInterval\(onRefresh/);
   assert.match(shellSource, /api\/hr\/onboarding\/\$\{selectedProcess\.id\}/);
 });
+
+test('declara os índices da linha de produção no banco coala-rh', async () => {
+  const hrIndexes = JSON.parse(await readFile(
+    new URL('../../../firestore.rh.indexes.json', import.meta.url),
+    'utf8',
+  )) as {
+    indexes: Array<{
+      collectionGroup: string;
+      fields: Array<{ fieldPath: string; order: string }>;
+    }>;
+  };
+
+  const onboardingIndexes = hrIndexes.indexes.filter(
+    index => index.collectionGroup === 'onboardingProcesses',
+  );
+  const fieldPaths = onboardingIndexes.map(index => index.fields.map(field => field.fieldPath));
+
+  assert.ok(fieldPaths.some(paths => (
+    paths.includes('status')
+    && paths.includes('createdAt')
+    && paths.includes('__name__')
+  )));
+  assert.ok(fieldPaths.some(paths => (
+    paths.includes('providerCnpj')
+    && paths.includes('status')
+  )));
+});
