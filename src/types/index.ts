@@ -1225,6 +1225,9 @@ export type OnboardingDocument = OnboardingDocumentTemplate & {
   note?: string | null;
   extractedFields?: Record<string, unknown>;
   fieldConfidences?: Record<string, number>;
+  confirmedExtractedFields?: string[];
+  extractedFieldsConfirmedAt?: string | null;
+  extractedFieldsConfirmedBy?: string | null;
   promotedDocumentId?: string | null;
   promotedAt?: string | null;
   promotedBy?: string | null;

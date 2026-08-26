@@ -20,6 +20,8 @@ import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-
 import { syncApprovedOnboardingPhotoToAvatar } from '@/lib/hr/profile-photo-avatar.server';
 import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
 import { setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
+import { confirmExtractedDocumentField } from '@/features/hr/onboarding/document-field-confirmation';
+import { redactOnboardingProcess } from '@/features/hr/onboarding/process-redaction.server';
 import {
   createOnboardingPublicLinkWindow,
   extendOnboardingPublicLink,
@@ -791,13 +793,31 @@ async function createCollaboratorFromOnboarding(params: {
   };
 }
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const access = await assertFormalizationAccess(request, 'onboarding.manage').catch(() => null);
-  if (!access) return jsonError('Sem permissão para gerenciar onboarding.', 403);
-
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const access = await assertFormalizationAccess(request, 'view').catch(() => null);
+  if (!access) return jsonError('Sem permissão para acessar onboarding.', 403);
   const { id } = await context.params;
-  const body = await request.json();
+  const snapshot = await hrDbAdmin.collection('onboardingProcesses').doc(id).get();
+  if (!snapshot.exists) return jsonError('Onboarding não encontrado.', 404);
+  return NextResponse.json({
+    process: redactOnboardingProcess({
+      id: snapshot.id,
+      ...((serializeHrValue(snapshot.data()) as Record<string, unknown>) ?? {}),
+    }, access),
+  });
+}
+
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== 'object') return jsonError('Payload inválido.');
   const action = asString(body.action);
+  const requiredPermission = action === 'document_status' || action === 'document_status_bulk' || action === 'confirm_document_field'
+    ? 'documents.review'
+    : 'onboarding.manage';
+  const access = await assertFormalizationAccess(request, requiredPermission).catch(() => null);
+  if (!access) return jsonError('Sem permissão para executar esta ação na integração.', 403);
+
   const ref = hrDbAdmin.collection('onboardingProcesses').doc(id);
   const snap = await ref.get();
   if (!snap.exists) return jsonError('Onboarding não encontrado.', 404);
@@ -912,10 +932,26 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     }
     update.documents = mergeDocumentStatus(documents, documentId, status, asString(body.note), now);
     changedDocumentsCount = 1;
+  } else if (action === 'confirm_document_field') {
+    const documentId = asString(body.documentId);
+    const fieldKey = asString(body.fieldKey);
+    if (!documentId || !fieldKey) return jsonError('Documento ou campo inválido.');
+    const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
+    const confirmation = confirmExtractedDocumentField({
+      documents,
+      documentId,
+      fieldKey,
+      now,
+      actorId: access.decoded.uid,
+    });
+    if (!confirmation.ok && confirmation.reason === 'document_not_found') return jsonError('Documento não encontrado.', 404);
+    if (!confirmation.ok) return jsonError('O campo extraído não está disponível neste documento.', 409);
+    update.documents = confirmation.documents;
+    changedDocumentsCount = 1;
   } else if (action === 'document_status_bulk') {
     const documentIds = asStringArray(body.documentIds);
     const status = asString(body.status) as OnboardingDocument['status'] | null;
-    if (documentIds.length === 0 || status !== 'approved') {
+    if (documentIds.length === 0 || !status || !['approved', 'rejected'].includes(status)) {
       return jsonError('Documentos ou status inválido.');
     }
     if (process.currentStage !== 'document_review') {
@@ -934,7 +970,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return jsonError('Não é possível aprovar em lote documentos sem arquivo anexado para auditoria.', 400);
     }
 
-    update.documents = mergeDocumentStatuses(documents, documentIds, status, asString(body.note), now);
+    const note = asString(body.note);
+    if (status === 'rejected' && (!note || note.length < 3)) {
+      return jsonError('Informe o motivo da reprovação em lote.');
+    }
+    update.documents = mergeDocumentStatuses(documents, documentIds, status, note, now);
     changedDocumentsCount = documentIds.length;
   } else if (action === 'advance_stage') {
     const currentStage = asString(body.currentStage) as OnboardingStageId | null;
