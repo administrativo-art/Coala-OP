@@ -28,13 +28,15 @@ const PUBLIC_RECRUITMENT_API_PATHS = [
   '/api/hr/talent',
   '/api/hr/upload',
   '/api/hr/onboarding/public',
+  '/api/hr/accountant',
   '/api/hr/aso/candidate',
   '/api/hr/aso/clinic',
 ];
 
-const PUBLIC_ASO_PAGE_PATHS = [
+const PUBLIC_STANDALONE_PAGE_PATHS = [
   '/aso/candidato',
   '/aso/clinica',
+  '/contador/ficha-registro',
 ];
 
 function matchesPathOrChild(pathname: string, allowedPath: string) {
@@ -45,8 +47,8 @@ function isAllowedPublicRecruitmentApi(pathname: string) {
   return PUBLIC_RECRUITMENT_API_PATHS.some((path) => matchesPathOrChild(pathname, path));
 }
 
-function isAllowedPublicAsoPage(pathname: string) {
-  return PUBLIC_ASO_PAGE_PATHS.some((path) => matchesPathOrChild(pathname, path));
+function isAllowedPublicStandalonePage(pathname: string) {
+  return PUBLIC_STANDALONE_PAGE_PATHS.some((path) => matchesPathOrChild(pathname, path));
 }
 
 export function middleware(req: NextRequest) {
@@ -69,9 +71,9 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Os links com token do ASO vivem fora da árvore /vagas e devem chegar
-  // intactos às páginas públicas correspondentes.
-  if (isAllowedPublicAsoPage(normalizedPathname)) {
+  // Links públicos com token vivem fora da árvore /vagas e devem chegar
+  // intactos às páginas correspondentes.
+  if (isAllowedPublicStandalonePage(normalizedPathname)) {
     const response = NextResponse.next();
     response.headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
     response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');

@@ -34,6 +34,23 @@ test('libera somente as APIs públicas necessárias ao fluxo do ASO', () => {
   assert.equal(blocked.status, 404);
 });
 
+test('preserva a página e a API públicas de envio da ficha pelo contador', () => {
+  const page = middleware(publicRequest('/contador/ficha-registro/token-contador'));
+  assert.equal(page.headers.get('x-middleware-next'), '1');
+  assert.match(page.headers.get('cache-control') ?? '', /no-store/);
+  assert.equal(page.headers.get('x-robots-tag'), 'noindex, nofollow, noarchive');
+
+  assertPassThrough('/api/hr/accountant/token-contador');
+});
+
+test('mantém íntegro o contrato do link público de admissão enviado por e-mail', () => {
+  const page = middleware(publicRequest('/onboarding/token-admissao'));
+  assert.equal(page.headers.get('x-middleware-rewrite'), `https://${PUBLIC_HOST}/vagas/onboarding/token-admissao`);
+
+  assertPassThrough('/api/hr/onboarding/public/token-admissao');
+  assertPassThrough('/api/hr/upload');
+});
+
 test('mantém vagas na árvore pública e páginas internas bloqueadas', () => {
   const opening = middleware(publicRequest('/atendente'));
   assert.equal(opening.headers.get('x-middleware-rewrite'), `https://${PUBLIC_HOST}/vagas/atendente`);
