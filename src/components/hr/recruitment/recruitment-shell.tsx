@@ -10074,8 +10074,8 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
 
             {/* PRIMEIRA FASE CONSOLIDADA: COLETA, CONFERÊNCIA E ASO */}
             {(activeKind === 'coleta' || activeKind === 'revisao') && (
-              <div className="mt-4 flex flex-col gap-4">
-                <section className="order-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+                <section className="order-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-start-2 lg:row-start-2">
                 <div className="flex flex-wrap items-center justify-between gap-2.5">
                   <p className="text-xs font-black uppercase tracking-wide text-slate-500">Dados fornecidos pelo candidato</p>
                   <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
@@ -10110,7 +10110,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                 ) : null}
                 </section>
 
-                {canViewAso ? <div className="order-2 rounded-2xl border border-cyan-300 bg-cyan-50/70 p-4 shadow-sm">
+                {canViewAso ? <div className="order-2 rounded-2xl border border-cyan-300 bg-cyan-50/70 p-4 shadow-sm lg:col-start-2 lg:row-start-1">
                   <button
                     type="button"
                     onClick={() => setAsoCollapsed(current => !current)}
@@ -10376,7 +10376,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                   </>}
                 </div> : null}
 
-                <div className="order-3">
+                <div className="order-1 min-w-0 lg:col-start-1 lg:row-span-3 lg:row-start-1">
                   <OnboardingDocumentWorkbench
                     documents={reviewDocuments}
                     canReview={canReviewDocuments}
@@ -10403,7 +10403,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                 </div>
 
 
-                <div className="order-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm">
+                <div className="order-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm lg:col-start-2 lg:row-start-3">
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-black text-slate-900">Link do formulário público</div>
                     <div className={`mt-0.5 text-xs font-bold ${linkActive ? 'text-blue-600' : 'text-slate-400'}`}>

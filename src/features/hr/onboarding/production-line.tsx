@@ -209,7 +209,7 @@ export function OnboardingProductionLine({
 
   return (
     <div className="min-w-0 space-y-4 text-slate-950">
-      <header className="sticky top-[-1px] z-20 -mx-4 flex flex-wrap items-center gap-3 border-b border-[#e0dcd4] bg-[#f5f3ee]/95 px-4 py-3 backdrop-blur-xl md:-mx-8 md:px-8">
+      <header className="sticky top-[-1px] z-20 -mx-3 flex flex-wrap items-center gap-3 border-b border-[#e0dcd4] bg-[#f5f3ee]/95 px-3 py-3 backdrop-blur-xl">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="text-[11px] font-black uppercase tracking-[0.1em] text-[#df2f78]">Pessoal</span>
           <span className="h-1 w-1 rounded-full bg-[#c9c3b8]" />
