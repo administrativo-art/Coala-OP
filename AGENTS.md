@@ -1,5 +1,40 @@
 # Regras operacionais do Coala One
 
+## Como tratar o código existente
+
+- Código existente é evidência, não necessariamente padrão. Antes de copiar uma implementação, distinga decisão arquitetural intencional de convenção consolidada, solução local, detalhe histórico ou dívida técnica. Somente decisão e convenção comprovadas viram padrão.
+- Na dúvida, não canonize. Preserve o comportamento existente, registre a incerteza e trate o ponto como não normativo. Solicite decisão apenas quando ela for necessária para prosseguir ou quando a alteração criaria um padrão global difícil de reverter.
+
+## Padrão de construção de módulos
+
+- Valide entrada por schema na fronteira do sistema. Nunca confie em dados enviados pelo cliente.
+- Escritas que dependem de leitura prévia, alteram documentos correlacionados, executam transições de estado, recalculam agregados ou precisam manter auditoria atomicamente consistente devem usar transação no mesmo banco.
+- Escritas simples, independentes e idempotentes podem usar `set`, `update` ou batch, conforme a garantia necessária. Não use transação apenas por simetria.
+- Quando auditoria fizer parte da mesma unidade de consistência e estiver no mesmo banco, grave-a na mesma transação.
+- Não trate operações entre bancos ou efeitos externos como se formassem uma única transação. Persista intenção e estado observável; execute o efeito externo com idempotência, retry e tratamento explícito de falha.
+- Componentes não reinventam transporte nem autenticação. Chamada autenticada à API passa por cliente compartilhado. Hook de domínio só existe quando houver comportamento client-side que o justifique, como cache, estado compartilhado, optimistic update, paginação, revalidação, coordenação ou reuso.
+- Nenhuma abstração nova sem antes procurar a existente. Se criar uma, registre no relatório por que a existente não servia.
+
+## Protocolo de issue
+
+- Antes de alterar código, caracterize o comportamento atual e reproduza a falha quando isso for tecnicamente viável.
+- Classifique a issue como ocorrência isolada, regra de negócio, contrato entre componentes, integração, regressão, arquitetura ou ambiente/produção.
+- Identifique o contrato ou invariante violado, as superfícies afetadas e o que está fora do escopo.
+- Busque o menor nível de abstração que elimina a classe do problema, não apenas a ocorrência, sem overengineering.
+- Uma issue não termina quando o caso reportado passa a funcionar; termina quando a regra violada volta a ser garantida por um artefato permanente.
+- Antes de fechar, responda: "se amanhã outra implementação tocar neste componente, o que impede a falha de voltar?". Resposta aceitável é um artefato, como teste, tipo, schema, constraint, validação central, autorização no servidor ou regra no CI. "Corrigi aquela linha" não é.
+- Não transforme hipótese em causa comprovada. Diferencie evidência, inferência e decisão.
+
+## Verificação antes de concluir
+
+- Nenhuma tarefa é considerada pronta sem executar as verificações aplicáveis.
+- Mudanças comuns devem manter `npm run check` verde.
+- Mudanças que afetem build, importações, fronteiras server/client ou geração de rotas devem manter `npm run verify` verde.
+- Mudanças em regras de acesso ao Firestore exigem `npm run check:rules` verde.
+- Mudanças cobertas por teste de integração exigem o respectivo comando verde.
+- A IA não afirma que algo funciona sem ter executado a verificação. Não descreva como resultado aquilo que não rodou.
+- Falhas preexistentes devem ser identificadas como preexistentes; não podem ser omitidas nem atribuídas à mudança sem evidência.
+
 ## CLI e navegador
 
 - Para operações determinísticas, estruturadas ou repetitivas, prefira CLI ou script à automação do navegador.
