@@ -2,6 +2,10 @@ import { spawn, execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
+import { assertNoFirebaseTestCredentials } from "../tests/helpers/firestore-emulator-safety.mjs";
+
+const projectId = "demo-coala-security";
+
 function javaHomeFromMac() {
   if (process.platform !== "darwin") return null;
 
@@ -24,6 +28,8 @@ function hasJava(javaHome) {
   return Boolean(javaHome && existsSync(join(javaHome, "bin", process.platform === "win32" ? "java.exe" : "java")));
 }
 
+assertNoFirebaseTestCredentials();
+
 const candidates = [
   process.env.JAVA_HOME,
   javaHomeFromMac(),
@@ -34,6 +40,12 @@ const candidates = [
 ].filter(Boolean);
 
 const javaHome = candidates.find(hasJava);
+const firebaseExecutable = join(
+  process.cwd(),
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "firebase.cmd" : "firebase",
+);
 
 if (!javaHome) {
   console.error("[test:security:rules] Java 11+ nao encontrado.");
@@ -42,21 +54,30 @@ if (!javaHome) {
   process.exit(1);
 }
 
+if (!existsSync(firebaseExecutable)) {
+  console.error("[test:security:rules] Firebase CLI local não encontrada. Execute npm ci.");
+  process.exit(1);
+}
+
 const env = {
   ...process.env,
   JAVA_HOME: javaHome,
   PATH: `${join(javaHome, "bin")}${delimiter}${process.env.PATH ?? ""}`,
+  GCLOUD_PROJECT: projectId,
+  GOOGLE_CLOUD_PROJECT: projectId,
 };
 
 const child = spawn(
-  "firebase",
+  firebaseExecutable,
   [
     "emulators:exec",
     "--project",
-    "demo-coala-security",
+    projectId,
+    "--config",
+    "firebase.test.json",
     "--only",
     "firestore,storage",
-    "node --test tests/security/rules.test.mjs",
+    "node --test tests/security/rules.test.mjs tests/security/firestore.rules.test.mjs",
   ],
   {
     env,
@@ -64,6 +85,11 @@ const child = spawn(
     stdio: "inherit",
   },
 );
+
+child.on("error", (error) => {
+  console.error("[test:security:rules] Falha ao iniciar a Firebase CLI local:", error.message);
+  process.exit(1);
+});
 
 child.on("exit", (code, signal) => {
   if (signal) {

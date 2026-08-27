@@ -13,6 +13,11 @@ const systemDocumentTemplateAssets = [
 ];
 const nextConfig = {
   transpilePackages: ['@react-pdf/renderer'],
+  // `npm run verify` executa o lint antes do build. Evita repetir a mesma
+  // análise no Next e inundar o log do CI com a dívida legada em warnings.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   experimental: {
     // App Hosting builds run in a memory-limited container. Next otherwise
     // derives this from the host CPU count and can spawn enough page-data

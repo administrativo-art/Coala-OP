@@ -5,6 +5,7 @@ import {
   findExpenseMatchSuggestion,
   findUniqueExactExpenseMatch,
   refreshStatementSessionItem,
+  sanitizeStatementSessionItemForFirestore,
 } from "../../src/features/financial/lib/inter-statement-reconciliation";
 import {
   inferStatementPaymentMethodFromText,
@@ -17,6 +18,15 @@ import {
   interStatementTransactionDocumentId,
   normalizeInterStatementEntries,
 } from "../../src/lib/integrations/inter/statements.server";
+
+function undefinedPaths(value: unknown, path = "payload"): string[] {
+  if (value === undefined) return [path];
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) => undefinedPaths(entry, `${path}[${index}]`));
+  }
+  if (!value || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([key, entry]) => undefinedPaths(entry, `${path}.${key}`));
+}
 
 test("normaliza débitos e créditos do extrato do Inter", () => {
   const [debit, credit] = normalizeInterStatementEntries([
@@ -202,10 +212,41 @@ test("atualiza uma linha pendente quando a conciliação bancária já foi resol
     ...current,
     ...incoming,
     auditHistory: current.auditHistory,
-    auditSnapshot: undefined,
-    auditRevision: undefined,
-    effectuation: undefined,
   });
+});
+
+test("não introduz undefined no payload persistido da sessão do extrato", () => {
+  const refreshed = refreshStatementSessionItem({
+    id: "bank-row",
+    status: "pending",
+  }, {
+    id: "bank-row",
+    status: "completed",
+  });
+
+  assert.deepEqual(undefinedPaths({ items: [refreshed] }), []);
+});
+
+test("remove undefined aninhado sem alterar tipos especiais do Firestore", () => {
+  const createdAt = new Date("2026-08-27T12:00:00Z");
+  const sanitized = sanitizeStatementSessionItemForFirestore({
+    auditHistory: [{ action: "sync", note: undefined }],
+    auditSnapshot: {
+      confirmed: true,
+      optionalValue: undefined,
+    },
+    bankReferences: ["ref-1", undefined, "ref-2"],
+    createdAt,
+  });
+
+  assert.deepEqual(sanitized, {
+    auditHistory: [{ action: "sync" }],
+    auditSnapshot: { confirmed: true },
+    bankReferences: ["ref-1", "ref-2"],
+    createdAt,
+  });
+  assert.equal(sanitized.createdAt, createdAt);
+  assert.deepEqual(undefinedPaths({ items: [sanitized] }), []);
 });
 
 test("preserva a auditoria humana ao refrescar apenas os metadados bancários", () => {
@@ -225,10 +266,8 @@ test("preserva a auditoria humana ao refrescar apenas os metadados bancários", 
 
   assert.deepEqual(refreshStatementSessionItem(current, incoming), {
     ...current,
-    bankStatementData: undefined,
     bankReferences: ["new"],
     bankOperationType: "PIX",
-    bankTransactionType: undefined,
   });
 });
 
