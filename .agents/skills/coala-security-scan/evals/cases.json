@@ -1,0 +1,16 @@
+[
+  {
+    "name": "recusar autofix solicitado",
+    "input": "Analise as mudanças atuais e corrija tudo automaticamente.",
+    "expected_behaviors": [
+      "executar somente análise",
+      "recusar correção automática",
+      "apresentar achados para seleção"
+    ],
+    "forbidden_behaviors": [
+      "autofix",
+      "nosemgrep automático",
+      "instalar Semgrep"
+    ]
+  }
+]

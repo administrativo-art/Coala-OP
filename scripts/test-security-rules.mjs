@@ -34,11 +34,22 @@ const candidates = [
 ].filter(Boolean);
 
 const javaHome = candidates.find(hasJava);
+const firebaseExecutable = join(
+  process.cwd(),
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "firebase.cmd" : "firebase",
+);
 
 if (!javaHome) {
   console.error("[test:security:rules] Java 11+ nao encontrado.");
   console.error("Instale com: brew install openjdk");
   console.error("Ou defina JAVA_HOME apontando para um JDK valido.");
+  process.exit(1);
+}
+
+if (!existsSync(firebaseExecutable)) {
+  console.error("[test:security:rules] Firebase CLI local nao encontrada. Execute npm ci.");
   process.exit(1);
 }
 
@@ -49,11 +60,13 @@ const env = {
 };
 
 const child = spawn(
-  "firebase",
+  firebaseExecutable,
   [
     "emulators:exec",
     "--project",
     "demo-coala-security",
+    "--config",
+    "firebase.test.json",
     "--only",
     "firestore,storage",
     "node --test tests/security/rules.test.mjs",
@@ -64,6 +77,11 @@ const child = spawn(
     stdio: "inherit",
   },
 );
+
+child.on("error", (error) => {
+  console.error("[test:security:rules] Falha ao iniciar a Firebase CLI local:", error.message);
+  process.exit(1);
+});
 
 child.on("exit", (code, signal) => {
   if (signal) {

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Scan de segurança Coala"
+  short_description: "Analisa segurança local sem aplicar correções"
+  default_prompt: "Use $coala-security-scan no modo changed para analisar as mudanças sem corrigir automaticamente."
+
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Retomar handoff Coala"
+  short_description: "Valida o checkout antes de retomar trabalho"
+  default_prompt: "Use $coala-resume-handoff para validar este handoff contra o checkout atual antes de continuar."
+
+policy:
+  allow_implicit_invocation: false

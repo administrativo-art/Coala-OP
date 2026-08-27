@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
@@ -7,8 +8,10 @@ import {
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
+  collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   writeBatch,
@@ -20,13 +23,25 @@ import {
   uploadBytes,
 } from "firebase/storage";
 
+import {
+  assertFirestoreEmulatorSafety,
+  KNOWN_FIRESTORE_DATABASE_IDS,
+} from "../helpers/firestore-emulator-safety.mjs";
+
 const root = new URL("../../", import.meta.url);
 const rules = {
   main: await readFile(new URL("firestore.rules", root), "utf8"),
+  signage: await readFile(new URL("firestore.signage.rules", root), "utf8"),
   financial: await readFile(new URL("firestore.financial.rules", root), "utf8"),
   rh: await readFile(new URL("firestore.rh.rules", root), "utf8"),
+  checklist: await readFile(new URL("firestore.checklist.rules", root), "utf8"),
   storage: await readFile(new URL("storage.rules", root), "utf8"),
 };
+
+function initializeSafeTestEnvironment({ projectId, databaseId, ...options }) {
+  assertFirestoreEmulatorSafety({ projectId, databaseId });
+  return initializeTestEnvironment({ projectId, ...options });
+}
 
 const basePermissions = {
   settings: {
@@ -129,8 +144,9 @@ function compliantUser(profileId) {
 }
 
 test("Firestore principal bloqueia escalação e preserva operações autorizadas", async () => {
-  const env = await initializeTestEnvironment({
+  const env = await initializeSafeTestEnvironment({
     projectId: "demo-security-main",
+    databaseId: "coala",
     firestore: { rules: rules.main },
     storage: { rules: rules.storage },
   });
@@ -278,8 +294,9 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
 });
 
 test("Financeiro separa edição de despesa do registro de pagamento", async () => {
-  const env = await initializeTestEnvironment({
+  const env = await initializeSafeTestEnvironment({
     projectId: "demo-security-financial",
+    databaseId: "coala-financeiro",
     firestore: { rules: rules.financial },
   });
 
@@ -608,8 +625,9 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
 });
 
 test("Financeiro permite auditar sincronização do Inter sem alterar a identidade bancária", async () => {
-  const env = await initializeTestEnvironment({
+  const env = await initializeSafeTestEnvironment({
     projectId: "demo-security-inter-statement",
+    databaseId: "coala-financeiro",
     firestore: { rules: rules.financial },
   });
 
@@ -691,8 +709,9 @@ test("Financeiro permite auditar sincronização do Inter sem alterar a identida
 });
 
 test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backend", async () => {
-  const env = await initializeTestEnvironment({
+  const env = await initializeSafeTestEnvironment({
     projectId: "demo-security-cash-closures",
+    databaseId: "coala-financeiro",
     firestore: { rules: rules.financial },
   });
 
@@ -796,8 +815,9 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
 });
 
 test("RH isola unidades, auditoria e recrutamento direto", async () => {
-  const env = await initializeTestEnvironment({
+  const env = await initializeSafeTestEnvironment({
     projectId: "demo-security-rh",
+    databaseId: "coala-rh",
     firestore: { rules: rules.rh },
   });
 
@@ -844,4 +864,80 @@ test("RH isola unidades, auditoria e recrutamento direto", async () => {
   } finally {
     await env.cleanup();
   }
+});
+
+test("Signage permite somente leitura pontual de player publicado", async () => {
+  const env = await initializeSafeTestEnvironment({
+    projectId: "demo-security-signage",
+    databaseId: "coala-signage",
+    firestore: { rules: rules.signage },
+  });
+
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await Promise.all([
+        setDoc(doc(context.firestore(), "publishedPlayers/kiosk-1"), { playlistId: "playlist-1" }),
+        setDoc(doc(context.firestore(), "privatePlayers/kiosk-1"), { playlistId: "private" }),
+      ]);
+    });
+
+    const anonymous = env.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(anonymous, "publishedPlayers/kiosk-1")));
+    await assertFails(getDocs(collection(anonymous, "publishedPlayers")));
+    await assertFails(setDoc(doc(anonymous, "publishedPlayers/kiosk-2"), { playlistId: "forged" }));
+    await assertFails(getDoc(doc(anonymous, "privatePlayers/kiosk-1")));
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test("Checklist nega toda leitura e escrita direta do cliente", async () => {
+  const env = await initializeSafeTestEnvironment({
+    projectId: "demo-security-checklist",
+    databaseId: "coala-checklist",
+    firestore: { rules: rules.checklist },
+  });
+
+  try {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await assertSucceeds(setDoc(doc(context.firestore(), "checklists/checklist-1"), { title: "Abertura" }));
+    });
+
+    const authenticated = env.authenticatedContext("operator").firestore();
+    await assertFails(getDoc(doc(authenticated, "checklists/checklist-1")));
+    await assertFails(setDoc(doc(authenticated, "checklists/checklist-2"), { title: "Fechamento" }));
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test("guarda do emulador rejeita projeto, database e credencial inseguros", () => {
+  const safeEnv = { FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080" };
+  assert.deepEqual(KNOWN_FIRESTORE_DATABASE_IDS, [
+    "coala",
+    "coala-signage",
+    "coala-financeiro",
+    "coala-rh",
+    "coala-checklist",
+  ]);
+  assert.throws(
+    () => assertFirestoreEmulatorSafety({ projectId: "coala-op", databaseId: "coala", env: safeEnv }),
+    /prefixo demo-/,
+  );
+  assert.throws(
+    () => assertFirestoreEmulatorSafety({ projectId: "demo-safe", databaseId: "coala-finance", env: safeEnv }),
+    /Database ID não reconhecido/,
+  );
+  assert.throws(
+    () => assertFirestoreEmulatorSafety({ projectId: "demo-safe", databaseId: "coala", env: {} }),
+    /FIRESTORE_EMULATOR_HOST ausente/,
+  );
+  assert.throws(
+    () => assertFirestoreEmulatorSafety({
+      projectId: "demo-safe",
+      databaseId: "coala",
+      env: { ...safeEnv, GOOGLE_APPLICATION_CREDENTIALS: "/not/used.json" },
+    }),
+    /GOOGLE_APPLICATION_CREDENTIALS/,
+  );
 });

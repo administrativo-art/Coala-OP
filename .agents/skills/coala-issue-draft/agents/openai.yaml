@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rascunho de issue Coala"
+  short_description: "Estrutura e sanitiza uma issue local"
+  default_prompt: "Use $coala-issue-draft para criar um rascunho local desta falha sem publicar nada."
+
+policy:
+  allow_implicit_invocation: false

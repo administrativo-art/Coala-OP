@@ -1,0 +1,7 @@
+interface:
+  display_name: "Handoff Coala"
+  short_description: "Registra contexto verificável para retomada"
+  default_prompt: "Use $coala-handoff para criar um handoff factual desta sessão sem modificar o código."
+
+policy:
+  allow_implicit_invocation: false

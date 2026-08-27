@@ -1,0 +1,7 @@
+interface:
+  display_name: "Triagem de erros Coala"
+  short_description: "Agrupa erros e prepara triagem local"
+  default_prompt: "Use $coala-error-triage para agrupar este export de erros e preparar rascunhos locais sem publicar nada."
+
+policy:
+  allow_implicit_invocation: false

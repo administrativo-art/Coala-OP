@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
+import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,12 @@ import { CashControlNavigation } from "./cash-control-navigation";
 
 type Props = { kioskId: string; date: string };
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+type CashClosureApiPayload = CashClosureWithLines & {
+  created?: boolean;
+  operatorAvatars?: Record<string, string>;
+  settings?: { seniorDivergenceCents?: number };
+  allocationError?: string;
+};
 
 const STATUS_LABEL: Record<CashClosure["status"], string> = {
   not_synced: "Não sincronizado",
@@ -122,6 +129,7 @@ function ChannelIcon({ line }: { line: CashClosureLine }) {
 
 export function CashClosureDayPage({ kioskId, date }: Props) {
   const { firebaseUser, permissions } = useAuth();
+  const api = useAuthenticatedApi();
   const { toast } = useToast();
   const [data, setData] = useState<CashClosureWithLines | null>(null);
   const [operatorAvatars, setOperatorAvatars] = useState<Record<string, string>>({});
@@ -142,28 +150,11 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     latestData.current = data;
   }, [data]);
 
-  const api = useCallback(async (path: string, init?: RequestInit) => {
-    if (!firebaseUser) throw new Error("Sessão não disponível.");
-    const token = await firebaseUser.getIdToken();
-    const response = await fetch(path, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(init?.body ? { "Content-Type": "application/json" } : {}),
-        ...init?.headers,
-      },
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "Falha na operação.");
-    return payload;
-  }, [firebaseUser]);
-
   const load = useCallback(async () => {
     if (!firebaseUser) return;
     setLoading(true);
     try {
-      const payload = await api(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`);
+      const payload = await api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`);
       setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
       setOperatorAvatars(payload.operatorAvatars ?? {});
       setSeniorDivergenceCents(payload.settings?.seniorDivergenceCents ?? 1_000);
@@ -192,9 +183,9 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     if (!current || !["draft", "reopened", "pending_review"].includes(current.closure.status)) return;
     setSaveState("saving");
     try {
-      const payload = await api(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`, {
+      const payload = await api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`, {
         method: "PATCH",
-        body: JSON.stringify({
+        json: {
           lines: current.lines.map((line) => ({
             id: line.id,
             reportedCents: line.reportedCents,
@@ -202,7 +193,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
             countedCents: line.countedCents,
             note: line.note,
           })),
-        }),
+        },
       });
       setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
       setSaveState("saved");
@@ -250,9 +241,9 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
   const sync = useCallback(async () => {
     setWorking("sync");
     try {
-      const payload = await api("/api/financial/cash-closures/sync", {
+      const payload = await api<CashClosureApiPayload>("/api/financial/cash-closures/sync", {
         method: "POST",
-        body: JSON.stringify({ kioskId, date }),
+        json: { kioskId, date },
       });
       setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
       setSaveState("idle");
@@ -298,9 +289,9 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     setWorking(reasonAction);
     try {
       if (reasonAction === "approve" && ["dirty", "error"].includes(saveState)) await save();
-      const payload = await api(`/api/financial/cash-closures/${encodeURIComponent(closureId)}/${reasonAction}`, {
+      const payload = await api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}/${reasonAction}`, {
         method: "POST",
-        body: JSON.stringify({ reason }),
+        json: { reason },
       });
       toast({ title: reasonAction === "approve" ? "Fechamento aprovado." : "Fechamento reaberto." });
       if (payload.allocationError) {
@@ -329,7 +320,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     try {
       await api(`/api/financial/cash-closures/${encodeURIComponent(closureId)}/split-deposit`, {
         method: "POST",
-        body: JSON.stringify({ partsCents }),
+        json: { partsCents },
       });
       toast({ title: `Dinheiro dividido em ${partsCents.length} partes e alocado.` });
       await load();

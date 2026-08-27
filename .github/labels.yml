@@ -1,0 +1,43 @@
+# Catálogo local desejado. Este arquivo não cria ou altera labels remotas.
+- name: bug
+  color: d73a4a
+  description: Falha acionável do produto
+- name: incident
+  color: b60205
+  description: Incidente operacional sob investigação
+- name: regression
+  color: e99695
+  description: Comportamento corrigido que voltou a ocorrer
+- name: severity:low
+  color: c5def5
+  description: Baixo impacto e sem urgência operacional
+- name: severity:medium
+  color: fbca04
+  description: Impacto moderado com alternativa disponível
+- name: severity:high
+  color: d93f0b
+  description: Impacto relevante ou função importante indisponível
+- name: severity:critical
+  color: 8b0000
+  description: Segurança, integridade, financeiro ou indisponibilidade crítica
+- name: environment:development
+  color: 6f42c1
+  description: Detectado em desenvolvimento
+- name: environment:staging
+  color: 5319e7
+  description: Detectado em staging ou homologação
+- name: environment:production
+  color: b60205
+  description: Detectado em produção
+- name: rollout:pending
+  color: ededed
+  description: Aguarda autorização ou execução de rollout
+- name: rollout:observing
+  color: 0e8a16
+  description: Em janela de observação após rollout
+- name: rollout:validated
+  color: 006b75
+  description: Validação operacional concluída
+- name: rollout:rolled-back
+  color: 000000
+  description: Rollout revertido

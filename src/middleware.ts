@@ -8,7 +8,9 @@ import { isPublicRecruitmentRequest } from '@/lib/public-recruitment-host';
  *   vagas.coalashakes.com            -> /vagas
  *   vagas.coalashakes.com/banco...   -> /vagas/banco-de-talentos
  *   vagas.coalashakes.com/<slug>     -> /vagas/<slug>
- * Rotas internas do sistema (ex.: /dashboard) ficam bloqueadas nesse host.
+ * Rotas internas do sistema nunca são servidas diretamente nesse host: APIs
+ * não públicas e prefixos sensíveis recebem 404; os demais caminhos entram na
+ * árvore pública /vagas, onde são tratados como slugs.
  * Em qualquer outro host (op.coalashakes.com, *.run.app, localhost) o
  * middleware não faz nada.
  */

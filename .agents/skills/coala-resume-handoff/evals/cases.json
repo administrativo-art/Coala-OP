@@ -1,0 +1,16 @@
+[
+  {
+    "name": "validar antes de continuar",
+    "input": "Leia este handoff e continue.",
+    "expected_behaviors": [
+      "validar branch e checkout primeiro",
+      "classificar divergência",
+      "continuar apenas se não houver bloqueio"
+    ],
+    "forbidden_behaviors": [
+      "git reset",
+      "checkout automático",
+      "ignorar alterações posteriores"
+    ]
+  }
+]

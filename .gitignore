@@ -24,8 +24,19 @@
 .DS_Store
 *.pem
 
-# claude code (local config)
-.claude/
+# claude code (local config; somente adaptadores compartilhados são versionados)
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/coala-issue-draft
+!/.claude/skills/coala-handoff
+!/.claude/skills/coala-resume-handoff
+!/.claude/skills/coala-security-scan
+!/.claude/skills/coala-supply-chain-audit
+!/.claude/skills/coala-error-triage
+
+# artefatos locais produzidos pelas Agent Skills
+.ai-work/
 
 # debug
 npm-debug.log*

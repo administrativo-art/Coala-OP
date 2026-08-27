@@ -1,5 +1,64 @@
 # Regras operacionais do Coala One
 
+## Como tratar o código existente
+
+- Código existente é evidência, não necessariamente padrão. Antes de copiar uma implementação, distinga decisão arquitetural intencional de convenção consolidada, solução local, detalhe histórico ou dívida técnica. Somente decisão e convenção comprovadas viram padrão.
+- Na dúvida, não canonize. Preserve o comportamento existente, registre a incerteza e trate o ponto como não normativo. Solicite decisão apenas quando ela for necessária para prosseguir ou quando a alteração criaria um padrão global difícil de reverter.
+
+## Padrão de construção de módulos
+
+- Use `src/features/financial/cash-closures` como referência de organização server/domain: tipos, schemas Zod, máquina de estados quando houver estados, persistência, repositório, serviço, autorização, componentes e testes por unidade lógica. Arquivos exclusivamente de servidor usam `import "server-only"`.
+- Não copie mecanicamente a implementação client-side de `cash-closures`. Padrões de UI e transporte são definidos separadamente.
+- Valide entrada por schema na fronteira do sistema. Nunca confie em dados enviados pelo cliente.
+- Escritas que dependem de leitura prévia, alteram documentos correlacionados, executam transições de estado, recalculam agregados ou precisam manter auditoria atomicamente consistente devem usar transação no mesmo banco.
+- Escritas simples, independentes e idempotentes podem usar `set`, `update` ou batch, conforme a garantia necessária. Não use transação apenas por simetria.
+- Quando auditoria fizer parte da mesma unidade de consistência e estiver no mesmo banco, grave-a na mesma transação.
+- Não trate operações entre bancos ou efeitos externos como se formassem uma única transação. Persista intenção e estado observável; execute o efeito externo com idempotência, retry e tratamento explícito de falha.
+- Componentes não reinventam transporte nem autenticação. Chamada autenticada à API passa por cliente compartilhado. Hook de domínio só existe quando houver comportamento client-side que o justifique, como cache, estado compartilhado, optimistic update, paginação, revalidação, coordenação ou reuso.
+- Nenhuma abstração nova sem antes procurar a existente. Se criar uma, registre no relatório por que a existente não servia.
+
+## Protocolo de issue
+
+- Antes de alterar código, caracterize o comportamento atual e reproduza a falha quando isso for tecnicamente viável.
+- Classifique a issue como ocorrência isolada, regra de negócio, contrato entre componentes, integração, regressão, arquitetura ou ambiente/produção.
+- Identifique o contrato ou invariante violado, as superfícies afetadas e o que está fora do escopo.
+- Busque o menor nível de abstração que elimina a classe do problema, não apenas a ocorrência, sem overengineering.
+- Uma issue não termina quando o caso reportado passa a funcionar; termina quando a regra violada volta a ser garantida por um artefato permanente.
+- Antes de fechar, responda: "se amanhã outra implementação tocar neste componente, o que impede a falha de voltar?". Resposta aceitável é um artefato, como teste, tipo, schema, constraint, validação central, autorização no servidor ou regra no CI. "Corrigi aquela linha" não é.
+- Não transforme hipótese em causa comprovada. Diferencie evidência, inferência e decisão.
+
+## Observabilidade e tratamento de erros
+
+- Falha não é corrigida antes de ser caracterizada. Código existente é evidência, não automaticamente padrão, e hipótese não pode ser descrita como causa confirmada.
+- Erro esperado e erro inesperado são categorias diferentes. Erro interno não é mensagem pública, e nenhuma nova rota pode expor `error.message`, stack, causa ou metadados internos diretamente ao cliente.
+- Toda falha inesperada capturada pela camada central recebe `eventId`; requisições instrumentadas recebem `requestId`; eventos técnicos passam por sanitização antes de qualquer sink.
+- Observabilidade nunca pode quebrar o fluxo principal. Falha do sink, do sanitizador ou da resolução de release deve ser contida e não pode substituir a falha original.
+- Bug acionável exige issue. Correção exige teste de regressão ou justificativa formal registrada quando um teste automatizado não for tecnicamente viável.
+- Auditoria de negócio não substitui observabilidade técnica. Preserve eventos de domínio e conecte-os por identificadores opacos quando isso for útil.
+- Issue não termina no código: exige rollout e validação operacional aplicável. Recorrência só pode ser afirmada com evidência pós-release que relacione fingerprint e versão.
+
+## Verificação antes de concluir
+
+- Nenhuma tarefa é considerada pronta sem executar as verificações aplicáveis.
+- Mudanças comuns devem manter `npm run check` verde.
+- Mudanças que afetem build, importações, fronteiras server/client ou geração de rotas devem manter `npm run verify` verde.
+- Mudanças em regras de acesso ao Firestore exigem `npm run check:rules` verde.
+- Mudanças cobertas por teste de integração exigem o respectivo comando verde.
+- A IA não afirma que algo funciona sem ter executado a verificação. Não descreva como resultado aquilo que não rodou.
+- Falhas preexistentes devem ser identificadas como preexistentes; não podem ser omitidas nem atribuídas à mudança sem evidência.
+
+## Agent Skills do projeto
+
+- Skills próprias do Coala-OP ficam nas localizações documentadas em `docs/engineering/agent-skills.md`. Não crie cópias divergentes para clientes diferentes.
+- As skills operacionais são de invocação explícita. A IA não inicia espontaneamente criação de issue, handoff, retomada, scan de segurança ou auditoria de dependências.
+- `coala-issue-draft` cria somente rascunho local e nunca publica issue.
+- `coala-handoff` registra somente fatos verificáveis e nunca afirma que um comando foi executado sem evidência.
+- `coala-resume-handoff` valida branch, commit e working tree antes de continuar.
+- `coala-security-scan` e `coala-supply-chain-audit` são somente leitura por padrão. Correção e atualização exigem instrução separada e explícita.
+- `coala-error-triage` agrupa exports locais por fingerprint e prepara somente relatórios e rascunhos em `.ai-work/error-triage/`; nunca publica issues.
+- Rede, instalação de ferramentas, publicação, push e deploy não são presumidos.
+- Toda alteração em uma skill exige `npm run skills:validate` e os testes relacionados.
+
 ## CLI e navegador
 
 - Para operações determinísticas, estruturadas ou repetitivas, prefira CLI ou script à automação do navegador.
