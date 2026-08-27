@@ -38,6 +38,7 @@ import { DPProvider } from '@/components/dp-provider';
 import { AssetsProvider } from '@/components/assets-provider';
 import { Toaster } from "@/components/ui/toaster";
 import { ProfileComplianceGate } from "@/components/profile-compliance-gate";
+import { ClientErrorObserver } from "@/components/observability/client-error-observer";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -59,6 +60,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
         <ProfilesProvider>
           <AuthProvider>
+            <ClientErrorObserver />
             <KiosksProvider>
               {children}
             </KiosksProvider>
@@ -73,6 +75,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <ProfilesProvider>
         <AuthProvider>
+          <ClientErrorObserver />
           <ProfileComplianceGate>
             <KiosksProvider>
               <LocationsProvider>
