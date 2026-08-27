@@ -9,6 +9,7 @@ import {
 import {
   findExpenseMatchSuggestion,
   refreshStatementSessionItem,
+  sanitizeStatementSessionItemForFirestore,
   type StatementExpenseMatchCandidate,
   type StatementExpenseMatchSuggestion,
 } from "@/features/financial/lib/inter-statement-reconciliation";
@@ -792,9 +793,11 @@ async function updateMonthlySession(params: {
     const knownIds = new Set(currentItems.map((item: Record<string, unknown>) => String(item.externalTransactionId || item.id || "")));
     const appended = items.filter((item) => !knownIds.has(String(item.externalTransactionId || item.id || "")));
 
-    const nextItems = [...refreshedCurrentItems, ...appended].sort((left, right) =>
-      String((left as Record<string, unknown>).date || "").localeCompare(String((right as Record<string, unknown>).date || ""))
-    );
+    const nextItems = [...refreshedCurrentItems, ...appended]
+      .sort((left, right) =>
+        String((left as Record<string, unknown>).date || "").localeCompare(String((right as Record<string, unknown>).date || ""))
+      )
+      .map(sanitizeStatementSessionItemForFirestore);
     const summary = buildSummary(nextItems);
     const [year, monthNumber] = month.split("-");
     const now = Timestamp.now();

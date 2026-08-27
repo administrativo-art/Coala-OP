@@ -22,6 +22,30 @@ export type StatementExpenseMatchSuggestion = StatementExpenseMatchCandidate & {
   additionalCharges: number;
 };
 
+function stripUndefinedDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry) => entry !== undefined)
+      .map(stripUndefinedDeep);
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .map(([key, entry]) => [key, stripUndefinedDeep(entry)]),
+  );
+}
+
+export function sanitizeStatementSessionItemForFirestore(
+  item: Record<string, unknown>,
+): Record<string, unknown> {
+  return stripUndefinedDeep(item) as Record<string, unknown>;
+}
+
 export function refreshStatementSessionItem(
   current: Record<string, unknown>,
   incoming: Record<string, unknown>,
@@ -29,22 +53,22 @@ export function refreshStatementSessionItem(
   const incomingStatus = String(incoming.status || "");
   const currentStatus = String(current.status || "pending");
   if (incomingStatus === "completed" || currentStatus === "pending") {
-    return {
+    return sanitizeStatementSessionItemForFirestore({
       ...current,
       ...incoming,
       auditHistory: current.auditHistory,
       auditSnapshot: current.auditSnapshot,
       auditRevision: current.auditRevision,
       effectuation: current.effectuation,
-    };
+    });
   }
-  return {
+  return sanitizeStatementSessionItemForFirestore({
     ...current,
     bankStatementData: incoming.bankStatementData,
     bankReferences: incoming.bankReferences,
     bankOperationType: incoming.bankOperationType,
     bankTransactionType: incoming.bankTransactionType,
-  };
+  });
 }
 
 function statementDate(isoDate: string) {
