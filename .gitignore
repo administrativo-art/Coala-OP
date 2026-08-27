@@ -24,8 +24,16 @@
 .DS_Store
 *.pem
 
-# claude code (local config)
+# claude code (local config; skills canônico-versionadas são exceções explícitas)
 .claude/
+!.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/coala-error-triage
+
+# artefatos locais de agentes
+.ai-work/
 
 # debug
 npm-debug.log*

@@ -9,7 +9,7 @@ Este arquivo registra contratos duráveis da fundação do Coala-OP.
 - `GARANTIDO`: o contrato está protegido por verificação automatizada aplicável e executada.
 - `VALIDADO EM PRODUÇÃO` não é um estado alternativo. É uma evidência operacional adicional, que exige rollout identificado e smoke test ou validação operacional aplicável.
 
-Um invariante pode estar `GARANTIDO` sem estar validado em produção. Nenhum invariante deste candidato foi validado em produção.
+Um invariante pode estar `GARANTIDO` sem estar validado em produção. Evidência operacional deve identificar revisão, execução e limite da observação.
 
 ## ENG-ISSUE-1
 
@@ -54,12 +54,33 @@ Um invariante pode estar `GARANTIDO` sem estar validado em produção. Nenhum in
 ## FIN-INTER-STATEMENT-1
 
 - **Estado:** GARANTIDO
+- **Proteção automatizada:** GARANTIDA por teste de regressão e sanitização nas fronteiras de domínio e persistência.
 - **Regra:** Itens persistidos em sessões de extrato do Banco Inter não contêm valores `undefined`, inclusive em campos opcionais e objetos aninhados.
 - **Motivação:** O Firestore rejeita documentos com `undefined` e interrompia `/api/jobs/inter/statements/sync`.
 - **Mecanismo de proteção:** Sanitização no domínio e novamente na fronteira de persistência, sem habilitar `ignoreUndefinedProperties` globalmente.
 - **Teste:** `tests/unit/financial-inter-statement.test.ts`.
 - **Limitações:** O teste protege os itens da sessão de extrato; não constitui um sanitizador universal para todos os payloads Firestore do produto.
-- **Validação em produção:** Não realizada.
+- **Validação em produção:** CONFIRMADA na revisão `studio-build-2026-08-27-002`: execução natural de `/api/jobs/inter/statements/sync` em 27/08/2026 respondeu HTTP 200 sem recorrência do erro de `undefined` na janela observada. Evidência: `docs/engineering/production-validation-2026-08-27.md`.
+
+## OBS-SYSTEM-ERROR-1
+
+- **Estado:** GARANTIDO
+- **Regra:** Falhas inesperadas nas superfícies instrumentadas produzem evento estruturado sanitizado, com stack multiline parseável, identidade opaca, correlação e sink provider-agnostic; a resposta pública não expõe detalhe interno.
+- **Motivação:** Tornar falhas acionáveis sem transformar observabilidade em nova fonte de vazamento ou indisponibilidade.
+- **Mecanismo de proteção:** `src/lib/observability`, Error Boundaries, envelope seguro, pilotos e ratchet do contrato de erro.
+- **Teste:** `tests/unit/observability/*.test.ts` e `npm run check:error-contract`.
+- **Limitações:** A cobertura é incremental; o pacote independente `functions` ainda não usa o contrato compartilhado.
+- **Validação em produção:** Não realizada. Formato local compatível não prova ingestão nem grouping no Google.
+
+## DEPLOY-SOURCE-1
+
+- **Estado:** GARANTIDO
+- **Regra:** `main` é a branch protegida de integração; `production` é a branch protegida acompanhada pelo App Hosting. Merge em `main` não autoriza deploy. Promoção ocorre explicitamente por PR de SHA previamente validado para `production`.
+- **Motivação:** Separar integração de código da autorização operacional de publicação.
+- **Mecanismo de proteção:** Branches protegidas, App Hosting vinculado a `production` e promoção explícita.
+- **Teste:** Na promoção de 27/08/2026, `main@b24f44f7` e `production@a0a76b19` produziram a mesma tree `388f180a`.
+- **Limitações:** A proteção depende da configuração remota permanecer ativa; esta tarefa apenas revalidou SHAs/trees e não alterou configuração.
+- **Validação em produção:** CONFIRMADA para a promoção documentada em `docs/engineering/production-validation-2026-08-27.md`.
 
 ## Contratos adiados por dependência funcional
 
