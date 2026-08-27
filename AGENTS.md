@@ -25,6 +25,20 @@
 - Antes de fechar, responda: "se amanhã outra implementação tocar neste componente, o que impede a falha de voltar?". Resposta aceitável é um artefato, como teste, tipo, schema, constraint, validação central, autorização no servidor ou regra no CI. "Corrigi aquela linha" não é.
 - Não transforme hipótese em causa comprovada. Diferencie evidência, inferência e decisão.
 
+## Observabilidade e tratamento de erros
+
+- Erro esperado e erro inesperado são categorias diferentes. Erro interno não é mensagem pública, e nenhuma nova rota pode expor `error.message`, stack, causa ou metadados internos diretamente ao cliente.
+- Toda falha inesperada capturada pela camada central recebe `eventId`; requisições instrumentadas recebem `requestId`; eventos técnicos passam por sanitização antes de qualquer sink.
+- Observabilidade nunca pode quebrar o fluxo principal. Falha do sink, sanitizador ou resolução de release deve ser contida e não pode substituir a falha original.
+- Auditoria de negócio não substitui observabilidade técnica. Preserve eventos de domínio e conecte-os por identificadores opacos quando útil.
+
+## Agent Skills do projeto
+
+- Skills próprias ficam nas localizações documentadas em `docs/engineering/agent-skills.md`; não crie cópias divergentes para clientes.
+- `coala-error-triage` é de invocação explícita, escreve somente em `.ai-work/error-triage/` e nunca publica issues.
+- Rede, publicação, push, deploy e automação externa não são presumidos.
+- Toda alteração em skill exige `npm run skills:validate` e os testes relacionados.
+
 ## Verificação antes de concluir
 
 - Nenhuma tarefa é considerada pronta sem executar as verificações aplicáveis.
