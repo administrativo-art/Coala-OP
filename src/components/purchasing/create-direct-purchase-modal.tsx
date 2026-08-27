@@ -44,6 +44,7 @@ import { usePurchasingFinancialOptions } from '@/hooks/use-purchasing-financial-
 import { getDefaultPurchaseUnitType, getPurchaseUnitOptions } from '@/lib/purchasing-units';
 import {
   type PaymentMethod,
+  type PurchaseFreightPaymentMode,
   type PurchasePaymentCondition,
   type PurchaseReceiptMode,
   type PurchaseStockEntryType,
@@ -60,8 +61,23 @@ const schema = z.object({
   installmentsCount: z.coerce.number().min(2).optional(),
   paymentDueDate: z.string().min(1, 'Informe a data.'),
   estimatedReceiptDate: z.string().optional(),
+  deliveryFee: z.coerce.number().min(0).optional(),
+  freightPaymentMode: z.enum(['included_with_goods', 'separate'] as const).optional(),
+  freightSupplierName: z.string().optional(),
   trackingInfo: z.string().optional(),
   notes: z.string().optional(),
+}).superRefine((values, context) => {
+  if (
+    Number(values.deliveryFee || 0) > 0 &&
+    values.freightPaymentMode === 'separate' &&
+    String(values.freightSupplierName || '').trim().length < 2
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['freightSupplierName'],
+      message: 'Informe quem receberá o frete.',
+    });
+  }
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -223,7 +239,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
   const { activeCategories } = useOperationalItemCategories();
   const { products, getProductFullName } = useProducts();
   const { createPurchase } = usePurchaseOrders();
-  const { paymentCards } = usePurchasingFinancialOptions();
+  const { paymentCards, flattenedAccountPlans } = usePurchasingFinancialOptions();
   const [items, setItems] = useState<DraftItem[]>([newDraftItem()]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -239,6 +255,9 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
       installmentsCount: 2,
       paymentDueDate: today,
       estimatedReceiptDate: today,
+      deliveryFee: 0,
+      freightPaymentMode: 'separate',
+      freightSupplierName: '',
       trackingInfo: '',
       notes: '',
     },
@@ -247,13 +266,15 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
   const receiptMode = form.watch('receiptMode');
   const paymentMethod = form.watch('paymentMethod');
   const paymentCardKey = form.watch('paymentCardKey') ?? '';
+  const deliveryFee = Number(form.watch('deliveryFee') || 0);
+  const freightPaymentMode = (form.watch('freightPaymentMode') || 'separate') as PurchaseFreightPaymentMode;
   const selectedPaymentCard = useMemo(
     () => paymentCards.find((card) => getPaymentCardKey(card.accountId, card.methodId) === paymentCardKey) ?? null,
     [paymentCards, paymentCardKey],
   );
   const total = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantityOrdered * item.unitPriceOrdered, 0),
-    [items],
+    () => items.reduce((sum, item) => sum + item.quantityOrdered * item.unitPriceOrdered, 0) + deliveryFee,
+    [deliveryFee, items],
   );
 
   const updateItem = (key: string, patch: Partial<DraftItem>) => {
@@ -325,6 +346,8 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
     setSubmitting(true);
     
     const supplier = entities.find(e => e.id === values.supplierId);
+    const defaultGoodsPlan = flattenedAccountPlans.find((plan) => plan.id === purchasingDefaults.goodsAccountPlanId);
+    const defaultFreightPlan = flattenedAccountPlans.find((plan) => plan.id === purchasingDefaults.freightAccountPlanId);
 
     try {
       const orderId = await createPurchase({
@@ -345,7 +368,15 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
             ? new Date().toISOString()
             : values.estimatedReceiptDate || values.paymentDueDate,
         accountPlanId: purchasingDefaults.goodsAccountPlanId ?? undefined,
+        accountPlanName: defaultGoodsPlan?.name,
         freightAccountPlanId: purchasingDefaults.freightAccountPlanId ?? undefined,
+        freightAccountPlanName: defaultFreightPlan?.name,
+        freightPaymentMode: deliveryFee > 0 ? freightPaymentMode : undefined,
+        freightSupplierName:
+          deliveryFee > 0 && freightPaymentMode === 'separate'
+            ? values.freightSupplierName?.trim()
+            : undefined,
+        deliveryFee,
         trackingInfo: values.trackingInfo || undefined,
         notes: values.notes || undefined,
         items: validItems.map(({ productId, baseItemId, itemName, operationalCategoryId, unit, purchaseUnitType, quantityOrdered, unitPriceOrdered, entryType }) => {
@@ -727,6 +758,56 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
                 );
                 })}
               </div>
+              </div>
+            </div>
+
+            <div className="rounded-[14px] border border-zinc-200 bg-white p-5">
+              <h3 className="text-base font-black tracking-[-0.02em] text-zinc-950">Frete</h3>
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="deliveryFee"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor do frete</FormLabel>
+                      <FormControl>
+                        <CurrencyInput value={Number(field.value || 0)} onChange={field.onChange} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="freightPaymentMode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Como o frete será pago?</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || 'separate'} disabled={deliveryFee <= 0}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="separate">Separado da mercadoria</SelectItem>
+                          <SelectItem value="included_with_goods">Junto com a mercadoria</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {deliveryFee > 0 && freightPaymentMode === 'separate' && (
+                  <FormField
+                    control={form.control}
+                    name="freightSupplierName"
+                    render={({ field }) => (
+                      <FormItem className="sm:col-span-2">
+                        <FormLabel>Favorecido do frete</FormLabel>
+                        <FormControl><Input {...field} placeholder="Transportadora ou motorista" /></FormControl>
+                        <p className="text-xs text-muted-foreground">Será criada uma despesa de frete vinculada a esta compra.</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
             </div>
 

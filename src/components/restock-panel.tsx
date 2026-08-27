@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, CheckCircle, PackageOpen, TrendingDown, Inbox, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { canAccessUnit } from "@/lib/unit-access";
 
 interface RestockResult {
   baseProduct: BaseProduct;
@@ -122,7 +123,7 @@ function StatusBadge({ status }: { status: RestockResult["status"] }) {
 }
 
 export function RestockPanel() {
-  const { user, permissions } = useAuth();
+  const { user, isDefaultAdmin } = useAuth();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
@@ -131,24 +132,23 @@ export function RestockPanel() {
   const loading = kiosksLoading || lotsLoading || baseProductsLoading || productsLoading;
 
   // Filtra quiosques pelo usuário logado
-  const isAdmin = permissions.settings.manageUsers;
   const availableKiosks = useMemo(() => {
-    if (isAdmin) return kiosks;
-    return kiosks.filter((k) => user?.assignedKioskIds?.includes(k.id));
-  }, [kiosks, user, isAdmin]);
+    if (!user) return [];
+    return kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }));
+  }, [isDefaultAdmin, kiosks, user]);
 
   const [selectedKioskId, setSelectedKioskId] = useState<string>("all");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (loading) return;
-    if (isAdmin) {
+    if (isDefaultAdmin || user?.unitAccessScope === "all") {
       const matriz = kiosks.find(k => k.name.toLowerCase().includes('matriz'));
       setSelectedKioskId(matriz?.id ?? kiosks[0]?.id ?? "all");
     } else {
       setSelectedKioskId(availableKiosks[0]?.id ?? "all");
     }
-  }, [loading, isAdmin, kiosks, availableKiosks]);
+  }, [availableKiosks, isDefaultAdmin, kiosks, loading, user?.unitAccessScope]);
 
   // Quiosques a analisar
   const kioskIdsToAnalyze = useMemo(() => {

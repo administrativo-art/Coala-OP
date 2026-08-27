@@ -1,26 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { type ProductSimulation, type PPO, type SimulationCategory } from '@/types';
+import { type ProductSimulation } from '@/types';
 import { useProductSimulation } from '@/hooks/use-product-simulation';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
-import { useCompanySettings } from '@/hooks/use-company-settings';
-import { useKiosks } from '@/hooks/use-kiosks';
 import { useToast } from '@/hooks/use-toast';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Trash2, Loader2, Info, LayoutDashboard, ClipboardList, Check, Search, Edit, Download } from 'lucide-react';
+import { Trash2, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { getPricingCommercialStatus } from '@/lib/pricing-insights';
 import { useAuth } from '@/hooks/use-auth';
 import { canDeleteTechnicalSheets, canExportTechnicalSheets } from '@/lib/commercial-permissions';
 
@@ -28,6 +21,7 @@ import { CostAnalysisTab } from './product-modal/cost-analysis-tab';
 import FullTechnicalSheetView from './product-modal/full-technical-sheet-view';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
 import { FichaTecnicaCompletaDocument } from './pdf/FichaTecnicaCompletaDocument';
+import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then(mod => mod.PDFDownloadLink),
@@ -38,14 +32,13 @@ interface ProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   simulation: ProductSimulation | null;
-  initialTab?: 'cost' | 'ficha';
+  initialTab?: 'cost' | 'ficha' | 'instruction';
 }
 
 export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cost' }: ProductModalProps) {
-  const [activeTab, setActiveTab] = useState<'cost' | 'ficha'>(initialTab);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { updateSimulation, deleteSimulation, simulationItems } = useProductSimulation();
+  const { deleteSimulation, simulationItems } = useProductSimulation();
   const { baseProducts } = useBaseProducts();
   const { categories } = useProductSimulationCategories();
   const { toast } = useToast();
@@ -79,12 +72,6 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
     };
   }, [simulation, simulationItems, baseProducts, categories]);
 
-  useEffect(() => {
-    if (open) {
-      setActiveTab(initialTab);
-    }
-  }, [open, initialTab]);
-
   const handleSave = async () => {
     // This will be triggered by a ref or a shared form context
     // For now, we'll implement the save logic inside the tabs or pass a trigger
@@ -115,65 +102,54 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
 
   if (!simulation) return null;
 
-  const isViewOnlyMode = initialTab === 'ficha';
+  const isCompleteSheetMode = initialTab === 'ficha';
+  const isInstructionMode = initialTab === 'instruction';
+  const isViewOnlyMode = isCompleteSheetMode || isInstructionMode;
+  const commercialStatus = getPricingCommercialStatus(simulation.salePrice, simulation.totalCmv || 0, simulation.profitGoal);
+  const statusPresentation = {
+    loss: { label: 'Prejuízo', className: 'border-red-200 bg-red-50 text-red-700' },
+    below: { label: 'Abaixo da meta', className: 'border-orange-200 bg-orange-50 text-orange-700' },
+    met: { label: 'Na meta', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+    none: { label: 'Sem meta', className: 'border-slate-200 bg-slate-50 text-slate-600' },
+  }[commercialStatus];
+  const categoryName = simulation.categoryIds?.[0]
+    ? categories.find((category) => category.id === simulation.categoryIds?.[0])?.name ?? 'Sem categoria'
+    : 'Sem categoria';
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[1000px] sm:max-w-[1000px] w-[95vw] h-[92vh] flex flex-col p-0 overflow-hidden rounded-2xl">
+        <DialogContent className="flex h-[90vh] w-[calc(100vw-2rem)] max-w-[900px] flex-col overflow-hidden rounded-[22px] border-0 p-0 shadow-2xl sm:max-w-[900px]">
+          <DialogDescription className="sr-only">
+            {isInstructionMode ? 'Ficha técnica de instrução da mercadoria.' : isCompleteSheetMode ? 'Ficha técnica completa da mercadoria.' : 'Edição de custos, preços e ficha técnica da mercadoria.'}
+          </DialogDescription>
           {/* Header */}
-          <div className="px-8 pt-6 pb-2 flex-shrink-0">
+          <div className="flex-shrink-0 border-b border-[#eeece7] px-6 py-5 pr-14">
             <div className="flex justify-between items-start">
               <div>
                 <div className="flex items-center gap-3">
-                   <DialogTitle className="text-2xl font-black text-gray-900 tracking-tight">{simulation.name}</DialogTitle>
-                   {isViewOnlyMode ? (
-                     <Badge className="bg-blue-600 text-white hover:bg-blue-600 border-none font-bold text-[10px] uppercase px-2 py-0.5">
-                       Ficha Técnica Completa
-                     </Badge>
-                   ) : (
-                     <Badge className="bg-pink-600 text-white hover:bg-pink-600 border-none font-bold text-[10px] uppercase px-2 py-0.5">
-                       Modo de Edição
-                     </Badge>
-                   )}
+                   <DialogTitle className="text-xl font-black tracking-tight text-slate-950">{simulation.name}</DialogTitle>
+                   <Badge variant="outline" className={cn('rounded-full text-[10px] font-black uppercase', statusPresentation.className)}>{statusPresentation.label}</Badge>
+                   {isViewOnlyMode ? <Badge variant="outline" className="rounded-full border-blue-200 bg-blue-50 text-[10px] font-black uppercase text-blue-700">{isInstructionMode ? 'Ficha de instrução' : 'Ficha completa'}</Badge> : null}
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  SKU: <span className="font-mono font-bold text-gray-600">{simulation.ppo?.sku || 'N/A'}</span> · {simulation.categoryIds?.[0] ? 'Mercadoria Cadastrada' : 'Sem Categoria'}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  SKU <span className="font-mono font-bold text-slate-600">{simulation.ppo?.sku || 'N/A'}</span> · {categoryName}
                 </p>
               </div>
             </div>
-            
-            {/* Tabs List - ONLY show if we are in Edit mode. In View mode, we show everything in one place. */}
-            {!isViewOnlyMode && (
-              <div className="flex gap-1 mt-4 border-b">
-                <button 
-                  onClick={() => setActiveTab('cost')}
-                  className={cn(
-                    "px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors -mb-px flex items-center gap-2",
-                    activeTab === 'cost' 
-                      ? "border-pink-500 text-pink-600" 
-                      : "border-transparent text-gray-400 hover:text-gray-700"
-                  )}
-                >
-                  <Edit className="h-4 w-4" />
-                  Editar Ficha
-                </button>
-                {/* We can still allow switching to view, but the user wants them separate */}
-              </div>
-            )}
           </div>
 
           {/* Body */}
           <div className="flex-1 overflow-hidden">
             {isViewOnlyMode ? (
-              <FullTechnicalSheetView simulation={simulation} />
+              <FullTechnicalSheetView simulation={simulation} variant={isInstructionMode ? 'instruction' : 'complete'} />
             ) : (
               <CostAnalysisTab simulation={simulation} onOpenChange={onOpenChange} />
             )}
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-center px-6 py-3 border-t bg-gray-50 flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center justify-between border-t border-[#eeece7] bg-[#faf9f6] px-6 py-4">
             <div className="flex gap-2">
               {canDeleteSheet && (
                 <Button 
@@ -189,8 +165,10 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
             <div className="flex gap-2">
               {isViewOnlyMode && pdfData && canExportSheet && (
                 <PDFDownloadLink
-                  document={<FichaTecnicaCompletaDocument data={pdfData as any} />}
-                  fileName={`ficha_completa_${simulation.name.replace(/ /g, '_')}.pdf`}
+                  document={isInstructionMode
+                    ? <FichaTecnicaDocument type="instrucao" data={pdfData as any} />
+                    : <FichaTecnicaCompletaDocument data={pdfData as any} />}
+                  fileName={`${isInstructionMode ? 'ficha_instrucao' : 'ficha_completa'}_${simulation.name.replace(/ /g, '_')}.pdf`}
                 >
                   {((props: any) => (
                     <Button variant="secondary" size="sm" disabled={props.loading}>
@@ -205,10 +183,10 @@ export function ProductModal({ open, onOpenChange, simulation, initialTab = 'cos
               </Button>
               {!isViewOnlyMode && (
                 <Button 
-                  className="bg-pink-500 hover:bg-pink-600 text-white font-semibold"
+                  className="bg-pink-600 font-bold text-white hover:bg-pink-700"
                   onClick={handleSave}
                 >
-                  Salvar Alterações
+                  Salvar preços
                 </Button>
               )}
             </div>

@@ -5,6 +5,9 @@ import { getFirestore } from "firebase-admin/firestore";
 const DEFAULT_PROJECT_ID = "smart-converter-752gf";
 const DEFAULT_DATABASE_ID = "coala";
 const BASE_URL = "https://api.tabletcloud.com.br";
+const PDV_FILIAL_FALLBACK_BY_KIOSK_ID = {
+  tirirical: "17343",
+};
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -314,10 +317,12 @@ async function resolveTargetKiosks(db, kioskIdArg) {
   }
 
   return filtered.map((kiosk) => {
-    if (!kiosk.pdvFilialId) {
+    const pdvFilialId = kiosk.pdvFilialId || PDV_FILIAL_FALLBACK_BY_KIOSK_ID[kiosk.id];
+
+    if (!pdvFilialId) {
       throw new Error(`[reprocess-goals-pdv] Quiosque ${kiosk.id} sem pdvFilialId configurado.`);
     }
-    return kiosk;
+    return { ...kiosk, pdvFilialId };
   });
 }
 

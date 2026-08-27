@@ -7,6 +7,7 @@ import { type LotEntry, type MovementRecord, type MovementType, type User, type 
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs, writeBatch, setDoc, runTransaction, increment, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
 import { pruneUndefined } from '@/lib/utils';
 import { convertValue } from '@/lib/conversion';
 
@@ -34,15 +35,6 @@ export type ConsumeLotParams = {
   quantityToConsume: number;
   type: MovementType;
   notes?: string;
-  uniformDelivery?: {
-    collaboratorUserId: string;
-    collaboratorName: string;
-    occurredAt: string;
-    kioskName?: string;
-    apparelType?: string;
-    apparelSize?: string;
-    apparelColor?: string;
-  };
 };
 
 export interface ExpiryProductsContextType {
@@ -79,7 +71,7 @@ const destLotIdKey = (params: {
 
 // --- PROVIDER COMPONENT ---
 export function ExpiryProductsProvider({ children }: { children: React.ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firebaseUser, loading: authLoading } = useAuth();
   const [lots, setLots] = useState<LotEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -96,17 +88,40 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
     }
 
     setLoading(true);
+    let active = true;
+
+    const loadFallback = async () => {
+      if (!firebaseUser) {
+        if (active) setLoading(false);
+        return;
+      }
+
+      try {
+        const payload = await fetchClientBootstrap(firebaseUser, ["lots"]);
+        if (!active) return;
+        setLots(payload.lots ?? []);
+      } catch (fallbackError) {
+        console.error("[ExpiryProductsProvider] API fallback failed:", fallbackError);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
     const q = query(collection(db, "lots"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      if (!active) return;
       const lotsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LotEntry));
       setLots(lotsData);
       setLoading(false);
     }, (error) => {
         console.error("Error fetching lots from Firestore: ", error);
-        setLoading(false);
+        void loadFallback();
     });
-    return () => unsubscribe();
-  }, [authLoading, user]);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [authLoading, firebaseUser, user]);
 
   const addMovementRecord = (batchOrTx: any, record: Omit<MovementRecord, 'id'>) => {
     const movementHistoryRef = doc(collection(db, "movementHistory"));
@@ -322,6 +337,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
 
   const consumeFromLot = useCallback(async (params: ConsumeLotParams, user: User) => {
     if (!user) throw new Error("Usuário de baixa não autenticado.");
+    if (params.type === 'SAIDA_ENTREGA_UNIFORME') {
+        throw new Error("Use o painel do colaborador para entregar uniformes.");
+    }
     await runTransaction(db, async (transaction) => {
         const lotRef = doc(db, "lots", params.lotId);
         const lotDoc = await transaction.get(lotRef);
@@ -340,11 +358,6 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
         const newQuantity = totalQty - params.quantityToConsume;
         
         const movementRecordRef = doc(collection(db, "movementHistory"));
-        const uniformEventRef = params.type === 'SAIDA_ENTREGA_UNIFORME' ? doc(collection(db, "uniformEvents")) : null;
-        if (params.type === 'SAIDA_ENTREGA_UNIFORME' && !params.uniformDelivery?.collaboratorUserId) {
-            throw new Error("Informe o colaborador que recebeu o uniforme.");
-        }
-
         const movementRecord: Omit<MovementRecord, 'id'> = {
             lotId: params.lotId,
             productId: currentLot.productId,
@@ -357,39 +370,9 @@ export function ExpiryProductsProvider({ children }: { children: React.ReactNode
             username: user.username,
             timestamp: new Date().toISOString(),
             notes: params.notes,
-            ...(uniformEventRef ? {
-              uniformEventId: uniformEventRef.id,
-              deliveredToUserId: params.uniformDelivery!.collaboratorUserId,
-              deliveredToUserName: params.uniformDelivery!.collaboratorName,
-              deliveredAt: params.uniformDelivery!.occurredAt,
-            } : {}),
         };
 
         transaction.set(movementRecordRef, pruneUndefined(movementRecord));
-        if (uniformEventRef) {
-            const now = new Date().toISOString();
-            transaction.set(uniformEventRef, pruneUndefined({
-                eventType: 'UNIFORME_ENTREGA',
-                movementId: movementRecordRef.id,
-                lotId: params.lotId,
-                productId: currentLot.productId,
-                productName: currentLot.productName,
-                kioskId: currentLot.kioskId,
-                kioskName: params.uniformDelivery?.kioskName,
-                quantity: params.quantityToConsume,
-                collaboratorUserId: params.uniformDelivery!.collaboratorUserId,
-                collaboratorName: params.uniformDelivery!.collaboratorName,
-                occurredAt: params.uniformDelivery!.occurredAt,
-                apparelType: params.uniformDelivery?.apparelType,
-                apparelSize: params.uniformDelivery?.apparelSize,
-                apparelColor: params.uniformDelivery?.apparelColor,
-                registeredByUserId: user.id,
-                registeredByUserName: user.username,
-                notes: params.notes,
-                createdAt: now,
-                updatedAt: now,
-            }));
-        }
         transaction.update(lotRef, { quantity: newQuantity });
     });
   }, []);

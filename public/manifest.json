@@ -8,12 +8,12 @@
   "theme_color": "#F43F5E",
   "icons": [
     {
-      "src": "/icons/Icon PWM (192 x 192 px).png",
+      "src": "/icons/coala-shakes-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/icons/Icon PWM (512 x 512 px).png",
+      "src": "/icons/coala-shakes-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

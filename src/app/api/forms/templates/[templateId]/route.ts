@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { mirrorTemplateToLegacy } from "@/features/forms/lib/legacy-bridge";
 import { buildFormTemplatePayload } from "@/features/forms/lib/service";
+import { getFormProjectById } from "@/features/forms/lib/server";
 import { formTemplateSchema } from "@/features/forms/lib/schemas";
-import { assertFormPermission } from "@/features/forms/lib/server-access";
+import {
+  assertFormAnalyticsPermission,
+  assertFormPermission,
+} from "@/features/forms/lib/server-access";
+import {
+  hasEnabledAnalyticsConfig,
+  validateTemplateAnalyticsPublication,
+} from "@/features/forms/analytics/template-publication";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
-import { type FormTemplate } from "@/types/forms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +27,7 @@ export async function GET(
     const { templateId } = await context.params;
     const payload = await buildFormTemplatePayload({
       templateId,
+      workspaceId: user.workspace_id,
       permissions: user.permissions,
       isDefaultAdmin: user.isDefaultAdmin,
     });
@@ -54,13 +61,42 @@ export async function PATCH(
     }
 
     const currentData = (existing.data() ?? {}) as Record<string, unknown>;
+    if (currentData.workspace_id !== user.workspace_id) {
+      return NextResponse.json({ error: "Template não encontrado neste workspace." }, { status: 404 });
+    }
+
     const parsed = formTemplateSchema.parse(await request.json());
+    const project = await getFormProjectById(parsed.form_project_id, user.workspace_id);
+    if (!project) {
+      return NextResponse.json({ error: "Projeto não encontrado neste workspace." }, { status: 404 });
+    }
     assertFormPermission(
       user.permissions,
       user.isDefaultAdmin,
       parsed.form_project_id,
       "manage"
     );
+    if (hasEnabledAnalyticsConfig(parsed.sections)) {
+      assertFormAnalyticsPermission(
+        user.permissions,
+        user.isDefaultAdmin,
+        "configure_templates"
+      );
+      const analyticsReport = await validateTemplateAnalyticsPublication({
+        db: checklistDbAdmin,
+        workspaceId: user.workspace_id,
+        sections: parsed.sections,
+      });
+      if (!analyticsReport.ok) {
+        return NextResponse.json(
+          {
+            error: "Configuração analítica inválida.",
+            validation: analyticsReport,
+          },
+          { status: 422 }
+        );
+      }
+    }
 
     const currentVersion =
       typeof currentData.version === "number" ? currentData.version : 1;
@@ -106,15 +142,6 @@ export async function PATCH(
           username: user.userDoc.username,
         },
       });
-    });
-    await mirrorTemplateToLegacy({
-      templateId,
-      template: {
-        ...(currentData as Record<string, unknown>),
-        ...patch,
-      } as unknown as FormTemplate,
-    }).catch((error) => {
-      console.error("Legacy dual-write failed for form template update:", error);
     });
     await logAction({
       workspace_id: user.workspace_id,

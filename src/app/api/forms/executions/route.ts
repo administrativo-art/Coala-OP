@@ -1,9 +1,16 @@
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
-import { mirrorExecutionToLegacy } from "@/features/forms/lib/legacy-bridge";
-import { listFormExecutions, getFormTemplateById } from "@/features/forms/lib/server";
-import { assertFormPermission } from "@/features/forms/lib/server-access";
+import {
+  listFormExecutions,
+  listFormExecutionsForAssignee,
+  getFormTemplateById,
+} from "@/features/forms/lib/server";
+import {
+  assertFormExecutionAccess,
+  assertFormPermission,
+  getUserFormUnitAccess,
+} from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
@@ -115,6 +122,21 @@ export async function GET(request: NextRequest) {
     const assignedToMe = searchParams.get("assignedToMe") === "true";
     const limit = Number(searchParams.get("limit") ?? "50");
 
+    if (assignedToMe) {
+      const unitAccess = getUserFormUnitAccess(
+        context.userDoc as unknown as Record<string, unknown>,
+        context.isDefaultAdmin
+      );
+      const executions = await listFormExecutionsForAssignee({
+        workspaceId: context.workspace_id,
+        userId: context.userDoc.id,
+        unitIds: unitAccess.unitIds,
+        allUnits: unitAccess.allUnits,
+        limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 100,
+      });
+      return NextResponse.json({ executions });
+    }
+
     if (formProjectId) {
       assertFormPermission(
         context.permissions,
@@ -128,11 +150,28 @@ export async function GET(request: NextRequest) {
       workspaceId: context.workspace_id,
       formProjectId,
       status,
-      assignedUserId: assignedToMe ? context.userDoc.id : null,
+      assignedUserId: null,
       limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 50,
     });
 
-    return NextResponse.json({ executions });
+    const visibleExecutions = executions.filter((execution) => {
+      try {
+        assertFormExecutionAccess({
+          permissions: context.permissions,
+          isDefaultAdmin: context.isDefaultAdmin,
+          userId: context.userDoc.id,
+          userDoc: context.userDoc as unknown as Record<string, unknown>,
+          workspaceId: context.workspace_id,
+          execution,
+          level: "view",
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    });
+
+    return NextResponse.json({ executions: visibleExecutions });
   } catch (error) {
     return NextResponse.json(
       {
@@ -151,12 +190,22 @@ export async function POST(request: NextRequest) {
     const user = await requireUser(request);
     const body = createExecutionSchema.parse(await request.json());
 
-    const template = await getFormTemplateById(body.template_id);
+    const template = await getFormTemplateById(body.template_id, user.workspace_id);
     if (!template) {
       return NextResponse.json({ error: "Template não encontrado." }, { status: 404 });
     }
 
     assertFormPermission(user.permissions, user.isDefaultAdmin, template.form_project_id, "operate");
+    const unitAccess = getUserFormUnitAccess(
+      user.userDoc as unknown as Record<string, unknown>,
+      user.isDefaultAdmin
+    );
+    if (!unitAccess.allUnits && !unitAccess.unitIds.includes(body.unit_id)) {
+      return NextResponse.json(
+        { error: "A unidade selecionada está fora do seu escopo de acesso." },
+        { status: 403 }
+      );
+    }
 
     const now = new Date();
     const ref = checklistDbAdmin.collection("form_executions").doc();
@@ -210,13 +259,6 @@ export async function POST(request: NextRequest) {
     };
 
     await ref.set(execution);
-
-    await mirrorExecutionToLegacy({
-      executionId: ref.id,
-      execution: { id: ref.id, ...execution } as FormExecution,
-    }).catch((error) => {
-      console.error("Legacy dual-write failed for form execution create:", error);
-    });
 
     await logAction({
       workspace_id: user.workspace_id,

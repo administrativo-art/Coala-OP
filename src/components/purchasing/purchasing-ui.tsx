@@ -84,47 +84,71 @@ export function PurchasingPeriodControl({
   onChange: (value: PurchasingPeriodFilter) => void;
   years: number[];
 }) {
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth();
+  const currentYear = currentDate.getFullYear();
+
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-zinc-200 bg-white p-1.5">
-      <button
-        type="button"
-        onClick={() => onChange({ ...value, mode: 'recent' })}
-        className={cn(
-          'inline-flex h-9 items-center rounded-[8px] px-3 text-sm font-bold transition-colors',
-          value.mode === 'recent' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900',
-        )}
-      >
-        <CalendarDays className="mr-2 h-4 w-4" />
-        180 dias
-      </button>
-      <div className={cn('flex items-center gap-1 rounded-[8px] px-2', value.mode === 'month' ? 'bg-zinc-100' : 'bg-transparent')}>
-        <select
-          value={value.month}
-          onChange={(event) => onChange({ ...value, mode: 'month', month: Number(event.target.value) })}
-          className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+      <div className="flex items-center gap-1 rounded-[8px] bg-zinc-100 p-1">
+        <button
+          type="button"
+          onClick={() => onChange({ ...value, mode: 'recent' })}
+          className={cn(
+            'inline-flex h-9 items-center rounded-[7px] px-3 text-sm font-bold transition-colors',
+            value.mode === 'recent' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-white hover:text-zinc-900',
+          )}
         >
-          {purchasingMonthLabels.map((label, index) => (
-            <option key={label} value={index}>{label}</option>
-          ))}
-        </select>
-        <select
-          value={value.year}
-          onChange={(event) => onChange({ ...value, mode: 'month', year: Number(event.target.value) })}
-          className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+          <CalendarDays className="mr-2 h-4 w-4" />
+          180 dias
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ mode: 'month', month: currentMonth, year: currentYear })}
+          className={cn(
+            'inline-flex h-9 items-center rounded-[7px] px-3 text-sm font-bold transition-colors',
+            value.mode === 'month' ? 'bg-zinc-950 text-white shadow-sm' : 'text-zinc-500 hover:bg-white hover:text-zinc-900',
+          )}
         >
-          {years.map((year) => (
-            <option key={year} value={year}>{year}</option>
-          ))}
-        </select>
+          Mês
+        </button>
       </div>
+      {value.mode === 'month' ? (
+        <div className="flex items-center gap-1 rounded-[8px] bg-zinc-100 px-2">
+          <select
+            value={value.month}
+            onChange={(event) => onChange({ ...value, mode: 'month', month: Number(event.target.value) })}
+            className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+          >
+            {purchasingMonthLabels.map((label, index) => (
+              <option key={label} value={index}>{label}</option>
+            ))}
+          </select>
+          <select
+            value={value.year}
+            onChange={(event) => onChange({ ...value, mode: 'month', year: Number(event.target.value) })}
+            className="h-9 rounded-[8px] border-0 bg-transparent px-2 text-sm font-bold text-zinc-800 outline-none"
+          >
+            {years.map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function PurchasingPageFrame({ children }: { children: ReactNode }) {
+export function PurchasingPageFrame({
+  children,
+  fullWidth = false,
+}: {
+  children: ReactNode;
+  fullWidth?: boolean;
+}) {
   return (
     <div className="min-h-[calc(100vh-1px)] bg-[#f5f5f6]">
-      <div className="mx-auto w-full max-w-[1500px] px-6 py-7 lg:px-8">
+      <div className={cn('mx-auto w-full px-6 py-7 lg:px-8', fullWidth ? 'max-w-none' : 'max-w-[1500px]')}>
         {children}
       </div>
     </div>
@@ -298,6 +322,77 @@ export function PurchasingStatusBadge({ label, tone = 'blue' }: { label: string;
     <span className={cn('inline-flex items-center rounded-[6px] border px-2 py-1 text-[11px] font-black uppercase leading-none tracking-[0.04em]', toneClasses[tone].soft)}>
       {label}
     </span>
+  );
+}
+
+export function PurchasingKanbanColumn({
+  label,
+  tone = 'blue',
+  count,
+  children,
+  className,
+}: {
+  label: string;
+  tone?: PurchasingTone;
+  count: number;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex h-[calc(100vh-360px)] min-h-[380px] flex-col rounded-[14px] bg-zinc-50/75 p-2', className)}>
+      <div className="mb-2 flex items-center gap-2 border-b border-zinc-200/80 px-1.5 pb-2.5 pt-1">
+        <span className={cn('h-2 w-2 shrink-0 rounded-full', toneClasses[tone].bg)} />
+        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900">{label}</h3>
+        <span className="text-xs font-semibold tabular-nums text-zinc-500">{count}</span>
+      </div>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-0.5 pb-1 pr-1">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function PurchasingKanbanCard({
+  href,
+  tone = 'blue',
+  code,
+  title,
+  meta,
+  badges,
+  children,
+  footerLeft,
+  amount,
+}: {
+  href: string;
+  tone?: PurchasingTone;
+  code: string;
+  title: string;
+  meta?: ReactNode;
+  badges?: ReactNode;
+  children?: ReactNode;
+  footerLeft?: ReactNode;
+  amount?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative block overflow-hidden rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 hover:shadow-md"
+    >
+      <span className={cn('absolute inset-x-0 top-0 h-0.5', toneClasses[tone].bg)} />
+      {meta ? <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">{meta}</div> : null}
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate font-mono text-[11px] font-black text-zinc-500">{code}</span>
+        {badges}
+      </div>
+      <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{title}</p>
+      {children}
+      {(footerLeft || amount) ? (
+        <div className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-500">
+          <span className="min-w-0 truncate">{footerLeft}</span>
+          {amount ? <span className="shrink-0 font-mono font-black text-zinc-900">{amount}</span> : null}
+        </div>
+      ) : null}
+    </Link>
   );
 }
 

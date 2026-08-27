@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChevronLeft, ChevronRight, Download, LayoutDashboard, Table2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, LayoutDashboard, Table2, UsersRound } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
+import { expenseAccountAllocationsForResultCenter } from "@/features/financial/lib/expense-account-allocations";
+import { buildDrePersonAnalysis, type DrePersonAccountMeta } from "@/features/financial/lib/dre-person-analysis";
+import { DrePeopleView } from "@/features/financial/components/dre/dre-people-view";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
@@ -44,11 +47,18 @@ export function DrePage() {
 
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [unitFilter, setUnitFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"dashboard" | "classic">("dashboard");
+  const [viewMode, setViewMode] = useState<"dashboard" | "classic" | "people">("dashboard");
+  const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
+  const canExportPersonnelCosts = canViewPersonnelCosts && permissions.financial?.personnelCosts?.export === true;
+
+  useEffect(() => {
+    if (!canViewPersonnelCosts && viewMode === "people") setViewMode("dashboard");
+  }, [canViewPersonnelCosts, viewMode]);
 
   const { data: transactions, loading: loadingTx } = useFinancialCollection<any>(financialCollection("transactions"));
   const { data: expenses, loading: loadingExp } = useFinancialCollection<any>(financialCollection("expenses"));
   const { data: accounts } = useFinancialCollection<any>(financialCollection("accounts"));
+  const { data: resultCenters, loading: loadingResultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
 
   const [salesReports, setSalesReports] = useState<SalesReport[]>([]);
   const [simulationCmvMap, setSimulationCmvMap] = useState<Record<string, number>>({});
@@ -75,7 +85,7 @@ export function DrePage() {
     return () => { cancelled = true; };
   }, []);
 
-  const loading = loadingTx || loadingExp || loadingCmv;
+  const loading = loadingTx || loadingExp || loadingResultCenters || loadingCmv;
 
   if (!permissions.financial?.dre) {
     return <FinancialAccessGuard title="DRE" description="Seu perfil não possui permissão para acessar o demonstrativo de resultado." />;
@@ -88,6 +98,30 @@ export function DrePage() {
     kiosks.forEach((k) => { m[k.id] = k.name; });
     return m;
   }, [kiosks]);
+
+  const resultCenterNameByKioskId = useMemo(() => {
+    const map: Record<string, string> = {};
+    (resultCenters || []).forEach((center: any) => {
+      if (typeof center?.name !== "string") return;
+      (Array.isArray(center.unitIds) ? center.unitIds : []).forEach((unitId: unknown) => {
+        if (typeof unitId === "string" && unitId) map[unitId] = center.name;
+      });
+    });
+    return map;
+  }, [resultCenters]);
+
+  const resultCenterNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (resultCenters || []).forEach((center: any) => {
+      if (typeof center?.name !== "string") return;
+      if (typeof center.id === "string" && center.id) map[center.id] = center.name;
+      map[center.name] = center.name;
+      (Array.isArray(center.unitIds) ? center.unitIds : []).forEach((unitId: unknown) => {
+        if (typeof unitId === "string" && unitId) map[unitId] = center.name;
+      });
+    });
+    return map;
+  }, [resultCenters]);
 
   // accountId → dre_position (flat, no inheritance needed)
   const accountDrePosMap = useMemo(() => {
@@ -103,20 +137,17 @@ export function DrePage() {
     return m;
   }, [accounts]);
 
-  const selectedUnitName = unitFilter === "all" ? null : (kioskNameById[unitFilter] ?? null);
+  const selectedUnitName = unitFilter === "all"
+    ? null
+    : (resultCenterNameByKioskId[unitFilter] ?? kioskNameById[unitFilter] ?? null);
   const selectedKioskId = unitFilter === "all" ? null : unitFilter;
 
   // ── computation helpers ─────────────────────────────────────────────────────
 
-  function matchesUnit(exp: any): boolean {
-    if (!selectedUnitName) return true;
-    const unit = exp.resultCenter || exp.apportionments?.[0]?.resultCenter || "";
-    return unit === selectedUnitName;
-  }
-
   function getRevenue(monthKey: string): number {
     return (transactions || []).reduce((sum: number, tx: any) => {
       if (tx.direction !== "in" || tx.type === "transfer_in") return sum;
+      if (tx.reversed === true || tx.auditStatus === "pending" || tx.auditStatus === "reversed") return sum;
       const d = toDate(tx.date);
       if (!d || format(d, "yyyy-MM") !== monthKey) return sum;
       if (selectedUnitName && tx.resultCenterName !== selectedUnitName) return sum;
@@ -135,16 +166,16 @@ export function DrePage() {
 
   function getExpensesByDrePos(pos: string | null, monthKey: string): number {
     return (expenses || []).reduce((sum: number, exp: any) => {
-      if (exp.status !== "paid") return sum;
-      const d = toDate(exp.paidAt);
+      if (["draft", "cancelled", "reconciled"].includes(exp.status)) return sum;
+      const d = toDate(exp.competenceDate) || toDate(exp.dueDate) || toDate(exp.paidAt);
       if (!d || format(d, "yyyy-MM") !== monthKey) return sum;
-      if (!matchesUnit(exp)) return sum;
-      const accountKey = exp.accountId ?? exp.accountPlan;
-      // Contas patrimoniais (is_dre_account: false) nunca entram na DRE, nem em "Não classificado"
-      if (accountIsDreMap[accountKey] === false) return sum;
-      const p = accountDrePosMap[accountKey] ?? null;
-      if (p !== pos) return sum;
-      return sum + (exp.totalValue || 0);
+      const allocated = expenseAccountAllocationsForResultCenter(exp, selectedUnitName);
+      return sum + allocated.reduce((allocationSum, allocation) => {
+        // Contas patrimoniais nunca entram na DRE, nem em "Não classificado".
+        if (accountIsDreMap[allocation.accountPlanId] === false) return allocationSum;
+        const allocationPosition = accountDrePosMap[allocation.accountPlanId] ?? null;
+        return allocationPosition === pos ? allocationSum + allocation.amount : allocationSum;
+      }, 0);
     }, 0);
   }
 
@@ -217,15 +248,36 @@ export function DrePage() {
     return m;
   }, [accounts]);
 
+  const accountMetaById = useMemo(() => {
+    const map: Record<string, DrePersonAccountMeta> = {};
+    (accounts || []).forEach((account: any) => {
+      map[account.id] = {
+        name: account.name || account.id,
+        drePosition: account.dre_position ?? null,
+        isDreAccount: account.is_dre_account !== false,
+      };
+    });
+    return map;
+  }, [accounts]);
+
+  const personAnalysis = useMemo(() => buildDrePersonAnalysis({
+    expenses: canViewPersonnelCosts ? (expenses || []) : [],
+    accounts: accountMetaById,
+    monthKey: selectedMonth,
+    resultCenter: selectedUnitName,
+    resultCenterNames: resultCenterNameMap,
+  }), [canViewPersonnelCosts, expenses, accountMetaById, selectedMonth, selectedUnitName, resultCenterNameMap]);
+
   const topExpensePlans = useMemo(() => {
     const totals: Record<string, number> = {};
     (expenses || []).forEach((exp: any) => {
-      if (exp.status === "cancelled" || exp.status === "draft") return;
-      const d = toDate(exp.dueDate || exp.createdAt);
+      if (["cancelled", "draft", "reconciled"].includes(exp.status)) return;
+      const d = toDate(exp.competenceDate) || toDate(exp.dueDate) || toDate(exp.createdAt);
       if (d && format(d, "yyyy-MM") !== selectedMonth) return;
-      if (!matchesUnit(exp)) return;
-      const name = accountNameById[exp.accountId ?? exp.accountPlan] || exp.accountPlanName || "Sem classificação";
-      totals[name] = (totals[name] || 0) + (exp.totalValue || 0);
+      expenseAccountAllocationsForResultCenter(exp, selectedUnitName, {}, accountNameById).forEach((allocation) => {
+        const name = allocation.accountPlanName || "Sem classificação";
+        totals[name] = (totals[name] || 0) + allocation.amount;
+      });
     });
     return Object.entries(totals).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,6 +316,32 @@ export function DrePage() {
   // ── export ───────────────────────────────────────────────────────────────────
 
   function exportCsv() {
+    if (viewMode === "people") {
+      if (!canExportPersonnelCosts) return;
+      const rows = [
+        ["DRE por colaborador —", selectedMonthLabel, unitFilter === "all" ? "Todas as unidades" : (kioskNameById[unitFilter] ?? unitFilter)],
+        [],
+        ["Colaborador", "Unidade", "Rubrica", "Natureza", "Compõe a DRE", "Valor"],
+        ...personAnalysis.people.flatMap((person) => person.rubrics.map((rubric) => [
+          person.employeeName,
+          rubric.resultCenters.join(" · ") || person.resultCenters.join(" · "),
+          rubric.accountPlanName,
+          rubric.analysisType === "employer_cost"
+            ? "Custo da empresa"
+            : rubric.analysisType === "employee_deduction" ? "Desconto do colaborador" : "Informativo",
+          rubric.countsInDre ? "Sim" : "Não",
+          formatCurrency(rubric.amount),
+        ])),
+      ];
+      const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(";")).join("\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      const anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = `dre-colaboradores-${selectedMonth}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(anchor.href);
+      return;
+    }
     const { revBruta, impostos, recLiq, cmv, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
     const rows = [
       ["DRE —", selectedMonthLabel, unitFilter === "all" ? "Todas as unidades" : (kioskNameById[unitFilter] ?? unitFilter)],
@@ -305,7 +383,7 @@ export function DrePage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">DRE</h1>
+          <h1 className="text-2xl font-bold tracking-tight">DRE</h1>
           <p className="text-muted-foreground">Demonstrativo gerencial com CMV automático e categorização por plano de contas.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -346,9 +424,17 @@ export function DrePage() {
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "classic" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               <Table2 className="h-3.5 w-3.5" /> DRE Clássica
             </button>
+            {canViewPersonnelCosts ? (
+              <button type="button" onClick={() => setViewMode("people")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "people" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                <UsersRound className="h-3.5 w-3.5" /> Por colaborador
+              </button>
+            ) : null}
           </div>
 
-          <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+          {(viewMode !== "people" || canExportPersonnelCosts) ? (
+            <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+          ) : null}
         </div>
       </div>
 
@@ -586,6 +672,16 @@ export function DrePage() {
             })()}
           </CardContent>
         </Card>
+      )}
+
+      {viewMode === "people" && canViewPersonnelCosts && (
+        <DrePeopleView
+          analysis={personAnalysis}
+          drePersonnelTotal={metrics.pessoal}
+          loading={loading}
+          monthLabel={selectedMonthLabel}
+          unitLabel={selectedUnitName || "Todas as unidades"}
+        />
       )}
     </div>
   );

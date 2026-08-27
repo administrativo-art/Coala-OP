@@ -6,8 +6,8 @@ import { DPRuntimeGuard } from '@/components/dp-runtime-guard';
 import { useAuth } from '@/hooks/use-auth';
 import dynamic from 'next/dynamic';
 
-const KioskManagement = dynamic(
-  () => import('@/components/kiosk-management').then(m => ({ default: m.KioskManagement })),
+const DPSettingsUnits = dynamic(
+  () => import('@/components/dp/dp-settings-units').then(m => ({ default: m.DPSettingsUnits })),
   { ssr: false }
 );
 
@@ -27,13 +27,13 @@ export default function UnitsPage() {
           <div>
             <h1 className="text-3xl font-bold">Unidades</h1>
             <p className="text-sm text-muted-foreground">
-              Gerencie os quiosques e suas integrações com PDV Legal e Bizneo.
+              Gerencie unidades operacionais, grupos e integrações principais.
             </p>
           </div>
         </div>
 
         <DPRuntimeGuard area="Unidades">
-          <KioskManagement />
+          <DPSettingsUnits />
         </DPRuntimeGuard>
       </div>
     </PermissionGuard>

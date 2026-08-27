@@ -54,7 +54,7 @@ export function ReturnsProvider({ children }: { children: React.ReactNode }) {
           setRequests(payload.requests);
         }
       } catch (error) {
-        console.error("Error fetching return requests:", error);
+        console.warn("Error fetching return requests:", error);
       } finally {
         if (isMounted) {
           setLoading(false);

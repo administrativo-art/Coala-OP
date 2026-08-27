@@ -1,4 +1,5 @@
-import type { FieldMapEntry, FieldType, FieldVisibility } from "@/types/rh";
+import type { FieldMapEntry, FieldType, FieldVisibility, ProfileBlockConfig } from "@/types/rh";
+import { normalizeFieldVisibility } from "@/types/rh";
 
 type FieldConfig = {
   label: string;
@@ -9,16 +10,25 @@ type FieldConfig = {
   employeeVisible: boolean;
   employeeEditable: boolean;
   order: number;
+  helpText?: string;
   options?: string[];
+  conditionals?: FieldMapEntry["conditionals"];
+  group?: FieldMapEntry["group"];
+  subgroup?: FieldMapEntry["subgroup"];
+  repeatable?: FieldMapEntry["repeatable"];
+  lgpd?: Partial<NonNullable<FieldMapEntry["lgpd"]>>;
 };
 
 function field(config: FieldConfig): FieldMapEntry {
   const section = config.section.toLowerCase();
+  const sectionKey = section.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const visibility = normalizeFieldVisibility(config.visibility);
   const isSensitiveCategory =
-    section.includes("diversidade") ||
-    section.includes("aso") ||
-    section.includes("bancarios") ||
-    section.includes("familia");
+    sectionKey.includes("diversidade") ||
+    sectionKey.includes("aso") ||
+    sectionKey.includes("saude") ||
+    sectionKey.includes("bancarios") ||
+    sectionKey.includes("familia");
   const entry: FieldMapEntry = {
     bizneo_id: "coala_internal",
     label: config.label,
@@ -29,109 +39,160 @@ function field(config: FieldConfig): FieldMapEntry {
     employee_editable: config.employeeEditable,
     order: config.order,
     lgpd: {
-      category: isSensitiveCategory || config.visibility === "internal"
+      category: isSensitiveCategory || visibility === "confidential"
         ? "sensitive"
-        : config.visibility === "sensitive"
+        : visibility === "restricted_total" || visibility === "restricted_partial"
           ? "confidential"
           : "personal",
-      legal_basis: section.includes("diversidade") ? "consent" : "legal_obligation",
-      retention: section.includes("bancarios")
+      legal_basis: sectionKey.includes("diversidade") ? "consent" : "legal_obligation",
+      retention: sectionKey.includes("bancarios")
         ? "termination_plus_90d"
-        : section.includes("diversidade") || section.includes("aso")
+        : sectionKey.includes("diversidade") || sectionKey.includes("aso") || sectionKey.includes("saude")
           ? "termination_plus_2y"
           : "employment_plus_5y",
-      requires_consent: section.includes("diversidade"),
+      requires_consent: sectionKey.includes("diversidade"),
+      ...config.lgpd,
     },
   };
   if (config.required !== undefined) entry.required = config.required;
+  if (config.helpText !== undefined) entry.help_text = config.helpText;
   if (config.options !== undefined) entry.options = config.options;
+  if (config.conditionals !== undefined) entry.conditionals = config.conditionals;
+  if (config.group !== undefined) entry.group = config.group;
+  if (config.subgroup !== undefined) entry.subgroup = config.subgroup;
+  if (config.repeatable !== undefined) entry.repeatable = config.repeatable;
   return entry;
 }
 
 const UF_OPTIONS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
-const YES_NO = ["Sim", "Nao"];
+const YES_NO = ["Sim", "Não"];
 const SHIRT_OPTIONS = ["PP", "P", "M", "G", "GG", "XG"];
 const SHOE_OPTIONS = ["33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"];
+const CNH_GROUP: FieldMapEntry["group"] = { id: "documents_cnh", label: "CNH", order: 60 };
+const CNH_VALIDITY_SUBGROUP: FieldMapEntry["subgroup"] = { id: "documents_cnh_validity", label: "Validade da CNH", group_id: "documents_cnh", order: 10 };
+const HAS_CNH_CONDITION: FieldMapEntry["conditionals"] = [{ kind: "show_if", field: "employee.has_cnh", operator: "eq", value: true }];
+const HAS_FOOD_RESTRICTION_CONDITION: FieldMapEntry["conditionals"] = [{ kind: "show_if", field: "employee.has_food_restriction", operator: "eq", value: true }];
+const NEEDS_WORKPLACE_ADAPTATION_CONDITION: FieldMapEntry["conditionals"] = [{ kind: "show_if", field: "employee.needs_workplace_adaptation", operator: "eq", value: true }];
+const CHILD_GROUP: FieldMapEntry["group"] = {
+  id: "children_records",
+  label: "Filhos",
+  order: 10,
+  repeatable: { enabled: true, add_label: "Adicionar filho", item_label: "Filho" },
+};
+
+export const DEFAULT_PROFILE_BLOCKS: Record<string, ProfileBlockConfig> = {
+  "system.schedule_units": { id: "system.schedule_units", label: "Escala e unidades", order: 1020, employee_visible: false, locked: true },
+  "system.uniforms": { id: "system.uniforms", label: "Uniformes: entrega e devolução", order: 1030, employee_visible: false, locked: true },
+  "system.vacations": { id: "system.vacations", label: "Férias", order: 1040, employee_visible: false, locked: true },
+  "system.aso_control": { id: "system.aso_control", label: "Controle de ASOs", order: 1045, employee_visible: false, locked: true },
+  "system.family_salary": { id: "system.family_salary", label: "Salário-família", order: 1048, employee_visible: false, locked: true },
+  "system.transport_voucher": { id: "system.transport_voucher", label: "Vale-transporte", order: 1050, employee_visible: false, locked: true },
+  "system.behavior": { id: "system.behavior", label: "Comportamento no sistema", order: 1060, employee_visible: false, locked: true },
+};
+
+export const DEFAULT_SYSTEM_FIELDS: Record<string, FieldMapEntry> = {
+  "system.documents.registration_bizneo": field({ label: "Matrícula Bizneo", section: "Dados contratuais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 60 }),
+  "system.documents.registration_pdv": field({ label: "Matrícula PDV", section: "Dados contratuais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 70 }),
+  "system.documents.access_profile": field({ label: "Perfil de acesso", section: "Dados contratuais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 110 }),
+  "system.role.job_role": field({ label: "Cargo", section: "Dados contratuais", type: "text", visibility: "public", employeeVisible: false, employeeEditable: false, order: 30 }),
+  "system.role.operational": field({ label: "Operacional", section: "Dados contratuais", type: "boolean", visibility: "public", employeeVisible: false, employeeEditable: false, order: 80 }),
+  "system.role.goals": field({ label: "Metas", section: "Dados contratuais", type: "boolean", visibility: "public", employeeVisible: false, employeeEditable: false, order: 90 }),
+  "system.role.functions": field({ label: "Funções", section: "Dados contratuais", type: "text", visibility: "public", employeeVisible: false, employeeEditable: false, order: 100 }),
+  "system.schedule.shift": field({ label: "Escala", section: "Escala e unidades", type: "text", visibility: "public", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "system.schedule.units": field({ label: "Unidades", section: "Escala e unidades", type: "text", visibility: "public", employeeVisible: false, employeeEditable: false, order: 20 }),
+  "system.uniforms.summary": field({ label: "Uniformes", section: "Uniformes", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "system.vacations.summary": field({ label: "Férias", section: "Férias", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "system.aso.summary": field({ label: "Resumo de ASOs", section: "Controle de ASOs", type: "multiline", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "system.family_salary.summary": field({ label: "Resumo do salário-família", section: "Salário-família", type: "multiline", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "system.transport_voucher.enabled": field({ label: "Vale-transporte", section: "Vale-transporte", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "system.behavior.operational": field({ label: "Usuário operacional", section: "Comportamento no sistema", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "system.behavior.goals": field({ label: "Participa de metas", section: "Comportamento no sistema", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),
+};
 
 export const DEFAULT_COMPLEMENTARY_FIELDS: Record<string, FieldMapEntry> = {
-  "employee.name": field({ label: "Nome Completo", section: "Dados Pessoais", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: false, order: 10 }),
-  "employee.state": field({ label: "Estado (UF)", section: "Dados Pessoais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: true, order: 20, options: UF_OPTIONS }),
-  "employee.city": field({ label: "Cidade", section: "Dados Pessoais", type: "text", visibility: "public", employeeVisible: true, employeeEditable: true, order: 30 }),
-  "employee.address": field({ label: "Endereco", section: "Dados Pessoais", type: "text", visibility: "sensitive", employeeVisible: true, employeeEditable: true, order: 40 }),
-  "employee.phone": field({ label: "Telefone Celular", section: "Dados Pessoais", type: "text", required: true, visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 50 }),
-  "employee.personal_email": field({ label: "E-Mail Pessoal", section: "Dados Pessoais", type: "text", required: true, visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 60 }),
-  "employee.nationality": field({ label: "Nacionalidade", section: "Dados Pessoais", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 70 }),
-  "employee.birth_date": field({ label: "Data de Nascimento", section: "Dados Pessoais", type: "date", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 80 }),
-  "employee.marital_status": field({ label: "Estado Civil", section: "Dados Pessoais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 90, options: ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viuvo(a)", "Uniao Estavel"] }),
-  "employee.mother_name": field({ label: "Nome da Mae", section: "Dados Pessoais", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 100 }),
-  "employee.father_name": field({ label: "Nome do Pai", section: "Dados Pessoais", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 110 }),
-  "employee.children_under_14": field({ label: "Filhos menores de 14 anos", section: "Dados Pessoais", type: "single_select", visibility: "sensitive", employeeVisible: true, employeeEditable: true, order: 120, options: ["Nenhum", "1", "2", "3", "4 ou mais"] }),
+  ...DEFAULT_SYSTEM_FIELDS,
+  "employee.name": field({ label: "Nome completo", section: "Dados pessoais", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: false, order: 10 }),
+  "employee.state": field({ label: "Estado (UF)", section: "Dados pessoais", type: "single_select", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 20, options: UF_OPTIONS }),
+  "employee.city": field({ label: "Cidade", section: "Dados pessoais", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 30 }),
+  "employee.address": field({ label: "Endereço", section: "Dados pessoais", type: "text", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 40 }),
+  "employee.address_zipcode": field({ label: "CEP", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 41 }),
+  "employee.address_street": field({ label: "Logradouro", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 42 }),
+  "employee.address_number": field({ label: "Número", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 43 }),
+  "employee.address_no_number": field({ label: "Sem número", section: "Dados pessoais", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 44 }),
+  "employee.address_complement": field({ label: "Complemento", section: "Dados pessoais", type: "text", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 45 }),
+  "employee.address_neighborhood": field({ label: "Bairro", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 46 }),
+  "employee.phone": field({ label: "Telefone celular", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 50 }),
+  "employee.personal_email": field({ label: "E-mail de acesso", section: "Dados pessoais", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 60, helpText: "É o mesmo e-mail utilizado para entrar no Coala One. Não existe um segundo e-mail pessoal." }),
+  "employee.nationality": field({ label: "Nacionalidade", section: "Dados pessoais", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 70 }),
+  "employee.birth_date": field({ label: "Data de nascimento", section: "Dados pessoais", type: "date", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 80 }),
+  "employee.marital_status": field({ label: "Estado civil", section: "Dados pessoais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 90, options: ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União estável"] }),
+  "employee.mother_name": field({ label: "Nome da mãe", section: "Dados pessoais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 100 }),
+  "employee.father_name": field({ label: "Nome do pai", section: "Dados pessoais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 110 }),
+  "employee.children_under_14": field({ label: "Quantidade de filhos menores de 14 anos", section: "Salário-família", type: "single_select", visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 10, options: ["Nenhum", "1", "2", "3", "4 ou mais"] }),
+  "employee.children": field({ label: "Cadastro de filhos", section: "Salário-família", type: "multiline", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20, group: CHILD_GROUP }),
 
-  "employee.cpf": field({ label: "CPF", section: "Documentos", type: "text", required: true, visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 10 }),
-  "employee.pis": field({ label: "PIS", section: "Documentos", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 20 }),
-  "employee.ctps_number": field({ label: "CTPS - Numero", section: "Documentos", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.ctps_series": field({ label: "CTPS - Serie", section: "Documentos", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
-  "employee.ctps_date": field({ label: "CTPS - Data de Emissao", section: "Documentos", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 50 }),
-  "employee.cnh_number": field({ label: "CNH - Numero", section: "Documentos", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 60 }),
-  "employee.cnh_type": field({ label: "CNH - Tipo", section: "Documentos", type: "multi_select", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 70, options: ["A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"] }),
-  "employee.cnh_expiry": field({ label: "CNH - Validade", section: "Documentos", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 80 }),
+  "employee.cpf": field({ label: "CPF", section: "Documentos", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 10 }),
+  "employee.pis": field({ label: "PIS", section: "Documentos", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),
+  "employee.ctps_number": field({ label: "CTPS - Número", section: "Documentos", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 30 }),
+  "employee.ctps_series": field({ label: "CTPS - Série", section: "Documentos", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.ctps_date": field({ label: "CTPS - Data de emissão", section: "Documentos", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 50 }),
+  "employee.has_cnh": field({ label: "Possui CNH?", section: "Documentos", type: "boolean", visibility: "public", employeeVisible: true, employeeEditable: true, order: 55 }),
+  "employee.cnh_number": field({ label: "Número de registro", section: "Documentos", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 60, group: CNH_GROUP, conditionals: HAS_CNH_CONDITION }),
+  "employee.cnh_type": field({ label: "Categoria", section: "Documentos", type: "multi_select", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 70, options: ["A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"], group: CNH_GROUP, conditionals: HAS_CNH_CONDITION }),
+  "employee.cnh_expiry": field({ label: "Data de validade", section: "Documentos", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 80, group: CNH_GROUP, subgroup: CNH_VALIDITY_SUBGROUP, conditionals: HAS_CNH_CONDITION }),
+  "employee.cnh_first_date": field({ label: "1ª habilitação", section: "Documentos", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 90, group: CNH_GROUP, subgroup: CNH_VALIDITY_SUBGROUP, conditionals: HAS_CNH_CONDITION }),
 
-  "employee.employer_cnpj": field({ label: "CNPJ Empregador", section: "Dados Contratuais", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 10 }),
-  "employee.employer_name": field({ label: "Razao Social", section: "Dados Contratuais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 20, options: ["CT Sorvetes Ltda", "Coala Shakes"] }),
-  "employee.job_role_id": field({ label: "Cargo / Funcao", section: "Dados Contratuais", type: "ref:jobRoles", visibility: "public", employeeVisible: true, employeeEditable: false, order: 30 }),
-  "employee.probation_eval_1": field({ label: "Exp. - 1a avaliacao", section: "Dados Contratuais", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
-  "employee.probation_eval_2": field({ label: "Exp. - 2a avaliacao", section: "Dados Contratuais", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 50 }),
+  "employee.employer_cnpj": field({ label: "CNPJ do empregador", section: "Dados contratuais", type: "text", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "employee.employer_name": field({ label: "Razão social", section: "Dados contratuais", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 20, options: ["CT Sorvetes Ltda", "Coala Shakes"] }),
+  "employee.job_role_id": field({ label: "Cargo / Função", section: "Dados contratuais", type: "ref:jobRoles", visibility: "public", employeeVisible: true, employeeEditable: false, order: 30 }),
+  "employee.probation_eval_1": field({ label: "Fim do 1º período de experiência", section: "Dados contratuais", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.probation_eval_2": field({ label: "Fim do 2º período de experiência", section: "Dados contratuais", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 50 }),
 
-  "employee.has_vt": field({ label: "Tem VT?", section: "Beneficios", type: "boolean", visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 10 }),
-  "employee.vt_daily_value": field({ label: "Valor VT (Diario)", section: "Beneficios", type: "currency", visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 20 }),
-  "employee.vt_notes": field({ label: "VT - Observacao", section: "Beneficios", type: "multiline", visibility: "internal", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.has_va_vr": field({ label: "Tem VA/VR?", section: "Beneficios", type: "boolean", visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 40 }),
-  "employee.va_vr_daily_value": field({ label: "Valor VA/VR", section: "Beneficios", type: "currency", visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 50 }),
-  "employee.has_health_plan": field({ label: "Convenio Medico?", section: "Beneficios", type: "boolean", visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 60 }),
-  "employee.has_dental_plan": field({ label: "Convenio Odontologico?", section: "Beneficios", type: "boolean", visibility: "sensitive", employeeVisible: true, employeeEditable: false, order: 70 }),
+  "employee.has_vt": field({ label: "Tem VT?", section: "Benefícios", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 10 }),
+  "employee.vt_daily_value": field({ label: "Valor do VT diário", section: "Benefícios", type: "currency", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 20 }),
+  "employee.vt_notes": field({ label: "Observação sobre VT", section: "Benefícios", type: "multiline", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 30 }),
+  "employee.has_va_vr": field({ label: "Tem VA/VR?", section: "Benefícios", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 40 }),
+  "employee.va_vr_daily_value": field({ label: "Valor do VA/VR", section: "Benefícios", type: "currency", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 50 }),
+  "employee.has_health_plan": field({ label: "Convênio médico?", section: "Benefícios", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 60 }),
+  "employee.has_dental_plan": field({ label: "Convênio odontológico?", section: "Benefícios", type: "boolean", visibility: "restricted_partial", employeeVisible: true, employeeEditable: false, order: 70 }),
 
-  "employee.education_level": field({ label: "Grau de Instrucao", section: "Formacao Academica", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 10, options: ["Fundamental Incompleto", "Fundamental Completo", "Medio Incompleto", "Medio Completo", "Superior Incompleto", "Superior Completo", "Pos-Graduacao", "Mestrado", "Doutorado"] }),
-  "employee.education_course": field({ label: "Curso", section: "Formacao Academica", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 20 }),
-  "employee.education_institution": field({ label: "Instituicao", section: "Formacao Academica", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 30 }),
-  "employee.education_end_date": field({ label: "Data de Conclusao", section: "Formacao Academica", type: "date", visibility: "public", employeeVisible: true, employeeEditable: false, order: 40 }),
+  "employee.education_level": field({ label: "Grau de instrução", section: "Formação acadêmica", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: false, order: 10, options: ["Fundamental incompleto", "Fundamental completo", "Médio incompleto", "Médio completo", "Superior incompleto", "Superior completo"] }),
+  "employee.education_course": field({ label: "Curso", section: "Formação acadêmica", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 20 }),
+  "employee.education_institution": field({ label: "Instituição", section: "Formação acadêmica", type: "text", visibility: "public", employeeVisible: true, employeeEditable: false, order: 30 }),
+  "employee.education_end_date": field({ label: "Data de conclusão", section: "Formação acadêmica", type: "date", visibility: "public", employeeVisible: true, employeeEditable: false, order: 40 }),
 
-  "employee.gender_identity": field({ label: "Identidade de Genero", section: "Inclusao & Diversidade", type: "single_select", visibility: "internal", employeeVisible: false, employeeEditable: false, order: 10, options: ["Mulher Cis", "Homem Cis", "Mulher Trans", "Homem Trans", "Nao-binario", "Prefiro nao informar"] }),
-  "employee.sexual_orientation": field({ label: "Orientacao Sexual", section: "Inclusao & Diversidade", type: "single_select", visibility: "internal", employeeVisible: false, employeeEditable: false, order: 20, options: ["Heterossexual", "Homossexual", "Bissexual", "Pansexual", "Assexual", "Prefiro nao informar"] }),
-  "employee.is_pcd": field({ label: "e PCD?", section: "Inclusao & Diversidade", type: "boolean", visibility: "internal", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.disability": field({ label: "Deficiencia", section: "Inclusao & Diversidade", type: "multi_select", visibility: "internal", employeeVisible: false, employeeEditable: false, order: 40, options: ["Fisica", "Auditiva", "Visual", "Intelectual", "Psicossocial", "Multipla"] }),
-  "employee.ethnicity": field({ label: "Etnia", section: "Inclusao & Diversidade", type: "single_select", visibility: "internal", employeeVisible: false, employeeEditable: false, order: 50, options: ["Branca", "Preta", "Parda", "Amarela", "Indigena", "Prefiro nao informar"] }),
+  "employee.gender_identity": field({ label: "Identidade de gênero", section: "Inclusão e diversidade", type: "single_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 10, options: ["Mulher cis", "Homem cis", "Mulher trans", "Homem trans", "Não binário", "Prefiro não informar"] }),
+  "employee.sexual_orientation": field({ label: "Orientação sexual", section: "Inclusão e diversidade", type: "single_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 20, options: ["Heterossexual", "Homossexual", "Bissexual", "Pansexual", "Assexual", "Prefiro não informar"] }),
+  "employee.is_pcd": field({ label: "É PCD?", section: "Inclusão e diversidade", type: "boolean", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 30 }),
+  "employee.disability": field({ label: "Deficiência", section: "Inclusão e diversidade", type: "multi_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 40, options: ["Física", "Auditiva", "Visual", "Intelectual", "Psicossocial", "Múltipla"] }),
+  "employee.ethnicity": field({ label: "Etnia", section: "Inclusão e diversidade", type: "single_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 50, options: ["Branca", "Preta", "Parda", "Amarela", "Indígena", "Prefiro não informar"] }),
 
-  "employee.emergency_name": field({ label: "Nome", section: "Contatos de Emergencia", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 10 }),
-  "employee.emergency_phone": field({ label: "Celular (com DDD)", section: "Contatos de Emergencia", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 20 }),
-  "employee.emergency_relation": field({ label: "Grau de Parentesco", section: "Contatos de Emergencia", type: "single_select", visibility: "public", employeeVisible: true, employeeEditable: true, order: 30, options: ["Mae/Pai", "Conjuge", "Filho(a)", "Irmao/Irmã", "Parente", "Amigo(a)", "Outro"] }),
-  "employee.emergency_medical": field({ label: "Alergias e Dados Medicos", section: "Contatos de Emergencia", type: "multiline", visibility: "sensitive", employeeVisible: true, employeeEditable: true, order: 40 }),
+  "employee.emergency_name": field({ label: "Nome", section: "Contatos de emergência", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 10 }),
+  "employee.emergency_phone": field({ label: "Celular (com DDD)", section: "Contatos de emergência", type: "text", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 20 }),
+  "employee.emergency_relation": field({ label: "Grau de parentesco", section: "Contatos de emergência", type: "single_select", required: true, visibility: "public", employeeVisible: true, employeeEditable: true, order: 30, options: ["Mãe/Pai", "Cônjuge", "Filho(a)", "Irmão/Irmã", "Parente", "Amigo(a)", "Outro"] }),
+  "employee.has_food_restriction": field({ label: "Possui restrição alimentar relevante à atividade?", section: "Saúde e segurança", type: "boolean", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 10, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
+  "employee.food_restrictions": field({ label: "Ingredientes relacionados à restrição", section: "Saúde e segurança", type: "multi_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 20, options: ["Leite e derivados", "Trigo ou glúten", "Ovos", "Soja", "Amendoim", "Castanhas ou outras oleaginosas", "Corantes ou aromatizantes", "Outro ingrediente"], conditionals: HAS_FOOD_RESTRICTION_CONDITION, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
+  "employee.food_restriction_other": field({ label: "Outro ingrediente", section: "Saúde e segurança", type: "text", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 30, conditionals: HAS_FOOD_RESTRICTION_CONDITION, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
+  "employee.food_restriction_activity_effects": field({ label: "Impacto da restrição na atividade", section: "Saúde e segurança", type: "multi_select", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 40, options: ["Apenas a ingestão ou degustação", "O contato ou a manipulação", "Ambos", "Preciso de avaliação pelo serviço de saúde ocupacional"], conditionals: HAS_FOOD_RESTRICTION_CONDITION, lgpd: { legal_basis: "life_protection", requires_consent: false } }),
+  "employee.needs_workplace_adaptation": field({ label: "Necessita de adaptação funcional?", section: "Saúde e segurança", type: "boolean", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 50, lgpd: { legal_basis: "legal_obligation", requires_consent: false } }),
+  "employee.workplace_adaptation_notes": field({ label: "Orientação funcional de SST", section: "Saúde e segurança", type: "multiline", visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 60, conditionals: NEEDS_WORKPLACE_ADAPTATION_CONDITION, lgpd: { legal_basis: "legal_obligation", requires_consent: false } }),
 
-  "employee.dependent_name": field({ label: "Nome Dependente", section: "Dependentes", type: "text", visibility: "public", employeeVisible: false, employeeEditable: false, order: 10 }),
-  "employee.dependent_relation": field({ label: "Grau de Parentesco", section: "Dependentes", type: "single_select", visibility: "public", employeeVisible: false, employeeEditable: false, order: 20, options: ["Filho(a)", "Enteado(a)", "Conjuge", "Outro"] }),
-  "employee.dependent_cpf": field({ label: "CPF Dependente", section: "Dependentes", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.dependent_rg": field({ label: "RG Dependente", section: "Dependentes", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.pix_key_type": field({ label: "Tipo da chave Pix", section: "Pagamento via Pix", type: "single_select", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 10, options: ["cpf", "cnpj", "phone", "email", "random"] }),
+  "employee.pix_key": field({ label: "Chave Pix", section: "Pagamento via Pix", type: "text", required: true, visibility: "restricted_partial", employeeVisible: true, employeeEditable: true, order: 20 }),
 
-  "employee.bank_name": field({ label: "Banco", section: "Dados Bancarios", type: "single_select", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 10, options: ["Banco do Brasil", "Bradesco", "Caixa", "Itau", "Santander", "Nubank", "Inter", "Outro"] }),
-  "employee.bank_agency": field({ label: "Agencia", section: "Dados Bancarios", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 20 }),
-  "employee.bank_account": field({ label: "Conta Corrente", section: "Dados Bancarios", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.pix_key": field({ label: "Chave PIX", section: "Dados Bancarios", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.aso_admission_date": field({ label: "Exame admissional", section: "Controle de ASOs", type: "date", required: true, visibility: "confidential", employeeVisible: false, employeeEditable: false, order: 10 }),
+  "employee.aso_dismissal_date": field({ label: "Exame demissional", section: "Controle de ASOs", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20 }),
+  "employee.aso_periodic_1": field({ label: "Exame periódico 1", section: "Controle de ASOs", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 30 }),
+  "employee.aso_periodic_2": field({ label: "Exame periódico 2", section: "Controle de ASOs", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 40 }),
 
-  "employee.aso_admission_date": field({ label: "Exame Admissional", section: "Controle de ASOs", type: "date", required: true, visibility: "internal", employeeVisible: false, employeeEditable: false, order: 10 }),
-  "employee.aso_dismissal_date": field({ label: "Exame Demissional", section: "Controle de ASOs", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 20 }),
-  "employee.aso_periodic_1": field({ label: "Exame Periodico 1", section: "Controle de ASOs", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.aso_periodic_2": field({ label: "Exame Periodico 2", section: "Controle de ASOs", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.uniform_shirt_size": field({ label: "Tamanho de camisa", section: "Uniforme", type: "single_select", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 10, options: SHIRT_OPTIONS }),
+  "employee.uniform_pants_size": field({ label: "Tamanho da calça", section: "Uniforme", type: "single_select", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 20, options: SHIRT_OPTIONS }),
+  "employee.uniform_shoe_size": field({ label: "Numeração do calçado", section: "Uniforme", type: "single_select", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 30, options: SHOE_OPTIONS }),
+  "employee.uniform_shirt_qty": field({ label: "Camisa - Quantidade entregue", section: "Uniforme", type: "number", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.uniform_apron_qty": field({ label: "Avental - Quantidade entregue", section: "Uniforme", type: "number", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 50 }),
+  "employee.uniform_sash_qty": field({ label: "Faixa - Quantidade entregue", section: "Uniforme", type: "number", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 60 }),
+  "employee.uniform_cap_qty": field({ label: "Boné - Quantidade entregue", section: "Uniforme", type: "number", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 70 }),
+  "employee.uniform_last_delivery": field({ label: "Data da última entrega", section: "Uniforme", type: "date", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 80 }),
 
-  "employee.uniform_shirt_size": field({ label: "Tamanho de camisa", section: "Uniforme", type: "single_select", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 10, options: SHIRT_OPTIONS }),
-  "employee.uniform_pants_size": field({ label: "Tamanho da calca", section: "Uniforme", type: "single_select", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 20, options: SHIRT_OPTIONS }),
-  "employee.uniform_shoe_size": field({ label: "Numeracao do calcado", section: "Uniforme", type: "single_select", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30, options: SHOE_OPTIONS }),
-  "employee.uniform_shirt_qty": field({ label: "Camisa - Qtd entregue", section: "Uniforme", type: "number", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
-  "employee.uniform_apron_qty": field({ label: "Avental - Qtd entregue", section: "Uniforme", type: "number", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 50 }),
-  "employee.uniform_sash_qty": field({ label: "Faixa - Qtd entregue", section: "Uniforme", type: "number", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 60 }),
-  "employee.uniform_cap_qty": field({ label: "Bone - Qtd entregue", section: "Uniforme", type: "number", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 70 }),
-  "employee.uniform_last_delivery": field({ label: "Data ultima entrega", section: "Uniforme", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 80 }),
-
-  "employee.has_family_salary": field({ label: "Tem salario familia?", section: "Salario Familia", type: "boolean", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 10 }),
-  "employee.family_salary_end_1": field({ label: "Data encerramento filho 1", section: "Salario Familia", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 20 }),
-  "employee.family_salary_birth_1": field({ label: "Nascimento filho 1", section: "Salario Familia", type: "date", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 30 }),
-  "employee.family_salary_name_1": field({ label: "Nome filho 1", section: "Salario Familia", type: "text", visibility: "sensitive", employeeVisible: false, employeeEditable: false, order: 40 }),
+  "employee.has_family_salary": field({ label: "Tem salário-família?", section: "Salário-família", type: "boolean", visibility: "restricted_partial", employeeVisible: false, employeeEditable: false, order: 30 }),
 };

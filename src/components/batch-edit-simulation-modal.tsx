@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, type FormEvent } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,13 +15,12 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Separator } from './ui/separator';
 import { Loader2, ChevronsUpDown } from 'lucide-react';
 import { Input } from './ui/input';
-import { ScrollArea } from './ui/scroll-area';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { useKiosks } from '@/hooks/use-kiosks';
 import { cn } from '@/lib/utils';
+import { createBatchStatusUpdate } from '@/lib/product-simulation-batch';
 
 
 const batchEditSchema = z.object({
@@ -151,12 +150,27 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
     const kioskAction = form.watch('kioskAction');
     const priceAdjustmentType = form.watch('priceAdjustmentType');
 
-    const onSubmit = async (values: BatchEditFormValues) => {
-        if (step < 3) {
-            setStep(step + 1);
-            return;
-        }
+    useEffect(() => {
+        if (!open) return;
+        form.reset({
+            target: selectedSimulationIds.size > 0 ? 'selected' : 'filtered',
+            statusAction: 'keep',
+            kioskAction: 'keep',
+            lineAction: 'keep',
+            categoryAction: 'keep',
+            groupAction: 'keep',
+            priceAction: 'keep',
+            priceAdjustmentType: 'percentage',
+            ncmAction: 'keep',
+            cestAction: 'keep',
+            cfopAction: 'keep',
+            kioskIds: [],
+        });
+        setStep(1);
+        setSelectedFields(new Set());
+    }, [form, open, selectedSimulationIds.size]);
 
+    const onSubmit = async (values: BatchEditFormValues) => {
         setIsSubmitting(true);
         
         const targetSimulations = values.target === 'selected'
@@ -171,7 +185,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
 
         try {
             await bulkUpdateSimulations(targetSimulations, {
-                status: { action: selectedFields.has('status') ? 'set' : 'keep', value: values.statusValue },
+                status: createBatchStatusUpdate(selectedFields.has('status'), values.statusValue),
                 kiosk: { action: selectedFields.has('kiosks') ? values.kioskAction : 'keep', ids: values.kioskIds || [] },
                 line: { action: selectedFields.has('line') ? values.lineAction : 'keep', id: values.lineId },
                 category: { action: selectedFields.has('category') ? values.categoryAction : 'keep', id: values.categoryId },
@@ -194,9 +208,31 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
 
     const toggleField = (field: string) => {
         const newFields = new Set(selectedFields);
-        if (newFields.has(field)) newFields.delete(field);
+        const isRemoving = newFields.has(field);
+        if (isRemoving) newFields.delete(field);
         else newFields.add(field);
+
+        if (field === 'status') form.setValue('statusAction', isRemoving ? 'keep' : 'set');
+        if (field === 'kiosks') form.setValue('kioskAction', isRemoving ? 'keep' : 'set');
+        if (field === 'line') form.setValue('lineAction', isRemoving ? 'keep' : 'set');
+        if (field === 'category') form.setValue('categoryAction', isRemoving ? 'keep' : 'set');
+        if (field === 'group') form.setValue('groupAction', isRemoving ? 'keep' : 'set');
+        if (field === 'price') form.setValue('priceAction', isRemoving ? 'keep' : 'change');
+        if (field === 'fiscal') {
+            form.setValue('ncmAction', isRemoving ? 'keep' : 'set');
+            form.setValue('cestAction', isRemoving ? 'keep' : 'set');
+            form.setValue('cfopAction', isRemoving ? 'keep' : 'set');
+        }
         setSelectedFields(newFields);
+    };
+
+    const handleStepSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (step < 3) {
+            setStep(current => current + 1);
+            return;
+        }
+        void form.handleSubmit(onSubmit)(event);
     };
 
     const fieldOptions = [
@@ -211,8 +247,10 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
 
     return (
         <Dialog open={open} onOpenChange={(v) => { if(!v) { setStep(1); setSelectedFields(new Set()); } onOpenChange(v); }}>
-            <DialogContent className="max-w-xl h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
-                <div className="bg-pink-600 p-8 text-white">
+            <DialogContent className={cn(
+                "flex max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[640px] flex-col overflow-hidden rounded-[22px] border-none p-0 shadow-2xl sm:max-w-[640px] sm:p-0 [&>button]:text-white [&>button]:opacity-90"
+            )}>
+                <div className="bg-pink-600 px-6 py-5 text-white">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-black tracking-tight">Alterar em lote</DialogTitle>
                         <DialogDescription className="text-pink-100 font-medium">
@@ -220,7 +258,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                         </DialogDescription>
                     </DialogHeader>
                     {/* Step Progress Bar */}
-                    <div className="flex gap-2 mt-6">
+                    <div className="mt-4 flex gap-2">
                         {[1, 2, 3].map(i => (
                             <div key={i} className={cn("h-1.5 flex-1 rounded-full transition-all", i <= step ? "bg-white" : "bg-white/30")} />
                         ))}
@@ -228,8 +266,8 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                 </div>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-hidden bg-gray-50">
-                        <ScrollArea className="flex-1 px-8 py-6">
+                    <form onSubmit={handleStepSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-50">
+                        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                             {step === 1 && (
                                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                                     <FormField
@@ -244,27 +282,27 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                                         value={field.value}
                                                         className="grid grid-cols-1 gap-3"
                                                     >
-                                                        <div className={cn(
+                                                        <label htmlFor="batch-target-selected" className={cn(
                                                             "flex items-center space-x-3 space-y-0 p-4 rounded-xl border-2 transition-all cursor-pointer",
                                                             field.value === 'selected' ? "border-pink-500 bg-white shadow-md" : "border-gray-200 bg-white/50 grayscale opacity-70"
-                                                        )} onClick={() => selectedSimulationIds.size > 0 && field.onChange('selected')}>
-                                                            <FormControl><RadioGroupItem value="selected" disabled={selectedSimulationIds.size === 0} /></FormControl>
+                                                        )}>
+                                                            <RadioGroupItem id="batch-target-selected" value="selected" disabled={selectedSimulationIds.size === 0} />
                                                             <div>
-                                                                <FormLabel className="font-bold text-gray-900 block">Itens selecionados</FormLabel>
+                                                                <span className="block font-bold text-gray-900">Itens selecionados</span>
                                                                 <span className="text-xs text-muted-foreground font-medium">{selectedSimulationIds.size} mercadorias marcadas na lista</span>
                                                             </div>
-                                                        </div>
+                                                        </label>
 
-                                                        <div className={cn(
+                                                        <label htmlFor="batch-target-filtered" className={cn(
                                                             "flex items-center space-x-3 space-y-0 p-4 rounded-xl border-2 transition-all cursor-pointer",
                                                             field.value === 'filtered' ? "border-pink-500 bg-white shadow-md" : "border-gray-200 bg-white/50"
-                                                        )} onClick={() => field.onChange('filtered')}>
-                                                            <FormControl><RadioGroupItem value="filtered" /></FormControl>
+                                                        )}>
+                                                            <RadioGroupItem id="batch-target-filtered" value="filtered" />
                                                             <div>
-                                                                <FormLabel className="font-bold text-gray-900 block">Resultado filtrado</FormLabel>
+                                                                <span className="block font-bold text-gray-900">Resultado filtrado</span>
                                                                 <span className="text-xs text-muted-foreground font-medium">{filteredSimulations.length} mercadorias baseadas nos filtros atuais</span>
                                                             </div>
-                                                        </div>
+                                                        </label>
                                                     </RadioGroup>
                                                 </FormControl>
                                             </FormItem>
@@ -313,7 +351,7 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                             <FormLabel className="text-xs font-black uppercase text-pink-600 tracking-wider">Status</FormLabel>
                                             <FormField control={form.control} name="statusValue" render={({ field }) => (
                                                 <FormItem><FormControl>
-                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
                                                         <SelectTrigger className="h-12 rounded-xl"><SelectValue placeholder="Selecione um status..." /></SelectTrigger>
                                                         <SelectContent>
                                                             <SelectItem value="active">Ativo</SelectItem>
@@ -478,9 +516,9 @@ export function BatchEditSimulationModal({ open, onOpenChange, simulations, filt
                                     )}
                                 </div>
                             )}
-                        </ScrollArea>
+                        </div>
 
-                        <div className="px-8 py-6 bg-white border-t flex justify-between items-center mt-auto">
+                        <div className="mt-auto flex items-center justify-between border-t bg-white px-6 py-4">
                             <Button 
                                 type="button" 
                                 variant="ghost" 

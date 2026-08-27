@@ -31,7 +31,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ slid
     }
 
     const current = existing.data()!;
-    if (!access.isAdmin && !(current.kioskIds ?? []).some((kioskId: string) => access.allowedKioskIds.includes(kioskId))) {
+    if (!access.allUnits && !(current.kioskIds ?? []).some((kioskId: string) => access.allowedKioskIds.includes(kioskId))) {
       return NextResponse.json({ error: 'Sem acesso a este slide.' }, { status: 403 });
     }
 
@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ slid
       isActive: normalizedPayload.isActive === true,
     });
 
-    const kioskIds = sanitizeKioskIds(parsed.kioskIds, access.allowedKioskIds, access.isAdmin);
+    const kioskIds = sanitizeKioskIds(parsed.kioskIds, access.allowedKioskIds, access.allUnits);
     if (!kioskIds.length) {
       return NextResponse.json({ error: 'Selecione ao menos um quiosque permitido.' }, { status: 400 });
     }
@@ -90,7 +90,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ s
     }
 
     const current = existing.data()!;
-    if (!access.isAdmin && !(current.kioskIds ?? []).some((kioskId: string) => access.allowedKioskIds.includes(kioskId))) {
+    if (!access.allUnits && !(current.kioskIds ?? []).some((kioskId: string) => access.allowedKioskIds.includes(kioskId))) {
       return NextResponse.json({ error: 'Sem acesso a este slide.' }, { status: 403 });
     }
 

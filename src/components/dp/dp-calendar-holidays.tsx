@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -51,6 +50,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ArrowLeft, Plus, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { BackButton } from '@/components/navigation/back-button';
 
 // ─── Holiday type labels ──────────────────────────────────────────────────────
 
@@ -171,7 +171,6 @@ interface DPCalendarHolidaysProps {
 }
 
 export function DPCalendarHolidays({ calendar, onBack }: DPCalendarHolidaysProps) {
-  const router = useRouter();
   const { deleteHoliday } = useDP();
   const { holidays, loading } = useDPHolidays(calendar.id);
   const { toast } = useToast();
@@ -203,9 +202,13 @@ export function DPCalendarHolidays({ calendar, onBack }: DPCalendarHolidaysProps
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => onBack ? onBack() : router.push('/dashboard/dp/settings/calendars')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+        {onBack ? (
+          <Button variant="ghost" size="icon" onClick={onBack} aria-label="Voltar">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        ) : (
+          <BackButton fallbackHref="/dashboard/dp/settings/calendars" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
+        )}
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-semibold truncate">{calendar.name}</h1>
           <p className="text-sm text-muted-foreground">

@@ -9,10 +9,15 @@ import dynamic from 'next/dynamic';
 
 import { useReposition } from '@/hooks/use-reposition';
 import { useAuth } from '@/hooks/use-auth';
+import { canAccessUnit } from '@/lib/unit-access';
 import { type RepositionActivity, type RepositionItem, type RepositionSuggestedLot, type Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/use-products';
 import SignatureCanvas from "react-signature-canvas";
+import {
+  dataUrlToFile,
+  uploadOperationalFile,
+} from "@/lib/operational-upload-client";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -254,19 +259,21 @@ function RepositionActivityCard({
                             Doc. assinado
                         </Button>
                     )}
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onCancel(activity)}>
-                                <Ban className="mr-2 h-4 w-4" />
-                                <span>Cancelar Atividade</span>
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                     {canRevert && (
+                       <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onCancel(activity)}>
+                                  <Ban className="mr-2 h-4 w-4" />
+                                  <span>Cancelar Atividade</span>
+                              </DropdownMenuItem>
+                          </DropdownMenuContent>
+                      </DropdownMenu>
+                     )}
                 </div>
             </CardHeader>
             <CardContent>
@@ -581,7 +588,7 @@ function RepositionActivityCard({
                                 {receiptHasDivergence && <Badge variant="secondary" className="bg-red-50 text-red-600">Divergência</Badge>}
                             </div>
                         </div>
-                        <div className="space-y-3 p-5">
+                        <div className="space-y-3 p-4 sm:p-5">
                             {receiptSummary.map(({ key, item, lot, receivedQuantity, difference, notes }) => {
                                 const lotImage = getLotImage(lot);
 
@@ -589,12 +596,12 @@ function RepositionActivityCard({
                                     <div
                                         key={`receipt-${key}`}
                                         className={cn(
-                                            "rounded-xl border bg-card p-3",
+                                            "min-w-0 rounded-xl border bg-card p-4",
                                             difference !== 0 && "border-red-200 bg-red-50/50"
                                         )}
                                     >
-                                        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_minmax(220px,320px)] lg:items-center">
-                                            <div className="flex items-center gap-3">
+                                        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,1fr)_180px_minmax(220px,320px)] lg:items-center">
+                                            <div className="flex min-w-0 items-center gap-3 sm:col-span-2 lg:col-span-1">
                                                 <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
                                                     {lotImage ? (
                                                         <img src={lotImage} alt={lot.productName} className="h-full w-full object-cover" />
@@ -608,18 +615,18 @@ function RepositionActivityCard({
                                                     <div className="mt-0.5 text-xs text-muted-foreground">Lote {lot.lotNumber || "-"}</div>
                                                 </div>
                                             </div>
-                                            <div className="rounded-lg border bg-background px-3 py-2">
+                                            <div className="min-w-0 rounded-lg border bg-background px-3 py-2">
                                                 <div className="text-[11px] font-semibold uppercase text-muted-foreground">Enviado</div>
                                                 <div className="text-lg font-bold tabular-nums">{lot.quantityToMove}</div>
                                             </div>
-                                            <div>
+                                            <div className="min-w-0">
                                                 <Label className="text-[11px] font-semibold uppercase text-muted-foreground">Recebido</Label>
                                                 <Input
                                                     type="number"
                                                     min={0}
                                                     value={Number.isFinite(receivedQuantity) ? receivedQuantity : 0}
                                                     disabled={!canEditStep(3)}
-                                                    className="mt-1 h-10 text-right font-semibold"
+                                                    className="mt-1 h-10 w-full min-w-0 text-right font-semibold"
                                                     onChange={(event) => {
                                                         const value = Number(event.target.value);
                                                         setReceiptRows((current) => ({
@@ -636,8 +643,8 @@ function RepositionActivityCard({
                                         <Textarea
                                             value={notes}
                                             disabled={!canEditStep(3)}
-                                            rows={1}
-                                            className="mt-3"
+                                            rows={3}
+                                            className="mt-3 min-h-[92px] w-full min-w-0 resize-y"
                                             placeholder={difference === 0 ? "Observação opcional" : "Observação obrigatória para divergência"}
                                             onChange={(event) => {
                                                 setReceiptRows((current) => ({
@@ -653,11 +660,12 @@ function RepositionActivityCard({
                                 );
                             })}
                         </div>
-                        <div className="flex items-center justify-between border-t px-5 py-4">
+                        <div className="flex flex-col gap-3 border-t px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                             <div className={cn("text-sm font-medium", receiptHasDivergence ? "text-red-600" : "text-muted-foreground")}>
                                 {receiptHasDivergence ? "Recebimento com divergência" : "Recebimento sem divergência"}
                             </div>
                             <Button
+                                className="w-full sm:w-auto"
                                 disabled={!canEditStep(3) || receiptHasMissingDivergenceNotes}
                                 onClick={() => {
                                     if (receiptHasMissingDivergenceNotes) {
@@ -793,9 +801,10 @@ function RepositionActivityCard({
 }
 
 
-export function RepositionManagement() {
+export function RepositionManagement({ returnTo }: { returnTo?: string } = {}) {
+  const router = useRouter();
   const { activities, loading, cancelRepositionActivity, updateRepositionActivity, finalizeRepositionActivity } = useReposition();
-  const { permissions, user } = useAuth();
+  const { permissions, user, firebaseUser, isDefaultAdmin } = useAuth();
   const { toast } = useToast();
   const { products } = useProducts();
   const [activityToCancel, setActivityToCancel] = useState<RepositionActivity | null>(null);
@@ -808,6 +817,18 @@ export function RepositionManagement() {
   const canManagePreparation = permissions.reposition.prepareDispatch || permissions.stock.analysis.restock || permissions.stock.inventoryControl.transfer;
   const canFinalizeStep = permissions.reposition.finalize || permissions.stock.stockCount.approve || permissions.stock.inventoryControl.transfer || permissions.reposition.cancel;
   const canRevertSteps = permissions.reposition.cancel;
+  // Atendente do quiosque (só recebe): tem recebimento mas NENHUMA capacidade de
+  // GESTÃO da reposição (preparar/efetivar/cancelar/analisar). Não usamos
+  // canManagePreparation/canFinalizeStep aqui porque eles incluem permissões
+  // amplas de estoque (ex.: stockCount.approve) que um atendente pode ter sem ser
+  // gestor da reposição. Para ele, a tela mostra apenas atividades NA etapa de
+  // recebimento, e só enquanto estiverem nela.
+  const managesReposition =
+    permissions.reposition.prepareDispatch ||
+    permissions.reposition.finalize ||
+    permissions.reposition.cancel ||
+    permissions.stock.analysis.restock;
+  const isReceiveOnly = permissions.reposition.receive && !managesReposition;
 
   const handleToggleSeparated = async (activity: RepositionActivity) => {
     if (!activity.isSeparated) {
@@ -862,6 +883,22 @@ export function RepositionManagement() {
     transporterName: string,
     signatureDataUrl: string
   ) => {
+    let signatureUrl = signatureDataUrl;
+    if (signatureDataUrl.startsWith("data:")) {
+      if (!firebaseUser) throw new Error("Usuário não autenticado.");
+      const signatureFile = await dataUrlToFile(
+        signatureDataUrl,
+        `assinatura-transporte-${activity.id}.png`
+      );
+      const uploaded = await uploadOperationalFile({
+        user: firebaseUser,
+        kind: "reposition-signature",
+        targetId: activity.id,
+        file: signatureFile,
+      });
+      signatureUrl = uploaded.url;
+    }
+
     await updateRepositionActivity(activity.id, {
       status: "Aguardando recebimento",
       separationSignature: activity.separationSignature ?? {
@@ -871,7 +908,7 @@ export function RepositionManagement() {
       transportSignature: {
         signedBy: transporterName,
         signedAt: new Date().toISOString(),
-        dataUrl: signatureDataUrl,
+        dataUrl: signatureUrl,
       },
     });
     toast({
@@ -924,6 +961,12 @@ export function RepositionManagement() {
         ? "A reposição avançou para efetivação com divergência registrada."
         : "A reposição avançou para efetivação sem divergência.",
     });
+
+    // Veio do painel do colaborador (deep-link de recebimento): volta pra lá,
+    // onde a tarefa já aparece como concluída.
+    if (returnTo) {
+      router.push(returnTo);
+    }
   };
 
   if (loading) {
@@ -935,7 +978,11 @@ export function RepositionManagement() {
     )
   }
 
-  const activeActivities = activities.filter((activity: RepositionActivity) => activity.status !== 'Concluído' && activity.status !== 'Cancelada');
+  const activeActivities = activities.filter((activity: RepositionActivity) => {
+    if (activity.status === 'Concluído' || activity.status === 'Cancelada') return false;
+    if (isReceiveOnly && activity.status !== 'Aguardando recebimento') return false;
+    return true;
+  });
 
   if (activeActivities.length === 0) {
     return (
@@ -1062,14 +1109,9 @@ export function RepositionManagement() {
                   onReopenDispatch={setActivityToReopenDispatch}
                   onReopenAudit={setActivityToReopenAudit}
                   canManagePreparation={canManagePreparation}
-                  canReceive={
-                    canManagePreparation ||
-                    (permissions.reposition.receive &&
-                      (
-                        !!user?.assignedKioskIds?.includes(activity.kioskDestinationId) ||
-                        !!user?.unitIds?.includes(activity.kioskDestinationId)
-                      ))
-                  }
+                  canReceive={Boolean(user) && (
+                    canManagePreparation || permissions.reposition.receive
+                  ) && canAccessUnit(user!, activity.kioskDestinationId, { isDefaultAdmin })}
                   canFinalizeStep={canFinalizeStep}
                   canRevert={canRevertSteps}
                   products={products}

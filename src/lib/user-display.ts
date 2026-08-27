@@ -1,6 +1,6 @@
 import { type User } from '@/types';
 
-export type UserIdentityLike = Partial<Pick<User, 'id' | 'username' | 'email' | 'registrationIdBizneo' | 'registrationIdPdv'>>;
+export type UserIdentityLike = Partial<Pick<User, 'id' | 'username' | 'email' | 'hrEmployeeId' | 'registrationIdBizneo' | 'registrationIdPdv'>>;
 
 export function looksLikeOpaqueUserIdentifier(value?: string | null): boolean {
   if (!value) return true;
@@ -15,6 +15,7 @@ export function getUserDisplayName(user?: UserIdentityLike | null, fallbackId?: 
   const candidates = [
     user?.username,
     user?.email?.split('@')[0],
+    user?.hrEmployeeId,
     user?.registrationIdBizneo,
     user?.registrationIdPdv,
     fallbackId ?? undefined,
@@ -27,6 +28,7 @@ export function getUserDisplayName(user?: UserIdentityLike | null, fallbackId?: 
 export function pickUserIdentitySnapshot(id: string, data: Record<string, unknown>): UserIdentityLike {
   const username = typeof data.username === 'string' ? data.username : undefined;
   const email = typeof data.email === 'string' ? data.email : undefined;
+  const hrEmployeeId = typeof data.hrEmployeeId === 'string' ? data.hrEmployeeId : undefined;
   const registrationIdBizneo = typeof data.registrationIdBizneo === 'string' ? data.registrationIdBizneo : undefined;
   const registrationIdPdv = typeof data.registrationIdPdv === 'string' ? data.registrationIdPdv : undefined;
 
@@ -34,6 +36,7 @@ export function pickUserIdentitySnapshot(id: string, data: Record<string, unknow
     id,
     username,
     email,
+    hrEmployeeId,
     registrationIdBizneo,
     registrationIdPdv,
   };

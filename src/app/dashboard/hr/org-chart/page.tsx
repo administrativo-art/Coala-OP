@@ -28,14 +28,34 @@ import {
   Pencil,
   Save,
   ShieldCheck,
+  FileText,
+  ClipboardCheck,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { updateHrFunction, updateHrRole } from "@/features/hr/lib/client";
+import {
+  DEFAULT_ONBOARDING_DOCUMENTS,
+  normalizeOnboardingDocumentTemplates,
+  normalizeOnboardingStages,
+} from "@/lib/recruitment-onboarding";
+import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
+import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { JobDepartment, JobFunction, JobRole, User } from "@/types";
+import type {
+  CandidateStatus,
+  HrFormQuestion,
+  JobDepartment,
+  JobFunction,
+  JobRole,
+  OnboardingDocumentTemplate,
+  OnboardingStage,
+  OnboardingStageId,
+  RecruitmentStage,
+  User,
+} from "@/types";
 
 interface OrgNode {
   role: JobRole;
@@ -72,6 +92,278 @@ function nodeMatchesSearch(node: OrgNode, search: string): boolean {
   return node.children.some((c) => nodeMatchesSearch(c, search));
 }
 
+const STAGE_LABELS: Record<CandidateStatus, string> = {
+  applied: "Inscrição",
+  screening: "Triagem",
+  interview: "Entrevista",
+  technical_test: "Avaliação prática",
+  offer: "Proposta",
+  hired: "Contratação",
+  rejected: "Reprovado",
+  withdrawn: "Desistência",
+  talent_pool: "Banco de talentos",
+};
+
+function stageModelDiffersFromDefault(stages: RecruitmentStage[]) {
+  const defaults = normalizeRecruitmentStages(null);
+  return stages.some((stage, index) => {
+    const fallback = defaults[index];
+    return !fallback ||
+      stage.id !== fallback.id ||
+      stage.label !== fallback.label ||
+      stage.order !== fallback.order ||
+      stage.required !== fallback.required ||
+      stage.dueDays !== fallback.dueDays;
+  });
+}
+
+function RecruitmentStageModelEditor({
+  stages,
+  onChange,
+  accent = "indigo",
+}: {
+  stages: RecruitmentStage[];
+  onChange: (stages: RecruitmentStage[]) => void;
+  accent?: "indigo" | "sky";
+}) {
+  const accentClass = accent === "sky"
+    ? "focus:border-sky-400 focus:ring-sky-100"
+    : "focus:border-indigo-400 focus:ring-indigo-100";
+
+  function updateStage(stageId: CandidateStatus, patch: Partial<RecruitmentStage>) {
+    onChange(stages.map((stage) => stage.id === stageId ? { ...stage, ...patch } : stage));
+  }
+
+  function moveStage(stageId: CandidateStatus, direction: -1 | 1) {
+    const index = stages.findIndex((stage) => stage.id === stageId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= stages.length) return;
+    const next = [...stages];
+    const [item] = next.splice(index, 1);
+    next.splice(nextIndex, 0, item);
+    onChange(next.map((stage, stageIndex) => ({ ...stage, order: stageIndex })));
+  }
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-800">Modelo de etapas do recrutamento</p>
+        <p className="mt-1 text-xs text-slate-500">Usado como base ao abrir vaga para este cargo ou função.</p>
+      </div>
+      <div className="space-y-2">
+        {stages.map((stage, index) => (
+          <div key={stage.id} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[2rem_1fr_7rem_8rem] md:items-center">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-500">
+              {index + 1}
+            </div>
+            <div>
+              <input
+                value={stage.label}
+                onChange={(event) => updateStage(stage.id, { label: event.target.value })}
+                className={`h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              />
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{STAGE_LABELS[stage.id]}</p>
+            </div>
+            <label className="space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Prazo</span>
+              <input
+                type="number"
+                min="0"
+                value={stage.dueDays ?? ""}
+                onChange={(event) => updateStage(stage.id, { dueDays: event.target.value === "" ? null : Number(event.target.value) })}
+                placeholder="dias"
+                className={`h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              />
+            </label>
+            <div className="flex justify-end gap-1">
+              <button type="button" disabled={index === 0} onClick={() => moveStage(stage.id, -1)} className="rounded-lg px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                Subir
+              </button>
+              <button type="button" disabled={index === stages.length - 1} onClick={() => moveStage(stage.id, 1)} className="rounded-lg px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100 disabled:opacity-30">
+                Descer
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const ONBOARDING_LABELS: Record<OnboardingStageId, string> = {
+  documents: "Coleta",
+  document_review: "Revisão",
+  accountant: "Contador",
+  signature_preparation: "Preparar assinatura",
+  signature: "Assinatura",
+  formalization_validation: "Validação",
+  integration: "Acessos",
+  probation: "Experiência",
+  done: "Finalizado",
+};
+
+function OnboardingModelEditor({
+  stages,
+  documents,
+  onStagesChange,
+  onDocumentsChange,
+  accent = "indigo",
+}: {
+  stages: OnboardingStage[];
+  documents: OnboardingDocumentTemplate[];
+  onStagesChange: (stages: OnboardingStage[]) => void;
+  onDocumentsChange: (documents: OnboardingDocumentTemplate[]) => void;
+  accent?: "indigo" | "sky";
+}) {
+  const accentClass = accent === "sky"
+    ? "focus:border-sky-400 focus:ring-sky-100"
+    : "focus:border-indigo-400 focus:ring-indigo-100";
+
+  function updateStage(stageId: OnboardingStageId, patch: Partial<OnboardingStage>) {
+    onStagesChange(stages.map((stage) => stage.id === stageId ? { ...stage, ...patch } : stage));
+  }
+
+  function updateDocument(documentId: string, patch: Partial<OnboardingDocumentTemplate>) {
+    onDocumentsChange(documents.map((document) => document.id === documentId ? { ...document, ...patch } : document));
+  }
+
+  function addDocument() {
+    const nextId = `documento_${Date.now().toString(36)}`;
+    onDocumentsChange([
+      ...documents,
+      { id: nextId, label: "Novo documento", required: true, order: documents.length },
+    ]);
+  }
+
+  function removeDocument(documentId: string) {
+    onDocumentsChange(documents.filter((document) => document.id !== documentId).map((document, index) => ({ ...document, order: index })));
+  }
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-800">Modelo de integração</p>
+        <p className="mt-1 text-xs text-slate-500">Define as etapas e documentos ao aprovar contratação.</p>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        {stages.map((stage) => (
+          <div key={stage.id} className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{ONBOARDING_LABELS[stage.id]}</p>
+            <input
+              value={stage.label}
+              onChange={(event) => updateStage(stage.id, { label: event.target.value })}
+              className={`mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+            />
+            <label className="mt-2 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Prazo em dias
+              <input
+                type="number"
+                min="0"
+                value={stage.dueDays ?? ""}
+                onChange={(event) => updateStage(stage.id, { dueDays: event.target.value === "" ? null : Number(event.target.value) })}
+                className={`mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              />
+            </label>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-slate-700">Documentos exigidos</p>
+          <button type="button" onClick={addDocument} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-white">
+            Adicionar
+          </button>
+        </div>
+        <div className="space-y-2">
+          {documents.map((document) => (
+            <div key={document.id} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+              <input
+                value={document.label}
+                onChange={(event) => updateDocument(document.id, { label: event.target.value })}
+                className={`h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:ring-2 ${accentClass}`}
+              />
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={document.required !== false}
+                  onChange={(event) => updateDocument(document.id, { required: event.target.checked })}
+                />
+                Obrigatório
+              </label>
+              <button type="button" onClick={() => removeDocument(document.id)} className="rounded-lg px-2 py-1 text-xs font-bold text-slate-400 hover:bg-red-50 hover:text-red-500">
+                Remover
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type RecruitmentModelCarrier = {
+  formQuestions?: HrFormQuestion[];
+  pipelineStages?: RecruitmentStage[];
+  onboardingStages?: OnboardingStage[];
+  onboardingDocuments?: OnboardingDocumentTemplate[];
+};
+
+function getRecruitmentModelSummary(item: RecruitmentModelCarrier, options?: { useDefaultDocuments?: boolean }) {
+  const questions = item.formQuestions ?? [];
+  const visibleQuestions = questions.filter((question) => question.active !== false).length;
+  const pipelineStages = normalizeRecruitmentStages(item.pipelineStages);
+  const integrationStages = normalizeOnboardingStages(item.onboardingStages);
+  const documentSource = item.onboardingDocuments?.length
+    ? item.onboardingDocuments
+    : options?.useDefaultDocuments
+      ? DEFAULT_ONBOARDING_DOCUMENTS
+      : [];
+  const integrationDocuments = normalizeOnboardingDocumentTemplates(documentSource);
+
+  return {
+    questions: questions.length,
+    visibleQuestions,
+    pipelineStages: pipelineStages.length,
+    integrationStages: integrationStages.length,
+    integrationDocuments: integrationDocuments.length,
+  };
+}
+
+function ModelSummaryCards({ summary }: { summary: ReturnType<typeof getRecruitmentModelSummary> }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <FileText className="h-3.5 w-3.5" />
+          <span>Formulário</span>
+        </div>
+        <p className="text-sm font-bold text-slate-900">
+          {summary.visibleQuestions}/{summary.questions}
+        </p>
+        <p className="mt-0.5 text-[11px] text-slate-500">campos visíveis</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <ListChecks className="h-3.5 w-3.5" />
+          <span>Vaga</span>
+        </div>
+        <p className="text-sm font-bold text-slate-900">{summary.pipelineStages}</p>
+        <p className="mt-0.5 text-[11px] text-slate-500">etapas do Kanban</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <ClipboardCheck className="h-3.5 w-3.5" />
+          <span>Integração</span>
+        </div>
+        <p className="text-sm font-bold text-slate-900">{summary.integrationDocuments}</p>
+        <p className="mt-0.5 text-[11px] text-slate-500">{summary.integrationStages} etapas</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Role Detail Modal ──────────────────────────────────────────────────────
 
 function RoleDetailModal({
@@ -92,6 +384,8 @@ function RoleDetailModal({
   onClose: () => void;
 }) {
   if (!role) return null;
+  const roleModelSummary = getRecruitmentModelSummary(role, { useDefaultDocuments: true });
+
   return (
     <Dialog open={!!role} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-lg border border-slate-200 bg-white text-slate-900">
@@ -120,6 +414,13 @@ function RoleDetailModal({
           {role.description && (
             <p className="text-sm leading-relaxed text-slate-600">{role.description}</p>
           )}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">CBO do cargo</p>
+            <p className={cn("mt-1 font-semibold", role.cbo ? "text-slate-900" : "text-amber-700")}>
+              {role.cbo || "Não cadastrado — a geração de documentos trabalhistas será bloqueada."}
+            </p>
+          </div>
 
           {employees.length > 0 && (
             <div>
@@ -168,6 +469,52 @@ function RoleDetailModal({
               </div>
             </div>
           )}
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-500">
+                <FileText className="h-3 w-3" />
+                <span>Modelos vinculados</span>
+              </div>
+              <a
+                href="/dashboard/settings?department=pessoal&tab=recruitment"
+                className="text-xs font-bold text-pink-600 hover:text-pink-500"
+              >
+                Gerenciar
+              </a>
+            </div>
+            <ModelSummaryCards summary={roleModelSummary} />
+
+            {functions.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Funções</p>
+                {functions.map((item) => {
+                  const summary = getRecruitmentModelSummary(item);
+                  return (
+                    <div key={item.id} className="rounded-xl border border-sky-100 bg-sky-50/70 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-sky-800">{item.name}</span>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => onEditFunction(item)}
+                            className="text-[11px] font-bold text-sky-700 hover:text-sky-600"
+                          >
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 text-[11px] font-bold text-slate-600">
+                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.visibleQuestions}/{summary.questions} campos</span>
+                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.pipelineStages} etapas</span>
+                        <span className="rounded-full bg-white px-2 py-1 shadow-sm">{summary.integrationDocuments} docs</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {role.responsibilities && role.responsibilities.length > 0 && (
             <div>
@@ -257,11 +604,15 @@ function RoleEditModal({
 }) {
   const [values, setValues] = React.useState({
     name: "",
+    cbo: "",
     publicTitle: "",
     departmentId: "",
     parentId: "",
     defaultProfileId: "",
     loginRestricted: false,
+    pipelineStages: normalizeRecruitmentStages(null),
+    onboardingStages: normalizeOnboardingStages(null),
+    onboardingDocuments: normalizeOnboardingDocumentTemplates(DEFAULT_ONBOARDING_DOCUMENTS),
     isActive: true,
   });
 
@@ -269,11 +620,17 @@ function RoleEditModal({
     if (!role) return;
     setValues({
       name: role.name ?? "",
+      cbo: role.cbo ?? "",
       publicTitle: role.publicTitle ?? "",
       departmentId: role.departmentId ?? "",
       parentId: role.parentId ?? role.reportsTo ?? "",
       defaultProfileId: role.defaultProfileId ?? "",
       loginRestricted: role.loginRestricted ?? false,
+      pipelineStages: normalizeRecruitmentStages(role.pipelineStages),
+      onboardingStages: normalizeOnboardingStages(role.onboardingStages),
+      onboardingDocuments: normalizeOnboardingDocumentTemplates(
+        role.onboardingDocuments?.length ? role.onboardingDocuments : DEFAULT_ONBOARDING_DOCUMENTS
+      ),
       isActive: role.isActive !== false,
     });
   }, [role]);
@@ -287,6 +644,7 @@ function RoleEditModal({
     const department = departments.find((item) => item.id === values.departmentId);
     await onSave({
       name: values.name.trim(),
+      cbo: values.cbo.trim() || undefined,
       publicTitle: values.publicTitle.trim() || undefined,
       departmentId: values.departmentId || null,
       departmentName: department?.name ?? null,
@@ -294,6 +652,9 @@ function RoleEditModal({
       reportsTo: values.parentId || null,
       defaultProfileId: values.defaultProfileId || undefined,
       loginRestricted: values.loginRestricted,
+      pipelineStages: values.pipelineStages.map((stage, index) => ({ ...stage, order: index })),
+      onboardingStages: values.onboardingStages.map((stage, index) => ({ ...stage, order: index })),
+      onboardingDocuments: values.onboardingDocuments.map((document, index) => ({ ...document, order: index })),
       isActive: values.isActive,
     });
   }
@@ -316,14 +677,36 @@ function RoleEditModal({
               />
             </label>
             <label className="space-y-1.5 text-sm">
-              <span className="font-semibold text-slate-700">Título público</span>
+              <span className="font-semibold text-slate-700">CBO do cargo</span>
               <input
-                value={values.publicTitle}
-                onChange={(event) => setValues((current) => ({ ...current, publicTitle: event.target.value }))}
+                value={values.cbo}
+                onChange={(event) => {
+                  const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
+                  const cbo = digits.length > 4
+                    ? `${digits.slice(0, 4)}-${digits.slice(4)}`
+                    : digits;
+                  setValues((current) => ({ ...current, cbo }));
+                }}
+                inputMode="numeric"
+                maxLength={7}
+                pattern="\d{4}-\d{2}"
+                placeholder="Ex.: 5134-15"
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               />
+              <span className="text-xs text-slate-500">
+                Herdado por todas as funções vinculadas a este cargo e usado nos documentos.
+              </span>
             </label>
           </div>
+
+          <label className="block space-y-1.5 text-sm">
+            <span className="font-semibold text-slate-700">Título público</span>
+            <input
+              value={values.publicTitle}
+              onChange={(event) => setValues((current) => ({ ...current, publicTitle: event.target.value }))}
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            />
+          </label>
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1.5 text-sm">
@@ -360,13 +743,27 @@ function RoleEditModal({
               value={values.defaultProfileId}
               onChange={(event) => setValues((current) => ({ ...current, defaultProfileId: event.target.value }))}
               className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none focus:border-indigo-400"
+              required={values.isActive}
             >
-              <option value="">Sem perfil automático</option>
+              <option value="">Selecione um perfil</option>
               {profiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>{profile.name}</option>
               ))}
             </select>
+            <span className="text-xs text-slate-500">Obrigatório para cargos ativos. A função pode definir um perfil mais específico.</span>
           </label>
+
+          <RecruitmentStageModelEditor
+            stages={values.pipelineStages}
+            onChange={(pipelineStages) => setValues((current) => ({ ...current, pipelineStages }))}
+          />
+
+          <OnboardingModelEditor
+            stages={values.onboardingStages}
+            documents={values.onboardingDocuments}
+            onStagesChange={(onboardingStages) => setValues((current) => ({ ...current, onboardingStages }))}
+            onDocumentsChange={(onboardingDocuments) => setValues((current) => ({ ...current, onboardingDocuments }))}
+          />
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
@@ -435,6 +832,9 @@ function FunctionEditModal({
     departmentId: "",
     defaultProfileId: "",
     compatibleRoleIds: [] as string[],
+    pipelineStages: normalizeRecruitmentStages(null),
+    onboardingStages: normalizeOnboardingStages(null),
+    onboardingDocuments: [] as OnboardingDocumentTemplate[],
     isActive: true,
   });
 
@@ -446,6 +846,9 @@ function FunctionEditModal({
       departmentId: item.departmentId ?? "",
       defaultProfileId: item.defaultProfileId ?? "",
       compatibleRoleIds: item.compatibleRoleIds ?? [],
+      pipelineStages: normalizeRecruitmentStages(item.pipelineStages),
+      onboardingStages: normalizeOnboardingStages(item.onboardingStages),
+      onboardingDocuments: normalizeOnboardingDocumentTemplates(item.onboardingDocuments ?? []),
       isActive: item.isActive !== false,
     });
   }, [item]);
@@ -471,6 +874,11 @@ function FunctionEditModal({
       departmentName: department?.name ?? null,
       compatibleRoleIds: values.compatibleRoleIds,
       defaultProfileId: values.defaultProfileId || undefined,
+      pipelineStages: stageModelDiffersFromDefault(values.pipelineStages)
+        ? values.pipelineStages.map((stage, index) => ({ ...stage, order: index }))
+        : [],
+      onboardingStages: values.onboardingStages.map((stage, index) => ({ ...stage, order: index })),
+      onboardingDocuments: values.onboardingDocuments.map((document, index) => ({ ...document, order: index })),
       isActive: values.isActive,
     });
   }
@@ -521,6 +929,20 @@ function FunctionEditModal({
               ))}
             </div>
           </div>
+
+          <RecruitmentStageModelEditor
+            stages={values.pipelineStages}
+            accent="sky"
+            onChange={(pipelineStages) => setValues((current) => ({ ...current, pipelineStages }))}
+          />
+
+          <OnboardingModelEditor
+            stages={values.onboardingStages}
+            documents={values.onboardingDocuments}
+            accent="sky"
+            onStagesChange={(onboardingStages) => setValues((current) => ({ ...current, onboardingStages }))}
+            onDocumentsChange={(onboardingDocuments) => setValues((current) => ({ ...current, onboardingDocuments }))}
+          />
 
           <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
             <span>
@@ -585,6 +1007,7 @@ function DraggableDroppableCard({
   };
 
   const isDropTarget = isOver || isDraggingOver;
+  const modelSummary = getRecruitmentModelSummary(node.role, { useDefaultDocuments: true });
 
   const employeeFunctions = (employee: User) =>
     functions.filter((item) => {
@@ -597,7 +1020,7 @@ function DraggableDroppableCard({
     <div
       ref={(el) => { setDragRef(el); setDropRef(el); }}
       style={style}
-      className={`relative w-80 overflow-hidden rounded-[2rem] border bg-white text-slate-950 shadow-[0_18px_45px_rgba(15,23,42,0.14)] transition-shadow duration-200 group/card ${
+      className={`group/card relative w-64 overflow-hidden rounded-xl border bg-white text-slate-950 shadow-md transition-shadow duration-200 ${
         isDropTarget
           ? "border-pink-500 ring-4 ring-pink-500/15"
           : "border-slate-200 hover:border-pink-300"
@@ -628,6 +1051,9 @@ function DraggableDroppableCard({
             <p className="mt-0.5 text-[11px] font-black uppercase tracking-[0.16em] text-pink-500">
               {node.role.publicTitle || "Cargo interno"}
             </p>
+            {node.role.cbo ? (
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">CBO {node.role.cbo}</p>
+            ) : null}
           </button>
           <div className="flex shrink-0 items-center gap-1">
             {hasChildren && (
@@ -650,6 +1076,21 @@ function DraggableDroppableCard({
                 <Pencil className="h-4 w-4" />
               </button>
             )}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-sm">
+          <div className="rounded-xl bg-slate-50 px-2 py-2 text-center">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Campos</p>
+            <p className="mt-0.5 text-xs font-black text-slate-800">{modelSummary.visibleQuestions}/{modelSummary.questions}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-2 py-2 text-center">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Etapas</p>
+            <p className="mt-0.5 text-xs font-black text-slate-800">{modelSummary.pipelineStages}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-2 py-2 text-center">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Integração</p>
+            <p className="mt-0.5 text-xs font-black text-slate-800">{modelSummary.integrationDocuments}</p>
           </div>
         </div>
 
@@ -1067,26 +1508,26 @@ export default function OrgChartPage() {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="flex h-full flex-col gap-4 bg-[#eef5f2] p-6 text-slate-950">
+      <div className="personal-org-density flex h-full flex-col gap-2.5 bg-[#eef5f2] p-3 text-slate-950">
         {/* Header */}
         <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.28em] text-pink-500">Corporativo</p>
-              <h1 className="mt-0.5 text-3xl font-black uppercase leading-none tracking-tight text-slate-800">Organograma</h1>
+              <h1 className="mt-0.5 text-xl font-black uppercase leading-none tracking-tight text-slate-800">Organograma</h1>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleExpandAll}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
+                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
               >
                 Expandir todos
               </button>
               <button
                 type="button"
                 onClick={handleCollapseAll}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
+                className="h-7 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-pink-600"
               >
                 Recolher todos
               </button>
@@ -1105,7 +1546,7 @@ export default function OrgChartPage() {
                 placeholder="Buscar cargo ou colaborador..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-64 rounded-full border border-slate-200 bg-white py-2 pl-10 pr-4 text-slate-800 shadow-sm placeholder-slate-400 transition-all focus:border-pink-300 focus:outline-none focus:ring-4 focus:ring-pink-100"
+                className="h-8 w-56 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 shadow-sm placeholder-slate-400 transition-all focus:border-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-100"
               />
               {search && (
                 <button
@@ -1117,10 +1558,10 @@ export default function OrgChartPage() {
               )}
             </div>
 
-            <div className="flex items-center rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+            <div className="flex h-8 items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
               <button
                 onClick={() => setZoom((z) => Math.min(z + 0.15, 2))}
-                className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-md p-1.5 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
                 title="Zoom in"
               >
                 <ZoomIn className="h-4 w-4" />
@@ -1130,7 +1571,7 @@ export default function OrgChartPage() {
               </span>
               <button
                 onClick={() => setZoom((z) => Math.max(z - 0.15, 0.4))}
-                className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-md p-1.5 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
                 title="Zoom out"
               >
                 <ZoomOut className="h-4 w-4" />
@@ -1138,7 +1579,7 @@ export default function OrgChartPage() {
               <div className="mx-1 my-1 w-px bg-slate-200" />
               <button
                 onClick={resetView}
-                className="rounded-full p-2 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-md p-1.5 text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-950"
                 title="Centralizar"
               >
                 <Maximize className="h-4 w-4" />
@@ -1146,7 +1587,7 @@ export default function OrgChartPage() {
             </div>
 
             {canDrag && (
-              <div className="flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-3 py-2 text-xs font-bold text-pink-600">
+              <div className="flex h-8 items-center gap-1 rounded-lg border border-pink-200 bg-pink-50 px-2.5 text-[11px] font-bold text-pink-600">
                 <GripVertical className="h-3 w-3" />
                 <span>Arrastar para reorganizar</span>
               </div>
@@ -1156,7 +1597,7 @@ export default function OrgChartPage() {
 
         {/* Chart canvas */}
         <div
-          className="flex-1 cursor-grab overflow-hidden rounded-[2rem] border border-white bg-white/55 p-8 shadow-inner active:cursor-grabbing"
+          className="flex-1 cursor-grab overflow-hidden rounded-xl border border-white bg-white/55 p-4 shadow-inner active:cursor-grabbing"
           onPointerDown={handlePanPointerDown}
           onPointerMove={handlePanPointerMove}
           onPointerUp={handlePanPointerEnd}

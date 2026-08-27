@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { updateTaskDocument } from "@/features/tasks/lib/server";
+import { syncRepositionTaskSafely } from "@/features/reposition/lib/task-sync";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
+import { canAccessAnyUnit, canAccessUnit } from "@/lib/unit-access";
 import { type RepositionActivity } from "@/types";
 
 export const runtime = "nodejs";
@@ -24,12 +25,21 @@ function canReceiveActivity(
   context: Awaited<ReturnType<typeof requireUser>>,
   activity: RepositionActivity
 ) {
-  if (canManage(context)) return true;
   if (!context.permissions?.reposition?.receive) return false;
+  return canAccessUnit(context.userDoc, activity.kioskDestinationId, {
+    isDefaultAdmin: context.isDefaultAdmin,
+  });
+}
 
-  const assignedKioskIds = context.userDoc.assignedKioskIds ?? [];
-  const unitIds = context.userDoc.unitIds ?? [];
-  return assignedKioskIds.includes(activity.kioskDestinationId) || unitIds.includes(activity.kioskDestinationId);
+function canAccessActivity(
+  context: Awaited<ReturnType<typeof requireUser>>,
+  activity: Pick<RepositionActivity, "kioskOriginId" | "kioskDestinationId">
+) {
+  return canAccessAnyUnit(
+    context.userDoc,
+    [activity.kioskOriginId, activity.kioskDestinationId],
+    { isDefaultAdmin: context.isDefaultAdmin }
+  );
 }
 
 function isReceiptUpdate(body: Partial<RepositionActivity>) {
@@ -38,18 +48,6 @@ function isReceiptUpdate(body: Partial<RepositionActivity>) {
     body.status === "Recebido sem divergência" ||
     body.receiptSignature !== undefined
   );
-}
-
-function mapRepositionStatusToTaskStatus(status: RepositionActivity["status"]) {
-  if (status === "Concluído") return "completed" as const;
-  if (status === "Cancelada") return "rejected" as const;
-  if (
-    status === "Recebido com divergência" ||
-    status === "Recebido sem divergência"
-  ) {
-    return "in_progress" as const;
-  }
-  return "pending" as const;
 }
 
 function cleanUndefined<T extends Record<string, unknown>>(value: T) {
@@ -113,6 +111,13 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
       ...(snap.data() as Omit<RepositionActivity, "id">),
     } as RepositionActivity;
 
+    if (!canAccessActivity(context, currentActivity)) {
+      return NextResponse.json(
+        { error: "Reposição fora do seu escopo de unidades." },
+        { status: 403 }
+      );
+    }
+
     const hasManagePermission = canManage(context);
     const isAllowed =
       hasManagePermission ||
@@ -134,6 +139,19 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
           receiptSignature: body.receiptSignature,
         };
 
+    const nextOriginId = allowedBody.kioskOriginId ?? currentActivity.kioskOriginId;
+    const nextDestinationId = allowedBody.kioskDestinationId ?? currentActivity.kioskDestinationId;
+    if (
+      hasManagePermission &&
+      (!canAccessUnit(context.userDoc, nextOriginId, { isDefaultAdmin: context.isDefaultAdmin }) ||
+        !canAccessUnit(context.userDoc, nextDestinationId, { isDefaultAdmin: context.isDefaultAdmin }))
+    ) {
+      return NextResponse.json(
+        { error: "A origem e o destino precisam estar dentro do seu escopo de unidades." },
+        { status: 403 }
+      );
+    }
+
     const updateData = cleanUndefined({
       ...allowedBody,
       updatedAt: new Date().toISOString(),
@@ -149,13 +167,15 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
       ...updateData,
     } as RepositionActivity;
 
-    if (nextActivity.taskId && typeof updateData.status === "string") {
-      await updateTaskDocument({
+    if (typeof updateData.status === "string") {
+      const task = await syncRepositionTaskSafely({
         context,
-        taskId: nextActivity.taskId,
-        allowOriginStatusChange: true,
-        updates: { status: mapRepositionStatusToTaskStatus(nextActivity.status) },
+        activity: nextActivity,
+        label: "patch",
       });
+      if (task && nextActivity.taskId !== task.id) {
+        nextActivity.taskId = task.id;
+      }
     }
 
     return NextResponse.json({
@@ -196,6 +216,12 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
       id: snap.id,
       ...(snap.data() as Omit<RepositionActivity, "id">),
     };
+    if (!canAccessActivity(context, current)) {
+      return NextResponse.json(
+        { error: "Reposição fora do seu escopo de unidades." },
+        { status: 403 }
+      );
+    }
     if (current.status === "Concluído" || current.status === "Cancelada") {
       return NextResponse.json({ activity: current });
     }
@@ -253,25 +279,19 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
       });
     });
 
-    if (current.taskId) {
-      try {
-        await updateTaskDocument({
-          context,
-          taskId: current.taskId,
-          allowOriginStatusChange: true,
-          updates: { status: "rejected" },
-        });
-      } catch (taskError) {
-        console.error(
-          "[REPOSITION DELETE] Reposição cancelada, mas falhou ao atualizar tarefa vinculada",
-          {
-            activityId,
-            taskId: current.taskId,
-            error: taskError,
-          }
-        );
-      }
-    }
+    await syncRepositionTaskSafely({
+      context,
+      activity: {
+        ...(current as RepositionActivity),
+        status: "Cancelada",
+        updatedAt: cancelTimestamp,
+        updatedBy: {
+          userId: context.userDoc.id,
+          username: context.userDoc.username,
+        },
+      },
+      label: "cancel",
+    });
 
     if (current.requestId) {
       await dbAdmin.collection("repositionRequests").doc(current.requestId).set(

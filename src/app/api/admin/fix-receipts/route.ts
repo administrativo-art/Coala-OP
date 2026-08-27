@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbAdmin } from '@/lib/firebase-admin';
-import { verifyAuth } from '@/lib/verify-auth';
+import { requireUser } from '@/lib/auth-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  const decoded = await verifyAuth(request).catch(() => null);
-  if (!decoded) {
-     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const context = await requireUser(request).catch(() => null);
+  if (!context) {
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  }
+  if (!context.isDefaultAdmin) {
+    return NextResponse.json(
+      { error: 'Rotina de reparo restrita ao administrador padrão.' },
+      { status: 403 },
+    );
   }
 
   const ordersSnap = await dbAdmin.collection('purchase_orders')

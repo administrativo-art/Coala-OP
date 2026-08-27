@@ -2,6 +2,99 @@
 # https://firebase.google.com/docs/app-hosting/configure
 
 runConfig:
+  # Server-side PDF rendering temporarily holds the rendered document,
+  # letterhead image, and stamped PDF in memory at the same time.
+  memoryMiB: 1024
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
+
+env:
+  - variable: NODE_OPTIONS
+    value: "--max-old-space-size=4096"
+    availability:
+      - BUILD
+  - variable: BIZNEO_TOKEN
+    secret: BIZNEO_TOKEN
+  - variable: PDVLEGAL_COD_EMPRESA
+    secret: PDVLEGAL_COD_EMPRESA
+  - variable: PDVLEGAL_TOKEN
+    secret: PDVLEGAL_TOKEN
+  - variable: PDVLEGAL_USERNAME
+    secret: PDVLEGAL_USERNAME
+  - variable: PDVLEGAL_PASSWORD
+    secret: PDVLEGAL_PASSWORD
+  - variable: FORMS_SCHEDULER_SECRET
+    secret: FORMS_SCHEDULER_SECRET
+  - variable: FORMS_SCHEDULER_WORKSPACE_ID
+    value: coala
+  - variable: FORMS_ANALYTICS_JOB_SECRET
+    secret: FORMS_SCHEDULER_SECRET
+  - variable: FORMS_ANALYTICS_JOB_WORKSPACE_IDS
+    value: coala
+  - variable: FORMS_ANALYTICS_PERSONAL_RETENTION_DAYS
+    value: "365"
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+  - variable: RESEND_WEBHOOK_SECRET
+    secret: RESEND_WEBHOOK_SECRET
+  - variable: FINANCIAL_INBOUND_ADDRESS
+    value: "cobrancas@entrada.coalashakes.com"
+  - variable: ASO_INBOUND_DOMAIN
+    value: "entrada.coalashakes.com"
+  - variable: PAYMENT_DATA_ENCRYPTION_KEY
+    secret: PAYMENT_DATA_ENCRYPTION_KEY
+  - variable: INTER_CLIENT_ID
+    secret: INTER_CLIENT_ID
+  - variable: INTER_CLIENT_SECRET
+    secret: INTER_CLIENT_SECRET
+  - variable: INTER_CERTIFICATE_BASE64
+    secret: INTER_CERTIFICATE_BASE64
+  - variable: INTER_PRIVATE_KEY_BASE64
+    secret: INTER_PRIVATE_KEY_BASE64
+  - variable: INTER_WEBHOOK_SECRET
+    secret: INTER_WEBHOOK_SECRET
+  - variable: INTER_RECONCILIATION_SECRET
+    secret: INTER_RECONCILIATION_SECRET
+  - variable: INTER_ACCOUNT_NUMBER
+    secret: INTER_ACCOUNT_NUMBER
+  - variable: INTER_ENVIRONMENT
+    value: "production"
+  - variable: INTER_COBRANCA_ENVIRONMENT
+    value: "production"
+  - variable: INTER_COBRANCA_PAYER_CNPJ
+    value: "14276603000125"
+  - variable: INTER_COBRANCA_DUE_BUSINESS_DAYS
+    value: "2"
+  - variable: INTER_COBRANCA_NUM_DIAS_AGENDA
+    value: "30"
+  - variable: INTER_COBRANCA_MIN_CENTS
+    value: "250"
+  - variable: INTER_COBRANCA_BANK_ACCOUNT_ID
+    value: "PoulVqBxvW6XNgLEeoob"
+  - variable: INTER_STATEMENT_BANK_ACCOUNT_ID
+    value: "PoulVqBxvW6XNgLEeoob"
+  - variable: INTER_STATEMENT_INITIAL_LOOKBACK_DAYS
+    value: "7"
+  - variable: CASH_CLOSURE_JOB_SECRET
+    secret: CASH_CLOSURE_JOB_SECRET
+  - variable: CASH_CLOSURE_SENIOR_DIVERGENCE_CENTS
+    value: "1000"
+  - variable: CASH_DEPOSIT_RECONCILIATION_SECRET
+    secret: CASH_DEPOSIT_RECONCILIATION_SECRET
+  - variable: RESEND_FORMALIZATION_FROM
+    value: "RH Coala Shakes <formalizacao@coalashakes.com>"
+  - variable: RESEND_ACCESS_FROM
+    value: "Zé da Senha | Coala One <acesso@coalashakes.com>"
+  - variable: AUTENTIQUE_SANDBOX
+    value: "true"
+  - variable: AUTENTIQUE_API_TOKEN
+    secret: AUTENTIQUE_API_TOKEN
+  - variable: AUTENTIQUE_ALLOW_PRODUCTION
+    value: "false"
+  - variable: DOCX_TO_PDF_URL
+    value: "https://coala-gotenberg-qsrxz2aeqa-rj.a.run.app"
+  - variable: DOCX_TO_PDF_AUDIENCE
+    value: "https://coala-gotenberg-qsrxz2aeqa-rj.a.run.app"
+  - variable: NEXT_PUBLIC_APP_URL
+    value: "https://op.coalashakes.com"

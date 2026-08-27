@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { assertHrAccess } from '@/features/hr/lib/server-access';
 import { logAction } from '@/lib/log-action';
-import type { HrFormQuestion, HrQuestionType } from '@/types';
+import { normalizeRecruitmentQuestions, resolveJobOpeningQuestions } from '@/lib/recruitment-forms';
+import { normalizeRecruitmentStages } from '@/lib/recruitment-pipeline';
+import {
+  applyRecruitmentScoring,
+  getRecruitmentScoringBlockMessage,
+  RECRUITMENT_COMPOSITION_PRESETS,
+} from '@/lib/recruitment-scoring';
+import type { RecruitmentCompositionPreset } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,56 +19,11 @@ function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-const QUESTION_TYPES: HrQuestionType[] = [
-  'text',
-  'yes_no',
-  'select',
-  'multi_select',
-  'number_range',
-  'date',
-  'location',
-  'file_upload',
-];
-
-function normalizeFormQuestions(value: unknown): HrFormQuestion[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item): HrFormQuestion | null => {
-      if (!item || typeof item !== 'object') return null;
-      const data = item as Record<string, unknown>;
-      const text = typeof data.text === 'string' ? data.text.trim().slice(0, 240) : '';
-      const type = QUESTION_TYPES.includes(data.type as HrQuestionType)
-        ? data.type as HrQuestionType
-        : 'text';
-
-      if (!text) return null;
-
-      const rawConfig = data.config && typeof data.config === 'object' && !Array.isArray(data.config)
-        ? data.config as Record<string, unknown>
-        : undefined;
-      const options = Array.isArray(rawConfig?.options)
-        ? rawConfig.options
-          .filter((option): option is string => typeof option === 'string' && option.trim().length > 0)
-          .map(option => option.trim().slice(0, 120))
-        : [];
-
-      return {
-        id: typeof data.id === 'string' && data.id.trim() ? data.id.trim() : randomUUID(),
-        text,
-        type,
-        required: data.required === true,
-        scored: false,
-        weight: data.weight === 'low' || data.weight === 'high' ? data.weight : 'medium',
-        eliminatory: data.eliminatory === true,
-        tags: Array.isArray(data.tags)
-          ? data.tags.filter((tag): tag is string => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean)
-          : [],
-        config: options.length > 0 ? { options } : undefined,
-      };
-    })
-    .filter((item): item is HrFormQuestion => item !== null)
-    .slice(0, 30);
+function normalizeCompositionPreset(value: unknown, fallback: unknown): RecruitmentCompositionPreset {
+  const candidate = typeof value === 'string' ? value : fallback;
+  return typeof candidate === 'string' && candidate in RECRUITMENT_COMPOSITION_PRESETS
+    ? candidate as RecruitmentCompositionPreset
+    : 'role_70_function_30';
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -70,21 +32,170 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const { id } = await context.params;
   const body = await request.json();
-  const { title, description, requirements, location, workType, slots, status, closesAt, formQuestions } = body;
-
-  const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
-  if (title !== undefined) update.title = title;
-  if (description !== undefined) update.description = description;
-  if (requirements !== undefined) update.requirements = requirements;
-  if (formQuestions !== undefined) update.formQuestions = normalizeFormQuestions(formQuestions);
-  if (location !== undefined) update.location = location;
-  if (workType !== undefined) update.workType = workType;
-  if (slots !== undefined) update.slots = Number(slots);
-  if (status !== undefined) update.status = status;
-  if (closesAt !== undefined) update.closesAt = closesAt;
+  const {
+    title,
+    jobRoleId,
+    functionId,
+    unitId,
+    shiftDefinitionId,
+    description,
+    requirements,
+    benefits,
+    publicSalaryRange,
+    applyButtonLabel,
+    applicationSuccessMessage,
+    lgpdContractText,
+    location,
+    workType,
+    contractTypeLabel,
+    workSchedule,
+    slots,
+    status,
+    applicationStartAt,
+    applicationEndAt,
+    closesAt,
+    formQuestions,
+    compositionPreset,
+    scoringAlertJustification,
+    pipelineStages,
+  } = body;
 
   const currentDoc = await hrDbAdmin.collection('jobOpenings').doc(id).get();
   const before = currentDoc.data() ?? {};
+  const resolvedApplicationStartAt = applicationStartAt !== undefined ? applicationStartAt : before.applicationStartAt;
+  const resolvedApplicationEndAt = applicationEndAt !== undefined ? applicationEndAt : before.applicationEndAt;
+
+  if (resolvedApplicationStartAt && resolvedApplicationEndAt && String(resolvedApplicationEndAt) < String(resolvedApplicationStartAt)) {
+    return jsonError('Período de inscrição inválido.');
+  }
+
+  const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+  if (title !== undefined) update.title = title;
+  if (jobRoleId !== undefined) {
+    update.jobRoleId = jobRoleId;
+    const roleDoc = await hrDbAdmin.collection('jobRoles').doc(jobRoleId).get();
+    update.jobRoleName = roleDoc.data()?.name ?? null;
+  }
+  if (functionId !== undefined) {
+    update.functionId = functionId || null;
+    update.functionName = null;
+    if (functionId) {
+      const functionDoc = await hrDbAdmin.collection('jobFunctions').doc(functionId).get();
+      const functionData = functionDoc.data();
+      const compatibleRoleIds = Array.isArray(functionData?.compatibleRoleIds) ? functionData.compatibleRoleIds : [];
+      const resolvedJobRoleId = typeof jobRoleId === 'string'
+        ? jobRoleId
+        : typeof before.jobRoleId === 'string'
+          ? before.jobRoleId
+          : undefined;
+      if (resolvedJobRoleId && compatibleRoleIds.length > 0 && !compatibleRoleIds.includes(resolvedJobRoleId)) {
+        return jsonError('Função incompatível com o cargo selecionado.');
+      }
+      update.functionName = functionData?.name ?? null;
+    }
+  }
+  if (unitId !== undefined) {
+    update.unitId = unitId || null;
+    update.unitName = null;
+    if (unitId) {
+      const unitDoc = await dbAdmin.collection('dp_units').doc(unitId).get();
+      if (!unitDoc.exists || unitDoc.data()?.isArchived === true) {
+        return jsonError('Unidade indisponível para novas vagas.');
+      }
+      update.unitName = unitDoc.data()?.name ?? null;
+    }
+  }
+  if (shiftDefinitionId !== undefined) {
+    update.shiftDefinitionId = shiftDefinitionId || null;
+    update.shiftDefinitionName = null;
+    if (shiftDefinitionId) {
+      const shiftDoc = await dbAdmin.collection('dp_shiftDefinitions').doc(shiftDefinitionId).get();
+      update.shiftDefinitionName = shiftDoc.data()?.name ?? null;
+    }
+  }
+  if (description !== undefined) update.description = description;
+  if (requirements !== undefined) update.requirements = requirements;
+  if (benefits !== undefined) update.benefits = Array.isArray(benefits) ? benefits : [];
+  if (publicSalaryRange !== undefined) update.publicSalaryRange = publicSalaryRange || null;
+  if (applyButtonLabel !== undefined) {
+    update.applyButtonLabel = typeof applyButtonLabel === 'string' ? applyButtonLabel.trim() || null : null;
+  }
+  if (applicationSuccessMessage !== undefined) {
+    update.applicationSuccessMessage = typeof applicationSuccessMessage === 'string'
+      ? applicationSuccessMessage.trim().slice(0, 500) || null
+      : null;
+  }
+  if (lgpdContractText !== undefined) {
+    update.lgpdContractText = typeof lgpdContractText === 'string'
+      ? lgpdContractText.trim().slice(0, 4000) || null
+      : null;
+  }
+  const shouldRecomputeScoring =
+    formQuestions !== undefined ||
+    compositionPreset !== undefined ||
+    jobRoleId !== undefined ||
+    functionId !== undefined;
+  if (shouldRecomputeScoring) {
+    const resolvedJobRoleId = typeof update.jobRoleId === 'string'
+      ? update.jobRoleId
+      : typeof before.jobRoleId === 'string'
+        ? before.jobRoleId
+        : undefined;
+    const resolvedFunctionId = typeof update.functionId === 'string'
+      ? update.functionId
+      : typeof before.functionId === 'string'
+        ? before.functionId
+        : undefined;
+    const [roleDoc, functionDoc] = await Promise.all([
+      resolvedJobRoleId ? hrDbAdmin.collection('jobRoles').doc(resolvedJobRoleId).get() : Promise.resolve(null),
+      resolvedFunctionId ? hrDbAdmin.collection('jobFunctions').doc(resolvedFunctionId).get() : Promise.resolve(null),
+    ]);
+    const roleQuestions = roleDoc?.data()?.formQuestions;
+    const functionQuestions = functionDoc?.data()?.formQuestions;
+    const questionsForScoring = formQuestions !== undefined
+      ? normalizeRecruitmentQuestions(formQuestions)
+      : jobRoleId !== undefined || functionId !== undefined
+        ? resolveJobOpeningQuestions(undefined, roleQuestions, functionQuestions)
+        : normalizeRecruitmentQuestions(before.formQuestions);
+    const selectedPreset = normalizeCompositionPreset(compositionPreset, before.compositionPreset);
+    const scoringModel = applyRecruitmentScoring(questionsForScoring, selectedPreset);
+    const scoringBlock = getRecruitmentScoringBlockMessage(scoringModel.snapshot);
+    if (scoringBlock) return jsonError(scoringBlock);
+    const scoringWarnings = scoringModel.snapshot.alerts.filter(alert => alert.severity === 'warning');
+    const scoringWarningJustification = typeof scoringAlertJustification === 'string'
+      ? scoringAlertJustification.trim().slice(0, 500)
+      : '';
+    if (scoringWarnings.length > 0 && !scoringWarningJustification) {
+      return jsonError('Justifique os alertas de pontuação antes de salvar a vaga.');
+    }
+
+    update.formQuestions = scoringModel.questions;
+    update.compositionPreset = scoringModel.snapshot.preset;
+    update.recruitmentScoring = scoringModel.snapshot;
+    update.recruitmentScoringAlertAcknowledgement = scoringWarnings.length > 0
+      ? {
+          note: scoringWarningJustification,
+          alertCodes: scoringWarnings.map(alert => alert.code),
+          acknowledgedAt: update.updatedAt,
+          acknowledgedBy: access.decoded.uid,
+        }
+      : null;
+  }
+  if (pipelineStages !== undefined) update.pipelineStages = normalizeRecruitmentStages(pipelineStages);
+  if (location !== undefined) update.location = location;
+  if (workType !== undefined) update.workType = workType;
+  if (contractTypeLabel !== undefined) {
+    update.contractTypeLabel = typeof contractTypeLabel === 'string' ? contractTypeLabel.trim() || null : null;
+  }
+  if (workSchedule !== undefined) {
+    update.workSchedule = typeof workSchedule === 'string' ? workSchedule.trim() || null : null;
+  }
+  if (slots !== undefined) update.slots = Number(slots);
+  if (status !== undefined) update.status = status;
+  if (applicationStartAt !== undefined) update.applicationStartAt = applicationStartAt;
+  if (applicationEndAt !== undefined) update.applicationEndAt = applicationEndAt;
+  if (closesAt !== undefined) update.closesAt = closesAt;
+
   await hrDbAdmin.collection('jobOpenings').doc(id).update(update);
   await logAction({
     user_id: access.decoded.uid,
@@ -101,12 +212,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         status: before.status ?? null,
         slots: before.slots ?? null,
         location: before.location ?? null,
+        functionId: before.functionId ?? null,
+        unitId: before.unitId ?? null,
+        shiftDefinitionId: before.shiftDefinitionId ?? null,
       },
       after: {
         title: update.title ?? before.title ?? null,
         status: update.status ?? before.status ?? null,
         slots: update.slots ?? before.slots ?? null,
         location: update.location ?? before.location ?? null,
+        functionId: update.functionId ?? before.functionId ?? null,
+        unitId: update.unitId ?? before.unitId ?? null,
+        shiftDefinitionId: update.shiftDefinitionId ?? before.shiftDefinitionId ?? null,
       },
     },
     ttl_days: 365,

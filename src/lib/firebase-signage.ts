@@ -1,11 +1,13 @@
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
+import { initializeClientAppCheck } from "./firebase-app-check";
 import { assertFirebaseClientConfig, firebaseClientConfig } from "./firebase-client-config";
 
 assertFirebaseClientConfig();
 
 const app = !getApps().length ? initializeApp(firebaseClientConfig) : getApp();
+initializeClientAppCheck(app);
 
 export const signageDb = getFirestore(app, "coala-signage");
 export const signageStorage = getStorage(app);

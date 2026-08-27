@@ -40,7 +40,11 @@ export function FinancialPeriodAnalysisModal({ open, onOpenChange }: FinancialPe
     const { kiosks } = useKiosks();
     const { baseProducts } = useBaseProducts();
     const { products } = useProducts();
-    const { history: movementHistory, loading: historyLoading } = useMovementHistory();
+    const { history: movementHistory, loading: historyLoading, loaded: historyLoaded, loadHistory } = useMovementHistory();
+
+    useEffect(() => {
+      if (open && !historyLoaded) loadHistory();
+    }, [open, historyLoaded, loadHistory]);
 
     const [kioskId, setKioskId] = useState<string>('');
     const [period, setPeriod] = useState({ month: '', year: '' });

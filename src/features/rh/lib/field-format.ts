@@ -1,6 +1,52 @@
 import type { EmployeeFieldValue, FieldType, RhRole } from '@/types/rh';
-import { maskSensitiveText, canViewField } from '@/types/rh';
-import type { Timestamp } from 'firebase/firestore';
+import { maskSensitiveText } from '@/types/rh';
+import { formatFieldOptionLabel } from './field-option-labels';
+
+type SerializedTimestamp = {
+  seconds?: number;
+  nanoseconds?: number;
+  _seconds?: number;
+  _nanoseconds?: number;
+};
+
+function isValidDate(value: Date): boolean {
+  return Number.isFinite(value.getTime());
+}
+
+function parseFieldDate(value: unknown): Date | null {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return isValidDate(value) ? value : null;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsedDate = new Date(value);
+    return isValidDate(parsedDate) ? parsedDate : null;
+  }
+
+  if (typeof value !== 'object') {
+    return null;
+  }
+
+  const timestampValue = value as SerializedTimestamp & { toDate?: unknown };
+
+  if (typeof timestampValue.toDate === 'function') {
+    const parsedDate = timestampValue.toDate();
+    return parsedDate instanceof Date && isValidDate(parsedDate) ? parsedDate : null;
+  }
+
+  const seconds = timestampValue.seconds ?? timestampValue._seconds;
+  if (typeof seconds !== 'number') {
+    return null;
+  }
+
+  const rawNanoseconds = timestampValue.nanoseconds ?? timestampValue._nanoseconds ?? 0;
+  const nanoseconds = typeof rawNanoseconds === 'number' ? rawNanoseconds : Number(rawNanoseconds);
+  const parsedDate = new Date(seconds * 1000 + Math.floor(nanoseconds / 1_000_000));
+
+  return isValidDate(parsedDate) ? parsedDate : null;
+}
 
 export function formatFieldValue(
   fv: EmployeeFieldValue | undefined,
@@ -16,8 +62,9 @@ export function formatFieldValue(
   }
 
   if (type === 'date' && fv.value_date) {
-    const d = (fv.value_date as unknown as Timestamp).toDate?.() ?? new Date(fv.value_date as unknown as string);
-    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+    const parsedDate = parseFieldDate(fv.value_date);
+    if (!parsedDate) return '—';
+    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).format(parsedDate);
   }
 
   if (type === 'currency' && fv.value_number != null) {
@@ -34,10 +81,10 @@ export function formatFieldValue(
   }
 
   if (type === 'multi_select' && Array.isArray(fv.value_json)) {
-    return (fv.value_json as string[]).join(', ') || '—';
+    return (fv.value_json as string[]).map((value) => formatFieldOptionLabel(fieldKey, value)).join(', ') || '—';
   }
 
-  return fv.value_text ?? fv.value_text ?? '—';
+  return fv.value_text ? formatFieldOptionLabel(fieldKey, fv.value_text) : '—';
 }
 
 export function getProfileCompletionBadge(pct: number): {

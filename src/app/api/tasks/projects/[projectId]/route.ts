@@ -79,9 +79,10 @@ export async function DELETE(
       return NextResponse.json({ error: "Projeto não encontrado." }, { status: 404 });
     }
 
-    const [tasksSnap, statusesSnap] = await Promise.all([
+    const [tasksSnap, statusesSnap, subprojectsSnap] = await Promise.all([
       dbAdmin.collection("tasks").where("project_id", "==", projectId).limit(1).get(),
       dbAdmin.collection("task_statuses").where("project_id", "==", projectId).get(),
+      dbAdmin.collection("task_subprojects").where("project_id", "==", projectId).get(),
     ]);
 
     if (!tasksSnap.empty) {
@@ -93,6 +94,7 @@ export async function DELETE(
 
     const batch = dbAdmin.batch();
     batch.delete(ref);
+    subprojectsSnap.docs.forEach((doc) => batch.delete(doc.ref));
     statusesSnap.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
 

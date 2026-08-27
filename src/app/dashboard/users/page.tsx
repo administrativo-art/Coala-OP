@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// This route is kept only for old bookmarks and redirects to the active user management tab.
+// This route is kept only for old bookmarks and redirects to the canonical collaborator management area.
 export default function UsersPage() {
-  redirect("/dashboard/settings?department=pessoal&tab=users");
+  redirect("/dashboard/dp/collaborators");
 }

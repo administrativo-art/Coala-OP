@@ -28,6 +28,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { AccountPlanTreeSelect } from '@/components/purchasing/account-plan-tree-select';
+import { ResultCenterSelect } from '@/components/purchasing/result-center-select';
 import { PermissionGuard } from '@/components/permission-guard';
 import {
   Select,
@@ -155,6 +156,7 @@ export default function ConfirmPurchasePage() {
   const [resultCenterId, setResultCenterId] = useState('');
   const [freightAccountPlanId, setFreightAccountPlanId] = useState('');
   const [freightPaymentMode, setFreightPaymentMode] = useState<PurchaseFreightPaymentMode>('separate');
+  const [freightSupplierName, setFreightSupplierName] = useState('');
   const [trackingInfo, setTrackingInfo] = useState('');
   const [generalNotes, setGeneralNotes] = useState('');
   const [itemNotes, setItemNotes] = useState<Record<string, string>>({});
@@ -212,7 +214,10 @@ export default function ConfirmPurchasePage() {
     (!isCardPayment(paymentMethod) || !!selectedPaymentCard) &&
     !!accountPlanId &&
     !!resultCenterId &&
-    (deliveryFee <= 0 || !!freightAccountPlanId);
+    (deliveryFee <= 0 || (
+      !!freightAccountPlanId &&
+      (freightPaymentMode !== 'separate' || freightSupplierName.trim().length >= 2)
+    ));
 
   const handleSubmit = async () => {
     if (!quotation || !canSubmit) return;
@@ -238,6 +243,10 @@ export default function ConfirmPurchasePage() {
         freightAccountPlanId: deliveryFee > 0 ? freightAccountPlanId : undefined,
         freightAccountPlanName: deliveryFee > 0 ? selectedFreightAccountPlan?.name : undefined,
         freightPaymentMode: deliveryFee > 0 ? freightPaymentMode : undefined,
+        freightSupplierName:
+          deliveryFee > 0 && freightPaymentMode === 'separate'
+            ? freightSupplierName.trim()
+            : undefined,
         resultCenterId,
         resultCenterName: selectedResultCenter?.name,
         deliveryFee,
@@ -593,16 +602,12 @@ export default function ConfirmPurchasePage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Centro de resultado</Label>
-                <Select value={resultCenterId} onValueChange={setResultCenterId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o centro de resultado" /></SelectTrigger>
-                  <SelectContent>
-                    {(resultCenters ?? []).map((center) => (
-                      <SelectItem key={center.id} value={center.id}>
-                        {center.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ResultCenterSelect
+                  value={resultCenterId}
+                  onChange={setResultCenterId}
+                  options={resultCenters ?? []}
+                  placeholder="Selecione o centro de resultado"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -643,6 +648,21 @@ export default function ConfirmPurchasePage() {
                   Se o frete for quitado junto, a compra continua separando mercadoria e frete para classificação contábil.
                 </p>
               </div>
+
+              {deliveryFee > 0 && freightPaymentMode === 'separate' && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Favorecido do frete</Label>
+                  <Input
+                    value={freightSupplierName}
+                    onChange={(event) => setFreightSupplierName(event.target.value)}
+                    placeholder="Ex.: transportadora ou motorista"
+                    className={cn(freightSupplierName.trim().length < 2 && 'border-amber-400')}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Será criada uma despesa de frete separada e vinculada a esta compra.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Observações gerais */}

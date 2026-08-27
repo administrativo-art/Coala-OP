@@ -1,13 +1,14 @@
 import { create } from 'zustand';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import {
   collection, addDoc, updateDoc, deleteDoc, doc,
   serverTimestamp, writeBatch, increment, getDocs, deleteField
 } from 'firebase/firestore';
 import type {
-  DPUnit, DPUnitGroup, DPShiftDefinition,
+  DPUnit, DPUnitGroup, DPUnitOrganization, DPShiftDefinition,
   DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
 } from '@/types';
+import { canonicalOperationalUnitId } from '@/lib/dp-units';
 
 export type DPResourceKey = 'units' | 'shiftDefs' | 'schedules' | 'vacations' | 'calendars';
 export type DPResourceSource = 'idle' | 'snapshot' | 'fallback' | 'error';
@@ -24,6 +25,7 @@ export interface DPStoreState {
   // Dados
   units: DPUnit[];
   unitGroups: DPUnitGroup[];
+  unitOrganizations: DPUnitOrganization[];
   unitsLoading: boolean;
   unitsError: string | null;
   shiftDefinitions: DPShiftDefinition[];
@@ -44,6 +46,7 @@ export interface DPStoreState {
   // Actions (Setters para uso interno dos listeners)
   setUnits: (units: DPUnit[]) => void;
   setUnitGroups: (groups: DPUnitGroup[]) => void;
+  setUnitOrganizations: (organizations: DPUnitOrganization[]) => void;
   setUnitsLoading: (loading: boolean) => void;
   setUnitsError: (error: string | null) => void;
   setShiftDefinitions: (defs: DPShiftDefinition[]) => void;
@@ -67,6 +70,9 @@ export interface DPStoreState {
   addUnit: (data: Omit<DPUnit, 'id' | 'createdAt'>) => Promise<void>;
   updateUnit: (unit: DPUnit) => Promise<void>;
   deleteUnit: (unitId: string) => Promise<void>;
+  addUnitOrganization: (data: Omit<DPUnitOrganization, 'id' | 'createdAt'>) => Promise<void>;
+  updateUnitOrganization: (organization: DPUnitOrganization) => Promise<void>;
+  deleteUnitOrganization: (organizationId: string) => Promise<void>;
   addUnitGroup: (data: Omit<DPUnitGroup, 'id' | 'createdAt'>) => Promise<void>;
   updateUnitGroup: (group: DPUnitGroup) => Promise<void>;
   deleteUnitGroup: (groupId: string) => Promise<void>;
@@ -99,6 +105,7 @@ const initialResourceMeta: DPResourceMeta = {
 const initialState = {
   units: [],
   unitGroups: [],
+  unitOrganizations: [],
   unitsLoading: true,
   unitsError: null,
   shiftDefinitions: [],
@@ -176,12 +183,59 @@ function sanitizeFirestoreUpdate(value: unknown): unknown {
   return value;
 }
 
-export const useDPStore = create<DPStoreState>((set) => ({
+async function requestFormUnitProjectSync() {
+  try {
+    if (typeof window === 'undefined') return;
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const token = await user.getIdToken();
+    await fetch('/api/forms/projects/ensure-units', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: 'no-store',
+    });
+  } catch (error) {
+    console.warn('[DP] Falha ao sincronizar projetos de formulários por unidade.', error);
+  }
+}
+
+async function authorizedDpJson<T = Record<string, unknown>>(path: string, method: string, body?: unknown): Promise<T> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Usuário não autenticado.');
+
+  const token = await user.getIdToken();
+  const response = await fetch(path, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    body:
+      body === undefined
+        ? undefined
+        : JSON.stringify(body, (_key, value) => (value === undefined ? null : value)),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error ?? 'Falha ao salvar dados de unidades.');
+  }
+
+  return response.json().catch(() => ({})) as Promise<T>;
+}
+
+export const useDPStore = create<DPStoreState>((set, get) => ({
   ...initialState,
 
   // Setters
   setUnits: (units) => set({ units }),
   setUnitGroups: (unitGroups) => set({ unitGroups }),
+  setUnitOrganizations: (unitOrganizations) => set({ unitOrganizations }),
   setUnitsLoading: (unitsLoading) => set({ unitsLoading }),
   setUnitsError: (unitsError) => set((state) => ({ unitsError, bootstrapError: selectBootstrapError({ ...state, unitsError }) })),
   setShiftDefinitions: (shiftDefinitions) => set({ shiftDefinitions }),
@@ -236,22 +290,61 @@ export const useDPStore = create<DPStoreState>((set) => ({
 
   // CRUD Implementation
   addUnit: async (data) => {
-    await addDoc(collection(db, 'dp_units'), stripUndefinedForCreate({ ...data, createdAt: serverTimestamp() }) as Record<string, unknown>);
+    const payload = await authorizedDpJson<{ unit?: DPUnit }>('/api/dp/units', 'POST', data);
+    if (payload.unit) {
+      set((state) => ({ units: [...state.units, payload.unit!] }));
+    }
+    void requestFormUnitProjectSync();
   },
-  updateUnit: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_units', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
+  updateUnit: async ({ id, createdAt: _createdAt, ...data }) => {
+    await authorizedDpJson(`/api/dp/units/${encodeURIComponent(id)}`, 'PATCH', data);
+    set((state) => ({
+      units: state.units.map((unit) => (unit.id === id ? { ...unit, ...data, id } : unit)),
+    }));
+    void requestFormUnitProjectSync();
   },
   deleteUnit: async (unitId) => {
-    await deleteDoc(doc(db, 'dp_units', unitId));
+    await authorizedDpJson(`/api/dp/units/${encodeURIComponent(unitId)}`, 'DELETE');
+    set((state) => ({ units: state.units.filter((unit) => unit.id !== unitId) }));
+  },
+  addUnitOrganization: async (data) => {
+    const payload = await authorizedDpJson<{ organization?: DPUnitOrganization }>('/api/dp/unit-organizations', 'POST', data);
+    if (payload.organization) {
+      set((state) => ({ unitOrganizations: [...state.unitOrganizations, payload.organization!] }));
+    }
+  },
+  updateUnitOrganization: async ({ id, createdAt: _createdAt, ...data }) => {
+    await authorizedDpJson(`/api/dp/unit-organizations/${encodeURIComponent(id)}`, 'PATCH', data);
+    set((state) => ({
+      unitOrganizations: state.unitOrganizations.map((organization) =>
+        organization.id === id ? { ...organization, ...data, id } : organization
+      ),
+    }));
+  },
+  deleteUnitOrganization: async (organizationId) => {
+    await authorizedDpJson(`/api/dp/unit-organizations/${encodeURIComponent(organizationId)}`, 'DELETE');
+    set((state) => ({
+      unitOrganizations: state.unitOrganizations.filter((organization) => organization.id !== organizationId),
+    }));
   },
   addUnitGroup: async (data) => {
-    await addDoc(collection(db, 'dp_unitGroups'), stripUndefinedForCreate({ ...data, unitCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);
+    const payload = await authorizedDpJson<{ group?: DPUnitGroup }>('/api/dp/unit-groups', 'POST', data);
+    if (payload.group) {
+      set((state) => ({ unitGroups: [...state.unitGroups, payload.group!] }));
+    }
+    void requestFormUnitProjectSync();
   },
-  updateUnitGroup: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_unitGroups', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
+  updateUnitGroup: async ({ id, createdAt: _createdAt, ...data }) => {
+    await authorizedDpJson(`/api/dp/unit-groups/${encodeURIComponent(id)}`, 'PATCH', data);
+    set((state) => ({
+      unitGroups: state.unitGroups.map((group) => (group.id === id ? { ...group, ...data, id } : group)),
+    }));
+    void requestFormUnitProjectSync();
   },
   deleteUnitGroup: async (groupId) => {
-    await deleteDoc(doc(db, 'dp_unitGroups', groupId));
+    await authorizedDpJson(`/api/dp/unit-groups/${encodeURIComponent(groupId)}`, 'DELETE');
+    set((state) => ({ unitGroups: state.unitGroups.filter((group) => group.id !== groupId) }));
+    void requestFormUnitProjectSync();
   },
   addShiftDefinition: async (data) => {
     await addDoc(collection(db, 'dp_shiftDefinitions'), stripUndefinedForCreate({ ...data, createdAt: serverTimestamp() }) as Record<string, unknown>);
@@ -263,13 +356,37 @@ export const useDPStore = create<DPStoreState>((set) => ({
     await deleteDoc(doc(db, 'dp_shiftDefinitions', defId));
   },
   addSchedule: async (data) => {
+    const state = get();
+    const unit = data.unitId ? state.units.find((candidate) => candidate.id === data.unitId) : undefined;
+    if (!unit || unit.isArchived === true) {
+      throw new Error('Selecione uma unidade ativa para criar a escala.');
+    }
+    const canonicalUnitId = canonicalOperationalUnitId(unit.id, state.units);
+    const duplicate = state.schedules.some((schedule) =>
+      Number(schedule.year) === Number(data.year) &&
+      Number(schedule.month) === Number(data.month) &&
+      (!schedule.unitId || canonicalOperationalUnitId(schedule.unitId, state.units) === canonicalUnitId)
+    );
+    if (duplicate) {
+      throw new Error('Já existe uma escala para esta unidade ou para uma unidade incorporada neste período.');
+    }
     const ref = await addDoc(collection(db, 'dp_schedules'), stripUndefinedForCreate({ ...data, shiftCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);
     return ref.id;
   },
   updateSchedule: async ({ id, ...data }) => {
+    const existing = get().schedules.find((schedule) => schedule.id === id);
+    const existingUnit = existing?.unitId ? get().units.find((unit) => unit.id === existing.unitId) : undefined;
+    if (existingUnit?.isArchived === true) {
+      throw new Error('Escalas históricas de unidades incorporadas são somente para leitura.');
+    }
     await updateDoc(doc(db, 'dp_schedules', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
   },
   deleteSchedule: async (scheduleId) => {
+    const existing = get().schedules.find((schedule) => schedule.id === scheduleId);
+    const existingUnit = existing?.unitId ? get().units.find((unit) => unit.id === existing.unitId) : undefined;
+    if (existingUnit?.isArchived === true) {
+      throw new Error('Escalas históricas de unidades incorporadas não podem ser excluídas.');
+    }
     const shiftsSnap = await getDocs(collection(db, 'dp_schedules', scheduleId, 'shifts'));
     const batch = writeBatch(db);
     shiftsSnap.docs.forEach(d => batch.delete(d.ref));

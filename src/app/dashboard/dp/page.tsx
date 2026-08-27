@@ -6,7 +6,7 @@ import { ptBR } from 'date-fns/locale';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useDPBootstrap } from '@/hooks/use-dp-bootstrap';
-import { useDPShifts } from '@/hooks/use-dp-shifts';
+import { useDPSchedulesShifts } from '@/hooks/use-dp-schedules-shifts';
 import type { User, DPVacationRecord } from '@/types';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,6 +20,7 @@ import {
   MapPin, Palmtree, DollarSign,
 } from 'lucide-react';
 import { useState } from 'react';
+import { ActiveTerminationsCard } from '@/features/hr/termination/active-terminations-card';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,18 @@ function initials(name: string) {
 function fmtDate(d?: string) {
   if (!d) return '—';
   try { return format(parseISO(d), 'dd/MM/yy'); } catch { return d; }
+}
+
+function toDateValue(value: unknown): Date | null {
+  if (!value) return null;
+  if (typeof value === 'object' && typeof (value as { toDate?: unknown }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
 }
 
 // ─── Vacation Stats Cards ─────────────────────────────────────────────────────
@@ -44,7 +57,7 @@ function VacationStatCard({ title, value, icon, bg, color }: {
           <div className={color}>{icon}</div>
         </div>
         <div>
-          <div className="text-3xl font-bold">{value}</div>
+          <div className="text-2xl font-bold">{value}</div>
           <p className="text-sm text-muted-foreground">{title}</p>
         </div>
       </CardContent>
@@ -74,7 +87,7 @@ function UpcomingVacationsCard({ vacations, userMap }: {
       </CardHeader>
       <CardContent>
         {upcoming.length === 0 ? (
-          <div className="flex flex-col items-center py-8 text-muted-foreground gap-2">
+          <div className="flex flex-col items-center py-6 text-muted-foreground gap-2">
             <Plane className="h-10 w-10" />
             <p className="text-sm">Nenhuma férias agendada.</p>
           </div>
@@ -148,7 +161,17 @@ interface EnrichedShift {
   shiftName: string;
 }
 
-function ShiftScheduleCard({ shifts, units }: { shifts: EnrichedShift[]; units: { id: string; name: string }[] }) {
+function ShiftScheduleCard({
+  shifts,
+  units,
+  loading,
+  error,
+}: {
+  shifts: EnrichedShift[];
+  units: { id: string; name: string }[];
+  loading?: boolean;
+  error?: string | null;
+}) {
   const [selectedUnit, setSelectedUnit] = useState('all');
 
   const shiftsByDay = useMemo(() => {
@@ -177,7 +200,15 @@ function ShiftScheduleCard({ shifts, units }: { shifts: EnrichedShift[]; units: 
         </Select>
       </CardHeader>
       <CardContent className="flex-1 overflow-y-auto pt-4">
-        {shiftsByDay.length === 0 ? (
+        {loading ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Carregando turnos da semana...
+          </div>
+        ) : error ? (
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+            {error}
+          </div>
+        ) : shiftsByDay.length === 0 ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
             Nenhum turno agendado para esta semana.
           </div>
@@ -231,13 +262,17 @@ function ShiftScheduleCard({ shifts, units }: { shifts: EnrichedShift[]; units: 
 
 function BirthdayCard({ users }: { users: User[] }) {
   const birthdays = useMemo(() => {
-    const m = getMonth(new Date());
+    const now = new Date();
+    const m = getMonth(now);
+    const year = now.getFullYear();
     return users
-      .filter(u => u.birthDate && typeof (u.birthDate as any).toDate === 'function' && getMonth((u.birthDate as any).toDate()) === m)
+      .map((user) => {
+        const birthDate = toDateValue(user.birthDate);
+        return birthDate ? { user, date: new Date(year, birthDate.getMonth(), birthDate.getDate()) } : null;
+      })
+      .filter((entry): entry is { user: User; date: Date } => !!entry && getMonth(entry.date) === m)
       .sort((a, b) => {
-        const da = (a.birthDate as any).toDate().getDate();
-        const db = (b.birthDate as any).toDate().getDate();
-        return da - db;
+        return a.date.getDate() - b.date.getDate();
       });
   }, [users]);
 
@@ -258,17 +293,16 @@ function BirthdayCard({ users }: { users: User[] }) {
           </div>
         ) : (
           <div className="space-y-3">
-            {birthdays.map(u => {
-              const date = (u.birthDate as any).toDate() as Date;
+            {birthdays.map(({ user, date }) => {
               const today = isToday(date);
               return (
-                <div key={u.id} className="flex items-center justify-between">
+                <div key={user.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Avatar className={`h-8 w-8 ${today ? 'ring-2 ring-primary ring-offset-1' : ''}`}>
-                      <AvatarImage src={u.avatarUrl} />
-                      <AvatarFallback className="text-xs">{initials(u.username)}</AvatarFallback>
+                      <AvatarImage src={user.avatarUrl} />
+                      <AvatarFallback className="text-xs">{initials(user.username)}</AvatarFallback>
                     </Avatar>
-                    <p className="text-sm font-medium truncate max-w-[120px]">{u.username}</p>
+                    <p className="text-sm font-medium truncate max-w-[120px]">{user.username}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Cake className="h-3.5 w-3.5 text-pink-400" />
@@ -448,17 +482,23 @@ export default function DPDashboardPage() {
     vacationsError,
   } = useDPBootstrap();
 
-  // Encontra a escala do mês atual (ou o mais recente)
   const now = new Date();
-  const currentSchedule = useMemo(() => {
-    return (
-      schedules.find(s => s.month === now.getMonth() + 1 && s.year === now.getFullYear()) ??
-      schedules[0] ??
-      null
-    );
-  }, [schedules]);
-
-  const { shifts } = useDPShifts(currentSchedule?.id ?? null);
+  const currentMonthSchedules = useMemo(
+    () =>
+      schedules
+        .filter((schedule) => schedule.month === now.getMonth() + 1 && schedule.year === now.getFullYear())
+        .sort((a, b) => {
+          const left = units.find((unit) => unit.id === a.unitId)?.name ?? a.name ?? a.id;
+          const right = units.find((unit) => unit.id === b.unitId)?.name ?? b.name ?? b.id;
+          return left.localeCompare(right);
+        }),
+    [schedules, units]
+  );
+  const currentMonthScheduleIds = useMemo(
+    () => currentMonthSchedules.map((schedule) => schedule.id),
+    [currentMonthSchedules]
+  );
+  const { shifts, loading: shiftsLoading, error: shiftsError } = useDPSchedulesShifts(currentMonthScheduleIds);
 
   // Mapas de lookup
   const userMap = useMemo(() =>
@@ -480,10 +520,10 @@ export default function DPDashboardPage() {
       ...s,
       userName: userMap[s.userId]?.username ?? '?',
       avatarUrl: userMap[s.userId]?.avatarUrl,
-      unitName: unitMap[s.unitId]?.name ?? '?',
+      unitName: unitMap[s.unitId]?.name ?? currentMonthSchedules.find((schedule) => schedule.id === (s as any).scheduleId)?.name ?? '?',
       shiftName: s.shiftDefinitionId ? (shiftDefMap[s.shiftDefinitionId]?.name ?? s.startTime) : s.startTime,
     })),
-    [shifts, userMap, unitMap, shiftDefMap]
+    [currentMonthSchedules, shifts, userMap, unitMap, shiftDefMap]
   );
 
   // Semana atual
@@ -530,7 +570,7 @@ export default function DPDashboardPage() {
   }, [vacations]);
 
   if (!permissions.dp?.view) {
-    return <p className="text-muted-foreground p-6">Sem permissão para acessar o Departamento Pessoal.</p>;
+    return <p className="text-muted-foreground p-6">Sem permissão para acessar o departamento pessoal.</p>;
   }
 
   const dashboardLoading =
@@ -556,7 +596,8 @@ export default function DPDashboardPage() {
           <p className="mt-1 text-muted-foreground">{dashboardErrors[0]}</p>
         </div>
       )}
-      <div className="grid gap-8 grid-cols-1 lg:grid-cols-3 xl:grid-cols-4">
+      <ActiveTerminationsCard />
+      <div className="grid gap-5 grid-cols-1 lg:grid-cols-3 xl:grid-cols-4">
 
         {/* ── Coluna principal ── */}
         <div className="lg:col-span-2 xl:col-span-3 space-y-8">
@@ -591,7 +632,7 @@ export default function DPDashboardPage() {
           </div>
 
           {/* Escala da Semana */}
-          <ShiftScheduleCard shifts={weeklyShifts} units={units} />
+          <ShiftScheduleCard shifts={weeklyShifts} units={units} loading={shiftsLoading} error={shiftsError} />
         </div>
 
         {/* ── Coluna lateral ── */}

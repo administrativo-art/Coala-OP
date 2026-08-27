@@ -5,17 +5,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { brand } from "@/config/brand";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
 import { canViewPurchasing } from "@/lib/purchasing-permissions";
 import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
+import { hasFormalizationPermission } from "@/lib/hr-formalization-permissions";
 import {
   ChevronDown, X, LayoutDashboard, Package, ListTodo, Target,
   CalendarDays, Umbrella, LayoutGrid, MonitorPlay, Wallet,
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
-  LogOut, DollarSign, ShoppingCart, Network, Users, PackageCheck,
-  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat
+  DollarSign, ShoppingCart, Network, Users, PackageCheck,
+  ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
+  Files, Building2, FileStack, Banknote
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -67,6 +68,7 @@ const SECTION_COLORS: Record<string, SectionColor> = {
   com:   { text: "#7c3aed", bg: "#f5f3ff", border: "#7c3aed" }, // violet
   fin:   { text: "#059669", bg: "#f0fdf4", border: "#059669" }, // emerald
   dp:    { text: "#0284c7", bg: "#f0f9ff", border: "#0284c7" }, // sky
+  docs:  { text: "#0f766e", bg: "#f0fdfa", border: "#0f766e" }, // teal
   midia: { text: "#db2777", bg: "#fdf2f8", border: "#db2777" }, // pink
   cfg:   { text: "#64748b", bg: "#f8fafc", border: "#64748b" }, // slate
 };
@@ -78,7 +80,7 @@ interface SidebarProps {
 
 export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
   const pathname = usePathname();
-  const { user, permissions, logout } = useAuth();
+  const { user, permissions } = useAuth();
   const { pendingTaskCount } = useAllTasks();
   const canAccessPurchasing = canViewPurchasing(permissions);
   const [hoverExpanded, setHoverExpanded] = useState(false);
@@ -97,10 +99,10 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             label: "Formulários",
             href: "/dashboard/forms",
             icon: FileText,
-            show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.dp?.checklists?.view || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.manageTemplates,
+            show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.forms.global.manage_templates || permissions.forms.global.view_analytics,
             children: [
-              { label: "Painel", href: "/dashboard/forms", icon: LayoutGrid, show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.dp?.checklists?.view || permissions.dp?.checklists?.manageTemplates },
-              { label: "Meus formulários", href: "/dashboard/forms/mine", icon: ClipboardCheck, show: permissions.forms.global.view_all_projects || permissions.dp?.checklists?.operate || permissions.dp?.checklists?.view },
+              { label: "Painel", href: "/dashboard/forms", icon: LayoutGrid, show: permissions.forms.global.view_all_projects || permissions.forms.global.create_projects || permissions.forms.global.manage_templates || permissions.forms.global.view_analytics },
+              { label: "Meus formulários", href: "/dashboard/forms/mine", icon: ClipboardCheck, show: permissions.forms.global.view_all_projects },
             ],
           },
           {
@@ -165,12 +167,63 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         icon: Users,
         color: SECTION_COLORS.dp,
         items: [
+          { label: "Acompanhamento", href: "/dashboard/processes", icon: ListChecks, show: permissions.dp?.view },
           { label: "Painel DP", href: "/dashboard/dp", icon: LayoutGrid, show: permissions.dp?.view },
-          { label: "Colaboradores", href: "/dashboard/dp/collaborators", icon: Users, show: permissions.dp?.collaborators?.view },
+          {
+            label: "Recrutamento", href: "__group:recruitment", icon: Users, show: permissions.dp?.view || hasFormalizationPermission(permissions, "view"),
+            children: [
+              { label: "Gestão da vaga", href: "/dashboard/hr/recruitment", icon: LayoutGrid, show: permissions.dp?.view },
+              { label: "Banco de talentos", href: "/dashboard/hr/recruitment/talents", icon: Users, show: permissions.dp?.view },
+            ],
+          },
+          {
+            label: "Gestão do colaborador",
+            href: permissions.dp?.collaborators?.ownProfileOnly === true && user?.id
+              ? `/dashboard/dp/collaborators/${user.id}`
+              : "/dashboard/dp/collaborators",
+            icon: Users,
+            show: permissions.dp?.collaborators?.view,
+            children: [
+              { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: hasFormalizationPermission(permissions, "view") },
+              { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
+              { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
+              { label: "Uniforme", href: "/dashboard/stock/uniforms", icon: Shirt, show: permissions.stock.uniforms?.view },
+              { label: "Desligamento", href: "/dashboard/dp/terminations", icon: FileStack, show: permissions.dp?.view },
+            ],
+          },
           { label: "Organograma", href: "/dashboard/hr/org-chart", icon: Network, show: permissions.dp?.view },
-          { label: "Recrutamento", href: "/dashboard/hr/recruitment", icon: Users, show: permissions.dp?.view },
-          { label: "Escalas de Trabalho", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
-          { label: "Férias da equipe", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },
+        ],
+      },
+      {
+        key: "docs",
+        label: "Documentos",
+        icon: Files,
+        color: SECTION_COLORS.docs,
+        items: [
+          {
+            label: "Central de documentos",
+            href: "/dashboard/documents/generated",
+            icon: FileStack,
+            show: hasFormalizationPermission(permissions, "documents.view"),
+          },
+          {
+            label: "Modelos",
+            href: "/dashboard/documents/templates",
+            icon: FileStack,
+            show: hasFormalizationPermission(permissions, "templates.view"),
+          },
+          {
+            label: "Documentos da empresa",
+            href: "/dashboard/documents/company",
+            icon: Building2,
+            show: hasFormalizationPermission(permissions, "companyDocuments.view"),
+          },
+          {
+            label: "Documentos dos colaboradores",
+            href: "/dashboard/documents/collaborators",
+            icon: Users,
+            show: hasFormalizationPermission(permissions, "documents.view"),
+          },
         ],
       },
       {
@@ -189,9 +242,31 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         color: SECTION_COLORS.fin,
         items: [
           { label: "Painel Financeiro", href: "/dashboard/financial", icon: LayoutGrid, show: permissions.financial?.view && permissions.financial?.dashboard },
-          { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view },
-          { label: "Fluxo de Caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view },
-          { label: "Fluxo Financeiro", href: "/dashboard/financial/financial-flow", icon: DollarSign, show: permissions.financial?.financialFlow },
+          {
+            label: "Contas a pagar",
+            href: "__group:accounts-payable",
+            icon: ReceiptText,
+            show: permissions.financial?.expenses?.view
+              || permissions.financial?.audits?.view
+              || permissions.financial?.cardStatements?.view
+              || permissions.financial?.inbox?.view
+              || permissions.financial?.paymentRequests?.view,
+            children: [
+              { label: "Despesas", href: "/dashboard/financial/expenses", icon: ReceiptText, show: permissions.financial?.expenses?.view || permissions.financial?.audits?.view || permissions.financial?.inbox?.view || permissions.financial?.paymentRequests?.view },
+              { label: "Faturas de cartão", href: "/dashboard/financial/expenses/card-statements", icon: ReceiptText, show: permissions.financial?.cardStatements?.view },
+            ],
+          },
+          {
+            label: "Controle de caixa",
+            href: "__group:cash-control",
+            icon: Banknote,
+            show: permissions.financial?.cashClosures?.view || permissions.financial?.cashDeposits?.view,
+            children: [
+              { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures", icon: Wallet, show: permissions.financial?.cashClosures?.view },
+              { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
+            ],
+          },
+          { label: "Fluxo de caixa", href: "/dashboard/financial/cash-flow", icon: Wallet, show: permissions.financial?.cashFlow?.view || permissions.financial?.financialFlow },
           { label: "DRE", href: "/dashboard/financial/dre", icon: Landmark, show: permissions.financial?.dre },
           { label: "Patrimônio", href: "/dashboard/financial/assets", icon: PackageCheck, show: permissions.assets?.view },
         ],
@@ -215,7 +290,14 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           .map(i => (i.children ? { ...i, children: i.children.filter(c => c.show) } : i)),
       }))
       .filter(s => s.items.length > 0);
-  }, [canAccessPurchasing, pendingTaskCount, permissions]);
+  }, [
+    canAccessPurchasing,
+    pendingTaskCount,
+    permissions,
+    user?.employmentRelationshipType,
+    user?.id,
+    user?.isActive,
+  ]);
 
   // Flatten items + their children for active-route matching.
   const flatItems = useMemo(
@@ -310,9 +392,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  const userName = user?.username ?? user?.email?.split("@")[0] ?? "Usuário";
-  const userEmail = user?.email ?? "";
-  const userInitial = (user?.username?.[0] ?? user?.email?.[0] ?? "U").toUpperCase();
   const expanded = open || hoverExpanded;
 
   return (
@@ -332,27 +411,27 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         onMouseEnter={() => setHoverExpanded(true)}
         onMouseLeave={() => setHoverExpanded(false)}
         className={cn(
-          "fixed left-4 top-4 bottom-4 z-50 flex flex-col overflow-hidden border bg-white shadow-[0_18px_45px_rgba(15,23,42,0.12)] transition-all duration-300",
+          "fixed bottom-1.5 left-1.5 top-1.5 z-50 flex flex-col overflow-hidden border bg-white shadow-[0_14px_36px_rgba(15,23,42,0.10)] transition-all duration-300",
           open
             ? "translate-x-0 pointer-events-auto"
             : "-translate-x-[130%] pointer-events-none lg:translate-x-0 lg:pointer-events-auto"
         )}
-        style={{ width: expanded ? 336 : 84, borderRadius: 28 }}
+        style={{ width: expanded ? 216 : 46, borderRadius: 12 }}
       >
         {/* Logo area */}
-        <div className={cn("relative flex-shrink-0", expanded ? "px-6 pb-5 pt-6" : "px-3 pb-5 pt-7")}>
+        <div className={cn("relative flex-shrink-0", expanded ? "px-3 pb-2 pt-3" : "px-1.5 pb-2 pt-4")}>
           {expanded ? (
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-2xl bg-white">
+              <div className="grid h-7 w-7 place-items-center overflow-hidden rounded-lg bg-white">
                 <img src={brand.logo} alt={brand.name} className="max-h-8 max-w-8 object-contain" />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-xl font-semibold tracking-normal text-slate-900">Coala Shakes</p>
+                <p className="truncate text-sm font-semibold tracking-normal text-slate-900">Coala Shakes</p>
               </div>
             </div>
           ) : (
-            <div className="mx-auto grid h-12 w-12 place-items-center overflow-hidden rounded-2xl bg-white" title={brand.name}>
-              <img src={brand.logo} alt={brand.name} className="max-h-9 max-w-9 object-contain" />
+            <div className="mx-auto grid h-8 w-8 place-items-center overflow-hidden rounded-md bg-white" title={brand.name}>
+              <img src={brand.logo} alt={brand.name} className="max-h-6 max-w-6 object-contain" />
             </div>
           )}
           <button
@@ -364,10 +443,10 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           </button>
         </div>
 
-        {expanded ? null : <div className="mx-4 h-px bg-slate-200" />}
+        {expanded ? null : <div className="mx-2 h-px bg-slate-200" />}
 
-        <div className={cn("flex-shrink-0", expanded ? "px-4 pb-2" : "px-3 pb-2 pt-4")}>
-          <div className="space-y-2">
+        <div className={cn("flex-shrink-0", expanded ? "px-2 pb-1" : "px-1.5 pb-1 pt-2")}>
+          <div className="space-y-1">
             {permissions.dashboard?.view ? (
               <Link
                 href="/dashboard"
@@ -375,15 +454,15 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 className={cn(
                   "flex items-center transition-colors",
                   expanded
-                    ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
-                    : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
+                    ? "h-9 gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 hover:bg-stone-50"
+                    : "mx-auto h-8 w-8 justify-center rounded-md text-slate-800 hover:bg-stone-50",
                   pathname === "/dashboard"
                     ? "border border-stone-200 bg-stone-50 text-slate-950"
                     : ""
                 )}
                 title="Painel da gestão"
               >
-                <LayoutDashboard className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+                <LayoutDashboard className="h-4 w-4 flex-shrink-0 stroke-[2.2]" />
                 {expanded ? <span>Painel da gestão</span> : null}
               </Link>
             ) : null}
@@ -395,15 +474,15 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 className={cn(
                   "flex items-center transition-colors",
                   expanded
-                    ? "h-12 gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 hover:bg-stone-50"
-                    : "mx-auto h-12 w-12 justify-center rounded-2xl text-slate-800 hover:bg-stone-50",
+                    ? "h-9 gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 hover:bg-stone-50"
+                    : "mx-auto h-8 w-8 justify-center rounded-md text-slate-800 hover:bg-stone-50",
                   pathname === "/dashboard/collaborator"
                     ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
                     : ""
                 )}
                 title="Painel do colaborador"
               >
-                <ClipboardCheck className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+                <ClipboardCheck className="h-4 w-4 flex-shrink-0 stroke-[2.2]" />
                 {expanded ? <span>Painel do colaborador</span> : null}
               </Link>
             ) : null}
@@ -411,7 +490,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
         </div>
 
         {/* Accordion nav */}
-        <nav className={cn("flex-1 overflow-y-auto", expanded ? "px-4 py-1" : "px-3 py-1")}>
+        <nav className={cn("flex-1 overflow-y-auto", expanded ? "px-2 py-1" : "px-1.5 py-1")}>
           {expanded ? (
             navSections.map(section => {
               const isOpen = openSections.has(section.key);
@@ -423,7 +502,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                 <div
                   key={section.key}
                   className={cn(
-                    "mb-2 rounded-2xl border border-transparent transition-colors",
+                    "mb-1 rounded-xl border border-transparent transition-colors",
                     (isOpen || hasActive) && "border-stone-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
                   )}
                 >
@@ -431,11 +510,11 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                     type="button"
                     onClick={() => toggleSection(section.key)}
                     className={cn(
-                      "flex h-12 w-full items-center gap-4 rounded-2xl px-4 text-[17px] font-medium text-slate-800 transition-colors hover:bg-stone-50",
+                      "flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-xs font-medium text-slate-800 transition-colors hover:bg-stone-50",
                       (isOpen || hasActive) && "text-slate-950 hover:bg-transparent"
                     )}
                   >
-                    <SectionIcon className="h-6 w-6 flex-shrink-0 stroke-[2.2]" />
+                    <SectionIcon className="h-4.5 w-4.5 flex-shrink-0 stroke-[2.2]" />
                     <span className="flex-1 text-left">{section.label}</span>
                     {sectionBadgeCount > 0 ? (
                       <span className="grid min-w-[26px] place-items-center rounded-full bg-slate-900 px-2 py-0.5 text-xs font-bold text-white">
@@ -443,19 +522,21 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                       </span>
                     ) : (
                       <ChevronDown
-                        className={cn("h-5 w-5 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")}
+                        className={cn("h-4 w-4 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")}
                       />
                     )}
                   </button>
 
                   {isOpen && (
-                    <div className="mb-3 ml-7 mt-0.5 space-y-0.5 border-l border-stone-200 py-1 pl-5">
+                    <div className="mb-1.5 ml-4 mt-0.5 space-y-0 border-l border-stone-200 py-0.5 pl-2.5">
                       {section.items.map(item => {
                         const active = isItemActive(item);
                         const count = item.badge?.count ?? 0;
                         const hasChildren = !!item.children?.length;
                         const groupOpen = openGroups.has(item.href);
                         const childActive = item.children?.some(isItemActive) ?? false;
+                        const parentActive = active || childActive;
+                        const isVirtualGroup = item.href.startsWith("__group:");
 
                         const dot = (on: boolean) => (
                           <span
@@ -467,26 +548,47 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                         if (hasChildren) {
                           return (
                             <div key={item.href}>
-                              <button
-                                type="button"
-                                onClick={() => toggleGroup(item.href)}
+                              <div
                                 className={cn(
-                                  "relative flex min-h-9 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
-                                  childActive && "font-semibold text-slate-950 hover:text-slate-950"
+                                  "relative flex min-h-7 w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                  parentActive && "font-semibold text-slate-950 hover:text-slate-950"
                                 )}
                               >
-                                {childActive && (
+                                {parentActive && (
                                   <span
                                     className="absolute -left-[21px] top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-full"
                                     style={{ background: section.color.text }}
                                   />
                                 )}
-                                {dot(childActive)}
-                                <span className="flex-1 truncate text-left">{item.label}</span>
-                                <ChevronDown
-                                  className={cn("h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200", groupOpen && "rotate-180")}
-                                />
-                              </button>
+                                {dot(parentActive)}
+                                {isVirtualGroup ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroup(item.href)}
+                                    className="min-w-0 flex-1 truncate text-left"
+                                  >
+                                    {item.label}
+                                  </button>
+                                ) : (
+                                  <Link
+                                    href={item.href}
+                                    onClick={() => onOpenChange(false)}
+                                    className="min-w-0 flex-1 truncate text-left"
+                                  >
+                                    {item.label}
+                                  </Link>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleGroup(item.href)}
+                                  className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-stone-100 hover:text-slate-600"
+                                  aria-label={groupOpen ? `Recolher ${item.label}` : `Expandir ${item.label}`}
+                                >
+                                  <ChevronDown
+                                    className={cn("h-4 w-4 transition-transform duration-200", groupOpen && "rotate-180")}
+                                  />
+                                </button>
+                              </div>
 
                               {groupOpen && (
                                 <div className="ml-[7px] mt-0.5 space-y-0.5 border-l border-stone-200 py-0.5 pl-[19px]">
@@ -503,7 +605,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                                             type="button"
                                             onClick={() => toggleGroup(child.href)}
                                             className={cn(
-                                              "relative flex min-h-8 w-full items-center gap-2.5 rounded-xl px-3 py-1.5 text-[14px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                              "relative flex min-h-6 w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                                               (cActive || cChildActive) && "font-semibold text-slate-950 hover:text-slate-950"
                                             )}
                                           >
@@ -533,7 +635,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                                                     href={grandchild.href}
                                                     onClick={() => onOpenChange(false)}
                                                     className={cn(
-                                                      "relative flex min-h-7 items-center gap-2 rounded-xl px-3 py-1 text-[13px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                                      "relative flex min-h-6 items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                                                       gActive && "font-semibold text-slate-950 hover:text-slate-950"
                                                     )}
                                                   >
@@ -563,7 +665,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                                         href={child.href}
                                         onClick={() => onOpenChange(false)}
                                         className={cn(
-                                          "relative flex min-h-8 items-center gap-2.5 rounded-xl px-3 py-1.5 text-[14px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                                          "relative flex min-h-6 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                                           cActive && "font-semibold text-slate-950 hover:text-slate-950"
                                         )}
                                       >
@@ -593,7 +695,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                             href={item.href}
                             onClick={() => onOpenChange(false)}
                             className={cn(
-                              "relative flex min-h-9 items-center gap-3 rounded-xl px-3 py-1.5 text-[15px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
+                              "relative flex min-h-7 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition-colors hover:bg-stone-50 hover:text-slate-700",
                               active && "font-semibold text-slate-950 hover:text-slate-950"
                             )}
                           >
@@ -619,7 +721,7 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
               );
             })
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {navSections.map((section) => {
                 const Icon = section.icon;
                 const active = section.items.some(isItemOrChildActive);
@@ -638,12 +740,12 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
                       setHoverExpanded(true);
                     }}
                     className={cn(
-                      "relative mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-slate-800 transition-colors hover:bg-stone-50",
+                      "relative mx-auto flex h-8 w-8 items-center justify-center rounded-md text-slate-800 transition-colors hover:bg-stone-50",
                       active && "border border-stone-200 bg-stone-50 text-slate-950"
                     )}
                     title={section.label}
                   >
-                    <Icon className="h-6 w-6 stroke-[2.2]" />
+                    <Icon className="h-4 w-4 stroke-[2.2]" />
                     {badgeCount > 0 && (
                       <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
                     )}
@@ -654,37 +756,6 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           )}
         </nav>
 
-        <div className={cn("mx-4 h-px bg-slate-200", expanded ? "mb-4" : "mb-3")} />
-
-        {/* Footer */}
-        <div className={cn("flex-shrink-0 pb-5", expanded ? "px-5" : "px-3")}>
-          <div className={cn("flex items-center", expanded ? "gap-2.5" : "justify-center")}>
-            <div
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-              style={{ background: "linear-gradient(135deg, #f43f5e, #14b8a6)" }}
-            >
-              {userInitial}
-            </div>
-            {expanded ? (
-              <>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold leading-tight">{userName}</p>
-                  <p className="truncate text-[10px] text-muted-foreground leading-tight">{userEmail}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <ThemeToggle />
-                  <button
-                    onClick={logout}
-                    className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label="Sair"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
-        </div>
       </aside>
     </>
   );

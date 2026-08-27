@@ -1,20 +1,13 @@
 
 "use client";
 
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
 import { RestockAnalysis } from '@/components/restock-analysis';
+import { BackButton } from '@/components/navigation/back-button';
 
 export default function RestockAnalysisPage() {
     return (
         <div>
-            <Link href="/dashboard/stock/analysis" className="inline-block mb-4">
-                <Button variant="outline">
-                    <ArrowLeft className="mr-2" />
-                    Voltar para Análises
-                </Button>
-            </Link>
+            <BackButton fallbackHref="/dashboard/stock/analysis" label="Voltar para Análises" className="mb-4" />
             <RestockAnalysis />
         </div>
     );

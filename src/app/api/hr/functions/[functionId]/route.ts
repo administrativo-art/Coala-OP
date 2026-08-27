@@ -10,6 +10,10 @@ import {
   serializeHrValue,
 } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import {
+  applyRecruitmentScoring,
+  getRecruitmentScoringBlockMessage,
+} from "@/lib/recruitment-scoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,11 +38,38 @@ export async function PATCH(
     const payload = normalizeJobFunctionPatch(
       jobFunctionPatchSchema.parse(await request.json())
     );
+    if (payload.formQuestions !== undefined) {
+      const scoringBlock = getRecruitmentScoringBlockMessage(
+        applyRecruitmentScoring(payload.formQuestions, "role_100").snapshot
+      );
+      if (scoringBlock) {
+        return NextResponse.json({ error: scoringBlock }, { status: 400 });
+      }
+    }
+
     if (payload.parentId === functionId) {
       return NextResponse.json(
         { error: "Uma função não pode ser pai dela mesma." },
         { status: 400 }
       );
+    }
+    if (payload.salaryCalculation?.baseFunctionId === functionId) {
+      return NextResponse.json(
+        { error: "Uma função não pode usar a si mesma como base salarial." },
+        { status: 400 }
+      );
+    }
+    if (payload.salaryCalculation) {
+      const baseFunction = await hrDbAdmin
+        .collection("jobFunctions")
+        .doc(payload.salaryCalculation.baseFunctionId)
+        .get();
+      if (!baseFunction.exists) {
+        return NextResponse.json(
+          { error: "A função-base da regra salarial não existe." },
+          { status: 400 }
+        );
+      }
     }
     const current = existing.data() ?? {};
     const nextData = stripUndefined({

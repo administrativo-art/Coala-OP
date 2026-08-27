@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import type { HrFormQuestion } from '@/types';
+import { createCandidateStageHistoryEntry } from '@/lib/recruitment-pipeline';
+import {
+  getConditionallyVisibleRecruitmentQuestions,
+  getPublicRecruitmentQuestions,
+  hydrateRecruitmentQuestionDynamicOptions,
+} from '@/lib/recruitment-forms';
+import { applyRecruitmentScoring, calculateRecruitmentScore } from '@/lib/recruitment-scoring';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,6 +60,59 @@ function getQuestionOptions(question: HrFormQuestion) {
     : [];
 }
 
+function isActiveRecord(data: FirebaseFirestore.DocumentData) {
+  return data.isArchived !== true &&
+    data.active !== false &&
+    data.isActive !== false &&
+    data.status !== 'inactive' &&
+    data.status !== 'inativo' &&
+    data.status !== 'terminated';
+}
+
+function normalizeUnitName(value: unknown) {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+async function getPublicUnitOptions() {
+  const unitsSnap = await dbAdmin.collection('dp_units').get();
+  return Array.from(new Set(
+    unitsSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => normalizeUnitName(data.name))
+      .filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function cleanOptionLabel(value: unknown) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+async function getPublicRoleFunctionOptions() {
+  const [rolesSnap, functionsSnap] = await Promise.all([
+    hrDbAdmin.collection('jobRoles').orderBy('name').get(),
+    hrDbAdmin.collection('jobFunctions').orderBy('name').get(),
+  ]);
+
+  const options = [
+    ...rolesSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => cleanOptionLabel(data.publicTitle || data.name))
+      .filter(Boolean)
+      .map(label => `Cargo · ${label}`),
+    ...functionsSnap.docs
+      .map(doc => doc.data())
+      .filter(isActiveRecord)
+      .map(data => cleanOptionLabel(data.publicTitle || data.name))
+      .filter(Boolean)
+      .map(label => `Função · ${label}`),
+  ];
+
+  return Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
 function hasAnswer(value: unknown) {
   if (value === null || value === undefined) return false;
   if (typeof value === 'string') return value.trim().length > 0;
@@ -98,6 +160,18 @@ function normalizeFormAnswers(rawAnswers: unknown, questions: HrFormQuestion[]) 
       normalized[question.id] = Array.from(new Set(values));
       continue;
     }
+    if (question.type === 'number_range') {
+      const value = Number(raw);
+      if (!Number.isFinite(value)) throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = value;
+      continue;
+    }
+    if (question.type === 'date') {
+      const value = trimText(raw, 40);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`Resposta inválida para: ${question.text}`);
+      normalized[question.id] = value;
+      continue;
+    }
 
     normalized[question.id] = trimText(raw, 1000);
   }
@@ -110,12 +184,34 @@ function createQuestionSnapshot(questions: HrFormQuestion[]) {
     id: question.id,
     text: question.text,
     type: question.type,
+    sectionId: question.sectionId ?? null,
+    sectionTitle: question.sectionTitle ?? null,
+    sectionOrder: question.sectionOrder ?? null,
+    parentQuestionId: question.parentQuestionId ?? null,
+    subquestionOrder: question.subquestionOrder ?? null,
     required: question.required,
+    active: question.active !== false,
+    scored: question.scored,
     eliminatory: question.eliminatory,
     expectedAnswer: question.expectedAnswer === undefined ? null : question.expectedAnswer,
     weight: question.weight,
     config: question.config ?? null,
+    conditions: question.conditions ?? null,
+    scoring: question.scoring ?? null,
   }));
+}
+
+function isInsideApplicationWindow(data: FirebaseFirestore.DocumentData, now: string) {
+  const start = typeof data.applicationStartAt === 'string' ? data.applicationStartAt : null;
+  const end = typeof data.applicationEndAt === 'string'
+    ? data.applicationEndAt
+    : typeof data.closesAt === 'string'
+      ? data.closesAt
+      : null;
+
+  if (start && start > now) return false;
+  if (end && end < now) return false;
+  return true;
 }
 
 export async function POST(request: NextRequest) {
@@ -163,16 +259,41 @@ export async function POST(request: NextRequest) {
 
   const opening = snapshot.docs[0];
   const openingData = opening.data();
+  const now = new Date().toISOString();
+  if (!isInsideApplicationWindow(openingData, now)) {
+    return jsonError('O período de inscrições desta vaga está encerrado.', 403);
+  }
+  const [publicUnits, rolesFunctions] = await Promise.all([
+    getPublicUnitOptions(),
+    getPublicRoleFunctionOptions(),
+  ]);
   const formQuestions = Array.isArray(openingData.formQuestions)
-    ? openingData.formQuestions as HrFormQuestion[]
+    ? hydrateRecruitmentQuestionDynamicOptions(
+        getPublicRecruitmentQuestions(openingData.formQuestions as HrFormQuestion[]),
+        { units: publicUnits, rolesFunctions }
+      )
     : [];
+  const rawAnswerMap = rawFormAnswers && typeof rawFormAnswers === 'object' && !Array.isArray(rawFormAnswers)
+    ? rawFormAnswers as Record<string, unknown>
+    : {};
+  let visibleFormQuestions = getConditionallyVisibleRecruitmentQuestions(formQuestions, rawAnswerMap);
   let formAnswers: Record<string, unknown>;
   try {
-    formAnswers = normalizeFormAnswers(rawFormAnswers, formQuestions);
+    formAnswers = normalizeFormAnswers(rawFormAnswers, visibleFormQuestions);
+    visibleFormQuestions = getConditionallyVisibleRecruitmentQuestions(formQuestions, formAnswers);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'Respostas do formulário inválidas.');
   }
-  const formQuestionSnapshot = createQuestionSnapshot(formQuestions);
+  const formQuestionSnapshot = createQuestionSnapshot(visibleFormQuestions);
+  const recruitmentScoring = openingData.recruitmentScoring && typeof openingData.recruitmentScoring === 'object'
+    ? openingData.recruitmentScoring
+    : applyRecruitmentScoring(formQuestions, openingData.compositionPreset).snapshot;
+  const recruitmentScore = calculateRecruitmentScore({
+    questions: visibleFormQuestions,
+    answers: formAnswers,
+    snapshot: recruitmentScoring,
+    calculatedAt: now,
+  });
 
   const existingCandidate = await hrDbAdmin
     .collection('candidates')
@@ -180,7 +301,6 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .get();
 
-  const now = new Date().toISOString();
   const candidateRef = existingCandidate.empty
     ? hrDbAdmin.collection('candidates').doc()
     : existingCandidate.docs[0].ref;
@@ -192,11 +312,26 @@ export async function POST(request: NextRequest) {
     return jsonError('Este e-mail já tem uma candidatura para esta vaga.', 409);
   }
 
+  const historyEntry = createCandidateStageHistoryEntry({
+    fromStatus: null,
+    toStatus: 'applied',
+    action: 'created',
+    actorId: 'public',
+    actorEmail: null,
+    createdAt: now,
+  });
+
   const applicationPayload = {
     candidateId: candidateRef.id,
     jobOpeningId: opening.id,
     jobRoleId: openingData.jobRoleId,
     jobRoleName: openingData.jobRoleName,
+    functionId: openingData.functionId ?? null,
+    functionName: openingData.functionName ?? null,
+    unitId: openingData.unitId ?? null,
+    unitName: openingData.unitName ?? null,
+    shiftDefinitionId: openingData.shiftDefinitionId ?? null,
+    shiftDefinitionName: openingData.shiftDefinitionName ?? null,
     stage: 'applied',
     status: 'active',
     source,
@@ -205,9 +340,14 @@ export async function POST(request: NextRequest) {
     resumePath,
     formAnswers,
     formQuestionSnapshot,
+    recruitmentScoring,
+    recruitmentScore,
+    eligibilityStatus: recruitmentScore.status,
+    rankingEligible: recruitmentScore.rankingEligible,
     appliedAt: now,
     updatedAt: now,
     createdBy: 'public',
+    stageHistory: [historyEntry],
   };
 
   const candidatePayload = {
@@ -216,6 +356,12 @@ export async function POST(request: NextRequest) {
     phone: phone || null,
     jobRoleId: openingData.jobRoleId,
     jobRoleName: openingData.jobRoleName,
+    functionId: openingData.functionId ?? null,
+    functionName: openingData.functionName ?? null,
+    unitId: openingData.unitId ?? null,
+    unitName: openingData.unitName ?? null,
+    shiftDefinitionId: openingData.shiftDefinitionId ?? null,
+    shiftDefinitionName: openingData.shiftDefinitionName ?? null,
     jobOpeningId: opening.id,
     latestApplicationId: applicationRef.id,
     status: 'applied',
@@ -224,6 +370,11 @@ export async function POST(request: NextRequest) {
     resumeUrl,
     resumePath,
     formAnswers,
+    formQuestionSnapshot,
+    recruitmentScoring,
+    recruitmentScore,
+    eligibilityStatus: recruitmentScore.status,
+    rankingEligible: recruitmentScore.rankingEligible,
     rating: 0,
     consent: {
       accepted: true,
@@ -235,6 +386,7 @@ export async function POST(request: NextRequest) {
       ip: getClientKey(request),
       userAgent: request.headers.get('user-agent')?.slice(0, 300) || null,
     },
+    recruitmentHistory: FieldValue.arrayUnion(historyEntry),
     appliedAt: now,
     updatedAt: now,
     createdBy: 'public',

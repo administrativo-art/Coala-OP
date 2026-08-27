@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Plano completo para consulta e vinculação de previsões, solicitações, agendamentos e pagamentos</title>
+  <style>
+    @page { size: Letter portrait; margin: 1in; }
+    body {
+      font-family: Calibri, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.10;
+      color: #1f2937;
+      margin: 0;
+    }
+    .kicker {
+      margin: 0 0 4pt;
+      font-size: 10pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #2e74b5;
+    }
+    h1 {
+      margin: 0 0 8pt;
+      font-size: 24pt;
+      line-height: 1.05;
+      color: #0b2545;
+      font-weight: 700;
+    }
+    .subtitle {
+      margin: 0 0 12pt;
+      font-size: 13pt;
+      line-height: 1.25;
+      color: #4b5563;
+    }
+    .meta {
+      margin: 0 0 20pt;
+      font-size: 10pt;
+      color: #6b7280;
+    }
+    h2 {
+      margin: 16pt 0 8pt;
+      font-size: 16pt;
+      line-height: 1.15;
+      color: #2e74b5;
+      font-weight: 700;
+      page-break-after: avoid;
+    }
+    h3 {
+      margin: 12pt 0 6pt;
+      font-size: 13pt;
+      line-height: 1.15;
+      color: #2e74b5;
+      font-weight: 700;
+      page-break-after: avoid;
+    }
+    h4 {
+      margin: 8pt 0 4pt;
+      font-size: 12pt;
+      line-height: 1.15;
+      color: #1f4d78;
+      font-weight: 700;
+      page-break-after: avoid;
+    }
+    p {
+      margin: 0 0 6pt;
+      orphans: 3;
+      widows: 3;
+    }
+    ul, ol {
+      margin: 0 0 8pt 0.5in;
+      padding-left: 0.2in;
+    }
+    li {
+      margin: 0 0 4pt;
+      padding-left: 0.03in;
+    }
+    ol li {
+      padding-left: 0.12in;
+    }
+    .flow {
+      margin: 10pt 0 12pt;
+      padding: 8pt 10pt;
+      background: #f4f6f9;
+      color: #0b2545;
+      font-size: 10.5pt;
+      font-weight: 700;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .note {
+      margin: 10pt 0 12pt;
+      padding: 9pt 11pt;
+      background: #fff8e8;
+      border: 1pt solid #ead69a;
+      color: #5d4700;
+    }
+    blockquote {
+      margin: 8pt 0 12pt;
+      padding: 8pt 12pt;
+      background: #f8fafc;
+      border-left: 3pt solid #94a3b8;
+      color: #334155;
+    }
+    code {
+      font-family: "Courier New", monospace;
+      font-size: 9.5pt;
+      color: #0b2545;
+      background: #f2f4f7;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8pt 0 12pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 0.75pt solid #cfd6df;
+      padding: 6pt 7pt;
+      vertical-align: middle;
+      text-align: left;
+    }
+    th {
+      background: #f2f4f7;
+      color: #0b2545;
+      font-weight: 700;
+    }
+    .closing {
+      margin-top: 14pt;
+      padding-top: 10pt;
+      border-top: 1pt solid #d7dce3;
+      color: #4b5563;
+    }
+  </style>
+</head>
+<body>
+  <p class="kicker">Coala One · Plano funcional e técnico</p>
+  <h1>Plano completo para consulta e vinculação de previsões, solicitações, agendamentos e pagamentos</h1>
+  <p class="subtitle">Estrutura proposta para acompanhar o ciclo completo de uma obrigação financeira sem duplicar despesas, DRE ou fluxo de caixa.</p>
+  <p class="meta">Versão de trabalho · 19 de agosto de 2026 · Documento para análise e futura implementação</p>
+
+  <h2>1. Visão geral</h2>
+
+  <p>A funcionalidade proposta é permitir que, ao abrir uma despesa provisionada ou uma despesa real no Coala One, o usuário consiga responder imediatamente a perguntas como:</p>
+
+  <ul>
+    <li>Já existe uma solicitação de pagamento para esta despesa?</li>
+    <li>Alguém já pediu aprovação interna?</li>
+    <li>O pagamento já foi enviado ao Banco Inter?</li>
+    <li>Está aguardando aprovação no aplicativo do banco?</li>
+    <li>Já existe um agendamento?</li>
+    <li>Qual é a data agendada?</li>
+    <li>O valor agendado é igual ao valor da despesa?</li>
+    <li>O pagamento foi realizado?</li>
+    <li>A saída já apareceu no extrato?</li>
+    <li>Existe alguma divergência entre a previsão, o documento real, o agendamento e o valor efetivamente pago?</li>
+    <li>Há juros ou multa incluídos no pagamento?</li>
+    <li>Esse pagamento contempla apenas esta despesa ou várias despesas consolidadas?</li>
+  </ul>
+
+  <p>A ideia é muito boa porque resolve um dos maiores riscos operacionais do financeiro: a mesma obrigação aparecer em lugares diferentes e ser tratada como se fossem despesas distintas.</p>
+
+  <p>Hoje podemos ter, para uma única obrigação:</p>
+
+  <ol>
+    <li>Uma previsão mensal.</li>
+    <li>Um boleto ou documento real.</li>
+    <li>Uma despesa cadastrada.</li>
+    <li>Uma solicitação interna de pagamento.</li>
+    <li>Um pedido enviado ao Banco Inter.</li>
+    <li>Um agendamento bancário.</li>
+    <li>Uma saída efetivada no extrato.</li>
+    <li>Um comprovante.</li>
+    <li>Juros ou multa.</li>
+    <li>Um lançamento na DRE.</li>
+  </ol>
+
+  <p>Esses registros não representam dez despesas. Eles representam etapas diferentes do ciclo de uma mesma obrigação.</p>
+
+  <p>O objetivo central do plano é criar uma linha de continuidade entre essas etapas:</p>
+
+  <div class="flow">Previsão → Despesa real → Solicitação → Agendamento → Pagamento → Extrato</div>
+
+  <p>O sistema precisa reconhecer essa continuidade sem duplicar a DRE, sem duplicar o fluxo de caixa e sem permitir que um agendamento seja confundido com um pagamento já realizado.</p>
+
+  <p>Também é necessário preservar uma regra de segurança já definida: a consulta pode ser automática e a preparação pode ser feita no Coala One, mas a aprovação bancária final não é realizada pela IA. A autorização efetiva no Banco Inter continua sendo feita exclusivamente pelo responsável diretamente no aplicativo bancário.</p>
+
+  <h2>2. O problema que a funcionalidade resolve</h2>
+
+  <p>Uma despesa provisionada é uma estimativa de uma obrigação futura. Ela existe para antecipar o impacto esperado na gestão financeira e na DRE, mesmo antes de o documento definitivo chegar.</p>
+
+  <p>Por exemplo:</p>
+
+  <ul>
+    <li>Internet do Administrativo prevista em R$ 102,93.</li>
+    <li>DAS previsto em R$ 3.000,00.</li>
+    <li>Honorário contábil previsto em R$ 536,64.</li>
+    <li>Aluguel do Shopping do Automóvel previsto em R$ 3.500,00.</li>
+    <li>Salário de uma colaboradora previsto com base no salário-base e gratificação.</li>
+    <li>FGTS previsto com base na folha.</li>
+  </ul>
+
+  <p>Quando chega o documento real, a previsão deve ser conciliada. O valor real pode ser igual, maior ou menor. A previsão não deve permanecer somada à despesa real, pois isso duplicaria o custo.</p>
+
+  <p>Depois disso, pode surgir uma solicitação de pagamento. Essa solicitação também não é uma nova despesa. Ela apenas representa que alguém iniciou o processo operacional de pagamento.</p>
+
+  <p>Quando o pagamento é agendado no banco, ainda não existe necessariamente uma saída efetiva. O agendamento é uma intenção bancária com data futura. Ele deve influenciar a visão do fluxo de caixa, mas não deve ser tratado como pagamento liquidado.</p>
+
+  <p>Quando a saída aparece no extrato, temos a confirmação bancária. Nesse momento, o sistema pode efetivar a baixa, registrar o pagamento e vincular o comprovante.</p>
+
+  <p>Sem uma estrutura de relacionamento, cada uma dessas etapas pode parecer isolada. Isso traz riscos como:</p>
+
+  <ul>
+    <li>Solicitar pagamento de uma despesa que já está agendada.</li>
+    <li>Agendar novamente um boleto já enviado ao banco.</li>
+    <li>Manter uma previsão ativa depois que o documento real foi cadastrado.</li>
+    <li>Dar baixa em uma despesa diferente daquela que originou o pagamento.</li>
+    <li>Confundir um agendamento com uma saída efetiva.</li>
+    <li>Duplicar a despesa na DRE.</li>
+    <li>Contar simultaneamente a previsão, o documento e o agendamento no fluxo de caixa.</li>
+    <li>Perder a explicação de diferenças provocadas por juros, multa, desconto ou abatimento.</li>
+    <li>Não conseguir saber quem solicitou, quem aprovou internamente e quem realizou a aprovação final no banco.</li>
+    <li>Não conseguir explicar por que um valor previsto era diferente do valor efetivamente pago.</li>
+  </ul>
+
+  <p>A nova funcionalidade deve funcionar como uma camada de rastreabilidade. Ela não cria mais lançamentos por si só; ela organiza e relaciona os registros que já existem em cada etapa.</p>
+
+  <h2>3. Princípio fundamental: uma obrigação, vários registros</h2>
+
+  <p>O primeiro conceito do projeto deve ser a separação entre “obrigação financeira” e “registros do processo”.</p>
+
+  <p>A obrigação financeira é aquilo que a empresa precisa pagar. Os registros são as representações dessa obrigação ao longo do tempo.</p>
+
+  <p>Considere a internet da unidade administrativa em agosto de 2026:</p>
+
+  <ul>
+    <li>Previsão: R$ 102,93.</li>
+    <li>Boleto recebido: R$ 102,93.</li>
+    <li>Solicitação de pagamento criada: R$ 102,93.</li>
+    <li>Agendamento no Inter: R$ 102,93 para 20/08/2026.</li>
+    <li>Saída no extrato: R$ 102,93.</li>
+    <li>Despesa reconhecida na DRE: R$ 102,93.</li>
+  </ul>
+
+  <p>Não existem cinco despesas de R$ 102,93. Existe uma única obrigação de R$ 102,93 representada em cinco etapas.</p>
+
+  <p>Em outro cenário:</p>
+
+  <ul>
+    <li>Previsão: R$ 102,93.</li>
+    <li>Documento real: R$ 102,93.</li>
+    <li>Agendamento original: R$ 102,93.</li>
+    <li>Pagamento realizado em atraso: R$ 107,93.</li>
+    <li>Juros e multa: R$ 5,00.</li>
+  </ul>
+
+  <p>Nesse caso, continuam existindo uma obrigação principal e um encargo adicional. A DRE deve apresentar:</p>
+
+  <ul>
+    <li>Internet: R$ 102,93.</li>
+    <li>Juros e multas: R$ 5,00.</li>
+  </ul>
+
+  <p>O fluxo de caixa deve apresentar:</p>
+
+  <ul>
+    <li>Uma saída bancária: R$ 107,93.</li>
+  </ul>
+
+  <p>A consulta da despesa deve mostrar toda a história:</p>
+
+  <ul>
+    <li>A previsão foi criada.</li>
+    <li>O boleto confirmou o valor principal.</li>
+    <li>Houve uma solicitação.</li>
+    <li>O pagamento foi realizado com acréscimo.</li>
+    <li>R$ 5,00 foram registrados como encargo financeiro.</li>
+  </ul>
+
+  <p>Esse princípio evita que a equipe tente resolver o problema copiando valores ou criando despesas redundantes.</p>
+
+  <h2>4. Criar uma identidade estável para a obrigação</h2>
+
+  <p>Para relacionar todos os registros, cada obrigação precisa ter uma identidade estável. Essa identidade não pode depender somente do valor, porque valores iguais são comuns.</p>
+
+  <p>A TVN, por exemplo, pode cobrar valores iguais ou muito próximos para várias unidades. Se o sistema procurar somente por “R$ 101,32”, poderá encontrar mais de uma despesa possível.</p>
+
+  <p>A identidade deve ser composta por elementos como:</p>
+
+  <ul>
+    <li>Tipo da obrigação.</li>
+    <li>Série recorrente.</li>
+    <li>Competência.</li>
+    <li>Unidade.</li>
+    <li>Favorecido.</li>
+    <li>Número da parcela, quando houver.</li>
+    <li>Documento do favorecido.</li>
+    <li>Referência do contrato.</li>
+    <li>Identificação do boleto.</li>
+    <li>Identificação da folha ou guia.</li>
+    <li>Identificação do cartão ou da fatura.</li>
+  </ul>
+
+  <p>Podemos criar um campo chamado <code>obligationKey</code>, que funcionará como a chave estável da obrigação.</p>
+
+  <p>Exemplos conceituais:</p>
+
+  <ul>
+    <li><code>internet:administrativo:tvn:2026-08</code></li>
+    <li><code>internet:joao-paulo:tvn:2026-08</code></li>
+    <li><code>aluguel:tirirical:mateus:2026-08</code></li>
+    <li><code>das:ct-sorvetes:2026-08</code></li>
+    <li><code>salario:heucilene:2026-08</code></li>
+    <li><code>fgts:ct-sorvetes:2026-08</code></li>
+    <li><code>honorario-contabil:administrativo:maximus:2026-08</code></li>
+  </ul>
+
+  <p>Essa chave não precisa aparecer integralmente para o usuário. Ela é uma referência técnica interna.</p>
+
+  <p>A previsão e a despesa real da mesma competência devem compartilhar a mesma chave. Assim, quando o boleto real chegar, o sistema não dependerá apenas de descrição e valor para localizar a previsão.</p>
+
+  <p>A chave também ajuda quando existe diferença entre os valores:</p>
+
+  <ul>
+    <li>Previsão: R$ 100,00.</li>
+    <li>Documento real: R$ 102,93.</li>
+  </ul>
+
+  <p>Mesmo com valores diferentes, a série, a competência, a unidade e o favorecido indicam que se trata da mesma obrigação.</p>
+
+  <p>Para despesas não recorrentes, o sistema pode gerar uma chave única. Por exemplo, a compra do carrinho do Shopping do Automóvel não precisa seguir uma série mensal. Ela pode receber uma identidade específica criada no momento do cadastro.</p>
+
+  <h2>5. Estrutura de dados proposta</h2>
+
+  <p>O Coala One já possui uma estrutura de solicitações bancárias chamada <code>bankPaymentRequests</code>. Ela contém etapas como:</p>
+
+  <ul>
+    <li>Aguardando autorização financeira interna.</li>
+    <li>Pronto para envio.</li>
+    <li>Enviando.</li>
+    <li>Aguardando aprovação bancária.</li>
+    <li>Processando.</li>
+    <li>Pago.</li>
+    <li>Rejeitado.</li>
+    <li>Expirado.</li>
+    <li>Falhou.</li>
+    <li>Cancelado.</li>
+  </ul>
+
+  <p>Portanto, não é necessário criar um segundo sistema de solicitações. O melhor caminho é ampliar a estrutura existente.</p>
+
+  <p>Entretanto, um simples campo <code>expenseId</code> não é suficiente para todas as situações. Existem pagamentos consolidados nos quais um pagamento pode estar relacionado a mais de uma despesa. Também pode existir uma despesa paga por mais de uma saída, como parcelamentos ou pagamentos parciais.</p>
+
+  <p>Por isso, o plano deve trabalhar com três camadas.</p>
+
+  <h3>5.1. Despesas e previsões</h3>
+
+  <p>A coleção de despesas continua registrando:</p>
+
+  <ul>
+    <li>Previsões.</li>
+    <li>Despesas reais.</li>
+    <li>Parcelas.</li>
+    <li>Planos de contas.</li>
+    <li>Centros de resultado.</li>
+    <li>Favorecidos.</li>
+    <li>Individualizações.</li>
+    <li>Rateios.</li>
+    <li>Situação da despesa.</li>
+    <li>Competência.</li>
+    <li>Vencimento.</li>
+    <li>Valor.</li>
+    <li>Relação entre previsão e despesa real.</li>
+  </ul>
+
+  <p>A previsão deverá guardar:</p>
+
+  <ul>
+    <li><code>provisionType: forecast</code></li>
+    <li><code>provisionSeriesKey</code></li>
+    <li><code>provisionCompetence</code></li>
+    <li><code>obligationKey</code></li>
+    <li><code>status: provisioned</code></li>
+  </ul>
+
+  <p>A despesa real deverá guardar:</p>
+
+  <ul>
+    <li><code>provisionType: actual</code></li>
+    <li>A mesma <code>provisionSeriesKey</code>.</li>
+    <li>A mesma competência.</li>
+    <li>A mesma <code>obligationKey</code>.</li>
+    <li>O ID da previsão reconciliada.</li>
+    <li>O valor provisionado.</li>
+    <li>O valor real.</li>
+    <li>A diferença.</li>
+    <li>A situação da conciliação.</li>
+  </ul>
+
+  <h3>5.2. Solicitações e operações bancárias</h3>
+
+  <p>A estrutura de solicitações deve continuar representando o processo de pagamento. Ela deverá receber campos adicionais, como:</p>
+
+  <ul>
+    <li>Tipo de pagamento: Pix, boleto, transferência, débito automático ou outro.</li>
+    <li>Origem: criado no Coala One, identificado no Inter ou registrado manualmente.</li>
+    <li>Valor solicitado.</li>
+    <li>Data pretendida.</li>
+    <li>Data agendada.</li>
+    <li>Favorecido.</li>
+    <li>Documento do favorecido.</li>
+    <li>Linha digitável ou código de pagamento, quando aplicável.</li>
+    <li>Hash da linha digitável, para evitar armazenar ou exibir desnecessariamente o código completo.</li>
+    <li>Código da solicitação no banco.</li>
+    <li>Situação interna.</li>
+    <li>Situação bancária.</li>
+    <li>Data da última consulta.</li>
+    <li>Usuário que criou.</li>
+    <li>Usuário que aprovou internamente.</li>
+    <li>Data do envio ao banco.</li>
+    <li>Indicação de que depende de aprovação no aplicativo.</li>
+    <li>Data efetiva do pagamento.</li>
+    <li>Identificação da transação no extrato.</li>
+    <li>Comprovante.</li>
+  </ul>
+
+  <p>A expressão “autorizado” precisa ser apresentada com cuidado. O Coala One pode registrar uma aprovação interna, mas isso não significa que o pagamento foi autorizado no Banco Inter.</p>
+
+  <p>Os textos da interface devem diferenciar:</p>
+
+  <ul>
+    <li>“Aprovado internamente”.</li>
+    <li>“Enviado ao Banco Inter”.</li>
+    <li>“Aguardando sua aprovação no Inter”.</li>
+    <li>“Agendado pelo banco”.</li>
+    <li>“Pago e confirmado”.</li>
+  </ul>
+
+  <h3>5.3. Relações entre pagamentos e despesas</h3>
+
+  <p>Deve ser criada uma estrutura específica de vínculos, que pode ser chamada de <code>expensePaymentLinks</code>.</p>
+
+  <p>Cada vínculo representará a participação de uma despesa em uma solicitação, agendamento ou pagamento.</p>
+
+  <p>Campos recomendados:</p>
+
+  <ul>
+    <li>ID do vínculo.</li>
+    <li>ID da obrigação.</li>
+    <li>ID da previsão.</li>
+    <li>ID da despesa real.</li>
+    <li>ID da parcela.</li>
+    <li>ID da solicitação de pagamento.</li>
+    <li>ID do agendamento bancário.</li>
+    <li>ID da transação do extrato.</li>
+    <li>Valor principal vinculado.</li>
+    <li>Valor de juros.</li>
+    <li>Valor de multa.</li>
+    <li>Valor de desconto.</li>
+    <li>Valor total atribuído.</li>
+    <li>Papel do vínculo: principal, encargo, desconto ou pagamento parcial.</li>
+    <li>Origem do vínculo: direto, automático, sugerido ou confirmado manualmente.</li>
+    <li>Nível de confiança.</li>
+    <li>Usuário que confirmou.</li>
+    <li>Data da confirmação.</li>
+    <li>Situação: ativo, substituído, cancelado ou divergente.</li>
+    <li>Histórico de alterações.</li>
+  </ul>
+
+  <p>Essa estrutura permite relações muitos-para-muitos.</p>
+
+  <p>Um pagamento consolidado pode ter vários vínculos:</p>
+
+  <ul>
+    <li>FGTS da Aliny.</li>
+    <li>FGTS da Carliane.</li>
+    <li>FGTS da Heucilene.</li>
+    <li>Empréstimo consignado da Carliane.</li>
+    <li>Outros colaboradores.</li>
+  </ul>
+
+  <p>Da mesma forma, uma despesa parcelada pode ter vários pagamentos:</p>
+
+  <ul>
+    <li>Primeira parcela.</li>
+    <li>Segunda parcela.</li>
+    <li>Pagamento complementar.</li>
+    <li>Juros e multa.</li>
+  </ul>
+
+  <h2>6. Como funcionará a consulta dentro da despesa</h2>
+
+  <p>Ao abrir uma despesa provisionada, o sistema deverá executar uma consulta interna chamada, conceitualmente, de “contexto de pagamento”.</p>
+
+  <p>Essa consulta não deve olhar apenas para o ID atual. Ela deve montar a cadeia completa da obrigação.</p>
+
+  <p>O processo será:</p>
+
+  <ol>
+    <li>Identificar a despesa aberta.</li>
+    <li>Verificar se ela é previsão ou despesa real.</li>
+    <li>Obter sua <code>obligationKey</code>.</li>
+    <li>Localizar a previsão correspondente.</li>
+    <li>Localizar a despesa real correspondente.</li>
+    <li>Localizar solicitações vinculadas.</li>
+    <li>Localizar registros bancários sincronizados.</li>
+    <li>Localizar agendamentos.</li>
+    <li>Localizar transações do extrato.</li>
+    <li>Localizar comprovantes.</li>
+    <li>Verificar divergências.</li>
+    <li>Retornar um resumo único.</li>
+  </ol>
+
+  <p>A resposta poderá conter:</p>
+
+  <ul>
+    <li>Previsão de R$ 102,93.</li>
+    <li>Despesa real de R$ 102,93.</li>
+    <li>Solicitação criada em 18/08/2026.</li>
+    <li>Aprovada internamente.</li>
+    <li>Enviada ao Inter.</li>
+    <li>Aguardando aprovação bancária.</li>
+    <li>Agendada para 20/08/2026.</li>
+    <li>Ainda não localizada no extrato.</li>
+  </ul>
+
+  <p>Ou:</p>
+
+  <ul>
+    <li>Previsão de R$ 102,93.</li>
+    <li>Despesa real de R$ 102,93.</li>
+    <li>Saída de R$ 107,93 localizada.</li>
+    <li>Possíveis encargos de R$ 5,00.</li>
+    <li>Aguardando classificação entre juros e multa.</li>
+  </ul>
+
+  <p>Essa consulta deve ser feita prioritariamente nos registros locais do Coala One. Não é prudente consultar o Banco Inter toda vez que qualquer usuário abrir uma despesa.</p>
+
+  <p>A consulta direta ao banco deve ocorrer:</p>
+
+  <ul>
+    <li>Por ação explícita no botão “Atualizar situação”.</li>
+    <li>Por uma rotina segura de sincronização.</li>
+    <li>Quando o sistema precisar confirmar um estado bancário ainda pendente.</li>
+    <li>Com a permissão adequada.</li>
+    <li>Sempre em modo de consulta, sem autorizar pagamentos.</li>
+  </ul>
+
+  <h2>7. Apresentação na interface</h2>
+
+  <p>No detalhe de cada despesa deverá existir um bloco chamado “Situação do pagamento”.</p>
+
+  <p>Esse bloco deve ser compacto quando não houver nada relevante e detalhado quando houver um processo em andamento.</p>
+
+  <h3>7.1. Sem vínculo encontrado</h3>
+
+  <p>Exibição:</p>
+
+  <ul>
+    <li>Nenhuma solicitação ou agendamento localizado.</li>
+    <li>Valor da despesa.</li>
+    <li>Vencimento.</li>
+    <li>Última consulta.</li>
+  </ul>
+
+  <p>Dependendo das permissões, pode aparecer o botão “Criar solicitação de pagamento”.</p>
+
+  <p>Para uma previsão ainda sem documento real, o botão deve ser apresentado com cautela. O sistema pode permitir preparar uma solicitação, mas não deve encaminhar um valor estimado ao banco como se fosse definitivo sem confirmação.</p>
+
+  <p>Uma previsão sem documento real deve exibir:</p>
+
+  <ul>
+    <li>“Valor ainda provisionado”.</li>
+    <li>“Documento real não conciliado”.</li>
+    <li>“O envio bancário dependerá da confirmação do valor”.</li>
+  </ul>
+
+  <h3>7.2. Solicitação em andamento</h3>
+
+  <p>Exibição:</p>
+
+  <ul>
+    <li>Solicitação criada.</li>
+    <li>Valor solicitado.</li>
+    <li>Favorecido.</li>
+    <li>Criada por.</li>
+    <li>Data de criação.</li>
+    <li>Situação interna.</li>
+    <li>Botão “Ver solicitação”.</li>
+  </ul>
+
+  <p>Se estiver aguardando aprovação interna:</p>
+
+  <ul>
+    <li>“Aguardando aprovação financeira interna”.</li>
+  </ul>
+
+  <p>Se já estiver aprovada no Coala One:</p>
+
+  <ul>
+    <li>“Aprovada internamente”.</li>
+    <li>“Ainda não enviada ao banco”.</li>
+  </ul>
+
+  <h3>7.3. Aguardando aprovação no Inter</h3>
+
+  <p>Exibição:</p>
+
+  <ul>
+    <li>Enviada ao Banco Inter.</li>
+    <li>Código da solicitação.</li>
+    <li>Valor.</li>
+    <li>Data pretendida.</li>
+    <li>“Aguardando sua aprovação no aplicativo do Banco Inter”.</li>
+  </ul>
+
+  <p>Essa mensagem é importante porque deixa explícito que o Coala One e a IA não concluíram a aprovação bancária.</p>
+
+  <h3>7.4. Pagamento agendado</h3>
+
+  <p>Exibição:</p>
+
+  <ul>
+    <li>Agendado para 20/08/2026.</li>
+    <li>Valor agendado.</li>
+    <li>Favorecido.</li>
+    <li>Origem do agendamento.</li>
+    <li>Última atualização.</li>
+    <li>Situação bancária.</li>
+    <li>Botão “Atualizar situação”.</li>
+  </ul>
+
+  <div class="note"><strong>Aviso:</strong> agendamento não é confirmação de pagamento.</div>
+
+  <h3>7.5. Pagamento realizado</h3>
+
+  <p>Exibição:</p>
+
+  <ul>
+    <li>Pago.</li>
+    <li>Data da saída.</li>
+    <li>Valor principal.</li>
+    <li>Juros.</li>
+    <li>Multa.</li>
+    <li>Valor total.</li>
+    <li>Conta bancária.</li>
+    <li>Transação do extrato.</li>
+    <li>Comprovante.</li>
+    <li>Usuário ou processo responsável pela conciliação.</li>
+  </ul>
+
+  <h2>8. Status consolidados</h2>
+
+  <p>O sistema possui diversos estados técnicos, mas o usuário precisa enxergar um status consolidado e compreensível.</p>
+
+  <p>A ordem sugerida é:</p>
+
+  <ol>
+    <li>Sem processo de pagamento.</li>
+    <li>Aguardando documento real.</li>
+    <li>Solicitação preparada.</li>
+    <li>Aguardando aprovação interna.</li>
+    <li>Aprovado internamente.</li>
+    <li>Enviando ao banco.</li>
+    <li>Aguardando aprovação no Inter.</li>
+    <li>Agendado.</li>
+    <li>Processando.</li>
+    <li>Pago.</li>
+    <li>Pago com divergência.</li>
+    <li>Rejeitado.</li>
+    <li>Aprovação expirada.</li>
+    <li>Falha bancária.</li>
+    <li>Cancelado.</li>
+  </ol>
+
+  <p>Esses estados não devem alterar automaticamente a situação contábil da despesa.</p>
+
+  <p>Por exemplo:</p>
+
+  <ul>
+    <li>“Aguardando aprovação no Inter” não significa pago.</li>
+    <li>“Agendado” não significa pago.</li>
+    <li>“Processando” não significa pago.</li>
+    <li>Somente uma confirmação bancária adequada ou uma saída conciliada no extrato deve liquidar a despesa.</li>
+  </ul>
+
+  <p>O status também deve considerar múltiplos pagamentos:</p>
+
+  <ul>
+    <li>Parcialmente solicitado.</li>
+    <li>Parcialmente agendado.</li>
+    <li>Parcialmente pago.</li>
+    <li>Pago integralmente.</li>
+    <li>Pago acima do valor.</li>
+    <li>Pago abaixo do valor.</li>
+  </ul>
+
+  <h2>9. Regras de vinculação automática e sugestões</h2>
+
+  <p>O sistema deve trabalhar com três níveis de vínculo.</p>
+
+  <h3>9.1. Vínculo direto</h3>
+
+  <p>É o vínculo mais seguro. Ocorre quando a solicitação foi criada a partir da própria despesa ou previsão.</p>
+
+  <p>Nesse caso, o ID da obrigação já é conhecido. Não é necessário tentar descobrir pelo valor.</p>
+
+  <p>Exemplo:</p>
+
+  <ul>
+    <li>Usuário abre “Internet – Administrativo | TVN”.</li>
+    <li>Clica em “Criar solicitação”.</li>
+    <li>A solicitação nasce com o ID da obrigação.</li>
+    <li>Quando enviada ao banco, preserva essa identidade.</li>
+    <li>Quando o banco retorna o código, ele permanece ligado à mesma obrigação.</li>
+    <li>Quando a saída chega no extrato, o código bancário ajuda a concluir a cadeia.</li>
+  </ul>
+
+  <h3>9.2. Vínculo sugerido</h3>
+
+  <p>Ocorre quando o sistema encontra um agendamento ou pagamento sem relação interna direta.</p>
+
+  <p>A sugestão deve considerar:</p>
+
+  <ul>
+    <li>Documento do favorecido.</li>
+    <li>Nome do favorecido.</li>
+    <li>Linha digitável.</li>
+    <li>Identificador Pix.</li>
+    <li>Código da solicitação.</li>
+    <li>Valor.</li>
+    <li>Competência.</li>
+    <li>Vencimento.</li>
+    <li>Data agendada.</li>
+    <li>Unidade.</li>
+    <li>Série recorrente.</li>
+    <li>Descrição normalizada.</li>
+    <li>Parcela.</li>
+  </ul>
+
+  <p>Uma sugestão forte pode aparecer pré-selecionada, mas deve ser revisável.</p>
+
+  <h3>9.3. Vínculo ambíguo</h3>
+
+  <p>Ocorre quando há mais de uma despesa plausível.</p>
+
+  <p>Exemplo:</p>
+
+  <ul>
+    <li>TVN João Paulo: R$ 101,32.</li>
+    <li>TVN Tirirical: R$ 101,32.</li>
+    <li>Agendamento: R$ 101,32.</li>
+    <li>Descrição bancária: “Telecomunicações Nordeste”.</li>
+  </ul>
+
+  <p>O valor e o favorecido são iguais. Sem linha digitável, contrato, unidade ou referência específica, o sistema não pode escolher sozinho.</p>
+
+  <p>A interface deve mostrar:</p>
+
+  <ul>
+    <li>“Encontramos duas possíveis despesas.”</li>
+    <li>Relação das unidades.</li>
+    <li>Vencimentos.</li>
+    <li>Documentos associados.</li>
+    <li>Botão para confirmar o vínculo correto.</li>
+  </ul>
+
+  <p>O sistema nunca deve escolher uma unidade apenas porque ela aparece primeiro na lista.</p>
+
+  <h2>10. Consulta de agendamentos encontrados no Banco Inter</h2>
+
+  <p>A integração atual do sistema possui um fluxo estruturado de solicitações de pagamento, especialmente para operações Pix. A consulta geral de agendamentos de boleto deve ser tratada como uma etapa própria.</p>
+
+  <p>Antes da implementação completa, será necessário confirmar quais dados a integração bancária disponibiliza para cada modalidade:</p>
+
+  <ul>
+    <li>Pix.</li>
+    <li>Boleto.</li>
+    <li>Transferência.</li>
+    <li>Pagamento agendado.</li>
+    <li>Débito automático.</li>
+    <li>Pagamento já processado.</li>
+    <li>Pagamento pendente de aprovação.</li>
+    <li>Pagamento rejeitado ou expirado.</li>
+  </ul>
+
+  <p>Se o Banco Inter disponibilizar uma listagem de agendamentos, o sistema poderá sincronizá-la para uma coleção local.</p>
+
+  <p>Cada registro sincronizado deverá guardar:</p>
+
+  <ul>
+    <li>Modalidade.</li>
+    <li>Código bancário.</li>
+    <li>Valor.</li>
+    <li>Data agendada.</li>
+    <li>Situação.</li>
+    <li>Favorecido.</li>
+    <li>Documento.</li>
+    <li>Linha digitável mascarada ou hash.</li>
+    <li>Conta de origem.</li>
+    <li>Data da última consulta.</li>
+    <li>Resposta bancária relevante.</li>
+    <li>Origem da sincronização.</li>
+  </ul>
+
+  <p>Se determinado tipo de agendamento não estiver disponível na API utilizada pelo sistema, o Coala One deve informar isso claramente. Não pode afirmar que “não há agendamento” quando, na verdade, não conseguiu consultar aquela modalidade.</p>
+
+  <p>Os resultados possíveis devem ser distintos:</p>
+
+  <ul>
+    <li>Nenhum agendamento localizado.</li>
+    <li>Nenhum agendamento localizado entre os dados disponíveis.</li>
+    <li>Consulta bancária indisponível.</li>
+    <li>Modalidade não suportada pela integração.</li>
+    <li>Agendamento localizado.</li>
+    <li>Mais de um agendamento possível.</li>
+  </ul>
+
+  <p>Essa diferença é importante para não gerar uma falsa sensação de segurança.</p>
+
+  <h2>11. Comportamento quando existe apenas a previsão</h2>
+
+  <p>Uma previsão não é uma obrigação bancária definitiva. O valor pode mudar quando o documento real chegar.</p>
+
+  <p>Por isso, a regra mais prudente é:</p>
+
+  <ul>
+    <li>A previsão pode receber um vínculo com uma solicitação preparada.</li>
+    <li>A previsão pode receber um vínculo com um agendamento identificado.</li>
+    <li>Mas o sistema deve destacar que o documento real ainda não foi conciliado.</li>
+    <li>O envio ou agendamento baseado exclusivamente em previsão deve exigir confirmação explícita.</li>
+    <li>Se o processo depender de boleto, a linha digitável real precisa existir antes do envio.</li>
+    <li>Se depender de Pix fixo e valor recorrente, o valor ainda deve ser confirmado.</li>
+  </ul>
+
+  <p>Quando o documento real for cadastrado, o sistema usa a <code>obligationKey</code> para substituir a previsão.</p>
+
+  <p>O vínculo de pagamento não é perdido. Ele passa a apontar para:</p>
+
+  <ul>
+    <li>A obrigação original.</li>
+    <li>A previsão histórica.</li>
+    <li>A despesa real vigente.</li>
+  </ul>
+
+  <p>Se o valor real for igual ao previsto, o processo continua normalmente.</p>
+
+  <p>Se o valor real for diferente, aplica-se uma regra conforme o estágio do pagamento.</p>
+
+  <h3>Solicitação ainda em rascunho</h3>
+
+  <p>O valor pode ser atualizado, com registro no histórico.</p>
+
+  <h3>Aguardando aprovação interna</h3>
+
+  <p>O valor pode ser atualizado, mas a aprovação anterior deve ser invalidada ou reiniciada.</p>
+
+  <h3>Aprovado internamente, mas não enviado</h3>
+
+  <p>A alteração exige nova aprovação interna.</p>
+
+  <h3>Enviado ao banco</h3>
+
+  <p>O sistema não deve alterar silenciosamente. Deve mostrar uma divergência.</p>
+
+  <h3>Agendado</h3>
+
+  <p>O sistema deve manter o agendamento original intacto e mostrar:</p>
+
+  <ul>
+    <li>Valor do documento real.</li>
+    <li>Valor agendado.</li>
+    <li>Diferença.</li>
+    <li>Necessidade de cancelar, substituir ou complementar.</li>
+  </ul>
+
+  <h3>Pago</h3>
+
+  <p>O histórico bancário é imutável. A diferença será tratada por conciliação, desconto, juros, multa ou pagamento complementar.</p>
+
+  <h2>12. Tratamento de juros, multa, desconto e abatimento</h2>
+
+  <p>A funcionalidade precisa distinguir o valor principal dos ajustes financeiros.</p>
+
+  <p>Exemplo:</p>
+
+  <ul>
+    <li>Previsão: R$ 100,00.</li>
+    <li>Documento real: R$ 102,93.</li>
+    <li>Pagamento: R$ 107,93.</li>
+  </ul>
+
+  <p>A diferença entre previsão e documento é:</p>
+
+  <ul>
+    <li>R$ 2,93 de variação da despesa principal.</li>
+  </ul>
+
+  <p>A diferença entre documento e pagamento é:</p>
+
+  <ul>
+    <li>R$ 5,00 de encargos.</li>
+  </ul>
+
+  <p>Essas duas diferenças não podem ser misturadas.</p>
+
+  <p>A conciliação deve registrar:</p>
+
+  <ul>
+    <li>Valor provisionado: R$ 100,00.</li>
+    <li>Valor real principal: R$ 102,93.</li>
+    <li>Variação da provisão: R$ 2,93.</li>
+    <li>Juros: valor informado.</li>
+    <li>Multa: valor informado.</li>
+    <li>Valor total pago: R$ 107,93.</li>
+  </ul>
+
+  <p>A validação deve exigir:</p>
+
+  <div class="flow">valor principal + juros + multa – descontos = valor pago</div>
+
+  <p>O vínculo ficará assim:</p>
+
+  <ul>
+    <li>Pagamento bancário: R$ 107,93.</li>
+    <li>Despesa principal vinculada: R$ 102,93.</li>
+    <li>Despesa de encargo vinculada: R$ 5,00.</li>
+  </ul>
+
+  <p>O encargo deve guardar o ID da despesa principal. Assim, ao abrir a internet administrativa, o usuário verá que houve R$ 5,00 de juros ou multa vinculados àquela obrigação.</p>
+
+  <p>Na DRE:</p>
+
+  <ul>
+    <li>R$ 102,93 ficam no plano de internet.</li>
+    <li>R$ 5,00 ficam em juros e multas.</li>
+  </ul>
+
+  <p>No fluxo de caixa:</p>
+
+  <ul>
+    <li>Uma única saída de R$ 107,93.</li>
+  </ul>
+
+  <p>Se o banco informar explicitamente juros e multa, o sistema pode preencher os campos. Se informar apenas o valor total, o sistema mostra a diferença e exige classificação humana.</p>
+
+  <h2>13. Pagamentos consolidados</h2>
+
+  <p>A estrutura precisa nascer preparada para pagamentos que abrangem diversas obrigações.</p>
+
+  <h3>DAS</h3>
+
+  <p>O DAS é um pagamento único, mas pode ter desmembramento por tributo para análise gerencial.</p>
+
+  <p>A operação bancária terá:</p>
+
+  <ul>
+    <li>Um pagamento total.</li>
+    <li>Uma despesa principal.</li>
+    <li>Diversas alocações de plano de contas.</li>
+  </ul>
+
+  <p>A consulta mostrará o pagamento no nível da obrigação DAS, sem fingir que houve um pagamento bancário separado para cada tributo.</p>
+
+  <h3>FGTS e empréstimo consignado</h3>
+
+  <p>A guia pode reunir:</p>
+
+  <ul>
+    <li>FGTS de diversos colaboradores.</li>
+    <li>Valores de empréstimos consignados.</li>
+    <li>Individualizações por pessoa.</li>
+  </ul>
+
+  <p>A operação bancária continua sendo única. O vínculo pode apontar para a despesa consolidada e preservar as individualizações internas.</p>
+
+  <p>A consulta por colaborador pode mostrar que parte daquela obrigação está associada a ele, mas não deve criar várias saídas bancárias.</p>
+
+  <h3>Cartão de crédito</h3>
+
+  <p>O pagamento da fatura é único, enquanto a fatura possui várias despesas.</p>
+
+  <p>Nesse caso:</p>
+
+  <ul>
+    <li>Cada item do cartão impacta a DRE conforme seu plano.</li>
+    <li>A fatura consolida os itens.</li>
+    <li>A saída da conta corrente liquida a fatura.</li>
+    <li>O pagamento da fatura não cria outra despesa na DRE.</li>
+  </ul>
+
+  <p>Ao consultar um item do cartão, o sistema pode mostrar:</p>
+
+  <ul>
+    <li>“Incluído na fatura 08/2026”.</li>
+    <li>“Fatura com vencimento em 12/09/2026”.</li>
+    <li>“Pagamento da fatura agendado”.</li>
+    <li>“Fatura paga”.</li>
+  </ul>
+
+  <p>O vínculo bancário principal fica com a fatura, não com cada compra individual.</p>
+
+  <h3>Pagamentos parciais</h3>
+
+  <p>Uma obrigação também pode ser paga em duas ou mais saídas.</p>
+
+  <p>O sistema deve somar os vínculos:</p>
+
+  <ul>
+    <li>Valor da obrigação: R$ 1.000,00.</li>
+    <li>Primeiro pagamento: R$ 600,00.</li>
+    <li>Segundo pagamento: R$ 400,00.</li>
+    <li>Situação: pago integralmente.</li>
+  </ul>
+
+  <p>Se houver apenas R$ 600,00:</p>
+
+  <ul>
+    <li>Situação: parcialmente pago.</li>
+    <li>Saldo: R$ 400,00.</li>
+  </ul>
+
+  <h2>14. Prevenção de pagamentos duplicados</h2>
+
+  <p>Uma das principais vantagens da funcionalidade é impedir duplicidade.</p>
+
+  <p>Antes de criar uma solicitação, o sistema deve consultar todos os vínculos ativos da obrigação.</p>
+
+  <p>Se encontrar:</p>
+
+  <ul>
+    <li>Solicitação aguardando aprovação.</li>
+    <li>Solicitação aprovada.</li>
+    <li>Solicitação enviada ao banco.</li>
+    <li>Agendamento ativo.</li>
+    <li>Pagamento processando.</li>
+    <li>Pagamento realizado.</li>
+  </ul>
+
+  <p>O sistema deve bloquear ou alertar a criação de outro pagamento integral.</p>
+
+  <p>A mensagem pode ser:</p>
+
+  <blockquote>Já existe uma solicitação ativa de R$ 102,93 para esta obrigação, atualmente aguardando aprovação no Banco Inter.</blockquote>
+
+  <p>Nos pagamentos parciais, a regra deve considerar o saldo.</p>
+
+  <p>Exemplo:</p>
+
+  <ul>
+    <li>Obrigação: R$ 1.000,00.</li>
+    <li>Já solicitado: R$ 600,00.</li>
+    <li>Saldo disponível para nova solicitação: R$ 400,00.</li>
+  </ul>
+
+  <p>Solicitações canceladas, rejeitadas ou expiradas não devem impedir uma nova tentativa, mas continuam visíveis no histórico.</p>
+
+  <p>Também deve existir idempotência. Se o usuário clicar duas vezes ou a comunicação sofrer repetição, a mesma solicitação não pode ser criada novamente.</p>
+
+  <h2>15. Permissões</h2>
+
+  <p>A consulta e o gerenciamento precisam respeitar perfis de acesso.</p>
+
+  <p>O sistema já possui permissões relacionadas a solicitações de pagamento. Elas podem ser organizadas e complementadas da seguinte forma:</p>
+
+  <ul>
+    <li>Visualizar solicitações e situações bancárias.</li>
+    <li>Criar solicitações.</li>
+    <li>Aprovar internamente.</li>
+    <li>Enviar solicitações ao banco.</li>
+    <li>Atualizar situação bancária.</li>
+    <li>Vincular ou desvincular despesas.</li>
+    <li>Visualizar comprovantes.</li>
+    <li>Cancelar solicitações, quando permitido.</li>
+  </ul>
+
+  <p>A nomenclatura “Autorizar” deve ser revista na interface para evitar confusão. O ideal é usar “Aprovar internamente”.</p>
+
+  <p>A permissão para aprovar internamente não deve ser confundida com a autorização final no Banco Inter.</p>
+
+  <p>A divisão recomendada é:</p>
+
+  <ul>
+    <li>Usuário operacional: pode visualizar e preparar.</li>
+    <li>Financeiro: pode revisar e aprovar internamente.</li>
+    <li>Usuário com permissão de integração: pode enviar ao Inter.</li>
+    <li>Responsável bancário: aprova diretamente no aplicativo do Inter.</li>
+    <li>IA: pode consultar, classificar, sugerir e preparar, mas não realiza a aprovação bancária final.</li>
+  </ul>
+
+  <p>A IA também não deve enviar um pagamento apenas porque encontrou uma previsão. Qualquer ação que crie efeito bancário deve depender de solicitação explícita e das permissões aplicáveis.</p>
+
+  <h2>16. Auditoria e histórico</h2>
+
+  <p>Toda alteração de vínculo deve ser auditável.</p>
+
+  <p>O histórico deve registrar:</p>
+
+  <ul>
+    <li>Criação da previsão.</li>
+    <li>Cadastro da despesa real.</li>
+    <li>Conciliação da previsão.</li>
+    <li>Criação da solicitação.</li>
+    <li>Alteração do valor.</li>
+    <li>Aprovação interna.</li>
+    <li>Envio ao banco.</li>
+    <li>Retorno do banco.</li>
+    <li>Identificação de agendamento.</li>
+    <li>Confirmação manual de vínculo.</li>
+    <li>Rejeição de sugestão.</li>
+    <li>Troca da despesa vinculada.</li>
+    <li>Cancelamento.</li>
+    <li>Pagamento.</li>
+    <li>Identificação no extrato.</li>
+    <li>Criação de juros ou multa.</li>
+    <li>Inclusão de comprovante.</li>
+  </ul>
+
+  <p>Cada evento deve guardar:</p>
+
+  <ul>
+    <li>Data e hora.</li>
+    <li>Usuário ou processo.</li>
+    <li>Estado anterior.</li>
+    <li>Estado novo.</li>
+    <li>Motivo.</li>
+    <li>Valores envolvidos.</li>
+    <li>Origem da informação.</li>
+    <li>Identificadores relevantes.</li>
+  </ul>
+
+  <p>Vínculos não devem ser apagados fisicamente. Se forem incorretos, devem ser marcados como cancelados ou substituídos, preservando o histórico.</p>
+
+  <p>Isso é especialmente importante quando um agendamento foi associado à unidade errada e depois corrigido.</p>
+
+  <h2>17. Impacto no fluxo de caixa e na DRE</h2>
+
+  <p>A funcionalidade não pode somar previsão, solicitação e agendamento como três valores diferentes.</p>
+
+  <p>Para a DRE, a regra será:</p>
+
+  <ul>
+    <li>A previsão aparece enquanto não existe despesa real conciliada.</li>
+    <li>A despesa real substitui a previsão.</li>
+    <li>Solicitação e agendamento não geram nova despesa.</li>
+    <li>Juros e multa geram despesa financeira separada.</li>
+    <li>Pagamento apenas liquida a obrigação.</li>
+  </ul>
+
+  <p>Para o fluxo de caixa projetado:</p>
+
+  <ul>
+    <li>Antes do documento real, usa-se a previsão e a data esperada.</li>
+    <li>Quando chega a despesa real, usa-se o valor e o vencimento reais.</li>
+    <li>Quando há agendamento, a data agendada pode substituir a data estimada.</li>
+    <li>O valor não é somado novamente.</li>
+    <li>Quando o pagamento ocorre, o projetado é substituído pela saída efetiva.</li>
+  </ul>
+
+  <p>A origem exibida pode mudar:</p>
+
+  <ul>
+    <li>Previsão.</li>
+    <li>Documento real.</li>
+    <li>Solicitação.</li>
+    <li>Agendamento.</li>
+    <li>Extrato.</li>
+  </ul>
+
+  <p>Mas o sistema continua exibindo uma única obrigação financeira.</p>
+
+  <h2>18. Alertas e tarefas automáticas</h2>
+
+  <p>A consulta pode gerar alertas úteis:</p>
+
+  <ul>
+    <li>Vencimento próximo e nenhuma solicitação criada.</li>
+    <li>Solicitação criada, mas ainda sem aprovação interna.</li>
+    <li>Enviado ao Inter e aguardando aprovação bancária.</li>
+    <li>Agendamento para valor diferente da despesa real.</li>
+    <li>Agendamento duplicado.</li>
+    <li>Solicitação expirada.</li>
+    <li>Pagamento rejeitado.</li>
+    <li>Agendamento vencido sem saída no extrato.</li>
+    <li>Saída encontrada sem despesa vinculada.</li>
+    <li>Pagamento superior ao principal.</li>
+    <li>Documento real recebido depois do agendamento com valor diferente.</li>
+    <li>Previsão ainda ativa depois do pagamento.</li>
+    <li>Pagamento confirmado sem comprovante armazenado.</li>
+    <li>Mais de uma despesa candidata.</li>
+  </ul>
+
+  <p>Esses alertas devem aparecer como tarefas financeiras, não como alterações automáticas irreversíveis.</p>
+
+  <h2>19. Etapas de implementação</h2>
+
+  <h3>Etapa 1 — Modelo de identidade</h3>
+
+  <p>Criar a <code>obligationKey</code> e garantir que previsões e despesas reais da mesma obrigação compartilhem essa identidade.</p>
+
+  <p>Também será necessário revisar as séries recorrentes já cadastradas:</p>
+
+  <ul>
+    <li>Internet.</li>
+    <li>Honorários contábeis.</li>
+    <li>Aluguel.</li>
+    <li>Sistema RH.</li>
+    <li>Plano odontológico.</li>
+    <li>GPT/Codex.</li>
+    <li>DAS.</li>
+    <li>Salários.</li>
+    <li>FGTS.</li>
+    <li>INSS.</li>
+    <li>Consignados.</li>
+  </ul>
+
+  <h3>Etapa 2 — Estrutura de vínculos</h3>
+
+  <p>Criar a estrutura <code>expensePaymentLinks</code>, preparada para:</p>
+
+  <ul>
+    <li>Uma despesa e um pagamento.</li>
+    <li>Um pagamento e várias despesas.</li>
+    <li>Uma despesa e vários pagamentos.</li>
+    <li>Parcelas.</li>
+    <li>Juros.</li>
+    <li>Multas.</li>
+    <li>Pagamentos parciais.</li>
+    <li>Previsão substituída por despesa real.</li>
+  </ul>
+
+  <h3>Etapa 3 — Consulta local</h3>
+
+  <p>Criar o serviço que, dado o ID de uma despesa, retorna:</p>
+
+  <ul>
+    <li>Obrigação.</li>
+    <li>Previsão.</li>
+    <li>Despesa real.</li>
+    <li>Solicitações.</li>
+    <li>Agendamentos sincronizados.</li>
+    <li>Pagamentos.</li>
+    <li>Extrato.</li>
+    <li>Comprovantes.</li>
+    <li>Divergências.</li>
+  </ul>
+
+  <p>Essa etapa já pode gerar valor sem fazer nenhuma consulta ao Banco Inter.</p>
+
+  <h3>Etapa 4 — Interface</h3>
+
+  <p>Adicionar “Situação do pagamento”:</p>
+
+  <ul>
+    <li>No detalhe da despesa.</li>
+    <li>No detalhe da previsão.</li>
+    <li>Na auditoria.</li>
+    <li>Na lista de despesas, como indicador compacto.</li>
+    <li>Na página de autorizações bancárias.</li>
+  </ul>
+
+  <p>Também adicionar filtros:</p>
+
+  <ul>
+    <li>Sem solicitação.</li>
+    <li>Aguardando aprovação interna.</li>
+    <li>Aguardando aprovação no Inter.</li>
+    <li>Agendado.</li>
+    <li>Pago.</li>
+    <li>Com divergência.</li>
+    <li>Possível duplicidade.</li>
+  </ul>
+
+  <h3>Etapa 5 — Migração dos registros atuais</h3>
+
+  <p>Relacionar solicitações já existentes às despesas que possuem <code>expenseId</code>.</p>
+
+  <p>Para registros sem vínculo direto, executar um script de análise que proponha associações com base em:</p>
+
+  <ul>
+    <li>Favorecido.</li>
+    <li>Documento.</li>
+    <li>Valor.</li>
+    <li>Competência.</li>
+    <li>Vencimento.</li>
+    <li>Descrição.</li>
+    <li>Código bancário.</li>
+  </ul>
+
+  <p>Associações ambíguas devem ficar pendentes de revisão.</p>
+
+  <h3>Etapa 6 — Consulta bancária somente de leitura</h3>
+
+  <p>Implementar a sincronização dos estados bancários disponíveis.</p>
+
+  <p>Essa sincronização deve:</p>
+
+  <ul>
+    <li>Consultar.</li>
+    <li>Salvar o retorno localmente.</li>
+    <li>Atualizar a situação.</li>
+    <li>Registrar a data da consulta.</li>
+    <li>Não aprovar pagamentos.</li>
+    <li>Não alterar valores.</li>
+    <li>Não criar pagamento automaticamente sem vínculo seguro.</li>
+  </ul>
+
+  <h3>Etapa 7 — Proteção contra duplicidade</h3>
+
+  <p>Antes de criar ou enviar uma solicitação:</p>
+
+  <ul>
+    <li>Consultar vínculos ativos.</li>
+    <li>Calcular valores já solicitados.</li>
+    <li>Calcular valores já agendados.</li>
+    <li>Calcular valores já pagos.</li>
+    <li>Bloquear duplicidade integral.</li>
+    <li>Permitir complementos somente de forma explícita.</li>
+  </ul>
+
+  <h3>Etapa 8 — Divergências e encargos</h3>
+
+  <p>Integrar o tratamento de:</p>
+
+  <ul>
+    <li>Juros.</li>
+    <li>Multa.</li>
+    <li>Desconto.</li>
+    <li>Abatimento.</li>
+    <li>Pagamento parcial.</li>
+    <li>Pagamento excedente.</li>
+    <li>Valor real diferente da previsão.</li>
+  </ul>
+
+  <h3>Etapa 9 — Testes e validação</h3>
+
+  <p>A validação deve ser feita prioritariamente por testes e scripts, sem depender do navegador.</p>
+
+  <p>O navegador só deverá ser utilizado quando autorizado pelo desenvolvedor ou quando for realmente necessário para uma validação visual específica.</p>
+
+  <h2>20. Cenários de teste</h2>
+
+  <p>O projeto deve cobrir, no mínimo, os seguintes cenários:</p>
+
+  <ol>
+    <li>Previsão sem solicitação.</li>
+    <li>Previsão com solicitação em rascunho.</li>
+    <li>Previsão com documento real de mesmo valor.</li>
+    <li>Previsão com documento real de valor diferente.</li>
+    <li>Solicitação criada diretamente da despesa.</li>
+    <li>Solicitação duplicada.</li>
+    <li>Agendamento encontrado sem solicitação local.</li>
+    <li>Dois candidatos com o mesmo valor.</li>
+    <li>Pagamento com juros.</li>
+    <li>Pagamento com multa.</li>
+    <li>Pagamento com desconto.</li>
+    <li>Pagamento parcial.</li>
+    <li>Pagamento consolidado.</li>
+    <li>Solicitação cancelada e recriada.</li>
+    <li>Solicitação expirada.</li>
+    <li>Pagamento rejeitado.</li>
+    <li>Agendamento sem saída no extrato.</li>
+    <li>Saída sem agendamento conhecido.</li>
+    <li>Fatura de cartão com várias despesas.</li>
+    <li>FGTS com individualização por colaborador.</li>
+    <li>DAS com desmembramento de planos.</li>
+    <li>Usuário sem permissão de consulta.</li>
+    <li>Usuário com consulta, mas sem criação.</li>
+    <li>Usuário com criação, mas sem aprovação interna.</li>
+    <li>Garantia de que nenhuma ação realiza aprovação bancária final.</li>
+  </ol>
+
+  <h2>21. Exemplo completo: internet administrativa</h2>
+
+  <p>Considere a previsão:</p>
+
+  <ul>
+    <li>Descrição: Internet – Administrativo | TVN.</li>
+    <li>Competência: 08/2026.</li>
+    <li>Valor: R$ 101,32.</li>
+    <li>Vencimento estimado: 20/08/2026.</li>
+    <li>Situação: provisionada.</li>
+  </ul>
+
+  <p>O boleto real chega:</p>
+
+  <ul>
+    <li>Valor: R$ 102,93.</li>
+    <li>Vencimento: 20/08/2026.</li>
+    <li>Beneficiário: Telecomunicações Nordeste Ltda.</li>
+    <li>CNPJ: 02.995.233/0001-05.</li>
+  </ul>
+
+  <p>O sistema reconhece a mesma série, competência, unidade e favorecido. A previsão é conciliada:</p>
+
+  <ul>
+    <li>Valor previsto: R$ 101,32.</li>
+    <li>Valor real: R$ 102,93.</li>
+    <li>Variação: R$ 1,61.</li>
+  </ul>
+
+  <p>Uma solicitação é criada a partir da despesa real:</p>
+
+  <ul>
+    <li>Valor: R$ 102,93.</li>
+    <li>Situação: aguardando aprovação interna.</li>
+    <li>Vínculo direto com a obrigação.</li>
+  </ul>
+
+  <p>Depois da aprovação interna e do envio:</p>
+
+  <ul>
+    <li>Situação: aguardando aprovação no Inter.</li>
+    <li>A interface informa que a aprovação deve ser feita no aplicativo.</li>
+  </ul>
+
+  <p>Depois da aprovação bancária:</p>
+
+  <ul>
+    <li>Situação: agendado para 20/08/2026.</li>
+    <li>A despesa mostra o agendamento.</li>
+    <li>O fluxo de caixa usa a data agendada.</li>
+    <li>A despesa ainda não é marcada como paga.</li>
+  </ul>
+
+  <p>Quando a saída aparece:</p>
+
+  <ul>
+    <li>Valor: R$ 102,93.</li>
+    <li>Situação: pago.</li>
+    <li>Transação vinculada.</li>
+    <li>Comprovante disponível.</li>
+    <li>Previsão já substituída.</li>
+    <li>Nenhuma duplicação na DRE.</li>
+  </ul>
+
+  <p>Se o pagamento ocorrer com R$ 5,00 de encargos:</p>
+
+  <ul>
+    <li>Saída: R$ 107,93.</li>
+    <li>Principal: R$ 102,93.</li>
+    <li>Juros e multa: R$ 5,00.</li>
+    <li>Uma única saída no fluxo de caixa.</li>
+    <li>Duas classificações na DRE.</li>
+    <li>Um vínculo completo entre ambas.</li>
+  </ul>
+
+  <h2>22. Resultado esperado</h2>
+
+  <p>Ao final, qualquer usuário autorizado poderá abrir uma despesa e entender seu estágio completo sem procurar manualmente em diversas telas.</p>
+
+  <p>A resposta estará dentro da própria despesa:</p>
+
+  <ul>
+    <li>O que foi previsto.</li>
+    <li>Qual documento substituiu a previsão.</li>
+    <li>Se alguém solicitou pagamento.</li>
+    <li>Se houve aprovação interna.</li>
+    <li>Se foi enviado ao banco.</li>
+    <li>Se depende de aprovação no aplicativo.</li>
+    <li>Se foi agendado.</li>
+    <li>Se foi pago.</li>
+    <li>Se apareceu no extrato.</li>
+    <li>Se houve juros, multa ou diferença.</li>
+    <li>Quais despesas participaram de um pagamento consolidado.</li>
+  </ul>
+
+  <p>O sistema terá mais controle sem confundir gestão financeira com autorização bancária. A IA poderá ajudar a localizar, comparar e sugerir vínculos, mas as decisões sensíveis continuarão sob controle humano.</p>
+
+  <p>A recomendação é implementar primeiro a identidade da obrigação, os vínculos e a consulta local. Depois, integrar a consulta bancária de forma somente de leitura. Essa ordem entrega valor rapidamente, reduz o risco de duplicidade e cria uma base segura para os agendamentos, pagamentos consolidados, encargos e conciliações futuras.</p>
+
+  <p class="closing">Nenhuma parte deste plano exige rollout imediato. A implementação pode ser feita e validada localmente, mantendo qualquer envio ou implantação para uma decisão posterior.</p>
+</body>
+</html>

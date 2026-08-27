@@ -29,18 +29,22 @@ import type {
   FormExecutionEvent,
   FormExecutionItem,
   FormExecutionSection,
+  FormItemConfig,
 } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
 import {
   claimFormExecution,
   deleteFormAsset,
+  fetchExecutionOccurrences,
   fetchFormExecution,
   updateFormExecution,
   uploadFormAsset,
+  type AnalyticsOccurrenceRow,
 } from "@/features/forms/lib/client";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/navigation/back-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -65,6 +69,16 @@ type DraftSection = {
 type EvidenceTarget =
   | { scope: "item"; itemId: string; kind: "photo" | "signature" | "file" }
   | { scope: "section"; sectionId: string; kind: "photo" | "signature" };
+
+type FormOptionValue = NonNullable<FormItemConfig["options"]>[number];
+
+function getOptionLabel(option: FormOptionValue) {
+  return typeof option === "string" ? option : option.label;
+}
+
+function getOptionValue(option: FormOptionValue) {
+  return typeof option === "string" ? option : option.value ?? option.label;
+}
 
 const STATUS_META: Record<
   FormExecution["status"],
@@ -231,6 +245,24 @@ function isDraftOutOfRange(item: FormExecutionItem, draft: DraftItem) {
   const range = getNumericRange(item);
   if (!range) return false;
   return draft.number_value < range.min || draft.number_value > range.max;
+}
+
+const OCCURRENCE_STATUS_LABELS: Record<string, string> = {
+  open: "Aberta",
+  in_progress: "Em andamento",
+  waiting: "Aguardando",
+  blocked: "Bloqueada",
+  pending_validation: "Aguardando validação",
+  resolved: "Resolvida",
+  cancelled: "Cancelada",
+};
+
+function formatResolutionMinutes(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ${minutes % 60}min`;
+  const days = Math.floor(hours / 24);
+  return `${days} dia(s) e ${hours % 24}h`;
 }
 
 function formatRelative(value: unknown) {
@@ -485,6 +517,9 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
   const [evidenceTarget, setEvidenceTarget] = useState<EvidenceTarget | null>(null);
   const [sectionsMode, setSectionsMode] = useState(false);
   const [sectionIdx, setSectionIdx] = useState(0);
+  const [itemOccurrences, setItemOccurrences] = useState<
+    Map<string, AnalyticsOccurrenceRow[]>
+  >(new Map());
   const initializedRef = useRef(false);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedDraftRef = useRef<string>("");
@@ -533,7 +568,36 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
     };
   }, [firebaseUser, executionId]);
 
-  const canEdit = execution?.status === "in_progress" || execution?.status === "pending";
+  const canEdit =
+    execution?.status === "in_progress" ||
+    execution?.status === "pending" ||
+    execution?.status === "overdue";
+
+  useEffect(() => {
+    if (!firebaseUser || execution?.status !== "completed") {
+      setItemOccurrences(new Map());
+      return;
+    }
+    let cancelled = false;
+    fetchExecutionOccurrences(firebaseUser, executionId)
+      .then((payload) => {
+        if (cancelled) return;
+        const grouped = new Map<string, AnalyticsOccurrenceRow[]>();
+        for (const row of payload.items) {
+          const key = row.template_item_id ?? "";
+          if (!key) continue;
+          grouped.set(key, [...(grouped.get(key) ?? []), row]);
+        }
+        setItemOccurrences(grouped);
+      })
+      .catch(() => {
+        // sem permissão de analytics: badge simplesmente não aparece
+        if (!cancelled) setItemOccurrences(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, executionId, execution?.status]);
 
   const executionView = useMemo(() => {
     if (!execution) return null;
@@ -595,7 +659,13 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
           ? `${target.itemId}:${target.kind}`
           : `${target.sectionId}:section:${target.kind}`
       );
-      const uploaded = await uploadFormAsset(firebaseUser, { file, kind: target.kind });
+      const uploaded = await uploadFormAsset(firebaseUser, {
+        file,
+        kind: target.kind,
+        executionId: execution.id,
+        scope: target.scope,
+        targetId: target.scope === "item" ? target.itemId : target.sectionId,
+      });
 
       if (target.scope === "item") {
         const item = (execution.items ?? []).find((entry) => entry.id === target.itemId);
@@ -651,7 +721,12 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
       );
       const assetPath = extractAssetPathFromUrl(targetUrl);
       if (assetPath) {
-        await deleteFormAsset(firebaseUser, assetPath);
+        await deleteFormAsset(firebaseUser, {
+          assetPath,
+          executionId: execution.id,
+          scope: target.scope,
+          targetId: target.scope === "item" ? target.itemId : target.sectionId,
+        });
       }
 
       if (target.scope === "item") {
@@ -848,9 +923,7 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
           <span className="font-medium text-foreground">{execution.template_name}</span>
         </nav>
         <div className="flex-1" />
-        <Button type="button" variant="outline" size="sm" asChild>
-          <Link href="/dashboard/forms">Voltar à lista</Link>
-        </Button>
+        <BackButton fallbackHref="/dashboard/forms" label="Voltar à lista" size="sm" />
         {execution.status === "pending" ? (
           <Button onClick={() => void runAction("claim")} disabled={submitting !== null} size="sm">
             {submitting === "claim" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}
@@ -1042,6 +1115,36 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                         {item.description ? (
                           <div className="mt-1 text-sm text-muted-foreground">{item.description}</div>
                         ) : null}
+                        {(itemOccurrences.get(item.template_item_id) ?? []).map((occurrence) => (
+                          <div
+                            key={occurrence.id}
+                            className={cn(
+                              "mt-2 rounded-md border px-2 py-1 text-xs",
+                              occurrence.resolution_status === "resolved"
+                                ? "border-emerald-200 bg-emerald-50/60"
+                                : "border-amber-200 bg-amber-50/60"
+                            )}
+                          >
+                            <span className="font-medium">
+                              Gerou ocorrência: {occurrence.result_name_snapshot}
+                              {occurrence.option_label_snapshot
+                                ? ` (${occurrence.option_label_snapshot})`
+                                : ""}
+                              {" — "}
+                              {occurrence.target_name_snapshot}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {" · "}
+                              {OCCURRENCE_STATUS_LABELS[occurrence.resolution_status] ??
+                                occurrence.resolution_status}
+                              {occurrence.resolution_status === "resolved" &&
+                              typeof occurrence.resolution_time_minutes === "number"
+                                ? ` em ${formatResolutionMinutes(occurrence.resolution_time_minutes)}`
+                                : ""}
+                              {occurrence.has_active_task ? " · Tarefa ativa" : ""}
+                            </span>
+                          </div>
+                        ))}
                       </div>
 
                       {item.type === "checkbox" ? (
@@ -1069,19 +1172,23 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                       {(item.type === "text" || item.type === "select") ? (
                         options.length > 0 && item.type === "select" ? (
                           <div className="grid gap-2 sm:grid-cols-3">
-                            {options.map((option) => (
-                              <Button
-                                key={option}
-                                type="button"
-                                variant={draft.text_value === option ? "default" : "outline"}
-                                disabled={disabled}
-                                onClick={() => updateDraft(item.id, { text_value: option })}
-                                className="justify-start"
-                              >
-                                <span className={cn("mr-2 h-4 w-4 rounded-full border", draft.text_value === option && "border-primary-foreground bg-primary-foreground")} />
-                                {option}
-                              </Button>
-                            ))}
+                            {options.map((option) => {
+                              const value = getOptionValue(option);
+                              const label = getOptionLabel(option);
+                              return (
+                                <Button
+                                  key={value}
+                                  type="button"
+                                  variant={draft.text_value === value ? "default" : "outline"}
+                                  disabled={disabled}
+                                  onClick={() => updateDraft(item.id, { text_value: value })}
+                                  className="justify-start"
+                                >
+                                  <span className={cn("mr-2 h-4 w-4 rounded-full border", draft.text_value === value && "border-primary-foreground bg-primary-foreground")} />
+                                  {label}
+                                </Button>
+                              );
+                            })}
                           </div>
                         ) : (
                           <Textarea
@@ -1136,22 +1243,24 @@ export function FormExecutionDetailShell({ executionId }: { executionId: string 
                         options.length > 0 ? (
                           <div className="grid gap-2 sm:grid-cols-3">
                             {options.map((option) => {
+                              const value = getOptionValue(option);
+                              const label = getOptionLabel(option);
                               const values = Array.isArray(draft.multi_values) ? draft.multi_values : [];
-                              const checked = values.includes(option);
+                              const checked = values.includes(value);
                               return (
-                                <label key={option} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                <label key={value} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                                   <Checkbox
                                     checked={checked}
                                     disabled={disabled}
                                     onCheckedChange={(nextChecked) =>
                                       updateDraft(item.id, {
                                         multi_values: nextChecked === true
-                                          ? Array.from(new Set([...values, option]))
-                                          : values.filter((value) => value !== option),
+                                          ? Array.from(new Set([...values, value]))
+                                          : values.filter((entry) => entry !== value),
                                       })
                                     }
                                   />
-                                  {option}
+                                  {label}
                                 </label>
                               );
                             })}

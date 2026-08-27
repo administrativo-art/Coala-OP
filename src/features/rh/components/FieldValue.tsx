@@ -1,5 +1,6 @@
 import type { EmployeeFieldValue, FieldType, RhRole } from '@/types/rh';
 import { formatFieldValue } from '../lib/field-format';
+import { formatFieldOptionLabel } from '../lib/field-option-labels';
 
 type Props = {
   fv?:      EmployeeFieldValue;
@@ -38,7 +39,7 @@ export function FieldValue({ fv, type, role, fieldKey }: Props) {
       <div className="flex flex-wrap gap-1">
         {(fv!.value_json as string[]).map((v) => (
           <span key={v} className="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-            {v}
+            {formatFieldOptionLabel(fieldKey, v)}
           </span>
         ))}
       </div>

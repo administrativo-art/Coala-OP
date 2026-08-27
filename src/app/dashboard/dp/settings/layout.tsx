@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
-import { Building2, Briefcase, Clock, CalendarDays, Users, Workflow, LockKeyhole } from 'lucide-react';
+import { Building2, Briefcase, Clock, CalendarDays, Users, Workflow, LockKeyhole, ClipboardCheck } from 'lucide-react';
 
 const navItems = [
   { label: 'Colaboradores', href: '/dashboard/dp/settings/collaborators', icon: Users,        perm: 'collaborators' as const },
-  { label: 'Cargos & Funções', href: '/dashboard/dp/settings/roles', icon: Briefcase, perm: 'roles' as const },
+  { label: 'Cargos e funções', href: '/dashboard/dp/settings/roles', icon: Briefcase, perm: 'roles' as const },
   { label: 'Organograma', href: '/dashboard/dp/settings/organogram', icon: Workflow, perm: 'organogram' as const },
-  { label: 'Acesso por Escala', href: '/dashboard/dp/settings/login-access', icon: LockKeyhole, perm: 'loginAccess' as const },
+  { label: 'Acesso por escala', href: '/dashboard/dp/settings/login-access', icon: LockKeyhole, perm: 'loginAccess' as const },
+  { label: 'Atualização cadastral', href: '/dashboard/dp/settings/profile-compliance', icon: ClipboardCheck, perm: 'profileCompliance' as const },
   { label: 'Unidades',    href: '/dashboard/dp/settings/units',     icon: Building2,    perm: 'units' as const },
   { label: 'Turnos',      href: '/dashboard/dp/settings/shifts',    icon: Clock,        perm: 'shifts' as const },
   { label: 'Calendários', href: '/dashboard/dp/settings/calendars', icon: CalendarDays, perm: 'calendars' as const },
@@ -27,6 +28,10 @@ const permMap = {
     root?.settings?.manageUsers ||
     root?.dp?.collaborators?.edit ||
     root?.dp?.collaborators?.terminate,
+  profileCompliance: (_dp: any, root: any) =>
+    root?.settings?.manageUsers ||
+    root?.dp?.collaborators?.view ||
+    root?.dp?.collaborators?.edit,
   units:     (dp: any) => dp?.settings?.manageUnits,
   shifts:    (dp: any) => dp?.settings?.manageShifts,
   calendars: (dp: any) => dp?.settings?.manageCalendars,
@@ -41,7 +46,7 @@ export default function DPSettingsLayout({ children }: { children: React.ReactNo
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Configurações — Departamento Pessoal</h1>
+        <h1 className="text-2xl font-semibold">Configurações — Departamento pessoal</h1>
         <p className="text-muted-foreground text-sm mt-1">Gerencie os dados base do módulo.</p>
       </div>
       <nav className="flex gap-1 border-b pb-0">

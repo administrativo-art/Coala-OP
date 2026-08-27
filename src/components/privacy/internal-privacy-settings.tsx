@@ -117,13 +117,13 @@ function StatusPill({ done }: { done: boolean }) {
 export function InternalPrivacySettings() {
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase text-pink-500">LGPD interna</p>
             <h2 className="mt-2 text-2xl font-black text-slate-950">Aviso interno de privacidade</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              O Coala OP e um sistema interno da empresa para gestao operacional, administrativa,
+              O Coala One e um sistema interno da empresa para gestao operacional, administrativa,
               financeira, de RH/DP e recrutamento. Os dados pessoais sao tratados pela empresa para
               executar atividades internas, cumprir obrigacoes legais, organizar a operacao e proteger
               o ambiente corporativo.
@@ -153,7 +153,7 @@ export function InternalPrivacySettings() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <Database className="h-5 w-5 text-pink-500" />
             <h3 className="text-lg font-black text-slate-950">Inventario inicial de tratamento</h3>
@@ -189,7 +189,7 @@ export function InternalPrivacySettings() {
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-pink-500" />
               <h3 className="text-lg font-black text-slate-950">Status LGPD</h3>
@@ -207,7 +207,7 @@ export function InternalPrivacySettings() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <Server className="h-5 w-5 text-pink-500" />
               <h3 className="text-lg font-black text-slate-950">Fornecedores mapeados</h3>
@@ -227,7 +227,7 @@ export function InternalPrivacySettings() {
       <PrivacyGovernancePanel />
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <TimerReset className="h-5 w-5 text-pink-500" />
             <h3 className="text-lg font-black text-slate-950">Retencao inicial</h3>
@@ -242,7 +242,7 @@ export function InternalPrivacySettings() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-pink-500" />
             <h3 className="text-lg font-black text-slate-950">Proximos controles tecnicos</h3>

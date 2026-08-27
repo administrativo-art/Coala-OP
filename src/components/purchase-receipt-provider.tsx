@@ -9,6 +9,8 @@ import {
   type Product,
   type BaseProduct,
   type PurchaseAssetComponentAction,
+  type PurchaseDivergenceExcessBillingMode,
+  type PurchaseDivergenceResolutionAction,
   type PurchaseItemTreatment,
   type PurchaseStockEntryType,
 } from '@/types';
@@ -84,12 +86,25 @@ export interface SaveConferencePayload {
 }
 
 export interface ConfirmStockEntryPayload {
-  destinationKioskId: string;
-  destinationKioskName: string;
+  destinationKioskId?: string;
+  destinationKioskName?: string;
   items: StockEntryItemInput[];
   notes?: string;
   receiptProofUrl?: string;
   receiptProofDescription?: string;
+}
+
+export interface ResolveDivergenceItemInput {
+  receiptItemId: string;
+  action: PurchaseDivergenceResolutionAction;
+  excessBillingMode?: PurchaseDivergenceExcessBillingMode;
+  excessUnitPrice?: number | null;
+  notes?: string;
+}
+
+export interface ResolveDivergencePayload {
+  items: ResolveDivergenceItemInput[];
+  notes?: string;
 }
 
 export interface PurchaseReceiptContextType {
@@ -100,6 +115,7 @@ export interface PurchaseReceiptContextType {
   saveConference: (receiptId: string, payload: SaveConferencePayload) => Promise<void>;
   startStockEntry: (receiptId: string) => Promise<void>;
   confirmStockEntry: (receiptId: string, payload: ConfirmStockEntryPayload) => Promise<void>;
+  resolveDivergence: (receiptId: string, payload: ResolveDivergencePayload) => Promise<void>;
 }
 
 export const PurchaseReceiptContext = createContext<PurchaseReceiptContextType | undefined>(undefined);
@@ -293,6 +309,47 @@ export function PurchaseReceiptProvider({ children }: { children: React.ReactNod
     [firebaseUser, receipts, user],
   );
 
+  const resolveDivergence = useCallback(
+    async (receiptId: string, payload: ResolveDivergencePayload) => {
+      if (!firebaseUser) throw new Error('Usuário não autenticado.');
+
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/purchasing/receipts/${receiptId}/resolve-divergence`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...payload,
+          username: user?.username || 'Sistema',
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao tratar a divergência.');
+      }
+
+      const { status: finalStatus } = await response.json().catch(() => ({}));
+      const receipt = receipts.find((r) => r.id === receiptId);
+      if (receipt) {
+        await syncPurchaseReceiptTask(firebaseUser, {
+          receiptId: receipt.id,
+          purchaseOrderId: receipt.purchaseOrderId,
+          supplierId: receipt.supplierId,
+          status: finalStatus ?? receipt.status,
+          receiptMode: receipt.receiptMode,
+          expectedDate: receipt.expectedDate,
+          notes: payload.notes ?? receipt.notes,
+        }).catch((error) => {
+          console.error('Error syncing purchase receipt task:', error);
+        });
+      }
+    },
+    [firebaseUser, receipts, user],
+  );
+
   const fetchReceiptItems = useCallback(async (receiptId: string): Promise<PurchaseReceiptItem[]> => {
     if (!firebaseUser) throw new Error('Usuário não autenticado.');
     const token = await firebaseUser.getIdToken();
@@ -304,8 +361,8 @@ export function PurchaseReceiptProvider({ children }: { children: React.ReactNod
   }, [firebaseUser]);
 
   const value: PurchaseReceiptContextType = useMemo(
-    () => ({ receipts, loading, fetchReceiptItems, startConference, saveConference, startStockEntry, confirmStockEntry }),
-    [receipts, loading, fetchReceiptItems, startConference, saveConference, startStockEntry, confirmStockEntry],
+    () => ({ receipts, loading, fetchReceiptItems, startConference, saveConference, startStockEntry, confirmStockEntry, resolveDivergence }),
+    [receipts, loading, fetchReceiptItems, startConference, saveConference, startStockEntry, confirmStockEntry, resolveDivergence],
   );
 
   return <PurchaseReceiptContext.Provider value={value}>{children}</PurchaseReceiptContext.Provider>;

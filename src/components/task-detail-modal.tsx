@@ -9,8 +9,9 @@ import { type Task, type TaskHistoryItem, type TaskOrigin, type ReturnRequestSta
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Badge } from './ui/badge';
-import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2, ShoppingCart, Trash2 } from 'lucide-react';
+import { History, User, Check, X, Send, UserCheck, MessageSquare, AlertTriangle, ListOrdered, ListTodo, FileText, Calendar as CalendarIcon, CheckCircle2, ShoppingCart, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { canAccessUnit } from '@/lib/unit-access';
 import { useTasks } from '@/hooks/use-tasks';
 import { Textarea } from './ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -74,7 +75,7 @@ function TaskOriginDetails({ origin }: { origin: TaskOrigin }) {
 
 export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
   const router = useRouter();
-  const { user, users } = useAuth();
+  const { user, users, isDefaultAdmin } = useAuth();
   const { profiles } = useProfiles();
   const { updateTask, deleteTask } = useTasks();
   const [rejectionNotes, setRejectionNotes] = useState('');
@@ -86,27 +87,44 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     onOpenChange(false);
   }
   
-  const getAssigneeName = (type: 'user' | 'profile', id: string) => {
+  const getAssigneeName = (type: Task['assigneeType'], id: string) => {
     if (type === 'user') return users.find(u => u.id === id)?.username || 'Usuário desconhecido';
-    return profiles.find(p => p.id === id)?.name || 'Perfil desconhecido';
+    if (type === 'profile') return profiles.find(p => p.id === id)?.name || 'Perfil desconhecido';
+    if (type === 'role') return profiles.find(p => p.id === id)?.name || `Função/cargo: ${id}`;
+    if (type === 'team') return `Equipe: ${id}`;
+    if (type === 'unit') return task?.unitName || `Unidade: ${id}`;
+    return id || 'Não definido';
   };
 
   const isMyTurn = useMemo(() => {
     if (!task || !user) return false;
     const { status, assigneeType, assigneeId, approverType, approverId } = task;
+    if (task.unitId && !canAccessUnit(user, task.unitId, { isDefaultAdmin })) return false;
+    const userRoleIds = Array.from(new Set([
+      user.profileId,
+      user.jobRoleId,
+      ...(user.jobFunctionIds ?? []),
+    ].filter(Boolean)));
 
     if (status === 'awaiting_approval') {
         if (approverType === 'user' && approverId === user.id) return true;
         if (approverType === 'profile' && user.profileId === approverId) return true;
+        if (approverType === 'role' && approverId && userRoleIds.includes(approverId)) return true;
+        if (approverType === 'unit' && approverId && canAccessUnit(user, approverId, { isDefaultAdmin })) return true;
     } else if (status === 'pending' || status === 'reopened' || status === 'in_progress') {
         if (assigneeType === 'user' && assigneeId === user.id) return true;
         if (assigneeType === 'profile' && user.profileId === assigneeId) return true;
+        if (assigneeType === 'role' && userRoleIds.includes(assigneeId)) return true;
+        if (assigneeType === 'unit' && canAccessUnit(user, assigneeId, { isDefaultAdmin })) return true;
     }
     return false;
-  }, [task, user, users, profiles]);
+  }, [isDefaultAdmin, task, user]);
 
   const originLink = useMemo(() => {
     if (!task) return null;
+    if (task.originLink) {
+      return task.originLink;
+    }
     if (task.origin.kind === 'form_trigger') {
       return `/dashboard/forms/${task.origin.execution_id}/view`;
     }
@@ -115,6 +133,8 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
     }
     return task.legacyLink ?? null;
   }, [task]);
+
+  const isStockCountTask = task?.origin.kind === 'legacy' && task.origin.type === 'stock_count_approval';
 
   if (!task || !profiles) return null;
 
@@ -203,6 +223,12 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
                       <h4 className="text-sm font-semibold flex items-center gap-2"><CalendarIcon /> Prazo de conclusão</h4>
                       <p>{task.dueDate ? format(parseISO(task.dueDate), 'dd/MM/yyyy') : 'Não definido'}</p>
                   </div>
+                  {(task.unitName || task.unitId) &&
+                    <div className="p-3 border rounded-lg space-y-1">
+                        <h4 className="text-sm font-semibold flex items-center gap-2"><FileText /> Unidade vinculada</h4>
+                        <p>{task.unitName || task.unitId}</p>
+                    </div>
+                  }
                   {task.completedAt &&
                     <div className="p-3 border rounded-lg space-y-1">
                         <h4 className="text-sm font-semibold flex items-center gap-2"><CheckCircle2 /> Data de conclusão</h4>
@@ -247,10 +273,17 @@ export function TaskDetailModal({ task, onOpenChange }: TaskDetailModalProps) {
         </div>
 
         <DialogFooter className="pt-4 border-t flex justify-between w-full">
-          <Button variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4" /> Excluir Tarefa
-          </Button>
-          {isMyTurn ? (
+          {isStockCountTask ? <span /> : (
+            <Button variant="destructive" onClick={() => setIsDeleteConfirmOpen(true)}>
+              <Trash2 className="mr-2 h-4 w-4" /> Excluir Tarefa
+            </Button>
+          )}
+          {isStockCountTask && originLink ? (
+            <Button variant="outline" onClick={() => router.push(originLink)}>
+              <ListOrdered className="mr-2" />
+              Abrir contagem
+            </Button>
+          ) : isMyTurn ? (
             <div className="space-y-2">
               {task.status === 'awaiting_approval' ? (
                 <div className="flex justify-end gap-2">

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { mirrorExecutionToLegacy } from "@/features/forms/lib/legacy-bridge";
+import { assertFormExecutionAccess } from "@/features/forms/lib/server-access";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
-import { type FormExecution } from "@/types/forms";
+import type { FormExecution } from "@/types/forms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +25,16 @@ export async function POST(
       }
 
       const data = (snap.data() ?? {}) as Record<string, unknown>;
+      assertFormExecutionAccess({
+        permissions: user.permissions,
+        isDefaultAdmin: user.isDefaultAdmin,
+        userId: user.userDoc.id,
+        userDoc: user.userDoc as unknown as Record<string, unknown>,
+        workspaceId: user.workspace_id,
+        execution: { id: snap.id, ...data } as unknown as FormExecution,
+        level: "operate",
+      });
+
       if (data.status === "completed") {
         throw new Error("Essa execução já foi concluída.");
       }
@@ -66,12 +76,6 @@ export async function POST(
       module: "forms",
       action: "execution_claimed",
       metadata: { execution_id: executionId },
-    });
-    await mirrorExecutionToLegacy({
-      executionId,
-      execution: execution as unknown as FormExecution,
-    }).catch((error) => {
-      console.error("Legacy dual-write failed for form execution claim:", error);
     });
 
     return NextResponse.json({ execution: { id: executionId, ...execution } });

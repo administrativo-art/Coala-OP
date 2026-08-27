@@ -1,10 +1,12 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { initializeClientAppCheck } from "./firebase-app-check";
 import { assertFirebaseClientConfig, firebaseClientConfig } from "./firebase-client-config";
 
 assertFirebaseClientConfig();
 
 const app = getApps().length ? getApp() : initializeApp(firebaseClientConfig);
+initializeClientAppCheck(app);
 
 export const financialDb = getFirestore(app, "coala-financeiro");
 

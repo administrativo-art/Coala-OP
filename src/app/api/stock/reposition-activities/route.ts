@@ -1,12 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { createManualTask } from "@/features/tasks/lib/server";
+import { syncRepositionTaskSafely } from "@/features/reposition/lib/task-sync";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
+import { canAccessAnyUnit, canAccessUnit } from "@/lib/unit-access";
 import { type RepositionActivity } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const ACTIVE_REPOSITION_STATUSES: RepositionActivity["status"][] = [
+  "Aguardando despacho",
+  "Aguardando recebimento",
+  "Recebido com divergência",
+  "Recebido sem divergência",
+];
+
+function toSummary(activity: RepositionActivity): RepositionActivity {
+  const stripEmbeddedSignature = (signature?: RepositionActivity["receiptSignature"]) => {
+    if (!signature) return undefined;
+    const { dataUrl: _dataUrl, ...metadata } = signature;
+    return metadata;
+  };
+
+  return {
+    ...activity,
+    items: ACTIVE_REPOSITION_STATUSES.includes(activity.status) ? activity.items : [],
+    transportSignature: stripEmbeddedSignature(activity.transportSignature),
+    receiptSignature: stripEmbeddedSignature(activity.receiptSignature),
+    separationSignature: stripEmbeddedSignature(activity.separationSignature),
+    separationChecklist: undefined,
+  };
+}
+
+function toFullListItem(activity: RepositionActivity): RepositionActivity {
+  if (ACTIVE_REPOSITION_STATUSES.includes(activity.status)) return activity;
+  const stripEmbeddedSignature = (signature?: RepositionActivity["receiptSignature"]) => {
+    if (!signature) return undefined;
+    const { dataUrl: _dataUrl, ...metadata } = signature;
+    return metadata;
+  };
+  return {
+    ...activity,
+    transportSignature: stripEmbeddedSignature(activity.transportSignature),
+    receiptSignature: stripEmbeddedSignature(activity.receiptSignature),
+    separationSignature: stripEmbeddedSignature(activity.separationSignature),
+  };
+}
 
 function canManage(context: Awaited<ReturnType<typeof requireUser>>) {
   return context.isDefaultAdmin || !!context.permissions?.reposition?.prepareDispatch || !!context.permissions?.stock?.analysis?.restock;
@@ -14,14 +54,6 @@ function canManage(context: Awaited<ReturnType<typeof requireUser>>) {
 
 function canView(context: Awaited<ReturnType<typeof requireUser>>) {
   return canManage(context) || !!context.permissions?.reposition?.view || !!context.permissions?.reposition?.receive;
-}
-
-function buildRepositionTaskDescription(activity: Pick<
-  RepositionActivity,
-  "kioskOriginName" | "kioskDestinationName" | "items" | "status"
->) {
-  const totalItems = activity.items.length;
-  return `${activity.kioskOriginName} -> ${activity.kioskDestinationName}. ${totalItems} ${totalItems === 1 ? "item" : "itens"}. Status: ${activity.status}.`;
 }
 
 export async function GET(request: NextRequest) {
@@ -34,20 +66,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const detail = request.nextUrl.searchParams.get("detail") === "full" ? "full" : "summary";
     const snap = await dbAdmin.collection("repositionActivities").get();
     const activities = snap.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<RepositionActivity, "id">) }))
-      .filter((activity) => {
-        if (canManage(context)) return true;
-        if (!context.permissions?.reposition?.receive) return true;
-
-        const assignedKioskIds = context.userDoc.assignedKioskIds ?? [];
-        const unitIds = context.userDoc.unitIds ?? [];
-        return assignedKioskIds.includes(activity.kioskDestinationId) || unitIds.includes(activity.kioskDestinationId);
-      })
+      .filter((activity) => canAccessAnyUnit(
+        context.userDoc,
+        [activity.kioskOriginId, activity.kioskDestinationId],
+        { isDefaultAdmin: context.isDefaultAdmin }
+      ))
+      .map((activity) => detail === "full" ? toFullListItem(activity) : toSummary(activity))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
-    return NextResponse.json({ activities });
+    return NextResponse.json(
+      { activities },
+      {
+        headers: {
+          "Cache-Control": "private, no-store",
+          "X-Reposition-Detail": detail,
+        },
+      }
+    );
   } catch (error) {
     return NextResponse.json(
       {
@@ -84,6 +123,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Payload inválido para criação da reposição." },
         { status: 400 }
+      );
+    }
+
+    const canAccessOrigin = canAccessUnit(context.userDoc, body.kioskOriginId, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    });
+    const canAccessDestination = canAccessUnit(context.userDoc, body.kioskDestinationId, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    });
+    if (!canAccessOrigin || !canAccessDestination) {
+      return NextResponse.json(
+        { error: "A origem e o destino precisam estar dentro do seu escopo de unidades." },
+        { status: 403 }
       );
     }
 
@@ -154,32 +206,13 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    try {
-      const task = await createManualTask({
-        context,
-        input: {
-          title: `Reposição ${payload.kioskOriginName} -> ${payload.kioskDestinationName}`,
-          description: buildRepositionTaskDescription(payload),
-          assigneeType: "user",
-          assigneeId: context.userDoc.id,
-          origin: {
-            kind: "legacy",
-            type: "reposition_activity",
-            id: activityRef.id,
-          },
-        },
-      });
-
+    const task = await syncRepositionTaskSafely({
+      context,
+      activity: payload,
+      label: "create",
+    });
+    if (task) {
       payload.taskId = task.id;
-      await activityRef.set({ taskId: task.id }, { merge: true });
-    } catch (taskError) {
-      console.error(
-        "[REPOSITION POST] Reposição criada, mas falhou ao criar tarefa vinculada",
-        {
-          activityId: activityRef.id,
-          error: taskError,
-        }
-      );
     }
 
     if (payload.requestId) {

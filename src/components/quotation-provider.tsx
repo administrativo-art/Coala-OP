@@ -7,6 +7,7 @@ import {
   type QuotationStatus,
 } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
+import { warnBackgroundLoadError } from '@/lib/client-background-errors';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
 
 export interface QuotationContextType {
@@ -80,7 +81,7 @@ export function QuotationProvider({ children }: { children: React.ReactNode }) {
         [...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
       );
     } catch (err) {
-      console.error('Error fetching quotations:', err);
+      warnBackgroundLoadError('quotations', err);
       setQuotations([]);
     } finally {
       setLoading(false);

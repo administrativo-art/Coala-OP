@@ -1,9 +1,11 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { type RepositionActivity, type RepositionContextType } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import { warnBackgroundLoadError } from "@/lib/client-background-errors";
 import {
   cancelRepositionActivityRequest,
   createRepositionActivityRequest,
@@ -18,13 +20,27 @@ export const RepositionContext = createContext<
 >(undefined);
 
 export function RepositionProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { user, permissions, firebaseUser } = useAuth();
   const [activities, setActivities] = useState<RepositionActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const { optimisticallyUpdateLots } = useExpiryProducts();
 
+  // Mirror the server's `canView` gate (reposition-activities GET): managers via
+  // analysis.restock, but also attendants/operators via reposition.view/receive/
+  // prepareDispatch. Without this, an attendant (e.g. only reposition.receive) would
+  // never load the activities the server would scope to their assigned kiosks.
+  const canLoadReposition =
+    (permissions?.stock?.analysis?.restock ?? false) ||
+    (permissions?.reposition?.view ?? false) ||
+    (permissions?.reposition?.receive ?? false) ||
+    (permissions?.reposition?.prepareDispatch ?? false);
+  const needsFullActivities =
+    pathname?.startsWith("/dashboard/stock/analysis") ||
+    pathname?.startsWith("/dashboard/stock/reposition");
+
   useEffect(() => {
-    if (!(permissions?.stock?.analysis?.restock ?? false) || !firebaseUser) {
+    if (!canLoadReposition || !firebaseUser) {
       setActivities([]);
       setLoading(false);
       return;
@@ -33,15 +49,18 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     const currentFirebaseUser = firebaseUser;
 
     let isMounted = true;
+    setLoading(true);
 
     async function load() {
       try {
-        const payload = await fetchRepositionActivities(currentFirebaseUser);
+        const payload = await fetchRepositionActivities(currentFirebaseUser, {
+          detail: needsFullActivities ? "full" : "summary",
+        });
         if (isMounted) {
           setActivities(payload.activities);
         }
       } catch (error) {
-        console.error("Error fetching reposition activities:", error);
+        warnBackgroundLoadError("reposition-activities", error);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -50,15 +69,17 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
     }
 
     void load();
-    const intervalId = window.setInterval(() => {
-      void load();
-    }, 30000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && needsFullActivities) void load();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isMounted = false;
-      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [permissions?.stock?.analysis?.restock, firebaseUser]);
+  }, [canLoadReposition, firebaseUser, needsFullActivities]);
 
   const createRepositionActivity = useCallback(
     async (
@@ -158,10 +179,12 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       if (!firebaseUser) return;
 
       await finalizeRepositionActivityRequest(firebaseUser, activity.id, resolution);
-      const payload = await fetchRepositionActivities(firebaseUser);
+      const payload = await fetchRepositionActivities(firebaseUser, {
+        detail: needsFullActivities ? "full" : "summary",
+      });
       setActivities(payload.activities);
     },
-    [firebaseUser]
+    [firebaseUser, needsFullActivities]
   );
 
   const revertRepositionActivity = useCallback(
@@ -169,10 +192,12 @@ export function RepositionProvider({ children }: { children: React.ReactNode }) 
       if (!firebaseUser) return;
 
       await revertRepositionActivityRequest(firebaseUser, activityId);
-      const payload = await fetchRepositionActivities(firebaseUser);
+      const payload = await fetchRepositionActivities(firebaseUser, {
+        detail: needsFullActivities ? "full" : "summary",
+      });
       setActivities(payload.activities);
     },
-    [firebaseUser]
+    [firebaseUser, needsFullActivities]
   );
 
   const value = useMemo(

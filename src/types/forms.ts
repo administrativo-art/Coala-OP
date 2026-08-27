@@ -1,4 +1,8 @@
 import { type Timestamp } from 'firebase/firestore';
+import type {
+  FormItemAnalyticsConfig,
+  FormItemOption,
+} from '@/features/forms/analytics/analytics-config-schema';
 
 // ─── Context discriminator ─────────────────────────────────────────────────────
 
@@ -44,6 +48,9 @@ export type FormProject = {
   description?: string;
   color?: string;
   icon?: string;
+  source?: 'unit_auto' | 'manual';
+  unit_id?: string;
+  unit_name_snapshot?: string;
   is_active: boolean;
   members: FormProjectMember[];
   created_at: Timestamp | string;
@@ -110,7 +117,8 @@ export type FormTaskTrigger = {
   title_template: string;
   description_template?: string;
   task_project_id: string;
-  assignee_type: 'user' | 'role';
+  task_subproject_id?: string;
+  assignee_type: 'user' | 'role' | 'team' | 'unit';
   assignee_id: string;
   assignee_name?: string;
   requires_approval: boolean;
@@ -127,7 +135,7 @@ export type FormItemConfig = {
   max?: number;
   unit?: string;
   alert_out_of_range?: boolean;
-  options?: string[];
+  options?: Array<string | FormItemOption>;
   min_photos?: number;
   max_photos?: number;
   allow_multiple?: boolean;
@@ -155,6 +163,7 @@ export type FormTemplateItem = {
   conditional_branches?: FormConditionalBranch[];
   task_triggers?: FormTaskTrigger[];
   config?: FormItemConfig;
+  analytics_config?: FormItemAnalyticsConfig;
 };
 
 export type FormTemplateSection = {
@@ -456,6 +465,13 @@ export type FormExecution = {
   completed_at?: string | null;
   canceled_by_user_id?: string | null;
   canceled_at?: string | null;
+  analytics_revision?: number;
+  analytics_generation_state?: 'generating' | 'generated' | 'failed';
+  analytics_generation_batch_id?: string;
+  analytics_generation_lock_id?: string;
+  analytics_generation_lock_at?: Timestamp | string;
+  analytics_generated_at?: Timestamp | string;
+  analytics_generation_error?: string;
   created_at: Timestamp | string;
   updated_at?: Timestamp | string;
 };

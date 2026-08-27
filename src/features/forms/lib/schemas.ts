@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  formItemAnalyticsConfigSchema,
+  formItemOptionSchema,
+} from "@/features/forms/analytics/analytics-config-schema";
+
 const isoDateSchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const formConditionalOperatorSchema = z.enum([
@@ -25,7 +30,9 @@ export const formItemConfigSchema = z.object({
   max: z.number().optional(),
   unit: z.string().trim().max(20).optional(),
   alert_out_of_range: z.boolean().optional(),
-  options: z.array(z.string().trim().min(1)).optional(),
+  options: z
+    .array(z.union([z.string().trim().min(1), formItemOptionSchema]))
+    .optional(),
   min_photos: z.number().int().min(1).optional(),
   max_photos: z.number().int().min(1).optional(),
   allow_multiple: z.boolean().optional(),
@@ -37,7 +44,8 @@ export const formTaskTriggerSchema = z.object({
   title_template: z.string().trim().min(1),
   description_template: z.string().trim().max(2000).optional(),
   task_project_id: z.string().trim().min(1),
-  assignee_type: z.enum(["user", "role"]),
+  task_subproject_id: z.string().trim().min(1).optional(),
+  assignee_type: z.enum(["user", "role", "team", "unit"]),
   assignee_id: z.string().trim().min(1),
   assignee_name: z.string().trim().max(200).optional(),
   requires_approval: z.boolean().default(false),
@@ -88,6 +96,7 @@ export const formTemplateItemSchema: z.ZodTypeAny = z.lazy(() =>
       .optional(),
     task_triggers: z.array(formTaskTriggerSchema).optional(),
     config: formItemConfigSchema.optional(),
+    analytics_config: formItemAnalyticsConfigSchema.optional(),
   })
 );
 
@@ -106,6 +115,9 @@ export const formProjectSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   color: z.string().trim().max(40).optional(),
   icon: z.string().trim().max(100).optional(),
+  source: z.enum(["manual", "unit_auto"]).optional(),
+  unit_id: z.string().trim().max(200).optional(),
+  unit_name_snapshot: z.string().trim().max(300).optional(),
   is_active: z.boolean().default(true),
   members: z
     .array(

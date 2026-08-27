@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,6 +15,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, Kiosk, User } from '@/types';
 import { cn } from '@/lib/utils';
+import {
+  activeOperationalUnits,
+  canonicalOperationalUnitId,
+  findOperationalUnitRecord,
+  operationalUnitIdsMatch,
+} from '@/lib/dp-units';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,7 +60,8 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ArrowLeft, Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
+import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { useToast } from '@/hooks/use-toast';
 import type { DPShiftDefinition } from '@/types';
@@ -66,6 +72,7 @@ import {
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { buildShiftStreakState, isDayOffShift, isWorkShift } from '@/lib/dp-shift-rules';
 import { DPBulkShiftEditDialog } from '@/components/dp/dp-bulk-shift-edit-dialog';
+import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -190,12 +197,13 @@ function ShiftDialog({
 
   async function onSubmit(values: ShiftFormValues) {
     const hasCrossConflict = !!siblingOccupied?.get(values.userId)?.has(values.date);
+    const userName = operationalUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
     try {
       if (isEdit && shift) {
-        await updateShift({ ...shift, ...values, type: 'work', hasConflict: hasCrossConflict || shift.hasConflict });
+        await updateShift({ ...shift, ...values, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict || shift.hasConflict });
         toast({ title: 'Turno atualizado.' });
       } else {
-        await addShift({ ...values, scheduleId, type: 'work', hasConflict: hasCrossConflict });
+        await addShift({ ...values, scheduleId, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict });
         toast({ title: 'Turno adicionado.' });
       }
       if (hasCrossConflict) {
@@ -256,7 +264,7 @@ function ShiftDialog({
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl>
                     <SelectContent>
-                      {units.map(u => (
+                      {activeOperationalUnits(units).map(u => (
                         <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -491,8 +499,7 @@ interface DPScheduleEditorProps {
 }
 
 export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
-  const router = useRouter();
-  const { activeUsers, permissions, updateUser } = useAuth();
+  const { activeUsers, permissions, updateUser, user, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const {
     updateSchedule,
@@ -526,6 +533,15 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     (unitsError && units.length === 0 ? unitsError : null) ??
     (shiftDefsError && shiftDefinitions.length === 0 ? shiftDefsError : null);
   const ancillaryBootstrapError = schedulesError ?? calendarsError;
+  const accessibleSchedules = useMemo(() => {
+    if (!user) return [];
+    const access = resolveUnitAccess(user, { isDefaultAdmin });
+    return schedules.filter((candidate) =>
+      candidate.unitId
+        ? canAccessUnit(user, candidate.unitId, { isDefaultAdmin })
+        : access.allUnits
+    );
+  }, [isDefaultAdmin, schedules, user]);
 
   // Calendar for holidays
   const { holidays } = useDPHolidays(schedule.calendarId ?? null);
@@ -553,26 +569,33 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   }, [schedule.month, schedule.year]);
 
   const prevSchedule = useMemo(() => {
-    const candidates = schedules.filter(s => s.month === prevPeriod.month && s.year === prevPeriod.year);
+    const candidates = accessibleSchedules.filter(s => s.month === prevPeriod.month && s.year === prevPeriod.year);
     if (schedule.unitId) {
-      return candidates.find(s => s.unitId === schedule.unitId) ?? null;
+      return findOperationalUnitRecord(candidates, schedule.unitId, units) ?? null;
     }
     return candidates.find(s => !s.unitId) ?? candidates[0] ?? null;
-  }, [prevPeriod.month, prevPeriod.year, schedule.unitId, schedules]);
+  }, [accessibleSchedules, prevPeriod.month, prevPeriod.year, schedule.unitId, units]);
   const prevScheduleId = prevSchedule?.id ?? null;
   const { shifts: prevShifts } = useDPShifts(prevScheduleId);
 
+  const prevScheduleSourceUnit = useMemo(() => {
+    if (!schedule.unitId || !prevSchedule?.unitId || prevSchedule.unitId === schedule.unitId) return null;
+    if (!operationalUnitIdsMatch(prevSchedule.unitId, schedule.unitId, units)) return null;
+    return units.find(unit => unit.id === prevSchedule.unitId) ?? null;
+  }, [prevSchedule?.unitId, schedule.unitId, units]);
+
   const prevSiblingIds = useMemo(() => {
     if (!schedule.unitId) return [];
-    return schedules
+    return accessibleSchedules
       .filter(s =>
         s.id !== prevScheduleId &&
         s.month === prevPeriod.month &&
         s.year === prevPeriod.year &&
-        !!s.unitId
+        !!s.unitId &&
+        !operationalUnitIdsMatch(s.unitId, schedule.unitId, units)
       )
       .map(s => s.id);
-  }, [prevPeriod.month, prevPeriod.year, prevScheduleId, schedule.unitId, schedules]);
+  }, [accessibleSchedules, prevPeriod.month, prevPeriod.year, prevScheduleId, schedule.unitId, units]);
   const { shifts: prevSiblingShifts } = useDPSiblingShifts(prevSiblingIds);
 
   // Last 7 days of previous month for preview
@@ -596,7 +619,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     });
   }, [schedule.month, schedule.year]);
 
-  const canEdit = (permissions.dp?.schedules?.edit ?? false) && !schedule.locked;
+  const scheduleUnit = schedule.unitId ? units.find((unit) => unit.id === schedule.unitId) : undefined;
+  const isArchivedUnitSchedule = scheduleUnit?.isArchived === true;
+  const canManageSchedule = (permissions.dp?.schedules?.edit ?? false) && !isArchivedUnitSchedule;
+  const canEdit = canManageSchedule && !schedule.locked;
 
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [editShift, setEditShift] = useState<DPShift | null>(null);
@@ -722,15 +748,19 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     shifts.forEach(s => { if (!seen.has(s.unitId)) seen.set(s.unitId, s.unitId); });
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name } as DPUnit));
   }, [units, shifts]);
+  const accessibleUnits = useMemo(
+    () => user ? filterUnitsByAccess(allUnits, user, { isDefaultAdmin }) : [],
+    [allUnits, isDefaultAdmin, user],
+  );
 
   // In per-unit mode, always show only the schedule's own unit
   const activeUnits = useMemo(() => {
     if (isPerUnit && schedule.unitId) {
-      const own = allUnits.find(u => u.id === schedule.unitId);
+      const own = accessibleUnits.find(u => u.id === schedule.unitId);
       return own ? [own] : [];
     }
-    return unitFilter === '__all__' ? allUnits : allUnits.filter(u => u.id === unitFilter);
-  }, [isPerUnit, schedule.unitId, allUnits, unitFilter]);
+    return unitFilter === '__all__' ? accessibleUnits : accessibleUnits.filter(u => u.id === unitFilter);
+  }, [isPerUnit, schedule.unitId, accessibleUnits, unitFilter]);
 
   // Shift definition lookup
   const defMap = useMemo(() => {
@@ -772,11 +802,17 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
 
   // ── Per-unit mode: sibling schedules (same month/year, different unitId) ──
   const siblingIds = useMemo(() => {
-    if (!isPerUnit) return [];
-    return schedules
-      .filter(s => s.id !== schedule.id && s.month === schedule.month && s.year === schedule.year && s.unitId)
+    if (!isPerUnit || !schedule.unitId) return [];
+    return accessibleSchedules
+      .filter(s =>
+        s.id !== schedule.id &&
+        s.month === schedule.month &&
+        s.year === schedule.year &&
+        s.unitId &&
+        !operationalUnitIdsMatch(s.unitId, schedule.unitId, units)
+      )
       .map(s => s.id);
-  }, [isPerUnit, schedules, schedule.id, schedule.month, schedule.year]);
+  }, [accessibleSchedules, isPerUnit, schedule.id, schedule.month, schedule.year, schedule.unitId, units]);
 
   const { shifts: siblingShifts } = useDPSiblingShifts(siblingIds);
   const workShifts = useMemo(() => shifts.filter(isWorkShift), [shifts]);
@@ -856,12 +892,13 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const prevShiftIndexWithCount = useMemo(() => {
     const idx: Record<string, Record<string, (DPShift & { consecutiveDayCount: number })[]>> = {};
     for (const shift of prevShiftsWithConsecutive) {
+      const displayUnitId = canonicalOperationalUnitId(shift.unitId, units) ?? shift.unitId;
       if (!idx[shift.date]) idx[shift.date] = {};
-      if (!idx[shift.date][shift.unitId]) idx[shift.date][shift.unitId] = [];
-      idx[shift.date][shift.unitId].push(shift);
+      if (!idx[shift.date][displayUnitId]) idx[shift.date][displayUnitId] = [];
+      idx[shift.date][displayUnitId].push(shift);
     }
     return idx;
-  }, [prevShiftsWithConsecutive]);
+  }, [prevShiftsWithConsecutive, units]);
 
   const dayOffIndex = useMemo(() => {
     const activeUnitIds = new Set(activeUnits.map((unit) => unit.id));
@@ -1083,16 +1120,14 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard/dp/schedules')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+        <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-semibold truncate">{schedule.name}</h1>
           <p className="text-sm text-muted-foreground">
             {MONTHS[schedule.month - 1]} {schedule.year}
           </p>
         </div>
-        {permissions.dp?.schedules?.edit && (
+        {canManageSchedule && (
           schedule.locked ? (
             <Button size="sm" variant="outline" onClick={handleUnlock} disabled={locking} className="border-amber-500/50 text-amber-600 hover:bg-amber-50">
               <LockOpen className="mr-2 h-4 w-4" />
@@ -1131,6 +1166,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
           Escala trancada — dados de colaboradores e vale-transporte estão congelados.
         </div>
       )}
+      {isArchivedUnitSchedule && (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          Escala histórica preservada após a incorporação desta unidade. Alterações estão bloqueadas.
+        </div>
+      )}
       {ancillaryBootstrapError && (
         <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
           <Lock className="h-3.5 w-3.5 shrink-0" />
@@ -1162,10 +1203,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                 <span>Pessoas</span>
                 <ChevronRight className="h-3 w-3 ml-auto" />
               </div>
-              <p className="text-2xl font-bold">{uniqueCollaborators}</p>
+              <p className="text-lg font-bold">{uniqueCollaborators}</p>
             </div>
           </PopoverTrigger>
-          <PopoverContent className="w-64 p-3" align="start">
+          <PopoverContent className="w-56 p-2" align="start">
             <p className="text-xs font-medium text-muted-foreground mb-2">Por colaborador</p>
             {pessoasBreakdown.length === 0 ? (
               <p className="text-xs text-muted-foreground">Nenhum colaborador na escala.</p>
@@ -1186,14 +1227,14 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
             <AlertTriangle className="h-3.5 w-3.5" />
             <span>Conflito{conflictCount !== 1 ? 's' : ''}</span>
           </div>
-          <p className={`text-2xl font-bold ${conflictCount > 0 ? 'text-destructive' : ''}`}>{conflictCount}</p>
+          <p className={`text-lg font-bold ${conflictCount > 0 ? 'text-destructive' : ''}`}>{conflictCount}</p>
         </div>
         <div className="rounded-xl border bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
             <Filter className="h-3.5 w-3.5" />
             <span>Turnos</span>
           </div>
-          <p className="text-2xl font-bold">{workShifts.length}</p>
+          <p className="text-lg font-bold">{workShifts.length}</p>
         </div>
         <Popover>
           <PopoverTrigger asChild>
@@ -1203,12 +1244,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                 <span>Vale Transporte</span>
                 <ChevronRight className="h-3 w-3 ml-auto" />
               </div>
-              <p className="text-2xl font-bold">
+              <p className="text-lg font-bold">
                 {vtStats.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </p>
             </div>
           </PopoverTrigger>
-          <PopoverContent className="w-72 p-3" align="end">
+          <PopoverContent className="w-60 p-2" align="end">
             <p className="text-xs font-medium text-muted-foreground mb-2">Por colaborador</p>
             {vtStats.breakdown.length === 0 ? (
               <p className="text-xs text-muted-foreground">Nenhum colaborador com VT.</p>
@@ -1322,6 +1363,14 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                       >
                         <span className={`transition-transform ${prevExpanded ? 'rotate-90' : ''}`}>▶</span>
                         {MONTHS[(prevMonthDays[0].prevMonth) - 1]} {prevMonthDays[0].prevYear} — prévia
+                        {prevScheduleSourceUnit && (
+                          <Badge
+                            variant="outline"
+                            className="ml-auto border-blue-200 bg-blue-50 text-[9px] normal-case tracking-normal text-blue-700"
+                          >
+                            Continuidade: {prevScheduleSourceUnit.name}
+                          </Badge>
+                        )}
                       </button>
                     </td>
                   </tr>

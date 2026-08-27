@@ -119,10 +119,11 @@
       ]
     },
     {
-      "collectionGroup": "sync_log",
+      "collectionGroup": "onboardingProcesses",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "started_at", "order": "DESCENDING" }
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "probationV2.status", "order": "ASCENDING" }
       ]
     },
     {
@@ -131,13 +132,6 @@
       "fields": [
         { "fieldPath": "field_key",   "order": "ASCENDING" },
         { "fieldPath": "updated_at",  "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "rh_access_cache",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "bizneo_employee_id", "order": "ASCENDING" }
       ]
     }
   ],

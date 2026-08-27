@@ -1,8 +1,10 @@
 "use client";
 
 import React, { createContext, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { type RepositionRequest, type RepositionRequestContextType } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
+import { warnBackgroundLoadError } from "@/lib/client-background-errors";
 import {
   createRepositionRequest,
   fetchRepositionRequests,
@@ -14,6 +16,7 @@ export const RepositionRequestContext = createContext<
 >(undefined);
 
 export function RepositionRequestProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { permissions, firebaseUser } = useAuth();
   const [requests, setRequests] = useState<RepositionRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +28,8 @@ export function RepositionRequestProvider({ children }: { children: React.ReactN
   }, [firebaseUser]);
 
   useEffect(() => {
-    if (!(permissions?.stock?.analysis?.restock ?? false) || !firebaseUser) {
+    const isRepositionRoute = pathname?.startsWith("/dashboard/stock/analysis");
+    if (!isRepositionRoute || !(permissions?.stock?.analysis?.restock ?? false) || !firebaseUser) {
       setRequests([]);
       setLoading(false);
       return;
@@ -33,26 +37,34 @@ export function RepositionRequestProvider({ children }: { children: React.ReactN
 
     const currentFirebaseUser = firebaseUser;
     let isMounted = true;
+    setLoading(true);
 
     async function load() {
       try {
         const payload = await fetchRepositionRequests(currentFirebaseUser);
         if (isMounted) setRequests(payload.requests);
       } catch (error) {
-        console.error("Error fetching reposition requests:", error);
+        warnBackgroundLoadError("reposition-requests", error);
       } finally {
         if (isMounted) setLoading(false);
       }
     }
 
     void load();
-    const intervalId = window.setInterval(() => void load(), 30000);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 60000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isMounted = false;
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [permissions?.stock?.analysis?.restock, firebaseUser]);
+  }, [pathname, permissions?.stock?.analysis?.restock, firebaseUser]);
 
   const createRequest = useCallback(
     async (data: Pick<RepositionRequest, "kioskId" | "kioskName" | "items" | "notes">) => {

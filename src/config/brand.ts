@@ -1,13 +1,15 @@
+import sidebarLogo from '@/assets/brand/logosidebar.png';
+
 // ============================================================
-// CONFIGURAÇÃO CENTRAL DE MARCA — Coala Operação | Estoque
+// CONFIGURAÇÃO CENTRAL DE MARCA — Coala One
 // Troque apenas os valores abaixo para rebrandear o sistema
 // ============================================================
 
 export const brand = {
-  name: 'Sistema - Coala',
-  shortName: 'Coala Operação',
-  logo: '/logosidebar.png',
+  name: 'Coala One',
+  shortName: 'Coala One',
+  logo: sidebarLogo.src,
   loginBg: '/loginfundo.png',
   version: 'v1.0.0',
-  description: 'Gestão inteligente de estoque',
+  description: 'Pessoas, processos e operação em um só lugar',
 };

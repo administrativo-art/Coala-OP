@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState, type DragEvent } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
   ChevronDown,
   ClipboardList,
   FileQuestion,
@@ -20,14 +18,27 @@ import {
   Zap,
 } from "lucide-react";
 
-import type { FormAssignment, FormTemplate } from "@/types/forms";
+import type { FormAssignment, FormItemConfig, FormTemplate } from "@/types/forms";
+import type { FormItemOption } from "@/features/forms/analytics/analytics-config-schema";
+import {
+  AnalyticsConfigPanel,
+  analyticsConfigToEditor,
+  buildStructuredOptionsPayload,
+  editorAnalyticsToPayload,
+  emptyEditorAnalyticsConfig,
+  type EditorAnalyticsConfig,
+  type EditorOptionAnalytics,
+} from "@/components/forms/analytics-config-panel";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
+import { activeOperationalUnits } from "@/lib/dp-units";
 import {
   fetchFormTemplate,
   fetchFormTemplateApplication,
   updateFormTemplate,
   updateFormTemplateApplication,
+  TemplatePublicationError,
+  type TemplateValidationIssue,
 } from "@/features/forms/lib/client";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +59,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { BackButton } from "@/components/navigation/back-button";
 
 const OCCURRENCE_LABELS: Record<string, string> = {
   manual: "Manual",
@@ -116,6 +128,16 @@ function formatPendingPolicy(policy?: FormAssignment["pending_policy"]) {
   return "Manter pendentes antigos";
 }
 
+type FormOptionValue = NonNullable<FormItemConfig["options"]>[number];
+
+function getOptionLabel(option: FormOptionValue) {
+  return typeof option === "string" ? option : option.label;
+}
+
+function formatOptionsText(options?: FormItemConfig["options"]) {
+  return (options ?? []).map(getOptionLabel).join("\n");
+}
+
 type EditorItem = {
   id: string;
   title: string;
@@ -144,6 +166,9 @@ type EditorItem = {
   show_if_value: string;
   task_triggers: EditorTaskTrigger[];
   conditional_branches: EditorConditionalBranch[];
+  analytics_config: EditorAnalyticsConfig;
+  option_analytics: Record<string, EditorOptionAnalytics>;
+  structured_options: FormItemOption[];
 };
 
 type EditorSection = {
@@ -170,7 +195,8 @@ type EditorTaskTrigger = {
   title_template: string;
   description_template: string;
   task_project_id: string;
-  assignee_type: "user" | "role";
+  task_subproject_id: string;
+  assignee_type: "user" | "role" | "team" | "unit";
   assignee_id: string;
   assignee_name: string;
   requires_approval: boolean;
@@ -225,6 +251,67 @@ function createEmptyEditorItem(): EditorItem {
     show_if_value: "",
     task_triggers: [],
     conditional_branches: [],
+    analytics_config: emptyEditorAnalyticsConfig(),
+    option_analytics: {},
+    structured_options: [],
+  };
+}
+
+function extractStructuredOptions(
+  options?: FormItemConfig["options"]
+): FormItemOption[] {
+  return (options ?? []).filter(
+    (option): option is FormItemOption => typeof option !== "string"
+  );
+}
+
+function extractOptionAnalytics(
+  options?: FormItemConfig["options"]
+): Record<string, EditorOptionAnalytics> {
+  const map: Record<string, EditorOptionAnalytics> = {};
+  for (const option of options ?? []) {
+    if (typeof option === "string") continue;
+    map[option.label] = {
+      criterion_id: option.analytics?.criterion_id ?? "",
+      result_id: option.analytics?.result_id ?? "",
+      severity: option.analytics?.severity ?? "",
+    };
+  }
+  return map;
+}
+
+function splitOptionLabels(optionsText: string) {
+  return optionsText
+    .split("\n")
+    .map((option) => option.trim())
+    .filter(Boolean);
+}
+
+function buildItemConfigPayload(item: EditorItem) {
+  const labels = splitOptionLabels(item.options_text);
+  if (labels.length === 0 && item.type !== "photo") return undefined;
+
+  const useStructuredOptions =
+    labels.length > 0 &&
+    (item.analytics_config.enabled ||
+      item.structured_options.length > 0 ||
+      Object.values(item.option_analytics).some(
+        (entry) => entry.criterion_id || entry.result_id || entry.severity
+      ));
+
+  return {
+    ...(item.type === "photo" ? { min_photos: 1, allow_multiple: true } : {}),
+    ...(labels.length > 0
+      ? {
+          options: useStructuredOptions
+            ? buildStructuredOptionsPayload({
+                labels,
+                structuredOptions: item.structured_options,
+                optionAnalytics: item.option_analytics,
+              })
+            : labels,
+        }
+      : {}),
   };
 }
 
@@ -253,6 +340,9 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
   const [applicationOpen, setApplicationOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingApplication, setSavingApplication] = useState(false);
+  const [publicationIssues, setPublicationIssues] = useState<
+    TemplateValidationIssue[]
+  >([]);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [formState, setFormState] = useState({
     name: "",
@@ -271,6 +361,17 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
   });
   const defaultTaskProjectId = template?.form_project_id ?? "";
   const displayedSections = formState.sections.length > 0 ? formState.sections : [];
+  const itemTitleById = new Map<string, string>();
+  for (const section of displayedSections) {
+    for (const item of section.items) itemTitleById.set(item.id, item.title);
+  }
+  const issuesByItem = new Map<string, TemplateValidationIssue[]>();
+  for (const issue of publicationIssues) {
+    issuesByItem.set(issue.item_id, [
+      ...(issuesByItem.get(issue.item_id) ?? []),
+      issue,
+    ]);
+  }
   const questionCount = displayedSections.reduce((total, section) => total + section.items.length, 0);
   const conditionalCount = displayedSections.reduce(
     (total, section) =>
@@ -354,7 +455,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   typeof item.tolerance_percent === "number"
                     ? String(item.tolerance_percent)
                     : "",
-                options_text: (item.config?.options ?? []).join("\n"),
+                options_text: formatOptionsText(item.config?.options),
                 action_required: item.action_required ?? false,
                 show_if_enabled: !!item.show_if,
                 show_if_item_id: item.show_if?.item_id ?? "",
@@ -366,6 +467,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   title_template: trigger.title_template,
                   description_template: trigger.description_template ?? "",
                   task_project_id: trigger.task_project_id,
+                  task_subproject_id: trigger.task_subproject_id ?? "",
                   assignee_type: trigger.assignee_type,
                   assignee_id: trigger.assignee_id,
                   assignee_name: trigger.assignee_name ?? "",
@@ -377,6 +479,9 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                       ? String(trigger.sla_hours)
                       : "",
                 })),
+                analytics_config: analyticsConfigToEditor(item.analytics_config),
+                option_analytics: extractOptionAnalytics(item.config?.options),
+                structured_options: extractStructuredOptions(item.config?.options),
                 conditional_branches: (item.conditional_branches ?? []).map(
                   (branch) => ({
                     id: createLocalId(),
@@ -400,7 +505,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                         typeof branchItem.tolerance_percent === "number"
                           ? String(branchItem.tolerance_percent)
                           : "",
-                      options_text: (branchItem.config?.options ?? []).join("\n"),
+                      options_text: formatOptionsText(branchItem.config?.options),
                       action_required: branchItem.action_required ?? false,
                       show_if_enabled: !!branchItem.show_if,
                       show_if_item_id: branchItem.show_if?.item_id ?? "",
@@ -411,6 +516,9 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           : String(branchItem.show_if.value),
                       task_triggers: [],
                       conditional_branches: [],
+                      analytics_config: emptyEditorAnalyticsConfig(),
+                      option_analytics: {},
+                      structured_options: [],
                     })),
                   })
                 ),
@@ -502,20 +610,10 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                 ? undefined
                 : Number(item.tolerance_percent),
             action_required: item.action_required,
-            config:
-              item.options_text.trim() || item.type === "photo"
-                ? {
-                    ...(item.type === "photo" ? { min_photos: 1, allow_multiple: true } : {}),
-                    ...(item.options_text.trim()
-                      ? {
-                          options: item.options_text
-                            .split("\n")
-                            .map((option) => option.trim())
-                            .filter(Boolean),
-                        }
-                      : {}),
-                  }
-                : undefined,
+            config: buildItemConfigPayload(item),
+            ...(editorAnalyticsToPayload(item.analytics_config)
+              ? { analytics_config: editorAnalyticsToPayload(item.analytics_config) }
+              : {}),
             show_if:
               item.show_if_enabled && item.show_if_item_id
                 ? {
@@ -535,6 +633,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                   ? undefined
                   : trigger.description_template,
               task_project_id: trigger.task_project_id,
+              ...(trigger.task_subproject_id ? { task_subproject_id: trigger.task_subproject_id } : {}),
               assignee_type: trigger.assignee_type,
               assignee_id: trigger.assignee_id,
               assignee_name:
@@ -607,13 +706,23 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
 
       const refreshed = await fetchFormTemplate(firebaseUser, template.id);
       setTemplate(refreshed);
+      setPublicationIssues([]);
       setEditorOpen(false);
       toast({ title: "Formulário atualizado" });
     } catch (saveError) {
-      toast({
-        variant: "destructive",
-        title: saveError instanceof Error ? saveError.message : "Falha ao atualizar formulário.",
-      });
+      if (saveError instanceof TemplatePublicationError) {
+        setPublicationIssues(saveError.issues);
+        toast({
+          variant: "destructive",
+          title: "Configuração analítica inválida",
+          description: `${saveError.issues.filter((issue) => issue.level === "error").length} erro(s) impedem a publicação. Veja o resumo no topo do editor.`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: saveError instanceof Error ? saveError.message : "Falha ao atualizar formulário.",
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -837,6 +946,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
           title_template: "Ação corretiva: {{item_title}}",
           description_template: "",
           task_project_id: defaultTaskProjectId,
+          task_subproject_id: "",
           assignee_type: "role",
           assignee_id: "",
           assignee_name: "",
@@ -994,12 +1104,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
     <div className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-3">
-          <Link href="/dashboard/forms">
-            <Button variant="ghost" className="w-fit px-0 text-muted-foreground">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar para formulários
-            </Button>
-          </Link>
+          <BackButton fallbackHref="/dashboard/forms" label="Voltar para formulários" variant="ghost" className="w-fit px-0 text-muted-foreground" />
           <div className="flex items-start gap-3">
             <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white">
               <ClipboardList className="h-5 w-5" />
@@ -1107,6 +1212,34 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
               Adicionar seção
             </Button>
           </div>
+
+          {publicationIssues.length > 0 ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+              <p className="text-sm font-semibold text-destructive">
+                A configuração analítica impede a publicação
+              </p>
+              <ul className="mt-2 space-y-1 text-xs">
+                {publicationIssues.map((issue, index) => {
+                  const item = itemTitleById.get(issue.item_id);
+                  return (
+                    <li
+                      key={`${issue.item_id}-${issue.code}-${index}`}
+                      className={
+                        issue.level === "error"
+                          ? "text-destructive"
+                          : "text-amber-700"
+                      }
+                    >
+                      <span className="font-medium">
+                        {item ?? issue.item_id}
+                      </span>
+                      {issue.field ? ` · ${issue.field}` : ""}: {issue.message}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
 
           {displayedSections.length === 0 ? (
             <Card>
@@ -1235,6 +1368,11 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">
                               {item.title.trim() || "Pergunta sem título"}
+                              {(issuesByItem.get(item.id)?.length ?? 0) > 0 ? (
+                                <span className="ml-2 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
+                                  {issuesByItem.get(item.id)!.length} problema(s)
+                                </span>
+                              ) : null}
                             </p>
                             <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                               <span>{getItemTypeLabel(item.type)}</span>
@@ -1648,6 +1786,31 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                           ) : null}
                         </div>
                       </div>
+                      <AnalyticsConfigPanel
+                        itemType={item.type}
+                        value={item.analytics_config}
+                        optionLabels={splitOptionLabels(item.options_text)}
+                        optionAnalytics={item.option_analytics}
+                        taskTriggerOptions={item.task_triggers.map((trigger) => ({
+                          id: trigger.id,
+                          label: trigger.title_template || trigger.id,
+                        }))}
+                        siblingItems={formState.sections.flatMap((candidateSection) =>
+                          candidateSection.items
+                            .filter((candidate) => candidate.id !== item.id)
+                            .map((candidate) => ({
+                              id: candidate.id,
+                              title: candidate.title,
+                              type: candidate.type,
+                            }))
+                        )}
+                        onChange={(next) =>
+                          updateItem(section.id, item.id, { analytics_config: next })
+                        }
+                        onOptionAnalyticsChange={(next) =>
+                          updateItem(section.id, item.id, { option_analytics: next })
+                        }
+                      />
                         </div>
                       ) : null}
                     </div>
@@ -2014,7 +2177,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                       unit_ids:
                         current.unit_ids.length === units.length
                           ? []
-                          : units.map((unit) => unit.id),
+                          : activeOperationalUnits(units).map((unit) => unit.id),
                     }))
                   }
                 >
@@ -2025,7 +2188,7 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                 {units.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhuma unidade carregada.</p>
                 ) : (
-                  units.map((unit) => (
+                  activeOperationalUnits(units).map((unit) => (
                     <label key={unit.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
                       <Checkbox
                         checked={applicationForm.unit_ids.includes(unit.id)}
@@ -2686,6 +2849,23 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                                       }
                                       placeholder="Task project id"
                                     />
+                                    <Input
+                                      value={trigger.task_subproject_id}
+                                      onChange={(event) =>
+                                        updateTaskTrigger(
+                                          section.id,
+                                          item.id,
+                                          trigger.id,
+                                          {
+                                            task_subproject_id:
+                                              event.target.value,
+                                          }
+                                        )
+                                      }
+                                      placeholder="Task subproject id (opcional)"
+                                    />
+                                  </div>
+                                  <div className="grid gap-3 md:grid-cols-2">
                                     <select
                                       className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                                       value={trigger.assignee_type}
@@ -2696,13 +2876,15 @@ export function FormTemplateDetailShell({ templateId }: { templateId: string }) 
                                           trigger.id,
                                           {
                                             assignee_type:
-                                              event.target.value as "user" | "role",
+                                              event.target.value as "user" | "role" | "team" | "unit",
                                           }
                                         )
                                       }
                                     >
                                       <option value="role">Cargo</option>
                                       <option value="user">Usuário</option>
+                                      <option value="team">Equipe</option>
+                                      <option value="unit">Unidade</option>
                                     </select>
                                   </div>
                                   <div className="grid gap-3 md:grid-cols-2">

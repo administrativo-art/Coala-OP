@@ -66,6 +66,10 @@ export function purchaseTreatmentCreatesAsset(treatment?: PurchaseItemTreatment)
   return treatment === 'asset';
 }
 
+export function purchaseTreatmentRequiresKioskDestination(treatment?: PurchaseItemTreatment) {
+  return treatment !== 'uniform' && !purchaseTreatmentSkipsOperationalEntry(treatment);
+}
+
 export function purchaseTreatmentSkipsOperationalEntry(treatment?: PurchaseItemTreatment) {
   return treatment === 'asset_component' || treatment === 'service' || treatment === 'expense';
 }

@@ -2,30 +2,49 @@
 
 import { useState, useMemo } from 'react';
 import { Timestamp } from 'firebase/firestore';
-import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useGoals } from '@/contexts/goals-context';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
+import { canAccessUnit } from '@/lib/unit-access';
 import { useDPStore } from '@/store/use-dp-store';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
+import { useGoalMethodConfigs } from '@/hooks/use-goal-method-configs';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
-import { useShiftRevenueSalesReports } from '@/hooks/use-shift-revenue-suggestion';
-import { computeShiftSuggestion } from '@/lib/shift-revenue-suggestion';
+import {
+  applyRevenueTargetsToGoalMethod,
+  calculateTieredGoalBonus,
+  formatCurrencyBRL,
+} from '@/lib/goal-methods';
 import { useToast } from '@/hooks/use-toast';
 import { useProductSimulationCategories } from '@/hooks/use-product-simulation-categories';
 import { ProductSimulationContext } from '@/components/product-simulation-provider';
 import { useContext } from 'react';
-import { type EmployeeGoal, type GoalPeriodDoc, type GoalShift, type GoalType } from '@/types';
+import {
+  type DPUnit,
+  type DPUnitGroup,
+  type DPUnitOrganization,
+  type DPUnitResponsibilitySource,
+  type EmployeeGoal,
+  type GoalLeadershipRecipient,
+  type GoalParticipantRole,
+  type GoalPeriod,
+  type GoalPeriodDoc,
+  type GoalShift,
+  type GoalType,
+  type User,
+} from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronLeft, Plus, Search, X } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,45 +53,129 @@ function currentMonthValue(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function currentDateValue(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function currentWeekValue(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const firstWeekStart = startOfWeek(new Date(year, 0, 4), { weekStartsOn: 1 });
+  const currentWeekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const diffMs = currentWeekStart.getTime() - firstWeekStart.getTime();
+  const week = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return `${year}-W${String(Math.max(week, 1)).padStart(2, '0')}`;
+}
+
 function monthToDateRange(monthStr: string): { start: Date; end: Date } {
   const [year, month] = monthStr.split('-').map(Number);
   const start = startOfMonth(new Date(year, month - 1, 1));
   return { start, end: endOfMonth(start) };
 }
 
-function ordinalLabel(n: number): string {
-  const ordinals = ['1º', '2º', '3º', '4º', '5º', '6º', '7º', '8º', '9º', '10º'];
-  return `${ordinals[n] ?? `${n + 1}º`} Turno`;
+function dateToDateRange(dateStr: string): { start: Date; end: Date } {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return { start: date, end: date };
+}
+
+function weekToDateRange(weekStr: string): { start: Date; end: Date } {
+  const [yearStr, weekPart] = weekStr.split('-W');
+  const year = Number(yearStr);
+  const week = Number(weekPart);
+  const firstWeekStart = startOfWeek(new Date(year, 0, 4), { weekStartsOn: 1 });
+  const start = addDays(firstWeekStart, (week - 1) * 7);
+  return { start, end: endOfWeek(start, { weekStartsOn: 1 }) };
+}
+
+function goalPeriodToDateRange(period: GoalPeriod, values: { month: string; week: string; date: string }) {
+  if (period === 'daily') return dateToDateRange(values.date);
+  if (period === 'weekly') return weekToDateRange(values.week);
+  return monthToDateRange(values.month);
+}
+
+function goalPeriodLabel(period: GoalPeriod): string {
+  if (period === 'daily') return 'Diária';
+  if (period === 'weekly') return 'Semanal';
+  return 'Mensal';
+}
+
+function formatDateRange(start: Date, end: Date): string {
+  if (dateKey(start) === dateKey(end)) return format(start, 'dd/MM/yyyy');
+  return `${format(start, 'dd/MM/yyyy')} até ${format(end, 'dd/MM/yyyy')}`;
 }
 
 function monthKeyFromDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function isReliefWorkerUser(user: { jobRoleName?: string; jobFunctionNames?: string[] } | undefined): boolean {
+  if (!user) return false;
+  const labels = [user.jobRoleName, ...(user.jobFunctionNames ?? [])].filter(Boolean).map(value => normalizeText(String(value)));
+  return labels.some(label => label.includes('folguista'));
+}
+
+function resolveUnitReferenceIds(reference: string, units: DPUnit[]) {
+  if (!reference) return [];
+  if (units.some(unit => unit.id === reference)) return [reference];
+  const matchedUnit = units.length > 0 ? matchDPUnitForKiosk(reference, units) : undefined;
+  return matchedUnit ? [reference, matchedUnit.id] : [reference];
+}
+
+function sourceMatchesUser(
+  sourceType: DPUnitResponsibilitySource | undefined,
+  sourceId: string | undefined,
+  user: User
+) {
+  if (!sourceType || !sourceId) return false;
+  if (sourceType === 'job_role') return user.jobRoleId === sourceId;
+  return user.jobFunctionIds?.includes(sourceId) === true;
+}
+
+function userOwnsResponsibility(
+  entity: Pick<DPUnitGroup | DPUnitOrganization, 'responsibleUserId' | 'responsibleSourceType' | 'responsibleSourceId'>,
+  user: User
+) {
+  if (entity.responsibleUserId) return entity.responsibleUserId === user.id;
+  return sourceMatchesUser(entity.responsibleSourceType, entity.responsibleSourceId, user);
+}
+
 
 const GOAL_TYPE_OPTIONS: { type: GoalType; label: string; description: string }[] = [
-  { type: 'revenue', label: 'Faturamento', description: 'Meta de receita total com turnos e colaboradores' },
+  { type: 'revenue', label: 'Faturamento', description: 'Meta de receita por período com colaboradores' },
   { type: 'ticket', label: 'Ticket Médio', description: 'Meta global do quiosque (faturamento ÷ cupons)' },
   { type: 'product_line', label: 'Linha de Produto', description: 'Meta por categoria (milkshake, açaí, casquinha…)' },
   { type: 'product_specific', label: 'Produto Específico', description: 'Meta para um produto individual' },
 ];
 
-interface ShiftDraft {
-  id: string;
-  label: string;
-  pct: string;
-}
-
-interface EmployeeAssignment {
-  shiftId: string;
+interface RevenueParticipant {
   employeeId: string;
-  pct: string;
+  label: string;
+  source: 'schedule' | 'manual';
+  role: GoalParticipantRole;
+  scheduledDays: number;
+  coveredTurns: number;
+  shiftLabels: string[];
+  fraction: number;
 }
 
 // Per-type config data
 interface RevenueConfig {
   targetValue: number;
   upValue: number;
+  topValue: number;
 }
 interface TicketConfig {
   targetValue: number;
@@ -82,19 +185,20 @@ interface ProductLineConfig {
   lineName: string;
   targetValue: number;
   upValue: number;
+  topValue: number;
 }
 interface ProductSpecificConfig {
   productId: string;
   productName: string;
   targetValue: number;
   upValue: number;
+  topValue: number;
 }
 
 // Wizard step identifiers
 type WizardStepId =
   | 'selection'
   | 'revenue_config'
-  | 'revenue_shifts'
   | 'revenue_shifts_users'
   | 'ticket_config'
   | 'product_line_config'
@@ -102,7 +206,7 @@ type WizardStepId =
 
 function buildSteps(selectedTypes: Set<GoalType>): WizardStepId[] {
   const steps: WizardStepId[] = ['selection'];
-  if (selectedTypes.has('revenue')) steps.push('revenue_config', 'revenue_shifts', 'revenue_shifts_users');
+  if (selectedTypes.has('revenue')) steps.push('revenue_config', 'revenue_shifts_users');
   if (selectedTypes.has('ticket')) steps.push('ticket_config');
   if (selectedTypes.has('product_line')) steps.push('product_line_config');
   if (selectedTypes.has('product_specific')) steps.push('product_specific_config');
@@ -112,7 +216,6 @@ function buildSteps(selectedTypes: Set<GoalType>): WizardStepId[] {
 const STEP_LABELS: Record<WizardStepId, string> = {
   selection: 'Seleção',
   revenue_config: 'Faturamento',
-  revenue_shifts: 'Turnos',
   revenue_shifts_users: 'Colaboradores',
   ticket_config: 'Ticket Médio',
   product_line_config: 'Linha de Produto',
@@ -129,17 +232,19 @@ interface GoalTemplateFormModalProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormModalProps) {
-  const { addTemplate, addPeriod, addEmployeeGoal, rebalancePeriodEmployeeGoals, periods, employeeGoals, templates } = useGoals();
+  const { addTemplate, addPeriod, addEmployeeGoal, periods, templates } = useGoals();
   const { kiosks } = useKiosks();
-  const { user, permissions, users } = useAuth();
-  const { shiftDefinitions, shiftDefsLoading, schedules, units } = useDPStore();
+  const { activeConfigs: goalMethodConfigs } = useGoalMethodConfigs();
+  const { user, permissions, users, isDefaultAdmin } = useAuth();
+  const { shiftDefinitions, schedules, units, unitGroups, unitOrganizations } = useDPStore();
   const { toast } = useToast();
   const { categories } = useProductSimulationCategories();
   const simCtx = useContext(ProductSimulationContext);
   const simulations = simCtx?.simulations ?? [];
 
-  const isAdmin = permissions.settings?.manageUsers ?? false;
-  const availableKiosks = isAdmin ? kiosks : kiosks.filter(k => user?.assignedKioskIds?.includes(k.id));
+  const availableKiosks = user
+    ? kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }))
+    : [];
 
   // Product lines from cost & price module
   const productLines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
@@ -147,37 +252,23 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   // ── Global state ──────────────────────────────────────────────────────────
   const [stepIdx, setStepIdx] = useState(0);
   const [kioskId, setKioskId] = useState(availableKiosks[0]?.id ?? '');
+  const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>('monthly');
   const [month, setMonth] = useState(currentMonthValue());
+  const [week, setWeek] = useState(currentWeekValue());
+  const [date, setDate] = useState(currentDateValue());
+  const [revenueGoalMethod, setRevenueGoalMethod] = useState('manual');
   const [selectedTypes, setSelectedTypes] = useState<Set<GoalType>>(new Set(['revenue']));
   const [copySourceMonth, setCopySourceMonth] = useState('none');
   const [copiedFromMonth, setCopiedFromMonth] = useState('');
 
   // ── Revenue state ─────────────────────────────────────────────────────────
-  const [revenueConfig, setRevenueConfig] = useState<RevenueConfig>({ targetValue: 0, upValue: 0 });
+  const [revenueConfig, setRevenueConfig] = useState<RevenueConfig>({ targetValue: 0, upValue: 0, topValue: 0 });
   const [revenueConfigError, setRevenueConfigError] = useState('');
-  // Overrides de % por turno digitados pelo usuário (chave = shiftDefinitionId)
-  const [shiftPctOverrides, setShiftPctOverrides] = useState<Record<string, string>>({});
-
-  // Fallback manual quando não há escala DP para o quiosque/mês
-  const [manualShiftCount, setManualShiftCount] = useState(2);
-  const [manualShiftDrafts, setManualShiftDrafts] = useState<ShiftDraft[]>([
-    { id: 'shift-0', label: '1º Turno', pct: '50' },
-    { id: 'shift-1', label: '2º Turno', pct: '50' },
-  ]);
-
-  function handleManualShiftCountChange(n: number) {
-    setManualShiftCount(n);
-    const equal = (100 / n).toFixed(1);
-    setManualShiftDrafts(
-      Array.from({ length: n }, (_, i) => ({
-        id: `shift-${i}`,
-        label: ordinalLabel(i),
-        pct: equal,
-      }))
-    );
-  }
-
-  const { reports: revenueSalesReports, loading: revenueSalesLoading } = useShiftRevenueSalesReports(kioskId || null);
+  const [excludedParticipantIds, setExcludedParticipantIds] = useState<string[]>([]);
+  const [manualParticipantIds, setManualParticipantIds] = useState<string[]>([]);
+  const [newParticipantId, setNewParticipantId] = useState('');
+  const [participantPickerOpen, setParticipantPickerOpen] = useState(false);
+  const [participantSearch, setParticipantSearch] = useState('');
 
   // Mapa de shiftDefinition para lookup rápido
   const shiftDefMap = useMemo(
@@ -185,11 +276,15 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     [shiftDefinitions]
   );
 
+  const activeDateRange = useMemo(
+    () => goalPeriodToDateRange(goalPeriod, { month, week, date }),
+    [goalPeriod, month, week, date]
+  );
+
   const [targetYear, targetMonth] = useMemo(() => {
-    if (!month) return [0, 0];
-    const [y, m] = month.split('-').map(Number);
-    return [y, m];
-  }, [month]);
+    const start = activeDateRange.start;
+    return [start.getFullYear(), start.getMonth() + 1];
+  }, [activeDateRange]);
 
   // Encontra a unidade DP correspondente ao quiosque selecionado (por nome)
   const dpUnitForKiosk = useMemo(() => {
@@ -197,6 +292,84 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     if (!kiosk) return null;
     return matchDPUnitForKiosk(kiosk.name, units) ?? null;
   }, [kiosks, kioskId, units]);
+
+  const dpGroupForKiosk = useMemo(() => {
+    if (!dpUnitForKiosk?.groupId) return null;
+    return unitGroups.find(group => group.id === dpUnitForKiosk.groupId) ?? null;
+  }, [dpUnitForKiosk, unitGroups]);
+
+  const dpOrganizationForKiosk = useMemo(() => {
+    const organizationId = dpUnitForKiosk?.organizationId ?? dpGroupForKiosk?.organizationId;
+    if (!organizationId) return null;
+    return unitOrganizations.find(organization => organization.id === organizationId) ?? null;
+  }, [dpGroupForKiosk, dpUnitForKiosk, unitOrganizations]);
+
+  const leadershipRecipients = useMemo<GoalLeadershipRecipient[]>(() => {
+    if (!kioskId || !dpUnitForKiosk) return [];
+
+    const recipients = new Map<string, GoalLeadershipRecipient>();
+    const addRecipient = (
+      targetUser: User,
+      source: GoalLeadershipRecipient['source'],
+      sourceLabel: string
+    ) => {
+      if (recipients.has(targetUser.id)) return;
+      recipients.set(targetUser.id, {
+        userId: targetUser.id,
+        userName: targetUser.username ?? targetUser.email ?? targetUser.id,
+        source,
+        sourceLabel,
+      });
+    };
+
+    for (const candidate of users) {
+      if (dpGroupForKiosk && userOwnsResponsibility(dpGroupForKiosk, candidate)) {
+        addRecipient(candidate, 'unit_group_responsible', `Grupo: ${dpGroupForKiosk.name}`);
+      }
+
+      if (dpOrganizationForKiosk && userOwnsResponsibility(dpOrganizationForKiosk, candidate)) {
+        addRecipient(candidate, 'unit_organization_responsible', `Organização: ${dpOrganizationForKiosk.name}`);
+      }
+    }
+
+    const responsibilityTargets = new Set([
+      kioskId,
+      dpUnitForKiosk.id,
+      dpUnitForKiosk.name,
+      dpGroupForKiosk?.id,
+      dpGroupForKiosk?.name,
+      dpOrganizationForKiosk?.id,
+      dpOrganizationForKiosk?.name,
+    ].filter((value): value is string => Boolean(value)));
+
+    for (const candidate of users) {
+      const responsibleRefs = new Set<string>();
+      for (const reference of candidate.responsibleUnitIds ?? []) {
+        resolveUnitReferenceIds(reference, units).forEach(id => responsibleRefs.add(id));
+        responsibleRefs.add(reference);
+      }
+      if ([...responsibilityTargets].some(target => responsibleRefs.has(target))) {
+        addRecipient(candidate, 'responsible_unit_ids', `Responsável por: ${dpUnitForKiosk.name}`);
+      }
+    }
+
+    return Array.from(recipients.values()).sort((left, right) =>
+      left.userName.localeCompare(right.userName, 'pt-BR')
+    );
+  }, [dpGroupForKiosk, dpOrganizationForKiosk, dpUnitForKiosk, kioskId, unitGroups, units, users]);
+
+  const leadershipUserIds = useMemo(
+    () => new Set(leadershipRecipients.map(item => item.userId)),
+    [leadershipRecipients]
+  );
+
+  const getParticipantRole = useMemo(() => {
+    return (participantUser: User | undefined): GoalParticipantRole => {
+      if (participantUser && leadershipUserIds.has(participantUser.id)) return 'leader';
+      if (isReliefWorkerUser(participantUser)) return 'relief';
+      return 'fixed';
+    };
+  }, [leadershipUserIds]);
 
   // Encontra a escala do mês para a unidade DP do quiosque
   const scheduleForKiosk = useMemo(
@@ -208,78 +381,15 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     [schedules, targetMonth, targetYear, dpUnitForKiosk]
   );
 
-  // Carrega os turnos reais da escala do quiosque
-  const { shifts: dpShifts, loading: dpShiftsLoading } = useDPShifts(scheduleForKiosk?.id ?? null);
+  // Carrega os turnos reais da escala do quiosque para vincular colaboradores.
+  const { shifts: dpShifts } = useDPShifts(scheduleForKiosk?.id ?? null);
 
-  // IDs dos usuários atribuídos ao quiosque selecionado
-  const kioskUserIds = useMemo(() => new Set(
-    users
-      .filter(u => kioskId && (u.assignedKioskIds?.includes(kioskId) || u.participatesInGoals === true))
-      .map(u => u.id)
-  ), [users, kioskId]);
-
-  // Filtra apenas os turnos dos colaboradores do quiosque
-  const kioskShifts = useMemo(
-    () => dpShifts.filter(s => kioskUserIds.has(s.userId)),
-    [dpShifts, kioskUserIds]
-  );
-
-  // Grupos de colaboradores por turno — derivado dos turnos reais da escala
-  const shiftGroups = useMemo(() => {
-    const workShifts = kioskShifts.filter(s => s.type === 'work' && s.shiftDefinitionId);
-
-    const byDef = new Map<string, Set<string>>();
-    for (const s of workShifts) {
-      if (!byDef.has(s.shiftDefinitionId!)) byDef.set(s.shiftDefinitionId!, new Set());
-      byDef.get(s.shiftDefinitionId!)!.add(s.userId);
-    }
-
-    const sorted = [...byDef.entries()].sort(([aId], [bId]) => {
-      const a = shiftDefMap.get(aId)?.startTime ?? '';
-      const b = shiftDefMap.get(bId)?.startTime ?? '';
-      return a.localeCompare(b);
-    });
-
-    return sorted.map(([defId, userIds]) => {
-      const def = shiftDefMap.get(defId);
-      const label = def ? `${def.name} (${def.startTime}–${def.endTime})` : '—';
-      const groupUsers = [...userIds]
-        .map(uid => users.find(u => u.id === uid))
-        .filter((u): u is NonNullable<typeof u> => u != null);
-      return { id: defId, label, users: groupUsers, def: def ?? null };
-    });
-  }, [kioskShifts, shiftDefMap, users]);
-
-  // Quantidade de dias trabalhados por colaborador em cada turno (da escala real)
-  const workedDaysMap = useMemo(() => {
-    const map = new Map<string, number>(); // `${defId}:${userId}` → nº de dias
-    for (const s of kioskShifts) {
-      if (s.type !== 'work' || !s.shiftDefinitionId) continue;
-      const key = `${s.shiftDefinitionId}:${s.userId}`;
-      map.set(key, (map.get(key) ?? 0) + 1);
-    }
-    return map;
-  }, [kioskShifts]);
-
-  const shiftSuggestion = useMemo(() => {
-    if (revenueSalesLoading || shiftGroups.length === 0 || revenueSalesReports.length === 0) return null;
-    const validGroups = shiftGroups.filter(g => g.def != null) as Array<{ id: string; def: NonNullable<(typeof shiftGroups)[0]['def']> }>;
-    if (validGroups.length === 0) return null;
-    return computeShiftSuggestion(revenueSalesReports, validGroups);
-  }, [revenueSalesReports, revenueSalesLoading, shiftGroups]);
-
-  // Derivado puro — nunca fica desatualizado, sem useEffect
-  const shifts = useMemo<ShiftDraft[]>(() => {
-    // Sem escala DP: usa entradas manuais
-    if (shiftGroups.length === 0) return manualShiftDrafts;
-    const equalPct = (100 / shiftGroups.length).toFixed(1);
-    return shiftGroups.map(g => ({
-      id: g.id,
-      label: g.label,
-      pct: shiftPctOverrides[g.id]
-        ?? (shiftSuggestion?.[g.id] != null ? shiftSuggestion[g.id].toFixed(1) : equalPct),
-    }));
-  }, [shiftGroups, shiftPctOverrides, shiftSuggestion, manualShiftDrafts]);
+  // A escala já é da unidade do quiosque; qualquer pessoa escalada nela entra como participante.
+  const kioskShifts = useMemo(() => {
+    const startKey = dateKey(activeDateRange.start);
+    const endKey = dateKey(activeDateRange.end);
+    return dpShifts.filter(s => s.date >= startKey && s.date <= endKey);
+  }, [dpShifts, activeDateRange]);
 
   // Colaboradores do quiosque para fallback manual
   const kioskUsers = useMemo(
@@ -287,29 +397,181 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     [users, kioskId]
   );
 
-  const assignments = useMemo<EmployeeAssignment[]>(() => {
-    // Modo escala DP: usa dias trabalhados por turno
-    if (shiftGroups.length > 0) {
-      const result: EmployeeAssignment[] = [];
-      for (const g of shiftGroups) {
-        if (g.users.length === 0) continue;
-        const totalDays = g.users.reduce((sum, u) => sum + (workedDaysMap.get(`${g.id}:${u.id}`) ?? 0), 0);
-        for (const u of g.users) {
-          const userDays = workedDaysMap.get(`${g.id}:${u.id}`) ?? 0;
-          const pct = totalDays > 0
-            ? ((userDays / totalDays) * 100).toFixed(1)
-            : (100 / g.users.length).toFixed(1);
-          result.push({ shiftId: g.id, employeeId: u.id, pct });
-        }
+  const scheduledParticipants = useMemo<RevenueParticipant[]>(() => {
+    const byEmployee = new Map<string, { scheduledDays: Set<string>; shiftLabels: Set<string>; coveredTurns: number }>();
+    for (const shift of kioskShifts) {
+      if (shift.type !== 'work') continue;
+      const current = byEmployee.get(shift.userId) ?? { scheduledDays: new Set<string>(), shiftLabels: new Set<string>(), coveredTurns: 0 };
+      current.scheduledDays.add(shift.date);
+      current.coveredTurns += 1;
+      if (shift.shiftDefinitionId) {
+        const def = shiftDefMap.get(shift.shiftDefinitionId);
+        current.shiftLabels.add(def ? `${def.name} (${def.startTime}–${def.endTime})` : `${shift.startTime}–${shift.endTime}`);
+      } else {
+        current.shiftLabels.add(`${shift.startTime}–${shift.endTime}`);
       }
-      return result;
+      byEmployee.set(shift.userId, current);
     }
-    // Modo manual: distribui os usuários do quiosque igualmente pelo 1º turno
-    if (manualShiftDrafts.length === 0 || kioskUsers.length === 0) return [];
-    const firstShift = manualShiftDrafts[0]!;
-    const equalPct = (100 / kioskUsers.length).toFixed(1);
-    return kioskUsers.map(u => ({ shiftId: firstShift.id, employeeId: u.id, pct: equalPct }));
-  }, [shiftGroups, workedDaysMap, manualShiftDrafts, kioskUsers]);
+
+    const base = byEmployee.size > 0
+      ? Array.from(byEmployee.entries()).map(([employeeId, info]) => ({
+          employeeId,
+          label: users.find(u => u.id === employeeId)?.username ?? employeeId,
+          source: 'schedule' as const,
+          role: getParticipantRole(users.find(u => u.id === employeeId)),
+          scheduledDays: info.scheduledDays.size,
+          coveredTurns: info.coveredTurns,
+          shiftLabels: Array.from(info.shiftLabels),
+          fraction: 0,
+        }))
+      : kioskUsers.map(user => ({
+          employeeId: user.id,
+          label: user.username ?? user.id,
+          source: 'schedule' as const,
+          role: getParticipantRole(user),
+          scheduledDays: 0,
+          coveredTurns: 0,
+          shiftLabels: [],
+          fraction: 0,
+        }));
+
+    const totalWeight = base.reduce((sum, item) => sum + Math.max(item.coveredTurns || item.scheduledDays, 1), 0);
+    return base
+      .map(item => ({ ...item, fraction: totalWeight > 0 ? Math.max(item.coveredTurns || item.scheduledDays, 1) / totalWeight : 0 }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+  }, [getParticipantRole, kioskShifts, kioskUsers, shiftDefMap, users]);
+
+  const participantRows = useMemo<RevenueParticipant[]>(() => {
+    const excluded = new Set(excludedParticipantIds);
+    const scheduled = scheduledParticipants.filter(item => !excluded.has(item.employeeId));
+    const scheduledIds = new Set(scheduled.map(item => item.employeeId));
+    const manual = manualParticipantIds
+      .filter(id => !scheduledIds.has(id) && !excluded.has(id))
+      .map(id => ({
+        employeeId: id,
+        label: users.find(user => user.id === id)?.username ?? id,
+        source: 'manual' as const,
+        role: getParticipantRole(users.find(user => user.id === id)),
+        scheduledDays: 0,
+        coveredTurns: 0,
+        shiftLabels: [],
+        fraction: 0,
+      }));
+
+    const rows = [...scheduled, ...manual];
+    const totalWeight = rows.reduce((sum, item) => sum + Math.max(item.coveredTurns || item.scheduledDays, 1), 0);
+    return rows
+      .map(item => ({ ...item, fraction: totalWeight > 0 ? Math.max(item.coveredTurns || item.scheduledDays, 1) / totalWeight : 0 }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+  }, [excludedParticipantIds, getParticipantRole, manualParticipantIds, scheduledParticipants, users]);
+
+  const selectedParticipantIds = useMemo(
+    () => new Set(participantRows.map(item => item.employeeId)),
+    [participantRows]
+  );
+
+  const selectedGoalMethodConfig = useMemo(
+    () => goalMethodConfigs.find(config => config.id === revenueGoalMethod) ?? null,
+    [goalMethodConfigs, revenueGoalMethod]
+  );
+
+  const revenueGoalMethodSnapshot = useMemo(() => {
+    if (!selectedGoalMethodConfig) return null;
+    if (
+      revenueConfig.targetValue <= 0 ||
+      revenueConfig.upValue <= revenueConfig.targetValue ||
+      revenueConfig.topValue <= revenueConfig.upValue
+    ) {
+      return null;
+    }
+
+    return applyRevenueTargetsToGoalMethod(selectedGoalMethodConfig, revenueConfig);
+  }, [revenueConfig, selectedGoalMethodConfig]);
+
+  const teamParticipantRows = useMemo(
+    () => participantRows.filter(row => row.role !== 'leader'),
+    [participantRows]
+  );
+
+  const reliefParticipantRows = useMemo(
+    () => teamParticipantRows.filter(row => row.role === 'relief'),
+    [teamParticipantRows]
+  );
+
+  const revenueMethodPreview = useMemo(
+    () => calculateTieredGoalBonus(
+      revenueGoalMethodSnapshot,
+      revenueConfig.topValue || revenueConfig.upValue || revenueConfig.targetValue,
+      teamParticipantRows.length,
+      {
+        fixedCollaboratorCount: teamParticipantRows.filter(row => row.role === 'fixed').length,
+        reliefWorkerCount: reliefParticipantRows.length,
+        reliefWorkerCoveredTurnsByPerson: reliefParticipantRows.map(row => row.coveredTurns),
+        totalPeriodTurns: new Set(
+          kioskShifts
+            .filter(shift => shift.type === 'work')
+            .map(shift => `${shift.date}:${shift.shiftDefinitionId ?? `${shift.startTime}-${shift.endTime}`}`)
+        ).size,
+      }
+    ),
+    [kioskShifts, reliefParticipantRows, revenueConfig, revenueGoalMethodSnapshot, teamParticipantRows]
+  );
+
+  const participantOptions = useMemo(
+    () => kioskUsers.filter(user => !selectedParticipantIds.has(user.id) && !excludedParticipantIds.includes(user.id)),
+    [kioskUsers, selectedParticipantIds, excludedParticipantIds]
+  );
+
+  const filteredParticipantOptions = useMemo(() => {
+    const search = normalizeText(participantSearch.trim());
+    return participantOptions
+      .filter(option => {
+        if (!search) return true;
+        const searchable = [
+          option.username,
+          option.email,
+          option.jobRoleName,
+          ...(option.jobFunctionNames ?? []),
+        ].filter(Boolean).map(value => normalizeText(String(value))).join(' ');
+        return searchable.includes(search);
+      })
+      .sort((left, right) => (left.username ?? left.id).localeCompare(right.username ?? right.id, 'pt-BR'));
+  }, [participantOptions, participantSearch]);
+
+  const selectedNewParticipant = useMemo(
+    () => participantOptions.find(option => option.id === newParticipantId) ?? null,
+    [newParticipantId, participantOptions]
+  );
+
+  const dpHierarchyItems = useMemo(
+    () => [
+      { label: 'Organização', value: dpOrganizationForKiosk?.name },
+      { label: 'Grupo', value: dpGroupForKiosk?.name },
+      { label: 'Unidade', value: dpUnitForKiosk?.name },
+    ].filter((item): item is { label: string; value: string } => Boolean(item.value)),
+    [dpGroupForKiosk, dpOrganizationForKiosk, dpUnitForKiosk]
+  );
+
+  function removeParticipant(row: RevenueParticipant) {
+    if (row.source === 'manual') {
+      setManualParticipantIds(prev => prev.filter(id => id !== row.employeeId));
+      return;
+    }
+    setExcludedParticipantIds(prev => prev.includes(row.employeeId) ? prev : [...prev, row.employeeId]);
+  }
+
+  function addParticipant() {
+    if (!newParticipantId) return;
+    setManualParticipantIds(prev => prev.includes(newParticipantId) ? prev : [...prev, newParticipantId]);
+    setExcludedParticipantIds(prev => prev.filter(id => id !== newParticipantId));
+    setNewParticipantId('');
+    setParticipantSearch('');
+  }
+
+  function handleRevenueMethodChange(value: string) {
+    setRevenueGoalMethod(value);
+    setRevenueConfigError('');
+  }
 
   const steps = useMemo(() => buildSteps(selectedTypes), [selectedTypes]);
   const currentStep = steps[stepIdx];
@@ -327,9 +589,6 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
   const [productSpecificError, setProductSpecificError] = useState('');
 
   const [saving, setSaving] = useState(false);
-
-  const pctSum = shifts.reduce((s, sh) => s + (parseFloat(sh.pct) || 0), 0);
-  const pctSumOk = Math.abs(pctSum - 100) < 0.01;
 
   const availableSourceMonths = useMemo(() => {
     const grouped = new Map<string, GoalPeriodDoc[]>();
@@ -352,6 +611,8 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       .sort((a, b) => b.key.localeCompare(a.key));
   }, [periods, kioskId, month]);
 
+  const periodValueReady = goalPeriod === 'daily' ? Boolean(date) : goalPeriod === 'weekly' ? Boolean(week) : Boolean(month);
+
   function applySourceMonth(sourceKey: string) {
     const sourceGroup = availableSourceMonths.find(item => item.key === sourceKey);
     if (!sourceGroup) {
@@ -362,7 +623,6 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     const nextTypes = new Set<GoalType>();
     let sourceRevenueLoaded = false;
 
-    setShiftPctOverrides({});
     setProductLineConfig({});
     setProductSpecificConfig({});
     setTicketConfig({ targetValue: 0 });
@@ -375,9 +635,11 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
 
       if (template.type === 'revenue' && !sourceRevenueLoaded) {
         sourceRevenueLoaded = true;
+        setRevenueGoalMethod(period.goalMethodConfigId ?? template.goalMethodConfigId ?? period.method ?? 'manual');
         setRevenueConfig({
           targetValue: period.targetValue,
           upValue: period.upValue ?? period.targetValue * 1.2,
+          topValue: period.topValue ?? 0,
         });
       }
 
@@ -391,6 +653,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           lineName: template.productLineName,
           targetValue: period.targetValue,
           upValue: period.upValue,
+          topValue: period.topValue ?? 0,
         });
       }
 
@@ -400,6 +663,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
           productName: template.productName,
           targetValue: period.targetValue,
           upValue: period.upValue,
+          topValue: period.topValue ?? 0,
         });
       }
     }
@@ -417,23 +681,23 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
 
   function handleNext() {
     if (currentStep === 'selection') {
-      if (!kioskId || !month || selectedTypes.size === 0) return;
+      if (!kioskId || !periodValueReady || selectedTypes.size === 0) return;
       setStepIdx(1);
       return;
     }
     if (currentStep === 'revenue_config') {
       if (revenueConfig.targetValue <= 0) { setRevenueConfigError('Meta alvo deve ser maior que zero'); return; }
       if (revenueConfig.upValue <= revenueConfig.targetValue) { setRevenueConfigError('Meta UP deve ser maior que a Meta alvo'); return; }
+      if (revenueConfig.topValue <= revenueConfig.upValue) { setRevenueConfigError('Meta TOP deve ser maior que a Meta UP'); return; }
       setRevenueConfigError('');
       setStepIdx(i => i + 1);
       return;
     }
-    if (currentStep === 'revenue_shifts') {
-      if (!pctSumOk) return;
-      setStepIdx(i => i + 1);
-      return;
-    }
     if (currentStep === 'revenue_shifts_users') {
+      if (participantRows.length === 0) {
+        toast({ title: 'Selecione ao menos um colaborador', variant: 'destructive' });
+        return;
+      }
       setStepIdx(i => i + 1);
       return;
     }
@@ -447,6 +711,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       if (!productLineConfig.lineId) { setProductLineError('Selecione uma linha de produto'); return; }
       if (!productLineConfig.targetValue || productLineConfig.targetValue <= 0) { setProductLineError('Meta alvo deve ser maior que zero'); return; }
       if (!productLineConfig.upValue || productLineConfig.upValue <= (productLineConfig.targetValue ?? 0)) { setProductLineError('Meta UP deve ser maior que a Meta alvo'); return; }
+      if (!productLineConfig.topValue || productLineConfig.topValue <= (productLineConfig.upValue ?? 0)) { setProductLineError('Meta TOP deve ser maior que a Meta UP'); return; }
       setProductLineError('');
       setStepIdx(i => i + 1);
       return;
@@ -455,6 +720,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       if (!productSpecificConfig.productId) { setProductSpecificError('Selecione um produto'); return; }
       if (!productSpecificConfig.targetValue || productSpecificConfig.targetValue <= 0) { setProductSpecificError('Meta alvo deve ser maior que zero'); return; }
       if (!productSpecificConfig.upValue || productSpecificConfig.upValue <= (productSpecificConfig.targetValue ?? 0)) { setProductSpecificError('Meta UP deve ser maior que a Meta alvo'); return; }
+      if (!productSpecificConfig.topValue || productSpecificConfig.topValue <= (productSpecificConfig.upValue ?? 0)) { setProductSpecificError('Meta TOP deve ser maior que a Meta UP'); return; }
       setProductSpecificError('');
       setStepIdx(i => i + 1);
     }
@@ -468,56 +734,75 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
+  function normalizedGoalShifts(): GoalShift[] {
+    return [{ id: 'period', label: goalPeriodLabel(goalPeriod), fraction: 1 }];
+  }
+
   async function handleSubmit() {
     setSaving(true);
-    const { start, end } = monthToDateRange(month);
+    const { start, end } = activeDateRange;
     let hasError = false;
 
     // ── Revenue ──
     if (selectedTypes.has('revenue')) {
+      const methodSnapshot = selectedGoalMethodConfig
+        ? applyRevenueTargetsToGoalMethod(selectedGoalMethodConfig, revenueConfig)
+        : null;
+      const methodFields = methodSnapshot
+        ? {
+            method: methodSnapshot.type,
+            goalMethodConfigId: methodSnapshot.id,
+            goalMethodSnapshot: methodSnapshot,
+          }
+        : {
+            method: 'manual' as const,
+          };
+
       const templateId = await addTemplate({
         kioskId,
         type: 'revenue',
-        period: 'monthly',
+        period: goalPeriod,
+        version: 2,
+        ...methodFields,
         targetValue: revenueConfig.targetValue,
         upValue: revenueConfig.upValue,
+        topValue: revenueConfig.topValue,
       });
 
       if (templateId) {
-        const goalShifts: GoalShift[] = shifts.map(s => ({
-          id: s.id, label: s.label, fraction: (parseFloat(s.pct) || 0) / 100,
-        }));
+        const goalShifts = normalizedGoalShifts();
         const periodData = {
           templateId, kioskId,
+          templateType: 'revenue',
+          version: 2,
+          ...methodFields,
           startDate: Timestamp.fromDate(start),
           endDate: Timestamp.fromDate(end),
           targetValue: revenueConfig.targetValue,
           upValue: revenueConfig.upValue,
+          topValue: revenueConfig.topValue,
           currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
-          shifts: goalShifts, status: 'active',
+          shifts: goalShifts,
+          leadershipRecipients,
+          status: 'active',
         } satisfies Omit<GoalPeriodDoc, 'id' | 'createdAt' | 'updatedAt'>;
         const periodId = await addPeriod(periodData);
         if (periodId) {
-          const createdGoals: EmployeeGoal[] = [];
-          for (const a of assignments) {
-            const shift = goalShifts.find(s => s.id === a.shiftId);
-            if (!shift) continue;
-            const withinFraction = (parseFloat(a.pct) || 0) / 100;
+          for (const participant of participantRows) {
             const employeeGoalData = {
-              periodId, employeeId: a.employeeId, kioskId,
-              shiftId: a.shiftId, fraction: withinFraction,
-              targetValue: revenueConfig.targetValue * shift.fraction * withinFraction,
+              periodId,
+              employeeId: participant.employeeId,
+              kioskId,
+              participantSource: participant.source,
+              participantRole: participant.role,
+              scheduledDays: participant.scheduledDays,
+              scheduledTurnCount: participant.coveredTurns,
+              fraction: participant.fraction,
+              targetValue: revenueConfig.targetValue * participant.fraction,
               currentValue: 0, dailyProgress: {}, distributionMode: 'scheduled_days',
             } satisfies Omit<EmployeeGoal, 'id' | 'createdAt' | 'updatedAt'>;
-            const goalId = await addEmployeeGoal(employeeGoalData);
-            if (goalId) createdGoals.push({ id: goalId, ...employeeGoalData } as EmployeeGoal);
+            await addEmployeeGoal(employeeGoalData);
           }
-          const kioskName = kiosks.find(kiosk => kiosk.id === kioskId)?.name;
-          await rebalancePeriodEmployeeGoals(
-            { id: periodId, ...periodData } as GoalPeriodDoc,
-            createdGoals,
-            kioskName ? { [kioskId]: kioskName } : undefined
-          );
         } else hasError = true;
       } else hasError = true;
     }
@@ -527,19 +812,26 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       const templateId = await addTemplate({
         kioskId,
         type: 'ticket',
-        period: 'monthly',
+        period: goalPeriod,
+        version: 2,
+        method: 'manual',
         targetValue: ticketConfig.targetValue,
         upValue: ticketConfig.targetValue, // no UP concept, same value
+        topValue: ticketConfig.targetValue,
       });
 
       if (templateId) {
         const ok = await addPeriod({
           templateId,
           kioskId,
+          templateType: 'ticket',
+          version: 2,
+          method: 'manual',
           startDate: Timestamp.fromDate(start),
           endDate: Timestamp.fromDate(end),
           targetValue: ticketConfig.targetValue,
           upValue: ticketConfig.targetValue,
+          topValue: ticketConfig.targetValue,
           currentValue: 0,
           dailyProgress: {},
           distributionMode: 'scheduled_days',
@@ -555,9 +847,12 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       const templateId = await addTemplate({
         kioskId,
         type: 'product_line',
-        period: 'monthly',
+        period: goalPeriod,
+        version: 2,
+        method: 'manual',
         targetValue: productLineConfig.targetValue!,
         upValue: productLineConfig.upValue!,
+        topValue: productLineConfig.topValue!,
         productLineRef: productLineConfig.lineId,
         productLineName: productLineConfig.lineName,
       });
@@ -566,10 +861,14 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         const ok = await addPeriod({
           templateId,
           kioskId,
+          templateType: 'product_line',
+          version: 2,
+          method: 'manual',
           startDate: Timestamp.fromDate(start),
           endDate: Timestamp.fromDate(end),
           targetValue: productLineConfig.targetValue!,
           upValue: productLineConfig.upValue!,
+          topValue: productLineConfig.topValue!,
           currentValue: 0,
           dailyProgress: {},
           distributionMode: 'scheduled_days',
@@ -585,9 +884,12 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
       const templateId = await addTemplate({
         kioskId,
         type: 'product_specific',
-        period: 'monthly',
+        period: goalPeriod,
+        version: 2,
+        method: 'manual',
         targetValue: productSpecificConfig.targetValue!,
         upValue: productSpecificConfig.upValue!,
+        topValue: productSpecificConfig.topValue!,
         productRef: productSpecificConfig.productId,
         productName: productSpecificConfig.productName,
       });
@@ -596,10 +898,14 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         const ok = await addPeriod({
           templateId,
           kioskId,
+          templateType: 'product_specific',
+          version: 2,
+          method: 'manual',
           startDate: Timestamp.fromDate(start),
           endDate: Timestamp.fromDate(end),
           targetValue: productSpecificConfig.targetValue!,
           upValue: productSpecificConfig.upValue!,
+          topValue: productSpecificConfig.topValue!,
           currentValue: 0,
           dailyProgress: {},
           distributionMode: 'scheduled_days',
@@ -623,18 +929,19 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
     onOpenChange(false);
     setStepIdx(0);
     setKioskId(availableKiosks[0]?.id ?? '');
+    setGoalPeriod('monthly');
     setMonth(currentMonthValue());
+    setWeek(currentWeekValue());
+    setDate(currentDateValue());
+    setRevenueGoalMethod('manual');
     setSelectedTypes(new Set(['revenue']));
     setCopySourceMonth('none');
     setCopiedFromMonth('');
-    setRevenueConfig({ targetValue: 0, upValue: 0 });
+    setRevenueConfig({ targetValue: 0, upValue: 0, topValue: 0 });
     setRevenueConfigError('');
-    setShiftPctOverrides({});
-    setManualShiftCount(2);
-    setManualShiftDrafts([
-      { id: 'shift-0', label: '1º Turno', pct: '50' },
-      { id: 'shift-1', label: '2º Turno', pct: '50' },
-    ]);
+    setExcludedParticipantIds([]);
+    setManualParticipantIds([]);
+    setNewParticipantId('');
     setTicketConfig({ targetValue: 0 });
     setTicketError('');
     setProductLineConfig({});
@@ -657,7 +964,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto overflow-x-hidden sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Nova meta</DialogTitle>
           <DialogDescription asChild>
@@ -684,17 +991,32 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Mês de referência</Label>
-              <Input type="month" value={month} onChange={e => setMonth(e.target.value)} />
-              {month && (() => {
-                try {
-                  const { start, end } = monthToDateRange(month);
-                  return <p className="text-xs text-muted-foreground">{format(start, 'dd/MM/yyyy')} até {format(end, 'dd/MM/yyyy')}</p>;
-                } catch { return null; }
-              })()}
+            <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
+              <div className="space-y-2">
+                <Label>Período</Label>
+                <Select value={goalPeriod} onValueChange={value => setGoalPeriod(value as GoalPeriod)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Diária</SelectItem>
+                    <SelectItem value="weekly">Semanal</SelectItem>
+                    <SelectItem value="monthly">Mensal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{goalPeriod === 'daily' ? 'Data' : goalPeriod === 'weekly' ? 'Semana' : 'Mês de referência'}</Label>
+                {goalPeriod === 'daily' && <Input type="date" value={date} onChange={e => setDate(e.target.value)} />}
+                {goalPeriod === 'weekly' && <Input type="week" value={week} onChange={e => setWeek(e.target.value)} />}
+                {goalPeriod === 'monthly' && <Input type="month" value={month} onChange={e => setMonth(e.target.value)} />}
+                {periodValueReady && (
+                  <p className="text-xs text-muted-foreground">
+                    Meta {goalPeriodLabel(goalPeriod).toLowerCase()}: {formatDateRange(activeDateRange.start, activeDateRange.end)}
+                  </p>
+                )}
+              </div>
             </div>
 
+            {goalPeriod === 'monthly' && (
             <div className="space-y-2 rounded-lg border p-3">
               <div className="space-y-0.5">
                 <Label>Copiar base de outro mês</Label>
@@ -731,6 +1053,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 </p>
               )}
             </div>
+            )}
 
             <div className="space-y-2">
               <Label>Tipos de meta</Label>
@@ -755,9 +1078,41 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
               )}
             </div>
 
+            {selectedTypes.has('revenue') && (
+              <div className="space-y-2 rounded-lg border p-3">
+                <Label>Forma da meta de faturamento</Label>
+                <Select value={revenueGoalMethod} onValueChange={handleRevenueMethodChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    {goalMethodConfigs.map(config => (
+                      <SelectItem key={config.id} value={config.id}>
+                        {config.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedGoalMethodConfig ? (
+                  <div className="rounded-md border border-pink-100 bg-pink-50 px-3 py-2 text-xs text-pink-800">
+                    <p className="font-semibold">{selectedGoalMethodConfig.name}</p>
+                    <p className="mt-1">
+                      {selectedGoalMethodConfig.description}
+                    </p>
+                    <p className="mt-1 text-pink-700">
+                      Esta forma define parâmetros de premiação. Os valores de faturamento serão informados na próxima etapa.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No modo manual, o usuário informa os valores de Meta Alvo, UP e TOP sem cálculo de premiação.
+                  </p>
+                )}
+              </div>
+            )}
+
             <DialogFooter>
               <Button variant="outline" onClick={handleClose}>Cancelar</Button>
-              <Button disabled={!kioskId || !month || selectedTypes.size === 0} onClick={handleNext}>
+              <Button disabled={!kioskId || !periodValueReady || selectedTypes.size === 0} onClick={handleNext}>
                 Próximo <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </DialogFooter>
@@ -767,7 +1122,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         {/* ── STEP: REVENUE CONFIG ── */}
         {currentStep === 'revenue_config' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Meta alvo</Label>
                 <CurrencyInput
@@ -784,108 +1139,86 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                   placeholder="0,00"
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label>Meta TOP</Label>
+                <CurrencyInput
+                  value={revenueConfig.topValue}
+                  onChange={v => setRevenueConfig(prev => ({ ...prev, topValue: v }))}
+                  placeholder="0,00"
+                />
+              </div>
             </div>
 
             {revenueConfigError && <p className="text-xs text-destructive">{revenueConfigError}</p>}
-            <DialogFooter>
-              <Button variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" />Voltar</Button>
-              <Button onClick={handleNext}>Próximo <ChevronRight className="ml-1 h-4 w-4" /></Button>
-            </DialogFooter>
-          </div>
-        )}
 
-        {/* ── STEP: REVENUE SHIFTS (% por turno) ── */}
-        {currentStep === 'revenue_shifts' && (
-          <div className="space-y-4">
-            {dpShiftsLoading || shiftDefsLoading ? (
-              <p className="text-sm text-muted-foreground">Carregando escala...</p>
-            ) : shiftGroups.length === 0 ? (
-              // Fallback manual — sem escala DP para este quiosque/mês
-              <>
-                <p className="text-xs text-muted-foreground">
-                  Escala DP não encontrada para {month}. Configure os turnos manualmente.
-                </p>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium">Quantos turnos?</span>
-                  <Select value={String(manualShiftCount)} onValueChange={v => handleManualShiftCountChange(parseInt(v))}>
-                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                    <SelectContent>{[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
-                  </Select>
+            {selectedGoalMethodConfig && revenueMethodPreview && (
+              <div className="rounded-[20px] border border-pink-100 bg-gradient-to-br from-pink-50 via-white to-slate-50 p-4 text-sm shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-pink-600">Prévia da bonificação</p>
+                    <p className="mt-1 text-base font-black tracking-tight text-zinc-900">{selectedGoalMethodConfig.name}</p>
+                    <p className="mt-1 max-w-[520px] text-xs font-medium leading-relaxed text-zinc-500">
+                      Esta prévia usa os valores informados acima para mostrar quanto a equipe receberia ao bater as faixas.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="rounded-full bg-white px-3 py-1 text-xs font-black">
+                    {teamParticipantRows.length} colaborador(es) elegível(is)
+                  </Badge>
                 </div>
-                <div className="space-y-2">
-                  {manualShiftDrafts.map((shift, idx) => {
-                    const shiftPct = parseFloat(shift.pct) || 0;
-                    const shiftTarget = (shiftPct / 100) * revenueConfig.targetValue;
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-[14px] border border-white bg-white/90 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400">Equipe</p>
+                    <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">R$ {formatCurrencyBRL(revenueMethodPreview.totalTeamBonus)}</p>
+                    <p className="mt-1 text-[11px] font-medium text-zinc-500">soma das faixas batidas</p>
+                  </div>
+                  <div className="rounded-[14px] border border-white bg-white/90 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400">Por colaborador</p>
+                    <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">R$ {formatCurrencyBRL(revenueMethodPreview.perCollaboratorBonus)}</p>
+                    <p className="mt-1 text-[11px] font-medium text-zinc-500">divisão entre elegíveis</p>
+                  </div>
+                  <div className="rounded-[14px] border border-white bg-white/90 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400">Liderança</p>
+                    <p className="mt-1 text-lg font-black tabular-nums text-zinc-900">R$ {formatCurrencyBRL(revenueMethodPreview.leadershipBonus)}</p>
+                    <p className="mt-1 text-[11px] font-medium text-zinc-500">calculada pela regra</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Regras por faixa</p>
+                  {revenueGoalMethodSnapshot?.tiers.map((tier, index) => {
+                    const tone = tier.id === 'up'
+                      ? 'border-blue-100 bg-blue-50 text-blue-700'
+                      : tier.id === 'top'
+                        ? 'border-violet-100 bg-violet-50 text-violet-700'
+                        : 'border-pink-100 bg-pink-50 text-pink-700';
                     return (
-                      <div key={shift.id} className="flex items-center gap-3">
-                        <span className="text-sm w-20 shrink-0 font-medium">{shift.label}</span>
-                        <div className="relative flex-1">
-                          <Input
-                            type="number" min="0" max="100" step="0.1" placeholder="0"
-                            className="pr-8"
-                            value={shift.pct}
-                            onChange={e => setManualShiftDrafts(prev => prev.map((s, i) => i === idx ? { ...s, pct: e.target.value } : s))}
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                      <div key={tier.id} className="grid gap-2 rounded-[14px] border border-white bg-white/85 px-3 py-2.5 sm:grid-cols-[150px_minmax(0,1fr)]">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-black ${tone}`}>
+                            {index + 1}
+                          </span>
+                          <span className="font-black text-zinc-900">{tier.label}</span>
                         </div>
-                        <span className="text-xs text-muted-foreground w-28 text-right shrink-0">
-                          = R$ {shiftTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
+                        <div className="text-xs font-semibold leading-relaxed text-zinc-500 sm:text-right">
+                          <span className="text-zinc-800">
+                            R$ {formatCurrencyBRL(tier.fromAmount)}
+                            {tier.toAmount ? ` a R$ ${formatCurrencyBRL(tier.toAmount)}` : ' em diante'}
+                          </span>
+                          <span className="mx-1 text-zinc-300">•</span>
+                          Fixo R$ {formatCurrencyBRL(tier.fixedBonusAmount)}
+                          <span className="mx-1 text-zinc-300">+</span>
+                          {tier.excessPercent}% sobre o excedente
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-                <div className={`text-sm font-medium ${pctSumOk ? 'text-green-600' : 'text-destructive'}`}>
-                  Soma: {pctSum.toFixed(1)}%{pctSumOk ? ' ✓' : ` — faltam ${(100 - pctSum).toFixed(1)}%`}
-                </div>
-              </>
-            ) : (
-              // Automático — escala DP encontrada
-              <>
-                <p className="text-sm text-muted-foreground">
-                  {shiftGroups.length} turno(s) encontrado(s) na escala de {month}. Defina a distribuição percentual da meta entre eles.
-                </p>
-                {revenueSalesLoading && (
-                  <p className="text-xs text-muted-foreground">Carregando histórico de faturamento...</p>
-                )}
-                {shiftSuggestion && !revenueSalesLoading && (
-                  <p className="text-xs text-muted-foreground">
-                    Distribuição pré-preenchida com base nos últimos 3 meses de faturamento real desta unidade.
-                  </p>
-                )}
-                <div className="space-y-2">
-                  {shifts.map(shift => {
-                    const shiftPct = parseFloat(shift.pct) || 0;
-                    const shiftTarget = (shiftPct / 100) * revenueConfig.targetValue;
-                    return (
-                      <div key={shift.id} className="flex items-center gap-3">
-                        <span className="text-sm flex-1 font-medium">{shift.label}</span>
-                        <div className="relative w-24">
-                          <Input
-                            type="number" min="0" max="100" step="0.1" placeholder="0"
-                            className="pr-8"
-                            value={shift.pct}
-                            onChange={e => setShiftPctOverrides(prev => ({ ...prev, [shift.id]: e.target.value }))}
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground w-28 text-right shrink-0">
-                          = R$ {shiftTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className={`text-sm font-medium ${pctSumOk ? 'text-green-600' : 'text-destructive'}`}>
-                  Soma: {pctSum.toFixed(1)}%{pctSumOk ? ' ✓' : ` — faltam ${(100 - pctSum).toFixed(1)}%`}
-                </div>
-              </>
+              </div>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" />Voltar</Button>
-              <Button disabled={!pctSumOk} onClick={handleNext}>
-                Próximo <ChevronRight className="ml-1 h-4 w-4" />
-              </Button>
+              <Button onClick={handleNext}>Próximo <ChevronRight className="ml-1 h-4 w-4" /></Button>
             </DialogFooter>
           </div>
         )}
@@ -894,58 +1227,150 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
         {currentStep === 'revenue_shifts_users' && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Distribuição automática da meta entre os colaboradores escalados em cada turno.
+              Colaboradores vinculados a esta meta. A escala ajuda a identificar presença, papel e cobertura do período; a meta continua sendo da equipe, sem alvo individual por colaborador.
             </p>
-            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-              {shiftGroups.map(group => {
-                const shift = shifts.find(s => s.id === group.id);
-                const shiftPct = parseFloat(shift?.pct ?? '0') || 0;
-                const shiftTarget = (shiftPct / 100) * revenueConfig.targetValue;
-                const totalDaysInShift = group.users.reduce(
-                  (sum, u) => sum + (workedDaysMap.get(`${group.id}:${u.id}`) ?? 0), 0
-                );
-
-                return (
-                  <div key={group.id} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold">{group.label}</span>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{shiftPct.toFixed(1)}%</Badge>
-                        <span className="text-xs text-muted-foreground">
-                          R$ {shiftTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
+            <div className="max-w-full rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+              <p className="font-semibold">Organograma da unidade</p>
+              {dpHierarchyItems.length > 0 && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  {dpHierarchyItems.map(item => (
+                    <div key={item.label} className="rounded-md border border-blue-100 bg-white/80 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-500">{item.label}</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-blue-950">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-blue-600">Liderança identificada</p>
+              {leadershipRecipients.length > 0 ? (
+                <div className="mt-2 flex max-w-full flex-wrap gap-2">
+                  {leadershipRecipients.map(recipient => (
+                    <Badge key={recipient.userId} variant="outline" className="max-w-full whitespace-normal break-words border-blue-200 bg-white text-left text-blue-800">
+                      {recipient.userName} · {recipient.sourceLabel}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-blue-800">
+                  Nenhum responsável estruturado encontrado para esta unidade. Configure o responsável no organograma antes de usar premiação de liderança.
+                </p>
+              )}
+            </div>
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Colaboradores vinculados</p>
+                  <p className="text-xs text-muted-foreground">{participantRows.length} participante(s) selecionado(s)</p>
+                </div>
+                <Badge variant="outline">{goalPeriodLabel(goalPeriod)}</Badge>
+              </div>
+              <div className="space-y-2 max-h-[34vh] overflow-y-auto pr-1">
+                {participantRows.length === 0 ? (
+                  <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                    Nenhum colaborador selecionado.
+                  </p>
+                ) : participantRows.map(row => {
+                  return (
+                    <div key={row.employeeId} className="flex flex-col gap-3 rounded-md border bg-muted/20 px-3 py-2 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-medium">{row.label}</span>
+                          <Badge variant={row.source === 'schedule' ? 'secondary' : 'outline'} className="h-5 px-1.5 text-[10px]">
+                            {row.source === 'schedule' ? 'Escala' : 'Manual'}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={`h-5 px-1.5 text-[10px] ${
+                              row.role === 'leader'
+                                ? 'border-violet-200 bg-violet-50 text-violet-700'
+                                : row.role === 'relief'
+                                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            }`}
+                          >
+                            {row.role === 'leader' ? 'Líder' : row.role === 'relief' ? 'Folguista' : 'Fixa'}
+                          </Badge>
+                          <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                            {row.coveredTurns > 0 ? `${row.coveredTurns} turno(s)` : row.scheduledDays > 0 ? `${row.scheduledDays} dia(s)` : 'sem escala'}
+                          </Badge>
+                        </div>
+                        {row.shiftLabels.length > 0 && (
+                          <p className="mt-1 truncate text-[11px] text-muted-foreground">{row.shiftLabels.join(' · ')}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 md:shrink-0 md:justify-end">
+                        <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeParticipant(row)}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </div>
-                    {group.users.length > 0 ? (
-                      <div className="border-t pt-2 space-y-1.5">
-                        {group.users.map(u => {
-                          const userDays = workedDaysMap.get(`${group.id}:${u.id}`) ?? 0;
-                          const userFrac = totalDaysInShift > 0
-                            ? userDays / totalDaysInShift
-                            : 1 / group.users.length;
-                          const userPctOfTotal = shiftPct * userFrac;
-                          const userTarget = (userPctOfTotal / 100) * revenueConfig.targetValue;
-                          return (
-                            <div key={u.id} className="flex items-center justify-between text-xs pl-1">
-                              <span className="flex items-center gap-1.5 text-muted-foreground">
-                                {u.username ?? u.id}
-                                <Badge variant="secondary" className="px-1.5 py-0 h-4">
-                                  {userDays} de {totalDaysInShift}d
-                                </Badge>
-                              </span>
-                              <span className="tabular-nums text-muted-foreground">
-                                {userPctOfTotal.toFixed(1)}% · R$ {userTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground pt-1 border-t pl-1">Nenhum colaborador neste turno</p>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+              <div className="flex flex-col gap-2 border-t pt-3 sm:flex-row">
+                <Popover
+                  open={participantPickerOpen}
+                  onOpenChange={(nextOpen) => {
+                    setParticipantPickerOpen(nextOpen);
+                    if (!nextOpen) setParticipantSearch('');
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="flex-1 justify-between font-normal">
+                      <span className={selectedNewParticipant ? 'truncate' : 'truncate text-muted-foreground'}>
+                        {selectedNewParticipant?.username ?? 'Buscar e adicionar colaborador'}
+                      </span>
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start" sideOffset={4}>
+                    <div className="relative mb-2">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={participantSearch}
+                        onChange={(event) => setParticipantSearch(event.target.value)}
+                        placeholder="Buscar por nome, cargo ou função..."
+                        className="h-9 pl-8"
+                      />
+                    </div>
+                    <div className="max-h-56 overflow-y-auto pr-1">
+                      {filteredParticipantOptions.length === 0 ? (
+                        <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                          Nenhum colaborador disponível.
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {filteredParticipantOptions.map(option => {
+                            const isSelected = option.id === newParticipantId;
+                            const roleLabel = option.jobFunctionNames?.[0] ?? option.jobRoleName ?? 'Sem cargo/função';
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm hover:bg-muted ${isSelected ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
+                                onClick={() => {
+                                  setNewParticipantId(option.id);
+                                  setParticipantPickerOpen(false);
+                                  setParticipantSearch('');
+                                }}
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate font-medium">{option.username ?? option.id}</span>
+                                  <span className={`block truncate text-xs ${isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>{roleLabel}</span>
+                                </span>
+                                {isSelected && <Check className="h-4 w-4 shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button type="button" variant="outline" onClick={addParticipant} disabled={!newParticipantId}>
+                  <Plus className="mr-1.5 h-4 w-4" /> Adicionar
+                </Button>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" />Voltar</Button>
@@ -1006,7 +1431,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Meta alvo (R$)</Label>
                 <CurrencyInput
@@ -1020,6 +1445,14 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 <CurrencyInput
                   value={productLineConfig.upValue ?? 0}
                   onChange={v => setProductLineConfig(prev => ({ ...prev, upValue: v }))}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Meta TOP (R$)</Label>
+                <CurrencyInput
+                  value={productLineConfig.topValue ?? 0}
+                  onChange={v => setProductLineConfig(prev => ({ ...prev, topValue: v }))}
                   placeholder="0,00"
                 />
               </div>
@@ -1059,7 +1492,7 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Meta alvo (R$)</Label>
                 <CurrencyInput
@@ -1073,6 +1506,14 @@ export function GoalTemplateFormModal({ open, onOpenChange }: GoalTemplateFormMo
                 <CurrencyInput
                   value={productSpecificConfig.upValue ?? 0}
                   onChange={v => setProductSpecificConfig(prev => ({ ...prev, upValue: v }))}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Meta TOP (R$)</Label>
+                <CurrencyInput
+                  value={productSpecificConfig.topValue ?? 0}
+                  onChange={v => setProductSpecificConfig(prev => ({ ...prev, topValue: v }))}
                   placeholder="0,00"
                 />
               </div>

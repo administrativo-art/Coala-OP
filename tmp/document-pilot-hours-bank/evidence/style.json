@@ -1,0 +1,85 @@
+{
+  "input": "/Users/imated/Coala Sistemas/Coala-OP/docs/modelos-documentos/admissionais/02-banco-horas-v1.docx",
+  "fonts_by_char_count": {
+    "Calibri": 4494
+  },
+  "direct_run_formatting_runs": 61,
+  "direct_paragraph_formatting_paragraphs": 23,
+  "heading_like_paragraphs_not_heading_style": [
+    {
+      "para_index": 1,
+      "text": "ACORDO INDIVIDUAL DE BANCO DE HORAS",
+      "style": ""
+    },
+    {
+      "para_index": 18,
+      "text": "{{custom_field_15914645}}",
+      "style": ""
+    },
+    {
+      "para_index": 22,
+      "text": "CT SORVETES LTDA",
+      "style": ""
+    }
+  ],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 1,
+        "text": "ACORDO INDIVIDUAL DE BANCO DE HORAS",
+        "style": ""
+      },
+      {
+        "para_index": 2,
+        "text": "",
+        "style": ""
+      },
+      {
+        "para_index": 3,
+        "text": "Contrato celebrado entre a pessoa jur\u00eddica de direito privado CT SORVETES LTDA, portadora do CNPJ n\u02da 14.276.603/0001-25,",
+        "style": ""
+      },
+      {
+        "para_index": 4,
+        "text": "1.\tA EMPREGADORA e o(a) EMPREGADO(A) concordam em estabelecer um regime de banco de horas, nos termos do artigo 59, \u00a75\u00ba ",
+        "style": ""
+      },
+      {
+        "para_index": 5,
+        "text": "2.\tO(A) EMPREGADO(A) concorda em prestar as horas excedentes em hor\u00e1rio diurno ou noturno, em qualquer turno, observando",
+        "style": ""
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 1,
+        "run_text": "ACORDO INDIVIDUAL DE BANCO DE HORAS",
+        "style": ""
+      },
+      {
+        "para_index": 3,
+        "run_text": "Contrato celebrado entre a pessoa jur\u00eddica de direito privado CT SORVETES LTDA, ",
+        "style": ""
+      },
+      {
+        "para_index": 3,
+        "run_text": "do",
+        "style": ""
+      },
+      {
+        "para_index": 3,
+        "run_text": " CNPJ n\u02da 14.276.603/0001-25, com sede no Edif\u00edcio Adriana, Av. Cel. Colares More",
+        "style": ""
+      },
+      {
+        "para_index": 3,
+        "run_text": "EMPREGADORA",
+        "style": ""
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}

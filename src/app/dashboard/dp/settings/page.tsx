@@ -13,7 +13,7 @@ export default function DPSettingsIndexPage() {
 
     const target =
       (permissions.dp?.collaborators?.edit || permissions.dp?.collaborators?.terminate)
-        ? '/dashboard/settings?department=pessoal&tab=users'
+        ? '/dashboard/dp/collaborators'
         : (permissions.settings?.manageUsers || permissions.dp?.collaborators?.edit)
           ? '/dashboard/settings?department=pessoal&tab=roles'
         : permissions.dp?.settings?.manageUnits

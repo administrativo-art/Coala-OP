@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from './ui/checkbox';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
-import { PlusCircle, Edit, Trash2, Archive, Box, Search, MoreHorizontal, Inbox, Save, X, Layers } from 'lucide-react';
+import { Plus, Edit, Trash2, Archive, Box, Search, MoreHorizontal, Inbox, Save, X, Layers, Tags } from 'lucide-react';
 import { AddEditProductModal } from './add-edit-product-modal';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHeader, TableHead, TableRow } from './ui/table';
@@ -341,13 +341,16 @@ function BulkEditProductsDialog({
             <Select value={operationalCategoryId} onValueChange={setOperationalCategoryId} disabled={!applyOperationalCategory}>
               <SelectTrigger><SelectValue placeholder="Selecione a categoria..." /></SelectTrigger>
               <SelectContent>
-                {activeCategories
-                  .filter((category) => category.destination !== 'asset')
-                  .map((category) => (
-                    <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
-                  ))}
+                {activeCategories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              A categoria define o fluxo de compra: estoque, vestimenta ou patrimônio.
+            </p>
           </div>
 
           <div className="rounded-md border p-4 space-y-3">
@@ -593,42 +596,57 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Insumos derivados cadastrados</CardTitle>
-          <CardDescription>Adicione e edite os itens de estoque derivados dos insumos base.</CardDescription>
+      <Card className="border-0 bg-transparent shadow-none">
+        <CardHeader className="px-0 pb-6 pt-0">
+          <CardTitle className="text-3xl font-black tracking-[-0.035em] text-[#281f1a] sm:text-4xl">
+            Insumos derivados cadastrados
+          </CardTitle>
+          <CardDescription className="text-base text-[#756a62] sm:text-lg">
+            Adicione e edite os itens operacionais usados em estoque, vestimenta e compras patrimoniais.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row gap-2">
-                <Button onClick={handleAddNewClick} className="w-full sm:w-auto">
-                    <PlusCircle className="mr-2 h-4 w-4" /> Adicionar insumo
+        <CardContent className="space-y-5 px-0">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsOperationalCategoriesOpen(true)}
+                  className="h-12 rounded-2xl border-[#dccbb8] bg-[#fffdf9] px-6 text-[#281f1a] hover:bg-white"
+                >
+                  <Tags className="mr-2 h-4 w-4" /> Categorias de item
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setIsOperationalCategoriesOpen(true)} className="w-full sm:w-auto">
-                    Categorias de item
+                <Button onClick={handleAddNewClick} className="h-12 rounded-2xl bg-[#a6325b] px-6 text-white hover:bg-[#8e294d]">
+                  <Plus className="mr-2 h-5 w-5" /> Adicionar insumo
                 </Button>
-                <div className="relative flex-grow">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-[#756a62]">
+                <strong className="text-[#281f1a]">{activeFiltered.length}</strong> de {products.filter((product) => !product.isArchived).length}
+              </p>
+            </div>
+            <div className="relative">
+                    <Search className="absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#9e938b]" />
                     <Input
                         placeholder="Buscar por insumo, marca, cód. de barras..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="pl-10 w-full"
+                        className="h-16 w-full rounded-2xl border-[#dccbb8] bg-[#fffdf9] pl-14 text-base shadow-none placeholder:text-[#8f847b]"
                     />
-                </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
                 {categoryFilters.map((filter) => (
                     <Button
                         key={filter.id}
                         type="button"
-                        variant={categoryFilter === filter.id ? "default" : "outline"}
-                        size="sm"
-                        className="h-8 max-w-[240px] rounded-full"
+                        variant="outline"
+                        className={categoryFilter === filter.id
+                          ? 'h-11 max-w-[260px] shrink-0 rounded-full border-[#281f1a] bg-[#281f1a] px-5 text-white hover:bg-[#281f1a]/90'
+                          : 'h-11 max-w-[260px] shrink-0 rounded-full border-[#dccbb8] bg-[#fffdf9] px-5 text-[#756a62] hover:bg-white'}
                         onClick={() => setCategoryFilter(filter.id)}
                         title={filter.label}
                     >
                         <span className="truncate">{filter.label}</span>
-                        <span className="ml-2 rounded-full bg-background/70 px-1.5 text-[10px] text-foreground">
+                        <span className="ml-2 text-xs opacity-70">
                             {filter.count}
                         </span>
                     </Button>
@@ -649,10 +667,10 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                     </div>
                 </div>
             )}
-            <div className="rounded-md border">
+            <div className="overflow-x-auto rounded-[26px] border border-[#dccbb8] bg-[#fffdf9]">
                 <Table>
                     <TableHeader>
-                        <TableRow>
+                        <TableRow className="border-[#e6ddd3] hover:bg-transparent">
                             <TableHead className="w-10">
                                 <Checkbox
                                     checked={allActiveSelected}
@@ -660,14 +678,14 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                                     aria-label="Selecionar todos"
                                 />
                             </TableHead>
-                            <TableHead className="w-[25%]">Insumo</TableHead>
-                            <TableHead>Marca</TableHead>
-                            <TableHead>Produto Base</TableHead>
-                            <TableHead>Categoria do item</TableHead>
-                            <TableHead>Embalagem</TableHead>
-                            <TableHead>Forma da contagem de estoque</TableHead>
-                            <TableHead>Unidade da contagem de estoque</TableHead>
-                            <TableHead>Cód. Barras</TableHead>
+                            <TableHead className="w-[25%] font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Insumo</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Marca</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Produto base</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Categoria</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Embalagem</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Forma da contagem</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Unid. contagem</TableHead>
+                            <TableHead className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[#756a62]">Cód. barras</TableHead>
                             <TableHead className="w-16 text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -691,7 +709,7 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                                 else if (countingUnitOption === 'content') displayedCountingUnit = product.unit || '-';
 
                                 return (
-                                    <TableRow key={product.id}>
+                                    <TableRow key={product.id} className="h-24 border-[#e6ddd3] hover:bg-[#faf6f0]">
                                         <TableCell>
                                             <Checkbox
                                                 checked={selectedProducts.has(product.id)}
@@ -703,11 +721,14 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                                                 {product.imageUrl ? (
                                                     <Image src={product.imageUrl} alt={product.baseName} width={40} height={40} className="rounded-md object-cover" />
                                                 ) : (
-                                                    <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
-                                                        <Box className="h-5 w-5 text-muted-foreground" />
+                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#ffd4bd] bg-[#fff7ef] text-lg font-black text-[#f97316] shadow-[inset_0_-4px_0_#f97316]">
+                                                        {product.baseName.slice(0, 1).toUpperCase()}
                                                     </div>
                                                 )}
-                                                <span className="font-semibold">{product.baseName}</span>
+                                                <div className="min-w-0">
+                                                  <p className="max-w-64 truncate font-bold text-[#281f1a]">{product.baseName}</p>
+                                                  <p className="font-mono text-xs uppercase text-[#756a62]">{product.id.slice(0, 8)}</p>
+                                                </div>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -719,22 +740,22 @@ const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
                                         </TableCell>
                                         <TableCell>
                                             {product.baseProductId ? (
-                                                <Badge variant="secondary">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
+                                                <Badge className="border-0 bg-[#efede9] font-mono text-xs uppercase text-[#756a62] hover:bg-[#efede9]">{baseProductMap.get(product.baseProductId)?.name || 'N/A'}</Badge>
                                             ) : (
                                                 <span className="text-muted-foreground">-</span>
                                             )}
                                         </TableCell>
                                         <TableCell>
                                             {product.operationalCategoryName ? (
-                                                <Badge variant="outline">{product.operationalCategoryName}</Badge>
+                                                <Badge variant="outline" className="rounded-full border-[#ffd1b3] bg-[#fff8f1] px-3 py-1 text-[#f97316]">{product.operationalCategoryName}</Badge>
                                             ) : (
                                                 <span className="text-muted-foreground">-</span>
                                             )}
                                         </TableCell>
                                         <TableCell>{product.packageSize}{product.unit?.toLowerCase() === 'pacote' ? ' ' : ''}{product.unit}</TableCell>
-                                        <TableCell><Badge variant="outline">{countingUnitText}</Badge></TableCell>
-                                        <TableCell><Badge variant="default">{displayedCountingUnit}</Badge></TableCell>
-                                        <TableCell className="font-mono text-xs">{product.barcode || '-'}</TableCell>
+                                        <TableCell><Badge variant="outline" className="border-[#dccbb8] bg-transparent text-[#756a62]">{countingUnitText}</Badge></TableCell>
+                                        <TableCell><Badge className="border border-[#dccbb8] bg-[#fff0f4] text-[#a6325b] hover:bg-[#fff0f4]">{displayedCountingUnit}</Badge></TableCell>
+                                        <TableCell className="font-mono text-xs text-[#756a62]">{product.barcode || '-'}</TableCell>
                                         <TableCell className="text-right">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>

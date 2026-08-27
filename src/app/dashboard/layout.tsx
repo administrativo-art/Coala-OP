@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { GlassSidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
@@ -16,7 +16,12 @@ import {
   submitHrLoginJustification,
   type HrLoginAccessPayload,
 } from '@/features/hr/lib/client';
+import { isPublicRecruitmentHost as isRecruitmentHost } from '@/lib/public-recruitment-host';
 import { LockKeyhole, ShieldAlert } from 'lucide-react';
+import {
+  PageContainer,
+  type PageContainerVariant,
+} from '@/components/layout/page-container';
 
 function shouldSurfaceLoginAccessNotice(payload: HrLoginAccessPayload) {
   return (
@@ -66,6 +71,18 @@ function shouldOpenLoginAccessGate(payload: HrLoginAccessPayload | null) {
   );
 }
 
+function resolvePersonalPageContainerVariant(pathname: string): PageContainerVariant {
+  if (pathname === '/dashboard/hr/org-chart') {
+    return 'fluid';
+  }
+
+  if (pathname === '/dashboard/dp/schedules' || pathname.startsWith('/dashboard/dp/schedules/')) {
+    return 'wide';
+  }
+
+  return 'default';
+}
+
 function LoadingSkeleton() {
     return (
       <div className="flex h-screen w-full">
@@ -93,13 +110,32 @@ export default function DashboardLayout({
   const { taskNotifications } = useAllTasks();
   const { toast } = useToast();
   const router = useRouter();
+  const pathname = usePathname();
   const [dataLoadTime, setDataLoadTime] = useState<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [isPublicRecruitmentHost, setIsPublicRecruitmentHost] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loginAccessState, setLoginAccessState] = useState<HrLoginAccessPayload | null>(null);
   const [submittingJustification, setSubmittingJustification] = useState(false);
+  const personalSection = pathname === '/dashboard/dp'
+    || pathname.startsWith('/dashboard/dp/')
+    || pathname.startsWith('/dashboard/hr/recruitment')
+    || pathname === '/dashboard/hr/org-chart'
+    || pathname.startsWith('/dashboard/stock/uniforms');
+  const personalPageContainerVariant = resolvePersonalPageContainerVariant(pathname);
 
   useEffect(() => {
+    document.body.classList.toggle('personal-density-active', personalSection);
+    return () => document.body.classList.remove('personal-density-active');
+  }, [personalSection]);
+
+  useEffect(() => {
+    if (isRecruitmentHost(window.location.hostname)) {
+      setIsPublicRecruitmentHost(true);
+      window.location.replace('/');
+      return;
+    }
+
     setIsMounted(true);
   }, []);
 
@@ -224,31 +260,48 @@ export default function DashboardLayout({
     }
   }, [firebaseUser, toast, user?.id]);
   
-  if (!isMounted || authLoading || !isAuthenticated) {
+  if (isPublicRecruitmentHost || !isMounted || authLoading || !isAuthenticated) {
     return <LoadingSkeleton />;
   }
 
+  const loginAccessNotice = loginAccessState && shouldSurfaceLoginAccessNotice(loginAccessState) ? (
+    <Alert variant={loginAccessState.evaluation.status === 'blocked' ? 'destructive' : 'default'}>
+      {loginAccessState.evaluation.status === 'blocked' ? (
+        <ShieldAlert className="h-4 w-4" />
+      ) : (
+        <LockKeyhole className="h-4 w-4" />
+      )}
+      <AlertTitle>{buildLoginAccessMessage(loginAccessState).title}</AlertTitle>
+      <AlertDescription>
+        {buildLoginAccessMessage(loginAccessState).description}
+      </AlertDescription>
+    </Alert>
+  ) : null;
+
   return (
-    <div className="flex min-h-screen w-full flex-col bg-[#f8fafc] dark:bg-[#0f172a]">
-       <div className="fixed inset-0 bg-[radial-gradient(at_0%_0%,rgba(124,58,237,0.03)_0,transparent_50%),radial-gradient(at_100%_100%,rgba(236,72,153,0.03)_0,transparent_50%)] pointer-events-none" />
+    <div className="flex min-h-screen w-full flex-col bg-[var(--bg)]">
       <GlassSidebar open={isSidebarOpen} onOpenChange={setIsSidebarOpen} />
-      <div className="flex flex-col flex-1 lg:pl-[112px]">
+      <div className="min-w-0 flex flex-1 flex-col lg:pl-[56px]">
         <Header tasks={taskNotifications} onMenuClick={() => setIsSidebarOpen(true)} />
-        <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-          {loginAccessState && shouldSurfaceLoginAccessNotice(loginAccessState) && (
-            <Alert variant={loginAccessState.evaluation.status === 'blocked' ? 'destructive' : 'default'}>
-              {loginAccessState.evaluation.status === 'blocked' ? (
-                <ShieldAlert className="h-4 w-4" />
-              ) : (
-                <LockKeyhole className="h-4 w-4" />
-              )}
-              <AlertTitle>{buildLoginAccessMessage(loginAccessState).title}</AlertTitle>
-              <AlertDescription>
-                {buildLoginAccessMessage(loginAccessState).description}
-              </AlertDescription>
-            </Alert>
+        <main
+          className={`min-w-0 flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 ${personalSection ? 'personal-section-density' : ''}`}
+          data-section={personalSection ? 'personal' : undefined}
+        >
+          {personalSection ? (
+            <PageContainer
+              variant={personalPageContainerVariant}
+              className="flex min-h-0 flex-1 flex-col gap-4 md:gap-8"
+              data-page-container={personalPageContainerVariant}
+            >
+              {loginAccessNotice}
+              {children}
+            </PageContainer>
+          ) : (
+            <>
+              {loginAccessNotice}
+              {children}
+            </>
           )}
-          {children}
         </main>
         {process.env.NODE_ENV === 'development' ? (
           <DebugPanel dataLoadTime={dataLoadTime} />

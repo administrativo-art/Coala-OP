@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
-import { createManualTask } from "@/features/tasks/lib/server";
+import { createManualTask, ensureTaskProject, ensureTaskSubproject } from "@/features/tasks/lib/server";
 import { type ItemAdditionRequest } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const ITEM_REQUEST_ASSIGNEE_ID = "__item_request_approver__";
+const ITEM_REQUEST_ORIGIN_LINK = "/dashboard/stock/item-requests";
+const STOCK_TASK_PROJECT_SLUG = "stock";
+const ITEM_REQUEST_SUBPROJECT_SLUG = "item-requests";
 
 function canReadRequests(context: Awaited<ReturnType<typeof requireUser>>) {
   return (
@@ -95,22 +100,47 @@ export async function POST(request: NextRequest) {
     const kioskName =
       typeof kioskData.name === "string" ? kioskData.name : "Quiosque";
 
+    const projectId = await ensureTaskProject(context, {
+      slug: STOCK_TASK_PROJECT_SLUG,
+      name: "Gestão de Estoque",
+      description: "Projeto macro das tarefas operacionais de estoque.",
+    });
+    const subprojectId = await ensureTaskSubproject(context, {
+      projectId,
+      slug: ITEM_REQUEST_SUBPROJECT_SLUG,
+      name: "Solicitações de cadastro",
+      description: "Quadro de tarefas geradas por solicitações de cadastro de insumos vindas da operação.",
+    });
+
     const task = await createManualTask({
       context,
       input: {
         title: `Nova solicitação de cadastro: ${body.productName.trim()}`,
-        description: `Solicitado por ${context.userDoc.username} para o quiosque ${kioskName}.`,
-        assigneeType: "profile",
-        assigneeId:
-          typeof body.assigneeProfileId === "string" && body.assigneeProfileId
-            ? body.assigneeProfileId
-            : "admin",
+        description: [
+          `Solicitado por ${context.userDoc.username}`,
+          `Unidade: ${kioskName}`,
+          `Produto: ${body.productName.trim()}`,
+          typeof body.brand === "string" && body.brand.trim() ? `Marca: ${body.brand.trim()}` : "",
+          typeof body.lote === "string" && body.lote.trim() ? `Lote: ${body.lote.trim()}` : "",
+          typeof body.notes === "string" && body.notes.trim() ? `Observações: ${body.notes.trim()}` : "",
+        ].filter(Boolean).join("\n"),
+        assigneeType: "role",
+        assigneeId: ITEM_REQUEST_ASSIGNEE_ID,
         requiresApproval: false,
         origin: {
           kind: "legacy",
           type: "item_addition_request",
           id: requestRef.id,
         },
+        projectId,
+        subprojectId,
+        subprojectName: "Solicitações de cadastro",
+        unitId: body.kioskId,
+        unitName: kioskName,
+        priority: "normal",
+        watcherUserIds: [context.userDoc.id],
+        visibilityScope: "unit",
+        originLink: ITEM_REQUEST_ORIGIN_LINK,
       },
     });
 

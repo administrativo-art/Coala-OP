@@ -1,22 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ChevronRight, Group, Menu, Settings2, SlidersHorizontal, Users2 } from "lucide-react";
+import { ArrowLeft, Box, BrainCircuit, ChevronRight, Group, Loader2, Menu, Package, Settings2, SlidersHorizontal, Users2, UsersRound } from "lucide-react";
 import { PermissionGuard } from "@/components/permission-guard";
+import { DPRuntimeGuard } from "@/components/dp-runtime-guard";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { ChartLineUp, Storefront, Users, Wallet } from "@phosphor-icons/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useBaseProducts } from "@/hooks/use-base-products";
+import { useEntities } from "@/hooks/use-entities";
+import { useProducts } from "@/hooks/use-products";
+import {
+  getSettingsTabStructureKey,
+  preserveSettingsTabSelection,
+  resolveRequestedSettingsTab,
+} from "@/lib/settings-tab-selection";
 
-const UserManagement = dynamic(
-  () => import("@/components/user-management").then((m) => m.UserManagement),
-  { ssr: false }
-);
 const ItemManagement = dynamic(
   () => import("@/components/item-management").then((m) => m.ItemManagement),
   { ssr: false }
@@ -41,12 +47,20 @@ const DPOrgChart = dynamic(
   () => import("@/components/dp/dp-org-chart").then((m) => m.DPOrgChart),
   { ssr: false }
 );
+const AccessProfilesSettings = dynamic(
+  () => import("@/components/access-profiles-settings").then((m) => m.AccessProfilesSettings),
+  { ssr: false }
+);
 const DPLoginAccessDiagnostic = dynamic(
   () => import("@/components/dp/dp-login-access-diagnostic").then((m) => m.DPLoginAccessDiagnostic),
   { ssr: false }
 );
 const DPLoginAccessAudit = dynamic(
   () => import("@/components/dp/dp-login-access-audit").then((m) => m.DPLoginAccessAudit),
+  { ssr: false }
+);
+const ProfileComplianceOverview = dynamic(
+  () => import("@/components/dp/profile-compliance-overview").then((m) => m.ProfileComplianceOverview),
   { ssr: false }
 );
 const DPSettingsCalendars = dynamic(
@@ -105,8 +119,8 @@ const GoalsProvider = dynamic(
   () => import("@/components/goals-provider").then((m) => m.GoalsProvider),
   { ssr: false }
 );
-const KioskManagement = dynamic(
-  () => import("@/components/kiosk-management").then((m) => m.KioskManagement),
+const DPSettingsUnits = dynamic(
+  () => import("@/components/dp/dp-settings-units").then((m) => m.DPSettingsUnits),
   { ssr: false }
 );
 const PdvSyncManagement = dynamic(
@@ -133,6 +147,18 @@ const FieldConfigPage = dynamic(
   () => import("@/features/rh/components/FieldConfigPage").then((m) => m.FieldConfigPage),
   { ssr: false }
 );
+const AssetBarcodeLabelsPanel = dynamic(
+  () => import("@/components/assets/asset-barcode-labels-panel").then((m) => m.AssetBarcodeLabelsPanel),
+  { ssr: false }
+);
+const RecruitmentFormsView = dynamic(
+  () => import("@/components/hr/recruitment/recruitment-shell").then((m) => m.RecruitmentFormsView),
+  { ssr: false }
+);
+const AiBillingSettings = dynamic(
+  () => import("@/components/ai-management/ai-billing-settings").then((m) => m.AiBillingSettings),
+  { ssr: false }
+);
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -153,13 +179,94 @@ function EmptySection({ label }: { label: string }) {
   );
 }
 
-function OperationalCadastrosPanel() {
+function RecruitmentFormsSettingsPanel() {
+  const { firebaseUser, permissions } = useAuth();
+  const { roles, functions, loading, error, refresh } = useHrBootstrap();
+  const canManage = !!(permissions.settings.manageUsers || permissions.dp?.collaborators?.edit);
+
+  const getToken = useCallback(async () => {
+    const token = await firebaseUser?.getIdToken();
+    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    return token;
+  }, [firebaseUser]);
+
+  if (!firebaseUser || loading) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-2xl border bg-white">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-700">
+        {error}
+      </div>
+    );
+  }
+
   return (
-    <Tabs defaultValue="items" className="w-full space-y-4">
-      <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl border bg-background p-1 shadow-sm">
-        <TabsTrigger value="base-products" className="rounded-xl px-4 py-2 text-sm font-medium">Insumo base</TabsTrigger>
-        <TabsTrigger value="items" className="rounded-xl px-4 py-2 text-sm font-medium">Insumo derivado</TabsTrigger>
-        <TabsTrigger value="entities" className="rounded-xl px-4 py-2 text-sm font-medium">Pessoas e empresas</TabsTrigger>
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden">
+      <RecruitmentFormsView
+        getToken={getToken}
+        canManage={canManage}
+        roles={roles}
+        functions={functions}
+        onModelsUpdated={refresh}
+      />
+    </div>
+  );
+}
+
+function OperationalCadastrosPanel() {
+  const { baseProducts } = useBaseProducts();
+  const { products } = useProducts();
+  const { entities } = useEntities();
+
+  const catalogTabs = [
+    {
+      value: "base-products",
+      label: "Insumo base",
+      count: baseProducts.filter((product) => !product.isArchived).length,
+      icon: Box,
+    },
+    {
+      value: "items",
+      label: "Insumo derivado",
+      count: products.filter((product) => !product.isArchived).length,
+      icon: Package,
+    },
+    {
+      value: "entities",
+      label: "Pessoas e empresas",
+      count: entities.length,
+      icon: UsersRound,
+    },
+  ];
+
+  return (
+    <Tabs defaultValue="items" className="w-full space-y-8">
+      <TabsList className="grid h-auto w-full grid-cols-3 rounded-none border-0 border-b border-[#ded3c5] bg-transparent p-0 shadow-none">
+        {catalogTabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className="group relative min-h-20 rounded-none border-0 bg-transparent px-3 py-4 text-[#746961] shadow-none transition-colors data-[state=active]:bg-transparent data-[state=active]:text-[#211814] data-[state=active]:shadow-none"
+            >
+              <span className="flex items-center justify-center gap-3">
+                <Icon className="h-5 w-5 text-[#a79c93] group-data-[state=active]:text-[#a6325b]" />
+                <span className="text-sm font-bold sm:text-base">{tab.label}</span>
+                <span className="rounded-full bg-[#e6e0d8] px-2.5 py-1 text-xs font-bold text-[#746961] group-data-[state=active]:bg-[#a6325b] group-data-[state=active]:text-white">
+                  {tab.count}
+                </span>
+              </span>
+              <span className="absolute inset-x-4 -bottom-px hidden h-1 rounded-full bg-[#a6325b] group-data-[state=active]:block" />
+            </TabsTrigger>
+          );
+        })}
       </TabsList>
       <TabsContent value="base-products">
         <BaseProductManagement />
@@ -263,7 +370,7 @@ function SettingsLaunchPanel({
   );
 }
 
-function OperationalChecklistsPanel() {
+function OperationalFormsPanel() {
   return (
     <SettingsLaunchPanel
       title="Módulo de formulários"
@@ -274,12 +381,22 @@ function OperationalChecklistsPanel() {
   );
 }
 
+function OperationalUnitsPanel() {
+  return (
+    <DPRuntimeGuard area="Unidades">
+      <DPSettingsUnits />
+    </DPRuntimeGuard>
+  );
+}
+
 type NestedTab = {
   value: string;
   label: string;
-  title: string;
-  description: string;
+  /** Omitido quando o próprio conteúdo já exibe o título da seção. */
+  title?: string;
+  description?: string;
   content: React.ReactNode;
+  children?: NestedTab[];
 };
 
 type DepartmentTab = {
@@ -335,29 +452,59 @@ function DepartmentSubtabs({
   emptyLabel: string;
   requestedValue?: string | null;
 }) {
-  const defaultTab = tabs[0]?.value;
-  const [activeSubTab, setActiveSubTab] = useState(defaultTab ?? "");
+  const tabStructureKey = getSettingsTabStructureKey(tabs);
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const defaultMatch = resolveRequestedSettingsTab(tabs, requestedValue);
+  const [activeSubTab, setActiveSubTab] = useState(defaultMatch?.groupValue ?? "");
+  const [activeLeafTab, setActiveLeafTab] = useState(defaultMatch?.leafValue ?? "");
 
   useEffect(() => {
-    if (requestedValue && tabs.some((tab) => tab.value === requestedValue)) {
-      setActiveSubTab(requestedValue);
+    if (!requestedValue) return;
+    const match = resolveRequestedSettingsTab(tabsRef.current, requestedValue);
+    if (!match) return;
+    setActiveSubTab(match.groupValue);
+    setActiveLeafTab(match.leafValue);
+  }, [requestedValue, tabStructureKey]);
+
+  useEffect(() => {
+    const selection = preserveSettingsTabSelection(
+      tabsRef.current,
+      activeSubTab,
+      activeLeafTab
+    );
+    if (!selection) {
+      setActiveSubTab("");
+      setActiveLeafTab("");
       return;
     }
-    setActiveSubTab(defaultTab ?? "");
-  }, [defaultTab, requestedValue, tabs]);
+    if (selection.groupValue !== activeSubTab) setActiveSubTab(selection.groupValue);
+    if (selection.leafValue !== activeLeafTab) setActiveLeafTab(selection.leafValue);
+  }, [activeLeafTab, activeSubTab, tabStructureKey]);
 
-  if (!defaultTab) {
+  if (!tabs.length) {
     return <EmptySection label={emptyLabel} />;
   }
 
-  const activeTab = tabs.find((tab) => tab.value === activeSubTab) ?? tabs[0];
+  const activeGroup = tabs.find((tab) => tab.value === activeSubTab) ?? tabs[0];
+  const childTabs = activeGroup.children ?? [];
+  const activeTab = childTabs.find((tab) => tab.value === activeLeafTab) ?? childTabs[0] ?? activeGroup;
+
+  const handleGroupChange = (value: string) => {
+    const nextGroup = tabs.find((tab) => tab.value === value) ?? tabs[0];
+    setActiveSubTab(nextGroup.value);
+    setActiveLeafTab((nextGroup.children?.[0] ?? nextGroup).value);
+  };
 
   return (
-    <div className="space-y-6">
-      <SegmentedTabs tabs={tabs} value={activeTab.value} onChange={setActiveSubTab} />
-      <div className="space-y-4">
-        <SectionHeader title={activeTab.title} description={activeTab.description} />
-        {activeTab.content}
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden">
+      <SegmentedTabs tabs={tabs} value={activeGroup.value} onChange={handleGroupChange} />
+      {childTabs.length > 1 ? (
+        <SegmentedTabs tabs={childTabs} value={activeTab.value} onChange={setActiveLeafTab} />
+      ) : null}
+      <div className="min-w-0 space-y-4">
+        {activeTab.title ? <SectionHeader title={activeTab.title} description={activeTab.description} /> : null}
+        <div className="min-w-0 overflow-x-hidden">{activeTab.content}</div>
       </div>
     </div>
   );
@@ -370,11 +517,11 @@ export default function SettingsPage() {
 
   const operationalTabs: NestedTab[] = [
     {
-      value: "checklists",
+      value: "forms",
       label: "Formulários",
       title: "Formulários operacionais",
       description: "Centralize o acesso às configurações operacionais dos formulários e ao catálogo de templates.",
-      content: <OperationalChecklistsPanel />,
+      content: <OperationalFormsPanel />,
     },
     {
       value: "cadastros",
@@ -388,20 +535,20 @@ export default function SettingsPage() {
       label: "Unidades",
       title: "Unidades",
       description: "Gerencie as unidades operacionais e integrações principais.",
-      content: <KioskManagement compact />,
+      content: <OperationalUnitsPanel />,
     },
     {
       value: "pdv-sync",
       label: "Sincronizar",
-      title: "Sincronização PDV",
+      title: "Sincronização do PDV",
       description: "Reprocesse dados históricos e configure a rotina operacional ligada ao PDV.",
       content: <PdvSyncManagement />,
     },
     {
       value: "catalogo-qr",
-      label: "QR Catálogo",
-      title: "QR Code do Catálogo",
-      description: "Imprima o QR code para que atendentes acessem o catálogo de mercadorias diretamente pelo celular.",
+      label: "QR Codes",
+      title: "QR codes operacionais",
+      description: "Centralize QR codes, etiquetas e códigos usados em catálogo, patrimônio, estoque e leitura por scanner.",
       content: <CatalogoQRPanel />,
     },
   ].filter((tab) => {
@@ -454,18 +601,11 @@ export default function SettingsPage() {
     return false;
   });
 
-  const personalTabs: NestedTab[] = [
-    {
-      value: "users",
-      label: "Usuários",
-      title: "Usuários",
-      description: "Gerencie usuários, perfis de acesso e dados complementares do DP.",
-      content: <UserManagement />,
-    },
+  const personalLeafTabs: NestedTab[] = [
     {
       value: "roles",
-      label: "Cargos & Funções",
-      title: "Cargos & Funções",
+      label: "Cargos e funções",
+      title: "Cargos e funções",
       description: "Catálogo de cargos, funções e vínculo com perfis do departamento pessoal.",
       content: <DPSettingsRoles />,
     },
@@ -474,19 +614,19 @@ export default function SettingsPage() {
       label: "Organograma",
       title: "Organograma",
       description: "Visualização da estrutura organizacional do departamento pessoal.",
-      content: (
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Esta visualização usa cargos e vínculos dos colaboradores sem substituir o modelo atual de permissões.
-          </p>
-          <DPOrgChart />
-        </div>
-      ),
+      content: <DPOrgChart />,
+    },
+    {
+      value: "access-profiles",
+      label: "Perfis de acesso",
+      title: "Perfis de acesso",
+      description: "Crie e edite os perfis de permissão aplicados aos colaboradores.",
+      content: <AccessProfilesSettings canEdit={!!permissions.settings.manageProfiles} />,
     },
     {
       value: "login-access",
-      label: "Acesso por Escala",
-      title: "Acesso por Escala",
+      label: "Acesso por escala",
+      title: "Acesso por escala",
       description: "Diagnóstico e auditoria da política de acesso vinculada à escala.",
       content: (
         <div className="space-y-4">
@@ -501,16 +641,30 @@ export default function SettingsPage() {
     {
       value: "privacy",
       label: "Privacidade",
-      title: "Privacidade Interna",
+      title: "Privacidade interna",
       description: "Aviso interno, inventário LGPD, fornecedores, retenção e pendências de governança.",
       content: <InternalPrivacySettings />,
     },
     {
+      value: "profile-compliance",
+      label: "Atualização cadastral",
+      title: "Atualização cadastral",
+      description: "Acompanhe a obrigatoriedade e as confirmações trimestrais dos dados pessoais.",
+      content: <ProfileComplianceOverview />,
+    },
+    {
       value: "profile-fields",
-      label: "Campos do Perfil",
-      title: "Campos do Perfil",
+      label: "Campos do perfil",
+      title: "Campos do perfil",
       description: "Crie, nomeie e organize as seções e campos exibidos no perfil dos colaboradores.",
       content: <FieldConfigPage />,
+    },
+    {
+      value: "recruitment",
+      label: "Recrutamento",
+      title: "Recrutamento",
+      description: "Gerencie formulários públicos, modelos de questionário e modelos de integração por cargo e função.",
+      content: <RecruitmentFormsSettingsPanel />,
     },
     {
       value: "audit",
@@ -529,14 +683,11 @@ export default function SettingsPage() {
     {
       value: "calendars",
       label: "Calendário",
-      title: "Calendários de Trabalho",
+      title: "Calendários de trabalho",
       description: "Configure calendários de feriados usados nas escalas.",
       content: <DPSettingsCalendars />,
     },
   ].filter((tab) => {
-    if (tab.value === "users") {
-      return !!(permissions.settings.manageUsers || permissions.settings.manageProfiles);
-    }
     if (tab.value === "roles") {
       return !!(permissions.settings.manageUsers || permissions.dp?.collaborators?.edit);
     }
@@ -546,6 +697,9 @@ export default function SettingsPage() {
         permissions.dp?.collaborators?.edit ||
         permissions.dp?.collaborators?.terminate
       );
+    }
+    if (tab.value === "access-profiles") {
+      return !!permissions.settings.manageProfiles;
     }
     if (tab.value === "login-access") {
       return !!(
@@ -563,10 +717,24 @@ export default function SettingsPage() {
         permissions.dp?.collaborators?.terminate
       );
     }
+    if (tab.value === "profile-compliance") {
+      return !!(
+        permissions.settings.manageUsers ||
+        permissions.dp?.collaborators?.view ||
+        permissions.dp?.collaborators?.edit
+      );
+    }
     if (tab.value === "profile-fields") {
       return !!(
         permissions.settings.manageUsers ||
         permissions.dp?.collaborators?.edit
+      );
+    }
+    if (tab.value === "recruitment") {
+      return !!(
+        permissions.settings.manageUsers ||
+        permissions.dp?.collaborators?.edit ||
+        permissions.dp?.view
       );
     }
     if (tab.value === "audit") {
@@ -584,11 +752,56 @@ export default function SettingsPage() {
     return false;
   });
 
+  const pickPersonalTabs = (values: string[]) => personalLeafTabs.filter((tab) => values.includes(tab.value));
+
+  const personalTabs: NestedTab[] = [
+    {
+      value: "team-structure",
+      label: "Equipe e organograma",
+      title: "Equipe e organograma",
+      description: "Gerencie cargos, funções e a estrutura organizacional.",
+      content: null,
+      children: pickPersonalTabs(["roles", "organogram", "access-profiles"]),
+    },
+    {
+      value: "collaborator-profile",
+      label: "Perfil do colaborador",
+      title: "Perfil do colaborador",
+      description: "Configure os campos e a composição do perfil dos colaboradores.",
+      content: null,
+      children: pickPersonalTabs(["profile-fields"]),
+    },
+    {
+      value: "journey",
+      label: "Jornada",
+      title: "Jornada",
+      description: "Configure turnos, calendários e regras de acesso por escala.",
+      content: null,
+      children: pickPersonalTabs(["shifts", "calendars", "login-access"]),
+    },
+    {
+      value: "recruitment",
+      label: "Recrutamento",
+      title: "Recrutamento",
+      description: "Gerencie formulários públicos, modelos de questionário e modelos de integração por cargo e função.",
+      content: null,
+      children: pickPersonalTabs(["recruitment"]),
+    },
+    {
+      value: "governance",
+      label: "Governança",
+      title: "Governança",
+      description: "Centralize privacidade, auditoria e controles internos do departamento pessoal.",
+      content: null,
+      children: pickPersonalTabs(["profile-compliance", "privacy", "audit"]),
+    },
+  ].filter((tab) => (tab.children?.length ?? 0) > 0);
+
   const financialTabs: NestedTab[] = [
     {
       value: "accounting",
       label: "Contabilidade",
-      title: "Cadastros Contábeis",
+      title: "Cadastros contábeis",
       description: "Plano de contas e centros de resultado do módulo financeiro.",
       content: (
         <div className="space-y-6">
@@ -603,7 +816,7 @@ export default function SettingsPage() {
     {
       value: "accounts",
       label: "Contas",
-      title: "Contas Bancárias",
+      title: "Contas bancárias",
       description: "Gerencie bancos, contas e vínculos usados no financeiro.",
       content: (
         <BankAccountsManagement canManage={permissions.financial?.settings?.manageBankAccounts} />
@@ -612,13 +825,42 @@ export default function SettingsPage() {
     {
       value: "import",
       label: "Importação",
-      title: "Aliases de Importação",
+      title: "Aliases de importação",
       description: "Mapeie aliases e regras usadas na importação financeira.",
       content: (
         <ImportAliasesManagement canManage={permissions.financial?.settings?.manageImportAliases} />
       ),
     },
-  ].filter(() => !!permissions.financial?.settings?.view);
+    {
+      value: "asset-labels",
+      label: "Patrimônio",
+      title: "Etiquetas patrimoniais",
+      description: "Gere e exporte placas patrimoniais com logo, numeração fixa e código de barras.",
+      content: <AssetBarcodeLabelsPanel />,
+    },
+  ].filter((tab) => {
+    if (tab.value === "asset-labels") return !!permissions.assets?.printLabels;
+    return !!permissions.financial?.settings?.view;
+  });
+
+  const aiManagementTabs: NestedTab[] = permissions.settings.viewAiCosts
+    ? [
+        {
+          value: "gpt-credits",
+          label: "Créditos GPT",
+          title: "Créditos GPT",
+          description: "Acompanhe o limite mensal disponível, o consumo e o volume de uso dos modelos GPT.",
+          content: <AiBillingSettings view="credits" />,
+        },
+        {
+          value: "app-cost",
+          label: "Custo Google Cloud",
+          title: "Custo Google Cloud",
+          description: "Acompanhe o custo de infraestrutura do projeto Firebase e dos serviços Google Cloud vinculados.",
+          content: <AiBillingSettings view="costs" />,
+        },
+      ]
+    : [];
 
   const departmentTabs: DepartmentTab[] = [
     {
@@ -649,10 +891,28 @@ export default function SettingsPage() {
       tabs: financialTabs,
       emptyLabel: "Financeiro",
     },
+    ...(aiManagementTabs.length
+      ? [{
+          value: "ai-management",
+          label: "Gerenciamento de IA",
+          icon: <BrainCircuit className="h-3.5 w-3.5" />,
+          tabs: aiManagementTabs,
+          emptyLabel: "Gerenciamento de IA",
+        }]
+      : []),
   ];
+  const departmentStructureKey = getSettingsTabStructureKey(departmentTabs);
+  const departmentTabsRef = useRef(departmentTabs);
+  departmentTabsRef.current = departmentTabs;
 
   const requestedDepartment = searchParams.get("department");
   const requestedTab = searchParams.get("tab");
+
+  useEffect(() => {
+    if (requestedDepartment === "pessoal" && requestedTab === "users") {
+      router.replace("/dashboard/dp/collaborators");
+    }
+  }, [requestedDepartment, requestedTab, router]);
 
   const [activeDepartment, setActiveDepartment] = useState(
     requestedDepartment && departmentTabs.some((tab) => tab.value === requestedDepartment)
@@ -661,42 +921,43 @@ export default function SettingsPage() {
   );
 
   useEffect(() => {
-    if (!departmentTabs.some((tab) => tab.value === activeDepartment)) {
-      setActiveDepartment(departmentTabs[0]?.value ?? "operacional");
+    const currentTabs = departmentTabsRef.current;
+    if (!currentTabs.some((tab) => tab.value === activeDepartment)) {
+      setActiveDepartment(currentTabs[0]?.value ?? "operacional");
     }
-  }, [activeDepartment, departmentTabs]);
+  }, [activeDepartment, departmentStructureKey]);
 
   useEffect(() => {
     if (
       requestedDepartment &&
-      departmentTabs.some((tab) => tab.value === requestedDepartment)
+      departmentTabsRef.current.some((tab) => tab.value === requestedDepartment)
     ) {
       setActiveDepartment(requestedDepartment);
     }
-  }, [requestedDepartment, departmentTabs]);
+  }, [requestedDepartment, departmentStructureKey]);
 
   const activeDepartmentTab =
     departmentTabs.find((tab) => tab.value === activeDepartment) ?? departmentTabs[0];
 
   return (
     <PermissionGuard allowed={permissions.settings.view}>
-      <div className="w-full space-y-6">
-        <div className="flex items-center gap-4 mb-2">
+      <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden">
+        <div className="flex items-center gap-2 sm:gap-4 mb-2">
           <Button
             onClick={() => router.back()}
             variant="ghost"
-            className="p-2 rounded-full h-auto w-auto text-muted-foreground transition-colors hover:bg-muted"
+            className="p-2 rounded-full h-auto w-auto shrink-0 text-muted-foreground transition-colors hover:bg-muted"
             aria-label="Voltar"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Configurações</h1>
-            <p className="text-sm text-muted-foreground">Gerencie as configurações de cada departamento.</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold">Configurações</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">Gerencie as configurações de cada departamento.</p>
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <SegmentedTabs
             tabs={departmentTabs}
             value={activeDepartmentTab?.value ?? "operacional"}

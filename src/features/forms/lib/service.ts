@@ -7,24 +7,19 @@ import {
 import {
   getFormExecutionById,
   getFormTemplateById,
+  ensureUnitFormProjects,
   listFormExecutions,
   listFormProjects,
   listFormTemplates,
   listFormTypes,
 } from "@/features/forms/lib/server";
-import {
-  getLegacyFormExecutionBySyntheticId,
-  getLegacyFormTemplateBySyntheticId,
-  listLegacyFormExecutions,
-  listLegacyFormProjects,
-  listLegacyFormTemplates,
-} from "@/features/forms/lib/legacy-read";
 import { getFeatureFlags } from "@/lib/feature-flags";
 
 export async function buildFormsBootstrap(params: {
   workspaceId: string;
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
+  userId?: string;
 }) {
   const flags = await getFeatureFlags(params.workspaceId);
   if (flags.kill_forms_module) {
@@ -39,38 +34,29 @@ export async function buildFormsBootstrap(params: {
     throw new Error("Sem permissão para acessar formulários.");
   }
 
-  const [projects, templates, executions, types] = await Promise.all([
+  await ensureUnitFormProjects(params.workspaceId);
+
+  const [projects, templates, templateOptions, executions, types] = await Promise.all([
     listFormProjects(params.workspaceId),
     listFormTemplates({ workspaceId: params.workspaceId, isActive: true }),
+    listFormTemplates({ workspaceId: params.workspaceId }),
     listFormExecutions({ workspaceId: params.workspaceId, limit: 30 }),
     listFormTypes({ workspaceId: params.workspaceId, isActive: true }),
   ]);
-  const [legacyProjects, legacyTemplates, legacyExecutions] =
-    flags.forms_read_from_legacy_enabled
-      ? await Promise.all([
-          listLegacyFormProjects(200),
-          listLegacyFormTemplates(200),
-          listLegacyFormExecutions(200),
-        ])
-      : [[], [], []];
 
   const mergedProjects = [...projects];
-  legacyProjects.forEach((project) => {
-    if (!mergedProjects.some((current) => current.id === project.id)) {
-      mergedProjects.push(project);
-    }
-  });
 
   const visibleProjects = mergedProjects.filter((project) => {
-    try {
-      assertFormPermission(
-        params.permissions,
-        params.isDefaultAdmin,
-        project.id,
-        "view"
-      );
-      return true;
-    } catch {
+      try {
+        assertFormPermission(
+          params.permissions,
+          params.isDefaultAdmin,
+          project.id,
+          "view",
+          { userId: params.userId, project: project as any }
+        );
+        return true;
+      } catch {
       return false;
     }
   });
@@ -85,19 +71,45 @@ export async function buildFormsBootstrap(params: {
         params.isDefaultAdmin || params.permissions.forms.global.create_projects,
       can_manage_templates:
         params.isDefaultAdmin ||
-        params.permissions.forms.global.manage_templates ||
-        params.permissions.dp.checklists.manageTemplates,
+        params.permissions.forms.global.manage_templates,
       can_view_analytics:
         params.isDefaultAdmin ||
         params.permissions.forms.global.view_analytics ||
-        params.permissions.dp.checklists.viewAnalytics,
+        params.permissions.forms.analytics.view,
+      can_manage_analytics_taxonomy:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.manage_taxonomy ||
+        params.permissions.forms.global.manage_templates ||
+        params.permissions.forms.global.create_projects,
+      can_configure_analytics_templates:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.configure_templates ||
+        params.permissions.forms.global.manage_templates,
+      can_reprocess_occurrences:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.reprocess_occurrences,
+      can_manage_retention_policy:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.manage_retention_policy,
+      can_resolve_occurrences:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.resolve_occurrences,
+      can_validate_occurrence_resolution:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.validate_occurrence_resolution,
+      can_view_personal_targets:
+        params.isDefaultAdmin ||
+        params.permissions.forms.analytics.view_personal_targets,
     },
     projects: visibleProjects,
     types: types.filter((type) => visibleProjectIds.has(type.form_project_id)),
-    templates: [...templates, ...legacyTemplates].filter((template) =>
+    templates: templates.filter((template) =>
       visibleProjectIds.has(template.form_project_id)
     ),
-    executions: [...executions, ...legacyExecutions].filter((execution) =>
+    template_options: templateOptions.filter((template) =>
+      visibleProjectIds.has(template.form_project_id)
+    ),
+    executions: executions.filter((execution) =>
       visibleProjectIds.has(execution.form_project_id)
     ),
   };
@@ -105,12 +117,11 @@ export async function buildFormsBootstrap(params: {
 
 export async function buildFormTemplatePayload(params: {
   templateId: string;
+  workspaceId: string;
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
 }) {
-  const template =
-    (await getFormTemplateById(params.templateId)) ??
-    (await getLegacyFormTemplateBySyntheticId(params.templateId));
+  const template = await getFormTemplateById(params.templateId, params.workspaceId);
   if (!template) {
     throw new Error("Template não encontrado.");
   }
@@ -127,22 +138,14 @@ export async function buildFormTemplatePayload(params: {
 
 export async function buildFormExecutionPayload(params: {
   executionId: string;
+  workspaceId: string;
   permissions: PermissionSet;
   isDefaultAdmin: boolean;
 }) {
-  const payload =
-    (await getFormExecutionById(params.executionId)) ??
-    (await getLegacyFormExecutionBySyntheticId(params.executionId));
+  const payload = await getFormExecutionById(params.executionId, params.workspaceId);
   if (!payload) {
     throw new Error("Execução não encontrada.");
   }
-
-  assertFormPermission(
-    params.permissions,
-    params.isDefaultAdmin,
-    payload.execution.form_project_id,
-    "view"
-  );
 
   return payload;
 }

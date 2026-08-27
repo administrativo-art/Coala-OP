@@ -2,9 +2,16 @@ import { randomUUID } from "crypto";
 
 import { z } from "zod";
 
+import {
+  normalizeOnboardingDocumentTemplates,
+  normalizeOnboardingStages,
+} from "@/lib/recruitment-onboarding";
+import { normalizeRecruitmentStages } from "@/lib/recruitment-pipeline";
+
 const stringListSchema = z.array(z.string().trim().min(1)).default([]);
 
 const salaryRangeSchema = z.object({
+  label: z.string().trim().max(80).optional(),
   min: z.number().nonnegative().optional(),
   max: z.number().nonnegative().optional(),
   currency: z.string().trim().min(3).max(8),
@@ -23,6 +30,22 @@ const salaryRangeSchema = z.object({
   }
 });
 
+const jobFunctionSalaryCalculationSchema = z.object({
+  type: z.literal("base_plus_percentage"),
+  baseFunctionId: z.string().trim().min(1),
+  additionalPercentage: z.number().positive().max(1000),
+});
+
+const recruitmentDisplaySchema = z.object({
+  locationLabel: z.string().trim().max(120).optional(),
+  workType: z.enum(["presencial", "remoto", "hibrido"]).optional(),
+  contractTypeLabel: z.string().trim().max(80).optional(),
+  deadlineLabel: z.string().trim().max(80).optional(),
+  buttonText: z.string().trim().max(80).optional(),
+  successMessage: z.string().trim().max(500).optional(),
+  lgpdContractText: z.string().trim().max(4000).optional(),
+}).optional();
+
 const formQuestionSchema = z.object({
   id: z.string().trim().min(1).optional(),
   text: z.string().trim().min(1).max(500),
@@ -36,13 +59,88 @@ const formQuestionSchema = z.object({
     "location",
     "file_upload",
   ]),
+  sectionId: z.string().trim().max(80).optional(),
+  sectionTitle: z.string().trim().max(120).optional(),
+  sectionOrder: z.number().int().nonnegative().optional(),
+  parentQuestionId: z.string().trim().max(120).optional(),
+  subquestionOrder: z.number().int().nonnegative().optional(),
   required: z.boolean().default(false),
   scored: z.boolean().default(false),
-  weight: z.enum(["low", "medium", "high"]).default("medium"),
+  weight: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   eliminatory: z.boolean().default(false),
   expectedAnswer: z.unknown().optional(),
   tags: z.array(z.string().trim().min(1)).default([]),
   config: z.record(z.unknown()).optional(),
+  conditions: z.array(z.object({
+    questionId: z.string().trim().min(1).max(120),
+    operator: z.enum(["equals", "not_equals", "includes", "answered", "not_answered"]),
+    value: z.unknown().optional(),
+  })).optional(),
+  scoring: z.object({
+    criterionCode: z.string().trim().max(80).optional(),
+    criterionLabel: z.string().trim().max(120).optional(),
+    category: z.enum([
+      "availability",
+      "experience",
+      "technical",
+      "behavioral",
+      "interest",
+      "retention",
+      "differentials",
+    ]).optional(),
+    groupId: z.string().trim().max(80).optional(),
+    groupName: z.string().trim().max(80).optional(),
+    use: z.enum(["informational", "scored", "eliminatory"]).optional(),
+    importance: z.enum(["low", "medium", "high", "critical"]).optional(),
+    justification: z.string().trim().max(500).optional(),
+    sourceLayer: z.enum(["role", "function", "opening"]).optional(),
+    answerFactors: z.record(z.number().min(0).max(1)).optional(),
+    finalWeight: z.number().optional(),
+    rubric: z.array(z.object({
+      factor: z.number().min(0).max(1),
+      label: z.string().trim().min(1).max(80),
+      description: z.string().trim().max(240).optional(),
+    })).optional(),
+  }).optional(),
+});
+
+const recruitmentStageSchema = z.object({
+  id: z.enum([
+    "applied",
+    "screening",
+    "interview",
+    "technical_test",
+    "offer",
+    "hired",
+  ]),
+  label: z.string().trim().min(1).max(80),
+  order: z.number().int().nonnegative().optional(),
+  required: z.boolean().optional(),
+  dueDays: z.number().int().nonnegative().nullable().optional(),
+});
+
+const onboardingStageSchema = z.object({
+  id: z.enum([
+    "documents",
+    "document_review",
+    "contract",
+    "system_access",
+    "integration",
+    "probation",
+    "done",
+  ]),
+  label: z.string().trim().min(1).max(100),
+  order: z.number().int().nonnegative().optional(),
+  required: z.boolean().optional(),
+  dueDays: z.number().int().nonnegative().nullable().optional(),
+});
+
+const onboardingDocumentTemplateSchema = z.object({
+  id: z.string().trim().min(1).max(80).optional(),
+  label: z.string().trim().min(1).max(120),
+  documentTypeCode: z.string().trim().min(1).max(80).optional(),
+  required: z.boolean().default(true),
+  order: z.number().int().nonnegative().optional(),
 });
 
 export const jobDepartmentCreateSchema = z.object({
@@ -56,6 +154,11 @@ export const jobDepartmentCreateSchema = z.object({
 
 const jobRoleBaseSchema = z.object({
   name: z.string().trim().min(2).max(120),
+  cbo: z.string()
+    .trim()
+    .regex(/^\d{4}-\d{2}$/, "Informe o CBO no formato 0000-00.")
+    .optional()
+    .or(z.literal("")),
   publicTitle: z.string().trim().min(2).max(120).optional(),
   slug: z.string().trim().min(1).max(120).optional(),
   departmentId: z.string().trim().min(1).nullable().optional(),
@@ -74,9 +177,14 @@ const jobRoleBaseSchema = z.object({
   workSchedule: z.string().trim().max(250).optional(),
   salaryRange: salaryRangeSchema.optional(),
   publicSalaryRange: salaryRangeSchema.optional(),
+  recruitmentDisplay: recruitmentDisplaySchema,
+  recruitmentModelSavedAt: z.string().trim().optional().nullable(),
   defaultProfileId: z.string().trim().min(1).optional(),
   loginRestricted: z.boolean().default(false),
   formQuestions: z.array(formQuestionSchema).default([]),
+  pipelineStages: z.array(recruitmentStageSchema).optional(),
+  onboardingStages: z.array(onboardingStageSchema).optional(),
+  onboardingDocuments: z.array(onboardingDocumentTemplateSchema).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -93,9 +201,20 @@ const jobFunctionBaseSchema = z.object({
   responsibilities: stringListSchema,
   publicResponsibilities: stringListSchema,
   requirements: stringListSchema,
+  publicRequirements: stringListSchema,
+  benefits: stringListSchema,
+  workSchedule: z.string().trim().max(250).optional(),
+  salaryRange: salaryRangeSchema.optional(),
+  publicSalaryRange: salaryRangeSchema.optional(),
+  salaryCalculation: jobFunctionSalaryCalculationSchema.optional(),
+  recruitmentDisplay: recruitmentDisplaySchema,
+  recruitmentModelSavedAt: z.string().trim().optional().nullable(),
   compatibleRoleIds: z.array(z.string().trim().min(1)).default([]),
   defaultProfileId: z.string().trim().min(1).optional(),
   formQuestions: z.array(formQuestionSchema).default([]),
+  pipelineStages: z.array(recruitmentStageSchema).optional(),
+  onboardingStages: z.array(onboardingStageSchema).optional(),
+  onboardingDocuments: z.array(onboardingDocumentTemplateSchema).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -172,18 +291,82 @@ function normalizeStringList(input?: string[]) {
 function normalizeFormQuestions(
   questions?: Array<z.infer<typeof formQuestionSchema>>
 ) {
-  return (questions ?? []).map((question) =>
+  const normalized = (questions ?? []).map((question) =>
     stripUndefined({
       ...question,
       id: question.id ?? randomUUID(),
+      sectionId: question.sectionId?.trim() || undefined,
+      sectionTitle: question.sectionTitle?.trim() || undefined,
+      parentQuestionId: question.parentQuestionId?.trim() || undefined,
       tags: normalizeStringList(question.tags),
       config: question.config && Object.keys(question.config).length > 0
         ? question.config
+        : undefined,
+      conditions: question.conditions && question.conditions.length > 0
+        ? question.conditions
+        : undefined,
+      scoring: question.scoring && Object.keys(question.scoring).length > 0
+        ? question.scoring
         : undefined,
       expectedAnswer:
         question.expectedAnswer === undefined ? undefined : question.expectedAnswer,
     })
   );
+  const indexById = new Map(normalized.map((question, index) => [question.id, index]));
+  return normalized.map((question, index) => {
+    const parentIndex = question.parentQuestionId ? indexById.get(question.parentQuestionId) : undefined;
+    const hasValidParent = parentIndex !== undefined && parentIndex < index;
+    const conditions = question.conditions?.filter((condition) => {
+      const conditionIndex = indexById.get(condition.questionId);
+      return conditionIndex !== undefined && conditionIndex < index;
+    });
+
+    return stripUndefined({
+      ...question,
+      parentQuestionId: hasValidParent ? question.parentQuestionId : undefined,
+      subquestionOrder: hasValidParent ? question.subquestionOrder : undefined,
+      conditions: conditions && conditions.length > 0 ? conditions : undefined,
+    });
+  });
+}
+
+function normalizePipelineStageModel(
+  stages?: Array<z.infer<typeof recruitmentStageSchema>>
+) {
+  if (stages === undefined) return undefined;
+  if (stages.length === 0) return [];
+  return normalizeRecruitmentStages(stages);
+}
+
+function normalizeOnboardingStageModel(
+  stages?: Array<z.infer<typeof onboardingStageSchema>>
+) {
+  if (stages === undefined) return undefined;
+  if (stages.length === 0) return [];
+  return normalizeOnboardingStages(stages);
+}
+
+function normalizeOnboardingDocumentModel(
+  documents?: Array<z.infer<typeof onboardingDocumentTemplateSchema>>
+) {
+  if (documents === undefined) return undefined;
+  return normalizeOnboardingDocumentTemplates(documents);
+}
+
+function normalizeRecruitmentDisplay(
+  display: z.infer<NonNullable<typeof recruitmentDisplaySchema>> | undefined
+) {
+  if (display === undefined) return undefined;
+  const normalized = stripUndefined({
+    locationLabel: display.locationLabel?.trim() || undefined,
+    workType: display.workType || undefined,
+    contractTypeLabel: display.contractTypeLabel?.trim() || undefined,
+    deadlineLabel: display.deadlineLabel?.trim() || undefined,
+    buttonText: display.buttonText?.trim() || undefined,
+    successMessage: display.successMessage?.trim() || undefined,
+    lgpdContractText: display.lgpdContractText?.trim() || undefined,
+  });
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 export function normalizeJobRoleInput(
@@ -191,6 +374,7 @@ export function normalizeJobRoleInput(
 ) {
   return stripUndefined({
     ...input,
+    cbo: input.cbo?.trim() || undefined,
     publicTitle: input.publicTitle?.trim() || input.name,
     slug: input.slug?.trim() || slugify(input.name),
     parentId: input.parentId ?? input.reportsTo ?? null,
@@ -201,7 +385,11 @@ export function normalizeJobRoleInput(
     publicRequirements: normalizeStringList(input.publicRequirements),
     competencies: normalizeStringList(input.competencies),
     benefits: normalizeStringList(input.benefits),
+    recruitmentDisplay: normalizeRecruitmentDisplay(input.recruitmentDisplay),
     formQuestions: normalizeFormQuestions(input.formQuestions),
+    pipelineStages: normalizePipelineStageModel(input.pipelineStages),
+    onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
+    onboardingDocuments: normalizeOnboardingDocumentModel(input.onboardingDocuments),
   });
 }
 
@@ -210,6 +398,7 @@ export function normalizeJobRolePatch(
 ) {
   return stripUndefined({
     ...input,
+    cbo: input.cbo === undefined ? undefined : input.cbo.trim() || undefined,
     publicTitle:
       input.publicTitle === undefined
         ? undefined
@@ -251,10 +440,14 @@ export function normalizeJobRolePatch(
       input.benefits === undefined
         ? undefined
         : normalizeStringList(input.benefits),
+    recruitmentDisplay: normalizeRecruitmentDisplay(input.recruitmentDisplay),
     formQuestions:
       input.formQuestions === undefined
         ? undefined
         : normalizeFormQuestions(input.formQuestions),
+    pipelineStages: normalizePipelineStageModel(input.pipelineStages),
+    onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
+    onboardingDocuments: normalizeOnboardingDocumentModel(input.onboardingDocuments),
   });
 }
 
@@ -269,8 +462,14 @@ export function normalizeJobFunctionInput(
     responsibilities: normalizeStringList(input.responsibilities),
     publicResponsibilities: normalizeStringList(input.publicResponsibilities),
     requirements: normalizeStringList(input.requirements),
+    publicRequirements: normalizeStringList(input.publicRequirements),
+    benefits: normalizeStringList(input.benefits),
+    recruitmentDisplay: normalizeRecruitmentDisplay(input.recruitmentDisplay),
     compatibleRoleIds: normalizeStringList(input.compatibleRoleIds),
     formQuestions: normalizeFormQuestions(input.formQuestions),
+    pipelineStages: normalizePipelineStageModel(input.pipelineStages),
+    onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
+    onboardingDocuments: normalizeOnboardingDocumentModel(input.onboardingDocuments),
   });
 }
 
@@ -302,6 +501,15 @@ export function normalizeJobFunctionPatch(
       input.requirements === undefined
         ? undefined
         : normalizeStringList(input.requirements),
+    publicRequirements:
+      input.publicRequirements === undefined
+        ? undefined
+        : normalizeStringList(input.publicRequirements),
+    benefits:
+      input.benefits === undefined
+        ? undefined
+        : normalizeStringList(input.benefits),
+    recruitmentDisplay: normalizeRecruitmentDisplay(input.recruitmentDisplay),
     compatibleRoleIds:
       input.compatibleRoleIds === undefined
         ? undefined
@@ -310,5 +518,8 @@ export function normalizeJobFunctionPatch(
       input.formQuestions === undefined
         ? undefined
         : normalizeFormQuestions(input.formQuestions),
+    pipelineStages: normalizePipelineStageModel(input.pipelineStages),
+    onboardingStages: normalizeOnboardingStageModel(input.onboardingStages),
+    onboardingDocuments: normalizeOnboardingDocumentModel(input.onboardingDocuments),
   });
 }

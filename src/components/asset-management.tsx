@@ -6,14 +6,13 @@ import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Box, Briefcase, Check, ChevronRight, ChevronsUpDown, Coins, FileText, Grid2X2, History, ImageIcon, MapPin, MoveRight, Plus, Printer, QrCode, Rows3, Search, Table2, Tags, Upload, Wrench } from 'lucide-react';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 
 import { useAssets } from '@/hooks/use-assets';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { storage } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { useFinancialCollection } from '@/features/financial/hooks/use-financial-collection';
 import { financialCollection } from '@/features/financial/lib/repositories';
 import type { Asset, AssetCategory, AssetMovement, AssetStatus } from '@/types';
@@ -27,9 +26,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { BarcodeScannerModal } from '@/components/barcode-scanner-modal';
 import { cn } from '@/lib/utils';
 
 const assetSchema = z.object({
+  code: z.string()
+    .trim()
+    .min(1, 'Informe ou escaneie o código da placa.')
+    .refine((value) => /^PAT-\d+$/.test(normalizeAssetCodeInput(value)), 'Use PAT-000123 ou apenas o número da placa.'),
   name: z.string().min(2, 'Informe o nome.'),
   category: z.string().optional(),
   subcategory: z.string().optional(),
@@ -42,6 +46,7 @@ const assetSchema = z.object({
   currentKioskId: z.string().min(1, 'Selecione a unidade.'),
   department: z.string().optional(),
   exactLocation: z.string().optional(),
+  responsibleUserId: z.string().optional(),
   responsibleName: z.string().optional(),
   inUse: z.boolean().optional(),
   possessionStatus: z.string().optional(),
@@ -85,6 +90,12 @@ const assetSchema = z.object({
 type AssetFormValues = z.infer<typeof assetSchema>;
 
 const assetEditSchema = assetSchema.extend({
+  code: z.string()
+    .optional()
+    .refine((value) => {
+      const normalized = normalizeAssetCodeInput(value ?? '');
+      return !normalized || normalized.startsWith('PEND-') || /^PAT-\d+$/.test(normalized);
+    }, 'Use PAT-000123, apenas o número da placa ou mantenha o código provisório.'),
   status: z.enum(['ativo', 'em_manutencao', 'fora_de_uso', 'extraviado', 'vendido', 'descartado', 'baixado']),
 });
 
@@ -125,25 +136,59 @@ function assetQrPayload(asset: Asset) {
   return `${window.location.origin}/patrimonio/${encodeURIComponent(asset.code)}`;
 }
 
-async function uploadAssetImage(file: File, assetId: string) {
-  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-  const storageRef = ref(storage, `assets/${assetId}/${Date.now()}.${extension}`);
-  const snapshot = await uploadBytes(storageRef, file);
-  return getDownloadURL(snapshot.ref);
+function normalizeAssetCodeInput(value: string) {
+  const raw = value.trim();
+  if (!raw) return '';
+
+  let candidate = raw;
+  try {
+    const url = new URL(raw);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const patrimonioIndex = parts.findIndex((part) => part.toLowerCase() === 'patrimonio');
+    if (patrimonioIndex >= 0 && parts[patrimonioIndex + 1]) {
+      candidate = decodeURIComponent(parts[patrimonioIndex + 1]);
+    }
+  } catch {
+    const match = raw.match(/\/patrimonio\/([^/?#]+)/i);
+    if (match?.[1]) {
+      candidate = decodeURIComponent(match[1]);
+    }
+  }
+
+  const normalized = candidate.toUpperCase().replace(/\s+/g, '');
+  if (normalized.startsWith('PEND-')) return normalized;
+  const patMatch = normalized.match(/^PAT[-_]?(\d+)$/);
+  if (patMatch) {
+    return `PAT-${patMatch[1].padStart(6, '0')}`;
+  }
+
+  const digits = normalized.replace(/\D/g, '');
+  if (digits) {
+    return `PAT-${digits.padStart(6, '0')}`;
+  }
+
+  return normalized;
 }
 
-async function uploadAssetFiscalDocument(file: File, assetId: string) {
-  const extension = file.name.split('.').pop()?.toLowerCase() || 'pdf';
-  const safeName = file.name
-    .replace(/\.[^/.]+$/, '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'nota-fiscal';
-  const storageRef = ref(storage, `assets/${assetId}/fiscal/${Date.now()}-${safeName}.${extension}`);
-  const snapshot = await uploadBytes(storageRef, file);
-  return getDownloadURL(snapshot.ref);
+async function uploadAssetFile(file: File, assetId: string, kind: 'image' | 'fiscal') {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error('Usuário não autenticado.');
+
+  const formData = new FormData();
+  formData.set('file', file);
+  formData.set('assetId', assetId);
+  formData.set('kind', kind);
+
+  const response = await fetch('/api/assets/upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || typeof payload.url !== 'string') {
+    throw new Error(payload.error || 'Falha ao enviar arquivo do patrimônio.');
+  }
+  return payload.url;
 }
 
 const FORM_PAYMENTS = ['PIX', 'Boleto', 'Cartão de crédito', 'Transferência / TED', 'Dinheiro', 'Cartão BNDES'];
@@ -222,8 +267,9 @@ function StatusPicker({ value, onChange }: { value: AssetStatus; onChange: (v: A
 }
 
 // Prévia da etiqueta ao vivo (QR decorativo + dados preenchidos)
-function LabelPreview({ name, brand, model, unitName, category }: { name?: string; brand?: string; model?: string; unitName?: string; category?: string }) {
+function LabelPreview({ code, name, brand, model, unitName, category }: { code?: string; name?: string; brand?: string; model?: string; unitName?: string; category?: string }) {
   const cat = category ? categoryColor(category) : null;
+  const normalizedCode = normalizeAssetCodeInput(code ?? '');
   return (
     <div className="flex items-stretch gap-3 rounded-xl border bg-card p-3">
       <div className="grid h-[84px] w-[84px] shrink-0 place-items-center gap-1 rounded-lg border border-dashed bg-muted/40 p-1.5 text-center text-muted-foreground">
@@ -235,7 +281,7 @@ function LabelPreview({ name, brand, model, unitName, category }: { name?: strin
           <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Patrimônio Coala</span>
           {cat && <span className="h-2 w-2 rounded-full" style={{ background: cat.color }} />}
         </div>
-        <div className="font-mono text-[13px] font-bold tabular-nums text-muted-foreground">Código automático</div>
+        <div className="font-mono text-[13px] font-bold tabular-nums text-muted-foreground">{normalizedCode || 'Informe a placa'}</div>
         <div className="mt-0.5 truncate text-[12px] font-semibold">{name || 'Nome do patrimônio'}</div>
         <div className="truncate text-[10.5px] text-muted-foreground">{[brand, model].filter(Boolean).join(' · ') || 'Marca · modelo'}</div>
         <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-foreground/70">
@@ -249,21 +295,23 @@ function LabelPreview({ name, brand, model, unitName, category }: { name?: strin
 function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { addAsset, categories } = useAssets();
   const { kiosks } = useKiosks();
+  const { activeUsers } = useAuth();
   const { toast } = useToast();
   const [status, setStatus] = useState<AssetStatus>('ativo');
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const form = useForm<AssetFormValues>({
     resolver: zodResolver(assetSchema),
-    defaultValues: { name: '', category: 'Patrimônio', subcategory: '', brand: '', model: '', serialNumber: '', imageUrl: '', currentKioskId: '', purchaseDate: '', supplierName: '', invoiceNumber: '', paymentMethod: '', warrantyEndsAt: '', exactLocation: '', responsibleName: '', notes: '' },
+    defaultValues: { code: '', name: '', category: 'Patrimônio', subcategory: '', brand: '', model: '', serialNumber: '', imageUrl: '', currentKioskId: '', purchaseDate: '', supplierName: '', invoiceNumber: '', paymentMethod: '', warrantyEndsAt: '', exactLocation: '', responsibleUserId: '', responsibleName: '', notes: '' },
   });
   const v = form.watch();
   const imageUrl = v.imageUrl;
   const unitName = kiosks.find((k) => k.id === v.currentKioskId)?.name;
-  const filledCount = (['name', 'subcategory', 'currentKioskId', 'brand', 'model', 'serialNumber', 'purchaseValue', 'supplierName'] as const)
+  const filledCount = (['code', 'name', 'subcategory', 'currentKioskId', 'brand', 'model', 'serialNumber', 'purchaseValue', 'supplierName'] as const)
     .filter((k) => String((v as Record<string, unknown>)[k] ?? '').trim()).length;
-  const ok = Boolean(v.name?.trim()) && Boolean(v.currentKioskId);
+  const ok = Boolean(v.code?.trim()) && Boolean(v.name?.trim()) && Boolean(v.currentKioskId);
 
   function resetAll() {
     form.reset();
@@ -274,7 +322,7 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
     if (!file) return;
     setUploadingImage(true);
     try {
-      const url = await uploadAssetImage(file, '_pending');
+      const url = await uploadAssetFile(file, '_pending', 'image');
       form.setValue('imageUrl', url, { shouldDirty: true });
       toast({ title: 'Foto adicionada.' });
     } catch (error) {
@@ -287,9 +335,19 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   async function onSubmit(values: AssetFormValues) {
     const kiosk = kiosks.find((k) => k.id === values.currentKioskId);
+    const responsible = activeUsers.find((user) => user.id === values.responsibleUserId);
+    const normalizedCode = normalizeAssetCodeInput(values.code);
     setSubmitting(true);
     try {
-      await addAsset({ ...values, status, currentKioskName: kiosk?.name, sourceType: 'manual' });
+      await addAsset({
+        ...values,
+        code: normalizedCode,
+        status,
+        currentKioskName: kiosk?.name,
+        responsibleUserId: responsible?.id,
+        responsibleName: responsible?.username,
+        sourceType: 'manual',
+      });
       toast({ title: 'Patrimônio cadastrado.' });
       resetAll();
       onOpenChange(false);
@@ -298,6 +356,13 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handlePlateScan(decodedText: string) {
+    const code = normalizeAssetCodeInput(decodedText);
+    form.setValue('code', code, { shouldDirty: true, shouldValidate: true });
+    setScannerOpen(false);
+    toast({ title: 'Placa identificada', description: code });
   }
 
   return (
@@ -354,6 +419,32 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                         <FormItem>
                           <FieldLabel required>Nome do patrimônio</FieldLabel>
                           <FormControl><input className={FORM_INPUT} placeholder="Ex: Máquina de sorvete italiana" {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="code" render={({ field }) => (
+                        <FormItem>
+                          <FieldLabel required>Código da placa</FieldLabel>
+                          <div className="flex gap-2">
+                            <FormControl>
+                              <input
+                                className={cn(FORM_INPUT, 'font-mono uppercase')}
+                                placeholder="Ex: PAT-000123 ou 123"
+                                {...field}
+                                value={field.value ?? ''}
+                                onBlur={(event) => {
+                                  const normalized = normalizeAssetCodeInput(event.target.value);
+                                  field.onBlur();
+                                  if (normalized) form.setValue('code', normalized, { shouldDirty: true, shouldValidate: true });
+                                }}
+                              />
+                            </FormControl>
+                            <Button type="button" variant="outline" className="h-10 shrink-0" onClick={() => setScannerOpen(true)}>
+                              <QrCode className="mr-1.5 h-4 w-4" />
+                              Escanear
+                            </Button>
+                          </div>
+                          <p className="mt-1 text-[10px] leading-tight text-muted-foreground">Escaneie o código de barras da placa ou digite a numeração impressa.</p>
                           <FormMessage />
                         </FormItem>
                       )} />
@@ -424,8 +515,17 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     <FormField control={form.control} name="exactLocation" render={({ field }) => (
                       <FormItem><FieldLabel>Local específico</FieldLabel><FormControl><input className={FORM_INPUT} placeholder="Cozinha principal" {...field} value={field.value ?? ''} /></FormControl></FormItem>
                     )} />
-                    <FormField control={form.control} name="responsibleName" render={({ field }) => (
-                      <FormItem><FieldLabel>Responsável</FieldLabel><FormControl><input className={FORM_INPUT} placeholder="Nome do responsável" {...field} value={field.value ?? ''} /></FormControl></FormItem>
+                    <FormField control={form.control} name="responsibleUserId" render={({ field }) => (
+                      <FormItem>
+                        <FieldLabel>Responsável</FieldLabel>
+                        <Select value={field.value || 'none'} onValueChange={(value) => field.onChange(value === 'none' ? '' : value)}>
+                          <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">Sem responsável</SelectItem>
+                            {activeUsers.map((user) => <SelectItem key={user.id} value={user.id}>{user.username}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
                     )} />
                   </div>
                   <div>
@@ -440,7 +540,7 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
             <div className="flex flex-col gap-4 border-t bg-muted/30 px-4 py-5 lg:border-l lg:border-t-0">
               <div>
                 <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Prévia da etiqueta</p>
-                <LabelPreview name={v.name} brand={v.brand} model={v.model} unitName={unitName} category={v.subcategory} />
+                <LabelPreview code={v.code} name={v.name} brand={v.brand} model={v.model} unitName={unitName} category={v.subcategory} />
               </div>
               <div className="rounded-xl border bg-card p-3">
                 <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Preenchimento</p>
@@ -453,18 +553,23 @@ function AssetFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
                   ))}
                 </div>
                 <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${Math.round((filledCount / 8) * 100)}%` }} />
+                  <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${Math.round((filledCount / 9) * 100)}%` }} />
                 </div>
-                <div className="mt-1.5 text-[10.5px] text-muted-foreground">{filledCount} de 8 campos preenchidos</div>
+                <div className="mt-1.5 text-[10.5px] text-muted-foreground">{filledCount} de 9 campos preenchidos</div>
               </div>
               <div className="mt-auto space-y-1.5">
-                {!ok && <p className="text-[11px] text-rose-600">Faltam nome e unidade.</p>}
+                {!ok && <p className="text-[11px] text-rose-600">Faltam código da placa, nome e unidade.</p>}
                 <Button type="submit" disabled={!ok || submitting} className="w-full bg-indigo-600 text-white hover:bg-indigo-700"><Check className="mr-2 h-4 w-4" />{submitting ? 'Cadastrando…' : 'Cadastrar patrimônio'}</Button>
                 <Button type="button" variant="ghost" className="w-full" onClick={resetAll}>Limpar</Button>
               </div>
             </div>
           </form>
         </Form>
+        <BarcodeScannerModal
+          open={scannerOpen}
+          onOpenChange={setScannerOpen}
+          onScanSuccess={handlePlateScan}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -529,6 +634,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const [movements, setMovements] = useState<AssetMovement[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingFiscalDocument, setUploadingFiscalDocument] = useState(false);
+  const [plateScannerOpen, setPlateScannerOpen] = useState(false);
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [saving, setSaving] = useState(false);
   const [assetStep, setAssetStep] = useState<AssetStep>('identification');
@@ -546,6 +652,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   const form = useForm<AssetEditFormValues>({
     resolver: zodResolver(assetEditSchema),
     defaultValues: {
+      code: '',
       name: '',
       category: '',
       subcategory: '',
@@ -558,6 +665,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       currentKioskId: '',
       department: '',
       exactLocation: '',
+      responsibleUserId: '',
       responsibleName: '',
       inUse: true,
       possessionStatus: '',
@@ -593,6 +701,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
   useEffect(() => {
     if (!asset) return;
     form.reset({
+      code: asset.code ?? '',
       name: asset.name ?? '',
       category: 'Patrimônio',
       subcategory: asset.subcategory ?? '',
@@ -605,6 +714,9 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
       currentKioskId: asset.currentKioskId ?? '',
       department: asset.department ?? '',
       exactLocation: asset.exactLocation ?? '',
+      responsibleUserId: asset.responsibleUserId
+        ?? activeUsers.find((user) => user.username === asset.responsibleName)?.id
+        ?? '',
       responsibleName: asset.responsibleName ?? '',
       inUse: asset.inUse ?? true,
       possessionStatus: asset.possessionStatus ?? '',
@@ -736,6 +848,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         destinationName,
         destinationKioskId: movDestType === 'cadastrado' ? movDestKioskId : undefined,
         newResponsibleName: newResponsibleName || undefined,
+        newResponsibleUserId: movRespType === 'cadastrado' ? movRespUserId : undefined,
         notes: movNotes || undefined,
       });
       toast({ title: 'Movimentação registrada.' });
@@ -762,7 +875,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     if (!asset || !file) return;
     setUploadingImage(true);
     try {
-      const url = await uploadAssetImage(file, asset.id);
+      const url = await uploadAssetFile(file, asset.id, 'image');
       form.setValue('imageUrl', url, { shouldDirty: true, shouldValidate: true });
       toast({ title: 'Foto adicionada.' });
     } catch (error) {
@@ -781,7 +894,7 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     if (!asset || !file) return;
     setUploadingFiscalDocument(true);
     try {
-      const url = await uploadAssetFiscalDocument(file, asset.id);
+      const url = await uploadAssetFile(file, asset.id, 'fiscal');
       form.setValue('documentUrl', url, { shouldDirty: true, shouldValidate: true });
       toast({ title: 'Nota fiscal anexada.' });
     } catch (error) {
@@ -801,7 +914,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     setSaving(true);
     try {
       const kiosk = kiosks.find((k) => k.id === asset.currentKioskId);
+      const responsible = activeUsers.find((user) => user.id === values.responsibleUserId);
+      const normalizedCode = normalizeAssetCodeInput(values.code ?? asset.code);
       await updateAsset(asset.id, {
+        code: normalizedCode,
         name: values.name,
         category: values.category || undefined,
         subcategory: values.subcategory || undefined,
@@ -813,7 +929,8 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
         currentKioskId: asset.currentKioskId,
         currentKioskName: asset.currentKioskName || kiosk?.name,
         exactLocation: (values.exactLocation === 'none' ? undefined : values.exactLocation) || undefined,
-        responsibleName: (values.responsibleName === 'none' ? undefined : values.responsibleName) || undefined,
+        responsibleUserId: responsible?.id,
+        responsibleName: responsible?.username,
         inUse: values.inUse,
         possessionStatus: values.possessionStatus || undefined,
         purchaseDate: values.purchaseDate || undefined,
@@ -857,6 +974,13 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
     }
   }
 
+  function handleEditPlateScan(decodedText: string) {
+    const code = normalizeAssetCodeInput(decodedText);
+    form.setValue('code', code, { shouldDirty: true, shouldValidate: true });
+    setPlateScannerOpen(false);
+    toast({ title: 'Placa identificada', description: code });
+  }
+
   return (
     <Dialog open={!!asset} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] w-[calc(100vw-2rem)] !max-w-[1120px] flex-col overflow-hidden p-0">
@@ -871,7 +995,10 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                   <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(0,0,0,0) 35%,rgba(0,0,0,.62) 100%)' }} />
                 </div>
                 <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3">
-                  <span className="rounded-md bg-white/90 px-2 py-1 font-mono text-[11px] font-bold text-zinc-900 ring-1 ring-zinc-200 backdrop-blur">{asset.code}</span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-md bg-white/90 px-2 py-1 font-mono text-[11px] font-bold text-zinc-900 ring-1 ring-zinc-200 backdrop-blur">{asset.code}</span>
+                    <AssetPlateBadge asset={asset} />
+                  </div>
                 </div>
                 <div className="absolute inset-x-0 bottom-0 p-4 text-left text-white">
                   <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider drop-shadow">
@@ -972,6 +1099,44 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                       <FormField control={form.control} name="name" render={({ field }) => (
                         <FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} disabled={!permissions.assets?.edit} /></FormControl><FormMessage /></FormItem>
                       )} />
+                      <FormField control={form.control} name="code" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Placa patrimonial</FormLabel>
+                          <div className="flex gap-2">
+                            <FormControl>
+                              <Input
+                                className="font-mono uppercase"
+                                placeholder="Ex: PAT-000123 ou 123"
+                                {...field}
+                                value={field.value ?? ''}
+                                disabled={!permissions.assets?.edit}
+                                onBlur={(event) => {
+                                  const normalized = normalizeAssetCodeInput(event.target.value);
+                                  field.onBlur();
+                                  if (normalized && !normalized.startsWith('PEND-')) {
+                                    form.setValue('code', normalized, { shouldDirty: true, shouldValidate: true });
+                                  }
+                                }}
+                              />
+                            </FormControl>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={!permissions.assets?.edit}
+                              onClick={() => setPlateScannerOpen(true)}
+                            >
+                              <QrCode className="mr-1.5 h-4 w-4" />
+                              Escanear
+                            </Button>
+                          </div>
+                          {asset.plateStatus === 'pendente' || String(asset.code ?? '').startsWith('PEND-') ? (
+                            <p className="mt-1 text-xs text-amber-700">Placa pendente: escaneie ou digite a placa física para sanear este patrimônio.</p>
+                          ) : (
+                            <p className="mt-1 text-xs text-muted-foreground">Altere somente para corrigir ou vincular a placa física.</p>
+                          )}
+                          <FormMessage />
+                        </FormItem>
+                      )} />
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <FormField control={form.control} name="brand" render={({ field }) => (
                           <FormItem><FormLabel>Marca</FormLabel><FormControl><Input {...field} value={field.value ?? ''} disabled={!permissions.assets?.edit} /></FormControl></FormItem>
@@ -1050,14 +1215,14 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                           </Select>
                         </FormItem>
                       )} />
-                      <FormField control={form.control} name="responsibleName" render={({ field }) => (
+                      <FormField control={form.control} name="responsibleUserId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Responsável</FormLabel>
-                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={!permissions.assets?.edit}>
+                          <Select value={field.value || 'none'} onValueChange={(value) => field.onChange(value === 'none' ? '' : value)} disabled={!permissions.assets?.edit}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                             <SelectContent>
                               <SelectItem value="none"><span className="text-muted-foreground">Sem responsável</span></SelectItem>
-                              {activeUsers.map((u) => <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>)}
+                              {activeUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </FormItem>
@@ -1366,6 +1531,11 @@ function AssetDetailDialog({ asset, onOpenChange }: { asset: Asset | null; onOpe
                 </div>
               </form>
             </Form>
+            <BarcodeScannerModal
+              open={plateScannerOpen}
+              onOpenChange={setPlateScannerOpen}
+              onScanSuccess={handleEditPlateScan}
+            />
           </>
         )}
       </DialogContent>
@@ -1545,6 +1715,27 @@ function assetCodeTail(code?: string) {
   return (code || '').split('-').slice(-1)[0] || code || '—';
 }
 
+function isAssetPlatePending(asset: Asset) {
+  return asset.plateStatus === 'pendente' || String(asset.code ?? '').toUpperCase().startsWith('PEND-');
+}
+
+function AssetPlateBadge({ asset }: { asset: Asset }) {
+  if (isAssetPlatePending(asset)) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 ring-1 ring-amber-200">
+        <QrCode className="h-3 w-3" />
+        Placa pendente
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-200">
+      <QrCode className="h-3 w-3" />
+      Placa vinculada
+    </span>
+  );
+}
+
 function AssetThumb({ asset, className, fit = 'cover' }: { asset: Asset; className?: string; fit?: 'cover' | 'contain' }) {
   const cat = categoryColor(asset.subcategory || asset.category);
   const [errored, setErrored] = useState(false);
@@ -1597,8 +1788,9 @@ function AssetCardHero({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset)
         </div>
       </div>
       <div className="p-4">
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: cat.color }}>
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: cat.color }}>
           <span className="h-1.5 w-1.5 rounded-full" style={{ background: cat.color }} />{asset.subcategory || asset.category || 'Patrimônio'}
+          <AssetPlateBadge asset={asset} />
         </div>
         <h3 className="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug">{asset.name}</h3>
         <div className="mt-2 text-[11.5px] text-muted-foreground">{asset.brand}{asset.model ? <> · <span className="text-foreground/80">{asset.model}</span></> : null}</div>
@@ -1627,6 +1819,7 @@ function AssetListRow({ asset, onOpen }: { asset: Asset; onOpen: (asset: Asset) 
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-mono text-[10.5px] font-bold text-muted-foreground">{asset.code}</span>
+          <AssetPlateBadge asset={asset} />
           <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: cat.color }}>{asset.subcategory || asset.category || 'Patrimônio'}</span>
         </div>
         <div className="truncate text-[13.5px] font-semibold">{asset.name}</div>
@@ -1673,7 +1866,10 @@ function AssetTableView({ assets, onOpen }: { assets: Asset[]; onOpen: (asset: A
             return (
               <tr key={a.id} onClick={() => onOpen(a)} className="group cursor-pointer border-b last:border-0 hover:bg-muted/40">
                 <td className="px-4 py-2"><AssetThumb asset={a} className="h-10 w-10 rounded-md" /></td>
-                <td className="px-4 py-2 font-mono text-[11.5px] font-semibold text-foreground/80">{a.code}</td>
+                <td className="px-4 py-2">
+                  <div className="font-mono text-[11.5px] font-semibold text-foreground/80">{a.code}</div>
+                  <div className="mt-1"><AssetPlateBadge asset={a} /></div>
+                </td>
                 <td className="px-4 py-2"><div className="font-semibold">{a.name}</div></td>
                 <td className="px-4 py-2"><span className="inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: cat.color }}><span className="h-1.5 w-1.5 rounded-full" style={{ background: cat.color }} />{a.subcategory || a.category || 'Patrimônio'}</span></td>
                 <td className="px-4 py-2 text-foreground/80">{a.brand}{a.model ? <> · <span className="text-muted-foreground">{a.model}</span></> : null}</td>
@@ -1729,6 +1925,90 @@ function FilterPill({ label, active, onClick, count, tone }: { label: string; ac
   );
 }
 
+function AssetCodeReaderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { toast } = useToast();
+  const [rawCode, setRawCode] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const normalizedCode = normalizeAssetCodeInput(rawCode);
+
+  const openAsset = (value = rawCode) => {
+    const code = normalizeAssetCodeInput(value);
+    if (!/^PAT-\d+$/.test(code)) {
+      toast({
+        variant: 'destructive',
+        title: 'Código inválido',
+        description: 'Informe um código no formato PAT-000123 ou apenas o número do patrimônio.',
+      });
+      return;
+    }
+
+    onOpenChange(false);
+    setScannerOpen(false);
+    setRawCode('');
+    window.location.href = `/patrimonio/${encodeURIComponent(code)}`;
+  };
+
+  const handleScanSuccess = (decodedText: string) => {
+    const code = normalizeAssetCodeInput(decodedText);
+    setRawCode(code);
+    openAsset(code);
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ler patrimônio por código</DialogTitle>
+            <DialogDescription>
+              Teste a abertura da consulta pelo número patrimonial. Você pode informar PAT-000123, apenas 123, ou escanear o QR/barcode atual.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Código do patrimônio</label>
+              <Input
+                autoFocus
+                value={rawCode}
+                onChange={(event) => setRawCode(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') openAsset();
+                }}
+                placeholder="Ex: PAT-000123 ou 123"
+                className="font-mono uppercase"
+              />
+              <p className="text-xs text-muted-foreground">
+                Normalizado: <span className="font-mono font-semibold text-foreground">{normalizedCode || '—'}</span>
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+              Esta versão de teste não faz OCR de texto impresso pela câmera. A câmera lê QR/barcode; para texto PAT impresso, use o campo acima ou um leitor físico que envie o código como teclado.
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setScannerOpen(true)}>
+                <QrCode className="mr-2 h-4 w-4" />
+                Escanear QR/barcode
+              </Button>
+              <Button type="button" onClick={() => openAsset()} disabled={!normalizedCode}>
+                Abrir consulta
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onScanSuccess={handleScanSuccess}
+      />
+    </>
+  );
+}
+
 export function AssetManagement() {
   const { assets, loading } = useAssets();
   const { permissions } = useAuth();
@@ -1736,8 +2016,10 @@ export function AssetManagement() {
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
   const [showNew, setShowNew] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
+  const [showCodeReader, setShowCodeReader] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
   const [statusFilter, setStatusFilter] = useState<'todos' | AssetStatus>('todos');
+  const [plateFilter, setPlateFilter] = useState<'todos' | 'pendentes'>('todos');
   const [categoryFilter, setCategoryFilter] = useState('todas');
   const [unitFilter, setUnitFilter] = useState('todas');
   const [brandFilter, setBrandFilter] = useState('todas');
@@ -1756,6 +2038,7 @@ export function AssetManagement() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
       const matchesStatus = statusFilter === 'todos' || asset.status === statusFilter;
+      const matchesPlate = plateFilter === 'todos' || isAssetPlatePending(asset);
       const matchesCategory = categoryFilter === 'todas' || (asset.subcategory || 'Sem subcategoria') === categoryFilter;
       const matchesUnit = unitFilter === 'todas' || asset.currentKioskId === unitFilter;
       const matchesBrand = brandFilter === 'todas' || asset.brand === brandFilter;
@@ -1766,9 +2049,9 @@ export function AssetManagement() {
         else if (periodFilter === 'last_year') matchesPeriod = yr === thisYear - 1;
         else matchesPeriod = !Number.isNaN(yr) && yr < thisYear - 1;
       }
-      return matchesSearch && matchesStatus && matchesCategory && matchesUnit && matchesBrand && matchesPeriod;
+      return matchesSearch && matchesStatus && matchesPlate && matchesCategory && matchesUnit && matchesBrand && matchesPeriod;
     });
-  }, [assets, search, statusFilter, categoryFilter, unitFilter, brandFilter, periodFilter]);
+  }, [assets, search, statusFilter, plateFilter, categoryFilter, unitFilter, brandFilter, periodFilter]);
 
   const categories = useMemo(() => Array.from(new Set(assets.map((asset) => asset.subcategory || 'Sem subcategoria'))).sort(), [assets]);
   const brands = useMemo(() => Array.from(new Set(assets.map((asset) => asset.brand).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'pt-BR')), [assets]);
@@ -1786,6 +2069,7 @@ export function AssetManagement() {
       maintenance: assets.filter((asset) => asset.status === 'em_manutencao').length,
       foraDeUso: assets.filter((asset) => asset.status === 'fora_de_uso').length,
       retired: assets.filter((asset) => asset.status === 'baixado').length,
+      pendingPlates: assets.filter(isAssetPlatePending).length,
       totalValue,
     };
   }, [assets]);
@@ -1813,19 +2097,36 @@ export function AssetManagement() {
           <p className="text-sm text-muted-foreground">Máquinas, equipamentos e mobiliário rastreados por código interno e QR Code.</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setShowCodeReader(true)}>
+            <QrCode className="mr-2 h-4 w-4" />
+            Ler código
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowCategories(true)} disabled={!permissions.assets?.create && !permissions.assets?.edit}><Tags className="mr-2 h-4 w-4" />Categorias</Button>
           <Button size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700" onClick={() => setShowNew(true)} disabled={!permissions.assets?.create}><Plus className="mr-2 h-4 w-4" />Novo patrimônio</Button>
         </div>
       </div>
 
       {/* KPIs — clicáveis (filtram por status) */}
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5">
-        <AssetKpi label="Total" value={summary.total} sub="no parque" tone="indigo" icon={Box} active={statusFilter === 'todos'} onClick={() => setStatusFilter('todos')} />
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-6">
+        <AssetKpi label="Total" value={summary.total} sub="no parque" tone="indigo" icon={Box} active={statusFilter === 'todos' && plateFilter === 'todos'} onClick={() => { setStatusFilter('todos'); setPlateFilter('todos'); }} />
         <AssetKpi label="Ativos" value={summary.active} sub="em operação" tone="emerald" icon={Box} active={statusFilter === 'ativo'} onClick={() => setStatusFilter('ativo')} />
         <AssetKpi label="Em manutenção" value={summary.maintenance} sub="aguardando OS" tone="amber" icon={Wrench} active={statusFilter === 'em_manutencao'} onClick={() => setStatusFilter('em_manutencao')} />
         <AssetKpi label="Baixados" value={summary.retired} sub="último ano" tone="red" icon={History} active={statusFilter === 'baixado'} onClick={() => setStatusFilter('baixado')} />
+        <AssetKpi label="Placas pendentes" value={summary.pendingPlates} sub="sanear urgente" tone="amber" icon={QrCode} active={plateFilter === 'pendentes'} onClick={() => setPlateFilter(plateFilter === 'pendentes' ? 'todos' : 'pendentes')} />
         <AssetKpi label="Valor patrimonial" value={formatCurrency(summary.totalValue)} sub="aquisição" tone="zinc" icon={Coins} />
       </div>
+
+      {summary.pendingPlates > 0 ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold">Existem {summary.pendingPlates} patrimônio(s) com placa pendente.</p>
+            <p className="text-xs text-amber-800">Eles podem ter sido criados no recebimento de compra e precisam ser saneados com a placa física.</p>
+          </div>
+          <Button type="button" variant="outline" className="border-amber-300 bg-white text-amber-900 hover:bg-amber-100" onClick={() => setPlateFilter('pendentes')}>
+            Ver pendências
+          </Button>
+        </div>
+      ) : null}
 
       {/* Filtros + view toggle */}
       <div className="flex flex-col gap-3 rounded-xl border bg-card p-3">
@@ -1887,11 +2188,12 @@ export function AssetManagement() {
 
         {/* Status pill row */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <FilterPill label="Todos" active={statusFilter === 'todos'} onClick={() => setStatusFilter('todos')} count={summary.total} />
+          <FilterPill label="Todos" active={statusFilter === 'todos' && plateFilter === 'todos'} onClick={() => { setStatusFilter('todos'); setPlateFilter('todos'); }} count={summary.total} />
           <FilterPill label="Ativos" active={statusFilter === 'ativo'} onClick={() => setStatusFilter('ativo')} count={summary.active} tone="ativo" />
           <FilterPill label="Em manutenção" active={statusFilter === 'em_manutencao'} onClick={() => setStatusFilter('em_manutencao')} count={summary.maintenance} tone="em_manutencao" />
           <FilterPill label="Fora de uso" active={statusFilter === 'fora_de_uso'} onClick={() => setStatusFilter('fora_de_uso')} count={summary.foraDeUso} tone="fora_de_uso" />
           <FilterPill label="Baixados" active={statusFilter === 'baixado'} onClick={() => setStatusFilter('baixado')} count={summary.retired} tone="baixado" />
+          <FilterPill label="Placas pendentes" active={plateFilter === 'pendentes'} onClick={() => setPlateFilter(plateFilter === 'pendentes' ? 'todos' : 'pendentes')} count={summary.pendingPlates} tone="em_manutencao" />
           <span className="mx-1 h-5 w-px bg-border" />
           <span className="self-center text-[11.5px] text-muted-foreground">
             <span className="font-semibold text-foreground/80">{filtered.length}</span> de {summary.total} patrimônios
@@ -1920,6 +2222,7 @@ export function AssetManagement() {
 
       <AssetFormSheet open={showNew} onOpenChange={setShowNew} />
       <AssetCategoryDialog open={showCategories} onOpenChange={setShowCategories} />
+      <AssetCodeReaderDialog open={showCodeReader} onOpenChange={setShowCodeReader} />
       <AssetDetailDialog asset={selected} onOpenChange={(open) => !open && setSelected(null)} />
     </div>
   );

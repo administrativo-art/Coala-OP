@@ -1,8 +1,9 @@
-import type { JobDepartment, JobFunction, JobRole } from "@/types";
+import type { DPShiftDefinition, DPUnit, JobDepartment, JobFunction, JobRole } from "@/types";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import type {
   LoginRestrictionEvaluation,
 } from "@/features/hr/lib/login-access";
+import { readHrJsonResponse } from "@/features/hr/lib/client-response";
 
 type FirebaseUserLike = {
   getIdToken: (forceRefresh?: boolean) => Promise<string>;
@@ -12,6 +13,8 @@ export type HrBootstrapPayload = {
   departments: JobDepartment[];
   roles: JobRole[];
   functions: JobFunction[];
+  units: DPUnit[];
+  shiftDefinitions: DPShiftDefinition[];
   access: {
     canView: boolean;
     canManageCatalog: boolean;
@@ -149,15 +152,6 @@ export type HrLoginAccessAuditPayload = {
   }>;
 };
 
-async function parseError(response: Response, fallback: string) {
-  try {
-    const payload = await response.json();
-    return payload?.error || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 async function authorizedJsonRequest<T>(
   path: string,
   firebaseUser: FirebaseUserLike,
@@ -179,11 +173,7 @@ async function authorizedJsonRequest<T>(
     20000
   );
 
-  if (!response.ok) {
-    throw new Error(await parseError(response, fallbackError));
-  }
-
-  return (await response.json()) as T;
+  return readHrJsonResponse<T>(response, fallbackError);
 }
 
 export async function fetchHrBootstrap(firebaseUser: FirebaseUserLike) {

@@ -31,7 +31,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
   const [selectedShift, setSelectedShift] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const hasShifts = (period?.shifts?.length ?? 0) > 0;
+  const hasShifts = (period?.shifts?.length ?? 0) > 0 && period?.version !== 2;
 
   const periodEmployeeGoals = useMemo(() =>
     employeeGoals.filter(eg => eg.periodId === period?.id),
@@ -53,6 +53,7 @@ export function AddEmployeeGoalModal({ open, onOpenChange, period }: AddEmployee
 
   async function rebalanceWith(nextGoals: EmployeeGoal[]) {
     if (!period) return;
+    if (period.version === 2) return;
     const kioskName = kiosks.find(kiosk => kiosk.id === period.kioskId)?.name;
     await rebalancePeriodEmployeeGoals(
       period,

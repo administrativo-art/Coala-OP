@@ -9,7 +9,7 @@ Este arquivo registra contratos duráveis da fundação do Coala-OP.
 - `GARANTIDO`: o contrato está protegido por verificação automatizada aplicável e executada.
 - `VALIDADO EM PRODUÇÃO` não é um estado alternativo. É uma evidência operacional adicional, que exige rollout identificado e smoke test ou validação operacional aplicável.
 
-Um invariante pode estar `GARANTIDO` sem estar validado em produção. Nenhum invariante deste checkpoint foi validado em produção.
+Um invariante pode estar `GARANTIDO` sem estar validado em produção. Nenhum invariante deste candidato foi validado em produção.
 
 ## ENG-ISSUE-1
 
@@ -23,22 +23,22 @@ Um invariante pode estar `GARANTIDO` sem estar validado em produção. Nenhum in
 
 ## ENG-VERIFY-1
 
-- **Estado:** PARCIALMENTE GARANTIDO
+- **Estado:** GARANTIDO
 - **Regra:** Mudanças comuns devem passar por `check`; mudanças que afetem build devem passar por `verify`.
 - **Motivação:** Tornar a verificação reproduzível localmente e no CI.
-- **Mecanismo de proteção:** Scripts npm e workflow `verify`.
-- **Teste:** `npm run check` e `npm run verify`.
-- **Limitações:** Permanece parcial até o workflow executar no GitHub e os checks serem exigidos na branch principal.
-- **Validação em produção:** Não realizada.
+- **Mecanismo de proteção:** Scripts npm, workflow `verify`, required checks e proteção da branch `main` já ativos.
+- **Teste:** `npm run check` e `npm run verify`; jobs reais `quality`, `firestore-rules` e `functions` executados no GitHub no checkpoint reduzido.
+- **Limitações:** O candidato funcional precisa passar novamente pelo GitHub Actions antes de ser integrado; isso não valida produção.
+- **Validação em produção:** A fundação reduzida teve rollout identificado, mas a árvore funcional deste candidato ainda não foi validada.
 
 ## FIRESTORE-EMU-1
 
 - **Estado:** GARANTIDO
-- **Regra:** Testes de regras Firestore deste checkpoint só iniciam com host de emulador local, project ID `demo-*` e sem credenciais reais no ambiente.
+- **Regra:** Testes de regras Firestore só iniciam com host de emulador local, project IDs `demo-*` e sem credenciais reais no ambiente.
 - **Motivação:** Impedir que a suíte de segurança alcance um projeto real.
 - **Mecanismo de proteção:** Preflight central e Firebase CLI local com versão fixada.
-- **Teste:** `tests/unit/firestore-emulator-safety.test.mjs`, executado por `npm run check`, e `tests/security/firestore.rules.test.mjs`, executado por `npm run check:rules`.
-- **Limitações:** A suíte reduzida cobre as regras principais em ambiente isolado; não caracteriza todos os bancos Firestore declarados pelo produto.
+- **Teste:** `tests/unit/firestore-emulator-safety.test.mjs`, executado por `npm run check`, e suítes de regras executadas por `npm run check:rules`.
+- **Limitações:** A suíte funcional carrega rules distintas em projetos isolados; ainda não caracteriza os database IDs nomeados do produto no emulador.
 - **Validação em produção:** Não aplicável.
 
 ## FUNCTIONS-BUILD-1
@@ -47,34 +47,42 @@ Um invariante pode estar `GARANTIDO` sem estar validado em produção. Nenhum in
 - **Regra:** O pacote independente `functions` deve instalar suas próprias dependências e compilar separadamente da aplicação raiz.
 - **Motivação:** O typecheck da raiz não cobre automaticamente o pacote de Functions.
 - **Mecanismo de proteção:** Job `functions` no workflow e lockfile próprio.
-- **Teste:** `npm --prefix functions ci` e `npm --prefix functions run build`.
-- **Limitações:** A execução real do job no GitHub ainda depende da abertura do PR.
+- **Teste:** `npm --prefix functions ci` e `npm --prefix functions run build`; job real `functions` executado no GitHub no checkpoint reduzido.
+- **Limitações:** O pacote deste candidato precisa passar novamente pelo job após integração.
+- **Validação em produção:** Não realizada para este candidato.
+
+## FIN-INTER-STATEMENT-1
+
+- **Estado:** GARANTIDO
+- **Regra:** Itens persistidos em sessões de extrato do Banco Inter não contêm valores `undefined`, inclusive em campos opcionais e objetos aninhados.
+- **Motivação:** O Firestore rejeita documentos com `undefined` e interrompia `/api/jobs/inter/statements/sync`.
+- **Mecanismo de proteção:** Sanitização no domínio e novamente na fronteira de persistência, sem habilitar `ignoreUndefinedProperties` globalmente.
+- **Teste:** `tests/unit/financial-inter-statement.test.ts`.
+- **Limitações:** O teste protege os itens da sessão de extrato; não constitui um sanitizador universal para todos os payloads Firestore do produto.
 - **Validação em produção:** Não realizada.
 
 ## Contratos adiados por dependência funcional
 
-Os contratos abaixo continuam válidos, mas não integram o checkpoint reduzido porque as superfícies funcionais correspondentes ainda não estão presentes em `main`.
-
 ### HOST-PUBLIC-*
 
-- **Estado:** ADIADO — DEPENDÊNCIA FUNCIONAL AINDA NÃO PRESENTE EM MAIN
+- **Estado:** ADIADO — REQUER RECONCILIAÇÃO PRÓPRIA
 - **Abrange:** isolamento de rotas internas no host público e semântica final de não encontrado após rewrite.
-- **Próximo passo:** integrar caracterização e testes junto com o middleware/host público da branch funcional.
+- **Próximo passo:** integrar caracterização e testes junto com a evolução correspondente do middleware/host público.
 
 ### FIN-CLOSURE-REPOSITORY-*
 
-- **Estado:** ADIADO — DEPENDÊNCIA FUNCIONAL AINDA NÃO PRESENTE EM MAIN
+- **Estado:** ADIADO — REQUER RECONCILIAÇÃO PRÓPRIA
 - **Abrange:** consistência, transições e auditoria do repositório de fechamento financeiro.
-- **Próximo passo:** integrar os testes junto com o módulo `cash-closures`.
+- **Próximo passo:** reconciliar separadamente os testes e o módulo `cash-closures` que não integraram o checkpoint reduzido.
 
 ### API-AUTH-TRANSPORT-*
 
-- **Estado:** ADIADO — DEPENDÊNCIA FUNCIONAL AINDA NÃO PRESENTE EM MAIN
+- **Estado:** ADIADO — REQUER RECONCILIAÇÃO PRÓPRIA
 - **Abrange:** transporte autenticado compartilhado e migração do consumidor canônico.
-- **Próximo passo:** integrar o contrato junto com os consumidores funcionais correspondentes.
+- **Próximo passo:** reconciliar o contrato junto com os consumidores funcionais correspondentes.
 
 ### FIRESTORE-MULTI-DATABASE-*
 
 - **Estado:** PROPOSTO
 - **Abrange:** caracterização positiva e negativa de todos os database IDs declarados em `firebase.json`.
-- **Próximo passo:** criar uma suíte dedicada quando houver harness capaz de selecionar explicitamente cada database ID sem ambiguidade.
+- **Próximo passo:** criar uma suíte dedicada capaz de selecionar explicitamente cada database ID sem ambiguidade.

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,7 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Edit, Shield, ChevronsUpDown, Search, Eraser, Eye, EyeOff, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, UserPlus, CircleDot, UserX } from 'lucide-react';
+import { Edit, Shield, ChevronsUpDown, Search, Eraser, Camera, Upload, KeyRound, Loader2, ArrowLeft, Download, CircleDot, UserX, Info, CheckCircle2, MailCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { type User } from '@/types';
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog';
@@ -28,6 +28,14 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuChe
 import { Switch } from './ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
+import { JUST_CAUSE_TYPES, requiresTerminationSubtype } from '@/lib/hr/termination-options';
+import {
+  EMPLOYMENT_RELATIONSHIP_TYPES,
+  employmentRelationshipLabel,
+  terminationCopyForRelationship,
+  terminationReasonsForRelationship,
+  type EmploymentTerminationReason,
+} from '@/lib/hr/employment-relationship';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { PhotoCaptureModal } from './photo-capture-modal';
 import { useToast } from '@/hooks/use-toast';
@@ -36,8 +44,14 @@ import { storage } from '@/lib/firebase';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { pickUserColor, getUserColor } from '@/lib/utils/user-colors';
 import { createAuditLog } from '@/features/audit/client';
+import { createManagedTerminationProcess } from '@/features/hr/termination/client';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
+import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
+import { formatPersonName } from '@/lib/person-name';
+import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import {
   calculateVacationHealth,
   CYCLE_STATUS_CONFIG,
@@ -122,32 +136,27 @@ function DerivedInfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-const TERMINATION_REASONS = [
-  'Dispensa sem justa causa',
-  'Dispensa por justa causa',
-  'Pedido de demissão (resilição pelo empregado)',
-  'Rescisão indireta',
-  'Rescisão por culpa recíproca',
-  'Rescisão por acordo entre as partes',
-  'Extinção legal ou por motivo de ordem pública',
-];
-
-const JUST_CAUSE_TYPES = [
-  'Abandono de emprego',
-  'Incontinência de conduta ou mau comportamento',
-  'Negociação habitual por conta própria ou de terceiros',
-  'Condenação criminal',
-  'Desídia no desempenho das funções',
-  'Embriaguez habitual ou em serviço',
-  'Violação de segredo da empresa',
-  'Ato de indisciplina ou de insubordinação',
-  'Ato lesivo da honra ou boa fama',
-  'Ofensas físicas',
-  'Prática constante de jogos de azar',
-  'Perda de habilitação ou requisitos legais para o exercício da função',
-  'Ato fraudulento em detrimento do empregador',
-  'Redução dolosa da produção ou produtividade',
-];
+function FieldHelpTooltip({ title, description }: { title: string; description: string }) {
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-pink-200 hover:text-pink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500/40"
+            aria-label={title}
+          >
+            <Info className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="start" className="max-w-[320px] p-3 text-xs leading-relaxed">
+          <p className="font-semibold text-slate-950">{title}</p>
+          <p className="mt-1 text-muted-foreground">{description}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 type InactivationMode = 'temporary' | 'contract_termination';
 type TransportVoucherStatus = 'none' | 'active' | 'suspended';
@@ -236,10 +245,10 @@ function newLocalId(prefix: string) {
 
 
 const userSchema = z.object({
-  username: z.string().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
+  username: z.string().trim().min(3, 'O nome de usuário deve ter pelo menos 3 caracteres.'),
   email: z.string().email("O e-mail é inválido."),
-  password: z.string().optional(),
   profileId: z.string({ required_error: 'É obrigatório selecionar um perfil.' }).min(1, 'O perfil é obrigatório.'),
+  unitId: z.string().optional(),
   assignedKioskIds: z.array(z.string()),
   avatarUrl: z.string().optional(),
   operacional: z.boolean().optional(),
@@ -249,16 +258,17 @@ const userSchema = z.object({
   registrationIdPdv: z.string().optional(),
   jobRoleId: z.string().optional(),
   jobFunctionIds: z.array(z.string()).optional(),
+  employmentRelationshipType: z.enum(['clt', 'pj', 'internship'], {
+    required_error: 'Selecione o tipo de vínculo.',
+  }),
+  responsibleUnitIds: z.array(z.string()).optional(),
+  unitAccessScope: z.enum(['linked', 'selected', 'all']).default('linked'),
+  unitAccessUnitIds: z.array(z.string()).optional(),
   admissionDate: z.string().optional(),
   birthDate: z.string().optional(),
   shiftDefinitionId: z.string().optional(),
   needsTransportVoucher: z.boolean().optional(),
   transportVoucherValue: z.coerce.number().nonnegative().optional(),
-}).refine(data => {
-    return !data.password || data.password.length >= 6;
-}, {
-    message: "A senha deve ter pelo menos 6 caracteres.",
-    path: ["password"],
 }).refine(data => {
     // Quiosque obrigatório apenas para não-admins
     if (data.profileId === 'admin') return true;
@@ -266,6 +276,12 @@ const userSchema = z.object({
 }, {
     message: 'Selecione pelo menos um quiosque.',
     path: ['assignedKioskIds'],
+}).refine(data => data.profileId === 'admin' || Boolean(data.unitId), {
+    message: 'Selecione a unidade principal do financeiro.',
+    path: ['unitId'],
+}).refine(data => data.unitAccessScope !== 'selected' || (data.unitAccessUnitIds?.length ?? 0) > 0, {
+    message: 'Selecione ao menos uma unidade para o escopo específico.',
+    path: ['unitAccessUnitIds'],
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -273,6 +289,8 @@ type UserFormValues = z.infer<typeof userSchema>;
 const USER_AUDIT_FIELDS = [
   'username',
   'profileId',
+  'unitId',
+  'unitIds',
   'assignedKioskIds',
   'operacional',
   'participatesInGoals',
@@ -282,6 +300,10 @@ const USER_AUDIT_FIELDS = [
   'jobRoleName',
   'jobFunctionIds',
   'jobFunctionNames',
+  'employmentRelationshipType',
+  'responsibleUnitIds',
+  'unitAccessScope',
+  'unitAccessUnitIds',
   'admissionDate',
   'birthDate',
   'shiftDefinitionId',
@@ -311,20 +333,35 @@ function userAuditDiff(before: User, after: Partial<User>) {
   return changes;
 }
 
-export function UserManagement() {
-  const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword } = useAuth();
+type UserManagementProps = {
+  createOnly?: boolean;
+  editUserId?: string;
+  onClose?: () => void;
+  contextLabel?: string;
+  showTransportVoucher?: boolean;
+};
+
+export function UserManagement({
+  createOnly = false,
+  editUserId,
+  onClose,
+  contextLabel = 'Gestão do colaborador',
+  showTransportVoucher = false,
+}: UserManagementProps = {}) {
+  const { permissions, users, addUser, terminateUser, user: currentUser, firebaseUser, updateUser, resetPassword, loading: authLoading } = useAuth();
   const { kiosks } = useKiosks();
   const { profiles, adminProfileId, loading: profilesLoading } = useProfiles();
-  const { roles, functions, loading: hrLoading } = useHrBootstrap();
-  const { shiftDefinitions, vacations } = useDP();
+  const { roles, functions, units, loading: hrLoading } = useHrBootstrap();
+  const { shiftDefinitions, shiftDefsLoading, vacations } = useDP();
   const { toast } = useToast();
   
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(createOnly || Boolean(editUserId));
   const [userToInactivate, setUserToInactivate] = useState<User | null>(null);
   const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null);
   const [inactivationMode, setInactivationMode] = useState<InactivationMode>('temporary');
   const [terminationDate, setTerminationDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [terminationEmployerUnitId, setTerminationEmployerUnitId] = useState('');
   const [terminationReason, setTerminationReason] = useState('');
   const [terminationCause, setTerminationCause] = useState('');
   const [terminationNotes, setTerminationNotes] = useState('');
@@ -340,19 +377,24 @@ export function UserManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [profileFilter, setProfileFilter] = useState('all');
   const [kioskFilter, setKioskFilter] = useState('all');
-  const [showPassword, setShowPassword] = useState(false);
+  const [createdUserNotice, setCreatedUserNotice] = useState<{
+    username: string;
+    email: string;
+    emailSent: boolean;
+  } | null>(null);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [pdvOperatorIds, setPdvOperatorIds] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initializedEditUserIdRef = useRef<string | null>(null);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
     defaultValues: {
         username: '',
         email: '',
-        password: '',
         profileId: '',
+        unitId: '',
         assignedKioskIds: [],
         avatarUrl: '',
         operacional: false,
@@ -361,6 +403,10 @@ export function UserManagement() {
         registrationIdPdv: '',
         jobRoleId: '',
         jobFunctionIds: [],
+        employmentRelationshipType: undefined,
+        responsibleUnitIds: [],
+        unitAccessScope: 'linked',
+        unitAccessUnitIds: [],
         admissionDate: '',
         birthDate: '',
         shiftDefinitionId: '',
@@ -372,6 +418,8 @@ export function UserManagement() {
   const selectedRoleId = form.watch('jobRoleId') ?? '';
   const selectedFunctionIds = form.watch('jobFunctionIds') ?? [];
   const selectedProfileId = form.watch('profileId') ?? '';
+  const selectedKioskIds = form.watch('assignedKioskIds') ?? [];
+  const selectedUnitAccessScope = form.watch('unitAccessScope') ?? 'linked';
   const admissionDateValue = form.watch('admissionDate');
   const birthDateValue = form.watch('birthDate');
   const needsTransportVoucherValue = form.watch('needsTransportVoucher');
@@ -419,6 +467,62 @@ export function UserManagement() {
     () => compatibleFunctions.map((item) => ({ value: item.id, label: item.name })),
     [compatibleFunctions]
   );
+  const responsibleUnitOptions = useMemo(
+    () => units.map((unit) => ({ value: unit.id, label: unit.name })),
+    [units]
+  );
+  const selectedTerminationRelationship = userToInactivate?.employmentRelationshipType;
+  const availableTerminationReasons = terminationReasonsForRelationship(selectedTerminationRelationship)
+    .filter((reason) => selectedTerminationRelationship !== 'pj' || reason === 'Encerramento por acordo entre as partes');
+  const terminationCopy = terminationCopyForRelationship(selectedTerminationRelationship);
+  const contractTerminationAvailable = selectedTerminationRelationship === 'clt' || selectedTerminationRelationship === 'pj';
+  const selectedWorkUnits = useMemo(() => {
+    const mapped = new Map<string, { id: string; name: string }>();
+
+    selectedKioskIds.forEach((kioskId) => {
+      const kiosk = kiosks.find((item) => item.id === kioskId);
+      const unit = kiosk ? matchDPUnitForKiosk(kiosk.name, units) : undefined;
+      if (unit) mapped.set(unit.id, { id: unit.id, name: unit.name });
+    });
+
+    return Array.from(mapped.values());
+  }, [kiosks, selectedKioskIds, units]);
+  const selectedWorkUnitIds = useMemo(
+    () => selectedWorkUnits.map((unit) => unit.id),
+    [selectedWorkUnits]
+  );
+  useEffect(() => {
+    const currentPrimaryUnitId = form.getValues('unitId');
+    if (currentPrimaryUnitId && selectedWorkUnitIds.includes(currentPrimaryUnitId)) return;
+    form.setValue('unitId', selectedWorkUnitIds[0] ?? '', {
+      shouldDirty: Boolean(currentPrimaryUnitId),
+      shouldValidate: false,
+    });
+  }, [form, selectedWorkUnitIds]);
+  const filteredShiftDefinitions = useMemo(() => {
+    if (selectedKioskIds.length === 0) return shiftDefinitions;
+    if (selectedWorkUnitIds.length === 0) return [];
+
+    return shiftDefinitions.filter((definition) =>
+      selectedWorkUnitIds.some((unitId) => shiftDefinitionMatchesUnit(definition, unitId))
+    );
+  }, [selectedKioskIds.length, selectedWorkUnitIds, shiftDefinitions]);
+  const shiftDefinitionHint = useMemo(() => {
+    if (selectedKioskIds.length === 0) {
+      return 'Selecione um quiosque para filtrar os turnos pela unidade.';
+    }
+
+    if (selectedWorkUnits.length === 0) {
+      return 'Nenhuma unidade DP foi encontrada para o quiosque selecionado.';
+    }
+
+    const unitNames = selectedWorkUnits.map((unit) => unit.name).join(', ');
+    if (filteredShiftDefinitions.length === 0) {
+      return `Nenhum turno cadastrado para ${unitNames}.`;
+    }
+
+    return `Exibindo turnos de ${unitNames}.`;
+  }, [filteredShiftDefinitions.length, selectedKioskIds.length, selectedWorkUnits]);
   const effectiveDefaultProfileId = useMemo(
     () =>
       selectedFunctions.find((item) => item.defaultProfileId)?.defaultProfileId ??
@@ -437,7 +541,7 @@ export function UserManagement() {
 
   useEffect(() => {
     const allowedFunctionIds = new Set(compatibleFunctions.map((item) => item.id));
-    const nextValue = selectedFunctionIds.filter((id) => allowedFunctionIds.has(id));
+    const nextValue = selectedFunctionIds.filter((id) => allowedFunctionIds.has(id)).slice(0, 1);
     if (nextValue.length !== selectedFunctionIds.length) {
       form.setValue('jobFunctionIds', nextValue, { shouldDirty: true });
     }
@@ -451,6 +555,32 @@ export function UserManagement() {
       form.setValue('profileId', effectiveDefaultProfileId, { shouldDirty: true });
     }
   }, [effectiveDefaultProfileId, editingUser, form]);
+
+  useEffect(() => {
+    if (!createOnly || !showForm || editingUser) return;
+
+    const clearAutofill = () => {
+      form.setValue('username', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+      form.setValue('email', '', { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+    };
+
+    clearAutofill();
+    const timeout = window.setTimeout(clearAutofill, 200);
+    return () => window.clearTimeout(timeout);
+  }, [createOnly, editingUser, form, showForm]);
+
+  useEffect(() => {
+    const currentShiftDefinitionId = form.getValues('shiftDefinitionId');
+    if (!currentShiftDefinitionId || selectedKioskIds.length === 0) return;
+
+    const stillAvailable = filteredShiftDefinitions.some(
+      (definition) => definition.id === currentShiftDefinitionId
+    );
+
+    if (!stillAvailable) {
+      form.setValue('shiftDefinitionId', '', { shouldDirty: true });
+    }
+  }, [filteredShiftDefinitions, form, selectedKioskIds.length]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
@@ -495,13 +625,20 @@ export function UserManagement() {
   }, [filteredUsers, profiles, adminProfileId]);
 
 
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingUser(null);
+    setPendingTransportVoucherHistory([]);
+    if (createOnly || editUserId) onClose?.();
+  };
+
   const handleAddNew = () => {
     setEditingUser(null);
     form.reset({
       username: '',
       email: '',
-      password: '',
       profileId: '',
+      unitId: '',
       assignedKioskIds: [],
       avatarUrl: '',
       operacional: false,
@@ -510,6 +647,10 @@ export function UserManagement() {
       registrationIdPdv: '',
       jobRoleId: '',
       jobFunctionIds: [],
+      employmentRelationshipType: undefined,
+      responsibleUnitIds: [],
+      unitAccessScope: 'linked',
+      unitAccessUnitIds: [],
       admissionDate: '',
       birthDate: '',
       shiftDefinitionId: '',
@@ -521,14 +662,22 @@ export function UserManagement() {
     setShowForm(true);
   };
 
-  const handleEdit = (user: User) => {
+  const handleEdit = useCallback((user: User) => {
     setEditingUser(user);
     form.reset({
       username: user.username,
       email: user.email,
-      password: '',
       profileId: user.profileId,
-      assignedKioskIds: user.assignedKioskIds || [],
+      unitId: user.unitId ?? user.unitIds?.[0] ?? '',
+      assignedKioskIds: Array.from(new Set([
+        ...(user.assignedKioskIds ?? []).filter((id) => kiosks.some((kiosk) => kiosk.id === id)),
+        ...kiosks
+          .filter((kiosk) => {
+            const unit = matchDPUnitForKiosk(kiosk.name, units);
+            return unit ? (user.unitIds ?? []).includes(unit.id) : false;
+          })
+          .map((kiosk) => kiosk.id),
+      ])),
       avatarUrl: user.avatarUrl || '',
       operacional: user.operacional || false,
       participatesInGoals: user.participatesInGoals || false,
@@ -536,6 +685,10 @@ export function UserManagement() {
       registrationIdPdv: user.registrationIdPdv ?? '',
       jobRoleId: user.jobRoleId ?? '',
       jobFunctionIds: user.jobFunctionIds ?? [],
+      employmentRelationshipType: user.employmentRelationshipType,
+      responsibleUnitIds: user.responsibleUnitIds ?? [],
+      unitAccessScope: user.unitAccessScope ?? 'linked',
+      unitAccessUnitIds: (user.unitAccessUnitIds ?? []).filter((id) => units.some((unit) => unit.id === id)),
       admissionDate: timestampToDateInput(user.admissionDate),
       birthDate: timestampToDateInput(user.birthDate),
       shiftDefinitionId: user.shiftDefinitionId ?? '',
@@ -547,7 +700,15 @@ export function UserManagement() {
     setPdvOperatorIds(existing);
     setPendingTransportVoucherHistory([]);
     setShowForm(true);
-  };
+  }, [form, kiosks, units]);
+
+  useEffect(() => {
+    if (!editUserId || initializedEditUserIdRef.current === editUserId) return;
+    const target = users.find((user) => user.id === editUserId);
+    if (!target) return;
+    initializedEditUserIdRef.current = editUserId;
+    handleEdit(target);
+  }, [editUserId, handleEdit, users]);
 
   const openTransportVoucherChangeDialog = (nextChecked: boolean) => {
     const fromStatus = getTransportVoucherStatus(form.getValues('needsTransportVoucher'), transportVoucherHistory);
@@ -615,6 +776,11 @@ export function UserManagement() {
     if (user.id === currentUser?.id || profileIsAdmin(user.profileId) || user.isActive === false) return;
     setInactivationMode('temporary');
     setTerminationDate(format(new Date(), 'yyyy-MM-dd'));
+    setTerminationEmployerUnitId(
+      units.some((unit) => unit.id === user.employerUnitId && CnpjValidator.validate(unit.cnpj ?? '').valid)
+        ? user.employerUnitId ?? ''
+        : units.find((unit) => CnpjValidator.clean(unit.cnpj ?? '') === CnpjValidator.clean(user.employerCnpj ?? '') && CnpjValidator.validate(unit.cnpj ?? '').valid)?.id ?? '',
+    );
     setTerminationReason('');
     setTerminationCause('');
     setTerminationNotes('');
@@ -623,27 +789,64 @@ export function UserManagement() {
 
   const handleInactivateConfirm = async () => {
     if (userToInactivate) {
+      if (inactivationMode === 'contract_termination' && !contractTerminationAvailable) {
+        toast({
+          title: userToInactivate.employmentRelationshipType === 'internship' ? 'Fluxo de estágio ainda não disponível.' : 'Tipo de vínculo obrigatório.',
+          description: userToInactivate.employmentRelationshipType === 'internship'
+            ? 'Nesta entrega, o desligamento específico de estágio ainda não foi habilitado.'
+            : 'Defina o tipo de vínculo no cadastro antes de registrar o encerramento.',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (inactivationMode === 'contract_termination' && !terminationReason) {
-        toast({ title: 'Tipo de demissão obrigatório.', description: 'Selecione o tipo de demissão para concluir o término do contrato.', variant: 'destructive' });
+        toast({ title: `${terminationCopy.reasonLabel} obrigatório.`, description: terminationCopy.missingReason, variant: 'destructive' });
+        return;
+      }
+      if (inactivationMode === 'contract_termination' && !terminationEmployerUnitId) {
+        toast({ title: 'CNPJ empregador obrigatório.', description: 'Selecione a empresa responsável pelo vínculo.', variant: 'destructive' });
+        return;
+      }
+      if (
+        inactivationMode === 'contract_termination' &&
+        !availableTerminationReasons.some((reason) => reason === terminationReason)
+      ) {
+        toast({ title: 'Motivo incompatível com o vínculo.', description: 'Selecione uma opção válida para o tipo de vínculo cadastrado.', variant: 'destructive' });
+        return;
+      }
+      if (inactivationMode === 'contract_termination') {
+        if (!firebaseUser || !terminationReason) return;
+        const result = await createManagedTerminationProcess(firebaseUser, {
+          employeeId: userToInactivate.id,
+          employerUnitId: terminationEmployerUnitId,
+          terminationDate,
+          terminationReason: terminationReason as EmploymentTerminationReason,
+          terminationCause: requiresTerminationSubtype(terminationReason) ? terminationCause : undefined,
+          terminationNotes: terminationNotes || undefined,
+        });
+        setUserToInactivate(null);
+        toast({
+          title: result.reused ? 'Processo de desligamento já existente.' : terminationCopy.success,
+          description: `${userToInactivate.username} permanecerá ativo até a conclusão formal.`,
+        });
+        window.location.assign(`/dashboard/dp/terminations/${result.process.id}`);
         return;
       }
       await terminateUser({
         uid: userToInactivate.id,
-        inactivationType: inactivationMode,
-        terminationDate: inactivationMode === 'contract_termination' ? terminationDate : undefined,
-        terminationReason: inactivationMode === 'contract_termination' ? terminationReason : undefined,
-        terminationCause: terminationReason === 'Dispensa por justa causa' ? terminationCause : undefined,
-        terminationNotes: terminationNotes || (inactivationMode === 'temporary' ? 'Inativação temporária pela tela de usuários.' : undefined),
+        inactivationType: 'temporary',
+        terminationNotes: terminationNotes || 'Inativação temporária pela tela de usuários.',
       });
       await logUserAudit('user_inactivated', userToInactivate, {
         email: userToInactivate.email,
         profile_id: userToInactivate.profileId,
         inactivation_type: inactivationMode,
+        employment_relationship_type: userToInactivate.employmentRelationshipType ?? null,
         termination_reason: terminationReason || null,
       });
       setUserToInactivate(null);
       toast({
-        title: inactivationMode === 'temporary' ? 'Usuário inativado temporariamente.' : 'Término do contrato registrado.',
+        title: inactivationMode === 'temporary' ? 'Usuário inativado temporariamente.' : terminationCopy.success,
         description: `${userToInactivate.username} não poderá acessar o sistema até uma reativação.`,
       });
     }
@@ -673,6 +876,7 @@ export function UserManagement() {
   };
 
   const onSubmit = async (values: UserFormValues) => {
+    values = { ...values, username: formatPersonName(values.username) };
     const avatarUrl = values.avatarUrl || '';
     const admissionDate = values.admissionDate
       ? Timestamp.fromDate(new Date(values.admissionDate + 'T12:00:00'))
@@ -680,6 +884,15 @@ export function UserManagement() {
     const birthDate = values.birthDate
       ? Timestamp.fromDate(new Date(values.birthDate + 'T12:00:00'))
       : undefined;
+    const expandedUnitAccessUnitIds = values.unitAccessScope === 'selected'
+      ? Array.from(new Set([
+          ...(values.unitAccessUnitIds ?? []),
+          ...kiosks.flatMap((kiosk) => {
+            const unit = matchDPUnitForKiosk(kiosk.name, units);
+            return unit && values.unitAccessUnitIds?.includes(unit.id) ? [kiosk.id] : [];
+          }),
+        ]))
+      : [];
 
     if (editingUser) {
       const updatedData: Partial<User> = {
@@ -694,6 +907,14 @@ export function UserManagement() {
           jobRoleName: selectedRole?.name,
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
+          employmentRelationshipType: values.employmentRelationshipType,
+          unitId: values.unitId || selectedWorkUnitIds[0],
+          responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
+          unitAccessScope: values.unitAccessScope,
+          unitAccessUnitIds: expandedUnitAccessUnitIds,
+          unitIds: selectedWorkUnitIds.length > 0
+            ? [values.unitId || selectedWorkUnitIds[0], ...selectedWorkUnitIds.filter((unitId) => unitId !== (values.unitId || selectedWorkUnitIds[0]))]
+            : undefined,
           admissionDate,
           birthDate,
           shiftDefinitionId: values.shiftDefinitionId || undefined,
@@ -701,7 +922,6 @@ export function UserManagement() {
           transportVoucherValue: values.needsTransportVoucher ? values.transportVoucherValue : undefined,
           transportVoucherHistory,
       };
-      delete (updatedData as any).password;
       const mergedUser = { ...editingUser, ...updatedData };
       const changes = userAuditDiff(editingUser, mergedUser);
       await updateUser(mergedUser);
@@ -711,10 +931,6 @@ export function UserManagement() {
         changes,
       });
     } else {
-        if (!values.password) {
-             form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
-             return;
-        }
       const createResult = await addUser({
           username: values.username,
           profileId: values.profileId,
@@ -736,24 +952,37 @@ export function UserManagement() {
           jobRoleName: selectedRole?.name,
           jobFunctionIds: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.id) : undefined,
           jobFunctionNames: selectedFunctions.length > 0 ? selectedFunctions.map((item) => item.name) : undefined,
+          employmentRelationshipType: values.employmentRelationshipType,
+          unitId: values.unitId || selectedWorkUnitIds[0],
+          responsibleUnitIds: values.responsibleUnitIds && values.responsibleUnitIds.length > 0 ? values.responsibleUnitIds : undefined,
+          unitAccessScope: values.unitAccessScope,
+          unitAccessUnitIds: expandedUnitAccessUnitIds,
+          unitIds: selectedWorkUnitIds.length > 0
+            ? [values.unitId || selectedWorkUnitIds[0], ...selectedWorkUnitIds.filter((unitId) => unitId !== (values.unitId || selectedWorkUnitIds[0]))]
+            : undefined,
           admissionDate,
           birthDate,
-      }, values.email, values.password);
+      }, values.email);
 
       if ('error' in createResult) {
         toast({ title: 'Erro ao criar usuário.', description: createResult.error, variant: 'destructive' });
         return;
       }
       const uid = createResult.uid;
-      toast({ title: 'Usuário criado com sucesso.' });
       await logUserAudit('user_created', { id: uid, username: values.username, email: values.email }, {
         email: values.email,
         profile_id: values.profileId,
         assigned_kiosk_count: values.assignedKioskIds.length,
+        first_access_email_sent: createResult.emailSent,
       });
+      setCreatedUserNotice({
+        username: values.username,
+        email: values.email,
+        emailSent: createResult.emailSent,
+      });
+      return;
     }
-    setShowForm(false);
-    setEditingUser(null);
+    closeForm();
   };
   
   const handlePhotoUpdate = async (dataUrl: string) => {
@@ -804,19 +1033,51 @@ export function UserManagement() {
   };
 
 
-  const canManageAnyUsers = permissions.settings.manageUsers;
+  const canManageAnyUsers = Boolean(
+    permissions.settings.manageUsers || permissions.dp?.collaborators?.edit
+  );
 
+  if (authLoading) {
+    return (
+      <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Carregando cadastro do colaborador...
+      </div>
+    );
+  }
 
   if (!canManageAnyUsers) {
     return (
         <Card className="w-full max-w-2xl mx-auto">
             <CardHeader>
-                <CardTitle>Acesso negado</CardTitle>
+            <CardTitle>Acesso negado</CardTitle>
             </CardHeader>
             <CardContent>
-                <p>Você não tem permissão para gerenciar usuários.</p>
+                <p>Você não tem permissão para editar cadastros de colaboradores.</p>
             </CardContent>
         </Card>
+    );
+  }
+
+  if (editUserId && !editingUser) {
+    if (users.some((user) => user.id === editUserId)) {
+      return (
+        <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Preparando edição do colaborador...
+        </div>
+      );
+    }
+    return (
+      <Card className="w-full max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle>Colaborador não encontrado</CardTitle>
+          <CardDescription>O cadastro solicitado não está disponível ou não pertence ao seu escopo de acesso.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button type="button" variant="outline" onClick={onClose}>Voltar para o perfil</Button>
+        </CardContent>
+      </Card>
     );
   }
   
@@ -831,6 +1092,8 @@ export function UserManagement() {
     { label: 'Inativos', value: inactiveCount, total: users.length, color: 'bg-slate-400', pct: users.length ? Math.round((inactiveCount / users.length) * 100) : 0, href: '/dashboard/users/inactive' },
     { label: 'Bloqueados', value: blockedCount, total: users.length, color: 'bg-rose-500', pct: users.length ? Math.round((blockedCount / users.length) * 100) : 0 },
   ];
+
+  if (createOnly && !showForm) return null;
 
   const lastAccessLabel = (value: unknown) => {
     if (!value) return 'Nunca';
@@ -855,28 +1118,31 @@ export function UserManagement() {
     <>
       {showForm ? (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+          <form onSubmit={form.handleSubmit(onSubmit)} autoComplete={createOnly ? 'off' : 'on'} className={createOnly ? "personal-create-user-form space-y-2" : "space-y-5"}>
             {/* ── Back nav ── */}
-            <div className="flex items-center gap-3 mb-2">
-              <Button
-                type="button" variant="ghost" size="icon"
-                className="shrink-0 h-8 w-8 rounded-full"
-                onClick={() => { setShowForm(false); setEditingUser(null); }}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div>
-                <p className="font-semibold leading-tight">
-                  {editingUser ? editingUser.username : 'Novo usuário'}
-                </p>
-                <p className="text-xs text-muted-foreground">Configurações › Usuários</p>
+            {!createOnly ? (
+              <div className="flex items-center gap-3 mb-2">
+                <Button
+                  type="button" variant="ghost" size="icon"
+                  className="shrink-0 h-8 w-8 rounded-full"
+                  onClick={closeForm}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div>
+                  <p className="font-semibold leading-tight">
+                    {editingUser ? editingUser.username : 'Novo usuário'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{contextLabel}</p>
+                </div>
               </div>
-            </div>
+            ) : null}
 
             {/* ── Cartão 1: Departamento Pessoal + identidade ── */}
-            <Card style={{ padding: '1.25rem 1.5rem' }}>
-              <div className="flex gap-5 items-start">
+            <Card className={createOnly ? "personal-create-user-card shadow-none" : undefined} style={{ padding: createOnly ? '0.625rem' : '1.25rem 1.5rem' }}>
+              <div className={createOnly ? "grid gap-2" : "flex gap-5 items-start"}>
                 {/* Avatar + botões */}
+                {!createOnly ? (
                 <div className="flex flex-col items-center gap-2 shrink-0">
                   <Avatar className="h-20 w-20">
                     {isUploadingPhoto ? (
@@ -907,9 +1173,11 @@ export function UserManagement() {
                   </div>
                   <Input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
                 </div>
+                ) : null}
 
                 {/* Nome, e-mail, badges */}
                 <div className="flex-1 space-y-3 min-w-0">
+                  {!createOnly ? (
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex items-center gap-1.5">
                       <div
@@ -928,46 +1196,60 @@ export function UserManagement() {
                       </Badge>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  ) : null}
+                  <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 md:grid-cols-3 gap-3"}>
                     <FormField control={form.control} name="username" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome</FormLabel>
-                        <FormControl><Input placeholder="ex: Maria Silva" {...field} /></FormControl>
+                        <FormControl>
+                          <Input
+                            placeholder="ex: Maria Silva"
+                            {...field}
+                            autoComplete={createOnly ? 'off' : 'name'}
+                            onBlur={(event) => {
+                              field.onBlur();
+                              const formatted = formatPersonName(event.target.value);
+                              if (formatted) {
+                                form.setValue('username', formatted, { shouldDirty: true, shouldValidate: true });
+                              }
+                            }}
+                          />
+                        </FormControl>
+                        <FormDescription>Use nome completo com iniciais maiúsculas. Ex.: Maria Joana Barbosa Pereira.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="email" render={({ field }) => (
                       <FormItem>
                         <FormLabel>E-mail</FormLabel>
-                        <FormControl><Input type="email" placeholder="email@dominio.com" {...field} disabled={!!editingUser} /></FormControl>
+                        <FormControl><Input type="email" placeholder="email@dominio.com" {...field} autoComplete={createOnly ? 'off' : 'email'} disabled={!!editingUser} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
-                    {!editingUser && (
-                      <div className="col-span-full">
-                        <FormField control={form.control} name="password" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Senha</FormLabel>
-                            <div className="relative">
-                              <FormControl>
-                                <Input type={showPassword ? 'text' : 'password'} placeholder="Mínimo 6 caracteres" {...field} />
-                              </FormControl>
-                              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground">
-                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              </button>
-                            </div>
-                            <FormMessage />
-                          </FormItem>
-                        )} />
-                      </div>
-                    )}
+                    <FormField control={form.control} name="employmentRelationshipType" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de vínculo</FormLabel>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione o vínculo" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {EMPLOYMENT_RELATIONSHIP_TYPES.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">
+                          Define as regras de integração e de encerramento aplicáveis.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                   </div>
                 </div>
               </div>
-              <div className="mt-5 space-y-4 border-t pt-5">
+              <div className={createOnly ? "mt-2 space-y-2 border-t pt-2" : "mt-5 space-y-4 border-t pt-5"}>
                 {permissions.dp?.view && (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
                       <FormField control={form.control} name="jobRoleId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Cargo</FormLabel>
@@ -996,30 +1278,100 @@ export function UserManagement() {
                       )} />
                       <FormField control={form.control} name="jobFunctionIds" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Funções</FormLabel>
-                          <FormControl>
-                            <MultiSelect
-                              options={compatibleFunctionOptions}
-                              selected={field.value ?? []}
-                              onChange={field.onChange}
-                              placeholder={
-                                hrLoading
-                                  ? 'Carregando funções...'
-                                  : selectedRoleId
-                                    ? 'Selecione as funções'
-                                    : 'Selecione primeiro um cargo'
-                              }
-                              className={selectedRoleId ? '' : 'opacity-70'}
-                            />
-                          </FormControl>
+                          <FormLabel>Função</FormLabel>
+                          <Select
+                            value={(field.value ?? [])[0] ?? '__none__'}
+                            onValueChange={(value) => {
+                              field.onChange(value === '__none__' ? [] : [value]);
+                            }}
+                            disabled={hrLoading || !selectedRoleId}
+                          >
+                            <FormControl>
+                              <SelectTrigger className={selectedRoleId ? '' : 'opacity-70'}>
+                                <SelectValue placeholder={selectedRoleId ? 'Selecione a função' : 'Selecione primeiro um cargo'} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="__none__">
+                                {selectedRoleId ? 'Sem função' : 'Selecione primeiro um cargo'}
+                              </SelectItem>
+                              {compatibleFunctionOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                              {selectedRoleId && compatibleFunctionOptions.length === 0 && (
+                                <SelectItem value="__no_function_options__" disabled>
+                                  Nenhuma função para este cargo
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
                           <FormDescription className="text-xs">
-                            As funções listadas respeitam a compatibilidade do cargo.
+                            A função listada respeita a compatibilidade do cargo.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="responsibleUnitIds" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Unidades sob responsabilidade</FormLabel>
+                        <FormControl>
+                          <MultiSelect
+                            options={responsibleUnitOptions}
+                            selected={field.value ?? []}
+                            onChange={field.onChange}
+                            placeholder="Selecione as unidades"
+                            className={responsibleUnitOptions.length > 0 ? '' : 'opacity-70'}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <div className={selectedUnitAccessScope === 'selected' ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4"}>
+                      <FormField control={form.control} name="unitAccessScope" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Escopo de visualização por unidade</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="linked">Somente unidades vinculadas</SelectItem>
+                              <SelectItem value="selected">Unidades específicas</SelectItem>
+                              <SelectItem value="all">Todas as unidades</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            Define onde o usuário pode visualizar e operar. As permissões do perfil continuam definindo o que ele pode fazer.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      {selectedUnitAccessScope === 'selected' ? (
+                        <FormField control={form.control} name="unitAccessUnitIds" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unidades liberadas no escopo</FormLabel>
+                            <FormControl>
+                              <MultiSelect
+                                options={responsibleUnitOptions}
+                                selected={field.value ?? []}
+                                onChange={field.onChange}
+                                placeholder="Selecione as unidades"
+                              />
+                            </FormControl>
+                            <FormDescription className="text-xs">
+                              Não altera a lotação nem as unidades sob responsabilidade.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      ) : null}
+                    </div>
+                    <div className={createOnly ? "grid grid-cols-1 gap-2 md:grid-cols-2" : "grid grid-cols-1 gap-4 md:grid-cols-2"}>
                       <FormField control={form.control} name="profileId" render={() => (
                         <FormItem>
                           <FormLabel>Perfil de permissão</FormLabel>
@@ -1039,20 +1391,43 @@ export function UserManagement() {
                           <FormMessage />
                         </FormItem>
                       )} />
+                      <FormField control={form.control} name="unitId" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Unidade principal (Financeiro)</FormLabel>
+                          <Select value={field.value || undefined} onValueChange={field.onChange} disabled={selectedWorkUnits.length === 0}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione primeiro uma unidade de escala" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {selectedWorkUnits.map((unit) => (
+                                <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            Define a lotação usada no financeiro. As demais unidades não alteram essa referência.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    <div>
                       <Controller control={form.control} name="assignedKioskIds" render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Quiosques</FormLabel>
+                          <FormLabel>Unidades de escala e operação</FormLabel>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <FormControl>
                                 <Button variant="outline" className="w-full justify-between font-normal">
-                                  {(field.value?.length || 0) > 0 ? `${field.value.length} quiosque(s)` : 'Selecione quiosques'}
+                                  {(field.value?.length || 0) > 0 ? `${field.value.length} unidade(s)` : 'Selecione as unidades'}
                                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                               </FormControl>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
-                              <DropdownMenuLabel>Quiosques disponíveis</DropdownMenuLabel>
+                              <DropdownMenuLabel>Unidades disponíveis</DropdownMenuLabel>
                               <DropdownMenuSeparator />
                               <ScrollArea className="h-48">
                                 {kiosks.map(kiosk => (
@@ -1061,7 +1436,9 @@ export function UserManagement() {
                                     checked={field.value?.includes(kiosk.id)}
                                     onCheckedChange={checked => {
                                       const selected = field.value || [];
-                                      field.onChange(checked ? [...selected, kiosk.id] : selected.filter(id => id !== kiosk.id));
+                                      field.onChange(checked
+                                        ? Array.from(new Set([...selected, kiosk.id]))
+                                        : selected.filter(id => id !== kiosk.id));
                                     }}
                                     onSelect={e => e.preventDefault()}
                                   >
@@ -1071,6 +1448,9 @@ export function UserManagement() {
                               </ScrollArea>
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          <FormDescription className="text-xs">
+                            Controla onde a pessoa aparece na escala e pode operar; aceita várias unidades.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
@@ -1094,34 +1474,32 @@ export function UserManagement() {
                         </div>
                       </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField control={form.control} name="registrationIdBizneo" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Matrícula Bizneo</FormLabel>
-                          <FormControl><Input placeholder="Ex: 18043422" {...field} disabled={hasBizneoLink} /></FormControl>
-                          {hasBizneoLink && (
-                            <FormDescription className="text-xs">Sincronizado pelo Bizneo.</FormDescription>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      )} />
+                    <div className={createOnly ? "grid grid-cols-1 gap-2 lg:grid-cols-3" : "grid grid-cols-1 gap-4 lg:grid-cols-3"}>
                       <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Turno padrão</FormLabel>
-                          <Select value={field.value || '__none__'} onValueChange={v => field.onChange(v === '__none__' ? '' : v)}>
+                          <Select
+                            value={field.value || '__none__'}
+                            onValueChange={v => field.onChange(v === '__none__' ? '' : v)}
+                            disabled={shiftDefsLoading}
+                          >
                             <FormControl><SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger></FormControl>
                             <SelectContent>
                               <SelectItem value="__none__">— Nenhum —</SelectItem>
-                              {shiftDefinitions.map(def => (
+                              {filteredShiftDefinitions.map(def => (
                                 <SelectItem key={def.id} value={def.id}>{def.name} ({def.startTime}–{def.endTime})</SelectItem>
                               ))}
+                              {filteredShiftDefinitions.length === 0 && (
+                                <SelectItem value="__no_shift_options__" disabled>
+                                  Nenhum turno para esta unidade
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
+                          <FormDescription className="text-xs">{shiftDefinitionHint}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )} />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField control={form.control} name="admissionDate" render={({ field }) => (
                         <FormItem>
                           <FormLabel>Data de admissão</FormLabel>
@@ -1137,6 +1515,7 @@ export function UserManagement() {
                         </FormItem>
                       )} />
                     </div>
+                    {!createOnly ? (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                       <DerivedInfoCard label="Tempo de empresa" value={dpDateSummary.tenure} />
                       <DerivedInfoCard label="Idade" value={dpDateSummary.age} />
@@ -1148,34 +1527,68 @@ export function UserManagement() {
                         vacations={vacations}
                       />
                     </div>
+                    ) : null}
                   </>
                 )}
               </div>
             </Card>
 
             {/* ── Cartão 2: Comportamento no sistema ── */}
-            <Card className="max-w-5xl" style={{ padding: '1rem' }}>
-              <p className="text-sm font-semibold mb-3">Comportamento no sistema</p>
+            <Card className={createOnly ? "personal-create-user-card max-w-5xl" : "max-w-5xl"} style={{ padding: createOnly ? '0.625rem' : '1rem' }}>
+              <p className="mb-1.5 text-[11px] font-semibold">Comportamento no sistema</p>
               <div className="grid gap-2 md:grid-cols-3">
                 <FormField control={form.control} name="operacional" render={({ field }) => (
-                  <FormItem className="flex min-h-[82px] flex-row items-center justify-between gap-3 rounded-lg border p-3">
+                  <FormItem className="flex min-h-[46px] flex-row items-center justify-between gap-2 rounded-md border p-2">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-sm font-medium">Operacional</FormLabel>
-                      <FormDescription className="text-xs">Escalas e relatórios.</FormDescription>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel className="text-sm font-medium">Operacional</FormLabel>
+                        <FieldHelpTooltip
+                          title="Usuário operacional"
+                          description="Inclui o colaborador nas rotinas de operação, como escala de trabalho e relatórios operacionais. Não altera cargo, função ou perfil de permissão."
+                        />
+                      </div>
                     </div>
-                    <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-[11px] font-bold', field.value ? 'text-pink-700' : 'text-slate-600')}>
+                        {field.value ? 'Ativo' : 'Inativo'}
+                      </span>
+                      <FormControl>
+                        <Switch
+                          checked={!!field.value}
+                          onCheckedChange={field.onChange}
+                          className="border border-slate-400 shadow-inner data-[state=unchecked]:bg-slate-300 data-[state=checked]:border-pink-600 data-[state=checked]:bg-pink-600"
+                        />
+                      </FormControl>
+                    </div>
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="participatesInGoals" render={({ field }) => (
-                  <FormItem className="flex min-h-[82px] flex-row items-center justify-between gap-3 rounded-lg border p-3">
+                  <FormItem className="flex min-h-[46px] flex-row items-center justify-between gap-2 rounded-md border p-2">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-sm font-medium">Metas</FormLabel>
-                      <FormDescription className="text-xs">Acompanhamento.</FormDescription>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel className="text-sm font-medium">Metas</FormLabel>
+                        <FieldHelpTooltip
+                          title="Participa de metas"
+                          description="Inclui o colaborador nos acompanhamentos e seleções do módulo de metas. Não cria meta sozinho e não muda remuneração sem as regras do módulo."
+                        />
+                      </div>
                     </div>
-                    <FormControl><Switch checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-[11px] font-bold', field.value ? 'text-pink-700' : 'text-slate-600')}>
+                        {field.value ? 'Ativo' : 'Inativo'}
+                      </span>
+                      <FormControl>
+                        <Switch
+                          checked={!!field.value}
+                          onCheckedChange={field.onChange}
+                          className="border border-slate-400 shadow-inner data-[state=unchecked]:bg-slate-300 data-[state=checked]:border-pink-600 data-[state=checked]:bg-pink-600"
+                        />
+                      </FormControl>
+                    </div>
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
+                {showTransportVoucher ? (
+                  <FormField control={form.control} name="needsTransportVoucher" render={({ field }) => (
                   <FormItem className="rounded-lg border p-3 md:col-span-3">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-[220px] space-y-1">
@@ -1191,7 +1604,7 @@ export function UserManagement() {
                           </span>
                         </div>
                         <FormDescription className="text-xs">
-                          Proximo ato: {nextTransportVoucherActionLabel(currentTransportVoucherStatus).toLowerCase()} beneficio.
+                          Próximo ato: {nextTransportVoucherActionLabel(currentTransportVoucherStatus).toLowerCase()} benefício.
                         </FormDescription>
                       </div>
 
@@ -1245,14 +1658,16 @@ export function UserManagement() {
                       </div>
                     </div>
                   </FormItem>
-                )} />
+                  )} />
+                ) : null}
               </div>
             </Card>
 
             {/* ── Footer ── */}
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingUser(null); }}>Cancelar</Button>
-              <Button type="submit" disabled={isUploadingPhoto || (!!editingUser && !form.formState.isDirty)}>
+            <div className="flex justify-end gap-2 pt-0.5">
+              <Button type="button" variant="outline" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} onClick={closeForm}>Cancelar</Button>
+              <Button type="submit" className={createOnly ? "h-7 px-3 text-[11px]" : undefined} disabled={isUploadingPhoto || form.formState.isSubmitting || (!!editingUser && !form.formState.isDirty)}>
+                {form.formState.isSubmitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
                 {editingUser ? 'Salvar alterações' : 'Criar usuário'}
               </Button>
             </div>
@@ -1274,9 +1689,6 @@ export function UserManagement() {
               <Button variant="outline" className="h-10 rounded-xl border-slate-200 bg-white" onClick={() => setIsProfilesModalOpen(true)} disabled={!permissions.settings.manageProfiles}>
                 <Shield className="mr-2 h-4 w-4" /> Perfis
               </Button>
-              <Button onClick={handleAddNew} disabled={!permissions.settings.manageUsers} className="h-10 rounded-xl bg-pink-500 text-white hover:bg-pink-600">
-                <UserPlus className="mr-2 h-4 w-4" /> Novo usuário
-              </Button>
             </div>
           </div>
 
@@ -1290,13 +1702,13 @@ export function UserManagement() {
                     <p className="text-[11px] font-black uppercase text-slate-500">{stat.label}</p>
                     <span className={`h-8 w-1 rounded-full ${stat.color}`} />
                   </div>
-                  <div className="mt-2 flex items-end justify-between gap-3">
-                    <p className="text-3xl font-black text-slate-950">{stat.value}</p>
-                    <p className="text-xs font-black text-slate-500">{stat.pct}%</p>
+                  <div className="mt-2 flex items-baseline justify-between gap-3">
+                    <p className="flex items-baseline gap-1.5 whitespace-nowrap">
+                      <span className="text-3xl font-black text-slate-950">{stat.value}</span>
+                      <span className="text-xs font-semibold text-slate-400">/ {stat.total}</span>
+                    </p>
+                    <p className="shrink-0 text-xs font-black text-slate-500">{stat.pct}%</p>
                   </div>
-                  <p className="mt-1 text-xs font-semibold text-slate-400">
-                    {clickable ? "Ver inativos →" : `/ ${stat.total}`}
-                  </p>
                 </>
               );
               const cardClass = "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
@@ -1331,7 +1743,7 @@ export function UserManagement() {
                 <SelectValue placeholder="Perfil" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os Perfis</SelectItem>
+                <SelectItem value="all">Todos os perfis</SelectItem>
                 {profiles.map(profile => (
                   <SelectItem key={profile.id} value={profile.id}>{profile.name}</SelectItem>
                 ))}
@@ -1342,15 +1754,15 @@ export function UserManagement() {
                 <SelectValue placeholder="Quiosque" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os Quiosques</SelectItem>
+                <SelectItem value="all">Todos os quiosques</SelectItem>
                 {kiosks.map(kiosk => (
                   <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <div className="ml-auto flex items-center gap-2">
-              <span className="hidden text-xs font-black text-slate-500 sm:inline">{filteredUsers.length} de {users.length}</span>
-              <Button variant="ghost" className="h-10 rounded-xl" onClick={() => { setSearchTerm(''); setProfileFilter('all'); setKioskFilter('all'); }}>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <span className="hidden whitespace-nowrap text-xs font-black text-slate-500 sm:inline">{filteredUsers.length} de {users.length}</span>
+              <Button variant="ghost" className="h-10 shrink-0 whitespace-nowrap rounded-xl" onClick={() => { setSearchTerm(''); setProfileFilter('all'); setKioskFilter('all'); }}>
               <Eraser className="mr-2 h-4 w-4" /> Limpar
               </Button>
             </div>
@@ -1372,7 +1784,6 @@ export function UserManagement() {
                       </span>
                       <span className="hidden text-xs font-semibold text-slate-400 md:inline">Acesso total ao sistema</span>
                     </div>
-                    <button onClick={handleAddNew} className="text-xs font-black text-pink-500">+ Adicionar</button>
                   </div>
                   <div className="divide-y divide-slate-100">
                     {group.users.map(user => (
@@ -1419,7 +1830,7 @@ export function UserManagement() {
                         </div>
                         <div className="text-xs font-black text-slate-700">
                           {lastAccessLabel((user as any).lastLoginAt)}
-                          <p className="text-[10px] font-semibold text-slate-400">ultimo acesso</p>
+                          <p className="text-[10px] font-semibold text-slate-400">último acesso</p>
                         </div>
                         <div className="flex items-center justify-end gap-1">
                           {permissions.settings.manageUsers && (
@@ -1472,6 +1883,44 @@ export function UserManagement() {
         onPhotoCaptured={handlePhotoCaptured}
       />
 
+      <Dialog
+        open={!!createdUserNotice}
+        onOpenChange={(open) => {
+          if (open) return;
+          setCreatedUserNotice(null);
+          closeForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-md" hideClose>
+          <DialogHeader className="items-center text-center sm:text-center">
+            <div className={cn(
+              'mb-2 grid h-14 w-14 place-items-center rounded-full',
+              createdUserNotice?.emailSent ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+            )}>
+              {createdUserNotice?.emailSent ? <MailCheck className="h-7 w-7" /> : <CheckCircle2 className="h-7 w-7" />}
+            </div>
+            <DialogTitle>Cadastro inicial criado</DialogTitle>
+            <DialogDescription className="max-w-sm leading-relaxed">
+              {createdUserNotice?.emailSent
+                ? <>O cadastro de <strong className="text-slate-800">{createdUserNotice.username}</strong> foi criado e o link para definir a senha foi enviado para <strong className="text-slate-800">{createdUserNotice.email}</strong>.</>
+                : <>O cadastro de <strong className="text-slate-800">{createdUserNotice?.username}</strong> foi criado, mas o e-mail com o link de definição de senha não pôde ser enviado. Reenvie o acesso pela ação de redefinição de senha.</>}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-center">
+            <Button
+              type="button"
+              className="min-w-32 bg-pink-600 hover:bg-pink-700"
+              onClick={() => {
+                setCreatedUserNotice(null);
+                closeForm();
+              }}
+            >
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!transportVoucherDialog} onOpenChange={(open) => { if (!open) setTransportVoucherDialog(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1493,7 +1942,7 @@ export function UserManagement() {
             </div>
             {transportVoucherDialog?.toStatus === 'active' && (
               <div>
-                <Label>Valor diario (R$)</Label>
+                <Label>Valor diário (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -1510,7 +1959,7 @@ export function UserManagement() {
                 value={transportVoucherReason}
                 onChange={(event) => setTransportVoucherReason(event.target.value)}
                 rows={3}
-                placeholder="Ex.: colaborador solicitou adesao ao beneficio."
+                placeholder="Ex.: colaborador solicitou adesão ao benefício."
               />
             </div>
           </div>
@@ -1548,34 +1997,53 @@ export function UserManagement() {
               <button
                 type="button"
                 onClick={() => setInactivationMode('contract_termination')}
+                disabled={!contractTerminationAvailable}
                 className={cn(
-                  'rounded-lg border p-4 text-left transition-colors',
+                  'rounded-lg border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-55',
                   inactivationMode === 'contract_termination' ? 'border-pink-300 bg-pink-50' : 'border-slate-200 bg-white hover:bg-slate-50'
                 )}
               >
-                <p className="text-sm font-semibold text-slate-900">Término do contrato</p>
-                <p className="mt-1 text-xs text-slate-500">Registra data, tipo de demissão e observações.</p>
+                <p className="text-sm font-semibold text-slate-900">{terminationCopy.action}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {contractTerminationAvailable
+                    ? `Vínculo: ${employmentRelationshipLabel(selectedTerminationRelationship)}.`
+                    : selectedTerminationRelationship === 'internship'
+                      ? 'O fluxo específico de estágio será implementado posteriormente.'
+                      : 'Defina o tipo de vínculo antes de registrar o encerramento.'}
+                </p>
               </button>
             </div>
 
             {inactivationMode === 'contract_termination' && (
               <div className="grid gap-4 rounded-lg border bg-slate-50/70 p-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Label>{selectedTerminationRelationship === 'pj' ? 'CNPJ da contratante' : 'CNPJ empregador'}</Label>
+                  <Select value={terminationEmployerUnitId} onValueChange={setTerminationEmployerUnitId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a empresa responsável pelo vínculo" /></SelectTrigger>
+                    <SelectContent>
+                      {units.filter((unit) => CnpjValidator.validate(unit.cnpj ?? '').valid).map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-xs text-slate-500">{selectedTerminationRelationship === 'pj' ? 'O CNPJ será validado contra o contrato assinado antes da abertura do distrato.' : 'A unidade de trabalho permanece separada da empregadora jurídica.'}</p>
+                </div>
                 <div>
-                  <Label>Data da demissão</Label>
+                  <Label>{terminationCopy.dateLabel}</Label>
                   <Input type="date" value={terminationDate} onChange={(event) => setTerminationDate(event.target.value)} />
                 </div>
                 <div>
-                  <Label>Tipo de demissão</Label>
-                  <Select value={terminationReason} onValueChange={(value) => { setTerminationReason(value); if (value !== 'Dispensa por justa causa') setTerminationCause(''); }}>
+                  <Label>{terminationCopy.reasonLabel}</Label>
+                  <Select value={terminationReason} onValueChange={(value) => { setTerminationReason(value); if (!requiresTerminationSubtype(value)) setTerminationCause(''); }}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      {TERMINATION_REASONS.map((reason) => (
+                      {availableTerminationReasons.map((reason) => (
                         <SelectItem key={reason} value={reason}>{reason}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                {terminationReason === 'Dispensa por justa causa' && (
+                {requiresTerminationSubtype(terminationReason) && (
                   <div className="sm:col-span-2">
                     <Label>Tipo de justa causa</Label>
                     <Select value={terminationCause} onValueChange={setTerminationCause}>

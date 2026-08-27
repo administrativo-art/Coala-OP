@@ -16,6 +16,7 @@ import {
 import type {
   DPUnit,
   DPUnitGroup,
+  DPUnitOrganization,
   DPShiftDefinition,
   DPSchedule,
   DPVacationRecord,
@@ -69,7 +70,7 @@ const SCOPE_RESOURCES: Record<DPScope, DPResourceKey[]> = {
   settings: ['units', 'shiftDefs', 'vacations', 'calendars'],
   schedules: ['units', 'shiftDefs', 'schedules', 'calendars'],
   vacations: ['units', 'vacations'],
-  collaborators: ['shiftDefs'],
+  collaborators: ['units', 'shiftDefs', 'vacations'],
   goals: ['units', 'shiftDefs', 'schedules'],
 };
 
@@ -84,6 +85,7 @@ function getDPScope(pathname: string | null): DPScope {
   if (pathname.startsWith('/dashboard/dp')) return 'dashboard';
   if (pathname.startsWith('/dashboard/collaborator')) return 'goals';
   if (pathname.startsWith('/dashboard/goals')) return 'goals';
+  if (pathname === '/dashboard') return 'dashboard';
   return 'inactive';
 }
 
@@ -159,6 +161,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       (['units', 'shiftDefs', 'schedules', 'vacations', 'calendars'] as DPResourceKey[]).forEach(deactivateResource);
       store.setUnits([]);
       store.setUnitGroups([]);
+      store.setUnitOrganizations([]);
       store.setShiftDefinitions([]);
       store.setSchedules([]);
       store.setVacations([]);
@@ -258,6 +261,68 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    let serverBootstrapPromise: Promise<void> | null = null;
+
+    const loadServerBootstrap = (reason: string) => {
+      if (serverBootstrapPromise) return serverBootstrapPromise;
+
+      serverBootstrapPromise = (async () => {
+        try {
+          const token = await firebaseUser.getIdToken();
+          const response = await fetch('/api/dp/bootstrap', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            cache: 'no-store',
+          });
+
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error ?? 'Falha ao carregar bootstrap do DP.');
+          }
+
+          const payload = await response.json();
+
+          if (Array.isArray(payload.units)) {
+            store.setUnits(payload.units as DPUnit[]);
+          }
+          if (Array.isArray(payload.unitGroups)) {
+            store.setUnitGroups(payload.unitGroups as DPUnitGroup[]);
+          }
+          if (Array.isArray(payload.unitOrganizations)) {
+            store.setUnitOrganizations(payload.unitOrganizations as DPUnitOrganization[]);
+          }
+          if (Array.isArray(payload.shiftDefinitions)) {
+            store.setShiftDefinitions(
+              (payload.shiftDefinitions as DPShiftDefinition[]).map((definition) => ({
+                ...definition,
+                daysOfWeek: normalizeDaysOfWeek(definition.daysOfWeek),
+              }))
+            );
+          }
+          if (Array.isArray(payload.schedules)) {
+            store.setSchedules(payload.schedules as DPSchedule[]);
+          }
+          if (Array.isArray(payload.vacations)) {
+            store.setVacations(payload.vacations as DPVacationRecord[]);
+          }
+          if (Array.isArray(payload.calendars)) {
+            store.setCalendars(payload.calendars as DPCalendar[]);
+          }
+
+          requiredResources.forEach((resource) => markResolved(resource, 'fallback'));
+        } catch (error) {
+          console.error(`[DPProvider] Server bootstrap fallback failed after ${reason}.`, error);
+          requiredResources.forEach((resource) => {
+            const message = normalizeResourceError(resource, error, 'Falha ao carregar dados do DP.');
+            markFailed(resource, message);
+          });
+        }
+      })();
+
+      return serverBootstrapPromise;
+    };
+
     const registerResource = <T extends DocumentData>({
       resource,
       queryRef,
@@ -282,6 +347,11 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
           applySnapshot(snapshot);
           markResolved(resource, 'fallback');
         } catch (error) {
+          if (resource === 'units') {
+            resolved = true;
+            await loadServerBootstrap(`${resource} client fallback`);
+            return;
+          }
           const message = normalizeResourceError(resource, error, errorMessage);
           console.error(`[DPProvider] Fallback fetch failed for ${resource}.`, error);
           markFailed(resource, message);
@@ -300,6 +370,12 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           window.clearTimeout(fallbackTimeoutId);
+          if (resource === 'units') {
+            resolved = true;
+            logSubscriptionError(resource, error);
+            void loadServerBootstrap(`${resource} subscription`);
+            return;
+          }
           const message = normalizeResourceError(resource, error, errorMessage);
           logSubscriptionError(resource, error);
           markFailed(resource, message);
@@ -312,6 +388,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     if (requiredResources.has('units')) {
       const unitsQuery = query(collection(db, 'dp_units'), orderBy('name'));
       const unitGroupsQuery = query(collection(db, 'dp_unitGroups'), orderBy('name'));
+      const unitOrganizationsQuery = query(collection(db, 'dp_unitOrganizations'), orderBy('name'));
 
       registerResource({
         resource: 'units',
@@ -329,10 +406,24 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           console.error('[DPProvider] Failed to subscribe to dp_unitGroups.', error);
+          void loadServerBootstrap('dp_unitGroups subscription');
         }
       );
 
       subscriptions.push(unsubscribeGroups);
+
+      const unsubscribeOrganizations = onSnapshot(
+        unitOrganizationsQuery,
+        (snapshot) => {
+          store.setUnitOrganizations(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as DPUnitOrganization)));
+        },
+        (error) => {
+          console.error('[DPProvider] Failed to subscribe to dp_unitOrganizations.', error);
+          void loadServerBootstrap('dp_unitOrganizations subscription');
+        }
+      );
+
+      subscriptions.push(unsubscribeOrganizations);
 
       const groupsFallbackTimeoutId = window.setTimeout(async () => {
         try {
@@ -340,10 +431,23 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
           store.setUnitGroups(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as DPUnitGroup)));
         } catch (error) {
           console.error('[DPProvider] Fallback fetch failed for dp_unitGroups.', error);
+          void loadServerBootstrap('dp_unitGroups client fallback');
         }
       }, 4000);
 
       timeouts.push(groupsFallbackTimeoutId);
+
+      const organizationsFallbackTimeoutId = window.setTimeout(async () => {
+        try {
+          const snapshot = await getDocs(unitOrganizationsQuery);
+          store.setUnitOrganizations(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as DPUnitOrganization)));
+        } catch (error) {
+          console.error('[DPProvider] Fallback fetch failed for dp_unitOrganizations.', error);
+          void loadServerBootstrap('dp_unitOrganizations client fallback');
+        }
+      }, 4000);
+
+      timeouts.push(organizationsFallbackTimeoutId);
     }
 
     registerResource({

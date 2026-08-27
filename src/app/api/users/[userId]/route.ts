@@ -1,17 +1,37 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { Timestamp } from "firebase-admin/firestore";
 
+import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
+import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
+import { recordTransportVoucherDecision } from "@/features/hr/lib/transport-voucher-decision.server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
+import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { canDelegateUnitAccess } from "@/lib/unit-access";
+import { assertEmployeeUnitAccess } from "@/features/hr/lib/employee-document-access-server";
 
 const MANAGE_USERS_ONLY_FIELDS = new Set([
   "profileId",
-  "isDefaultAdmin",
   "isActive",
   "inactivationType",
   "terminationReason",
   "terminationCause",
   "terminationNotes",
   "terminationDate",
+  "unitAccessScope",
+  "unitAccessUnitIds",
+]);
+
+const UNIT_ASSIGNMENT_FIELDS = new Set([
+  "unitId",
+  "unitIds",
+  "assignedKioskIds",
+  "unitAccessScope",
+  "unitAccessUnitIds",
+]);
+
+const DEFAULT_ADMIN_ONLY_FIELDS = new Set([
+  "isDefaultAdmin",
 ]);
 
 const SERVER_ONLY_FIELDS = new Set([
@@ -21,6 +41,29 @@ const SERVER_ONLY_FIELDS = new Set([
   "passwordChangedAt",
   "createdAt",
   "updatedAt",
+  "hrEmployeeId",
+  "personRecordType",
+  "profileCompliance",
+]);
+
+const COLLABORATOR_CORE_FIELDS = new Set([
+  "jobRoleId",
+  "functionId",
+  "jobFunctionIds",
+  "unitId",
+  "unitIds",
+  "assignedKioskIds",
+  "responsibleUnitIds",
+  "unitAccessScope",
+  "unitAccessUnitIds",
+  "shiftDefinitionId",
+  "operational",
+  "operacional",
+  "participatesInGoals",
+  "loginRestrictionEnabled",
+  "needsTransportVoucher",
+  "transportVoucherValue",
+  "jobRoleProfileSyncDisabled",
 ]);
 
 function cleanPayload(value: unknown): unknown {
@@ -37,6 +80,29 @@ function cleanPayload(value: unknown): unknown {
   }
 
   return value;
+}
+
+function hasCollaboratorCoreFields(payload: Record<string, unknown>) {
+  return Object.keys(payload).some((field) => COLLABORATOR_CORE_FIELDS.has(field));
+}
+
+function hasOwn(payload: Record<string, unknown>, field: string) {
+  return Object.prototype.hasOwnProperty.call(payload, field);
+}
+
+function comparable(value: unknown) {
+  if (value && typeof value === "object" && "seconds" in value && "nanoseconds" in value) {
+    return value;
+  }
+  return value ?? null;
+}
+
+function valuesDiffer(left: unknown, right: unknown) {
+  return JSON.stringify(comparable(left)) !== JSON.stringify(comparable(right));
+}
+
+function isProtectedUser(user: Record<string, unknown>) {
+  return user.username === "Tiago Brasil" || user.email === "administrativo@coalas.com";
 }
 
 export async function PATCH(
@@ -66,9 +132,30 @@ export async function PATCH(
       delete payload[field];
     }
 
-    const restrictedFields = Object.keys(payload).filter((field) =>
-      MANAGE_USERS_ONLY_FIELDS.has(field)
+    const userRef = dbAdmin.collection("users").doc(userId);
+    const existingUserSnap = await userRef.get();
+    const existingUser = existingUserSnap.data() ?? {};
+    if (!existingUserSnap.exists) {
+      return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
+    }
+    await assertEmployeeUnitAccess(actor, userId);
+    const unitAssignmentChanged = Object.keys(payload).some((field) =>
+      UNIT_ASSIGNMENT_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
     );
+
+    const restrictedFields = Object.keys(payload).filter((field) =>
+      MANAGE_USERS_ONLY_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
+    );
+    const defaultAdminOnlyFields = Object.keys(payload).filter((field) =>
+      DEFAULT_ADMIN_ONLY_FIELDS.has(field) && valuesDiffer(payload[field], existingUser[field])
+    );
+
+    if (defaultAdminOnlyFields.length > 0 && !actor.isDefaultAdmin) {
+      return NextResponse.json(
+        { error: "Somente o administrador padrão pode alterar privilégios administrativos." },
+        { status: 403 }
+      );
+    }
 
     if (restrictedFields.length > 0 && !canManageUsers) {
       return NextResponse.json(
@@ -77,7 +164,109 @@ export async function PATCH(
       );
     }
 
-    await dbAdmin.collection("users").doc(userId).set(payload, { merge: true });
+    if (hasCollaboratorCoreFields(payload)) {
+      const collaboratorCore = await resolveCollaboratorCore(payload, {
+        currentUser: existingUser,
+        protectedUser: isProtectedUser(existingUser),
+        syncProfile: true,
+      });
+      Object.assign(payload, collaboratorCore.userPatch);
+    }
+
+    if (
+      unitAssignmentChanged &&
+      !canDelegateUnitAccess(
+        actor.userDoc,
+        { ...existingUser, ...payload },
+        { isDefaultAdmin: actor.isDefaultAdmin },
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Você não pode atribuir unidades ou um escopo maior que o seu próprio." },
+        { status: 403 },
+      );
+    }
+
+    if (
+      !actor.isDefaultAdmin &&
+      typeof payload.profileId === "string" &&
+      payload.profileId.trim() &&
+      valuesDiffer(payload.profileId.trim(), existingUser.profileId)
+    ) {
+      if (userId === actor.decoded.uid) {
+        return NextResponse.json(
+          { error: "Somente o administrador padrão pode alterar o próprio perfil de acesso." },
+          { status: 403 }
+        );
+      }
+      const targetProfile = await dbAdmin
+        .collection("profiles")
+        .doc(payload.profileId.trim())
+        .get();
+      if (!targetProfile.exists) {
+        return NextResponse.json({ error: "Perfil não encontrado." }, { status: 400 });
+      }
+      if (targetProfile.data()?.isDefaultAdmin === true) {
+        return NextResponse.json(
+          { error: "Somente o administrador padrão pode atribuir o perfil administrativo." },
+          { status: 403 }
+        );
+      }
+    }
+
+    await userRef.set(payload, { merge: true });
+
+    if (unitAssignmentChanged) {
+      const nextUser = { ...existingUser, ...payload };
+      const employeeId = typeof nextUser.hrEmployeeId === "string" && nextUser.hrEmployeeId.trim()
+        ? nextUser.hrEmployeeId.trim()
+        : typeof nextUser.registrationIdBizneo === "string" && nextUser.registrationIdBizneo.trim()
+          ? nextUser.registrationIdBizneo.trim()
+          : userId;
+      const employeeRef = hrDbAdmin.collection("employees").doc(employeeId);
+      const employeeSnap = await employeeRef.get();
+      if (employeeSnap.exists) {
+        const nextUnitIds = Array.isArray(nextUser.unitIds)
+          ? nextUser.unitIds.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+          : [];
+        const nextPrimaryUnitId = typeof nextUser.unitId === "string" && nextUser.unitId.trim()
+          ? nextUser.unitId.trim()
+          : nextUnitIds[0] ?? "sem-unidade";
+        await employeeRef.set({
+          unit_id: nextPrimaryUnitId,
+          unit_ids: nextUnitIds,
+          updated_at: Timestamp.now(),
+        }, { merge: true });
+      }
+    }
+
+    if (hasOwn(payload, "needsTransportVoucher") || hasOwn(payload, "transportVoucherValue")) {
+      const active = payload.needsTransportVoucher === true;
+      const latestHistory = Array.isArray(payload.transportVoucherHistory)
+        ? [...payload.transportVoucherHistory].reverse().find((entry) => entry && typeof entry === "object") as Record<string, unknown> | undefined
+        : undefined;
+      const decisionChanged =
+        active !== (existingUser.needsTransportVoucher === true)
+        || (active && valuesDiffer(payload.transportVoucherValue, existingUser.transportVoucherValue));
+      if (decisionChanged) {
+        await recordTransportVoucherDecision({
+          employeeId: userId,
+          active,
+          dailyValue: typeof payload.transportVoucherValue === "number" ? payload.transportVoucherValue : null,
+          effectiveDate: typeof latestHistory?.effectiveDate === "string" ? latestHistory.effectiveDate : null,
+          reason: typeof latestHistory?.reason === "string" ? latestHistory.reason : null,
+          entity: existingUser.unitId ?? existingUser.unitIds?.[0] ?? "CS",
+          actorId: actor.decoded.uid,
+        });
+      }
+      await syncTransportVoucherProjection({
+        userId,
+        active,
+        valueReais: typeof payload.transportVoucherValue === "number" ? payload.transportVoucherValue : null,
+        actorId: actor.decoded.uid,
+        source: "collaborator_data_contract_v1",
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

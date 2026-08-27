@@ -34,6 +34,8 @@ export type Classification = {
 };
 
 export type OperationalItemDestination = 'stock' | 'uniform' | 'asset';
+export type UniformCondition = 'novo' | 'usado';
+export type UniformStockStatus = 'disponivel' | 'em_avaliacao';
 
 export type OperationalItemCategory = {
   id: string;
@@ -103,6 +105,13 @@ export type LotEntry = {
   kioskId: string;
   quantity: number;
   reservedQuantity?: number;
+  condition?: UniformCondition;
+  uniformStockStatus?: UniformStockStatus;
+  workspaceId?: string;
+  apparelType?: string;
+  apparelSize?: string;
+  apparelColor?: string;
+  uniformCareInstructions?: InstructionSection[];
   imageUrl?: string;
   locationId?: string | null;
   locationName?: string | null;
@@ -121,6 +130,8 @@ export type MovementType =
     | 'SAIDA_DESCARTE_OUTROS'
     | 'SAIDA_CORRECAO'
     | 'ENTRADA_CORRECAO'
+    | 'ENTRADA_DEVOLUCAO_UNIFORME'
+    | 'MIGRACAO_ESTOQUE_UNIFORME'
     | 'TRANSFERENCIA_SAIDA' 
     | 'TRANSFERENCIA_ENTRADA' 
     | 'ENTRADA_ESTORNO' 
@@ -153,6 +164,7 @@ export type MovementRecord = {
   deliveredToUserId?: string;
   deliveredToUserName?: string;
   deliveredAt?: string;
+  itemClass?: 'uniform';
 };
 
 export type AssetStatus =
@@ -189,7 +201,12 @@ export type Asset = {
   currentKioskName?: string;
   department?: string;
   exactLocation?: string;
+  responsibleUserId?: string;
   responsibleName?: string;
+  responsibilityStatus?: 'assigned' | 'pending_assignment';
+  previousResponsibleUserId?: string;
+  previousResponsibleName?: string;
+  responsibilityVacatedAt?: string;
   inUse?: boolean;
   possessionStatus?: string;
   status: AssetStatus;
@@ -231,6 +248,9 @@ export type Asset = {
   imageUrl?: string;
   notes?: string;
   sourceType?: 'manual' | 'purchase_receipt';
+  plateStatus?: 'vinculada' | 'pendente';
+  plateLinkedAt?: string;
+  plateLinkedBy?: string;
   purchaseOrderId?: string;
   purchaseReceiptId?: string;
   purchaseReceiptItemId?: string;
@@ -307,6 +327,98 @@ export type UniformEvent = {
   apparelType?: string;
   apparelSize?: string;
   apparelColor?: string;
+  uniformCareInstructions?: InstructionSection[];
+  imageUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  workspaceId?: string;
+  assignmentId?: string;
+  sourceDeliveryEventId?: string;
+  issuedCondition?: UniformCondition;
+  uniformTransactionId?: string;
+  termDocumentId?: string;
+  termStoragePath?: string;
+  termContentHash?: string;
+  signatureStatus?: 'signed';
+  exchangedFromAssignmentId?: string;
+  exchangedToAssignmentId?: string;
+  exchangedFromProductId?: string;
+  exchangedFromProductName?: string;
+};
+
+export type UniformAssignmentStatus = 'em_posse' | 'devolvido_parcial' | 'devolvido';
+
+export type UniformAssignment = {
+  id: string;
+  workspaceId: string;
+  deliveryEventId: string;
+  sourceLotId: string;
+  productId: string;
+  productName: string;
+  collaboratorUserId: string;
+  collaboratorName: string;
+  issuedCondition: UniformCondition;
+  quantityDelivered: number;
+  quantityReturned: number;
+  quantityInPossession: number;
+  status: UniformAssignmentStatus;
+  deliveredAt: string;
+  apparelType?: string;
+  apparelSize?: string;
+  apparelColor?: string;
+  uniformCareInstructions?: InstructionSection[];
+  imageUrl?: string;
+  deliveryTransactionId?: string;
+  deliveryTermDocumentId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UniformTransactionType = 'delivery' | 'exchange' | 'return';
+
+export type UniformTransactionItem = {
+  direction: 'outgoing' | 'incoming';
+  assignmentId?: string;
+  lotId?: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  condition: UniformCondition | UniformReturnedCondition;
+  stockDisposition?: UniformStockDisposition;
+  apparelType?: string;
+  apparelSize?: string;
+  apparelColor?: string;
+};
+
+export type UniformTransaction = {
+  id: string;
+  workspaceId: string;
+  type: UniformTransactionType;
+  status: 'signed_committed';
+  collaboratorUserId: string;
+  collaboratorName: string;
+  occurredAt: string;
+  notes?: string;
+  items: UniformTransactionItem[];
+  eventIds: string[];
+  movementIds: string[];
+  assignmentIds: string[];
+  signatures: {
+    collaborator: { name: string; imageHash: string; capturedAt: string };
+    responsible: { name: string; userId: string; imageHash: string; capturedAt: string };
+  };
+  term: {
+    documentId: string;
+    templateId?: string;
+    fileName: string;
+    storagePath: string;
+    contentHash: string;
+    mimeType: 'application/pdf';
+    size: number;
+    archiveStatus: 'archived' | 'pending' | 'failed';
+  };
+  registeredByUserId: string;
+  registeredByUserName: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -520,6 +632,18 @@ export type PPO = {
   assemblyVideoUrl?: string;
 };
 
+export type InstructionSection = {
+  id: string;
+  name: string;
+  etapas: {
+    id: string;
+    text: string;
+    quantity?: number;
+    unit?: string;
+    imageUrl?: string;
+  }[];
+};
+
 
 export type ProductSimulation = {
   id: string;
@@ -571,6 +695,7 @@ export type PermissionSet = {
   stock: {
     view: boolean;
     inventoryControl: { view: boolean; addLot: boolean; editLot: boolean; writeDown: boolean; transfer: boolean; viewHistory: boolean; };
+    uniforms: { view: boolean; deliver: boolean; return: boolean; dispose: boolean; manageEvaluation: boolean; };
     // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
     stockCount: { view: boolean; perform: boolean; approve: boolean; requestItem: boolean; };
     audit: { view: boolean; start: boolean; approve: boolean; };
@@ -591,7 +716,7 @@ export type PermissionSet = {
       export: boolean;
     };
   };
-  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; };
+  settings: { view: boolean; manageUsers: boolean; manageKiosks: boolean; manageProfiles: boolean; manageLabels: boolean; viewAiCosts: boolean; };
   tasks: { view: boolean; manage: boolean; };
   goals: { view: boolean; manage: boolean; };
   help: { view: true };
@@ -609,9 +734,8 @@ export type PermissionSet = {
     view: boolean;
     schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
-    collaborators: { view: boolean; add: boolean; edit: boolean; terminate: boolean; };
-    checklists: { view: boolean; operate: boolean; create: boolean; manageTemplates: boolean; viewAnalytics: boolean; };
-    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; manageChecklistTypes: boolean; };
+    collaborators: { view: boolean; ownProfileOnly?: boolean; add: boolean; edit: boolean; terminate: boolean; syncProfile: boolean; };
+    settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; };
     rh_role?: 'employee' | 'manager' | 'admin';
     rh?: {
       collaborators: { view: boolean; edit: boolean; };
@@ -625,6 +749,16 @@ export type PermissionSet = {
     financialFlow: boolean;
     dre: boolean;
     expenses: { view: boolean; create: boolean; edit: boolean; pay: boolean; import: boolean; delete: boolean; };
+    inbox: { view: boolean; analyze: boolean; link: boolean; discard: boolean; };
+    audits: { view: boolean; import: boolean; edit: boolean; ignore: boolean; effectuate: boolean; manage: boolean; };
+    reconciliation: { view: boolean; confirm: boolean; correct: boolean; classifyAdjustments: boolean; administer: boolean; };
+    cardStatements: { view: boolean; import: boolean; audit: boolean; close: boolean; reconcile: boolean; };
+    personnelCosts: { view: boolean; edit: boolean; export: boolean; };
+    beneficiaries: { view: boolean; viewMaskedPaymentData: boolean; managePaymentData: boolean; };
+    paymentRequests: { view: boolean; create: boolean; authorize: boolean; submit: boolean; refresh: boolean; viewProof: boolean; };
+    cashClosures: { view: boolean; edit: boolean; approve: boolean; reopen: boolean; resync: boolean; };
+    cashDeposits: { view: boolean; issue: boolean; cancel: boolean; adjust: boolean; };
+    interIntegration: { manage: boolean; };
     settings: { view: boolean; manageAccountPlans: boolean; manageResultCenters: boolean; manageBankAccounts: boolean; manageImportAliases: boolean; manageExpenseDescriptions: boolean; };
   };
   purchasing: {
@@ -645,6 +779,18 @@ export type PermissionSet = {
     roles: { view: boolean; manage: boolean; propagate: boolean };
     functions: { view: boolean; manage: boolean };
     navigation: { view: boolean };
+    formalization: {
+      view: boolean;
+      onboarding: { manage: boolean };
+      aso: { view: boolean; manage: boolean };
+      accountant: { view: boolean; manage: boolean };
+      documents: { view: boolean; generate: boolean; review: boolean };
+      companyDocuments: { view: boolean; manage: boolean };
+      templates: { view: boolean; manage: boolean; publish: boolean };
+      signatures: { view: boolean; send: boolean };
+      consents: { view: boolean; manage: boolean };
+      sensitiveData: { view: boolean };
+    };
   };
   recruitment: {
     view: boolean;
@@ -661,6 +807,22 @@ export type PermissionSet = {
       manage_templates: boolean;
       view_analytics: boolean;
     };
+    analytics: {
+      view: boolean;
+      manage_taxonomy: boolean;
+      configure_templates: boolean;
+      view_occurrences: boolean;
+      edit_occurrences_admin: boolean;
+      export_occurrences: boolean;
+      reprocess_occurrences: boolean;
+      view_personal_targets: boolean;
+      export_personal_targets: boolean;
+      view_collaborator_rankings: boolean;
+      manage_retention_policy: boolean;
+      manage_task_rules: boolean;
+      resolve_occurrences: boolean;
+      validate_occurrence_resolution: boolean;
+    };
     projects: Record<
       string,
       { view: boolean; operate: boolean; manage: boolean }
@@ -675,10 +837,28 @@ export type Profile = {
     permissions: Partial<PermissionSet>;
 }
 
+export type UserPdvAccess = {
+  externalUserId: string;
+  unitId?: string | null;
+  unitName?: string | null;
+  filialId: string;
+  filialName?: string | null;
+  profileId: string;
+  profileName?: string | null;
+  status: 'active' | 'inactive' | 'error';
+  updatedAt?: string | null;
+};
+
+export type UnitAccessScope = 'linked' | 'selected' | 'all';
+export type PersonRecordType = 'employee' | 'director' | 'partner' | 'pj' | 'internship' | 'test';
+
 export type User = {
   id: string; // Firebase Auth UID
   username: string;
   email: string;
+  phone?: string;
+  phoneVerifiedAt?: Timestamp | string;
+  phoneVerificationSource?: 'hr' | 'onboarding' | 'user';
   profileId: string;
   assignedKioskIds: string[];
   avatarUrl?: string;
@@ -687,18 +867,55 @@ export type User = {
   operacional?: boolean;
   participatesInGoals?: boolean;
   pdvOperatorIds?: { [kioskId: string]: number };
+  pdvAccessProfileId?: string;
+  pdvAccessProfileName?: string;
+  pdvAccessFilialId?: string;
+  pdvAccessFilialName?: string;
+  pdvAccesses?: UserPdvAccess[];
   // Departamento Pessoal (RH)
+  /** ID canônico do cadastro em coala-rh/employees. */
+  hrEmployeeId?: string;
+  /** Natureza cadastral da pessoa; não concede permissões de acesso. */
+  personRecordType?: PersonRecordType;
+  profileCompliance?: {
+    status: 'pending' | 'complete' | 'overdue';
+    policyVersion: number;
+    missingFields?: string[];
+    invalidFields?: string[];
+    evaluatedAt?: Timestamp | string | null;
+    completedAt?: Timestamp | string | null;
+    lastConfirmedAt?: Timestamp | string | null;
+    nextReviewAt?: Timestamp | string | null;
+  };
   registrationIdBizneo?: string;   // matrícula no Bizneo HR
   registrationIdPdv?: string;      // código no PDV
   jobRoleId?: string;
   jobRoleName?: string;
   jobFunctionIds?: string[];
   jobFunctionNames?: string[];
+  employmentRelationshipType?: 'clt' | 'pj' | 'internship';
+  onboardingId?: string | null;
+  /** Unidade jurídica responsável pelo vínculo; não se confunde com a unidade de trabalho. */
+  employerUnitId?: string | null;
+  employerUnitName?: string | null;
+  employerCnpj?: string | null;
+  employerAddress?: string | null;
+  responsibleUnitIds?: string[];
+  /**
+   * Limite territorial do acesso aos dados.
+   * Ausente equivale a `linked`, preservando o comportamento legado.
+   */
+  unitAccessScope?: UnitAccessScope;
+  /** Usado somente quando unitAccessScope === `selected`. */
+  unitAccessUnitIds?: string[];
   jobRoleProfileSyncDisabled?: boolean;
   mustChangePassword?: boolean;
   passwordChangedAt?: Timestamp;
   lastLoginAt?: Timestamp;
-  unitIds?: string[];               // unidade(s) de trabalho
+  /** Unidade principal de lotação, usada como referência financeira. */
+  unitId?: string;
+  /** Unidades em que a pessoa pode ser escalada e atuar. */
+  unitIds?: string[];
   admissionDate?: Timestamp;
   birthDate?: Timestamp;
   shiftDefinitionId?: string;
@@ -728,11 +945,19 @@ export type User = {
     cause?: string | null;
     notes?: string | null;
     terminationDate?: string | null;
+    employmentRelationshipType?: 'clt' | 'pj' | 'internship' | null;
   }>;
   terminationDate?: Timestamp;
   terminationReason?: string;
   terminationCause?: string;
   terminationNotes?: string;
+  terminationRelationshipType?: 'clt' | 'pj' | 'internship';
+  terminationProcessId?: string;
+  terminationEmployerUnitId?: string | null;
+  terminationEmployerName?: string | null;
+  terminationEmployerCnpj?: string | null;
+  terminationEmployerEntityId?: string | null;
+  employmentStatus?: 'active' | 'terminated';
 };
 
 export type HrQuestionType =
@@ -745,29 +970,769 @@ export type HrQuestionType =
   | "location"
   | "file_upload";
 
-export type HrQuestionWeight = "low" | "medium" | "high";
+export type HrQuestionWeight = "low" | "medium" | "high" | "critical";
+
+export type RecruitmentCriterionCategory =
+  | "availability"
+  | "experience"
+  | "technical"
+  | "behavioral"
+  | "interest"
+  | "retention"
+  | "differentials";
+
+export type RecruitmentQuestionScoringUse = "informational" | "scored" | "eliminatory";
+export type RecruitmentScoringSourceLayer = "role" | "function" | "opening";
+export type RecruitmentCompositionPreset =
+  | "role_100"
+  | "role_70_function_30"
+  | "role_60_function_40"
+  | "role_50_function_50";
+export type RecruitmentQuestionConditionOperator =
+  | "equals"
+  | "not_equals"
+  | "includes"
+  | "answered"
+  | "not_answered";
+
+export type RecruitmentQuestionCondition = {
+  questionId: string;
+  operator: RecruitmentQuestionConditionOperator;
+  value?: unknown;
+};
+
+export type RecruitmentQuestionScoringConfig = {
+  criterionCode?: string;
+  criterionLabel?: string;
+  category?: RecruitmentCriterionCategory;
+  groupId?: string;
+  groupName?: string;
+  use?: RecruitmentQuestionScoringUse;
+  importance?: HrQuestionWeight;
+  justification?: string;
+  sourceLayer?: RecruitmentScoringSourceLayer;
+  answerFactors?: Record<string, number>;
+  finalWeight?: number;
+  rubric?: Array<{
+    factor: number;
+    label: string;
+    description?: string;
+  }>;
+};
+
+export type RecruitmentQuestionScoringSnapshot = RecruitmentQuestionScoringConfig & {
+  finalWeight: number;
+  layerWeight: number;
+  originalLayerWeight: number;
+  duplicateOf?: string | null;
+  duplicateStrategy?: string | null;
+  alerts?: string[];
+};
+
+export type RecruitmentScoringAlertSeverity = "info" | "warning" | "blocking";
+
+export type RecruitmentScoringAlert = {
+  code: string;
+  message: string;
+  severity: RecruitmentScoringAlertSeverity;
+  questionId?: string;
+  criterionCode?: string;
+};
+
+export type RecruitmentScoringSnapshot = {
+  version: number;
+  preset: RecruitmentCompositionPreset;
+  totalPoints: number;
+  layerWeights: Record<RecruitmentScoringSourceLayer, number>;
+  questionWeights: Record<string, RecruitmentQuestionScoringSnapshot>;
+  categoryTotals: Partial<Record<RecruitmentCriterionCategory, number>>;
+  duplicateCriteria: Array<{
+    criterionCode: string;
+    keptQuestionId: string;
+    mergedQuestionIds: string[];
+    strategy: string;
+  }>;
+  alerts: RecruitmentScoringAlert[];
+  createdAt: string;
+};
+
+export type RecruitmentScoringAlertAcknowledgement = {
+  note: string;
+  alertCodes: string[];
+  acknowledgedAt: string;
+  acknowledgedBy: string;
+};
+
+export type RecruitmentEligibilityStatus = "eligible" | "not_eligible" | "not_evaluated";
+
+export type RecruitmentQuestionScore = {
+  questionId: string;
+  criterionCode?: string;
+  category?: RecruitmentCriterionCategory;
+  label: string;
+  weight: number;
+  factor: number;
+  points: number;
+  answer?: unknown;
+  eliminatory: boolean;
+  failedEliminatory: boolean;
+};
+
+export type RecruitmentScoreResult = {
+  status: RecruitmentEligibilityStatus;
+  rankingEligible: boolean;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  failedEliminatory: RecruitmentQuestionScore[];
+  questionScores: RecruitmentQuestionScore[];
+  categoryScores: Partial<Record<RecruitmentCriterionCategory, { points: number; max: number; percentage: number }>>;
+  calculatedAt: string;
+};
 
 export type HrFormQuestion = {
   id: string;
   text: string;
   type: HrQuestionType;
+  sectionId?: string;
+  sectionTitle?: string;
+  sectionOrder?: number;
+  parentQuestionId?: string;
+  subquestionOrder?: number;
   required: boolean;
+  active?: boolean;
   scored: boolean;
   weight: HrQuestionWeight;
   eliminatory: boolean;
   expectedAnswer?: unknown;
   tags?: string[];
   config?: Record<string, unknown>;
+  conditions?: RecruitmentQuestionCondition[];
+  scoring?: RecruitmentQuestionScoringConfig;
+};
+
+export type RecruitmentFormKind = 'talent_pool' | 'job_opening';
+export type RecruitmentFormStatus = 'draft' | 'published';
+
+export type RecruitmentFormConfig = {
+  id: string;
+  kind: RecruitmentFormKind;
+  title: string;
+  description?: string;
+  status: RecruitmentFormStatus;
+  questions: HrFormQuestion[];
+  consentText?: string;
+  lgpdContractText?: string;
+  successMessage?: string;
+  submitLabel?: string;
+  version: number;
+  createdAt?: string;
+  updatedAt: string;
+  updatedBy?: string;
+  publishedAt?: string | null;
 };
 
 export type JobRoleSalaryRange = {
+  label?: string;
   min?: number;
   max?: number;
   currency: string;
   visible?: boolean;
 };
 
-export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'technical_test' | 'offer' | 'hired' | 'rejected' | 'withdrawn';
+export type JobFunctionSalaryCalculation = {
+  type: 'base_plus_percentage';
+  baseFunctionId: string;
+  additionalPercentage: number;
+};
+
+export type RecruitmentDisplaySettings = {
+  locationLabel?: string;
+  workType?: 'presencial' | 'remoto' | 'hibrido';
+  contractTypeLabel?: string;
+  deadlineLabel?: string;
+  buttonText?: string;
+  successMessage?: string;
+  lgpdContractText?: string;
+};
+
+export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'technical_test' | 'offer' | 'hired' | 'rejected' | 'withdrawn' | 'talent_pool';
+
+export type CandidateDecisionAction =
+  | 'created'
+  | 'advanced'
+  | 'status_changed'
+  | 'hired'
+  | 'rejected'
+  | 'withdrawn'
+  | 'talent_pool';
+
+export type CandidateStageHistoryEntry = {
+  id: string;
+  fromStatus?: CandidateStatus | null;
+  toStatus: CandidateStatus;
+  action: CandidateDecisionAction;
+  note?: string | null;
+  actorId?: string | null;
+  actorEmail?: string | null;
+  createdAt: string;
+};
+
+export type RecruitmentStage = {
+  id: CandidateStatus;
+  label: string;
+  order: number;
+  required?: boolean;
+  dueDays?: number | null;
+};
+
+export type OnboardingStageId =
+  | 'documents'
+  | 'document_review'
+  | 'accountant'
+  | 'signature_preparation'
+  | 'signature'
+  | 'formalization_validation'
+  | 'integration'
+  | 'probation'
+  | 'done';
+
+export type OnboardingStage = {
+  id: OnboardingStageId;
+  label: string;
+  order: number;
+  required?: boolean;
+  dueDays?: number | null;
+};
+
+export type OnboardingDocumentTemplate = {
+  id: string;
+  label: string;
+  documentTypeCode?: string;
+  description?: string;
+  required?: boolean;
+  order?: number;
+};
+
+export type OnboardingDocument = OnboardingDocumentTemplate & {
+  status: 'pending' | 'received' | 'ai_approved' | 'review_required' | 'approved' | 'rejected';
+  fileUrl?: string | null;
+  filePath?: string | null;
+  fileHashSha256?: string | null;
+  receivedAt?: string | null;
+  approvedAt?: string | null;
+  updatedAt?: string | null;
+  note?: string | null;
+  extractedFields?: Record<string, unknown>;
+  fieldConfidences?: Record<string, number>;
+  promotedDocumentId?: string | null;
+  promotedAt?: string | null;
+  promotedBy?: string | null;
+};
+
+export type OnboardingFinalizationSettings = {
+  operational?: boolean;
+  participatesInGoals?: boolean;
+  loginRestrictionEnabled?: boolean;
+  needsTransportVoucher?: boolean;
+  transportVoucherValue?: number | null;
+  shiftDefinitionId?: string | null;
+};
+
+export type OnboardingTrainingItem = {
+  id: string;
+  label: string;
+  detail?: string | null;
+  status: 'pending' | 'current' | 'done';
+  order: number;
+  completedAt?: string | null;
+  createdAt?: string | null;
+};
+
+export type OnboardingFirstAccessState = {
+  status?: 'pending' | 'used' | 'revoked' | 'expired';
+  tokenId?: string | null;
+  createdAt?: string | null;
+  expiresAt?: string | null;
+  usedAt?: string | null;
+  createdBy?: string | null;
+};
+
+export type OnboardingAccessProvisioningState = {
+  status?: 'pending' | 'awaiting_delivery' | 'awaiting_password' | 'completed' | 'failed';
+  userCreatedAt?: string | null;
+  completedAt?: string | null;
+  operationalChecks?: {
+    odontoprev?: {
+      completed: boolean;
+      updatedAt: string;
+      updatedBy: string;
+    };
+    transportVoucherSystem?: {
+      completed: boolean;
+      updatedAt: string;
+      updatedBy: string;
+    };
+  };
+  email?: {
+    status?: 'not_sent' | 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed';
+    providerId?: string | null;
+    recipient?: string | null;
+    acceptedAt?: string | null;
+    deliveredAt?: string | null;
+    failedAt?: string | null;
+    lastEventAt?: string | null;
+    lastError?: string | null;
+  };
+};
+
+export type PjOnboardingStepId =
+  | 'contract_definition'
+  | 'provider_registration'
+  | 'registration_review'
+  | 'contract_preparation'
+  | 'contract_signature'
+  | 'financial_registration'
+  | 'access_configuration'
+  | 'provider_activation';
+
+export type PjOnboardingStepStatus = 'pending' | 'active' | 'completed' | 'correction_required';
+
+export type PjServiceScopeItem = {
+  id: string;
+  front: string;
+  deliverable: string;
+  order: number;
+};
+
+export type PjOnboardingWorkflow = {
+  version: 1;
+  currentStep: PjOnboardingStepId;
+  steps: Record<PjOnboardingStepId, {
+    status: PjOnboardingStepStatus;
+    completedAt?: string | null;
+    completedBy?: string | null;
+    note?: string | null;
+  }>;
+  provider: {
+    cnpj: string;
+    legalName: string;
+    tradeName?: string | null;
+    email: string;
+  };
+  terms: {
+    contractStartDate: string;
+    termType: 'fixed' | 'indefinite';
+    contractEndDate?: string | null;
+    monthlyValue: number;
+    paymentDay: number;
+    invoiceRequired: true;
+    serviceItems: PjServiceScopeItem[];
+  };
+  review?: {
+    status?: 'pending' | 'approved' | 'correction_required';
+    issues?: Array<{
+      id: string;
+      target: string;
+      message: string;
+      resolvedAt?: string | null;
+    }>;
+    reviewedAt?: string | null;
+    reviewedBy?: string | null;
+  };
+  contract?: {
+    status?: 'not_generated' | 'draft' | 'approved' | 'sent' | 'signed' | 'rejected' | 'failed';
+    version?: number;
+    storagePath?: string | null;
+    signedStoragePath?: string | null;
+    hashSha256?: string | null;
+    generatedAt?: string | null;
+    generatedBy?: string | null;
+    approvedAt?: string | null;
+    approvedBy?: string | null;
+    signatureRequestId?: string | null;
+    providerDocumentId?: string | null;
+    providerSignatures?: unknown[];
+    sentAt?: string | null;
+    signedAt?: string | null;
+    lastError?: string | null;
+    contractorRepresentative?: {
+      name?: string | null;
+      email?: string | null;
+      role?: string | null;
+      qualification?: string | null;
+      cpf?: string | null;
+      professionalId?: string | null;
+    };
+    signatureCity?: string | null;
+    forumCity?: string | null;
+  };
+  finance?: {
+    status?: 'pending' | 'submitted' | 'correction_required' | 'approved';
+    submittedAt?: string | null;
+    submittedBy?: string | null;
+    reviewedAt?: string | null;
+    reviewedBy?: string | null;
+    note?: string | null;
+  };
+  access?: {
+    status?: 'pending' | 'configured' | 'invitation_sent' | 'completed';
+    userName?: string | null;
+    userCpf?: string | null;
+    profileId?: string | null;
+    profileName?: string | null;
+    unitIds?: string[];
+    unitNames?: string[];
+    pdvRequired?: boolean;
+    pdvUnitId?: string | null;
+    pdvUnitName?: string | null;
+    pdvFilialId?: string | null;
+    pdvFilialName?: string | null;
+    pdvProfileId?: string | null;
+    pdvProfileName?: string | null;
+    configuredAt?: string | null;
+    configuredBy?: string | null;
+  };
+  activatedAt?: string | null;
+  activatedBy?: string | null;
+};
+
+export type OnboardingPrivacyAcceptance = {
+  noticeVersion: string;
+  noticeHash: string;
+  noticeTitle: string;
+  noticeSummary?: string;
+  noticeText: string;
+  acknowledgementText: string;
+  confirmationNote?: string;
+  acknowledged: true;
+  firstAcceptedAt: string;
+  lastConfirmedAt: string;
+  privacyNoticeSnapshotId?: string | null;
+  allergyNoticeVersion?: string | null;
+  allergyNoticeHash?: string | null;
+  allergyNoticeSnapshotId?: string | null;
+  allergyNoticeTitle?: string | null;
+  allergyNoticeContext?: string | null;
+  allergyAcknowledgementText?: string | null;
+  allergyConfirmationNote?: string | null;
+  allergyAcknowledged?: boolean;
+  allergyAcknowledgedAt?: string | null;
+  // Campos legados mantidos apenas para leitura de formalizações anteriores.
+  sensitiveDataConsentText?: string | null;
+  sensitiveDataTitle?: string | null;
+  sensitiveDataContext?: string | null;
+  sensitiveDataConsentAccepted?: boolean;
+  sensitiveDataConsentAcceptedAt?: string | null;
+  lastProtocol: string;
+};
+
+export type OnboardingProcess = {
+  id: string;
+  candidateId: string;
+  candidateName?: string | null;
+  candidateEmail?: string | null;
+  applicationId?: string | null;
+  jobOpeningId?: string | null;
+  jobRoleId?: string | null;
+  jobRoleName?: string | null;
+  functionId?: string | null;
+  functionName?: string | null;
+  employmentRelationshipType?: 'clt' | 'pj' | 'internship' | null;
+  unitId?: string | null;
+  unitName?: string | null;
+  employerUnitId?: string | null;
+  employerUnitName?: string | null;
+  employerCnpj?: string | null;
+  employerAddress?: string | null;
+  monthlySalary?: number | null;
+  monthlySalaryConfigured?: boolean;
+  shiftDefinitionId?: string | null;
+  shiftDefinitionName?: string | null;
+  expectedAdmissionDate?: string | null;
+  expectedAdmissionDateUpdatedAt?: string | null;
+  expectedAdmissionDateUpdatedBy?: string | null;
+  expectedAdmissionDateUpdatedByEmail?: string | null;
+  generateSignatureDocuments?: boolean;
+  collaboratorUserId?: string | null;
+  employeeId?: string | null;
+  publicToken?: string | null;
+  publicTokenClosedAt?: string | null;
+  publicTokenExpiresAt?: string | null;
+  publicTokenExtensionUsed?: boolean;
+  publicTokenExtendedAt?: string | null;
+  publicTokenExtendedBy?: string | null;
+  publicFormAnswers?: Record<string, unknown>;
+  publicFormSubmittedAt?: string | null;
+  publicFormLastSubmittedAt?: string | null;
+  publicFormRevision?: number | null;
+  identityCorrection?: {
+    status?: 'authorized' | 'consumed';
+    allowedFields?: Array<'fullName' | 'cpf'>;
+    version?: number | null;
+    reason?: string | null;
+    authorizedAt?: string | null;
+    authorizedBy?: string | null;
+    authorizedByEmail?: string | null;
+    consumedAt?: string | null;
+    submissionProtocol?: string | null;
+    changedFields?: Array<'fullName' | 'cpf'>;
+    clinicRevalidationRequired?: boolean | null;
+  } | null;
+  publicPrivacyAcceptance?: OnboardingPrivacyAcceptance | null;
+  consentimento_imagem_voz?: {
+    autorizado?: boolean;
+    status?: 'granted' | 'denied' | null;
+    decisionAt?: string | null;
+    respondido_em?: string | null;
+    termVersion?: string | null;
+  } | null;
+  asoWorkflow?: {
+    status?: 'pending' | 'request_validated' | 'process_started' | 'guide_generated' | 'guide_validated' | 'email_sent' | 'clinic_response_received' | 'appointment_pending_review' | 'appointment_confirmed' | 'candidate_notified' | 'awaiting_exam' | 'aso_received' | 'aso_under_review' | 'completed';
+    latestGuideId?: string | null;
+    latestGuideHashSha256?: string | null;
+    latestGuideGeneratedAt?: string | null;
+    latestGuideTemplateVersion?: string | null;
+    latestGuidePublicFormRevision?: number | null;
+    latestGuideRequiresRegeneration?: boolean | null;
+    clinicEntityId?: string | null;
+    paymentRequestId?: string | null;
+    paymentStatus?: 'draft' | 'awaiting_financial_authorization' | 'ready_to_submit' | 'submitting' | 'awaiting_bank_approval' | 'processing' | 'paid' | 'rejected' | 'approval_expired' | 'failed' | 'cancelled' | null;
+    paymentProofStoragePath?: string | null;
+    paymentConfirmedAt?: string | null;
+    startedAt?: string | null;
+    startedBy?: string | null;
+    startedByEmail?: string | null;
+    appointmentStatus?: 'not_requested' | 'awaiting_clinic' | 'confirmed';
+    appointmentAt?: string | null;
+    guideValidation?: {
+      documentId?: string | null;
+      validatedAt?: string | null;
+      validatedBy?: string | null;
+      validatedByEmail?: string | null;
+    } | null;
+    requestValidation?: {
+      id?: string | null;
+      fingerprint?: string | null;
+      candidateName?: string | null;
+      candidateEmail?: string | null;
+      candidateCpf?: string | null;
+      jobFunction?: string | null;
+      expectedAdmissionDate?: string | null;
+      examType?: 'admission' | 'dismissal';
+      companyName?: string | null;
+      companyCnpj?: string | null;
+      companyAddress?: string | null;
+      companyContacts?: string | null;
+      clinicEntityId?: string | null;
+      clinicName?: string | null;
+      clinicEmail?: string | null;
+      clinicPrice?: number | null;
+      clinicLocation?: import('@/features/hr/aso/clinic-location').AsoClinicLocation | null;
+      validatedAt?: string | null;
+      validatedBy?: string | null;
+      validatedByEmail?: string | null;
+    } | null;
+    formDataValidation?: {
+      submissionAt?: string | null;
+      revision?: number | null;
+      validatedAt?: string | null;
+      validatedBy?: string | null;
+      validatedByEmail?: string | null;
+    } | null;
+    clinic?: {
+      email?: string | null;
+      name?: string | null;
+      location?: import('@/features/hr/aso/clinic-location').AsoClinicLocation | null;
+      communicationId?: string | null;
+      providerId?: string | null;
+      emailStatus?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed' | null;
+      sentAt?: string | null;
+      deliveredAt?: string | null;
+      openedAt?: string | null;
+      clickedAt?: string | null;
+      repliedAt?: string | null;
+      lastError?: string | null;
+    } | null;
+    appointment?: {
+      date?: string | null;
+      time?: string | null;
+      location?: string | null;
+      instructions?: string | null;
+      source?: 'clinic_form' | 'inbound_email' | 'manual' | null;
+      responseText?: string | null;
+      confidence?: number | null;
+      proposedAt?: string | null;
+      confirmedAt?: string | null;
+      confirmedBy?: string | null;
+    } | null;
+    candidateNotification?: {
+      providerId?: string | null;
+      emailStatus?: string | null;
+      sentAt?: string | null;
+      deliveredAt?: string | null;
+      openedAt?: string | null;
+      clickedAt?: string | null;
+      uploadExpiresAt?: string | null;
+      lastError?: string | null;
+    } | null;
+    candidateStartNotification?: {
+      communicationId?: string | null;
+      providerId?: string | null;
+      emailStatus?: string | null;
+      sentAt?: string | null;
+      deliveredAt?: string | null;
+      openedAt?: string | null;
+      clickedAt?: string | null;
+      lastError?: string | null;
+    } | null;
+    asoDocument?: {
+      fileName?: string | null;
+      storagePath?: string | null;
+      hashSha256?: string | null;
+      mimeType?: string | null;
+      uploadedAt?: string | null;
+      status?: 'received' | 'approved' | 'rejected' | null;
+      reviewedAt?: string | null;
+      reviewedBy?: string | null;
+      rejectionReason?: string | null;
+    } | null;
+    updatedAt?: string | null;
+  };
+  accountantWorkflow?: {
+    status?: 'pending' | 'form_generated' | 'form_validated' | 'email_sent' | 'registry_received' | 'completed';
+    suggestedRecipientEmail?: string | null;
+    suggestedRecipientDepartment?: string | null;
+    suggestedRecipientCompanyId?: string | null;
+    suggestedRecipientCompanyName?: string | null;
+    latestFormId?: string | null;
+    latestFormHashSha256?: string | null;
+    latestFormGeneratedAt?: string | null;
+    latestFormRequiresRegeneration?: boolean;
+    latestFormStaleReasons?: Array<'monthly_salary_changed' | 'expected_admission_date_changed' | 'reviewed_form_data_changed'>;
+    latestFormInvalidatedAt?: string | null;
+    formData?: {
+      monthlySalary?: number | null;
+      companyName?: string;
+      employerCnpj?: string;
+      employeeName?: string;
+      maritalStatus?: string;
+      employeeCpf?: string;
+      educationLevel?: string;
+      jobFunction?: string;
+      probationContract?: string;
+      weeklyRest?: string;
+      workSchedule?: string;
+      [key: string]: unknown;
+    } | null;
+    remunerationUpdatedAt?: string | null;
+    remunerationUpdatedBy?: string | null;
+    formValidation?: {
+      documentId?: string | null;
+      validatedAt?: string | null;
+      validatedBy?: string | null;
+      validatedByEmail?: string | null;
+    } | null;
+    documentSelection?: {
+      documentId?: string | null;
+      selectedDocumentIds?: string[];
+      confirmedAt?: string | null;
+      confirmedBy?: string | null;
+      confirmedByEmail?: string | null;
+    } | null;
+    selectedDocumentIds?: string[];
+    email?: {
+      recipient?: string | null;
+      communicationId?: string | null;
+      providerId?: string | null;
+      status?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed' | null;
+      sentAt?: string | null;
+      deliveredAt?: string | null;
+      openedAt?: string | null;
+      clickedAt?: string | null;
+      lastError?: string | null;
+    } | null;
+    package?: {
+      attachmentCount?: number;
+      attachmentLabels?: string[];
+      selectedDocumentIds?: string[];
+      automaticDocumentIds?: string[];
+      sentAt?: string | null;
+    } | null;
+    registryDocument?: {
+      versionId?: string | null;
+      fileName?: string | null;
+      storagePath?: string | null;
+      hashSha256?: string | null;
+      mimeType?: string | null;
+      size?: number | null;
+      uploadedAt?: string | null;
+      status?: 'received' | 'approved' | 'rejected' | null;
+      reviewedAt?: string | null;
+      reviewedBy?: string | null;
+      rejectionReason?: string | null;
+    } | null;
+    updatedAt?: string | null;
+  };
+  finalizationSettings?: OnboardingFinalizationSettings;
+  firstAccess?: OnboardingFirstAccessState;
+  accessProvisioning?: OnboardingAccessProvisioningState;
+  pdvAccess?: {
+    required: boolean;
+    profileId?: string | null;
+    profileName?: string | null;
+    filialId?: string | null;
+    filialName?: string | null;
+    status?: 'not_required' | 'pending_password' | 'completed' | 'failed';
+    userId?: string | null;
+    provisionedAt?: string | null;
+    lastError?: string | null;
+  };
+  status: 'pending_setup' | 'collecting_documents' | 'reviewing_documents' | 'accountant_pending' | 'contract_pending' | 'ready_to_create_user' | 'awaiting_first_access' | 'active' | 'completed' | 'cancelled';
+  currentStage?: OnboardingStageId;
+  currentStageStartedAt?: string | null;
+  stages?: OnboardingStage[];
+  documents?: OnboardingDocument[];
+  integrationAlerts?: Array<{
+    id: string;
+    label: string;
+    status: 'pending' | 'resolved';
+    message?: string;
+    checkedAt?: string;
+    externalId?: string;
+    source?: string;
+  }>;
+  integrationV2?: {
+    mode: 'import' | 'blank';
+    templateId: string | null;
+    templateVersion: number | null;
+    snapshot: import('@/features/hr/integration/schemas').IntegrationTemplateVersion;
+    answers: Record<string, unknown>;
+    uploads: Record<string, unknown>;
+    stageStatuses: Record<string, 'pending' | 'active' | 'completed' | 'skipped'>;
+    currentStageId: string | null;
+    currentStageStartedAt?: string | null;
+    startedAt: string;
+    updatedAt: string;
+    assignees?: Record<string, { strategy: string; referenceId?: string; resolvedId?: string; resolvedType?: string }>;
+    actionResults?: Record<string, { status: 'completed' | 'failed'; executedAt: string; output?: Record<string, unknown>; error?: string }>;
+    optionFilters?: Record<string, unknown>;
+    completionRequestedAt?: string | null;
+  };
+  probationV2?: import('@/features/hr/integration/probation-process').ProbationProcessState;
+  pjWorkflow?: PjOnboardingWorkflow | null;
+  trainingItems?: OnboardingTrainingItem[];
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+  cancelledAtStage?: OnboardingStageId | null;
+  cancelledBy?: string | null;
+  cancelledByEmail?: string | null;
+  cancelReason?: string | null;
+};
 
 export type Candidate = {
   id: string;
@@ -778,18 +1743,50 @@ export type Candidate = {
   resumePath?: string;
   jobRoleId: string;
   jobRoleName?: string;
+  functionId?: string | null;
+  functionName?: string | null;
+  unitId?: string | null;
+  unitName?: string | null;
+  employerUnitId?: string | null;
+  employerUnitName?: string | null;
+  employerCnpj?: string | null;
+  shiftDefinitionId?: string | null;
+  shiftDefinitionName?: string | null;
   jobOpeningId?: string;
   latestApplicationId?: string;
   latestApplication?: {
     id: string;
+    stage?: CandidateStatus;
+    status?: string;
+    onboardingId?: string | null;
+    stageHistory?: CandidateStageHistoryEntry[];
     formAnswers?: Record<string, unknown>;
     formQuestionSnapshot?: HrFormQuestion[];
+    recruitmentScoring?: RecruitmentScoringSnapshot;
+    recruitmentScore?: RecruitmentScoreResult;
+    eligibilityStatus?: RecruitmentEligibilityStatus;
+    rankingEligible?: boolean;
   };
   status: CandidateStatus;
+  recruitmentHistory?: CandidateStageHistoryEntry[];
   notes?: string;
   formAnswers?: Record<string, unknown>;
+  formQuestionSnapshot?: HrFormQuestion[];
+  recruitmentScoring?: RecruitmentScoringSnapshot;
+  recruitmentScore?: RecruitmentScoreResult;
+  eligibilityStatus?: RecruitmentEligibilityStatus;
+  rankingEligible?: boolean;
+  talentPool?: {
+    rolePreference?: string | null;
+    unitPreference?: string | null;
+    submittedAt?: string;
+    formId?: string;
+    formVersion?: number;
+  };
   rating?: number; // 1-5
   source?: string;
+  onboardingId?: string | null;
+  hiredAt?: string | null;
   appliedAt: string;
   updatedAt: string;
   createdBy: string;
@@ -801,15 +1798,34 @@ export type JobOpening = {
   id: string;
   jobRoleId: string;
   jobRoleName?: string;
+  functionId?: string | null;
+  functionName?: string | null;
+  unitId?: string | null;
+  unitName?: string | null;
+  shiftDefinitionId?: string | null;
+  shiftDefinitionName?: string | null;
   title: string;
   slug: string;
   description?: string;
   requirements?: string[];
+  benefits?: string[];
+  publicSalaryRange?: JobRoleSalaryRange;
+  applyButtonLabel?: string;
+  applicationSuccessMessage?: string | null;
+  lgpdContractText?: string | null;
   formQuestions?: HrFormQuestion[];
+  recruitmentScoring?: RecruitmentScoringSnapshot;
+  compositionPreset?: RecruitmentCompositionPreset;
+  recruitmentScoringAlertAcknowledgement?: RecruitmentScoringAlertAcknowledgement | null;
+  pipelineStages?: RecruitmentStage[];
   location?: string;
   workType?: 'presencial' | 'remoto' | 'hibrido';
+  contractTypeLabel?: string | null;
+  workSchedule?: string | null;
   slots: number;
   status: JobOpeningStatus;
+  applicationStartAt?: string | null;
+  applicationEndAt?: string | null;
   closesAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -832,6 +1848,7 @@ export type JobRole = {
 // ...
   id: string;
   name: string;
+  cbo?: string;
   publicTitle: string;
   slug: string;
   departmentId?: string | null;
@@ -850,9 +1867,17 @@ export type JobRole = {
   workSchedule?: string;
   salaryRange?: JobRoleSalaryRange;
   publicSalaryRange?: JobRoleSalaryRange;
+  recruitmentDisplay?: RecruitmentDisplaySettings;
+  applicationSuccessMessage?: string | null;
+  lgpdContractText?: string | null;
+  recruitmentModelSavedAt?: string | null;
   defaultProfileId?: string;
   loginRestricted?: boolean;
   formQuestions?: HrFormQuestion[];
+  compositionPreset?: RecruitmentCompositionPreset;
+  pipelineStages?: RecruitmentStage[];
+  onboardingStages?: OnboardingStage[];
+  onboardingDocuments?: OnboardingDocumentTemplate[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -872,9 +1897,23 @@ export type JobFunction = {
   responsibilities?: string[];
   publicResponsibilities?: string[];
   requirements?: string[];
+  publicRequirements?: string[];
+  benefits?: string[];
+  workSchedule?: string;
+  salaryRange?: JobRoleSalaryRange;
+  publicSalaryRange?: JobRoleSalaryRange;
+  salaryCalculation?: JobFunctionSalaryCalculation;
+  recruitmentDisplay?: RecruitmentDisplaySettings;
+  applicationSuccessMessage?: string | null;
+  lgpdContractText?: string | null;
+  recruitmentModelSavedAt?: string | null;
   compatibleRoleIds?: string[];
   defaultProfileId?: string;
   formQuestions?: HrFormQuestion[];
+  compositionPreset?: RecruitmentCompositionPreset;
+  pipelineStages?: RecruitmentStage[];
+  onboardingStages?: OnboardingStage[];
+  onboardingDocuments?: OnboardingDocumentTemplate[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -968,7 +2007,31 @@ export type Product = {
   brand?: string;
   aliases?: string[];
   barcode?: string;
+  gtin?: string;
   imageUrl?: string;
+  description?: string;
+  externalCategory?: string;
+  ingredients?: string;
+  nutritionFacts?: Record<string, unknown>;
+  ncm?: string;
+  cest?: string;
+  dataSource?: 'internal' | 'open_food_facts' | 'gs1' | 'brazilian_commercial' | 'manual' | string;
+  confidence?: number;
+  lastBarcodeLookupAt?: string;
+  // Campos normalizados do cadastro inteligente por codigo de barras.
+  codigo_barras?: string;
+  nome?: string;
+  marca?: string;
+  descricao?: string;
+  categoria_id?: string;
+  quantidade?: number;
+  unidade_medida?: string;
+  imagem_url?: string;
+  ingredientes?: string;
+  informacoes_nutricionais?: Record<string, unknown>;
+  origem_dados?: string;
+  confianca?: number;
+  data_consulta?: string;
   packageType?: PackageType;
   category: UnitCategory;
   packageSize: number;
@@ -995,6 +2058,7 @@ export type Product = {
   apparelFit?: string;
   apparelMaterial?: string;
   apparelUsage?: string;
+  uniformCareInstructions?: InstructionSection[];
   nutritionalTableImageUrl?: string;
   compositionImageUrl?: string;
   nutritionalData?: NutritionalData;
@@ -1082,6 +2146,8 @@ export type StockAuditSession = {
     startedAt: string; // ISO String
     completedAt?: string; // ISO String
     items: StockAuditItem[];
+    taskId?: string;
+    workspaceId?: string;
 };
 
 export type ReturnRequestStatus = 'em_andamento' | 'finalizado_sucesso' | 'finalizado_erro';
@@ -1142,6 +2208,7 @@ export type Entity = {
   fantasyName?: string;
   nickname?: string;
   document: string; // CPF ou CNPJ
+  documentNormalized?: string;
   address: {
     street: string;
     number: string;
@@ -1154,13 +2221,51 @@ export type Entity = {
   contact?: {
     phone?: string;
     email?: string;
+    emails?: Array<{
+      id: string;
+      department: string;
+      email: string;
+      purposes?: Array<'onboarding' | 'termination' | 'aso'>;
+    }>;
   };
   responsible?: string; // Only for pessoa_juridica
+  documentSignatoryUserId?: string;
+  documentSignatoryName?: string;
+  documentSignatoryEmail?: string;
+  documentSignatoryScope?: 'entity' | 'cnpj_root';
+  cnpjRoot?: string;
   status?: 'active' | 'inactive';
+  inactivatedAt?: string;
+  inactivatedBy?: string;
   rg?: string; // Only for pessoa_fisica
   birthDate?: string; // Only for pessoa_fisica
   notes?: string;
   imageUrl?: string; // avatar
+  cnpj?: string;
+  razao_social?: string;
+  nome_fantasia?: string;
+  situacao_cadastral?: string;
+  data_abertura?: string;
+  natureza_juridica?: string;
+  cnae_principal_codigo?: string;
+  cnae_principal_descricao?: string;
+  cnaes_secundarios_json?: Array<{ codigo: string; descricao: string }>;
+  inscricao_estadual?: string;
+  contribuinte_icms?: 'sim' | 'nao' | 'nao_informado';
+  situacao_inscricao_estadual?: 'ativa' | 'inativa' | 'suspensa' | 'baixada' | 'nao_consultada' | 'nao_informado';
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  telefone?: string;
+  email?: string;
+  tipo_empresa?: string;
+  origem_dados?: 'internal' | 'brasilapi' | 'viacep' | 'cache' | 'manual' | 'sintegra';
+  data_ultima_consulta_cnpj?: string;
+  observacoes?: string;
 };
 
 // Purchase Module Types (legacy — cotação v1)
@@ -1272,6 +2377,7 @@ export type PurchaseOrder = {
   paymentMethodLabel?: string | null;
   paymentCondition?: PurchasePaymentCondition;
   installmentsCount?: number;
+  installmentDueDates?: string[];
   purchaseDate?: string;
   invoiceNumber?: string;
   invoiceAccessKey?: string;
@@ -1299,6 +2405,8 @@ export type PurchaseOrder = {
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
   freightPaymentMode?: PurchaseFreightPaymentMode;
+  freightSupplierId?: string | null;
+  freightSupplierName?: string | null;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -1307,6 +2415,10 @@ export type PurchaseOrder = {
   trackingInfo?: string;
   notes?: string;
   linkedExpenseId?: string;
+  linkedFreightExpenseId?: string;
+  archivedLinkedExpenseId?: string;
+  financialArchiveRunId?: string;
+  financialExpenseArchivedAt?: string;
   createdAt: string;
   createdBy: string; // userId
   confirmedAt?: string;
@@ -1383,6 +2495,16 @@ export type PurchaseReceipt = {
 };
 
 export type PurchaseReceiptItemStatus = 'pending' | 'received' | 'partial' | 'divergent' | 'cancelled';
+export type PurchaseDivergenceResolutionAction =
+  | 'accept_charged'
+  | 'bonus'
+  | 'return_excess'
+  | 'keep_pending'
+  | 'close_shortage'
+  | 'request_replacement'
+  | 'credit_discount'
+  | 'correct_entry';
+export type PurchaseDivergenceExcessBillingMode = 'same_unit_price' | 'custom_unit_price';
 export type PurchaseStockEntryType = 'stock' | 'uniform' | 'asset';
 export type PurchaseItemTreatment =
   | 'stock'
@@ -1415,6 +2537,11 @@ export type PurchaseReceiptItem = {
   status: PurchaseReceiptItemStatus;
   receiptDisposition?: 'pending' | 'receive' | 'receive_less' | 'receive_more' | 'exchange_pending' | 'returned';
   divergenceReason?: string;
+  divergenceResolutionAction?: PurchaseDivergenceResolutionAction | null;
+  divergenceExcessBillingMode?: PurchaseDivergenceExcessBillingMode | null;
+  divergenceExcessUnitPrice?: number | null;
+  divergenceResolvedAt?: string;
+  divergenceResolvedBy?: string;
   resolutionNotes?: string;
   entryType?: PurchaseStockEntryType;
   itemTreatment?: PurchaseItemTreatment;
@@ -1456,6 +2583,8 @@ export type PurchaseFinancial = {
   freightAccountPlanId?: string;
   freightAccountPlanName?: string;
   freightPaymentMode?: PurchaseFreightPaymentMode;
+  freightSupplierId?: string | null;
+  freightSupplierName?: string | null;
   resultCenterId?: string;
   resultCenterName?: string;
   deliveryFee?: number;
@@ -1470,6 +2599,7 @@ export type PurchaseFinancial = {
   paymentCondition?: PurchasePaymentCondition;
   installmentsCount?: number;
   linkedExpenseId?: string;
+  linkedFreightExpenseId?: string;
   paidAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -1543,11 +2673,21 @@ export type RepositionPartialFulfillmentReason =
   | "Item incluído pelo CD"
   | "Outro";
 
+// Insumo derivado escolhido pelo solicitante (com a quantidade em embalagens e o equivalente na unidade base).
+export type RepositionRequestedProduct = {
+  productId: string;
+  productName: string;
+  packages: number;
+  quantityBase: number;
+};
+
 export type RepositionItem = {
   baseProductId: string;
   productName: string;
   quantityNeeded: number;
   suggestedLots: RepositionSuggestedLot[];
+  // Preenchido apenas durante a montagem da solicitação (não usado na atividade).
+  requestedProducts?: RepositionRequestedProduct[];
   fulfillmentDivergence?: {
     requestedQuantity: number;
     fulfilledQuantity: number;
@@ -1567,6 +2707,8 @@ export type RepositionRequestItem = {
   currentStock: number;
   minimumStock: number;
   requestedQuantity: number;
+  // Insumos derivados (tamanhos) escolhidos pelo solicitante para este insumo base.
+  requestedProducts?: RepositionRequestedProduct[];
   notes?: string;
 };
 
@@ -1649,6 +2791,7 @@ export const defaultGuestPermissions: PermissionSet = {
     stock: { 
       view: false, 
       inventoryControl: { view: false, addLot: false, editLot: false, writeDown: false, transfer: false, viewHistory: false }, 
+      uniforms: { view: false, deliver: false, return: false, dispose: false, manageEvaluation: false },
       // `audit` permissions are now synced with `stockCount` for backward compatibility with Firestore rules, but UI uses `stockCount`.
       stockCount: { view: false, perform: false, approve: false, requestItem: false }, 
       audit: { view: false, start: false, approve: false }, 
@@ -1663,7 +2806,7 @@ export const defaultGuestPermissions: PermissionSet = {
     commercial: {
       technicalSheets: { view: false, create: false, edit: false, delete: false, export: false },
     },
-    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false },
+    settings: { view: false, manageUsers: false, manageKiosks: false, manageProfiles: false, manageLabels: false, viewAiCosts: false },
     tasks: { view: false, manage: false },
     goals: { view: false, manage: false },
     help: { view: true },
@@ -1675,9 +2818,8 @@ export const defaultGuestPermissions: PermissionSet = {
       view: false,
       schedules: { view: false, create: false, edit: false, delete: false, export: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
-      collaborators: { view: false, add: false, edit: false, terminate: false },
-      checklists: { view: false, operate: false, create: false, manageTemplates: false, viewAnalytics: false },
-      settings: { manageUnits: false, manageShifts: false, manageCalendars: false, manageChecklistTypes: false },
+      collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
+      settings: { manageUnits: false, manageShifts: false, manageCalendars: false },
       rh_role: undefined,
       rh: { collaborators: { view: false, edit: false }, can_view_salary: false },
     },
@@ -1688,6 +2830,16 @@ export const defaultGuestPermissions: PermissionSet = {
       financialFlow: false,
       dre: false,
       expenses: { view: false, create: false, edit: false, pay: false, import: false, delete: false },
+      inbox: { view: false, analyze: false, link: false, discard: false },
+      audits: { view: false, import: false, edit: false, ignore: false, effectuate: false, manage: false },
+      reconciliation: { view: false, confirm: false, correct: false, classifyAdjustments: false, administer: false },
+      cardStatements: { view: false, import: false, audit: false, close: false, reconcile: false },
+      personnelCosts: { view: false, edit: false, export: false },
+      beneficiaries: { view: false, viewMaskedPaymentData: false, managePaymentData: false },
+      paymentRequests: { view: false, create: false, authorize: false, submit: false, refresh: false, viewProof: false },
+      cashClosures: { view: false, edit: false, approve: false, reopen: false, resync: false },
+      cashDeposits: { view: false, issue: false, cancel: false, adjust: false },
+      interIntegration: { manage: false },
       settings: { view: false, manageAccountPlans: false, manageResultCenters: false, manageBankAccounts: false, manageImportAliases: false, manageExpenseDescriptions: false },
     },
     purchasing: {
@@ -1707,6 +2859,18 @@ export const defaultGuestPermissions: PermissionSet = {
       roles: { view: false, manage: false, propagate: false },
       functions: { view: false, manage: false },
       navigation: { view: false },
+      formalization: {
+        view: false,
+        onboarding: { manage: false },
+        aso: { view: false, manage: false },
+        accountant: { view: false, manage: false },
+        documents: { view: false, generate: false, review: false },
+        companyDocuments: { view: false, manage: false },
+        templates: { view: false, manage: false, publish: false },
+        signatures: { view: false, send: false },
+        consents: { view: false, manage: false },
+        sensitiveData: { view: false },
+      },
     },
     recruitment: {
       view: false,
@@ -1723,6 +2887,22 @@ export const defaultGuestPermissions: PermissionSet = {
         manage_templates: false,
         view_analytics: false,
       },
+      analytics: {
+        view: false,
+        manage_taxonomy: false,
+        configure_templates: false,
+        view_occurrences: false,
+        edit_occurrences_admin: false,
+        export_occurrences: false,
+        reprocess_occurrences: false,
+        view_personal_targets: false,
+        export_personal_targets: false,
+        view_collaborator_rankings: false,
+        manage_retention_policy: false,
+        manage_task_rules: false,
+        resolve_occurrences: false,
+        validate_occurrence_resolution: false,
+      },
       projects: {},
     },
 };
@@ -1731,13 +2911,13 @@ export const defaultGuestPermissions: PermissionSet = {
 export const defaultAdminPermissions: PermissionSet = {
     dashboard: { view: true, operational: true, pricing: true, audit: true, technicalSheets: true, collaborator: true },
     registration: { view: true, items: { add: true, edit: true, delete: true }, baseProducts: { add: true, edit: true, delete: true }, entities: { add: true, edit: true, delete: true } },
-    stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true }, predefinedLists: { view: true, manage: true } },
+    stock: { view: true, inventoryControl: { view: true, addLot: true, editLot: true, writeDown: true, transfer: true, viewHistory: true }, uniforms: { view: true, deliver: true, return: true, dispose: true, manageEvaluation: true }, stockCount: { view: true, perform: true, approve: true, requestItem: true }, audit: { view: true, start: true, approve: true }, analysis: { view: true, restock: true, consumption: true, projection: true, valuation: true }, purchasing: { view: true, suggest: true, approve: true, deleteHistory: true }, returns: { view: true, add: true, updateStatus: true, delete: true }, conversions: { view: true }, predefinedLists: { view: true, manage: true } },
     assets: { view: true, create: true, edit: true, transfer: true, retire: true, printLabels: true, viewHistory: true },
     pricing: { view: true, simulate: true, manageParameters: true },
     commercial: {
       technicalSheets: { view: true, create: true, edit: true, delete: true, export: true },
     },
-    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true },
+    settings: { view: true, manageUsers: true, manageKiosks: true, manageProfiles: true, manageLabels: true, viewAiCosts: true },
     tasks: { view: true, manage: true },
     goals: { view: true, manage: true },
     reposition: { view: true, prepareDispatch: true, receive: true, finalize: true, cancel: true },
@@ -1748,9 +2928,8 @@ export const defaultAdminPermissions: PermissionSet = {
       view: true,
       schedules: { view: true, create: true, edit: true, delete: true, export: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
-      collaborators: { view: true, add: true, edit: true, terminate: true },
-      checklists: { view: true, operate: true, create: true, manageTemplates: true, viewAnalytics: true },
-      settings: { manageUnits: true, manageShifts: true, manageCalendars: true, manageChecklistTypes: true },
+      collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
+      settings: { manageUnits: true, manageShifts: true, manageCalendars: true },
       rh_role: 'admin' as const,
       rh: { collaborators: { view: true, edit: true }, can_view_salary: true },
     },
@@ -1761,6 +2940,16 @@ export const defaultAdminPermissions: PermissionSet = {
       financialFlow: true,
       dre: true,
       expenses: { view: true, create: true, edit: true, pay: true, import: true, delete: true },
+      inbox: { view: true, analyze: true, link: true, discard: true },
+      audits: { view: true, import: true, edit: true, ignore: true, effectuate: true, manage: true },
+      reconciliation: { view: true, confirm: true, correct: true, classifyAdjustments: true, administer: true },
+      cardStatements: { view: true, import: true, audit: true, close: true, reconcile: true },
+      personnelCosts: { view: true, edit: true, export: true },
+      beneficiaries: { view: true, viewMaskedPaymentData: true, managePaymentData: true },
+      paymentRequests: { view: true, create: true, authorize: true, submit: true, refresh: true, viewProof: true },
+      cashClosures: { view: true, edit: true, approve: true, reopen: true, resync: true },
+      cashDeposits: { view: true, issue: true, cancel: true, adjust: true },
+      interIntegration: { manage: true },
       settings: { view: true, manageAccountPlans: true, manageResultCenters: true, manageBankAccounts: true, manageImportAliases: true, manageExpenseDescriptions: true },
     },
     purchasing: {
@@ -1780,6 +2969,18 @@ export const defaultAdminPermissions: PermissionSet = {
       roles: { view: true, manage: true, propagate: true },
       functions: { view: true, manage: true },
       navigation: { view: true },
+      formalization: {
+        view: true,
+        onboarding: { manage: true },
+        aso: { view: true, manage: true },
+        accountant: { view: true, manage: true },
+        documents: { view: true, generate: true, review: true },
+        companyDocuments: { view: true, manage: true },
+        templates: { view: true, manage: true, publish: true },
+        signatures: { view: true, send: true },
+        consents: { view: true, manage: true },
+        sensitiveData: { view: true },
+      },
     },
     recruitment: {
       view: true,
@@ -1795,6 +2996,22 @@ export const defaultAdminPermissions: PermissionSet = {
         create_projects: true,
         manage_templates: true,
         view_analytics: true,
+      },
+      analytics: {
+        view: true,
+        manage_taxonomy: true,
+        configure_templates: true,
+        view_occurrences: true,
+        edit_occurrences_admin: true,
+        export_occurrences: true,
+        reprocess_occurrences: true,
+        view_personal_targets: true,
+        export_personal_targets: true,
+        view_collaborator_rankings: true,
+        manage_retention_policy: true,
+        manage_task_rules: true,
+        resolve_occurrences: true,
+        validate_occurrence_resolution: true,
       },
       projects: {},
     },
@@ -1849,6 +3066,15 @@ export type TaskHistoryItem = {
     details?: string;
 };
 
+export type TaskAssigneeType = 'user' | 'profile' | 'role' | 'team' | 'unit';
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type TaskVisibilityScope =
+  | 'assignee'
+  | 'assignee_and_watchers'
+  | 'unit'
+  | 'project'
+  | 'workspace';
+
 export interface LegacyTask {
   id: string;
   type: string;
@@ -1860,22 +3086,41 @@ export interface LegacyTask {
 
 export type Task = {
     id: string;
+    workspaceId?: string;
     projectId?: string;
+    subprojectId?: string;
+    subprojectName?: string;
     statusId?: string;
     title: string;
     description?: string;
     status: 'pending' | 'in_progress' | 'awaiting_approval' | 'completed' | 'reopened' | 'rejected';
-    assigneeType: 'user' | 'profile';
+    lifecycleState?: TaskLifecycleState;
+    completionResult?: TaskCompletionResult;
+    version?: number;
+    assigneeType: TaskAssigneeType;
     assigneeId: string; // userId or profileId
     requiresApproval: boolean;
-    approverType?: 'user' | 'profile';
+    approverType?: TaskAssigneeType;
     approverId?: string;
+    priority?: TaskPriority;
+    unitId?: string;
+    unitName?: string;
+    createdByUserId?: string;
+    createdByUsername?: string;
+    watcherUserIds?: string[];
+    watcherProfileIds?: string[];
+    watcherRoleIds?: string[];
+    visibilityScope?: TaskVisibilityScope;
+    originLink?: string;
     origin: TaskOrigin;
     history: TaskHistoryItem[];
     createdAt: string; // ISO string
     updatedAt: string; // ISO string
     dueDate?: string; // ISO string
     completedAt?: string; // ISO string
+    cancelledAt?: string; // ISO string
+    sourceStatus?: string;
+    requiresRelinkDecision?: boolean;
     // Properties for adapted legacy tasks
     legacyLink?: string;
     legacyIcon?: React.FC<any>;
@@ -1965,6 +3210,70 @@ export type GoalType = 'revenue' | 'ticket' | 'product_line' | 'product_specific
 export type GoalPeriod = 'daily' | 'weekly' | 'monthly'
 export type GoalStatus = 'active' | 'closed' | 'cancelled'
 export type GoalDistributionMode = 'calendar_days' | 'scheduled_days'
+export type GoalMethod = 'manual' | 'tiered_unit_bonus' | 'historical_average' | 'growth_rate' | 'custom'
+export type GoalParticipantSource = 'schedule' | 'manual'
+export type GoalParticipantRole = 'fixed' | 'relief' | 'leader'
+export type GoalBonusSplitMode = 'equal' | 'weighted_by_presence' | 'manual'
+export type GoalReliefWorkerSplitMode = 'proportional_by_covered_shifts'
+export type GoalIncentiveTone = 'info' | 'warning' | 'success'
+export type GoalIncentiveTriggerType = 'distance_to_next_tier_percent' | 'distance_to_next_tier_amount' | 'tier_reached'
+
+export interface GoalBonusTierConfig {
+  id: string
+  label: string
+  fromAmount: number
+  toAmount: number | null
+  displayTargetAmount?: number
+  fixedBonusAmount: number
+  excessPercent: number
+  description?: string
+}
+
+export interface GoalIncentiveMessageRule {
+  id: string
+  label: string
+  triggerType: GoalIncentiveTriggerType
+  thresholdPercent?: number
+  thresholdAmount?: number
+  tierId?: string
+  message: string
+  tone: GoalIncentiveTone
+}
+
+export interface GoalMethodConfig {
+  id: string
+  name: string
+  type: GoalMethod
+  active: boolean
+  description?: string
+  unitProfile?: string
+  targetPeriod: GoalPeriod
+  referenceRevenue: number
+  tiers: GoalBonusTierConfig[]
+  teamBonus: {
+    enabled: boolean
+    splitMode: GoalBonusSplitMode
+    eligibleCollaboratorRule: 'all_goal_participants' | 'manual_eligible'
+    prorateByAttendance: boolean
+    reliefWorker?: {
+      enabled: boolean
+      splitMode: GoalReliefWorkerSplitMode
+      turnsPerDay: number
+      fixedCollaboratorRule: 'remaining_equal_split'
+      description?: string
+    }
+  }
+  leadershipBonus: {
+    enabled: boolean
+    factorNumerator: number
+    factorDenominator: number
+  }
+  incentiveMessages: GoalIncentiveMessageRule[]
+  createdAt?: Timestamp
+  updatedAt?: Timestamp
+}
+
+export type GoalMethodSnapshot = Omit<GoalMethodConfig, 'createdAt' | 'updatedAt'>
 
 export interface GoalClosureSnapshot {
   distributionMode: GoalDistributionMode
@@ -1972,6 +3281,7 @@ export interface GoalClosureSnapshot {
   periodDayCount: number
   dailyTarget: number
   dailyUpTarget: number
+  dailyTopTarget?: number
   employeeDateKeysByGoalId: Record<string, string[]>
   employeeDayCountsByGoalId: Record<string, number>
   employeeDailyTargetsByGoalId: Record<string, number>
@@ -1984,13 +3294,30 @@ export interface GoalShift {
   fraction: number
 }
 
+export type GoalLeadershipRecipientSource =
+  | 'unit_group_responsible'
+  | 'unit_organization_responsible'
+  | 'responsible_unit_ids'
+
+export interface GoalLeadershipRecipient {
+  userId: string
+  userName: string
+  source: GoalLeadershipRecipientSource
+  sourceLabel: string
+}
+
 export interface GoalTemplate {
   id: string
   kioskId: string
   type: GoalType
   period: GoalPeriod
+  version?: number
+  method?: GoalMethod
+  goalMethodConfigId?: string
+  goalMethodSnapshot?: GoalMethodSnapshot
   targetValue: number
   upValue: number
+  topValue?: number        // metas criadas antes do 3º nível não têm TOP
   productRef?: string      // product_specific: ProductSimulation.id or name
   productLineRef?: string  // product_line: SimulationCategory.id
   productLineName?: string // product_line: display label
@@ -2002,14 +3329,21 @@ export interface GoalPeriodDoc {
   id: string
   templateId: string
   kioskId: string
+  templateType?: GoalType
+  version?: number
+  method?: GoalMethod
+  goalMethodConfigId?: string
+  goalMethodSnapshot?: GoalMethodSnapshot
   startDate: Timestamp
   endDate: Timestamp
   targetValue: number
   upValue: number
+  topValue?: number        // metas criadas antes do 3º nível não têm TOP
   currentValue: number
   dailyProgress?: { [date: string]: number }
   distributionMode?: GoalDistributionMode
   shifts?: GoalShift[]
+  leadershipRecipients?: GoalLeadershipRecipient[]
   status: GoalStatus
   closedAt?: Timestamp
   closedBy?: string
@@ -2025,6 +3359,10 @@ export interface EmployeeGoal {
   employeeId: string
   kioskId: string
   shiftId?: string
+  participantSource?: GoalParticipantSource
+  participantRole?: GoalParticipantRole
+  scheduledDays?: number
+  scheduledTurnCount?: number
   fraction: number
   targetValue: number
   currentValue: number
@@ -2040,18 +3378,52 @@ export interface EmployeeGoal {
 export type DPUnit = {
   id: string;
   name: string;
+  isArchived?: boolean;
+  mergedIntoUnitId?: string;
+  mergedIntoUnitName?: string;
+  archivedAt?: Timestamp;
+  cnpj?: string;
+  address?: string;
+  unitType?: string;
+  organizationId?: string;
   groupId?: string;
+  externalSource?: 'manual' | 'kiosk' | 'pdvlegal' | 'bizneo';
+  externalId?: string;
+  pdvFilialId?: string;
   bizneoTaxonId?: number; // ID do taxon (local) no Bizneo
   auditChecklistThreshold?: number;
   createdAt: Timestamp;
 };
 
+export type DPUnitResponsibilitySource = 'job_role' | 'job_function';
+
+export type DPUnitResponsibility = {
+  responsibleSourceType?: DPUnitResponsibilitySource;
+  responsibleSourceId?: string;
+  responsibleSourceName?: string;
+  responsibleUserId?: string;
+  responsibleUserName?: string;
+  responsibilityStatus?: 'assigned' | 'replacement_required';
+  responsibilityVacatedAt?: string;
+  responsibilityVacatedByTerminationUserId?: string;
+};
+
+export type DPUnitOrganization = {
+  id: string;
+  name: string;
+  description?: string;
+  isArchived?: boolean;
+  archivedAt?: Timestamp;
+  createdAt: Timestamp;
+} & DPUnitResponsibility;
+
 export type DPUnitGroup = {
   id: string;
   name: string;
+  organizationId?: string;
   unitCount?: number;
   createdAt: Timestamp;
-};
+} & DPUnitResponsibility;
 
 export type DPShiftDefinition = {
   id: string;
@@ -2092,6 +3464,7 @@ export type DPShift = {
   scheduleId: string;
   unitId: string;
   userId: string;            // referência ao users/ (Firebase UID)
+  userName?: string;         // snapshot mínimo para a escala não depender do diretório carregado
   shiftDefinitionId?: string;
   date: string; // YYYY-MM-DD
   startTime: string;
@@ -2140,297 +3513,38 @@ export type DPVacationRecord = {
   createdAt: Timestamp;
 };
 
-export type DPChecklistItemType =
-  | "checkbox"
-  | "text"
-  | "number"
-  | "temperature"
-  | "select"
-  | "photo"
-  | "signature"
-  | "yes_no"
-  | "multi_select"
-  | "date";
-
-export type DPChecklistTemplateType = string;
-
-export type DPChecklistTypeColorScheme =
-  | "emerald"
-  | "indigo"
-  | "amber"
-  | "violet"
-  | "blue"
-  | "orange"
-  | "red"
-  | "gray";
-
-export type DPChecklistType = {
-  id: string;
-  name: string;
-  emoji: string;
-  description: string;
-  examples: string;
-  behavior: string;
-  configBanner: string;
-  isSchedulable: boolean;
-  colorScheme: DPChecklistTypeColorScheme;
-  isActive: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-export type DPChecklistOccurrenceType =
-  | "manual"
-  | "daily"
-  | "weekly"
-  | "biweekly"
-  | "monthly"
-  | "annual"
-  | "custom";
-
-export type CustomScheduleMode = "weekdays" | "monthdays" | "interval" | "once";
-
-export type CustomSchedule = {
-  modes: CustomScheduleMode[];
-  weekdays?: number[]; // 0=Dom..6=Sáb
-  monthdays?: number[]; // 1..31
-  intervalDays?: number;
-  onceDates?: string[]; // YYYY-MM-DD
-};
-
-export type DPChecklistCriticality = "low" | "medium" | "high" | "critical";
-
-export type DPChecklistConditionalOperator =
-  | "equals"
-  | "not_equals"
-  | "gt"
-  | "lt"
-  | "contains";
-
-export type DPChecklistConditionalRule = {
-  itemId: string;
-  operator: DPChecklistConditionalOperator;
-  value?: unknown;
-};
-
-export type DPChecklistVersionHistoryEntry = {
-  version: number;
-  updatedBy: string;
-  updatedAt: Timestamp | string;
-  changeNotes?: string;
-};
-
-export type DPChecklistBranchPathEntry = {
-  parentItemId: string;
-  triggerValue?: unknown;
-};
-
-export type DPChecklistItemConfig = {
-  min?: number;
-  max?: number;
-  unit?: string;
-  alertOutOfRange?: boolean;
-  options?: string[];
-  minPhotos?: number;
-  maxPhotos?: number;
-};
-
-export type DPChecklistTemplateItem = {
-  id: string;
-  order: number;
-  title: string;
-  description?: string;
-  type: DPChecklistItemType;
-  required: boolean;
-  weight: number;
-  blockNext: boolean;
-  criticality: DPChecklistCriticality;
-  referenceValue?: number;
-  tolerancePercent?: number;
-  actionRequired?: boolean;
-  notifyRoleIds?: string[];
-  escalationMinutes?: number;
-  showIf?: DPChecklistConditionalRule;
-  conditionalBranches?: Array<{
-    value?: unknown;
-    label: string;
-    items: DPChecklistTemplateItem[];
-  }>;
-  config?: DPChecklistItemConfig;
-};
-
-export type DPChecklistSection = {
-  id: string;
-  title: string;
-  order: number;
-  showIf?: DPChecklistConditionalRule;
-  requirePhoto?: boolean;
-  requireSignature?: boolean;
-  items: DPChecklistTemplateItem[];
-};
-
-export type DPChecklistTemplate = {
-  id: string;
-  name: string;
-  description?: string;
-  category?: string;
-  templateType: DPChecklistTemplateType;
-  occurrenceType?: DPChecklistOccurrenceType;
-  annualSchedule?: { month: number; day: number };
-  customSchedule?: CustomSchedule;
-  unitIds?: string[];
-  unitNames?: string[];
-  jobRoleIds?: string[];
-  jobRoleNames?: string[];
-  jobFunctionIds?: string[];
-  jobFunctionNames?: string[];
-  shiftDefinitionIds?: string[];
-  shiftDefinitionNames?: string[];
-  isActive: boolean;
-  version: number;
-  versionHistory?: DPChecklistVersionHistoryEntry[];
-  lastExecutionAt?: string | null;
-  sections: DPChecklistSection[];
-  createdAt: Timestamp | string;
-  updatedAt?: Timestamp | string;
-  createdBy?: { userId: string; username: string; };
-  updatedBy?: { userId: string; username: string; };
-};
-
-export type DPChecklistExecutionStatus = "pending" | "claimed" | "completed" | "overdue";
-
-export type DPChecklistExecutionItem = {
-  templateItemId: string;
-  sectionId: string;
-  sectionTitle: string;
-  order: number;
-  title: string;
-  description?: string;
-  type: DPChecklistItemType;
-  required: boolean;
-  weight: number;
-  blockNext: boolean;
-  criticality: DPChecklistCriticality;
-  referenceValue?: number;
-  tolerancePercent?: number;
-  actionRequired?: boolean;
-  notifyRoleIds?: string[];
-  escalationMinutes?: number;
-  branchPath?: DPChecklistBranchPathEntry[];
-  showIf?: DPChecklistConditionalRule;
-  sectionShowIf?: DPChecklistConditionalRule;
-  config?: DPChecklistItemConfig;
-  checked?: boolean | null;
-  yesNoValue?: boolean | null;
-  textValue?: string;
-  numberValue?: number;
-  multiValues?: string[];
-  dateValue?: string;
-  photoUrls?: string[];
-  signatureUrl?: string;
-  isLate?: boolean;
-  isOutOfRange?: boolean;
-  completedAt?: string | null;
-  completedByUserId?: string | null;
-  linkedTaskId?: string | null;
-};
-
-export type DPChecklistExecutionSection = {
-  id: string;
-  title: string;
-  order: number;
-  showIf?: DPChecklistConditionalRule;
-  requirePhoto?: boolean;
-  requireSignature?: boolean;
-};
-
-export type DPChecklistExecution = {
-  id: string;
-  checklistDate: string;
-  templateId: string;
-  templateName: string;
-  templateType: DPChecklistTemplateType;
-  templateVersion: number;
-  occurrenceType?: DPChecklistOccurrenceType;
-  scheduleId: string;
-  shiftId: string;
-  unitId: string;
-  unitName?: string;
-  shiftDefinitionId?: string;
-  shiftDefinitionName?: string;
-  assignedUserId: string;
-  assignedUsername: string;
-  collaboratorUserIds?: string[];
-  collaboratorUsernames?: string[];
-  createdByUserId?: string;
-  createdByUsername?: string;
-  sections: DPChecklistExecutionSection[];
-  shiftStartTime: string;
-  shiftEndTime: string;
-  shiftEndDate: string;
-  status: DPChecklistExecutionStatus;
-  score?: number;
-  items: DPChecklistExecutionItem[];
-  incidentContext?: string | null;
-  supplierName?: string | null;
-  invoiceNumber?: string | null;
-  scheduledDate?: string | null;
-  claimedByUserId?: string | null;
-  claimedByUsername?: string | null;
-  claimedAt?: string | null;
-  completedByUserId?: string | null;
-  completedByUsername?: string | null;
-  completedAt?: string | null;
-  reviewedBy?: string | null;
-  reviewNotes?: string | null;
-  createdAt: Timestamp | string;
-  updatedAt?: Timestamp | string;
-};
-
-export type OperationalTaskStatus =
-  | "open"
-  | "in_progress"
-  | "resolved"
-  | "escalated"
-  | "closed";
-
-export type OperationalTask = {
-  id: string;
-  executionId: string;
-  sectionId: string;
-  itemId: string;
-  itemTitle: string;
-  unitId: string;
-  unitName: string;
-  description: string;
-  status: OperationalTaskStatus;
-  assignedToRoleIds: string[];
-  assignedToUserId?: string;
-  assignedToUserName?: string;
-  slaMinutes: number;
-  slaDeadlineAt: Timestamp | string;
-  escalatedAt?: Timestamp | string;
-  resolvedAt?: Timestamp | string;
-  resolvedBy?: string;
-  resolutionNotes?: string;
-  createdAt: Timestamp | string;
-  updatedAt: Timestamp | string;
-};
-
 // ─── New task motor — Etapa 8 (task_projects / task_statuses / tasks) ──────────
 
 export type TaskStatusCategory = 'not_started' | 'active' | 'done' | 'canceled';
+export type TaskLifecycleState =
+  | 'open'
+  | 'in_progress'
+  | 'waiting'
+  | 'blocked'
+  | 'completed'
+  | 'cancelled';
+export type TaskCompletionResult =
+  | 'resolved'
+  | 'not_resolved'
+  | 'partially_resolved'
+  | 'cancelled'
+  | 'duplicate'
+  | 'not_applicable';
 
 export type TaskStatusDoc = {
   id: string;
   project_id: string;
+  subproject_id?: string;
   name: string;
   slug: string;
   category: TaskStatusCategory;
+  lifecycle_state?: TaskLifecycleState;
   is_initial: boolean;
   is_terminal: boolean;
   order: number;
   color?: string;
+  requires_completion_note?: boolean;
+  requires_evidence?: boolean;
 };
 
 export type TaskProject = {
@@ -2439,6 +3553,19 @@ export type TaskProject = {
   name: string;
   description?: string;
   members: { user_id: string; username: string; role: 'viewer' | 'operator' | 'manager' }[];
+  created_at: string;
+  updated_at: string;
+  created_by: { user_id: string; username: string };
+};
+
+export type TaskSubproject = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  name: string;
+  description?: string;
+  slug?: string;
+  order?: number;
   created_at: string;
   updated_at: string;
   created_by: { user_id: string; username: string };
@@ -2462,10 +3589,11 @@ export type FormTask = {
   id: string;
   workspace_id: string;
   project_id: string;
+  subproject_id?: string;
   status_id: string;
   title: string;
   description?: string;
-  assignee_type: 'user' | 'role';
+  assignee_type: 'user' | 'role' | 'team' | 'unit';
   assignee_id: string;
   assignee_name?: string;
   requires_approval: boolean;

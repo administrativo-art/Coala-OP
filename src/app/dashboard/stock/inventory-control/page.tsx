@@ -2,17 +2,17 @@
 "use client";
 
 import { Suspense, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ExpiryControl } from '@/components/expiry-control';
-import { ArrowLeft, MinusCircle, History, Truck, Scale, Ticket } from 'lucide-react';
+import { MinusCircle, History, Truck, Scale, Ticket } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MovementHistoryModal } from '@/components/movement-history-modal';
 import { FinancialPeriodAnalysisModal } from '@/components/financial-period-analysis-modal';
 import { LabelSettingsModal } from '@/components/label-settings';
 import { RadialMenu } from '@/components/radial-menu';
 import { useAuth } from '@/hooks/use-auth';
+import { BackButton } from '@/components/navigation/back-button';
 
 function InventoryControlContent() {
     const router = useRouter();
@@ -54,12 +54,7 @@ function InventoryControlContent() {
         <>
             <div className="space-y-4">
                 <div className="flex flex-col items-start gap-4 mb-4">
-                    <Link href="/dashboard/stock">
-                        <Button variant="outline">
-                            <ArrowLeft className="mr-2" />
-                            Voltar para gestão de estoque
-                        </Button>
-                    </Link>
+                    <BackButton fallbackHref="/dashboard/stock" label="Voltar para gestão de estoque" />
                 </div>
                 <ExpiryControl />
             </div>

@@ -1,0 +1,12 @@
+import { writeFileSync } from "node:fs";
+import PizZip from "pizzip";
+import { generateDocx } from "../src/features/hr/documents/docx-generator.ts";
+
+const output = process.argv[2] || "/tmp/coala-docx-generator-qa.docx";
+const zip = new PizZip();
+zip.file("[Content_Types].xml", `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+zip.folder("_rels")?.file(".rels", `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+zip.folder("word")?.file("document.xml", `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>CONTRATO DE EXPERIÊNCIA</w:t></w:r></w:p><w:p><w:r><w:t>Colaborador: </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>{{employee.</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>name}}</w:t></w:r></w:p><w:p><w:r><w:t>CPF: {{employee.cpf}}</w:t></w:r></w:p><w:p><w:r><w:t>Admissão: {{employee.aso_admission_date}}</w:t></w:r></w:p><w:p><w:r><w:t>{{#if employee.has_vt}}</w:t></w:r></w:p><w:p><w:r><w:rPr><w:i/></w:rPr><w:t>Vale-transporte diário: {{employee.vt_daily_value}}</w:t></w:r></w:p><w:p><w:r><w:t>{{/if}}</w:t></w:r></w:p><w:p><w:r><w:t>Observações:</w:t><w:br/><w:t>{{employee.vt_notes}}</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`);
+zip.folder("word")?.folder("_rels")?.file("document.xml.rels", `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`);
+const template = zip.generate({ type: "nodebuffer" });
+writeFileSync(output, generateDocx(template, { employee: { name: "Maria Joana Barbosa Pereira", cpf: "123.456.789-00", aso_admission_date: "17/07/2026", has_vt: true, vt_daily_value: "R$ 8,40", vt_notes: "Uso em dias trabalhados.\nValor sujeito à escala." } }));

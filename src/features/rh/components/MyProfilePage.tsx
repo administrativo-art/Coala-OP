@@ -7,7 +7,10 @@ import { ProfileCompletion } from './ProfileCompletion';
 import { SectionCard } from './SectionCard';
 import { SectionEditModal } from './SectionEditModal';
 import { getStatusBadge } from '../lib/field-format';
-import type { FieldMapEntry, EmployeeFieldValue } from '@/types/rh';
+import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
+import { EmployeeProbationCard } from './EmployeeProbationCard';
+import { canEditField, canViewField } from '@/types/rh';
+import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
 const SECTION_LABELS: Record<string, string> = {
   identity:  'Dados pessoais',
@@ -18,6 +21,10 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 const EMPLOYEE_VISIBLE_SECTIONS = Object.keys(SECTION_LABELS);
+
+function cleanIds(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
 
 function Skeleton({ className }: { className: string }) {
   return <div className={`animate-pulse bg-gray-100 rounded-lg ${className}`} />;
@@ -61,17 +68,44 @@ export function MyProfilePage() {
     );
   }
 
-  const { employee, fieldValues, fieldMap } = profileState.data;
+  const {
+    employee,
+    fieldValues,
+    fieldMap,
+    consentimento_imagem_voz,
+    ciencia_privacidade_onboarding,
+    periodo_experiencia,
+  } = profileState.data;
   const { label: statusLabel, color: statusColor } = getStatusBadge(employee.status);
   const initials = employee.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  const ownerRole: RhRole = 'employee';
+  const visibilityContext: FieldVisibilityContext = {
+    isOwner: true,
+    userId: cache.auth_uid ?? employee.auth_uid ?? null,
+    roleIds: cleanIds([
+      cache.job_role_id,
+      ...(cache.job_role_ids ?? []),
+      ...(cache.role_ids ?? []),
+    ]),
+    functionIds: cleanIds([
+      cache.job_function_id,
+      ...(cache.job_function_ids ?? []),
+      ...(cache.function_ids ?? []),
+    ]),
+  };
 
   const sections = Object.entries(fieldMap.fields).reduce<
-    Record<string, Array<{ key: string; entry: FieldMapEntry; fv?: EmployeeFieldValue }>>
+    Record<string, Array<{ key: string; entry: FieldMapEntry; fv?: EmployeeFieldValue; editable?: boolean }>>
   >((acc, [key, entry]) => {
-    if (!entry.employee_visible) return acc;
+    if (!canViewField(entry.visibility, ownerRole, visibilityContext, entry.access, fieldMap.access_matrix)) return acc;
     if (!EMPLOYEE_VISIBLE_SECTIONS.includes(entry.section)) return acc;
     if (!acc[entry.section]) acc[entry.section] = [];
-    acc[entry.section].push({ key, entry, fv: fieldValues[key] });
+    acc[entry.section].push({
+      key,
+      entry,
+      fv: fieldValues[key],
+      editable: canEditField(entry, ownerRole, visibilityContext, fieldMap.access_matrix),
+    });
     return acc;
   }, {});
 
@@ -110,17 +144,23 @@ export function MyProfilePage() {
         fieldValues={fieldValues}
       />
 
+      <ImageVoiceConsentCard
+        employeeId={employee.bizneo_employee_id}
+        initialConsent={consentimento_imagem_voz}
+        privacyAcknowledgement={ciencia_privacidade_onboarding}
+        canRevoke
+      />
+
+      <EmployeeProbationCard probation={periodo_experiencia} />
+
       {/* Editable sections */}
       {EMPLOYEE_VISIBLE_SECTIONS.filter((s) => sections[s]?.length).map((sec) => (
         <SectionCard
           key={sec}
           title={SECTION_LABELS[sec] ?? sec}
           fields={sections[sec]}
-          role="employee"
-          onEdit={(key) => {
-            const f = allFields.find((f) => f.key === key);
-            if (f?.entry.employee_editable) setEditKey(key);
-          }}
+          role={ownerRole}
+          onEdit={setEditKey}
         />
       ))}
 

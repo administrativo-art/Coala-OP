@@ -10,6 +10,11 @@ import {
   serializeHrValue,
 } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { dbAdmin } from "@/lib/firebase-admin";
+import {
+  applyRecruitmentScoring,
+  getRecruitmentScoringBlockMessage,
+} from "@/lib/recruitment-scoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +49,25 @@ export async function POST(request: NextRequest) {
     const payload = normalizeJobRoleInput(
       jobRoleCreateSchema.parse(await request.json())
     );
+    if (payload.isActive !== false && !payload.defaultProfileId) {
+      return NextResponse.json(
+        { error: "Todo cargo ativo deve possuir um perfil de acesso padrão." },
+        { status: 400 }
+      );
+    }
+    if (payload.defaultProfileId) {
+      const profile = await dbAdmin.collection("profiles").doc(payload.defaultProfileId).get();
+      if (!profile.exists) {
+        return NextResponse.json({ error: "Perfil de acesso não encontrado." }, { status: 400 });
+      }
+    }
+    const scoringBlock = getRecruitmentScoringBlockMessage(
+      applyRecruitmentScoring(payload.formQuestions ?? [], "role_100").snapshot
+    );
+    if (scoringBlock) {
+      return NextResponse.json({ error: scoringBlock }, { status: 400 });
+    }
+
     const now = new Date().toISOString();
     const data = stripUndefined({
       ...payload,

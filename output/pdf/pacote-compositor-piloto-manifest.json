@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "packageId": "visual-pilot",
+  "packageType": "admission",
+  "protocol": "COAL-ADM-2026-000184",
+  "parties": [],
+  "components": [
+    {
+      "componentId": "contract",
+      "templateId": "system-admission-employment-probation-contract",
+      "templateVersion": 2,
+      "title": "Contrato de experiência",
+      "order": 1,
+      "startPage": 1,
+      "endPage": 3,
+      "contentHash": "b5bd0f7b83c84e717add691cb911d423204f638d12be1699fea1a2411cd73724",
+      "artifactHash": "8e4694901346cbc86780ab94de475160916c39f057f82f1fa2571ea282f3fd5d",
+      "sourceDocxHash": null,
+      "signatureScope": "bundle"
+    },
+    {
+      "componentId": "hours",
+      "templateId": "system-admission-hours-bank-agreement",
+      "templateVersion": 2,
+      "title": "Banco de horas",
+      "order": 2,
+      "startPage": 4,
+      "endPage": 5,
+      "contentHash": "c8fe14523774f769c4fbcaf79674701e2c9f382e8ead8576e2da27085f983b0b",
+      "artifactHash": "e98f2ad78d241d707c501147e52e5e1ac009128e9c8b8c4fd6661c46945fda24",
+      "sourceDocxHash": null,
+      "signatureScope": "bundle"
+    }
+  ],
+  "totalPages": 5,
+  "letterheadVersion": "coala-letterhead-v2",
+  "composerVersion": "document-composer-v1",
+  "pdfProfile": "pdf-1.7",
+  "packageHash": "8710490d505bf2292329aa8ccbb3bd9ce751c6aab06c0d0fca30914a3e720ed5",
+  "generatedAt": "2026-07-28T00:00:00.000Z",
+  "manifestHash": "09515697305fd7da8acca4ba8de14acb5d99e0beaef88483e8be3853796c23f7"
+}

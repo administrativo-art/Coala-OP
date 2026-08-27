@@ -1,6 +1,7 @@
 import { dbAdmin } from '@/lib/firebase-admin';
 import { type SalesReport, type SalesReportItem, type ConsumptionReport, type ConsumptionAnalysisItem, type ProductSimulation, type ProductSimulationItem, type BaseProduct } from '@/types';
 import { convertValue } from '@/lib/conversion';
+import { isPdvCouponFullyCancelled, isPdvItemCancelled, pdvCouponItems } from '@/lib/integrations/pdv-coupon-ingestion';
 
 function requireEnv(name: string): string {
   const val = process.env[name];
@@ -42,6 +43,282 @@ export type SyncDiagnostics = {
   itemsZeroValue: number;
   unmappedSkus: { sku: string; name: string; count: number }[];
 };
+
+export type PdvLegalFilial = {
+  id: string;
+  name: string;
+  cnpj: string | null;
+  active: boolean | null;
+};
+
+export type PdvLegalProfile = {
+  id: string;
+  name: string;
+  usersCount: number | null;
+};
+
+export type PdvLegalUser = {
+  id: string;
+  name: string;
+  filialId: string | null;
+  profileId: string | null;
+  active: boolean | null;
+};
+
+function responseRows(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== 'object') return [];
+  const record = raw as Record<string, unknown>;
+  for (const key of ['data', 'usuarios', 'users', 'items', 'results']) {
+    if (Array.isArray(record[key])) return record[key] as unknown[];
+  }
+  return [];
+}
+
+async function pdvGet(path: string): Promise<unknown> {
+  const { COD_EMPRESA, API_TOKEN } = getEnv();
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${BASE_URL}${path}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      CodEmpresa: COD_EMPRESA,
+      Token: API_TOKEN,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new PdvApiError(`Falha ao consultar o PDV Legal (HTTP ${response.status}).`, 'FETCH_FAILED', detail.slice(0, 300));
+  }
+  return response.json().catch(() => null);
+}
+
+export async function fetchPdvLegalProfiles(): Promise<PdvLegalProfile[]> {
+  const rows = responseRows(await pdvGet('/usuariopdv/perfil/get'));
+  return rows.flatMap(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    const row = value as Record<string, unknown>;
+    const id = String(row.codigo ?? '').trim();
+    const name = typeof row.nome === 'string' ? row.nome.trim() : '';
+    if (!id || !name) return [];
+    return [{ id, name, usersCount: typeof row.numeroUsuarios === 'number' ? row.numeroUsuarios : null }];
+  }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+export async function fetchPdvLegalUsers(): Promise<PdvLegalUser[]> {
+  const rows = responseRows(await pdvGet('/usuariopdv/get'));
+  return rows.flatMap(value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    const row = value as Record<string, unknown>;
+    const id = String(row.codigo ?? row.id ?? '').trim();
+    const name = typeof row.nome === 'string' ? row.nome.trim() : '';
+    if (!id || !name) return [];
+    const filial = row.codFilial ?? row.codfilial ?? row.codigoFilial;
+    const profile = row.codperfil ?? row.codPerfil ?? row.codigoPerfil;
+    return [{
+      id,
+      name,
+      filialId: filial == null ? null : String(filial),
+      profileId: profile == null ? null : String(profile),
+      active: typeof row.ativo === 'boolean' ? row.ativo : null,
+    }];
+  });
+}
+
+function normalizePersonName(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+export async function findPdvLegalUser(params: { name: string; filialId?: string | null; id?: string | null }) {
+  const users = await fetchPdvLegalUsers();
+  if (params.id) return users.find(user => user.id === params.id) ?? null;
+  const target = normalizePersonName(params.name);
+  const matches = users.filter(user =>
+    normalizePersonName(user.name) === target &&
+    (!params.filialId || user.filialId === params.filialId)
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export async function createPdvLegalUser(params: {
+  name: string;
+  filialId: string;
+  profileId: string;
+  password: string;
+}): Promise<PdvLegalUser> {
+  const { COD_EMPRESA, API_TOKEN } = getEnv();
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${BASE_URL}/usuariopdv/save`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      CodEmpresa: COD_EMPRESA,
+      Token: API_TOKEN,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      codigo: 0,
+      nome: params.name,
+      codFilial: Number(params.filialId),
+      codperfil: Number(params.profileId),
+      senha: Number(params.password),
+      isEntregador: false,
+      ativo: true,
+      byApi: true,
+    }),
+  });
+  const raw = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new PdvApiError(`Falha ao criar usuário no PDV Legal (HTTP ${response.status}).`, 'USER_CREATE_FAILED');
+  }
+  const row = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  const id = String(row.codigo ?? row.id ?? '').trim();
+  if (id) {
+    return { id, name: params.name, filialId: params.filialId, profileId: params.profileId, active: true };
+  }
+  const found = await findPdvLegalUser({ name: params.name, filialId: params.filialId });
+  if (!found) throw new PdvApiError('Usuário criado, mas o código não foi retornado pelo PDV Legal.', 'USER_ID_MISSING');
+  return found;
+}
+
+export async function updatePdvLegalUserAccess(params: {
+  userId: string;
+  filialId: string;
+  profileId: string;
+}): Promise<PdvLegalUser> {
+  const cleanId = params.userId.trim();
+  if (!/^\d+$/.test(cleanId)) throw new PdvApiError('Código de usuário do PDV inválido.', 'USER_ID_INVALID');
+  if (!/^\d+$/.test(params.filialId) || !/^\d+$/.test(params.profileId)) {
+    throw new PdvApiError('Filial ou perfil do PDV inválido.', 'USER_ACCESS_INVALID');
+  }
+
+  const raw = await pdvGet(`/usuariopdv/get/${encodeURIComponent(cleanId)}`);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new PdvApiError('Cadastro do PDV não localizado para atualização.', 'USER_NOT_FOUND');
+  }
+  const current = raw as Record<string, unknown>;
+  const name = typeof current.nome === 'string' ? current.nome.trim() : '';
+  const password = current.senha;
+  if (!name || (typeof password !== 'number' && typeof password !== 'string')) {
+    throw new PdvApiError('O PDV não retornou os dados necessários para preservar usuário e senha.', 'USER_UPDATE_DATA_MISSING');
+  }
+
+  const { COD_EMPRESA, API_TOKEN } = getEnv();
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${BASE_URL}/usuariopdv/update`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      CodEmpresa: COD_EMPRESA,
+      Token: API_TOKEN,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      codigo: Number(cleanId),
+      nome: name,
+      codFilial: Number(params.filialId),
+      codperfil: Number(params.profileId),
+      senha: Number(password),
+      isEntregador: current.isEntregador === true,
+      codRefExterna: typeof current.codRefExterna === 'number' ? current.codRefExterna : 0,
+      ativo: current.ativo !== false,
+      segment: typeof current.segment === 'string' ? current.segment : '',
+      byApi: true,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new PdvApiError(`Falha ao atualizar acesso no PDV Legal (HTTP ${response.status}).`, 'USER_UPDATE_FAILED', detail.slice(0, 300));
+  }
+  const updated = await findPdvLegalUser({ name, filialId: params.filialId, id: cleanId });
+  if (!updated || updated.filialId !== params.filialId || updated.profileId !== params.profileId) {
+    throw new PdvApiError('O PDV Legal não confirmou a nova filial e o novo perfil.', 'USER_UPDATE_NOT_CONFIRMED');
+  }
+  return updated;
+}
+
+export async function deletePdvLegalUser(userId: string): Promise<void> {
+  const cleanId = userId.trim();
+  if (!/^\d+$/.test(cleanId)) throw new PdvApiError('Código de usuário do PDV inválido.', 'USER_ID_INVALID');
+  const { COD_EMPRESA, API_TOKEN } = getEnv();
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${BASE_URL}/usuariopdv/delete/${encodeURIComponent(cleanId)}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      CodEmpresa: COD_EMPRESA,
+      Token: API_TOKEN,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+  if (!response.ok && response.status !== 404) {
+    const detail = await response.text().catch(() => '');
+    throw new PdvApiError(`Falha ao remover acesso no PDV Legal (HTTP ${response.status}).`, 'USER_DELETE_FAILED', detail.slice(0, 300));
+  }
+  const remaining = await findPdvLegalUser({ name: '', id: cleanId });
+  if (remaining?.active !== false) {
+    throw new PdvApiError('O PDV Legal ainda retorna o usuário após a solicitação de remoção.', 'USER_DELETE_NOT_CONFIRMED');
+  }
+}
+
+function normalizePdvFilial(value: unknown): PdvLegalFilial | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const rawId = row.codigo ?? row.Codigo ?? row.id ?? row.Id;
+  const rawName = row.nome ?? row.Nome ?? row.razaoSocial ?? row.RazaoSocial;
+  if ((typeof rawId !== 'string' && typeof rawId !== 'number') || typeof rawName !== 'string') {
+    return null;
+  }
+  const id = String(rawId).trim();
+  const name = rawName.trim();
+  if (!id || !name) return null;
+  const rawCnpj = row.cnpj ?? row.Cnpj ?? row.cpfCnpj ?? row.CpfCnpj;
+  const rawActive = row.ativo ?? row.Ativo;
+  return {
+    id,
+    name,
+    cnpj: typeof rawCnpj === 'string' && rawCnpj.trim() ? rawCnpj.trim() : null,
+    active: typeof rawActive === 'boolean' ? rawActive : null,
+  };
+}
+
+export async function fetchPdvLegalFiliais(): Promise<PdvLegalFilial[]> {
+  const { COD_EMPRESA, API_TOKEN } = getEnv();
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${BASE_URL}/filial/get`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      CodEmpresa: COD_EMPRESA,
+      Token: API_TOKEN,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new PdvApiError(
+      `Falha ao consultar filiais do PDV Legal (HTTP ${response.status}).`,
+      'FILIAIS_FETCH_FAILED',
+      detail.slice(0, 300),
+    );
+  }
+  const raw: unknown = await response.json().catch(() => null);
+  const rows = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).data)
+      ? (raw as { data: unknown[] }).data
+      : [];
+  return rows
+    .map(normalizePdvFilial)
+    .filter((filial): filial is PdvLegalFilial => filial !== null)
+    .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
+}
 
 /**
  * Detecta e valida o formato da resposta de cupons. Array direto, paginado
@@ -107,7 +384,7 @@ export async function getAccessToken() {
 /**
  * Busca cupons exaustivamente (Paginado) no servidor.
  */
-async function fetchAllCouponsForDay(accessToken: string, date: string, filialId: string) {
+export async function fetchAllCouponsForDay(accessToken: string, date: string, filialId: string) {
   const { COD_EMPRESA, API_TOKEN } = getEnv();
   console.log(`[PDV Legal] Iniciando coleta: ${date} (Filial: ${filialId})`);
 
@@ -193,16 +470,10 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   const unmappedSkuMap: Record<string, { sku: string; name: string; count: number }> = {};
 
   for (const coupon of coupons) {
-    const rawItems = coupon.Itens || coupon.itens;
-    if (!rawItems || !Array.isArray(rawItems)) { diag.couponsWithoutItems++; continue; }
+    const rawItems = pdvCouponItems(coupon);
+    if (rawItems.length === 0) { diag.couponsWithoutItems++; continue; }
 
-    const isCupomCancelado = coupon.iscancelado || coupon.status === 'CANCELADO';
-
-    // Verifica se é um "Cancelamento Total Preguiçoso" da API:
-    // O cupom está cancelado, mas a API esqueceu de marcar os itens dentro dele como cancelados.
-    const hasAnyItemExplicitlyCancelled = rawItems.some(item => item.iscancelado === true);
-
-    if (isCupomCancelado && !hasAnyItemExplicitlyCancelled) {
+    if (isPdvCouponFullyCancelled(coupon)) {
        // Se o cupom está cancelado E NENHUM item dentro dele diz que foi cancelado,
        // assumimos que foi um cancelamento total da venda e ignoramos o cupom inteiro.
        diag.couponsCancelled++;
@@ -216,7 +487,7 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     for (const item of rawItems) {
       diag.itemsSeen++;
       // IGNORA O ITEM APENAS SE ELE, INDIVIDUALMENTE, ESTIVER MARCADO COMO CANCELADO
-      if (item.iscancelado) { diag.itemsCancelled++; continue; }
+      if (isPdvItemCancelled(item)) { diag.itemsCancelled++; continue; }
 
       const possibleSkus = [
           item.codigoVenda,

@@ -11,7 +11,11 @@ service cloud.firestore {
     }
 
     function hasFinancialClaims() {
-      return isAuth() && request.auth.token.financial != null;
+      return isAuth() && request.auth.token.get('financial', null) != null;
+    }
+
+    function financialClaims() {
+      return request.auth.token.get('financial', {});
     }
 
     function userData() {
@@ -22,107 +26,159 @@ service cloud.firestore {
       return (hasUserDoc()
         && userData().active == true
         && userData().permissions.view == true)
-        || (hasFinancialClaims() && request.auth.token.financial.view == true);
+        || (hasFinancialClaims() && financialClaims().view == true);
     }
 
     function isFinancialAdmin() {
-      return request.auth.token.isDefaultAdmin == true
+      return request.auth.token.get('isDefaultAdmin', false) == true
         || (hasUserDoc() && userData().isDefaultAdmin == true && hasFinancialAccess());
     }
 
     function canViewDashboard() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.dashboard == true)
-        || (hasFinancialClaims() && request.auth.token.financial.dashboard == true);
+        || (hasFinancialClaims() && financialClaims().dashboard == true);
     }
 
     function canViewCashFlow() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.cashFlow.view == true)
-        || (hasFinancialClaims() && request.auth.token.financial.cashFlow.view == true);
+        || (hasFinancialClaims() && financialClaims().cashFlow.view == true);
     }
 
     function canCreateCashFlow() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.cashFlow.create == true)
-        || (hasFinancialClaims() && request.auth.token.financial.cashFlow.create == true);
+        || (hasFinancialClaims() && financialClaims().cashFlow.create == true);
     }
 
     function canViewExpenses() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.view == true)
-        || (hasFinancialClaims() && request.auth.token.financial.expenses.view == true);
+        || (hasFinancialClaims() && financialClaims().expenses.view == true);
     }
 
     function canCreateExpenses() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.create == true)
-        || (hasFinancialClaims() && request.auth.token.financial.expenses.create == true);
+        || (hasFinancialClaims() && financialClaims().expenses.create == true);
     }
 
     function canEditExpenses() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.edit == true)
-        || (hasFinancialClaims() && request.auth.token.financial.expenses.edit == true);
+        || (hasFinancialClaims() && financialClaims().expenses.edit == true);
     }
 
     function canPayExpenses() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.pay == true)
-        || (hasFinancialClaims() && request.auth.token.financial.expenses.pay == true);
+        || (hasFinancialClaims() && financialClaims().expenses.pay == true);
     }
 
-    function canImportExpenses() {
-      return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.import == true)
-        || (hasFinancialClaims() && request.auth.token.financial.expenses.import == true);
+    function financialGroupPerm(group, key) {
+      return isFinancialAdmin()
+        || (hasUserDoc() && hasFinancialAccess()
+          && userData().permissions.get(group, {}).get(key, false) == true)
+        || (hasFinancialClaims()
+          && financialClaims().get(group, {}).get(key, false) == true);
     }
 
+    function canViewAudits() { return financialGroupPerm('audits', 'view'); }
+    function canImportAudits() { return canViewAudits() && financialGroupPerm('audits', 'import'); }
+    function canEditAudits() { return canViewAudits() && financialGroupPerm('audits', 'edit'); }
+    function canIgnoreAudits() { return canViewAudits() && financialGroupPerm('audits', 'ignore'); }
+    function canEffectuateAudits() { return canViewAudits() && financialGroupPerm('audits', 'effectuate'); }
+    function canManageAudits() { return canViewAudits() && financialGroupPerm('audits', 'manage'); }
+    function canViewCardStatements() { return financialGroupPerm('cardStatements', 'view'); }
+    function canImportCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'import'); }
+    function canAuditCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'audit'); }
+    function canCloseCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'close'); }
+    function canReconcileCardStatements() { return canViewCardStatements() && financialGroupPerm('cardStatements', 'reconcile'); }
+    function canViewPersonnelCosts() { return financialGroupPerm('personnelCosts', 'view'); }
+    function canEditPersonnelCosts() { return canViewPersonnelCosts() && financialGroupPerm('personnelCosts', 'edit'); }
     function canDeleteExpenses() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.expenses.delete == true)
-        || (hasFinancialClaims() && request.auth.token.financial.expenses.delete == true);
+        || (hasFinancialClaims() && financialClaims().expenses.delete == true);
     }
 
     function canViewFinancialFlow() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.financialFlow == true)
-        || (hasFinancialClaims() && request.auth.token.financial.financialFlow == true);
+        || (hasFinancialClaims() && financialClaims().financialFlow == true);
     }
 
     function canViewDre() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.dre == true)
-        || (hasFinancialClaims() && request.auth.token.financial.dre == true);
+        || (hasFinancialClaims() && financialClaims().dre == true);
+    }
+
+    function canViewCashClosures() {
+      return isFinancialAdmin()
+        || (hasUserDoc() && hasFinancialAccess()
+          && userData().permissions.get('cashClosures', {}).get('view', false) == true)
+        || (hasFinancialClaims()
+          && financialClaims().get('cashClosures', {}).get('view', false) == true);
+    }
+
+    function canEditCashClosures() {
+      return isFinancialAdmin()
+        || (hasUserDoc() && hasFinancialAccess()
+          && userData().permissions.get('cashClosures', {}).get('edit', false) == true)
+        || (hasFinancialClaims()
+          && financialClaims().get('cashClosures', {}).get('edit', false) == true);
+    }
+
+    function canViewCashDeposits() {
+      return isFinancialAdmin()
+        || (hasUserDoc() && hasFinancialAccess()
+          && userData().permissions.get('cashDeposits', {}).get('view', false) == true)
+        || (hasFinancialClaims()
+          && financialClaims().get('cashDeposits', {}).get('view', false) == true);
+    }
+
+    function canAccessKiosk(kioskId) {
+      return isFinancialAdmin()
+        || (hasUserDoc() && (
+          userData().get('unitAccessScope', 'linked') == 'all'
+          || kioskId in userData().get('unitAccessUnitIds', [])
+          || kioskId in userData().get('unitIds', [])
+          || kioskId in userData().get('assignedKioskIds', [])
+        ));
     }
 
     function canViewSettings() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.settings.view == true)
-        || (hasFinancialClaims() && request.auth.token.financial.settings.view == true);
+        || (hasFinancialClaims() && financialClaims().settings.view == true);
     }
 
     function canManageAccountPlans() {
       return isFinancialAdmin()
         || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageAccountPlans == true)
-        || (hasFinancialClaims() && request.auth.token.financial.settings.manageAccountPlans == true);
+        || (hasFinancialClaims() && financialClaims().settings.manageAccountPlans == true);
     }
 
     function canManageResultCenters() {
       return isFinancialAdmin()
         || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageResultCenters == true)
-        || (hasFinancialClaims() && request.auth.token.financial.settings.manageResultCenters == true);
+        || (hasFinancialClaims() && financialClaims().settings.manageResultCenters == true);
     }
 
     function canManageBankAccounts() {
       return isFinancialAdmin()
         || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageBankAccounts == true)
-        || (hasFinancialClaims() && request.auth.token.financial.settings.manageBankAccounts == true);
+        || (hasFinancialClaims() && financialClaims().settings.manageBankAccounts == true);
     }
 
     function canManageImportAliases() {
       return isFinancialAdmin()
         || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageImportAliases == true)
-        || (hasFinancialClaims() && request.auth.token.financial.settings.manageImportAliases == true);
+        || (hasFinancialClaims() && financialClaims().settings.manageImportAliases == true);
     }
 
     function canManageExpenseDescriptions() {
       return isFinancialAdmin()
         || (hasUserDoc() && canViewSettings() && userData().permissions.settings.manageExpenseDescriptions == true)
-        || (hasFinancialClaims() && request.auth.token.financial.settings.manageExpenseDescriptions == true);
+        || (hasFinancialClaims() && financialClaims().settings.manageExpenseDescriptions == true);
     }
 
     function canReadExpenseDescriptions() {
       return canCreateExpenses()
         || canEditExpenses()
+        || canEditAudits()
+        || canAuditCardStatements()
         || canManageExpenseDescriptions();
     }
 
@@ -130,6 +186,142 @@ service cloud.firestore {
       return canCreateExpenses()
         || canEditExpenses()
         || canManageExpenseDescriptions();
+    }
+
+    function isBankStatementAuditUpdate() {
+      return resource.data.get('importedFrom', null) == 'bank_statement'
+        && request.resource.data.get('importedFrom', null) == 'bank_statement'
+        && request.resource.data.get('importSource', null) == resource.data.get('importSource', null)
+        && request.resource.data.get('externalTransactionId', null) == resource.data.get('externalTransactionId', null)
+        && request.resource.data.get('amount', null) == resource.data.get('amount', null)
+        && request.resource.data.get('date', null) == resource.data.get('date', null)
+        && request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null)
+        && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null)
+        && (canEditAudits() || canIgnoreAudits() || canEffectuateAudits() || canManageAudits());
+    }
+
+    function hasConsistentExpenseAccount(data) {
+      return data.accountPlan is string
+        && data.accountPlan.size() > 0
+        && data.get('accountId', data.accountPlan) == data.accountPlan;
+    }
+
+    function hasValidExpenseAccount(data) {
+      return hasConsistentExpenseAccount(data)
+        && exists(/databases/$(database)/documents/accounts/$(data.accountPlan))
+        && get(/databases/$(database)/documents/accounts/$(data.accountPlan)).data.active == true
+        && (
+          get(/databases/$(database)/documents/accounts/$(data.accountPlan)).data.isGroup != true
+          || (
+            data.get('hasAccountAllocations', false) == true
+            && data.accountAllocations is list
+            && data.accountAllocations.size() >= 2
+            && data.accountAllocations.size() <= 25
+          )
+        );
+    }
+
+    function expenseAccountChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['accountPlan', 'accountId', 'hasAccountAllocations', 'accountAllocations']);
+    }
+
+    function hasValidExpenseIndividualization(data) {
+      return data.get('hasPersonAllocations', false) != true
+        || (
+          data.personAllocations is list
+          && data.personAllocations.size() >= 1
+          && data.personAllocations.size() <= 200
+        );
+    }
+
+    function isCardStatementImportCreate(data) {
+      return data.get('importedFrom', null) == 'card_statement'
+        && data.get('sourceType', null) == 'card_statement_import'
+        && data.get('status', null) == 'pending'
+        && data.get('cardReconciliationStatus', null) == 'pending'
+        && data.get('plannedPaymentMethodType', null) == 'credit_card'
+        && data.get('createdBy', null) == request.auth.uid
+        && data.get('updatedBy', null) == request.auth.uid
+        && data.get('cardStatementKey', '') is string
+        && data.get('cardStatementKey', '').size() > 0
+        && data.get('cardStatementImportFingerprint', '') is string
+        && data.get('cardStatementImportFingerprint', '').size() > 0
+        && data.get('totalValue', 0) is number
+        && data.get('totalValue', 0) > 0
+        && data.get('competenceDate', null) is timestamp
+        && data.get('dueDate', null) is timestamp
+        && data.get('accountPlan', null) == ''
+        && data.get('accountId', null) == ''
+        && data.get('accountPlanId', null) == ''
+        && data.get('hasAccountAllocations', null) == false
+        && data.get('accountAllocations', null) is list
+        && data.get('accountAllocations', []).size() == 0
+        && data.get('hasPersonAllocations', null) == false
+        && data.get('personAllocations', null) is list
+        && data.get('personAllocations', []).size() == 0
+        && canImportCardStatements();
+    }
+
+    function expenseIndividualizationChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['hasPersonAllocations', 'personAllocations']);
+    }
+
+    function isCardStatementAuditUpdate() {
+      return resource.data.get('importedFrom', null) == 'card_statement'
+        && request.resource.data.get('importedFrom', null) == 'card_statement'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'description', 'supplier', 'notes',
+          'accountPlan', 'accountId', 'accountPlanId', 'accountPlanName',
+          'resultCenter', 'resultCenterId', 'resultCenterName',
+          'isApportioned', 'apportionments',
+          'hasAccountAllocations', 'accountAllocations',
+          'hasPersonAllocations', 'personAllocations',
+          'cardReconciliationStatus', 'cardReconciledAt', 'cardReconciledBy', 'cardStatementKey',
+          'updatedAt', 'updatedBy'
+        ])
+        && canAuditCardStatements()
+        && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
+        && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data)));
+    }
+
+    function isCardStatementImportWrite(data) {
+      return data.get('status', null) == 'open'
+        && data.get('key', '') is string
+        && data.get('key', '').size() > 0
+        && data.get('accountId', '') is string
+        && data.get('paymentMethodId', '') is string
+        && canImportCardStatements();
+    }
+
+    function isCardStatementImportUpdate() {
+      return isCardStatementImportWrite(request.resource.data)
+        && resource.data.get('status', 'open') == 'open'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'key', 'monthKey', 'accountId', 'accountName', 'paymentMethodId', 'paymentMethodLabel',
+          'closingDate', 'dueDate', 'officialTotal', 'status',
+          'lastImportFileName', 'lastImportAnalysis', 'lastImportedAt', 'lastImportedBy',
+          'updatedAt', 'updatedBy', 'createdAt', 'createdBy'
+        ]);
+    }
+
+    function isCardStatementCloseWrite(data) {
+      return data.get('status', null) == 'closed'
+        && data.get('officialTotal', 0) is number
+        && data.get('officialTotal', 0) > 0
+        && data.get('allocations', null) is list
+        && canCloseCardStatements();
+    }
+
+    function isCardStatementCloseUpdate() {
+      return isCardStatementCloseWrite(request.resource.data)
+        && resource.data.get('status', 'open') == 'open'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'key', 'monthKey', 'accountId', 'accountName', 'paymentMethodId', 'paymentMethodLabel',
+          'closingDate', 'dueDate', 'projectedTotal', 'provisionedTotal', 'officialTotal',
+          'status', 'allocations', 'updatedAt', 'updatedBy', 'createdAt', 'createdBy'
+        ]);
     }
 
     match /users/{userId} {
@@ -170,32 +362,163 @@ service cloud.firestore {
     }
 
     match /expenses/{expenseId} {
-      allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre();
-      allow create: if canCreateExpenses();
-      allow update: if canEditExpenses() || canPayExpenses();
+      allow read: if canViewExpenses() || canViewDashboard() || canViewFinancialFlow() || canViewDre()
+        || canViewAudits() || canViewCardStatements() || canViewPersonnelCosts();
+      allow create: if isCardStatementImportCreate(request.resource.data)
+        || (canCreateExpenses()
+          && hasValidExpenseAccount(request.resource.data)
+          && (request.resource.data.get('hasPersonAllocations', false) != true || canEditPersonnelCosts())
+          && hasValidExpenseIndividualization(request.resource.data));
+      allow update: if (canEditExpenses()
+          && (!expenseAccountChanged() || hasValidExpenseAccount(request.resource.data))
+          && (!expenseIndividualizationChanged() || (canEditPersonnelCosts() && hasValidExpenseIndividualization(request.resource.data))))
+        || isCardStatementAuditUpdate();
       allow delete: if canDeleteExpenses();
     }
 
     match /payments/{paymentId} {
       allow read: if canViewExpenses() || canViewCashFlow() || canViewFinancialFlow() || canViewDre();
-      allow create: if canPayExpenses();
-      allow update, delete: if false;
+      // Registros de pagamento alteram obrigação, vínculo, ajustes e histórico
+      // na mesma operação. Toda escrita ocorre pela API autenticada do servidor.
+      allow create, update, delete: if false;
+    }
+
+    match /financialObligations/{obligationId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /obligationPaymentLinks/{linkId} {
+      allow read, write: if false;
+    }
+
+    match /paymentAdjustments/{adjustmentId} {
+      allow read, write: if false;
+    }
+
+    match /cardStatements/{statementId} {
+      allow read: if canViewCardStatements();
+      allow create: if isCardStatementImportWrite(request.resource.data)
+        || isCardStatementCloseWrite(request.resource.data);
+      allow update: if isCardStatementImportUpdate()
+        || isCardStatementCloseUpdate();
+      allow delete: if false;
     }
 
     match /transactions/{transactionId} {
-      allow read: if canViewCashFlow() || canViewFinancialFlow() || canViewDre() || canViewDashboard();
-      allow create: if canCreateCashFlow() || canImportExpenses() || canPayExpenses();
-      allow update, delete: if false;
+      allow read: if canViewCashFlow() || canViewFinancialFlow() || canViewDre() || canViewDashboard()
+        || canViewAudits() || canReconcileCardStatements();
+      allow create: if canCreateCashFlow() || canEffectuateAudits() || canPayExpenses();
+      allow update: if isBankStatementAuditUpdate();
+      allow delete: if false;
     }
 
     match /importDrafts/{draftId} {
-      allow read: if canImportExpenses() && (
+      allow read: if canViewAudits() && (
         resource.data.status == "open" ||
         resource.data.createdBy == request.auth.uid
       );
-      allow delete: if canImportExpenses() && resource.data.createdBy == request.auth.uid;
-      allow create: if canImportExpenses() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if canImportExpenses() && resource.data.createdBy == request.auth.uid;
+      allow delete: if false;
+      allow create: if canImportAudits() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if false;
+    }
+
+    // Dados de favorecidos contêm destino bancário criptografado e auditoria.
+    // Toda leitura e escrita ocorre nas APIs autenticadas do servidor.
+    match /supplierPaymentProfiles/{entityId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    // Solicitações bancárias, eventos e comprovantes são acessados somente por
+    // APIs de servidor para impedir criação, autorização ou baixa pelo cliente.
+    match /bankPaymentRequests/{requestId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    // Expectativas de débito ligam uma solicitação bancária ao extrato real.
+    // São internas para impedir que o cliente force uma conciliação.
+    match /expectedBankDebits/{debitId} {
+      allow read, write: if false;
+    }
+
+    // E-mails financeiros e anexos são expostos somente pelas APIs autenticadas
+    // para evitar acesso direto a documentos de cobrança pelo cliente.
+    match /financialInboxMessages/{messageId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /cashClosures/{closureId} {
+      allow read: if canViewCashClosures() && canAccessKiosk(resource.data.kioskId);
+      allow create, update, delete: if false;
+
+      match /lines/{lineId} {
+        allow read: if canViewCashClosures()
+          && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId);
+        allow update: if canEditCashClosures()
+          && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId)
+          && get(/databases/$(database)/documents/cashClosures/$(closureId)).data.status == 'draft'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['countedCents', 'note'])
+          && (request.resource.data.countedCents == null
+            || (request.resource.data.countedCents is int && request.resource.data.countedCents >= 0))
+          && (request.resource.data.note == null || request.resource.data.note is string);
+        allow create, delete: if false;
+      }
+    }
+
+    match /cashClosureUnitSummaries/{summaryId} {
+      allow read: if canViewCashClosures() && canAccessKiosk(resource.data.kioskId);
+      allow write: if false;
+    }
+
+    match /cashClosureMonthlySummaries/{summaryId} {
+      allow read: if canViewCashClosures() && canAccessKiosk(resource.data.kioskId);
+      allow write: if false;
+    }
+
+    match /cashClosureAuditLogs/{logId} {
+      allow read, write: if false;
+    }
+
+    match /cashDepositBatches/{batchId} {
+      allow read: if canViewCashDeposits() && canAccessKiosk(resource.data.kioskId);
+      allow write: if false;
+
+      match /items/{itemId} {
+        allow read: if canViewCashDeposits()
+          && canAccessKiosk(get(/databases/$(database)/documents/cashDepositBatches/$(batchId)).data.kioskId);
+        allow write: if false;
+      }
+    }
+
+    match /cashDepositAdjustments/{adjustmentId} {
+      allow read, write: if false;
+    }
+
+    match /interCobrancas/{cobrancaId} {
+      allow read, write: if false;
+    }
+
+    match /interCobrancaEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /interWebhookRawEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /cashDepositReconciliationRuns/{runId} {
+      allow read, write: if false;
     }
   }
 }

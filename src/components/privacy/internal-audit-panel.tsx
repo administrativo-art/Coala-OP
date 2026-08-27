@@ -23,6 +23,7 @@ const MODULE_LABELS: Record<string, string> = {
   "recruitment.openings": "Vagas",
   "privacy.requests": "Pedidos LGPD",
   "privacy.incidents": "Incidentes",
+  "system.cli": "Operações por CLI",
   tasks: "Tarefas",
 };
 
@@ -48,6 +49,10 @@ const ACTION_LABELS: Record<string, string> = {
   privacy_request_updated: "Pedido LGPD atualizado",
   security_incident_created: "Incidente criado",
   security_incident_updated: "Incidente atualizado",
+  cli_session_started: "Sessão de CLI iniciada",
+  cli_session_completed: "Sessão de CLI concluída",
+  cli_session_failed: "Sessão de CLI encerrada com erro",
+  cli_operation_recorded: "Operação registrada pela CLI",
 };
 
 function formatDate(value: string | null) {
@@ -164,6 +169,7 @@ export function InternalAuditPanel() {
               <SelectItem value="dp.schedules">Escalas</SelectItem>
               <SelectItem value="recruitment">Recrutamento</SelectItem>
               <SelectItem value="privacy">Privacidade</SelectItem>
+              <SelectItem value="system.cli">Operações por CLI</SelectItem>
               <SelectItem value="tasks">Tarefas</SelectItem>
             </SelectContent>
           </Select>

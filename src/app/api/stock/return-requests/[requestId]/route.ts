@@ -36,6 +36,16 @@ function mapReturnStatusToTaskStatus(status: ReturnRequest["status"]): Task["sta
   return "in_progress";
 }
 
+function getReturnTaskTitle(request: Pick<ReturnRequest, "numero" | "insumoNome" | "status">) {
+  if (request.status === "finalizado_sucesso") {
+    return `Avaria concluída: ${request.numero}`;
+  }
+  if (request.status === "finalizado_erro") {
+    return `Avaria encerrada sem sucesso: ${request.numero}`;
+  }
+  return `Acompanhar avaria: ${request.numero} - ${request.insumoNome}`;
+}
+
 export async function PATCH(request: NextRequest, routeContext: RouteContext) {
   try {
     const context = await requireUser(request);
@@ -108,8 +118,14 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
       await updateTaskDocument({
         context,
         taskId,
+        allowOriginStatusChange: true,
         updates: {
           status: mapReturnStatusToTaskStatus(body.status),
+          title: getReturnTaskTitle({
+            ...current,
+            status: body.status,
+          }),
+          originLink: "/dashboard/stock/returns",
         },
       });
     }
@@ -142,7 +158,28 @@ export async function DELETE(request: NextRequest, routeContext: RouteContext) {
     }
 
     const { requestId } = await routeContext.params;
-    await dbAdmin.collection("returnRequests").doc(requestId).delete();
+    const requestRef = dbAdmin.collection("returnRequests").doc(requestId);
+    const snap = await requestRef.get();
+    const current = snap.exists
+      ? ({ id: snap.id, ...(snap.data() as Omit<ReturnRequest, "id">) } as ReturnRequest)
+      : null;
+
+    await requestRef.delete();
+
+    if (current?.taskId) {
+      await updateTaskDocument({
+        context,
+        taskId: current.taskId,
+        allowOriginStatusChange: true,
+        updates: {
+          status: "rejected",
+          title: `Avaria removida: ${current.numero}`,
+          description: "O chamado de avaria/devolução foi removido.",
+          originLink: "/dashboard/stock/returns",
+        },
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

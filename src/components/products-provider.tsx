@@ -6,13 +6,15 @@ import React, { createContext, useState, useEffect, useCallback, useMemo } from 
 import { type Product, type ProductDefinition, unitCategories, type UnitCategory } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, writeBatch, where, getDocs } from 'firebase/firestore';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
+import { collection, onSnapshot, query, where, getDocs } from 'firebase/firestore';
+import { normalizeMeasurementUnit } from '@/lib/conversion';
 
 export interface ProductsContextType {
   products: Product[];
   loading: boolean;
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
-  updateProduct: (updatedProduct: Product) => Promise<void>;
+  updateProduct: (updatedProduct: Pick<Product, 'id'> & Partial<Omit<Product, 'id'>>) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
   deleteMultipleProducts: (productIds: string[]) => Promise<void>;
   getProductFullName: (product: Product | null | undefined) => string;
@@ -34,10 +36,41 @@ const cleanUndefinedFields = (data: Record<string, any>) => {
 
 export function ProductsProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
+    if (!firebaseUser) {
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    const applyProducts = (productsData: Product[]) => {
+      if (!active) return;
+      setProducts(productsData
+        .map((product) => ({ ...product, unit: normalizeMeasurementUnit(product.unit) }))
+        .sort((a,b) => a.baseName.localeCompare(b.baseName)));
+      setLoading(false);
+    };
+
+    const loadFallback = async () => {
+      try {
+        const payload = await fetchClientBootstrap(firebaseUser, ["products"]);
+        applyProducts(payload.products ?? []);
+      } catch (fallbackError) {
+        console.error("[ProductsProvider] API fallback failed:", fallbackError);
+        if (active) setLoading(false);
+      }
+    };
+
+    setLoading(true);
     const q = query(collection(db, "products"));
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
         const productsData = querySnapshot.docs.map(doc => {
@@ -58,15 +91,17 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
                 category,
             } as Product
         });
-        setProducts(productsData.sort((a,b) => a.baseName.localeCompare(b.baseName)));
-        setLoading(false);
+        applyProducts(productsData);
     }, (error) => {
         console.error("Error fetching products from Firestore: ", error);
-        setLoading(false);
+        void loadFallback();
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [authLoading, firebaseUser]);
 
   const findOrCreateProduct = useCallback(async (productDef: ProductDefinition): Promise<Product | null> => {
     if (!firebaseUser) throw new Error('Usuário não autenticado.');
@@ -116,7 +151,7 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     if (!response.ok) throw new Error('Falha ao adicionar produto.');
   }, [firebaseUser]);
 
-  const updateProduct = useCallback(async (updatedProduct: Product) => {
+  const updateProduct = useCallback(async (updatedProduct: Pick<Product, 'id'> & Partial<Omit<Product, 'id'>>) => {
     if (!firebaseUser) throw new Error('Usuário não autenticado.');
     const { id, ...dataToUpdate } = updatedProduct;
     const token = await firebaseUser.getIdToken();

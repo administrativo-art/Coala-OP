@@ -4,7 +4,11 @@ import { ExpenseForm } from "@/features/financial/components/expenses/expense-fo
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { useAuth } from "@/hooks/use-auth";
 
-export function NewExpensePage() {
+type NewExpensePageProps = {
+  presentation?: "page" | "modal";
+};
+
+export function NewExpensePage({ presentation = "page" }: NewExpensePageProps) {
   const { permissions } = useAuth();
 
   if (!permissions.financial?.expenses?.create) {
@@ -17,15 +21,5 @@ export function NewExpensePage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Lançar despesa</h1>
-        <p className="text-muted-foreground">
-          Preencha os campos abaixo para provisionar uma nova despesa no módulo financeiro.
-        </p>
-      </div>
-      <ExpenseForm />
-    </div>
-  );
+  return <ExpenseForm presentation={presentation} />;
 }

@@ -7,9 +7,11 @@ import {
   type PermissionSet,
   type User,
 } from "@/types";
+import { applyLegacyFormalizationFallbacks } from "@/lib/hr-formalization-permissions";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/verify-auth";
 import { WORKSPACE_ID } from "@/lib/workspace";
+import { requiresProfileCompliance } from "@/features/hr/profile-compliance-access.server";
 
 function mergeRecursive(
   target: Record<string, unknown>,
@@ -55,6 +57,19 @@ function applyCommercialPermissionFallbacks(permissions: PermissionSet) {
   permissions.commercial.technicalSheets.export ||= legacyCanViewSheets || legacyCanEditSheets;
 }
 
+function applyFormsPermissionFallbacks(permissions: PermissionSet) {
+  const canViewAnalytics = permissions.forms.global.view_analytics === true;
+  const canManageForms =
+    permissions.forms.global.manage_templates === true ||
+    permissions.forms.global.create_projects === true;
+
+  permissions.forms.analytics.view ||= canViewAnalytics || canManageForms;
+  permissions.forms.analytics.view_occurrences ||= canViewAnalytics;
+  permissions.forms.analytics.manage_taxonomy ||= canManageForms;
+  permissions.forms.analytics.configure_templates ||= canManageForms;
+  permissions.forms.analytics.manage_task_rules ||= canManageForms;
+}
+
 export function buildPermissionSet(
   profilePermissions: Partial<PermissionSet> | undefined,
   isDefaultAdmin: boolean
@@ -73,6 +88,8 @@ export function buildPermissionSet(
   }
 
   applyCommercialPermissionFallbacks(merged);
+  applyFormsPermissionFallbacks(merged);
+  applyLegacyFormalizationFallbacks(merged, profilePermissions);
 
   return merged;
 }
@@ -87,7 +104,7 @@ export type ServerUserContext = {
 };
 
 export async function requireUser(req: NextRequest): Promise<ServerUserContext> {
-  const decoded = await verifyAuth(req);
+  const decoded = await verifyAuth(req, { enforceProfileCompliance: false });
   if (!decoded.uid) {
     throw new Error("Usuário inválido.");
   }
@@ -98,6 +115,9 @@ export async function requireUser(req: NextRequest): Promise<ServerUserContext> 
   }
 
   const userData = userSnap.data() ?? {};
+  if (requiresProfileCompliance(userData, req)) {
+    throw new Error("Atualização cadastral obrigatória pendente.");
+  }
   const isTokenDefaultAdmin = decoded.isDefaultAdmin === true;
   const profileId =
     typeof userData.profileId === "string" && userData.profileId

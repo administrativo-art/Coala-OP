@@ -8,6 +8,9 @@ import type { Asset, AssetMovement, AssetStatus } from '@/types';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const BARCODE_SETTINGS_DOC_ID = 'barcode-labels';
+const DEFAULT_GENERATED_LABELS_UNTIL = 1000;
+
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -16,15 +19,46 @@ function canManageAsset(permissions: Awaited<ReturnType<typeof requireUser>>['pe
   return permissions.assets?.[action] === true;
 }
 
-async function nextAssetCode() {
-  const counterRef = dbAdmin.collection('counters').doc('assets');
-  const next = await dbAdmin.runTransaction(async (tx) => {
-    const snap = await tx.get(counterRef);
-    const current = Number(snap.data()?.next ?? 1);
-    tx.set(counterRef, { next: current + 1, updatedAt: new Date().toISOString() }, { merge: true });
-    return current;
-  });
-  return `PAT-${String(next).padStart(6, '0')}`;
+function normalizeAssetCodeInput(value: unknown) {
+  const raw = String(value ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!raw) return '';
+  if (raw.startsWith('PEND-')) return raw;
+  const patMatch = raw.match(/^PAT[-_]?(\d+)$/);
+  if (patMatch) return `PAT-${String(Number(patMatch[1])).padStart(6, '0')}`;
+  const digits = raw.replace(/\D/g, '');
+  return digits ? `PAT-${String(Number(digits)).padStart(6, '0')}` : raw;
+}
+
+async function assertAssetCodeCanBeUsed(code: string) {
+  const match = code.match(/^PAT-(\d+)$/);
+  if (!match) throw new Error('Código patrimonial inválido. Use o formato PAT-000001.');
+
+  const sequence = Number(match[1]);
+  if (!Number.isFinite(sequence) || sequence < 1) {
+    throw new Error('Código patrimonial inválido. Use uma sequência a partir de PAT-000001.');
+  }
+  const settingsSnap = await dbAdmin.collection('assetSettings').doc(BARCODE_SETTINGS_DOC_ID).get();
+  const settings = settingsSnap.data() ?? {};
+  const generatedUntil = Math.max(
+    DEFAULT_GENERATED_LABELS_UNTIL,
+    settings.workspaceId === WORKSPACE_ID ? Number(settings.generatedUntil ?? 0) || 0 : 0
+  );
+
+  if (sequence > generatedUntil) {
+    throw new Error(
+      `A etiqueta ${code} ainda não foi gerada. Gere mais etiquetas antes de usar esta numeração. Última etiqueta liberada: PAT-${String(generatedUntil).padStart(6, '0')}.`
+    );
+  }
+
+  const existing = await dbAdmin
+    .collection('assets')
+    .where('workspaceId', '==', WORKSPACE_ID)
+    .where('code', '==', code)
+    .limit(1)
+    .get();
+  if (!existing.empty) {
+    throw new Error(`A etiqueta ${code} já está vinculada a outro patrimônio.`);
+  }
 }
 
 async function addMovement(input: Omit<AssetMovement, 'id'>) {
@@ -53,8 +87,26 @@ export async function POST(request: NextRequest) {
   if (!name || !currentKioskId) return jsonError('Nome e unidade atual são obrigatórios.');
 
   const now = new Date().toISOString();
-  const code = await nextAssetCode();
+  const sourceType = body.sourceType === 'purchase_receipt' ? 'purchase_receipt' : 'manual';
+  const requestedCode = normalizeAssetCodeInput(body.code);
   const assetRef = dbAdmin.collection('assets').doc();
+  let code: string;
+  let plateStatus: 'vinculada' | 'pendente';
+  try {
+    if (sourceType === 'manual' && !requestedCode) {
+      throw new Error('Informe ou escaneie o código da placa patrimonial antes de cadastrar.');
+    }
+    if (requestedCode) {
+      await assertAssetCodeCanBeUsed(requestedCode);
+      code = requestedCode;
+      plateStatus = 'vinculada';
+    } else {
+      code = `PEND-${assetRef.id.slice(0, 8).toUpperCase()}`;
+      plateStatus = 'pendente';
+    }
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : 'Falha ao reservar etiqueta patrimonial.');
+  }
   const asset: Asset & { workspaceId: string } = {
     id: assetRef.id,
     workspaceId: WORKSPACE_ID,
@@ -71,7 +123,9 @@ export async function POST(request: NextRequest) {
     currentKioskName: body.currentKioskName?.trim?.() || undefined,
     department: body.department?.trim?.() || undefined,
     exactLocation: body.exactLocation?.trim?.() || undefined,
+    responsibleUserId: body.responsibleUserId?.trim?.() || undefined,
     responsibleName: body.responsibleName?.trim?.() || undefined,
+    responsibilityStatus: body.responsibleUserId ? 'assigned' : undefined,
     inUse: typeof body.inUse === 'boolean' ? body.inUse : true,
     possessionStatus: body.possessionStatus?.trim?.() || undefined,
     status: (body.status as AssetStatus) || 'ativo',
@@ -106,7 +160,10 @@ export async function POST(request: NextRequest) {
     maintenanceCostTotal: Number.isFinite(Number(body.maintenanceCostTotal)) ? Number(body.maintenanceCostTotal) : undefined,
     imageUrl: body.imageUrl || undefined,
     notes: body.notes || undefined,
-    sourceType: body.sourceType === 'purchase_receipt' ? 'purchase_receipt' : 'manual',
+    sourceType,
+    plateStatus,
+    plateLinkedAt: plateStatus === 'vinculada' ? now : undefined,
+    plateLinkedBy: plateStatus === 'vinculada' ? context.userDoc.id : undefined,
     purchaseOrderId: body.purchaseOrderId || undefined,
     purchaseReceiptId: body.purchaseReceiptId || undefined,
     purchaseReceiptItemId: body.purchaseReceiptItemId || undefined,

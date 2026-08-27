@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  AlertTriangle,
   Bell,
+  BookOpen,
   CalendarDays,
   CheckCircle2,
   CheckSquare,
@@ -12,47 +14,48 @@ import {
   Clock,
   FileText,
   Flag,
+  FolderOpen,
   ListOrdered,
   Loader2,
   MapPin,
   Minus,
   Plus,
+  UserRound,
 } from "lucide-react";
-import { collection, collectionGroup, getDocs, query, where } from "firebase/firestore";
 import {
   eachDayOfInterval,
-  endOfMonth,
   endOfWeek,
   format,
   isSameDay,
   isWithinInterval,
-  startOfMonth,
   startOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { fetchMyFormExecutions } from "@/features/forms/lib/client";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useAllTasks } from "@/hooks/use-all-tasks";
-import { useGoals } from "@/contexts/goals-context";
-import { GoalsProvider } from "@/components/goals-provider";
+import { useReposition } from "@/hooks/use-reposition";
+import { useToast } from "@/hooks/use-toast";
 import { useStockAudit } from "@/hooks/use-stock-audit";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useDPStore } from "@/store/use-dp-store";
-import type { DPShift, EmployeeGoal, GoalPeriodDoc, StockAuditItem, StockAuditSession } from "@/types";
+import type { DPShift, EmployeeGoal, GoalPeriodDoc, RepositionActivity, StockAuditItem, StockAuditSession } from "@/types";
 import type { FormExecution } from "@/types/forms";
 import {
   getEmployeeDistributionDateKeys,
-  loadGoalDistributionSnapshot,
   type GoalDistributionSnapshot,
 } from "@/lib/goals-distribution";
+import { calculateTieredGoalBonus, formatCurrencyBRL } from "@/lib/goal-methods";
+import { canViewTechnicalSheets } from "@/lib/commercial-permissions";
+import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from "@/lib/stock-expiry-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -87,12 +90,43 @@ function compactUnique(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0)));
 }
 
+function stockExpiryBadgeClass(level: StockExpiryAlertLevel) {
+  switch (level) {
+    case "expired":
+    case "today":
+    case "invalid":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "urgent":
+      return "border-orange-200 bg-orange-50 text-orange-700";
+    case "warning":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "ok":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "none":
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-600";
+  }
+}
+
 function normalizeIdentity(value: string | null | undefined) {
   return (value ?? "")
     .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function canPreviewCollaboratorMockups(
+  user: { username?: string | null; email?: string | null },
+  firebaseUser: { displayName?: string | null; email?: string | null } | null | undefined
+) {
+  const username = normalizeIdentity(user.username ?? firebaseUser?.displayName);
+  const email = normalizeIdentity(user.email ?? firebaseUser?.email);
+  return (
+    username === normalizeIdentity("Tiago Brasil") ||
+    email === "administrativo@coalas.com" ||
+    email === "administrativo@coalashakes.com"
+  );
 }
 
 function mergeEmployeeGoals(goals: EmployeeGoal[]) {
@@ -250,6 +284,134 @@ function goalRecortes(goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] }, p
   };
 }
 
+function activePeriodTier(period: GoalPeriodDoc) {
+  const up = period.upValue && period.upValue > period.targetValue ? period.upValue : period.targetValue;
+  const top = period.topValue && period.topValue > up ? period.topValue : null;
+
+  if (period.currentValue < period.targetValue) {
+    return { label: "Meta Alvo", amount: period.targetValue };
+  }
+
+  if (period.currentValue < up) {
+    return { label: "Meta UP", amount: up };
+  }
+
+  if (top && period.currentValue < top) {
+    return { label: "Meta TOP", amount: top };
+  }
+
+  return top ? { label: "Meta TOP", amount: top } : { label: "Meta UP", amount: up };
+}
+
+function teamGoalRecortes(period: GoalPeriodDoc) {
+  const periodStart = asDate(period.startDate);
+  const periodEnd = asDate(period.endDate);
+  const allDays = eachDayOfInterval({ start: periodStart, end: periodEnd });
+  const today = new Date();
+  const activeTier = activePeriodTier(period);
+  const targetPerDay = activeTier.amount / Math.max(allDays.length, 1);
+  const todayKey = dateKey(today);
+  const todayValue = period.dailyProgress?.[todayKey] ?? 0;
+
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+  const weekDays = allDays.filter((day) => isWithinInterval(day, { start: weekStart, end: weekEnd }));
+  const weekValue = weekDays
+    .filter((day) => day <= today)
+    .reduce((acc, day) => acc + (period.dailyProgress?.[dateKey(day)] ?? 0), 0);
+
+  return {
+    tier: activeTier,
+    today: { value: todayValue, target: targetPerDay, pct: percent(todayValue, targetPerDay) },
+    semana: { value: weekValue, target: targetPerDay * weekDays.length, pct: percent(weekValue, targetPerDay * weekDays.length) },
+    mes: { value: period.currentValue, target: activeTier.amount, pct: percent(period.currentValue, activeTier.amount) },
+  };
+}
+
+function getPeriodDateKeys(period: GoalPeriodDoc) {
+  const periodStart = asDate(period.startDate);
+  const periodEnd = asDate(period.endDate);
+  return eachDayOfInterval({ start: periodStart, end: periodEnd }).map(dateKey);
+}
+
+function getGoalRole(goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] }) {
+  const roles = goal.originalGoals?.map((item) => item.participantRole).filter(Boolean) ?? [];
+  if (roles.includes("leader")) return "leader";
+  if (roles.includes("relief")) return "relief";
+  return goal.participantRole ?? "fixed";
+}
+
+function getGoalCoveredTurns(goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] }) {
+  if (goal.originalGoals?.length) {
+    return goal.originalGoals.reduce((sum, item) => sum + (item.scheduledTurnCount ?? 0), 0);
+  }
+  return goal.scheduledTurnCount ?? 0;
+}
+
+function getGoalBonusContext(
+  goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] },
+  period: GoalPeriodDoc,
+  periodGoals: EmployeeGoal[]
+) {
+  const methodSnapshot = period.goalMethodSnapshot;
+  if (!methodSnapshot) return null;
+
+  const teamGoals = periodGoals.filter((item) => item.periodId === period.id && item.kioskId === goal.kioskId);
+  const bonusParticipants = teamGoals.filter((item) => item.participantRole !== "leader");
+  const fixedGoals = bonusParticipants.filter((item) => item.participantRole !== "relief");
+  const reliefGoals = bonusParticipants.filter((item) => item.participantRole === "relief");
+  const periodShiftCount = Math.max(period.shifts?.length ?? 1, 1);
+  const totalPeriodTurns = getPeriodDateKeys(period).length * periodShiftCount;
+  const preview = calculateTieredGoalBonus(
+    methodSnapshot,
+    period.currentValue ?? goal.currentValue,
+    bonusParticipants.length,
+    {
+      fixedCollaboratorCount: fixedGoals.length,
+      reliefWorkerCount: reliefGoals.length,
+      reliefWorkerCoveredTurnsByPerson: reliefGoals.map((item) => item.scheduledTurnCount ?? 0),
+      totalPeriodTurns,
+    }
+  );
+
+  if (!preview) return null;
+
+  const role = getGoalRole(goal);
+  const ownCoveredTurns = getGoalCoveredTurns(goal);
+  let individualBonus = preview.perCollaboratorBonus;
+  let roleLabel = "Colaborador fixo";
+
+  if (role === "leader") {
+    individualBonus = preview.leadershipBonus;
+    roleLabel = "Liderança";
+  } else if (role === "relief") {
+    roleLabel = "Folguista";
+    if (preview.reliefWorkerSplit) {
+      individualBonus = totalPeriodTurns > 0
+        ? (ownCoveredTurns / totalPeriodTurns) * preview.totalTeamBonus
+        : preview.reliefWorkerSplit.reliefWorkerBonus;
+    }
+  } else if (preview.reliefWorkerSplit) {
+    individualBonus = preview.reliefWorkerSplit.perFixedCollaboratorBonus;
+  }
+
+  const roundedIndividualBonus = Math.round(individualBonus * 100) / 100;
+  const rawMessage = preview.incentiveMessage?.message ?? null;
+  const collaboratorMessage = rawMessage
+    ? rawMessage
+        .replace("por colaborador", "para você")
+        .replace(`R$ ${formatCurrencyBRL(preview.perCollaboratorBonus)}`, `R$ ${formatCurrencyBRL(roundedIndividualBonus)}`)
+    : null;
+
+  return {
+    preview,
+    individualBonus: roundedIndividualBonus,
+    role,
+    roleLabel,
+    collaboratorMessage,
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Live clock                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -324,6 +486,7 @@ function TimelineItem({
   statusLabel,
   statusClass,
   title,
+  titleHref,
   meta,
   completed,
   action,
@@ -336,6 +499,7 @@ function TimelineItem({
   statusLabel: string;
   statusClass: string;
   title: string;
+  titleHref?: string;
   meta?: string;
   completed?: boolean;
   action: React.ReactNode;
@@ -366,8 +530,17 @@ function TimelineItem({
                 {statusLabel}
               </span>
             </div>
-            <h4 className={`mt-2 font-semibold ${completed ? "text-muted-foreground line-through" : ""}`}>{title}</h4>
-            {meta ? <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p> : null}
+            {titleHref ? (
+              <Link href={titleHref} className="group/title block">
+                <h4 className={`mt-2 font-semibold underline-offset-2 group-hover/title:underline ${completed ? "text-muted-foreground line-through" : ""}`}>{title}</h4>
+                {meta ? <p className="mt-0.5 text-xs text-muted-foreground group-hover/title:text-foreground">{meta}</p> : null}
+              </Link>
+            ) : (
+              <>
+                <h4 className={`mt-2 font-semibold ${completed ? "text-muted-foreground line-through" : ""}`}>{title}</h4>
+                {meta ? <p className="mt-0.5 text-xs text-muted-foreground">{meta}</p> : null}
+              </>
+            )}
           </div>
           <div className="shrink-0">{action}</div>
         </div>
@@ -456,7 +629,8 @@ function CountSummary({ session }: { session: StockAuditSession }) {
 
   const total = session.items.length;
   const counted = touched.size;
-  const canSubmit = total > 0 && counted === total && !saving;
+  const canSubmit = total > 0 && counted === total && !saving && !saved;
+  const expirySummary = useMemo(() => getStockExpirySummary(session.items), [session.items]);
 
   const adjust = (item: StockAuditItem, delta: number) => {
     const key = itemKey(item);
@@ -473,10 +647,14 @@ function CountSummary({ session }: { session: StockAuditSession }) {
         ...item,
         finalQuantity: quantities[itemKey(item)] ?? item.finalQuantity ?? 0,
       }));
-      await updateAuditSession(session.id, { items: updatedItems });
+      await updateAuditSession(session.id, {
+        items: updatedItems,
+        status: "completed",
+        completedAt: new Date().toISOString(),
+      });
       setSaved(true);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Falha ao enviar a contagem.");
+      setSaveError(error instanceof Error ? error.message : "Falha ao concluir a contagem.");
     } finally {
       setSaving(false);
     }
@@ -493,10 +671,25 @@ function CountSummary({ session }: { session: StockAuditSession }) {
         </span>
       </div>
 
+      {expirySummary.attention > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="flex flex-wrap items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+            <span className="font-semibold">Atenção de validade</span>
+            {expirySummary.expired > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("expired")}>{expirySummary.expired} vencido(s)</Badge> : null}
+            {expirySummary.today > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("today")}>{expirySummary.today} vence(m) hoje</Badge> : null}
+            {expirySummary.urgent > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("urgent")}>{expirySummary.urgent} em até 7 dias</Badge> : null}
+            {expirySummary.warning > 0 ? <Badge variant="outline" className={stockExpiryBadgeClass("warning")}>{expirySummary.warning} em até 30 dias</Badge> : null}
+          </div>
+          <p className="mt-1 text-xs text-amber-800/80">Aviso apenas visual; não altera a quantidade contada.</p>
+        </div>
+      ) : null}
+
       <div className="space-y-2">
         {session.items.map((item) => {
           const key = itemKey(item);
           const isTouched = touched.has(key);
+          const expiryAlert = getStockExpiryAlert(item.expiryDate);
           return (
             <div
               key={key}
@@ -504,7 +697,10 @@ function CountSummary({ session }: { session: StockAuditSession }) {
             >
               <div className="min-w-0">
                 <p className="truncate font-medium">{item.productName}</p>
-                <p className="text-xs text-muted-foreground">{item.displayUnit}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-muted-foreground">{item.displayUnit} · Val: {formatStockExpiryDate(item.expiryDate)}</p>
+                  <Badge variant="outline" className={stockExpiryBadgeClass(expiryAlert.level)}>{expiryAlert.label}</Badge>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -542,11 +738,11 @@ function CountSummary({ session }: { session: StockAuditSession }) {
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          {saved ? "Contagem enviada com sucesso." : `Conte todos os itens para enviar (${counted}/${total}).`}
+          {saved ? "Contagem concluída e estoque atualizado." : `Conte todos os itens para concluir (${counted}/${total}).`}
         </p>
         <Button onClick={submit} disabled={!canSubmit} className="bg-indigo-600 text-white hover:bg-indigo-700">
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {saved ? "Enviado" : "Enviar contagem"}
+          {saved ? "Concluída" : "Concluir contagem"}
         </Button>
       </div>
     </div>
@@ -559,7 +755,7 @@ function CountTimelineAction({ session, isLast }: { session: StockAuditSession; 
       type="count"
       time="—"
       dot="bg-amber-500"
-      statusLabel="Pendente"
+      statusLabel="Em aberto"
       statusClass="text-amber-600"
       title={`Contagem · ${session.kioskName}`}
       meta={`${session.items.length} ${session.items.length === 1 ? "item" : "itens"}`}
@@ -567,13 +763,13 @@ function CountTimelineAction({ session, isLast }: { session: StockAuditSession; 
         <Dialog>
           <DialogTrigger asChild>
             <Button size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700">
-              Contar
+              Continuar
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[86vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Contagem direcionada</DialogTitle>
-              <DialogDescription>Conte apenas os itens da sua sessão e envie quando completar a lista.</DialogDescription>
+              <DialogTitle>Concluir contagem</DialogTitle>
+              <DialogDescription>Confira todos os itens da sua sessão. Ao concluir, o estoque será atualizado e a pendência sairá do seu painel.</DialogDescription>
             </DialogHeader>
             <CountSummary session={session} />
           </DialogContent>
@@ -581,98 +777,6 @@ function CountTimelineAction({ session, isLast }: { session: StockAuditSession; 
       }
       isLast={isLast}
     />
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Full schedule (dialog)                                                     */
-/* -------------------------------------------------------------------------- */
-
-function ScheduleTable({ shifts, loading, error }: { shifts: DPShift[]; loading: boolean; error: string | null }) {
-  const { units, shiftDefinitions } = useDPStore();
-  const today = new Date();
-  const todayKey = dateKey(today);
-  const orderedShifts = useMemo(
-    () => [...shifts].sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`)),
-    [shifts]
-  );
-  const workShifts = orderedShifts.filter((shift) => shift.type !== "day_off");
-  const unitIds = Array.from(new Set(workShifts.map((shift) => shift.unitId).filter(Boolean)));
-  const unitLabel =
-    unitIds
-      .map((unitId) => units.find((unit) => unit.id === unitId)?.name ?? unitId)
-      .filter(Boolean)
-      .join(", ") || "Unidade não definida";
-  const monthLabel = format(today, "MMMM 'de' yyyy", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase());
-
-  const describeShift = (shift: DPShift) => {
-    const definition = shift.shiftDefinitionId
-      ? shiftDefinitions.find((item) => item.id === shift.shiftDefinitionId)
-      : null;
-    const isOff = shift.type === "day_off";
-    return {
-      day: format(new Date(`${shift.date}T12:00:00`), "eee dd/MM", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase()),
-      time: isOff ? "" : `${shift.startTime} — ${shift.endTime}`,
-      name: definition?.name ?? (isOff ? "Folga" : "Turno"),
-      isOff,
-    };
-  };
-
-  if (loading) {
-    return (
-      <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        Carregando escala...
-      </div>
-    );
-  }
-
-  if (error) {
-    return <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>;
-  }
-
-  return (
-    <>
-      <p className="text-sm text-muted-foreground">
-        {unitLabel} · {workShifts.length} turno(s) em {monthLabel}
-      </p>
-
-      <div className="overflow-hidden rounded-xl border bg-white">
-        <div className="grid grid-cols-[1.1fr_1fr_1fr] border-b bg-muted/30 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-          <span>Dia</span>
-          <span>Turno</span>
-          <span>Horário</span>
-        </div>
-        {orderedShifts.length === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground">Nenhum turno encontrado para este mês.</div>
-        ) : (
-          orderedShifts.map((shift) => {
-            const detail = describeShift(shift);
-            const isToday = shift.date === todayKey;
-            const isPast = shift.date < todayKey;
-            return (
-              <div
-                key={shift.id}
-                className={`grid grid-cols-[1.1fr_1fr_1fr] items-center border-b px-4 py-3 text-sm last:border-b-0 ${
-                  isToday ? "bg-indigo-50/70" : ""
-                } ${isPast ? "text-muted-foreground/60" : ""}`}
-              >
-                <span className={`flex items-center gap-2 ${isToday ? "font-semibold text-indigo-700" : "font-medium"}`}>
-                  {detail.day}
-                  {isToday ? (
-                    <span className="rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                      Hoje
-                    </span>
-                  ) : null}
-                </span>
-                <span className={detail.isOff ? "italic text-muted-foreground" : "font-medium"}>{detail.name}</span>
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">{detail.time || "—"}</span>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </>
   );
 }
 
@@ -696,17 +800,20 @@ function GoalProgressRow({
   goal,
   period,
   unitName,
+  periodGoals,
   distributionSnapshot,
 }: {
   goal: EmployeeGoal & { originalGoals?: EmployeeGoal[] };
   period: GoalPeriodDoc;
   unitName?: string;
+  periodGoals: EmployeeGoal[];
   distributionSnapshot?: GoalDistributionSnapshot | null;
 }) {
   const pct = percent(goal.currentValue, goal.targetValue);
   const upTarget = goal.targetValue * 1.2;
   const upPct = percent(goal.currentValue, upTarget);
   const recortes = goalRecortes(goal, period, distributionSnapshot);
+  const bonusContext = getGoalBonusContext(goal, period, periodGoals);
   const { periodStart, periodEnd, days, dailyTarget, dailyTargets } = recortes;
   const today = new Date();
   const elapsedDays = days.filter((day) => day <= today);
@@ -750,6 +857,39 @@ function GoalProgressRow({
           <p className="mt-1 text-xs text-muted-foreground">alvo diário atingido</p>
         </div>
       </div>
+
+      {bonusContext ? (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Bonificação estimada</p>
+              <p className="mt-1 text-sm font-semibold text-emerald-950">
+                {period.goalMethodSnapshot?.name ?? "Forma de meta"} · {bonusContext.roleLabel}
+              </p>
+              {bonusContext.collaboratorMessage ? (
+                <p className="mt-2 rounded-lg bg-white/75 px-3 py-2 text-sm font-semibold text-emerald-800">
+                  {bonusContext.collaboratorMessage}
+                </p>
+              ) : null}
+            </div>
+            <div className="rounded-xl bg-white px-4 py-3 text-right">
+              <p className="text-xs text-emerald-700/80">Sua bonificação estimada</p>
+              <p className="mt-1 text-2xl font-black text-emerald-950">R$ {formatCurrencyBRL(bonusContext.individualBonus)}</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-emerald-800 md:grid-cols-3">
+            <div className="rounded-lg bg-white/70 px-3 py-2">
+              Equipe: R$ {formatCurrencyBRL(bonusContext.preview.totalTeamBonus)}
+            </div>
+            <div className="rounded-lg bg-white/70 px-3 py-2">
+              Realizado: R$ {formatCurrencyBRL(bonusContext.preview.revenue)}
+            </div>
+            <div className="rounded-lg bg-white/70 px-3 py-2">
+              Papel: {bonusContext.roleLabel}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-2 rounded-xl border bg-muted/20 p-4">
         <div className="flex justify-between text-xs font-semibold text-muted-foreground">
@@ -835,10 +975,12 @@ function SidebarEscala({
   shifts,
   loading,
   error,
+  showMockup,
 }: {
   shifts: DPShift[];
   loading: boolean;
   error: string | null;
+  showMockup?: boolean;
 }) {
   const { shiftDefinitions } = useDPStore();
   const todayKey = dateKey(new Date());
@@ -849,25 +991,24 @@ function SidebarEscala({
       .slice(0, 5);
   }, [shifts, todayKey]);
 
+  const mockShifts = [
+    { day: "Hoje", label: "Tarde", time: "15:45-22:00", tone: "border-indigo-100 bg-indigo-50 text-indigo-700" },
+    { day: "Amanhã", label: "Manhã", time: "10:00-16:15", tone: "border-emerald-100 bg-emerald-50 text-emerald-700" },
+    { day: "Sábado", label: "Descanso", time: "folga", tone: "border-zinc-100 bg-zinc-50 text-zinc-500" },
+  ];
+
   return (
     <SidebarCard
       icon={<CalendarDays className="h-4 w-4" />}
       title="Escala"
       action={
-        <Dialog>
-          <DialogTrigger asChild>
-            <button type="button" className="text-xs font-medium text-indigo-600 hover:underline">
-              Ver mês
-            </button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[86vh] overflow-y-auto sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Minha escala</DialogTitle>
-              <DialogDescription>Turnos, horários e folgas do mês.</DialogDescription>
-            </DialogHeader>
-            <ScheduleTable shifts={shifts} loading={loading} error={error} />
-          </DialogContent>
-        </Dialog>
+        <Link
+          href="/dashboard/collaborator/schedule"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-pink-600 hover:underline"
+        >
+          Ver escala
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       }
     >
       {loading ? (
@@ -875,8 +1016,30 @@ function SidebarEscala({
           <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
           Carregando...
         </div>
+      ) : upcoming.length === 0 && showMockup ? (
+        <div className="space-y-2">
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-indigo-600">Mockup visual</p>
+            <p className="mt-0.5 text-xs font-semibold text-indigo-900">Como a escala aparecerá quando houver turnos.</p>
+          </div>
+          <div className="space-y-1.5">
+            {mockShifts.map((shift) => (
+              <div key={`${shift.day}-${shift.label}`} className={`flex items-center justify-between rounded-xl border px-3 py-2 ${shift.tone}`}>
+                <div className="min-w-0">
+                  <p className="text-xs font-black">{shift.day}</p>
+                  <p className="truncate text-[11px] font-semibold opacity-80">{shift.label}</p>
+                </div>
+                <span className="rounded-full bg-white/80 px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums">
+                  {shift.time}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : upcoming.length === 0 ? (
-        <p className="py-2 text-xs text-muted-foreground">Nenhum turno próximo.</p>
+        <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+          Nenhum turno futuro encontrado para este mês.
+        </p>
       ) : (
         <div className="space-y-1">
           {upcoming.map((shift) => {
@@ -905,16 +1068,138 @@ function SidebarEscala({
   );
 }
 
+function MockGoalMiniCard() {
+  const mockRows = [
+    { label: "Hoje", teamValue: 479.5, ownValue: 0, target: 935.48 },
+    { label: "Semana", teamValue: 6354.5, ownValue: 1958, target: 6548.39 },
+    { label: "Mês", teamValue: 12639.5, ownValue: 1958, target: 29000 },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-pink-100 bg-pink-50/70 px-3 py-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-600">Mockup visual</p>
+            <p className="mt-0.5 text-xs font-semibold text-pink-800">Meta do quiosque</p>
+          </div>
+          <Badge variant="outline" className="rounded-full border-pink-200 bg-white text-[10px] font-black text-pink-600">
+            Meta Alvo ativa
+          </Badge>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Bonificação estimada</p>
+            <p className="mt-0.5 text-xs text-emerald-800">Quiosque médio por faixas</p>
+          </div>
+          <p className="text-base font-black text-emerald-950">R$ 0,00</p>
+        </div>
+      </div>
+
+      {mockRows.map((row) => {
+        const pctValue = percent(row.teamValue, row.target);
+        const ownShare = percent(row.ownValue, row.teamValue);
+        return (
+          <div key={row.label} className="rounded-xl border border-zinc-100 bg-white/80 px-3 py-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-black uppercase tracking-[0.12em] text-zinc-500">{row.label}</span>
+              <span className="rounded-full bg-pink-50 px-2 py-0.5 text-[10px] font-black text-pink-600">
+                Meta Alvo · {pctValue.toFixed(0)}%
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-pink-500" style={{ width: `${Math.min(pctValue, 100)}%` }} />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <p className="font-bold text-zinc-400">Equipe</p>
+                <p className="font-black text-zinc-800">{money(row.teamValue)}</p>
+                <p className="font-medium text-zinc-400">de {money(row.target)}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-blue-500">Você</p>
+                <p className="font-black text-blue-600">{money(row.ownValue)}</p>
+                <p className="font-medium text-blue-500">{ownShare.toFixed(1)}% do faturado</p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MockGoalDetail() {
+  const days = [
+    { label: "Seg 06/07", total: 1776.5, own: 1074.5, status: "Com venda" },
+    { label: "Ter 07/07", total: 2062.5, own: 1102, status: "Com venda" },
+    { label: "Qua 08/07", total: 1887, own: 960.5, status: "Com venda" },
+    { label: "Qui 09/07", total: 479.5, own: 0, status: "Sem turno" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-pink-100 bg-pink-50/70 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <Badge variant="outline" className="rounded-full border-pink-200 bg-white text-pink-600">Mockup visual</Badge>
+            <h3 className="mt-3 text-lg font-black tracking-tight">Meta do quiosque</h3>
+            <p className="text-sm text-muted-foreground">Exemplo de como a meta aparecerá quando houver dados reais.</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">Faixa ativa</p>
+            <p className="text-base font-black text-pink-600">Meta Alvo</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {[
+            { label: "Hoje", value: 479.5, target: 935.48 },
+            { label: "Semana", value: 6354.5, target: 6548.39 },
+            { label: "Mês", value: 12639.5, target: 29000 },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl bg-white px-3 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400">{item.label}</p>
+              <p className="mt-1 text-base font-black">{money(item.value)}</p>
+              <p className="text-xs font-semibold text-pink-600">{percent(item.value, item.target).toFixed(1)}% da Meta Alvo</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border p-4">
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">Sua contribuição diária</p>
+        <div className="mt-3 overflow-hidden rounded-xl border">
+          {days.map((day) => (
+            <div key={day.label} className="grid grid-cols-[1fr_1fr_1fr_90px] items-center gap-3 border-b px-3 py-2.5 text-xs last:border-b-0">
+              <span className="font-bold">{day.label}</span>
+              <span className="text-right text-muted-foreground">Unidade {money(day.total)}</span>
+              <span className="text-right font-black text-blue-600">Você {money(day.own)}</span>
+              <span className="text-right font-semibold text-zinc-500">{day.status}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SidebarMetas({
   loading,
   goals,
   periods,
+  allGoals,
   distributionSnapshot,
+  showMockup,
 }: {
   loading: boolean;
   goals: Array<EmployeeGoal & { originalGoals?: EmployeeGoal[] }>;
   periods: GoalPeriodDoc[];
+  allGoals: EmployeeGoal[];
   distributionSnapshot?: GoalDistributionSnapshot | null;
+  showMockup?: boolean;
 }) {
   const { kiosks } = useKiosks();
   const kioskName = (id: string) => kiosks.find((kiosk) => kiosk.id === id)?.name ?? id;
@@ -929,6 +1214,7 @@ function SidebarMetas({
 
   const primary = goalUnits[0] ?? null;
   const recortes = primary ? goalRecortes(primary.goal, primary.period, distributionSnapshot) : null;
+  const primaryBonusContext = primary ? getGoalBonusContext(primary.goal, primary.period, allGoals) : null;
   const rows = recortes
     ? [
         { label: "Hoje", ...recortes.today },
@@ -958,8 +1244,12 @@ function SidebarMetas({
                 <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                 Carregando...
               </div>
+            ) : rows.length === 0 && showMockup ? (
+              <MockGoalMiniCard />
             ) : rows.length === 0 ? (
-              <p className="py-2 text-xs text-muted-foreground">Nenhuma meta ativa vinculada.</p>
+              <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                Nenhuma meta ativa vinculada a você no momento.
+              </p>
             ) : (
               <div className="space-y-3">
                 {goalUnits.length > 1 ? (
@@ -967,6 +1257,24 @@ function SidebarMetas({
                     {kioskName(primary!.goal.kioskId)}
                     <span className="text-muted-foreground/60"> · +{goalUnits.length - 1} unidade(s)</span>
                   </p>
+                ) : null}
+                {primaryBonusContext ? (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Sua bonificação estimada</p>
+                        <p className="mt-0.5 text-xs text-emerald-800">{primaryBonusContext.roleLabel}</p>
+                      </div>
+                      <p className="text-base font-black text-emerald-950">
+                        R$ {formatCurrencyBRL(primaryBonusContext.individualBonus)}
+                      </p>
+                    </div>
+                    {primaryBonusContext.collaboratorMessage ? (
+                      <p className="mt-2 text-xs font-semibold text-emerald-800">
+                        {primaryBonusContext.collaboratorMessage}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 {rows.map((row) => (
                   <div key={row.label} className="space-y-1">
@@ -999,15 +1307,18 @@ function SidebarMetas({
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Carregando metas...
           </div>
+        ) : goalUnits.length === 0 && showMockup ? (
+          <MockGoalDetail />
         ) : goalUnits.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-            Nenhuma meta ativa encontrada para o colaborador ou unidade vinculada.
+          <div className="rounded-xl border border-dashed bg-muted/20 p-6 text-sm text-muted-foreground">
+            Nenhuma meta ativa vinculada a você no momento.
           </div>
         ) : goalUnits.length === 1 ? (
           <GoalProgressRow
             goal={goalUnits[0].goal}
             period={goalUnits[0].period}
             unitName={kioskName(goalUnits[0].goal.kioskId)}
+            periodGoals={allGoals}
             distributionSnapshot={distributionSnapshot}
           />
         ) : (
@@ -1025,6 +1336,7 @@ function SidebarMetas({
                   goal={entry.goal}
                   period={entry.period}
                   unitName={kioskName(entry.goal.kioskId)}
+                  periodGoals={allGoals}
                   distributionSnapshot={distributionSnapshot}
                 />
               </TabsContent>
@@ -1045,17 +1357,77 @@ function SidebarMetas({
   );
 }
 
-function SidebarComunicados() {
+function SidebarComunicados({ showMockup }: { showMockup?: boolean }) {
   return (
     <SidebarCard
       icon={<Bell className="h-4 w-4" />}
       title="Comunicados"
-      action={<span className="text-xs font-medium text-muted-foreground/60">Em breve</span>}
+      action={showMockup ? <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Mockup</span> : undefined}
     >
-      <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
-        Os comunicados da operação aparecerão aqui.
-      </div>
+      {showMockup ? (
+        <div className="space-y-2">
+          <div className="rounded-xl border border-pink-100 bg-pink-50/70 px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-pink-600">Operação</p>
+                <p className="mt-0.5 truncate text-xs font-black text-pink-950">Novo padrão de fechamento</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-pink-800">Conferir dinheiro líquido e anexar evidência no fim do turno.</p>
+              </div>
+              <Badge variant="outline" className="shrink-0 rounded-full border-pink-200 bg-white text-[10px] text-pink-600">
+                Hoje
+              </Badge>
+            </div>
+          </div>
+          <div className="rounded-xl border border-zinc-100 bg-white px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="truncate text-xs font-bold text-zinc-900">Checklist de atendimento atualizado</p>
+                <p className="text-[11px] text-muted-foreground">Leitura rápida · 2 min</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+          Nenhum comunicado para exibir.
+        </p>
+      )}
     </SidebarCard>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Quick access                                                               */
+/* -------------------------------------------------------------------------- */
+
+function QuickAccessCard({
+  href,
+  icon,
+  title,
+  description,
+  tone,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  tone: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex min-h-24 items-center gap-3 rounded-2xl border bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"
+    >
+      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">{title}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{description}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+    </Link>
   );
 }
 
@@ -1064,31 +1436,33 @@ function SidebarComunicados() {
 /* -------------------------------------------------------------------------- */
 
 function CollaboratorDashboardPanelInner() {
-  const { firebaseUser, user } = useAuth();
-  const { periods, employeeGoals, loading: goalsLoading } = useGoals();
+  const { firebaseUser, user, permissions } = useAuth();
   const { kiosks } = useKiosks();
-  const { taskNotifications } = useAllTasks();
+  const { taskNotifications, pendingReceipts, completedReceipts } = useAllTasks();
+  const { activities: repositionActivities, updateRepositionActivity } = useReposition();
+  const { toast } = useToast();
   const { auditSessions } = useStockAudit();
-  const { schedules, units, shiftDefinitions } = useDPStore();
+  const [confirmingReceipt, setConfirmingReceipt] = useState<{ activityId: string; description: string } | null>(null);
+  const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
+  const { units, shiftDefinitions } = useDPStore();
   const [executions, setExecutions] = useState<FormExecution[]>([]);
   const [loadingForms, setLoadingForms] = useState(true);
   const [formsError, setFormsError] = useState<string | null>(null);
-  const [shifts, setShifts] = useState<DPShift[]>([]);
-  const [loadingSchedule, setLoadingSchedule] = useState(true);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [distributionSnapshot, setDistributionSnapshot] = useState<GoalDistributionSnapshot | null>(null);
-  const [apiShifts, setApiShifts] = useState<DPShift[] | null>(null);
-  const [apiPeriods, setApiPeriods] = useState<GoalPeriodDoc[] | null>(null);
-  const [apiEmployeeGoals, setApiEmployeeGoals] = useState<EmployeeGoal[] | null>(null);
+  const [apiShifts, setApiShifts] = useState<DPShift[]>([]);
+  const [apiPeriods, setApiPeriods] = useState<GoalPeriodDoc[]>([]);
+  const [apiEmployeeGoals, setApiEmployeeGoals] = useState<EmployeeGoal[]>([]);
   const [loadingCollaboratorData, setLoadingCollaboratorData] = useState(true);
+  const [collaboratorDataError, setCollaboratorDataError] = useState<string | null>(null);
   const currentUserIds = useMemo(
-    () => compactUnique([firebaseUser?.uid, user?.id, user?.registrationIdBizneo, user?.registrationIdPdv]),
-    [firebaseUser?.uid, user?.id, user?.registrationIdBizneo, user?.registrationIdPdv]
+    () => compactUnique([firebaseUser?.uid, user?.id, user?.hrEmployeeId, user?.registrationIdBizneo, user?.registrationIdPdv]),
+    [firebaseUser?.uid, user?.id, user?.hrEmployeeId, user?.registrationIdBizneo, user?.registrationIdPdv]
   );
-  const currentUserNames = useMemo(
-    () => compactUnique([user?.username, firebaseUser?.displayName, firebaseUser?.email]).map(normalizeIdentity),
-    [firebaseUser?.displayName, firebaseUser?.email, user?.username]
+  const showMockup = useMemo(
+    () => canPreviewCollaboratorMockups(user ?? {}, firebaseUser),
+    [firebaseUser?.displayName, firebaseUser?.email, user?.email, user?.username]
   );
+  const canAccessOwnProfile = Boolean(user?.id && permissions.dp?.collaborators?.view);
 
   useEffect(() => {
     let cancelled = false;
@@ -1098,12 +1472,15 @@ function CollaboratorDashboardPanelInner() {
         setApiShifts([]);
         setApiPeriods([]);
         setApiEmployeeGoals([]);
+        setDistributionSnapshot(null);
+        setCollaboratorDataError(null);
         setLoadingCollaboratorData(false);
         return;
       }
 
       try {
         setLoadingCollaboratorData(true);
+        setCollaboratorDataError(null);
         const token = await firebaseUser.getIdToken();
         const response = await fetch("/api/collaborator/dashboard", {
           headers: { Authorization: `Bearer ${token}` },
@@ -1120,9 +1497,11 @@ function CollaboratorDashboardPanelInner() {
       } catch (error) {
         console.warn("[CollaboratorDashboardPanel] API dashboard failed", error);
         if (!cancelled) {
-          setApiShifts(null);
-          setApiPeriods(null);
-          setApiEmployeeGoals(null);
+          setApiShifts([]);
+          setApiPeriods([]);
+          setApiEmployeeGoals([]);
+          setDistributionSnapshot(null);
+          setCollaboratorDataError(error instanceof Error ? error.message : "Falha ao carregar dados do colaborador.");
         }
       } finally {
         if (!cancelled) setLoadingCollaboratorData(false);
@@ -1164,106 +1543,14 @@ function CollaboratorDashboardPanelInner() {
     };
   }, [firebaseUser]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      if (!firebaseUser || currentUserIds.length === 0) {
-        setShifts([]);
-        setLoadingSchedule(false);
-        return;
-      }
-
-      const now = new Date();
-      const start = dateKey(startOfMonth(now));
-      const end = dateKey(endOfMonth(now));
-
-      try {
-        setLoadingSchedule(true);
-        setScheduleError(null);
-        const snaps = await Promise.all(
-          currentUserIds.map((userId) =>
-            getDocs(
-              query(
-                collectionGroup(db, "shifts"),
-                where("userId", "==", userId),
-                where("date", ">=", start),
-                where("date", "<=", end)
-              )
-            )
-          )
-        );
-        let foundShifts: DPShift[] = [];
-        if (!cancelled) {
-          const byId = new Map<string, DPShift>();
-          snaps.flatMap((snap) => snap.docs).forEach((docSnap) => {
-            byId.set(docSnap.ref.path, { id: docSnap.id, ...docSnap.data() } as DPShift);
-          });
-          foundShifts = Array.from(byId.values());
-          setShifts(foundShifts);
-        }
-
-        if (foundShifts.length === 0) {
-          const currentMonthSchedules = schedules.filter(
-            (schedule) => schedule.month === now.getMonth() + 1 && schedule.year === now.getFullYear()
-          );
-          const nested = await Promise.all(
-            currentMonthSchedules.map(async (schedule) => {
-              const snapshotMatchedUserIds = Object.entries(schedule.snapshot?.users ?? {})
-                .filter(([, snapshotUser]) => currentUserNames.includes(normalizeIdentity(snapshotUser.username)))
-                .map(([userId]) => userId);
-              const acceptedUserIds = new Set([...currentUserIds, ...snapshotMatchedUserIds]);
-              const snap = await getDocs(collection(db, "dp_schedules", schedule.id, "shifts"));
-              return snap.docs
-                .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as DPShift))
-                .filter((shift) => acceptedUserIds.has(shift.userId) && shift.date >= start && shift.date <= end);
-            })
-          );
-          if (!cancelled) setShifts(nested.flat());
-        }
-      } catch (error) {
-        try {
-          const currentMonthSchedules = schedules.filter(
-            (schedule) => schedule.month === now.getMonth() + 1 && schedule.year === now.getFullYear()
-          );
-          const nested = await Promise.all(
-            currentMonthSchedules.map(async (schedule) => {
-              const snapshotMatchedUserIds = Object.entries(schedule.snapshot?.users ?? {})
-                .filter(([, snapshotUser]) => currentUserNames.includes(normalizeIdentity(snapshotUser.username)))
-                .map(([userId]) => userId);
-              const acceptedUserIds = new Set([...currentUserIds, ...snapshotMatchedUserIds]);
-              const snap = await getDocs(collection(db, "dp_schedules", schedule.id, "shifts"));
-              return snap.docs
-                .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as DPShift))
-                .filter((shift) => acceptedUserIds.has(shift.userId) && shift.date >= start && shift.date <= end);
-            })
-          );
-          if (!cancelled) setShifts(nested.flat());
-        } catch (fallbackError) {
-          if (!cancelled) {
-            console.error("[CollaboratorDashboardPanel] failed to load user shifts", error, fallbackError);
-            setScheduleError("Falha ao carregar a escala do colaborador.");
-          }
-        }
-      } finally {
-        if (!cancelled) setLoadingSchedule(false);
-      }
-    }
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [firebaseUser, currentUserIds, currentUserNames, schedules]);
-
   const today = new Date();
   const todayKey = dateKey(today);
   const nowMinutes = today.getHours() * 60 + today.getMinutes();
   const firstName = (user?.username ?? "Colaborador").split(" ")[0];
   const dateEyebrow = format(today, "EEEE, d 'de' MMMM", { locale: ptBR }).toUpperCase();
-  const effectiveShifts = apiShifts ?? shifts;
-  const effectivePeriods = apiPeriods ?? periods;
-  const effectiveEmployeeGoals = apiEmployeeGoals ?? employeeGoals;
+  const effectiveShifts = apiShifts;
+  const effectivePeriods = apiPeriods;
+  const effectiveEmployeeGoals = apiEmployeeGoals;
 
   // Today's shift (greeting + timeline markers)
   const todayShift = useMemo(() => {
@@ -1301,14 +1588,57 @@ function CollaboratorDashboardPanelInner() {
     [auditSessions, firebaseUser?.uid]
   );
 
-  // Routine ring: forms + tasks + counts
+  // Routine ring: forms + tasks + pending receipts + counts
   const completedForms = dayExecutions.filter((execution) => execution.status === "completed").length;
-  const routinesTotal = dayExecutions.length + taskNotifications.length + myOpenCountSessions.length;
+  const routinesTotal = dayExecutions.length + taskNotifications.length + pendingReceipts.length + myOpenCountSessions.length;
   const routinesDone = completedForms;
   const pendingCount = routinesTotal - routinesDone;
   const allDone = routinesTotal > 0 && routinesDone === routinesTotal;
   const nextAction =
     dayExecutions.find((execution) => execution.status === "overdue" || execution.status === "pending" || execution.status === "in_progress") ?? null;
+
+  // "Concluir" no card de recebimento: confirma tudo conforme enviado (sem
+  // divergência) num toque. Divergências são tratadas pela tela de recebimento
+  // (texto do card). Espelha o handleConfirmReceipt da gestão de reposição.
+  const handleQuickConfirmReceipt = async () => {
+    if (!confirmingReceipt) return;
+    const activity = repositionActivities.find((item) => item.id === confirmingReceipt.activityId);
+    if (!activity) {
+      setConfirmingReceipt(null);
+      return;
+    }
+    setIsConfirmingReceipt(true);
+    try {
+      const receivedItems = activity.items.map((item) => ({
+        ...item,
+        receivedLots: item.suggestedLots.map((lot) => ({
+          ...lot,
+          receivedQuantity: lot.quantityToMove,
+        })),
+      }));
+      await updateRepositionActivity(activity.id, {
+        status: "Recebido sem divergência",
+        items: receivedItems,
+        receiptSignature: {
+          signedBy: user?.username ?? user?.email ?? "Colaborador",
+          signedAt: new Date().toISOString(),
+        },
+      });
+      toast({
+        title: "Recebimento confirmado",
+        description: "Tudo recebido conforme enviado. A tarefa foi concluída.",
+      });
+      setConfirmingReceipt(null);
+    } catch (error) {
+      toast({
+        title: "Erro ao confirmar recebimento",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConfirmingReceipt(false);
+    }
+  };
 
   // Build merged timeline descriptors
   const timeline = useMemo(() => {
@@ -1376,6 +1706,60 @@ function CollaboratorDashboardPanelInner() {
       });
     });
 
+    pendingReceipts.forEach((receipt, index) => {
+      items.push({
+        sortMin: nowMinutes + 1,
+        order: 2,
+        key: `pending-receipt-${receipt.id}-${index}`,
+        render: (isLast) => (
+          <TimelineItem
+            type="task"
+            time="—"
+            dot="bg-amber-500"
+            statusLabel="A fazer"
+            statusClass="text-amber-600"
+            title={receipt.title}
+            titleHref={receipt.link}
+            meta={receipt.description}
+            action={
+              <Button
+                size="sm"
+                className="bg-indigo-600 text-white hover:bg-indigo-700"
+                onClick={() => setConfirmingReceipt({ activityId: receipt.activityId, description: receipt.description })}
+              >
+                Concluir
+              </Button>
+            }
+            isLast={isLast}
+          />
+        ),
+      });
+    });
+
+    completedReceipts.forEach((receipt, index) => {
+      const time = format(new Date(receipt.completedAt), "HH:mm");
+      const min = hhmmToMinutes(time) ?? nowMinutes;
+      items.push({
+        sortMin: min,
+        order: 2,
+        key: `receipt-done-${receipt.id}-${index}`,
+        render: (isLast) => (
+          <TimelineItem
+            type="task"
+            time={time}
+            dot="bg-emerald-500"
+            statusLabel={receipt.hasDivergence ? "Concluído com divergência" : "Concluído"}
+            statusClass={receipt.hasDivergence ? "text-amber-600" : "text-emerald-600"}
+            title={receipt.title}
+            meta={`${receipt.description} · Concluído por ${receipt.completedBy}`}
+            completed
+            action={<CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+            isLast={isLast}
+          />
+        ),
+      });
+    });
+
     myOpenCountSessions.forEach((session, index) => {
       items.push({
         sortMin: nowMinutes + 2,
@@ -1417,51 +1801,21 @@ function CollaboratorDashboardPanelInner() {
 
     return items.sort((a, b) => a.sortMin - b.sortMin || a.order - b.order);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayExecutions, taskNotifications, myOpenCountSessions, todayShift, nowMinutes]);
+  }, [dayExecutions, taskNotifications, pendingReceipts, completedReceipts, myOpenCountSessions, todayShift, nowMinutes]);
 
-  const userGoalKioskIds = useMemo(() => new Set([...(user?.assignedKioskIds ?? [])]), [user?.assignedKioskIds]);
   const activePeriods = useMemo(() => effectivePeriods.filter((period) => period.status === "active"), [effectivePeriods]);
-  const kioskNameById = useMemo(
-    () => Object.fromEntries(kiosks.map((kiosk) => [kiosk.id, kiosk.name])),
-    [kiosks]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      if (apiPeriods !== null || apiEmployeeGoals !== null) return;
-      if (activePeriods.length === 0 || effectiveEmployeeGoals.length === 0) {
-        setDistributionSnapshot(null);
-        return;
-      }
-
-      try {
-        const snapshot = await loadGoalDistributionSnapshot(activePeriods, effectiveEmployeeGoals, kioskNameById);
-        if (!cancelled) setDistributionSnapshot(snapshot);
-      } catch (error) {
-        console.warn("[CollaboratorDashboardPanel] failed to load goal distribution snapshot", error);
-        if (!cancelled) setDistributionSnapshot(null);
-      }
-    }
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [activePeriods, apiEmployeeGoals, apiPeriods, effectiveEmployeeGoals, kioskNameById]);
 
   const visibleGoals = useMemo(() => {
+    // Apenas a meta INDIVIDUAL do colaborador. Sem fallback para a meta do
+    // quiosque: quem não tem meta vinculada vê o estado "sem meta".
     const ownGoals = effectiveEmployeeGoals.filter(
       (goal) => currentUserIds.includes(goal.employeeId) && activePeriods.some((period) => period.id === goal.periodId)
     );
-    if (ownGoals.length > 0) return mergeEmployeeGoals(ownGoals);
-    return mergeEmployeeGoals(effectiveEmployeeGoals.filter(
-      (goal) => userGoalKioskIds.has(goal.kioskId) && activePeriods.some((period) => period.id === goal.periodId)
-    ));
-  }, [activePeriods, currentUserIds, effectiveEmployeeGoals, userGoalKioskIds]);
+    return mergeEmployeeGoals(ownGoals);
+  }, [activePeriods, currentUserIds, effectiveEmployeeGoals]);
 
   return (
+    <>
     <section id="painel-colaborador" className="scroll-mt-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Left column */}
@@ -1522,6 +1876,42 @@ function CollaboratorDashboardPanelInner() {
             ) : null}
           </div>
 
+          {/* Acessos rápidos */}
+          {(canViewTechnicalSheets(permissions) || canAccessOwnProfile) ? (
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Acessos rápidos</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {canViewTechnicalSheets(permissions) ? (
+                  <QuickAccessCard
+                    href="/dashboard/commercial"
+                    icon={<BookOpen className="h-5 w-5" />}
+                    title="Ficha técnica"
+                    description="Produtos e modos de preparo"
+                    tone="bg-pink-50 text-pink-600"
+                  />
+                ) : null}
+                {canAccessOwnProfile ? (
+                  <QuickAccessCard
+                    href={`/dashboard/dp/collaborators/${user!.id}`}
+                    icon={<UserRound className="h-5 w-5" />}
+                    title="Meu perfil"
+                    description="Dados pessoais e benefícios"
+                    tone="bg-sky-50 text-sky-600"
+                  />
+                ) : null}
+                {canAccessOwnProfile ? (
+                  <QuickAccessCard
+                    href={`/dashboard/dp/collaborators/${user!.id}/documents`}
+                    icon={<FolderOpen className="h-5 w-5" />}
+                    title="Meus documentos"
+                    description="Contracheques, termos e recibos"
+                    tone="bg-emerald-50 text-emerald-600"
+                  />
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           {/* Linha do dia */}
           <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Linha do dia</p>
@@ -1550,24 +1940,60 @@ function CollaboratorDashboardPanelInner() {
 
         {/* Right column — sidebar */}
         <aside className="space-y-4">
-          <SidebarEscala shifts={effectiveShifts} loading={loadingCollaboratorData && apiShifts === null ? loadingSchedule : false} error={scheduleError} />
+          <SidebarEscala
+            shifts={effectiveShifts}
+            loading={loadingCollaboratorData}
+            error={collaboratorDataError}
+            showMockup={showMockup}
+          />
           <SidebarMetas
-            loading={loadingCollaboratorData && apiEmployeeGoals === null ? goalsLoading : false}
+            loading={loadingCollaboratorData}
             goals={visibleGoals}
             periods={activePeriods}
+            allGoals={effectiveEmployeeGoals}
             distributionSnapshot={distributionSnapshot}
+            showMockup={showMockup}
           />
-          <SidebarComunicados />
+          <SidebarComunicados showMockup={showMockup} />
         </aside>
       </div>
     </section>
+
+    <Dialog
+      open={!!confirmingReceipt}
+      onOpenChange={(open) => {
+        if (!open && !isConfirmingReceipt) setConfirmingReceipt(null);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Confirmar recebimento</DialogTitle>
+          {confirmingReceipt ? (
+            <DialogDescription>{confirmingReceipt.description}</DialogDescription>
+          ) : null}
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Isso registra <strong>tudo recebido conforme enviado</strong>, sem divergência, e conclui a tarefa.
+          Se algo chegou a menos ou a mais, abra a tela de recebimento pelo texto do card para ajustar.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setConfirmingReceipt(null)} disabled={isConfirmingReceipt}>
+            Cancelar
+          </Button>
+          <Button
+            className="bg-indigo-600 text-white hover:bg-indigo-700"
+            onClick={handleQuickConfirmReceipt}
+            disabled={isConfirmingReceipt}
+          >
+            {isConfirmingReceipt ? "Confirmando..." : "Confirmar recebimento"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
 export function CollaboratorDashboardPanel() {
-  return (
-    <GoalsProvider>
-      <CollaboratorDashboardPanelInner />
-    </GoalsProvider>
-  );
+  return <CollaboratorDashboardPanelInner />;
 }

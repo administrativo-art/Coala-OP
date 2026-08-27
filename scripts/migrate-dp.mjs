@@ -2,11 +2,12 @@
  * Script de migração: Coala-DP → Coala-OP (módulo Departamento Pessoal)
  *
  * CONFIGURAÇÃO:
- *   Coloque os arquivos JSON das service accounts em:
- *     scripts/sa-op.json   → Coala-OP  (smart-converter-752gf)
- *     scripts/sa-dp.json   → Coala-DP  (studio-7671525955-67ff0)
+ *   Guarde os arquivos JSON das service accounts fora do repositório
+ *   (ex.: ~/.config/coala/keys/) e informe por variável de ambiente:
+ *     FIREBASE_SERVICE_ACCOUNT_PATH       → Coala-OP  (smart-converter-752gf)
+ *     DP_FIREBASE_SERVICE_ACCOUNT_PATH    → Coala-DP  (studio-7671525955-67ff0)
  *
- *   Ou passe os caminhos como argumentos:
+ *   Ou passe os caminhos explicitamente:
  *     node scripts/migrate-dp.mjs phase1 --op=caminho/op.json --dp=caminho/dp.json
  *
  * USO:
@@ -18,7 +19,9 @@
 import { initializeApp, cert, getApps, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 
 // ─── Resolve caminhos dos service accounts ────────────────────────────────────
 
@@ -27,15 +30,19 @@ function resolveArg(name) {
   return arg ? arg.split('=')[1] : null;
 }
 
-const dpPath = resolveArg('dp') ?? 'scripts/sa-dp.json';
-const opPath = resolveArg('op') ?? null; // opcional — usa ADC se não informado
+const dpPath = resolveArg('dp') ?? process.env.DP_FIREBASE_SERVICE_ACCOUNT_PATH ?? null;
+const opPath = resolveArg('op') ?? process.env.FIREBASE_SERVICE_ACCOUNT_PATH ?? null; // opcional — usa ADC se não informado
 
-if (!existsSync(dpPath)) {
-  console.error(`❌ Service account do Coala-DP não encontrado em: ${dpPath}`);
+if (!dpPath || !existsSync(dpPath)) {
+  console.error(`❌ Service account do Coala-DP não encontrado. Informe --dp=... ou DP_FIREBASE_SERVICE_ACCOUNT_PATH.`);
   process.exit(1);
 }
 
 const dpSA = JSON.parse(readFileSync(dpPath, 'utf-8'));
+const reportsDir = process.env.COALA_REPORTS_DIR ?? join(homedir(), '.config', 'coala', 'reports');
+mkdirSync(reportsDir, { recursive: true });
+const collaboratorMappingPath = join(reportsDir, 'dp-collaborator-mapping.json');
+const dpIdMapPath = join(reportsDir, 'dp-id-map.json');
 
 // ─── Firebase apps ────────────────────────────────────────────────────────────
 
@@ -165,12 +172,12 @@ async function generateCollaboratorReport() {
   const matched = report.filter(r => r.status === 'MATCHED').length;
   const newUsers = report.filter(r => r.status === 'NEW_USER').length;
 
-  writeFileSync('scripts/dp-collaborator-mapping.json', JSON.stringify(report, null, 2));
+  writeFileSync(collaboratorMappingPath, JSON.stringify(report, null, 2));
 
   console.log(`\n  Colaboradores Coala-DP:  ${dpCollabs.length}`);
   console.log(`  Matched com Coala-OP:    ${matched}`);
   console.log(`  Precisam ser criados:    ${newUsers}`);
-  console.log('\n📄 Relatório salvo em: scripts/dp-collaborator-mapping.json');
+  console.log(`\n📄 Relatório salvo em: ${collaboratorMappingPath}`);
   console.log('   → Revise o arquivo, preencha new_email e new_password para os NEW_USER');
   console.log('   → Corrija op_userId para matches incorretos');
   console.log('   → Execute "node scripts/migrate-dp.mjs phase2" quando pronto\n');
@@ -183,13 +190,12 @@ async function generateCollaboratorReport() {
 async function migrateUsersAndRelational() {
   console.log('\n── Fase 2: Usuários, escalas e férias ────────────────────────');
 
-  const mappingPath = 'scripts/dp-collaborator-mapping.json';
-  if (!existsSync(mappingPath)) {
+  if (!existsSync(collaboratorMappingPath)) {
     console.error('❌ Arquivo de mapeamento não encontrado. Execute phase1 primeiro.');
     process.exit(1);
   }
 
-  const mapping = JSON.parse(readFileSync(mappingPath, 'utf-8'));
+  const mapping = JSON.parse(readFileSync(collaboratorMappingPath, 'utf-8'));
 
   // Valida NEW_USER sem email
   const sem_email = mapping.filter(m => m.status === 'NEW_USER' && !m.new_email);
@@ -266,8 +272,8 @@ async function migrateUsersAndRelational() {
   }
 
   // Salva o mapa dp_id → op_userId para referência
-  writeFileSync('scripts/dp-id-map.json', JSON.stringify(dpToOp, null, 2));
-  console.log('\n📄 Mapa de IDs salvo em: scripts/dp-id-map.json');
+  writeFileSync(dpIdMapPath, JSON.stringify(dpToOp, null, 2));
+  console.log(`\n📄 Mapa de IDs salvo em: ${dpIdMapPath}`);
 
   // ── Migra escalas + turnos ──
   console.log('\n  Migrando escalas...');

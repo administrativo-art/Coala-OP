@@ -1,10 +1,10 @@
-import { execFileSync, spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 import { assertNoFirebaseTestCredentials } from "../tests/helpers/firestore-emulator-safety.mjs";
 
-const projectId = "demo-coala-rules";
+const projectId = "demo-coala-security";
 
 function javaHomeFromMac() {
   if (process.platform !== "darwin") return null;
@@ -17,7 +17,7 @@ function javaHomeFromMac() {
       }).trim();
       if (value) return value;
     } catch {
-      // Continue with deterministic Homebrew fallbacks.
+      // Continue with Homebrew fallbacks.
     }
   }
 
@@ -25,8 +25,7 @@ function javaHomeFromMac() {
 }
 
 function hasJava(javaHome) {
-  const executable = process.platform === "win32" ? "java.exe" : "java";
-  return Boolean(javaHome && existsSync(join(javaHome, "bin", executable)));
+  return Boolean(javaHome && existsSync(join(javaHome, "bin", process.platform === "win32" ? "java.exe" : "java")));
 }
 
 assertNoFirebaseTestCredentials();
@@ -49,12 +48,14 @@ const firebaseExecutable = join(
 );
 
 if (!javaHome) {
-  console.error("[check:rules] Java 11+ não encontrado.");
+  console.error("[test:security:rules] Java 11+ nao encontrado.");
+  console.error("Instale com: brew install openjdk");
+  console.error("Ou defina JAVA_HOME apontando para um JDK valido.");
   process.exit(1);
 }
 
 if (!existsSync(firebaseExecutable)) {
-  console.error("[check:rules] Firebase CLI local não encontrada. Execute npm ci.");
+  console.error("[test:security:rules] Firebase CLI local não encontrada. Execute npm ci.");
   process.exit(1);
 }
 
@@ -75,8 +76,8 @@ const child = spawn(
     "--config",
     "firebase.test.json",
     "--only",
-    "firestore",
-    "node --test tests/security/firestore.rules.test.mjs",
+    "firestore,storage",
+    "node --test tests/security/rules.test.mjs tests/security/firestore.rules.test.mjs",
   ],
   {
     env,
@@ -86,13 +87,13 @@ const child = spawn(
 );
 
 child.on("error", (error) => {
-  console.error("[check:rules] Falha ao iniciar a Firebase CLI local:", error.message);
+  console.error("[test:security:rules] Falha ao iniciar a Firebase CLI local:", error.message);
   process.exit(1);
 });
 
 child.on("exit", (code, signal) => {
   if (signal) {
-    console.error(`[check:rules] Finalizado por sinal ${signal}.`);
+    console.error(`[test:security:rules] Finalizado por sinal ${signal}.`);
     process.exit(1);
   }
   process.exit(code ?? 1);

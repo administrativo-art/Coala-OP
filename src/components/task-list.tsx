@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { type LegacyTask, type Task } from '@/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -20,6 +20,8 @@ function isLegacyTaskItem(task: TaskListItem): task is LegacyTask & { legacy: tr
 interface TaskListProps {
   tasks: TaskListItem[];
   onTaskSelect: (task: Task) => void;
+  getTaskStatusLabel?: (task: Task) => string;
+  getTaskMeta?: (task: Task) => ReactNode;
 }
 
 const getStatusInfo = (status: Task['status']) => {
@@ -41,7 +43,7 @@ const getStatusInfo = (status: Task['status']) => {
 }
 
 
-export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
+export function TaskList({ tasks, onTaskSelect, getTaskStatusLabel, getTaskMeta }: TaskListProps) {
   const router = useRouter();
   const { deleteTask } = useTasks();
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
@@ -54,6 +56,11 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
 
     if (task.legacyLink) {
       router.push(task.legacyLink);
+      return;
+    }
+
+    if (task.origin.kind === 'legacy' && task.originLink) {
+      router.push(task.originLink);
       return;
     }
 
@@ -106,9 +113,14 @@ export function TaskList({ tasks, onTaskSelect }: TaskListProps) {
                 </div>
               ) : null}
               {task.description && <p className="text-xs text-muted-foreground mt-1">{task.description}</p>}
+              {!isLegacy && getTaskMeta ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {getTaskMeta(task)}
+                </div>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline">{isLegacy ? task.type : statusInfo?.label}</Badge>
+              <Badge variant="outline">{isLegacy ? task.type : getTaskStatusLabel?.(task) ?? statusInfo?.label}</Badge>
               {!isLegacy ? (
                 <Button 
                   variant="ghost" 

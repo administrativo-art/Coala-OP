@@ -1,8 +1,25 @@
+import { normalizeSearchText } from '@/lib/product-search';
+
 export type AccountPlanOption = {
   id: string;
   name: string;
   parentId?: string | null;
+  /** Palavras-chave cadastradas para direcionar buscas (ex.: "uniforme" → conta de uniformes). */
+  searchTerms?: string[];
+  /** Conceito da conta: o que entra e o que não entra (exibido nos seletores). */
+  description?: string;
 };
+
+/**
+ * Monta o texto pesquisável de um plano de contas: caminho na árvore + palavras-chave.
+ * Espelha o padrão de aliases de produto (buildProductSearchText).
+ */
+export function buildAccountPlanSearchText(
+  option: Pick<AccountPlanOption, 'name' | 'searchTerms'>,
+  path?: string[],
+) {
+  return normalizeSearchText([...(path ?? [option.name]), ...(option.searchTerms ?? [])].join(' '));
+}
 
 export type ResultCenterOption = {
   id: string;

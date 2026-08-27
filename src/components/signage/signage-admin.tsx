@@ -32,6 +32,7 @@ import {
   SIGNAGE_IMAGE_TEXT_MAX_DURATION_MS,
   SIGNAGE_VIDEO_MAX_DURATION_MS,
 } from '@/lib/signage';
+import { canAccessUnit } from '@/lib/unit-access';
 
 type SlideFormState = {
   title: string;
@@ -284,7 +285,7 @@ function StaticSlideRow({ slide, position, kioskMap: _kioskMap, canManage, onEdi
 export function SignageAdmin() {
   const router = useRouter();
   const { toast } = useToast();
-  const { user, firebaseUser, isAuthenticated, loading: authLoading, permissions } = useAuth();
+  const { user, firebaseUser, isAuthenticated, loading: authLoading, permissions, isDefaultAdmin } = useAuth();
   const { kiosks, loading: kiosksLoading, updateKiosk } = useKiosks();
   const [slides, setSlides] = useState<SignageSlide[]>([]);
   const [playerHealth, setPlayerHealth] = useState<Record<string, PlayerHeartbeat>>({});
@@ -304,12 +305,10 @@ export function SignageAdmin() {
 
   const canManage = (permissions.signage?.manage ?? false) || permissions.settings.manageUsers;
   const canView = canManage || permissions.signage?.view === true;
-  const isAdmin = permissions.settings.manageUsers;
-
   const allowedKiosks = useMemo(() => {
-    if (isAdmin) return kiosks;
-    return kiosks.filter(kiosk => user?.assignedKioskIds?.includes(kiosk.id));
-  }, [isAdmin, kiosks, user?.assignedKioskIds]);
+    if (!user) return [];
+    return kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }));
+  }, [isDefaultAdmin, kiosks, user]);
 
   const kioskStatuses = useMemo(() => {
     return allowedKiosks.map((kiosk) => {

@@ -25,7 +25,7 @@ export function getContentPurchaseUnitLabel(product: Pick<Product, 'packageType'
 }
 
 export function getDefaultPurchaseUnitType(product: Pick<Product, 'multiplo_caixa' | 'rotulo_caixa'>): PurchaseUnitType {
-  return hasValidLogisticPurchaseUnit(product) ? 'content' : 'content';
+  return hasValidLogisticPurchaseUnit(product) ? 'logistic' : 'content';
 }
 
 export function getPurchaseUnitLabel(

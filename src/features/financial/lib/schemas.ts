@@ -1,8 +1,35 @@
 import { z } from "zod";
+import { personAllocationsAreValid } from "./expense-person-allocations";
 
 export const expenseFormSchema = z
   .object({
     accountPlan: z.string().min(1, "O plano de contas é obrigatório."),
+    hasAccountAllocations: z.boolean().default(false),
+    accountAllocations: z
+      .array(
+        z.object({
+          accountPlanId: z.string().min(1, "Selecione a conta da apropriação."),
+          amount: z.coerce.number().positive("O valor da apropriação deve ser positivo."),
+        })
+      )
+      .optional(),
+    hasPersonAllocations: z.boolean().default(false),
+    personAllocations: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          accountPlanId: z.string().min(1, "Selecione a conta relacionada."),
+          employeeId: z.string().min(1, "Selecione o colaborador."),
+          employeeName: z.string().min(1, "O nome do colaborador é obrigatório."),
+          analysisType: z.enum(["employer_cost", "employee_deduction", "informational"]),
+          amount: z.coerce.number().positive("O valor individualizado deve ser positivo."),
+          resultCenter: z.string().min(1, "Selecione o centro de resultado."),
+          payrollDocumentId: z.string().optional(),
+          contractReference: z.string().optional(),
+          creditorName: z.string().optional(),
+        })
+      )
+      .optional(),
     description: z
       .string()
       .min(10, "A descrição deve ter pelo menos 10 caracteres."),
@@ -16,10 +43,22 @@ export const expenseFormSchema = z
         z.object({
           resultCenter: z.string(),
           percentage: z.coerce.number(),
+          basisValue: z.coerce.number().nonnegative().optional(),
+          participationStartDate: z.date().optional(),
         })
       )
       .optional(),
+    rateioCriterion: z.enum(["equal", "fixed", "revenue", "headcount"]).default("equal"),
+    rateioEffectiveFrom: z.date().optional(),
+    rateioFirstMonthMode: z.enum(["full", "prorated"]).default("full"),
     paymentMethod: z.enum(["single", "installments", "recurring"]).default("single"),
+    plannedPaymentMethodType: z
+      .enum(["credit_card", "debit_card", "pix", "boleto", "transfer", "cash"])
+      .optional(),
+    plannedBankAccountId: z.string().optional(),
+    plannedBankAccountName: z.string().optional(),
+    plannedPaymentMethodId: z.string().optional(),
+    plannedPaymentMethodLabel: z.string().optional(),
     installments: z.coerce
       .number()
       .int()
@@ -43,6 +82,45 @@ export const expenseFormSchema = z
     supplier: z.string().optional(),
     notes: z.string().optional(),
   })
+  .refine(
+    (data) => !data.hasAccountAllocations || (data.accountAllocations?.length ?? 0) >= 2,
+    {
+      message: "Adicione pelo menos duas apropriações contábeis.",
+      path: ["accountAllocations"],
+    }
+  )
+  .refine(
+    (data) => personAllocationsAreValid(data),
+    {
+      message: "A individualização deve fechar o total de cada conta e o valor total da despesa.",
+      path: ["personAllocations"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.hasAccountAllocations) return true;
+      const ids = (data.accountAllocations || []).map((item) => item.accountPlanId).filter(Boolean);
+      return ids.length === new Set(ids).size;
+    },
+    {
+      message: "Cada conta pode aparecer apenas uma vez nas apropriações.",
+      path: ["accountAllocations"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.hasAccountAllocations) return true;
+      const allocatedCents = (data.accountAllocations || []).reduce(
+        (total, item) => total + Math.round((Number(item.amount) || 0) * 100),
+        0
+      );
+      return allocatedCents === Math.round((Number(data.totalValue) || 0) * 100);
+    },
+    {
+      message: "A soma das apropriações deve ser igual ao valor total da despesa.",
+      path: ["accountAllocations"],
+    }
+  )
   .refine(
     (data) => {
       if (data.paymentMethod === "recurring") {
@@ -115,11 +193,54 @@ export const expenseFormSchema = z
       if (!data.isApportioned) {
         return true;
       }
-      return (data.apportionments || []).every((item) => item.percentage >= 1);
+      return (data.apportionments || []).every((item) => item.percentage > 0);
     },
     {
       message: "Porcentagem deve ser maior que 0.",
       path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned) return true;
+      const centers = (data.apportionments || []).map((item) => item.resultCenter.trim()).filter(Boolean);
+      return new Set(centers).size === centers.length;
+    },
+    {
+      message: "Cada unidade pode participar apenas uma vez do rateio.",
+      path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned || !["revenue", "headcount"].includes(data.rateioCriterion)) {
+        return true;
+      }
+      return (data.apportionments || []).every((item) => Number(item.basisValue) > 0);
+    },
+    {
+      message: "Informe uma base maior que zero para cada unidade.",
+      path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned || data.rateioCriterion !== "headcount") return true;
+      return (data.apportionments || []).every((item) => Number.isInteger(Number(item.basisValue)));
+    },
+    {
+      message: "O número de funcionários deve ser inteiro.",
+      path: ["apportionments"],
+    }
+  )
+  .refine(
+    (data) => {
+      if (!data.isApportioned || data.paymentMethod !== "recurring") return true;
+      return !!data.rateioEffectiveFrom;
+    },
+    {
+      message: "Informe a competência inicial desta versão do rateio.",
+      path: ["rateioEffectiveFrom"],
     }
   )
   .refine(

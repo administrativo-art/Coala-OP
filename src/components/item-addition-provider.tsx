@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useState, useEffect, useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { type ItemAdditionRequest } from "@/types";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,13 +35,18 @@ export const ItemAdditionContext = createContext<
 >(undefined);
 
 export function ItemAdditionProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { adminProfileId } = useProfiles();
   const { firebaseUser } = useAuth();
   const [requests, setRequests] = useState<ItemAdditionRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!firebaseUser) {
+    const isItemRequestRoute =
+      pathname?.startsWith("/dashboard/stock/count") ||
+      pathname?.startsWith("/dashboard/audit") ||
+      pathname?.startsWith("/dashboard/stock/item-requests");
+    if (!isItemRequestRoute || !firebaseUser) {
       setRequests([]);
       setLoading(false);
       return;
@@ -49,6 +55,7 @@ export function ItemAdditionProvider({ children }: { children: React.ReactNode }
     const currentFirebaseUser = firebaseUser;
 
     let isMounted = true;
+    setLoading(true);
 
     async function load() {
       try {
@@ -70,14 +77,14 @@ export function ItemAdditionProvider({ children }: { children: React.ReactNode }
 
     void load();
     const intervalId = window.setInterval(() => {
-      void load();
-    }, 30000);
+      if (document.visibilityState === "visible") void load();
+    }, 60000);
 
     return () => {
       isMounted = false;
       window.clearInterval(intervalId);
     };
-  }, [firebaseUser]);
+  }, [pathname, firebaseUser]);
 
   const addRequest = useCallback(
     async (

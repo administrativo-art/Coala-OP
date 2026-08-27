@@ -3,8 +3,6 @@ import { dbAdmin } from './firebase-admin';
 export interface FeatureFlags {
   // Activation flags (progressive rollout) — default false (don't activate new features on failure)
   forms_new_engine_enabled: boolean;
-  forms_legacy_dual_write_enabled: boolean;
-  forms_read_from_legacy_enabled: boolean;
   forms_navigation_api_enabled: boolean;
   forms_recruitment_context_enabled: boolean;
   tasks_new_engine_enabled: boolean;
@@ -26,8 +24,6 @@ export interface FeatureFlags {
 
 const SAFE_DEFAULTS: FeatureFlags = {
   forms_new_engine_enabled: false,
-  forms_legacy_dual_write_enabled: false,
-  forms_read_from_legacy_enabled: false,
   forms_navigation_api_enabled: false,
   forms_recruitment_context_enabled: false,
   tasks_new_engine_enabled: false,

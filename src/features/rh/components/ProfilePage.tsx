@@ -8,7 +8,10 @@ import { ProfileCompletion } from './ProfileCompletion';
 import { SectionCard } from './SectionCard';
 import { AuditLogTab } from './AuditLogTab';
 import { SectionEditModal } from './SectionEditModal';
-import type { FieldMapEntry, EmployeeFieldValue, RhRole } from '@/types/rh';
+import { ImageVoiceConsentCard } from './ImageVoiceConsentCard';
+import { EmployeeProbationCard } from './EmployeeProbationCard';
+import { canEditField } from '@/types/rh';
+import type { FieldMapEntry, EmployeeFieldValue, FieldVisibilityContext, RhRole } from '@/types/rh';
 
 const SECTION_LABELS: Record<string, string> = {
   identity:     'Identidade',
@@ -35,6 +38,14 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 type Props = { bizneoEmployeeId: string };
+
+function isLegacyUniformField(key: string, entry: FieldMapEntry) {
+  return key.startsWith('employee.uniform_') || entry.section.toLowerCase() === 'uniforme';
+}
+
+function cleanIds(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
 
 function Skeleton({ className }: { className: string }) {
   return <div className={`animate-pulse bg-gray-100 rounded-lg ${className}`} />;
@@ -71,7 +82,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
 
   if (profileState.status === 'loading' || profileState.status === 'idle') {
     return (
-      <div className="flex gap-6">
+      <div className="flex gap-3">
         <div className="hidden lg:block w-52 shrink-0 space-y-2 pt-1">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
         </div>
@@ -98,16 +109,48 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
     );
   }
 
-  const { employee, fieldValues, fieldMap, cache } = profileState.data;
+  const {
+    employee,
+    fieldValues,
+    fieldMap,
+    cache,
+    consentimento_imagem_voz,
+    ciencia_privacidade_onboarding,
+    periodo_experiencia,
+  } = profileState.data;
   const role = cache.rh_role as RhRole;
+  const visibilityContext: FieldVisibilityContext = {
+    isOwner: cache.bizneo_employee_id === bizneoEmployeeId || employee.auth_uid === cache.auth_uid,
+    canViewConfidential: role === 'admin',
+    userId: cache.auth_uid ?? null,
+    roleIds: cleanIds([
+      cache.job_role_id,
+      ...(cache.job_role_ids ?? []),
+      ...(cache.role_ids ?? []),
+    ]),
+    functionIds: cleanIds([
+      cache.job_function_id,
+      ...(cache.job_function_ids ?? []),
+      ...(cache.function_ids ?? []),
+    ]),
+  };
 
   // Group fields by section
-  const sections = Object.entries(fieldMap.fields).reduce<
-    Record<string, Array<{ key: string; entry: FieldMapEntry; fv?: EmployeeFieldValue }>>
+  const visibleProfileFields = Object.entries(fieldMap.fields).filter(
+    ([key, entry]) => !isLegacyUniformField(key, entry),
+  );
+
+  const sections = visibleProfileFields.reduce<
+    Record<string, Array<{ key: string; entry: FieldMapEntry; fv?: EmployeeFieldValue; editable?: boolean }>>
   >((acc, [key, entry]) => {
     const sec = entry.section;
     if (!acc[sec]) acc[sec] = [];
-    acc[sec].push({ key, entry, fv: fieldValues[key] });
+    acc[sec].push({
+      key,
+      entry,
+      fv: fieldValues[key],
+      editable: role !== 'employee' && canEditField(entry, role, visibilityContext, fieldMap.access_matrix),
+    });
     return acc;
   }, {});
 
@@ -122,16 +165,16 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
   };
 
   return (
-    <div className="flex gap-6 min-h-0">
+    <div className="flex min-h-0 gap-2">
       {/* Scroll-spy sidebar */}
       {tab === 'perfil' && (
-        <nav className="hidden lg:flex flex-col gap-1 w-52 shrink-0 pt-1 sticky top-24 self-start max-h-[calc(100vh-8rem)] overflow-y-auto">
+        <nav className="sticky top-20 hidden max-h-[calc(100vh-6rem)] w-36 shrink-0 flex-col gap-0.5 self-start overflow-y-auto pt-1 lg:flex">
           {orderedSections.map((sec) => (
             <button
               key={sec}
               type="button"
               onClick={() => scrollTo(sec)}
-              className={`text-left text-sm px-3 py-1.5 rounded-lg transition-colors truncate ${
+              className={`truncate rounded-md px-2 py-1 text-left text-[11px] transition-colors ${
                 activeSection === sec
                   ? 'bg-violet-50 text-violet-700 font-medium'
                   : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
@@ -144,7 +187,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
       )}
 
       {/* Main content */}
-      <div className="flex-1 min-w-0 space-y-4">
+      <div className="min-w-0 flex-1 space-y-2.5">
         <EmployeeHeader employee={employee} cache={cache} />
 
         {/* Tab bar */}
@@ -154,7 +197,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`relative px-4 py-2 text-sm font-medium transition-colors ${
+              className={`relative px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 tab === t.id
                   ? 'text-violet-700'
                   : 'text-gray-500 hover:text-gray-800'
@@ -171,6 +214,12 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
         {/* Tab: Perfil */}
         {tab === 'perfil' && (
           <div className="space-y-3">
+            <ImageVoiceConsentCard
+              employeeId={employee.bizneo_employee_id}
+              initialConsent={consentimento_imagem_voz}
+              privacyAcknowledgement={ciencia_privacidade_onboarding}
+              canRevoke={visibilityContext.isOwner === true}
+            />
             {orderedSections.map((sec) => (
               <div
                 key={sec}
@@ -199,9 +248,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
 
         {/* Tab: Contratos */}
         {tab === 'contratos' && (
-          <div className="flex items-center justify-center py-20 text-gray-400">
-            <p className="text-sm">Contratos — em breve.</p>
-          </div>
+          <EmployeeProbationCard probation={periodo_experiencia} />
         )}
 
         {/* Tab: Remunerações */}
@@ -213,7 +260,7 @@ export function ProfilePage({ bizneoEmployeeId }: Props) {
       </div>
 
       {/* Right panel — completion */}
-      <div className="hidden xl:block w-64 shrink-0 sticky top-24 self-start">
+      <div className="sticky top-24 hidden w-52 shrink-0 self-start xl:block">
         <ProfileCompletion
           pct={employee.profile_completion}
           fieldMap={fieldMap}

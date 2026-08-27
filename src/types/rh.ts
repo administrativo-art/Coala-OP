@@ -9,7 +9,15 @@ export type JobRoleId        = string; // ref: coala-rh/jobRoles/{id}
 export type KioskId          = string; // ref: coala/Kiosk/{id}
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
-export type FieldVisibility = 'public' | 'sensitive' | 'internal';
+export type FieldVisibility =
+  | 'public'
+  | 'restricted_total'
+  | 'restricted_partial'
+  | 'confidential'
+  // Legado: mantido só para ler dados antigos já salvos no field_map.
+  | 'sensitive'
+  | 'internal';
+export type NormalizedFieldVisibility = 'public' | 'restricted_total' | 'restricted_partial' | 'confidential';
 export type RhRole          = 'employee' | 'manager' | 'admin';
 export type EmployeeStatus  = 'active' | 'inactive' | 'terminated';
 export type FieldType =
@@ -50,6 +58,107 @@ export type ConditionalRule =
   | { kind: 'show_if';    field: CoalaKey; operator: 'eq' | 'neq' | 'truthy'; value?: unknown }
   | { kind: 'required_if'; field: CoalaKey; operator: 'eq' | 'truthy'; value?: unknown };
 
+export type RepeatableConfig = {
+  enabled: boolean;
+  add_label?: string;
+  item_label?: string;
+  max_items?: number;
+};
+
+export type FieldGroupConfig = {
+  id: string;
+  label: string;
+  order?: number;
+  conditionals?: ConditionalRule[];
+  repeatable?: RepeatableConfig;
+};
+
+export type FieldSubgroupConfig = {
+  id: string;
+  label: string;
+  order?: number;
+  group_id?: string;
+  conditionals?: ConditionalRule[];
+};
+
+export type ProfileBlockConfig = {
+  id: string;
+  label: string;
+  order: number;
+  employee_visible: boolean;
+  employee_editable?: boolean;
+  locked?: boolean;
+};
+
+export type FieldAccessBinding = {
+  roleIds?: JobRoleId[];
+  functionIds?: string[];
+  userIds?: AuthUid[];
+};
+
+export type FieldAccessConfig = {
+  allowed?: FieldAccessBinding;
+};
+
+export type FieldVisibilityContext = {
+  isOwner?: boolean;
+  canViewConfidential?: boolean;
+  userId?: AuthUid | null;
+  roleIds?: string[];
+  functionIds?: string[];
+};
+
+export type ProfileAccessActor = 'authenticated' | 'owner' | 'manager' | 'admin' | 'explicit';
+export type ProfileAccessPermission = 'hidden' | 'view' | 'edit';
+export type ProfileAccessMatrixRule = Partial<Record<ProfileAccessActor, ProfileAccessPermission>> & {
+  bindings?: FieldAccessBinding;
+};
+
+export type ProfileAccessMatrix = {
+  version: string;
+  visibility: Partial<Record<NormalizedFieldVisibility, ProfileAccessMatrixRule>>;
+};
+
+export type DocumentVisibilityConfig = {
+  version: string;
+  categories?: Record<string, NormalizedFieldVisibility>;
+  document_types?: Record<string, NormalizedFieldVisibility>;
+};
+
+export const DEFAULT_PROFILE_ACCESS_MATRIX: ProfileAccessMatrix = {
+  version: 'coala-rh-access-v1',
+  visibility: {
+    public: {
+      authenticated: 'view',
+      owner: 'view',
+      manager: 'edit',
+      admin: 'edit',
+      explicit: 'view',
+    },
+    restricted_partial: {
+      authenticated: 'hidden',
+      owner: 'view',
+      manager: 'edit',
+      admin: 'edit',
+      explicit: 'view',
+    },
+    restricted_total: {
+      authenticated: 'hidden',
+      owner: 'hidden',
+      manager: 'edit',
+      admin: 'edit',
+      explicit: 'view',
+    },
+    confidential: {
+      authenticated: 'hidden',
+      owner: 'hidden',
+      manager: 'hidden',
+      admin: 'edit',
+      explicit: 'view',
+    },
+  },
+};
+
 // ─── FieldMap ───────────────────────────────────────────────────────────────
 export type FieldMapEntry = {
   bizneo_id:         BizneoFieldId;
@@ -62,13 +171,17 @@ export type FieldMapEntry = {
   options?:          string[];
   lgpd?: {
     category: 'personal' | 'sensitive' | 'confidential';
-    legal_basis: 'legal_obligation' | 'contract' | 'legitimate_interest' | 'consent';
+    legal_basis: 'legal_obligation' | 'contract' | 'legitimate_interest' | 'consent' | 'life_protection' | 'health_guardianship';
     retention: 'employment_plus_5y' | 'termination_plus_90d' | 'termination_plus_2y' | 'manual_review';
     requires_consent?: boolean;
   };
   triggers?:         TriggerConfig[];
   validation?:       ValidationRule[];
   conditionals?:     ConditionalRule[];
+  group?:            FieldGroupConfig;
+  subgroup?:         FieldSubgroupConfig;
+  repeatable?:       RepeatableConfig;
+  access?:           FieldAccessConfig;
   section:           string;
   label:             string;
   order:             number;
@@ -77,6 +190,10 @@ export type FieldMapEntry = {
 export type FieldMap = {
   version: string;
   fields:  Record<CoalaKey, FieldMapEntry>;
+  section_order?: Record<string, number>;
+  profile_blocks?: Record<string, ProfileBlockConfig>;
+  access_matrix?: ProfileAccessMatrix;
+  document_visibility?: DocumentVisibilityConfig;
 };
 
 // ─── Employee ───────────────────────────────────────────────────────────────
@@ -84,7 +201,10 @@ export type Employee = {
   bizneo_employee_id: BizneoEmployeeId;
   auth_uid?:          AuthUid;
   name:               string;
+  /** Mesmo e-mail usado para autenticação no Coala One. */
   email:              string;
+  access_email?:      string;
+  person_record_type?: 'employee' | 'director' | 'partner' | 'pj' | 'internship' | 'test';
   photo_url?:         string;
   status:             EmployeeStatus;
   job_role_id:        JobRoleId;
@@ -94,6 +214,59 @@ export type Employee = {
   synced_at:          Timestamp;
   created_at:         Timestamp;
   expires_at?:        Timestamp;
+  consentimento_imagem_voz?: ImageVoiceConsentRecord;
+  ciencia_privacidade_onboarding?: OnboardingPrivacyAcknowledgementRecord;
+};
+
+export type ImageVoiceConsentRecord = {
+  autorizado: boolean;
+  respondido_em: string;
+  versao_termo: string;
+  ip?: string | null;
+  user_agent?: string | null;
+  hash_termo_exibido?: string | null;
+  termo_snapshot_id?: string | null;
+  protocolo?: string | null;
+  origem?: string;
+  onboarding_id?: string | null;
+  status?: "granted" | "denied" | "revoked";
+  termVersion?: string;
+  termHash?: string;
+  decisionAt?: string;
+  decisionChannel?: string;
+  decisionEvidence?: Record<string, unknown>;
+  signedDocumentId?: string | null;
+  revokedAt?: string | null;
+  revocationReason?: string | null;
+  revocationChannel?: string | null;
+  operationalEffectStatus?: "not_applicable" | "pending" | "in_progress" | "completed";
+  operationalEffectAt?: string | null;
+  usages?: Array<{
+    usageId: string;
+    channel: string;
+    asset: string;
+    publishedAt: string;
+    registeredAt: string;
+    registeredBy: string;
+    removedAt: string | null;
+    removedBy: string | null;
+  }>;
+};
+
+export type OnboardingPrivacyAcknowledgementRecord = {
+  acknowledged: boolean;
+  noticeVersion: string;
+  noticeHash?: string | null;
+  noticeTitle?: string | null;
+  firstAcceptedAt?: string | null;
+  lastConfirmedAt?: string | null;
+  privacyNoticeSnapshotId?: string | null;
+  allergyAcknowledged?: boolean;
+  allergyAcknowledgedAt?: string | null;
+  allergyNoticeVersion?: string | null;
+  allergyNoticeHash?: string | null;
+  allergyNoticeSnapshotId?: string | null;
+  onboarding_id?: string | null;
 };
 
 // ─── FieldValue ─────────────────────────────────────────────────────────────
@@ -114,6 +287,17 @@ export type RhAccessCache = {
   rh_role:              RhRole;
   bizneo_employee_id?:  BizneoEmployeeId;
   unit_id?:             KioskId;
+  user_id?:             AuthUid;
+  job_role_id?:         JobRoleId;
+  job_role_ids?:        JobRoleId[];
+  role_ids?:            JobRoleId[];
+  job_function_id?:     string;
+  job_function_ids?:    string[];
+  function_ids?:        string[];
+  profile_compliance_status?: 'pending' | 'complete' | 'overdue';
+  profile_compliance_policy_version?: number;
+  profile_compliance_next_review_at?: Timestamp;
+  profile_compliance_updated_at?: Timestamp;
   updated_at:           Timestamp;
 };
 
@@ -217,10 +401,158 @@ export function calcProfileCompletion(
 }
 
 // ─── Helpers de visibilidade ─────────────────────────────────────────────────
-export function canViewField(visibility: FieldVisibility, role: RhRole): boolean {
-  if (visibility === 'public')    return true;
-  if (visibility === 'sensitive') return role === 'manager' || role === 'admin';
-  if (visibility === 'internal')  return role === 'admin';
+export function normalizeFieldVisibility(visibility?: FieldVisibility | string | null): NormalizedFieldVisibility {
+  if (visibility === 'sensitive') return 'restricted_total';
+  if (visibility === 'internal') return 'confidential';
+  if (
+    visibility === 'public'
+    || visibility === 'restricted_total'
+    || visibility === 'restricted_partial'
+    || visibility === 'confidential'
+  ) {
+    return visibility;
+  }
+  return 'confidential';
+}
+
+function normalizeAccessList(values?: string[]) {
+  return (values ?? []).map((value) => value.trim()).filter(Boolean);
+}
+
+export function normalizeFieldAccessBinding(binding?: FieldAccessBinding | null): FieldAccessBinding | undefined {
+  const roleIds = normalizeAccessList(binding?.roleIds);
+  const functionIds = normalizeAccessList(binding?.functionIds);
+  const userIds = normalizeAccessList(binding?.userIds);
+
+  if (roleIds.length === 0 && functionIds.length === 0 && userIds.length === 0) return undefined;
+
+  return {
+    ...(roleIds.length ? { roleIds } : {}),
+    ...(functionIds.length ? { functionIds } : {}),
+    ...(userIds.length ? { userIds } : {}),
+  };
+}
+
+export function hasExplicitAccessBinding(
+  binding: FieldAccessBinding | undefined,
+  context: FieldVisibilityContext = {},
+): boolean {
+  if (!binding) return false;
+
+  const userIds = normalizeAccessList(binding.userIds);
+  const roleIds = normalizeAccessList(binding.roleIds);
+  const functionIds = normalizeAccessList(binding.functionIds);
+
+  if (context.userId && userIds.includes(context.userId)) return true;
+  if (normalizeAccessList(context.roleIds).some((roleId) => roleIds.includes(roleId))) return true;
+  if (normalizeAccessList(context.functionIds).some((functionId) => functionIds.includes(functionId))) return true;
+
+  return false;
+}
+
+export function hasExplicitFieldAccess(
+  access: FieldAccessConfig | undefined,
+  context: FieldVisibilityContext = {},
+): boolean {
+  return hasExplicitAccessBinding(access?.allowed, context);
+}
+
+const PROFILE_ACCESS_PERMISSION_RANK: Record<ProfileAccessPermission, number> = {
+  hidden: 0,
+  view: 1,
+  edit: 2,
+};
+
+export function normalizeProfileAccessPermission(value: unknown): ProfileAccessPermission {
+  if (value === 'edit' || value === 'view' || value === 'hidden') return value;
+  return 'hidden';
+}
+
+export function normalizeProfileAccessMatrix(matrix?: ProfileAccessMatrix | null): ProfileAccessMatrix {
+  const source = matrix?.visibility ?? {};
+  const visibility = Object.fromEntries(
+    (['public', 'restricted_partial', 'restricted_total', 'confidential'] as NormalizedFieldVisibility[]).map((key) => {
+      const defaults = DEFAULT_PROFILE_ACCESS_MATRIX.visibility[key] ?? {};
+      const current = source[key] ?? {};
+      const bindings = normalizeFieldAccessBinding(current.bindings);
+      return [
+        key,
+        {
+          authenticated: normalizeProfileAccessPermission(current.authenticated ?? defaults.authenticated),
+          owner: normalizeProfileAccessPermission(current.owner ?? defaults.owner),
+          manager: normalizeProfileAccessPermission(current.manager ?? defaults.manager),
+          admin: normalizeProfileAccessPermission(current.admin ?? defaults.admin),
+          explicit: normalizeProfileAccessPermission(current.explicit ?? defaults.explicit),
+          ...(bindings ? { bindings } : {}),
+        },
+      ];
+    }),
+  ) as Record<NormalizedFieldVisibility, ProfileAccessMatrixRule>;
+
+  return {
+    version: matrix?.version || DEFAULT_PROFILE_ACCESS_MATRIX.version,
+    visibility,
+  };
+}
+
+export function resolveFieldAccessPermission(
+  visibility: FieldVisibility,
+  role: RhRole,
+  context: FieldVisibilityContext = {},
+  access?: FieldAccessConfig,
+  matrix?: ProfileAccessMatrix,
+): ProfileAccessPermission {
+  if (!matrix) {
+    const normalized = normalizeFieldVisibility(visibility);
+    if (normalized === 'public') return role === 'admin' || role === 'manager' ? 'edit' : 'view';
+    if (hasExplicitFieldAccess(access, context)) return 'view';
+    if (normalized === 'restricted_partial') return role === 'admin' || role === 'manager' ? 'edit' : context.isOwner === true ? 'view' : 'hidden';
+    if (normalized === 'restricted_total') return role === 'admin' || role === 'manager' ? 'edit' : 'hidden';
+    if (normalized === 'confidential') return role === 'admin' || context.canViewConfidential === true ? 'edit' : 'hidden';
+    return 'hidden';
+  }
+
+  const normalized = normalizeFieldVisibility(visibility);
+  const normalizedMatrix = normalizeProfileAccessMatrix(matrix);
+  const rule = normalizedMatrix.visibility[normalized] ?? {};
+  const actors: ProfileAccessActor[] = ['authenticated'];
+  if (context.isOwner === true) actors.push('owner');
+  if (role === 'manager') actors.push('manager');
+  if (role === 'admin' || context.canViewConfidential === true) actors.push('admin');
+  if (hasExplicitAccessBinding(rule.bindings, context) || hasExplicitFieldAccess(access, context)) actors.push('explicit');
+
+  return actors.reduce<ProfileAccessPermission>((best, actor) => {
+    const permission = normalizeProfileAccessPermission(rule[actor]);
+    return PROFILE_ACCESS_PERMISSION_RANK[permission] > PROFILE_ACCESS_PERMISSION_RANK[best] ? permission : best;
+  }, 'hidden');
+}
+
+export function canEditField(
+  entry: FieldMapEntry,
+  role: RhRole,
+  context: FieldVisibilityContext = {},
+  matrix?: ProfileAccessMatrix,
+): boolean {
+  const permission = resolveFieldAccessPermission(entry.visibility, role, context, entry.access, matrix);
+  return permission === 'edit';
+}
+
+export function canViewField(
+  visibility: FieldVisibility,
+  role: RhRole,
+  context: FieldVisibilityContext = {},
+  access?: FieldAccessConfig,
+  matrix?: ProfileAccessMatrix,
+): boolean {
+  if (matrix) {
+    return resolveFieldAccessPermission(visibility, role, context, access, matrix) !== 'hidden';
+  }
+  const normalized = normalizeFieldVisibility(visibility);
+  if (normalized === 'public') return true;
+  if (hasExplicitFieldAccess(access, context)) return true;
+  if (normalized === 'restricted_partial') return role === 'manager' || role === 'admin' || context.isOwner === true;
+  if (normalized === 'restricted_total') return role === 'manager' || role === 'admin';
+  if (normalized === 'confidential') return role === 'admin' || context.canViewConfidential === true;
   return false;
 }
 

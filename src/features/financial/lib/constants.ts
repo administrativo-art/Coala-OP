@@ -5,10 +5,18 @@ export const FINANCIAL_COLLECTIONS = {
   expenseDescriptions: "expenseDescriptions",
   expenses: "expenses",
   bankAccounts: "bankAccounts",
+  cardStatements: "cardStatements",
   payments: "payments",
   transactions: "transactions",
   importAliases: "importAliases",
   importDrafts: "importDrafts",
+  supplierPaymentProfiles: "supplierPaymentProfiles",
+  bankPaymentRequests: "bankPaymentRequests",
+  expectedBankDebits: "expectedBankDebits",
+  financialObligations: "financialObligations",
+  obligationPaymentLinks: "obligationPaymentLinks",
+  paymentAdjustments: "paymentAdjustments",
+  financialInboxMessages: "financialInboxMessages",
 } as const;
 
 export type FinancialCollectionName =
@@ -20,8 +28,11 @@ export const FINANCIAL_ROUTES = {
   financialFlow: "/dashboard/financial/financial-flow",
   dre: "/dashboard/financial/dre",
   expenses: "/dashboard/financial/expenses",
+  inbox: "/dashboard/financial/expenses/inbox",
   pendingAuditExpenses: "/dashboard/financial/expenses/pending-audit",
   newExpense: "/dashboard/financial/expenses/new",
   importExpenses: "/dashboard/financial/expenses/import",
+  cardStatements: "/dashboard/financial/expenses/card-statements",
   settings: "/dashboard/financial/settings",
+  paymentRequests: "/dashboard/financial/expenses/authorizations",
 } as const;

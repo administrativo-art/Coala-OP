@@ -14,7 +14,6 @@ import {
     Settings,
     Layers,
     Edit,
-    Table as TableIcon,
     CheckCircle2,
     AlertTriangle,
     History,
@@ -31,7 +30,11 @@ import {
     LayoutDashboard,
     ClipboardList,
     Package,
-    Building2
+    Building2,
+    Activity,
+    CircleMinus,
+    TrendingDown,
+    X
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { type ProductSimulationItem } from '@/types';
@@ -55,7 +58,7 @@ import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
 import { ScrollArea } from "./ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { TechnicalSheetViewerModal } from "./technical-sheet-viewer-modal";
+import { AddEditSimulationModal } from "./add-edit-simulation-modal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
@@ -64,6 +67,15 @@ import { useChannels } from "@/hooks/use-channels";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { convertValue } from "@/lib/conversion";
 import { calculateSimulationMetrics } from "@/lib/pricing-context";
+import { comparePricingSkus } from "@/lib/pricing-sort";
+import {
+    calculateGrossMargin,
+    calculatePriceSpread,
+    getCmvPercentage,
+    getPricingCommercialStatus,
+    hasAbnormalCmv,
+    type PricingCommercialStatus,
+} from "@/lib/pricing-insights";
 import { FichaTecnicaDocument } from './pdf/FichaTecnicaDocument';
 import type { BlobProviderParams } from '@react-pdf/renderer';
 import { GerencialReportDocument } from './pdf/GerencialReportDocument';
@@ -71,6 +83,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ProductModal } from "./product-modal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { PricingHistoryAnalysis } from "./pricing-history-analysis";
+import { BackButton } from "@/components/navigation/back-button";
 import {
     canCreateTechnicalSheets,
     canDeleteTechnicalSheets,
@@ -94,23 +107,25 @@ interface KioskManagementDialogProps {
 }
 
 function KioskManagementDialog({ open, onOpenChange, simulation, kiosks, onSave }: KioskManagementDialogProps) {
-  const [selectedIds, setSelectedIds] = useState<string[]>(simulation.kioskIds ?? []);
+  const initialIds = (simulation.kioskIds ?? []).length ? simulation.kioskIds ?? [] : kiosks.map((kiosk) => kiosk.id);
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialIds);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (open) setSelectedIds(simulation.kioskIds ?? []);
-  }, [open, simulation.kioskIds]);
+    if (open) setSelectedIds((simulation.kioskIds ?? []).length ? simulation.kioskIds ?? [] : kiosks.map((kiosk) => kiosk.id));
+  }, [kiosks, open, simulation.kioskIds]);
 
   const toggle = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  const hasChanged = JSON.stringify([...selectedIds].sort()) !== JSON.stringify([...(simulation.kioskIds ?? [])].sort());
+  const persistedIds = (simulation.kioskIds ?? []).length ? simulation.kioskIds ?? [] : kiosks.map((kiosk) => kiosk.id);
+  const hasChanged = JSON.stringify([...selectedIds].sort()) !== JSON.stringify([...persistedIds].sort());
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave(selectedIds);
+      await onSave(selectedIds.length === kiosks.length ? [] : selectedIds);
       onOpenChange(false);
     } finally {
       setIsSaving(false);
@@ -119,19 +134,19 @@ function KioskManagementDialog({ open, onOpenChange, simulation, kiosks, onSave 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Gerenciar Unidades</DialogTitle>
-          <DialogDescription className="truncate">{simulation.name}</DialogDescription>
+      <DialogContent className="max-w-md overflow-hidden rounded-[20px] p-0">
+        <DialogHeader className="border-b px-6 py-5">
+          <DialogTitle className="text-lg font-black">Gerenciar unidades</DialogTitle>
+          <DialogDescription className="truncate">{simulation.name} · {selectedIds.length === kiosks.length ? 'ativa em todas as unidades' : `ativa em ${selectedIds.length} de ${kiosks.length} unidades`}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-1 py-2">
+        <div className="space-y-2 px-6 py-4">
           {selectedIds.length === 0 && (
-            <p className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3">
-              Esta mercadoria não aparecerá ao filtrar por unidade.
+            <p className="mb-3 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">
+              Selecione pelo menos uma unidade para manter a mercadoria disponível.
             </p>
           )}
           {kiosks.map(kiosk => (
-            <div key={kiosk.id} className="flex items-center justify-between rounded-lg px-3 py-2.5 hover:bg-muted/50 transition-colors">
+            <div key={kiosk.id} className={cn("flex items-center justify-between rounded-xl border px-4 py-3 transition-colors", selectedIds.includes(kiosk.id) ? 'border-pink-200 bg-pink-50/60' : 'border-slate-200 bg-white')}>
               <label htmlFor={`kiosk-${kiosk.id}`} className="text-sm font-medium cursor-pointer flex-1">{kiosk.name}</label>
               <Switch
                 id={`kiosk-${kiosk.id}`}
@@ -141,9 +156,9 @@ function KioskManagementDialog({ open, onOpenChange, simulation, kiosks, onSave 
             </div>
           ))}
         </div>
-        <DialogFooter>
+        <DialogFooter className="border-t bg-[#faf9f6] px-6 py-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleSave} disabled={!hasChanged || isSaving}>
+          <Button className="bg-pink-600 hover:bg-pink-700" onClick={handleSave} disabled={!hasChanged || isSaving || selectedIds.length === 0}>
             {isSaving ? 'Salvando...' : 'Salvar'}
           </Button>
         </DialogFooter>
@@ -159,11 +174,29 @@ const formatCurrency = (value: number | undefined | null) => {
     return isNegative ? `- ${formatted}` : formatted;
 };
 
-type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'totalCmv' | 'profitGoal' | 'profitPercentage' | 'markup';
+type SortKey = keyof ProductSimulation | 'name' | 'sku' | 'salePrice' | 'totalCmv' | 'profitGoal' | 'profitPercentage' | 'markup' | 'grossVal' | 'grossPct';
 type SortDirection = 'asc' | 'desc';
+type CommercialAlert = 'loss' | 'below' | 'cmv';
+
+function normalizeUnitName(name: string) {
+    return name
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isCommercialSalesUnit(kiosk: Kiosk) {
+    const normalized = normalizeUnitName(kiosk.name);
+    return !normalized.includes('matriz') && !normalized.includes('centro de distribuicao');
+}
+
+function isSimulationAvailableInUnit(simulation: ProductSimulation, unitId: string) {
+    const unitIds = simulation.kioskIds ?? [];
+    return unitIds.length === 0 || unitIds.includes(unitId);
+}
 
 
-export function PricingSimulator() {
+export function PricingSimulator({ pageHeader = false }: { pageHeader?: boolean }) {
     const { simulations, simulationItems, loading: loadingSimulations, deleteSimulation, bulkUpdateSimulations, priceHistory, updateSimulation, resolveSimulationPrice } = useProductSimulation();
     const { baseProducts, loading: loadingBaseProducts } = useBaseProducts();
     const { categories, loading: loadingCategories } = useProductSimulationCategories();
@@ -179,63 +212,42 @@ export function PricingSimulator() {
     
     const [selectedSimulations, setSelectedSimulations] = useState<Set<string>>(new Set());
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-    const [initialTab, setInitialTab] = useState<'cost' | 'ficha'>('cost');
+    const [initialTab, setInitialTab] = useState<'cost' | 'ficha' | 'instruction'>('cost');
     const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-    const [isViewerModalOpen, setIsViewerModalOpen] = useState(false);
     const [activeMainTab, setActiveMainTab] = useState<string>("inventory");
     const [isBatchEditModalOpen, setIsBatchEditModalOpen] = useState(false);
     const [simulationToEdit, setSimulationToEdit] = useState<ProductSimulation | null>(null);
-    const [simulationToView, setSimulationToView] = useState<ProductSimulation | null>(null);
     const [simulationToDeactivate, setSimulationToDeactivate] = useState<ProductSimulation | null>(null);
     const [simToDeleteFirst, setSimToDeleteFirst] = useState<ProductSimulation | null>(null);
     const [simToDeleteFinal, setSimToDeleteFinal] = useState<ProductSimulation | null>(null);
     const [simToManageKiosks, setSimToManageKiosks] = useState<ProductSimulation | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
-    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' });
+    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'grossPct', direction: 'asc' });
     const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set());
     const [lineFilters, setLineFilters] = useState<Set<string>>(new Set());
     const [groupFilters, setGroupFilters] = useState<Set<string>>(new Set());
-    const [kioskFilter, setKioskFilter] = useState<string>("all");
     const [contextUnitId, setContextUnitId] = useState<string>("all");
     const [contextChannelId, setContextChannelId] = useState<string>("all");
+    const [commercialAlert, setCommercialAlert] = useState<CommercialAlert | null>(null);
 
     const [statusFilter, setStatusFilter] = useState<Set<'sem_meta' | 'na_meta' | 'abaixo'>>(new Set());
-
-    // Column visibility logic
     const ALL_COLS = useMemo(() => [
         { id: 'price', label: 'Preço', tip: 'Preço de venda ao cliente final.' },
         { id: 'cmv', label: 'CMV', tip: 'Custo da Mercadoria Vendida — soma dos insumos.' },
-        { id: 'grossPct', label: 'M. Bruta %', tip: 'Margem Bruta = (Preço − CMV) ÷ Preço. Métrica principal de rentabilidade.' },
-        { id: 'grossVal', label: 'M. Bruta R$', tip: 'Margem Bruta em reais: Preço menos CMV.' },
-        { id: 'contribPct', label: 'M. Contrib %', tip: 'Margem de Contribuição = (Faturamento líquido − CMV) ÷ Preço. Desconta impostos e taxas.' },
-        { id: 'markup', label: 'Markup', tip: 'Preço ÷ CMV. Quantas vezes o preço de venda é maior que o custo.' },
-        { id: 'goal', label: 'Meta M.B.', tip: 'Meta de Margem Bruta definida para esta mercadoria.' },
+        { id: 'grossPct', label: 'M. Bruta %', tip: 'Margem bruta percentual.' },
+        { id: 'grossVal', label: 'M. Bruta R$', tip: 'Preço menos CMV.' },
+        { id: 'contribPct', label: 'M. Contrib %', tip: 'Margem após impostos e taxas.' },
+        { id: 'markup', label: 'Markup', tip: 'Preço dividido pelo CMV.' },
+        { id: 'goal', label: 'Meta M.B.', tip: 'Meta de margem bruta.' },
     ], []);
-
-    const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('pricing-cols');
-            return saved ? new Set(JSON.parse(saved)) : new Set(['price', 'cmv', 'grossPct', 'goal']);
-        }
-        return new Set(['price', 'cmv', 'grossPct', 'goal']);
+    const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(['price', 'cmv', 'grossPct', 'goal']));
+    const toggleColumn = (id: string) => setVisibleColumns((current) => {
+        const next = new Set(current);
+        if (next.has(id) && next.size > 1) next.delete(id);
+        else next.add(id);
+        return next;
     });
-
-    useEffect(() => {
-        localStorage.setItem('pricing-cols', JSON.stringify(Array.from(visibleColumns)));
-    }, [visibleColumns]);
-
-    const toggleColumn = (id: string) => {
-        setVisibleColumns(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                if (next.size > 1) next.delete(id);
-            } else {
-                next.add(id);
-            }
-            return next;
-        });
-    };
 
 
     const handleAddNew = () => {
@@ -244,7 +256,7 @@ export function PricingSimulator() {
         setIsProductModalOpen(true);
     };
 
-    const handleEdit = (simulation: ProductSimulation, tab: 'cost' | 'ficha' = 'cost') => {
+    const handleEdit = (simulation: ProductSimulation, tab: 'cost' | 'ficha' | 'instruction' = 'cost') => {
         setSimulationToEdit(simulation);
         setInitialTab(tab);
         setIsProductModalOpen(true);
@@ -255,8 +267,7 @@ export function PricingSimulator() {
     };
     
     const handleViewTechnicalSheet = (simulation: ProductSimulation) => {
-        setSimulationToView(simulation);
-        setIsViewerModalOpen(true);
+        handleEdit(simulation, 'instruction');
     };
 
     const handleDelete = (sim: ProductSimulation) => {
@@ -326,6 +337,74 @@ export function PricingSimulator() {
     }, [categories]);
 
     const activeChannels = useMemo(() => channels.filter(channel => channel.active), [channels]);
+    const commercialKiosks = useMemo(
+        () => kiosks.filter(isCommercialSalesUnit).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+        [kiosks]
+    );
+    const unitNavigationCards = useMemo(
+        () => [
+            {
+                id: 'all',
+                name: 'Todas as mercadorias',
+                count: simulations.filter((simulation) => !simulation.isArchived).length,
+            },
+            ...commercialKiosks.map((kiosk) => ({
+                id: kiosk.id,
+                name: kiosk.name,
+                count: simulations.filter(
+                    (simulation) => !simulation.isArchived && isSimulationAvailableInUnit(simulation, kiosk.id)
+                ).length,
+            })),
+        ],
+        [commercialKiosks, simulations]
+    );
+    const simulationById = useMemo(
+        () => new Map(simulations.map((simulation) => [simulation.id, simulation])),
+        [simulations]
+    );
+    const pricingInsights = useMemo(() => {
+        const unitId = contextUnitId === 'all' ? null : contextUnitId;
+        const comparisonChannels = activeChannels.filter((channel) => channel.type !== 'balcao');
+
+        return new Map(simulations.map((simulation) => {
+            const counterResolution = resolveSimulationPrice(simulation, unitId, null);
+            const basePrice = counterResolution.available ? counterResolution.price ?? 0 : 0;
+            const channelRows = [
+                { id: 'balcao', name: 'Balcão', price: counterResolution.price, available: counterResolution.available },
+                ...comparisonChannels.map((channel) => {
+                    const resolution = resolveSimulationPrice(simulation, unitId, channel.id);
+                    return { id: channel.id, name: channel.name, price: resolution.price, available: resolution.available };
+                }),
+            ].map((channel) => {
+                const price = channel.available ? channel.price ?? 0 : 0;
+                const margin = calculateGrossMargin(price, simulation.totalCmv || 0).percentage;
+                return { ...channel, price, margin };
+            });
+            const availablePrices = channelRows.filter((channel) => channel.available).map((channel) => channel.price);
+            const bestMargin = Math.max(...channelRows.filter((channel) => channel.available).map((channel) => channel.margin), Number.NEGATIVE_INFINITY);
+
+            return [simulation.id, {
+                basePrice,
+                status: getPricingCommercialStatus(basePrice, simulation.totalCmv || 0, simulation.profitGoal),
+                cmvPercentage: getCmvPercentage(basePrice, simulation.totalCmv || 0),
+                abnormalCmv: hasAbnormalCmv(basePrice, simulation.totalCmv || 0),
+                spread: calculatePriceSpread(availablePrices),
+                channelRows: channelRows.map((channel) => ({ ...channel, isBest: channel.available && channel.margin === bestMargin })),
+            }];
+        }));
+    }, [activeChannels, contextUnitId, resolveSimulationPrice, simulations]);
+
+    const commercialAlertCounts = useMemo(() => {
+        const available = simulations.filter((simulation) =>
+            !simulation.isArchived
+            && (contextUnitId === 'all' || isSimulationAvailableInUnit(simulation, contextUnitId))
+        );
+        return {
+            loss: available.filter((simulation) => pricingInsights.get(simulation.id)?.status === 'loss').length,
+            below: available.filter((simulation) => pricingInsights.get(simulation.id)?.status === 'below').length,
+            cmv: available.filter((simulation) => pricingInsights.get(simulation.id)?.abnormalCmv).length,
+        };
+    }, [contextUnitId, pricingInsights, simulations]);
 
     const contextualSimulations = useMemo(() => {
         if (contextUnitId === 'all' && contextChannelId === 'all') {
@@ -363,19 +442,20 @@ export function PricingSimulator() {
             const categoryMatch = categoryFilters.size === 0 || (sim.categoryIds || []).some(catId => categoryFilters.has(catId));
             const lineMatch = lineFilters.size === 0 || (sim.lineId && lineFilters.has(sim.lineId));
             const groupMatch = groupFilters.size === 0 || (sim.groupIds || []).some(groupId => groupFilters.has(groupId));
-            const kioskMatch = kioskFilter === 'all' || (sim.kioskIds || []).includes(kioskFilter);
+            const kioskMatch = contextUnitId === 'all' || isSimulationAvailableInUnit(sim, contextUnitId);
+            const insight = pricingInsights.get(sim.id);
+            const alertMatch = !commercialAlert
+                || (commercialAlert === 'cmv' ? Boolean(insight?.abnormalCmv) : insight?.status === commercialAlert);
 
             let statusMatch = true;
             if (statusFilter.size > 0) {
-                const grossMarginPercentage = sim.salePrice > 0 ? ((sim.salePrice - sim.totalCmv) / sim.salePrice) * 100 : 0;
                 let simStatus: 'sem_meta' | 'na_meta' | 'abaixo' = 'sem_meta';
-                if (sim.profitGoal !== null && sim.profitGoal !== undefined) {
-                    simStatus = grossMarginPercentage >= sim.profitGoal ? 'na_meta' : 'abaixo';
-                }
+                if (insight?.status === 'met') simStatus = 'na_meta';
+                if (insight?.status === 'below' || insight?.status === 'loss') simStatus = 'abaixo';
                 statusMatch = statusFilter.has(simStatus);
             }
 
-            return searchMatch && categoryMatch && lineMatch && groupMatch && kioskMatch && statusMatch;
+            return searchMatch && categoryMatch && lineMatch && groupMatch && kioskMatch && alertMatch && statusMatch;
         };
 
         const sortFn = (a: ProductSimulation, b: ProductSimulation) => {
@@ -385,10 +465,12 @@ export function PricingSimulator() {
             if (sortConfig.key === 'sku') {
                 aValue = a.ppo?.sku || '';
                 bValue = b.ppo?.sku || '';
-            } else if (sortConfig.key === 'grossVal' as any) {
+
+                return comparePricingSkus(aValue, bValue, sortConfig.direction);
+            } else if (sortConfig.key === 'grossVal') {
                 aValue = a.salePrice - a.totalCmv;
                 bValue = b.salePrice - b.totalCmv;
-            } else if (sortConfig.key === 'grossPct' as any) {
+            } else if (sortConfig.key === 'grossPct') {
                 aValue = a.salePrice > 0 ? ((a.salePrice - a.totalCmv) / a.salePrice) * 100 : 0;
                 bValue = b.salePrice > 0 ? ((b.salePrice - b.totalCmv) / b.salePrice) * 100 : 0;
             } else {
@@ -413,7 +495,7 @@ export function PricingSimulator() {
         const archived = contextualSimulations.filter(s => s.isArchived && filterFn(s)).sort(sortFn);
         return { filteredSimulations: active, archivedSimulations: archived };
 
-    }, [contextualSimulations, searchTerm, categoryFilters, lineFilters, groupFilters, sortConfig, kioskFilter, statusFilter]);
+    }, [commercialAlert, contextualSimulations, searchTerm, categoryFilters, lineFilters, groupFilters, pricingInsights, sortConfig, contextUnitId, statusFilter]);
 
     const handleSort = (key: SortKey) => {
         setSortConfig(prevConfig => ({
@@ -421,6 +503,24 @@ export function PricingSimulator() {
             direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
         }));
     };
+
+    const handleSortSelection = (value: string) => {
+        const separator = value.lastIndexOf('-');
+        setSortConfig({
+            key: value.slice(0, separator) as SortKey,
+            direction: value.slice(separator + 1) as SortDirection,
+        });
+    };
+    const currentSortLabel = ({
+        'grossPct-asc': 'Pior margem primeiro',
+        'grossPct-desc': 'Melhor margem primeiro',
+        'name-asc': 'Nome (A–Z)',
+        'name-desc': 'Nome (Z–A)',
+        'salePrice-desc': 'Maior preço',
+        'salePrice-asc': 'Menor preço',
+        'totalCmv-desc': 'Maior CMV',
+        'totalCmv-asc': 'Menor CMV',
+    } as Record<string, string>)[`${sortConfig.key}-${sortConfig.direction}`] ?? 'Ordenação personalizada';
 
     const getProfitColorClass = (percentage: number) => {
         if (!pricingParameters?.profitRanges) return 'text-primary';
@@ -585,7 +685,8 @@ export function PricingSimulator() {
     const mainCategories = useMemo(() => categories.filter(c => c.type === 'category'), [categories]);
     const lines = useMemo(() => categories.filter(c => c.type === 'line'), [categories]);
     const groups = useMemo(() => categories.filter(c => c.type === 'group'), [categories]);
-    const totalActiveFilters = categoryFilters.size + lineFilters.size + groupFilters.size + statusFilter.size;
+    const totalActiveFilters = categoryFilters.size + lineFilters.size + groupFilters.size + statusFilter.size + (commercialAlert ? 1 : 0);
+    const toolbarFilterCount = totalActiveFilters + (contextUnitId === 'all' ? 0 : 1) + (contextChannelId === 'all' ? 0 : 1);
     
     const handleFilterChange = (id: string, type: 'category' | 'line' | 'group' | 'status') => {
         if (type === 'status') {
@@ -616,7 +717,12 @@ export function PricingSimulator() {
         setGroupFilters(new Set());
         setStatusFilter(new Set());
         setSearchTerm('');
-        setKioskFilter('all');
+        setCommercialAlert(null);
+    };
+
+    const handleUnitContextChange = (unitId: string) => {
+        setContextUnitId(unitId);
+        setSelectedSimulations(new Set());
     };
     
     const handleSelectionChange = (id: string, isSelected: boolean) => {
@@ -784,7 +890,7 @@ export function PricingSimulator() {
                                     <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
                                 </div>
                                 <div className="flex items-center justify-between px-4 py-3">
-                                    <div className="flex-1 flex justify-around gap-2 overflow-hidden">
+                                    <div className="flex-1 flex justify-around gap-2 overflow-x-auto">
                                         <TooltipProvider>
                                             {ALL_COLS.filter(c => visibleColumns.has(c.id)).map(col => (
                                                 <Tooltip key={col.id}>
@@ -972,7 +1078,7 @@ export function PricingSimulator() {
                                                 <AccordionTrigger className="p-0 hover:no-underline rounded-lg [&>svg]:ml-2" />
                                             </div>
                                             <div className="flex items-center px-4 py-3">
-                                                <div className="flex-1 flex justify-around gap-2">
+                                                <div className="flex-1 flex justify-around gap-2 overflow-x-auto">
                                                     <TooltipProvider>
                                                         {ALL_COLS.filter(c => visibleColumns.has(c.id)).map(col => (
                                                             <div key={col.id} className="text-center min-w-[60px]">
@@ -1003,9 +1109,190 @@ export function PricingSimulator() {
         );
     };
 
+    const renderCommercialTable = () => {
+        if (isLoading) {
+            return <div className="space-y-3"><Skeleton className="h-20 w-full rounded-2xl" /><Skeleton className="h-20 w-full rounded-2xl" /><Skeleton className="h-20 w-full rounded-2xl" /></div>;
+        }
+
+        if (simulations.every((simulation) => simulation.isArchived) && archivedSimulations.length === 0) {
+            return (
+                <div className="rounded-2xl border-2 border-dashed py-16 text-center text-muted-foreground">
+                    <Inbox className="mx-auto h-10 w-10" />
+                    <h3 className="mt-4 text-base font-bold text-foreground">Nenhuma mercadoria cadastrada</h3>
+                    <p className="mt-1 text-sm">Cadastre a primeira ficha para iniciar a análise comercial.</p>
+                </div>
+            );
+        }
+
+        if (filteredSimulations.length === 0 && archivedSimulations.length === 0) {
+            return (
+                <div className="rounded-2xl border-2 border-dashed py-16 text-center text-muted-foreground">
+                    <Search className="mx-auto h-9 w-9" />
+                    <h3 className="mt-4 text-base font-bold text-foreground">Nenhuma mercadoria neste recorte</h3>
+                    <p className="mt-1 text-sm">Ajuste o alerta, a unidade, o canal ou a busca.</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="overflow-x-auto pb-2">
+                <div className="min-w-[940px]">
+                    <div className="grid grid-cols-[42px_minmax(270px,1.6fr)_112px_100px_132px_88px_76px] items-center gap-3 border-b-2 border-[#eeece7] px-3 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+                        <Checkbox aria-label="Selecionar todas as mercadorias visíveis" checked={allFilteredSelected} onCheckedChange={handleSelectAllChange} />
+                        <span>Mercadoria</span>
+                        <span className="text-right">Preço</span>
+                        <span className="text-right">CMV</span>
+                        <span className="text-right">Margem bruta</span>
+                        <span className="text-right">Meta</span>
+                        <span />
+                    </div>
+
+                    <Accordion type="multiple" className="space-y-2 pt-2">
+                        {filteredSimulations.map((simulation) => {
+                            const originalSimulation = simulationById.get(simulation.id) ?? simulation;
+                            const insight = pricingInsights.get(simulation.id);
+                            const grossMargin = calculateGrossMargin(simulation.salePrice, simulation.totalCmv || 0);
+                            const status = getPricingCommercialStatus(simulation.salePrice, simulation.totalCmv || 0, simulation.profitGoal);
+                            const line = simulation.lineId ? categoryMap.get(simulation.lineId) : null;
+                            const category = simulation.categoryIds?.[0] ? categoryMap.get(simulation.categoryIds[0]) : null;
+                            const hasArchivedBase = simHasArchivedBase.get(simulation.id) ?? false;
+                            const statusUi: Record<PricingCommercialStatus, { label: string; bar: string; badge: string; surface: string }> = {
+                                loss: { label: 'Prejuízo', bar: 'border-l-red-500', badge: 'border-red-200 bg-red-50 text-red-700', surface: 'hover:border-red-200 hover:bg-red-50/40' },
+                                below: { label: 'Abaixo da meta', bar: 'border-l-orange-500', badge: 'border-orange-200 bg-orange-50 text-orange-700', surface: 'hover:border-orange-200 hover:bg-orange-50/40' },
+                                met: { label: 'Na meta', bar: 'border-l-emerald-500', badge: 'border-emerald-200 bg-emerald-50 text-emerald-700', surface: 'hover:border-emerald-200 hover:bg-emerald-50/40' },
+                                none: { label: 'Sem meta', bar: 'border-l-slate-300', badge: 'border-slate-200 bg-slate-50 text-slate-600', surface: 'hover:border-slate-300 hover:bg-slate-50/60' },
+                            };
+                            const ui = statusUi[status];
+                            const composition = simulationItems
+                                .filter((item) => item.simulationId === simulation.id)
+                                .flatMap((item) => {
+                                    const baseProduct = baseProducts.find((product) => product.id === item.baseProductId);
+                                    if (!baseProduct) return [];
+                                    const defaultCost = baseProduct.lastEffectivePrice?.pricePerUnit ?? baseProduct.initialCostPerUnit ?? 0;
+                                    let cost = item.quantity * defaultCost;
+                                    if (!item.useDefault) {
+                                        try {
+                                            const valueInBase = convertValue(1, item.overrideUnit || baseProduct.unit, baseProduct.unit, baseProduct.category);
+                                            cost = item.quantity * ((item.overrideCostPerUnit || 0) / valueInBase);
+                                        } catch {
+                                            cost = 0;
+                                        }
+                                    }
+                                    return [{
+                                        id: item.id,
+                                        name: baseProduct.name,
+                                        quantity: `${item.quantity} ${item.overrideUnit || baseProduct.unit}`,
+                                        cost,
+                                        share: simulation.totalCmv > 0 ? (cost / simulation.totalCmv) * 100 : 0,
+                                    }];
+                                });
+                            const itemHistory = (priceHistory || [])
+                                .filter((entry: any) => entry.simulationId === simulation.id)
+                                .sort((a: any, b: any) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime())
+                                .slice(0, 4);
+
+                            return (
+                                <AccordionItem key={simulation.id} value={simulation.id} className="border-0">
+                                    <Card className={cn("overflow-hidden rounded-2xl border border-l-4 bg-[#fbfaf7] shadow-none transition-all", ui.bar, ui.surface)}>
+                                        <div className="grid grid-cols-[42px_minmax(270px,1.6fr)_112px_100px_132px_88px_76px] items-center gap-3 px-3 py-4">
+                                            <Checkbox aria-label={`Selecionar ${simulation.name}`} checked={selectedSimulations.has(simulation.id)} onCheckedChange={(checked) => handleSelectionChange(simulation.id, Boolean(checked))} />
+                                            <div className="min-w-0">
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <span className="truncate text-sm font-bold text-slate-900">{simulation.name}</span>
+                                                    <Badge variant="outline" className={cn("h-5 gap-1 rounded-full px-2 text-[9px] font-black uppercase", ui.badge)}>
+                                                        {status === 'loss' ? <TrendingDown className="h-3 w-3" /> : status === 'met' ? <Check className="h-3 w-3" /> : status === 'below' ? <AlertTriangle className="h-3 w-3" /> : <CircleMinus className="h-3 w-3" />}
+                                                        {ui.label}
+                                                    </Badge>
+                                                    {insight?.abnormalCmv ? <Badge variant="outline" className="h-5 gap-1 rounded-full border-amber-200 bg-amber-50 px-2 text-[9px] font-black uppercase text-amber-700"><Activity className="h-3 w-3" />CMV {insight.cmvPercentage.toFixed(0)}%</Badge> : null}
+                                                    {(insight?.spread ?? 0) > 35 ? <Badge variant="outline" className="h-5 rounded-full border-cyan-200 bg-cyan-50 px-2 text-[9px] font-black uppercase text-cyan-700">Δ canal +{insight?.spread.toFixed(0)}%</Badge> : null}
+                                                    {hasArchivedBase ? <Badge variant="destructive" className="h-5 gap-1 rounded-full px-2 text-[9px] font-black uppercase"><AlertTriangle className="h-3 w-3" />Insumo inativo</Badge> : null}
+                                                </div>
+                                                <p className="mt-1 truncate text-[11px] text-slate-400"><span className="font-mono">{simulation.ppo?.sku || 'Sem SKU'}</span>{category ? ` · ${category.name}` : ''}{line ? ` · ${line.name}` : ''}</p>
+                                            </div>
+                                            <div className="text-right text-sm font-black text-slate-900">{(simulation as any).contextAvailable === false ? <span className="text-xs text-rose-600">Indisponível</span> : formatCurrency(simulation.salePrice)}</div>
+                                            <div className="text-right text-sm font-semibold text-slate-500">{formatCurrency(simulation.totalCmv)}</div>
+                                            <div className="text-right">
+                                                <p className={cn("text-[15px] font-black", status === 'loss' ? 'text-red-600' : status === 'below' ? 'text-orange-600' : status === 'met' ? 'text-emerald-600' : 'text-slate-600')}>{grossMargin.percentage.toFixed(1)}%</p>
+                                                <p className="text-[10px] text-slate-400">{formatCurrency(grossMargin.value)}</p>
+                                            </div>
+                                            <div className="text-right text-sm font-semibold text-slate-500">{simulation.profitGoal != null ? `${simulation.profitGoal}%` : '—'}</div>
+                                            <div className="flex items-center justify-end gap-1">
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-500"><span className="sr-only">Ações de {simulation.name}</span><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end" className="w-60">
+                                                        <DropdownMenuItem onClick={() => handleToggleSimulationActive(originalSimulation, false)} className="text-orange-600"><CheckCircle2 className="mr-2 h-4 w-4" />Desativar mercadoria</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => setSimToManageKiosks(originalSimulation)}><Building2 className="mr-2 h-4 w-4" />Gerenciar unidades</DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem onClick={() => handleViewTechnicalSheet(originalSimulation)}><Eye className="mr-2 h-4 w-4" />Ficha de instrução</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleEdit(originalSimulation, 'ficha')}><ClipboardList className="mr-2 h-4 w-4" />Ficha completa</DropdownMenuItem>
+                                                        {canEditSheet ? <DropdownMenuItem onClick={() => handleEdit(originalSimulation, 'cost')}><LayoutDashboard className="mr-2 h-4 w-4" />Editar ficha</DropdownMenuItem> : null}
+                                                        {canDeleteSheet ? <><DropdownMenuSeparator /><DropdownMenuItem className="text-destructive" onClick={() => handleDelete(originalSimulation)}><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem></> : null}
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                                <AccordionTrigger className="h-8 w-8 justify-center rounded-lg p-0 text-slate-400 hover:no-underline [&>svg]:m-0" aria-label={`Expandir detalhes de ${simulation.name}`} />
+                                            </div>
+                                        </div>
+
+                                        <AccordionContent className="pb-0">
+                                            <div className="grid grid-cols-2 gap-5 border-t bg-white p-5">
+                                                <div>
+                                                    <div className="mb-3 flex items-center justify-between gap-3"><h4 className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Preço e margem por canal</h4>{(insight?.spread ?? 0) > 35 ? <span className="text-[10px] font-bold text-cyan-700">Divergência +{insight?.spread.toFixed(0)}%</span> : null}</div>
+                                                    <div className="space-y-2">
+                                                        {insight?.channelRows.map((channel) => (
+                                                            <div key={channel.id} className={cn("flex items-center justify-between rounded-xl border px-3 py-2.5", channel.isBest ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200')}>
+                                                                <div><p className="text-xs font-bold text-slate-700">{channel.name}</p>{channel.isBest ? <p className="text-[9px] font-black uppercase text-emerald-600">Melhor margem</p> : null}</div>
+                                                                <div className="text-right"><p className="text-sm font-black">{channel.available ? formatCurrency(channel.price) : 'Indisponível'}</p><p className={cn("text-[11px] font-bold", channel.margin < 0 ? 'text-red-600' : channel.margin < (simulation.profitGoal ?? 0) ? 'text-orange-600' : 'text-emerald-600')}>{channel.available ? `${channel.margin.toFixed(1)}%` : '—'}</p></div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <div className="mb-3 flex items-center justify-between gap-3"><h4 className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Composição do CMV</h4><span className="text-sm font-black">{formatCurrency(simulation.totalCmv)}</span></div>
+                                                    <div className="space-y-3">
+                                                        {composition.length ? composition.map((item) => (
+                                                            <div key={item.id}>
+                                                                <div className="mb-1 flex justify-between gap-3 text-[11px]"><span className="truncate font-semibold text-slate-600">{item.name} · {item.quantity}</span><span className="shrink-0 font-bold text-slate-500">{formatCurrency(item.cost)} · {item.share.toFixed(0)}%</span></div>
+                                                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-pink-600 to-pink-400" style={{ width: `${Math.min(100, item.share)}%` }} /></div>
+                                                            </div>
+                                                        )) : <p className="text-xs text-slate-400">Nenhum insumo vinculado.</p>}
+                                                    </div>
+                                                </div>
+
+                                                {itemHistory.length ? <div className="col-span-2 border-t pt-4"><h4 className="mb-3 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Alterações recentes de preço</h4><div className="grid grid-cols-4 gap-2">{itemHistory.map((entry: any) => { const variation = entry.oldPrice > 0 ? ((entry.newPrice - entry.oldPrice) / entry.oldPrice) * 100 : 0; return <div key={entry.id} className="rounded-xl border bg-[#faf9f6] p-3"><p className="text-[10px] text-slate-400">{new Date(entry.changedAt).toLocaleDateString('pt-BR')}</p><p className="mt-1 text-xs"><span className="text-slate-400 line-through">{formatCurrency(entry.oldPrice)}</span> <b>{formatCurrency(entry.newPrice)}</b></p><p className={cn("mt-1 text-[10px] font-bold", variation >= 0 ? 'text-emerald-600' : 'text-red-600')}>{variation >= 0 ? '+' : ''}{variation.toFixed(1)}% · {entry.changedBy?.username || 'Sistema'}</p></div>; })}</div></div> : null}
+                                            </div>
+                                        </AccordionContent>
+                                    </Card>
+                                </AccordionItem>
+                            );
+                        })}
+                    </Accordion>
+
+                    {archivedSimulations.length ? <div className="mt-5 border-t pt-4"><p className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Mercadorias inativas ({archivedSimulations.length})</p><div className="grid grid-cols-2 gap-2">{archivedSimulations.map((simulation) => <div key={simulation.id} className="flex items-center justify-between rounded-xl border border-dashed bg-slate-50 px-4 py-3 opacity-70"><div><p className="text-sm font-bold text-slate-600">{simulation.name}</p><p className="font-mono text-[10px] text-slate-400">{simulation.ppo?.sku || 'Sem SKU'}</p></div><Button variant="outline" size="sm" onClick={() => handleToggleSimulationActive(simulationById.get(simulation.id) ?? simulation, true)}>Reativar</Button></div>)}</div></div> : null}
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <div className="space-y-6">
-            <div className="flex justify-end">
+        <div className="space-y-5">
+            <div className={cn("flex gap-4", pageHeader ? "flex-col justify-between lg:flex-row lg:items-end" : "justify-end")}>
+                {pageHeader && (
+                    <div className="flex min-w-0 items-start gap-2">
+                        <BackButton
+                            fallbackHref="/dashboard/pricing"
+                            variant="ghost"
+                            iconOnly
+                            className="mt-5 h-9 w-9 shrink-0 rounded-full text-muted-foreground transition-colors hover:bg-white"
+                            ariaLabel="Voltar para gestão de preços e margens"
+                        />
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-pink-600">Coala · Comercial</p>
+                            <h1 className="mt-1 text-[26px] font-black tracking-[-0.02em] text-slate-950">Precificação &amp; CMV</h1>
+                            <p className="mt-1 max-w-[620px] text-[13px] text-muted-foreground">Ferramenta de decisão comercial — encontre margens ruins, CMV anormal e divergências de preço por canal sem abrir cada mercadoria.</p>
+                        </div>
+                    </div>
+                )}
                 <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full md:w-auto">
                     <TabsList className="bg-white border shadow-sm p-1 h-11 rounded-xl">
                         <TabsTrigger 
@@ -1027,172 +1314,92 @@ export function PricingSimulator() {
             </div>
 
             {activeMainTab === "inventory" ? (
-                <Card className="border-none shadow-xl bg-gray-50/50">
-                    <CardHeader className="pb-0 pt-6 px-8">
-                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pb-4">
-                            {/* Left side actions & filters */}
-                            <div className="flex flex-wrap items-center gap-2">
+                <Card className="overflow-hidden rounded-[22px] border border-[#e6e3dd] bg-white shadow-sm">
+                    <CardHeader className="px-5 pb-0 pt-5 sm:px-6">
+                        <p className="pb-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Unidade</p>
+                        <div className="grid gap-3 pb-5 sm:grid-cols-2 xl:grid-cols-4">
+                            {unitNavigationCards.map((item, index) => {
+                                const isActive = contextUnitId === item.id;
+                                const Icon = index === 0 ? Package : Building2;
+
+                                return (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        aria-pressed={isActive}
+                                        onClick={() => handleUnitContextChange(item.id)}
+                                        className={cn(
+                                            "flex min-h-[70px] items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm transition-all",
+                                            "hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md",
+                                            isActive && "border-pink-500 bg-pink-50/70 ring-2 ring-pink-100"
+                                        )}
+                                    >
+                                        <span className={cn(
+                                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500",
+                                            isActive && "bg-pink-600 text-white"
+                                        )}>
+                                            <Icon className="h-5 w-5" />
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className={cn(
+                                                "block truncate text-sm font-bold text-gray-800",
+                                                isActive && "text-pink-700"
+                                            )}>
+                                                {item.name}
+                                            </span>
+                                            <span className="mt-1 block text-xs text-muted-foreground">
+                                                {item.count} mercadoria{item.count === 1 ? '' : 's'}
+                                            </span>
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className="border-t border-[#eeece7] pt-4">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Alertas comerciais</p>
+                                {commercialAlert ? <button type="button" onClick={() => setCommercialAlert(null)} className="text-[10px] font-bold uppercase text-pink-600 hover:text-pink-700">Limpar alerta</button> : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2.5 pb-5">
+                                {([
+                                    { id: 'loss' as const, label: 'Com prejuízo', count: commercialAlertCounts.loss, icon: TrendingDown, tone: 'border-red-200 bg-red-50 text-red-700', active: 'border-red-500 ring-red-100' },
+                                    { id: 'below' as const, label: 'Abaixo da meta', count: commercialAlertCounts.below, icon: AlertTriangle, tone: 'border-orange-200 bg-orange-50 text-orange-700', active: 'border-orange-500 ring-orange-100' },
+                                    { id: 'cmv' as const, label: 'CMV anormal', count: commercialAlertCounts.cmv, icon: Activity, tone: 'border-amber-200 bg-amber-50 text-amber-700', active: 'border-amber-500 ring-amber-100' },
+                                ]).map((alert) => {
+                                    const Icon = alert.icon;
+                                    const active = commercialAlert === alert.id;
+                                    return <button key={alert.id} type="button" aria-pressed={active} onClick={() => setCommercialAlert(active ? null : alert.id)} className={cn("flex min-w-40 items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all hover:-translate-y-0.5", alert.tone, active && `ring-2 ${alert.active}`)}><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white"><Icon className="h-4 w-4" /></span><span><strong className="block text-lg font-black leading-none">{alert.count}</strong><span className="text-[11px] font-bold">{alert.label}</span></span></button>;
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="space-y-3 border-t border-[#eeece7] py-4">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                                 {canCreateSheet && (
-                                    <Button onClick={handleAddNew} className="bg-pink-600 hover:bg-pink-700 text-white gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                    <Button onClick={handleAddNew} className="h-10 shrink-0 gap-2 rounded-xl bg-pink-600 text-xs font-bold uppercase text-white hover:bg-pink-700">
                                         <PlusCircle className="h-4 w-4" />
                                         Mercadoria
                                     </Button>
                                 )}
-                                {canEditSheet && (
-                                    <Button variant="outline" onClick={() => setIsBatchEditModalOpen(true)} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
-                                        Alterar em lote
-                                    </Button>
-                                )}
-                                {permissions.pricing.manageParameters && (
-                                    <Button variant="outline" onClick={() => setIsParamsModalOpen(true)} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
-                                        <Settings className="h-4 w-4" />
-                                        Parâmetros
-                                    </Button>
-                                )}
-                                {canExportSheet && (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" disabled={filteredSimulations.length === 0} className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
-                                            <Download className="h-4 w-4" />
-                                            Exportar
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        <DropdownMenuItem onSelect={e => e.preventDefault()}>
-                                            <PDFDownloadLink
-                                                document={<GerencialReportDocument data={filteredSimulations} />}
-                                                fileName={`relatorio_gerencial_${new Date().toISOString().slice(0, 10)}.pdf`}
-                                                className="w-full text-left"
-                                            >
-                                                {({ loading }: BlobProviderParams) => (loading ? 'Gerando...' : 'Relatório Gerencial (PDF)')}
-                                            </PDFDownloadLink>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={handleExportGerencialCsv}>Relatório Gerencial (CSV)</DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={handleExportXlsx}>Relatório Gerencial (XLSX)</DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onSelect={handleExportPriceListPdf}>Lista de Preços (PDF)</DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={handleExportPriceListCsv}>Lista de Preços (CSV)</DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onSelect={e => e.preventDefault()} disabled={!singleFilteredSimulation}>
-                                            {singleFilteredSimulation && (
-                                                <PDFDownloadLink
-                                                    document={<FichaTecnicaDocument type="completa" data={{...singleFilteredSimulation, ingredients: simulationItems.filter(i => i.simulationId === singleFilteredSimulation.id).map(i => ({ name: baseProductMap.get(i.baseProductId)?.name || '', quantity: i.quantity, unit: i.overrideUnit || baseProductMap.get(i.baseProductId)?.unit || '' })) }} />}
-                                                    fileName={`ficha_completa_${singleFilteredSimulation.name.replace(/ /g, '_')}.pdf`}
-                                                    className="w-full text-left"
-                                                >
-                                                    {({ loading }: BlobProviderParams) => (loading ? 'Gerando...' : 'Ficha de Instrução (PDF)')}
-                                                </PDFDownloadLink>
-                                            )}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha técnica simplificada (PDF)</DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha técnica simplificada (CSV)</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                                )}
-
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
-                                            <TableIcon className="h-4 w-4" />
-                                            Colunas
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="w-64">
-                                        <DropdownMenuLabel>Colunas Visíveis</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        {ALL_COLS.map(col => (
-                                            <DropdownMenuCheckboxItem
-                                                key={col.id}
-                                                checked={visibleColumns.has(col.id)}
-                                                onCheckedChange={() => toggleColumn(col.id)}
-                                                onSelect={(e) => e.preventDefault()}
-                                            >
-                                                <div className="flex flex-col">
-                                                    <span>{col.label}</span>
-                                                    <span className="text-[10px] text-muted-foreground">{col.tip}</span>
-                                                </div>
-                                            </DropdownMenuCheckboxItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-
-                                {totalActiveFilters > 0 && (
-                                    <Button variant="ghost" size="sm" onClick={clearFilters} className="text-pink-600 font-bold text-xs uppercase h-10 px-3">
-                                        <Eraser className="mr-2 h-4 w-4" />
-                                        Limpar Filtros
-                                    </Button>
-                                )}
-                            </div>
-                            
-                            {/* Right side search */}
-                            <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
-                                <Select value={contextUnitId} onValueChange={setContextUnitId}>
-                                    <SelectTrigger className="h-10 rounded-xl w-full sm:w-[220px]">
-                                        <SelectValue placeholder="Todas as unidades" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Todas as unidades</SelectItem>
-                                        {kiosks.map((kiosk) => (
-                                            <SelectItem key={kiosk.id} value={kiosk.id}>{kiosk.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                <Select value={contextChannelId} onValueChange={setContextChannelId}>
-                                    <SelectTrigger className="h-10 rounded-xl w-full sm:w-[220px]">
-                                        <SelectValue placeholder="Todos os canais" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Todos os canais</SelectItem>
-                                        {activeChannels.map((channel) => (
-                                            <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                <div className="relative w-full xl:w-72">
+                                <div className="relative min-w-0 flex-1">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <Input placeholder="Filtrar mercadorias..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 h-10 rounded-xl" />
+                                    <Input
+                                        placeholder="Buscar mercadoria por nome ou código..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="h-10 rounded-xl border-slate-200 bg-white pl-10 shadow-sm"
+                                    />
                                 </div>
-                                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-xl" onClick={clearFilters}><Eraser className="h-4 w-4" /></Button>
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
-                                            <ArrowUpDown className="h-4 w-4" />
-                                            Ordenar por
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="w-56">
-                                        <DropdownMenuRadioGroup value={`${sortConfig.key}-${sortConfig.direction}`} onValueChange={(v) => handleSort(v.split('-')[0] as SortKey)}>
-                                            <DropdownMenuRadioItem value="name-asc">Nome (A-Z)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="name-desc">Nome (Z-A)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="sku-asc">SKU (Crescente)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="sku-desc">SKU (Decrescente)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="salePrice-desc">Preço (Maior-Menor)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="salePrice-asc">Preço (Menor-Maior)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="totalCmv-desc">Custo (Maior-Menor)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="totalCmv-asc">Custo (Menor-Maior)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="grossVal-desc">M. Bruta R$ (Maior-Menor)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="grossVal-asc">M. Bruta R$ (Menor-Maior)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="grossPct-desc">M. Bruta % (Maior-Menor)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="grossPct-asc">M. Bruta % (Menor-Maior)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="profitGoal-desc">Meta (Maior-Menor)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="profitGoal-asc">Meta (Menor-Maior)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="profitPercentage-desc">M. Contrib (Maior-Menor)</DropdownMenuRadioItem>
-                                            <DropdownMenuRadioItem value="profitPercentage-asc">M. Contrib (Menor-Maior)</DropdownMenuRadioItem>
-                                        </DropdownMenuRadioGroup>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="gap-2 font-bold text-xs uppercase rounded-xl h-10">
+                                        <Button variant="outline" className="h-10 shrink-0 gap-2 rounded-xl px-4 text-xs font-bold uppercase">
                                             <Filter className="h-4 w-4" />
                                             Filtros
-                                            {(categoryFilters.size + lineFilters.size + statusFilter.size) > 0 && (
-                                                <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center rounded-full bg-pink-600 text-[10px]">
-                                                    {categoryFilters.size + lineFilters.size + statusFilter.size}
+                                            {toolbarFilterCount > 0 && (
+                                                <Badge className="ml-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-pink-600 px-1.5 text-[10px]">
+                                                    {toolbarFilterCount}
                                                 </Badge>
                                             )}
                                         </Button>
@@ -1248,28 +1455,196 @@ export function PricingSimulator() {
                                         </DropdownMenuCheckboxItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
+
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" size="icon" aria-label="Escolher colunas" className="h-10 w-10 shrink-0 rounded-xl">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                        <DropdownMenuLabel>Colunas visíveis</DropdownMenuLabel>
+                                        {ALL_COLS.map(column => (
+                                            <DropdownMenuCheckboxItem
+                                                key={column.id}
+                                                checked={visibleColumns.has(column.id)}
+                                                onCheckedChange={() => toggleColumn(column.id)}
+                                                onSelect={(event) => event.preventDefault()}
+                                            >
+                                                {column.label}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {canEditSheet && (
+                                        <Button variant="outline" onClick={() => setIsBatchEditModalOpen(true)} className="h-10 gap-2 rounded-xl text-xs font-bold uppercase">
+                                            Alterar em lote
+                                        </Button>
+                                    )}
+                                    {permissions.pricing.manageParameters && (
+                                        <Button variant="outline" onClick={() => setIsParamsModalOpen(true)} className="h-10 gap-2 rounded-xl text-xs font-bold uppercase">
+                                            <Settings className="h-4 w-4" />
+                                            Parâmetros
+                                        </Button>
+                                    )}
+                                    {canExportSheet && (
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" disabled={filteredSimulations.length === 0} className="h-10 gap-2 rounded-xl text-xs font-bold uppercase">
+                                                    <Download className="h-4 w-4" />
+                                                    Exportar
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent>
+                                                <DropdownMenuItem onSelect={event => event.preventDefault()}>
+                                                    <PDFDownloadLink document={<GerencialReportDocument data={filteredSimulations} />} fileName={`relatorio_gerencial_${new Date().toISOString().slice(0, 10)}.pdf`} className="w-full text-left">
+                                                        {({ loading }: BlobProviderParams) => (loading ? 'Gerando...' : 'Relatório Gerencial (PDF)')}
+                                                    </PDFDownloadLink>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onSelect={handleExportGerencialCsv}>Relatório Gerencial (CSV)</DropdownMenuItem>
+                                                <DropdownMenuItem onSelect={handleExportXlsx}>Relatório Gerencial (XLSX)</DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onSelect={handleExportPriceListPdf}>Lista de Preços (PDF)</DropdownMenuItem>
+                                                <DropdownMenuItem onSelect={handleExportPriceListCsv}>Lista de Preços (CSV)</DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onSelect={event => event.preventDefault()} disabled={!singleFilteredSimulation}>
+                                                    {singleFilteredSimulation && (
+                                                        <PDFDownloadLink
+                                                            document={<FichaTecnicaDocument type="completa" data={{...singleFilteredSimulation, ingredients: simulationItems.filter(item => item.simulationId === singleFilteredSimulation.id).map(item => ({ name: baseProductMap.get(item.baseProductId)?.name || '', quantity: item.quantity, unit: item.overrideUnit || baseProductMap.get(item.baseProductId)?.unit || '' })) }} />}
+                                                            fileName={`ficha_completa_${singleFilteredSimulation.name.replace(/ /g, '_')}.pdf`}
+                                                            className="w-full text-left"
+                                                        >
+                                                            {({ loading }: BlobProviderParams) => (loading ? 'Gerando...' : 'Ficha de Instrução (PDF)')}
+                                                        </PDFDownloadLink>
+                                                    )}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaPdf}>Ficha técnica simplificada (PDF)</DropdownMenuItem>
+                                                <DropdownMenuItem onSelect={handleExportFichaTecnicaSimplificadaCsv}>Ficha técnica simplificada (CSV)</DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    )}
+                                </div>
+
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <Select value={contextChannelId} onValueChange={setContextChannelId}>
+                                        <SelectTrigger className="h-10 w-[180px] shrink-0 rounded-xl">
+                                            <SelectValue placeholder="Todos os canais" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">Todos os canais</SelectItem>
+                                            {activeChannels.map((channel) => (
+                                                <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="outline" className="h-10 gap-2 rounded-xl text-xs font-bold uppercase">
+                                                <ArrowUpDown className="h-4 w-4" />
+                                                {currentSortLabel}
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent className="w-56">
+                                            <DropdownMenuRadioGroup value={`${sortConfig.key}-${sortConfig.direction}`} onValueChange={handleSortSelection}>
+                                                <DropdownMenuRadioItem value="grossPct-asc">Pior margem primeiro</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="grossPct-desc">Melhor margem primeiro</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="name-asc">Nome (A-Z)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="name-desc">Nome (Z-A)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="sku-asc">SKU (Crescente)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="sku-desc">SKU (Decrescente)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="salePrice-desc">Preço (Maior-Menor)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="salePrice-asc">Preço (Menor-Maior)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="totalCmv-desc">Custo (Maior-Menor)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="totalCmv-asc">Custo (Menor-Maior)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="grossVal-desc">M. Bruta R$ (Maior-Menor)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="grossVal-asc">M. Bruta R$ (Menor-Maior)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="profitGoal-desc">Meta (Maior-Menor)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="profitGoal-asc">Meta (Menor-Maior)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="profitPercentage-desc">M. Contrib (Maior-Menor)</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="profitPercentage-asc">M. Contrib (Menor-Maior)</DropdownMenuRadioItem>
+                                            </DropdownMenuRadioGroup>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </div>
+
+                            {toolbarFilterCount > 0 && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {contextUnitId !== 'all' && (
+                                        <button type="button" onClick={() => handleUnitContextChange('all')} className="inline-flex h-7 items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-3 text-[11px] font-bold text-pink-700">
+                                            {unitNavigationCards.find(item => item.id === contextUnitId)?.name ?? 'Unidade selecionada'}
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    )}
+                                    {contextChannelId !== 'all' && (
+                                        <button type="button" onClick={() => setContextChannelId('all')} className="inline-flex h-7 items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-3 text-[11px] font-bold text-cyan-700">
+                                            {activeChannels.find(channel => channel.id === contextChannelId)?.name ?? 'Canal selecionado'}
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    )}
+                                    {commercialAlert && (
+                                        <button type="button" onClick={() => setCommercialAlert(null)} className="inline-flex h-7 items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-3 text-[11px] font-bold text-orange-700">
+                                            {commercialAlert === 'loss' ? 'Com prejuízo' : commercialAlert === 'below' ? 'Abaixo da meta' : 'CMV anormal'}
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    )}
+                                    {lines.filter(line => lineFilters.has(line.id)).map(line => (
+                                        <button key={line.id} type="button" onClick={() => handleFilterChange(line.id, 'line')} className="inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600">
+                                            {line.name}<X className="h-3 w-3" />
+                                        </button>
+                                    ))}
+                                    {mainCategories.filter(category => categoryFilters.has(category.id)).map(category => (
+                                        <button key={category.id} type="button" onClick={() => handleFilterChange(category.id, 'category')} className="inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600">
+                                            {category.name}<X className="h-3 w-3" />
+                                        </button>
+                                    ))}
+                                    {Array.from(statusFilter).map(status => (
+                                        <button key={status} type="button" onClick={() => handleFilterChange(status, 'status')} className="inline-flex h-7 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600">
+                                            {status === 'na_meta' ? 'Na meta' : status === 'abaixo' ? 'Abaixo da meta' : 'Sem meta'}<X className="h-3 w-3" />
+                                        </button>
+                                    ))}
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            clearFilters();
+                                            handleUnitContextChange('all');
+                                            setContextChannelId('all');
+                                        }}
+                                        className="h-7 px-2 text-[11px] font-bold text-slate-500 hover:text-pink-600"
+                                    >
+                                        <Eraser className="mr-1 h-3.5 w-3.5" />
+                                        Limpar tudo
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     </CardHeader>
-                    <CardContent className="p-8 pt-0">
-                        {renderTable()}
+                    <CardContent className="px-5 pb-6 pt-0 sm:px-6">
+                        {renderCommercialTable()}
                     </CardContent>
                 </Card>
             ) : (
                 <PricingHistoryAnalysis simulations={simulations} priceHistory={priceHistory || []} />
             )}
 
-            <ProductModal 
-                open={isProductModalOpen}
+            <ProductModal
+                open={isProductModalOpen && simulationToEdit !== null}
                 onOpenChange={setIsProductModalOpen}
                 simulation={simulationToEdit}
                 initialTab={initialTab}
             />
 
-            <TechnicalSheetViewerModal
-                open={isViewerModalOpen}
-                onOpenChange={() => setSimulationToView(null)}
-                simulation={simulationToView}
+            <AddEditSimulationModal
+                open={isProductModalOpen && simulationToEdit === null}
+                onOpenChange={setIsProductModalOpen}
+                simulationToEdit={null}
+                onDelete={() => undefined}
             />
             
             <PricingParametersModal
@@ -1331,7 +1706,7 @@ export function PricingSimulator() {
                     open={!!simToManageKiosks}
                     onOpenChange={(open) => { if (!open) setSimToManageKiosks(null); }}
                     simulation={simToManageKiosks}
-                    kiosks={kiosks}
+                    kiosks={commercialKiosks}
                     onSave={handleSaveKioskManagement}
                 />
             )}

@@ -3,13 +3,20 @@ import { type DecodedIdToken } from "firebase-admin/auth";
 
 import {
   type PermissionSet,
+  type User,
 } from "@/types";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { requireUser } from "@/lib/auth-server";
+import { getUserDisplayName } from "@/lib/user-display";
+import {
+  hasFormalizationPermission,
+  type FormalizationAction,
+} from "@/lib/hr-formalization-permissions";
 
 function canViewHr(permissions: PermissionSet, isDefaultAdmin: boolean) {
   return (
     isDefaultAdmin ||
+    hasFormalizationPermission(permissions, "view", isDefaultAdmin) ||
     permissions.recruitment?.view ||
     permissions.recruitment?.pipeline?.view ||
     permissions.dp.view ||
@@ -54,6 +61,8 @@ export type HrAccess = {
   decoded: DecodedIdToken;
   isDefaultAdmin: boolean;
   profileId: string | null;
+  userDoc: User;
+  actorName: string;
   permissions: PermissionSet;
   canView: boolean;
   canManageCatalog: boolean;
@@ -75,11 +84,13 @@ export async function assertHrAccess(
     throw new Error(lookupError);
   }
 
-  const { decoded, permissions, isDefaultAdmin, profileId } = context;
+  const { decoded, permissions, isDefaultAdmin, profileId, userDoc } = context;
   const access: HrAccess = {
     decoded,
     isDefaultAdmin,
     profileId,
+    userDoc,
+    actorName: getUserDisplayName(userDoc, decoded.uid),
     permissions,
     canView: canViewHr(permissions, isDefaultAdmin),
     canManageCatalog: canManageHrCatalog(permissions, isDefaultAdmin),
@@ -97,4 +108,26 @@ export async function assertHrAccess(
   }
 
   return access;
+}
+
+export async function assertFormalizationAccess(
+  req: NextRequest,
+  action: FormalizationAction,
+): Promise<HrAccess> {
+  const context = await requireUser(req);
+  const { decoded, permissions, isDefaultAdmin, profileId, userDoc } = context;
+  if (!hasFormalizationPermission(permissions, action, isDefaultAdmin)) {
+    throw new Error("Sem permissão para executar esta ação na formalização admissional.");
+  }
+  return {
+    decoded,
+    isDefaultAdmin,
+    profileId,
+    userDoc,
+    actorName: getUserDisplayName(userDoc, decoded.uid),
+    permissions,
+    canView: canViewHr(permissions, isDefaultAdmin),
+    canManageCatalog: canManageHrCatalog(permissions, isDefaultAdmin),
+    lookupError: null,
+  };
 }

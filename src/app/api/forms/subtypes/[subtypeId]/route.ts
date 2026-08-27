@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  getFormProjectById,
   getFormSubtypeById,
   serializeFormValue,
 } from "@/features/forms/lib/server";
@@ -20,7 +21,7 @@ export async function GET(
   try {
     const context = await requireUser(request);
     const { subtypeId } = await contextArg.params;
-    const subtype = await getFormSubtypeById(subtypeId);
+    const subtype = await getFormSubtypeById(subtypeId, context.workspace_id);
     if (!subtype) {
       return NextResponse.json(
         { error: "Subtipo não encontrado." },
@@ -61,8 +62,18 @@ export async function PATCH(
         { status: 404 }
       );
     }
+    if (existing.data()?.workspace_id !== context.workspace_id) {
+      return NextResponse.json(
+        { error: "Subtipo não encontrado neste workspace." },
+        { status: 404 }
+      );
+    }
 
     const parsed = formSubtypeSchema.parse(await request.json());
+    const project = await getFormProjectById(parsed.form_project_id, context.workspace_id);
+    if (!project) {
+      return NextResponse.json({ error: "Projeto não encontrado neste workspace." }, { status: 404 });
+    }
     assertFormPermission(
       context.permissions,
       context.isDefaultAdmin,

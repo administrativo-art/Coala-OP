@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { useExpiryProducts } from "@/hooks/use-expiry-products";
+import { useProducts } from "@/hooks/use-products";
 import { useValidatedConsumptionData } from "@/hooks/useValidatedConsumptionData";
 import { useStockAudit } from "@/hooks/use-stock-audit";
 
@@ -21,6 +22,7 @@ import { TaskManager } from "@/components/task-manager";
 import { RestockPanel } from "@/components/restock-panel";
 import { AuditDashboard } from "@/components/audit-dashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { canAccessUnit } from "@/lib/unit-access";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
@@ -123,15 +125,21 @@ function ExpiringQuickView({ lots, loading }: { lots: any[]; loading: boolean })
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function OperationsPage() {
-  const { user, permissions } = useAuth();
+  const { user, permissions, isDefaultAdmin } = useAuth();
   const { lots, loading: lotsLoading } = useExpiryProducts();
+  const { products } = useProducts();
   const { isLoading: consumptionLoading } = useValidatedConsumptionData();
 
   const lotsInKiosk = useMemo(() => {
     if (lotsLoading || !user) return [];
-    if (user.username === "Tiago Brasil") return lots;
-    return lots.filter(lot => user.assignedKioskIds.includes(lot.kioskId));
-  }, [lots, user, lotsLoading]);
+    const uniformProductIds = new Set(
+      products
+        .filter((product) => product.operationalDestination === "uniform" || product.category === "Vestimenta")
+        .map((product) => product.id),
+    );
+    const commonLots = lots.filter((lot) => !uniformProductIds.has(lot.productId));
+    return commonLots.filter((lot) => canAccessUnit(user, lot.kioskId, { isDefaultAdmin }));
+  }, [isDefaultAdmin, lots, products, user, lotsLoading]);
 
   const expiringSoonCount = useMemo(() => {
     if (lotsLoading) return 0;

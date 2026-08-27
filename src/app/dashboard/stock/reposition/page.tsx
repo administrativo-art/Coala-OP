@@ -1,19 +1,32 @@
 "use client";
 
 import { RepositionHistory, RepositionManagement } from '@/components/reposition-management';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { useReposition } from '@/hooks/use-reposition';
-import { ArrowLeft, Inbox } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Inbox } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { BackButton } from '@/components/navigation/back-button';
 
 export default function RepositionPage() {
-    const router = useRouter();
+    const searchParams = useSearchParams();
+    const returnTo = searchParams.get('returnTo') || undefined;
     const { permissions } = useAuth();
     const { activities } = useReposition();
 
-    if (!permissions?.stock?.analysis?.restock) {
+    // Espelha o canView do servidor: gestor (analysis.restock) OU atendente do
+    // quiosque (reposition.view/receive). Sem isso, o atendente recebia "Acesso negado".
+    const managesReposition = !!permissions?.reposition?.prepareDispatch
+        || !!permissions?.reposition?.finalize
+        || !!permissions?.reposition?.cancel
+        || !!permissions?.stock?.analysis?.restock;
+    const isReceiveOnly = !!permissions?.reposition?.receive && !managesReposition;
+    const canAccess = !!permissions?.stock?.analysis?.restock
+        || !!permissions?.reposition?.view
+        || !!permissions?.reposition?.receive
+        || !!permissions?.reposition?.prepareDispatch;
+
+    if (!canAccess) {
         return (
             <div className="flex h-full items-center justify-center">
                 <div className="text-center text-muted-foreground">
@@ -24,19 +37,29 @@ export default function RepositionPage() {
         );
     }
 
-    const activeCount = activities.filter(activity => activity.status !== 'Concluído' && activity.status !== 'Cancelada').length;
+    const activeCount = activities.filter(activity => {
+        if (activity.status === 'Concluído' || activity.status === 'Cancelada') return false;
+        if (isReceiveOnly && activity.status !== 'Aguardando recebimento') return false;
+        return true;
+    }).length;
 
     return (
         <div className="mx-auto w-full max-w-[1600px] space-y-5 pb-10">
-            <Button
-                type="button"
-                variant="ghost"
-                className="h-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                onClick={() => router.push('/dashboard/stock/analysis')}
-            >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Voltar para reposição
-            </Button>
+            {returnTo ? (
+                <BackButton
+                    fallbackHref={returnTo}
+                    label="Voltar"
+                    variant="ghost"
+                    className="h-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                />
+            ) : (
+                <BackButton
+                    fallbackHref="/dashboard/stock/analysis"
+                    label="Voltar para reposição"
+                    variant="ghost"
+                    className="h-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                />
+            )}
 
             <div>
                 <h1 className="text-2xl font-bold tracking-tight">Gerenciamento da reposição</h1>
@@ -54,7 +77,7 @@ export default function RepositionPage() {
                     <TabsTrigger value="history">Histórico</TabsTrigger>
                 </TabsList>
                 <TabsContent value="management" className="mt-4">
-                    <RepositionManagement />
+                    <RepositionManagement returnTo={returnTo} />
                 </TabsContent>
                 <TabsContent value="history" className="mt-4">
                     <RepositionHistory />

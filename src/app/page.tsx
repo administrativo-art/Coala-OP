@@ -1,30 +1,49 @@
-"use client";
+import type { Metadata } from "next";
+import { headers } from "next/headers";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
-import { Loader2 } from 'lucide-react';
+import VagasPage from "@/app/vagas/page";
+import { RootHostSwitch } from "@/components/root-host-switch";
+import { isPublicRecruitmentRequest } from "@/lib/public-recruitment-host";
 
-export default function RootPage() {
-  const { isAuthenticated, loading } = useAuth();
-  const router = useRouter();
+const recruitmentMetadata: Metadata = {
+  metadataBase: new URL("https://vagas.coalashakes.com"),
+  title: "Vagas | Coala Shakes",
+  description: "Cresça com a gente. Veja vagas abertas e cadastre-se no banco de talentos da Coala Shakes.",
+  alternates: {
+    canonical: "https://vagas.coalashakes.com",
+  },
+  openGraph: {
+    title: "Vagas | Coala Shakes",
+    description: "Cresça com a gente. Veja vagas abertas e cadastre-se no banco de talentos da Coala Shakes.",
+    url: "https://vagas.coalashakes.com",
+    siteName: "Coala Shakes",
+    type: "website",
+    locale: "pt_BR",
+    images: [
+      {
+        url: "/icons/Icon PWM (192 x 192 px).png",
+        width: 192,
+        height: 192,
+        alt: "Coala Shakes",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "Vagas | Coala Shakes",
+    description: "Cresça com a gente. Veja vagas abertas e cadastre-se no banco de talentos da Coala Shakes.",
+    images: ["/icons/Icon PWM (192 x 192 px).png"],
+  },
+};
 
-  useEffect(() => {
-    if (!loading) {
-      if (isAuthenticated) {
-        router.replace('/dashboard');
-      } else {
-        router.replace('/login');
-      }
-    }
-  }, [isAuthenticated, loading, router]);
+export async function generateMetadata(): Promise<Metadata> {
+  return isPublicRecruitmentRequest(await headers()) ? recruitmentMetadata : {};
+}
 
-  return (
-    <div className="flex h-screen w-full items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="text-muted-foreground">Carregando...</p>
-      </div>
-    </div>
-  );
+export default async function RootPage() {
+  if (isPublicRecruitmentRequest(await headers())) {
+    return <VagasPage />;
+  }
+
+  return <RootHostSwitch />;
 }

@@ -24,6 +24,7 @@ import { calcProfileCompletion, type FieldMap, type EmployeeFieldValue } from '.
 const db    = getFirestore('coala');
 const hrDb  = getFirestore('coala-rh');
 const BRT   = 'America/Sao_Paulo';
+const BIZNEO_COLLABORATOR_IMPORT_ENABLED = false;
 
 const internalAppCors = [
   /op\.coalashakes\.com$/,
@@ -306,17 +307,28 @@ async function runSync(source: 'scheduled' | 'manual'): Promise<{
 }
 
 export const syncFromBizneo = onSchedule(
-  { schedule: '0 3 * * *', timeZone: BRT },
+  { schedule: '0 3 * * *', timeZone: BRT, secrets: ['BIZNEO_TOKEN'] },
   async () => {
+    if (!BIZNEO_COLLABORATOR_IMPORT_ENABLED) {
+      console.log('[syncFromBizneo] Importação de colaboradores do Bizneo desativada por política operacional.');
+      return;
+    }
     const result = await runSync('scheduled');
     console.log(`[syncFromBizneo] ${result.employee_count} usuários · ${result.updated_count} atualizados · ${result.error_count} erros`);
   }
 );
 
 export const manualSyncFromBizneo = onCall(
-  { cors: internalAppCors },
+  { cors: internalAppCors, secrets: ['BIZNEO_TOKEN'] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+
+    if (!BIZNEO_COLLABORATOR_IMPORT_ENABLED) {
+      throw new HttpsError(
+        'failed-precondition',
+        'A importação de colaboradores do Bizneo está desativada. Cadastros devem ser feitos no Coala One.',
+      );
+    }
 
     // Verificar se é admin (token claim ou rh_role)
     const isDefaultAdmin = request.auth.token.isDefaultAdmin === true;

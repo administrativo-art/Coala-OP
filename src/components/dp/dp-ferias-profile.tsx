@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -60,9 +59,10 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import {
-  ArrowLeft, CalendarDays, CheckCircle, MoreHorizontal,
+  CalendarDays, CheckCircle, MoreHorizontal,
   Pencil, Plus, Trash2, XCircle,
 } from 'lucide-react';
+import { BackButton } from '@/components/navigation/back-button';
 import { useToast } from '@/hooks/use-toast';
 
 import {
@@ -491,7 +491,6 @@ interface DPFeriasProfileProps {
 }
 
 export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
-  const router = useRouter();
   const { users, permissions } = useAuth();
   const { updateVacation, deleteVacation } = useDP();
   const { vacations, vacationsLoading, vacationsError } = useDPBootstrap();
@@ -551,9 +550,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
         <p className="text-sm">Colaborador não encontrado.</p>
-        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/dp/ferias')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />Voltar
-        </Button>
+        <BackButton fallbackHref="/dashboard/dp/ferias" label="Voltar" variant="ghost" size="sm" />
       </div>
     );
   }
@@ -570,9 +567,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
         <p className="text-sm text-destructive">Erro ao carregar férias: {vacationsError}</p>
-        <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/dp/ferias')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />Voltar
-        </Button>
+        <BackButton fallbackHref="/dashboard/dp/ferias" label="Voltar" variant="ghost" size="sm" />
       </div>
     );
   }
@@ -581,11 +576,9 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard/dp/ferias')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+        <BackButton fallbackHref="/dashboard/dp/ferias" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Avatar className="h-10 w-10 shrink-0">
+          <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage src={user.avatarUrl} />
             <AvatarFallback>{initials(user.username)}</AvatarFallback>
           </Avatar>
@@ -606,12 +599,12 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
 
         {/* Left: Health Summary */}
         <div className="lg:col-span-1 space-y-4">
           <Card>
-            <CardContent className="p-5 space-y-4">
+            <CardContent className="space-y-2.5 p-3">
               {health.status === 'INVALIDO' && (
                 <p className="text-sm text-muted-foreground">
                   Data de admissão não cadastrada. Configure o perfil do colaborador.
@@ -677,7 +670,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
           {/* Summary stats */}
           <Card>
-            <CardContent className="p-4 space-y-2">
+            <CardContent className="space-y-1.5 p-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Resumo</p>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total de ciclos</span>

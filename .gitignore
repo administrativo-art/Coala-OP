@@ -32,6 +32,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+error.log
 
 # vercel
 .vercel
@@ -51,4 +52,14 @@ firestore-debug.log
 scripts/sa-*.json
 scripts/*firebase-adminsdk*.json
 scripts/dp-collaborator-mapping.json
-scripts/dp-id-map.jsonrelatorios/
+scripts/dp-id-map.json
+relatorios/
+
+# Snapshots locais de dados de producao (nao versionar)
+backups/
+
+# Artefatos locais de renderização e conciliação (não versionar)
+/output/inter/
+/output/render/
+/output/rendered/
+/tmp/pdfs/

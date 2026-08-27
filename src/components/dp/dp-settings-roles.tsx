@@ -4,9 +4,9 @@ import React from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Briefcase, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Plus, PlusCircle, ShieldCheck, Trash2, Users2, Workflow } from "lucide-react";
+import { Briefcase, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Plus, PlusCircle, Search, ShieldCheck, Users2, Workflow } from "lucide-react";
 
-import type { HrFormQuestion, HrQuestionType, JobDepartment, JobFunction, JobRole } from "@/types";
+import type { JobDepartment, JobFunction, JobRole } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
@@ -74,7 +74,11 @@ import {
 
 const roleSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome do cargo."),
-  publicTitle: z.string().trim().optional(),
+  cbo: z.string()
+    .trim()
+    .regex(/^\d{4}-\d{2}$/, "Use o formato 0000-00.")
+    .optional()
+    .or(z.literal("")),
   departmentId: z.string().optional(),
   parentId: z.string().optional(),
   reportsTo: z.string().optional(),
@@ -82,21 +86,19 @@ const roleSchema = z.object({
   loginRestricted: z.boolean().default(false),
   isActive: z.boolean().default(true),
   description: z.string().trim().optional(),
-  publicDescription: z.string().trim().optional(),
 });
 
 type RoleFormValues = z.infer<typeof roleSchema>;
 
 const functionSchema = z.object({
   name: z.string().trim().min(2, "Informe o nome da função."),
-  publicTitle: z.string().trim().optional(),
   departmentId: z.string().optional(),
   parentId: z.string().optional(),
   compatibleRoleIds: z.array(z.string()).default([]),
   defaultProfileId: z.string().optional(),
+  monthlySalary: z.coerce.number().nonnegative("Deve ser um valor positivo.").optional(),
   isActive: z.boolean().default(true),
   description: z.string().trim().optional(),
-  publicDescription: z.string().trim().optional(),
 });
 
 type FunctionFormValues = z.infer<typeof functionSchema>;
@@ -110,25 +112,6 @@ const departmentSchema = z.object({
 
 type DepartmentFormValues = z.infer<typeof departmentSchema>;
 
-const QUESTION_TYPE_LABELS: Record<HrQuestionType, string> = {
-  text: 'Texto livre',
-  yes_no: 'Sim ou Não',
-  select: 'Seleção única',
-  multi_select: 'Múltipla escolha',
-  number_range: 'Faixa numérica',
-  date: 'Data',
-  location: 'Localização',
-  file_upload: 'Upload de arquivo',
-};
-
-const QUESTION_TYPES_ORDERED: HrQuestionType[] = [
-  'text', 'yes_no', 'select', 'multi_select', 'number_range', 'date', 'location', 'file_upload',
-];
-
-function genId() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
 type HrTreeItem = {
   id: string;
   name: string;
@@ -140,6 +123,14 @@ type HrTreeItem = {
 };
 
 type HrTreeNode<T extends HrTreeItem> = T & { children: Array<HrTreeNode<T>> };
+
+const TREE_TONES = [
+  { dot: "bg-pink-600", soft: "bg-pink-50 text-pink-700" },
+  { dot: "bg-amber-600", soft: "bg-amber-50 text-amber-700" },
+  { dot: "bg-emerald-600", soft: "bg-emerald-50 text-emerald-700" },
+  { dot: "bg-violet-600", soft: "bg-violet-50 text-violet-700" },
+  { dot: "bg-sky-600", soft: "bg-sky-50 text-sky-700" },
+];
 
 function getTreeParentId(item: HrTreeItem) {
   return item.parentId ?? item.reportsTo ?? null;
@@ -202,19 +193,20 @@ function HrTreeSection<T extends HrTreeItem>({
   function renderNode(node: HrTreeNode<T>, depth: number, number: string) {
     const hasChildren = node.children.length > 0;
     const isExpanded = expanded.has(node.id);
+    const tone = TREE_TONES[Math.min(depth, TREE_TONES.length - 1)];
 
     return (
-      <div key={node.id} className="space-y-1">
+      <div key={node.id}>
         <div
           className={cn(
-            "flex items-center gap-2 rounded-lg border border-transparent px-2 py-2 text-sm transition-colors hover:bg-muted/40",
+            "group flex min-h-14 items-center gap-3 border-b border-slate-100 px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-slate-50/70",
             node.isActive === false && "opacity-60"
           )}
-          style={{ paddingLeft: `${8 + depth * 20}px` }}
+          style={{ paddingLeft: `${16 + depth * 28}px` }}
         >
           <button
             type="button"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             onClick={() => hasChildren && toggle(node.id)}
           >
             {hasChildren ? (
@@ -223,18 +215,22 @@ function HrTreeSection<T extends HrTreeItem>({
               <span className="h-4 w-4" />
             )}
           </button>
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{number}</span>
+          <span className="w-16 shrink-0 whitespace-nowrap text-right font-mono text-[11px] tabular-nums text-slate-400">
+            {number}
+          </span>
+          <span className={cn("ml-1 h-1.5 w-1.5 shrink-0 rounded-full", tone.dot)} />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <span className={cn("truncate", depth === 0 && "font-semibold")}>{node.name}</span>
+              <span className={cn("truncate text-slate-950", depth === 0 ? "font-bold" : "font-medium")}>{node.name}</span>
               {node.isActive === false && <StatusBadge active={false} />}
             </div>
-            {meta ? <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-muted-foreground">{meta(node)}</div> : null}
+            {depth > 0 && node.departmentName ? <p className="mt-0.5 truncate text-xs text-slate-400">{node.departmentName}</p> : null}
           </div>
+          {meta ? <div className="hidden max-w-[48%] flex-wrap items-center justify-end gap-1.5 text-xs text-slate-400 md:flex">{meta(node)}</div> : null}
           {canManage && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-950">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -256,7 +252,7 @@ function HrTreeSection<T extends HrTreeItem>({
           )}
         </div>
         {hasChildren && isExpanded && (
-          <div className="space-y-1">
+          <div>
             {node.children.map((child, index) => renderNode(child, depth + 1, `${number}.${index + 1}`))}
           </div>
         )}
@@ -265,35 +261,36 @@ function HrTreeSection<T extends HrTreeItem>({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-xl">
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-50 text-slate-700">
               {icon}
-              {title}
-            </CardTitle>
-            <CardDescription>{description}</CardDescription>
+            </span>
+            <h3 className="truncate text-xl font-bold text-slate-950">{title}</h3>
           </div>
-          {canManage && (
-            <Button type="button" onClick={onAddRoot}>
-              {addRootLabel}
-            </Button>
-          )}
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
         </div>
-      </CardHeader>
-      <CardContent>
-        {tree.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {emptyLabel}
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {tree.map((node, index) => renderNode(node, 0, String(index + 1)))}
-          </div>
+        {canManage && (
+          <Button
+            type="button"
+            onClick={onAddRoot}
+            className="h-10 shrink-0 rounded-xl bg-pink-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-pink-500"
+          >
+            <PlusCircle className="mr-2 h-4 w-4" />
+            {addRootLabel}
+          </Button>
         )}
-      </CardContent>
-    </Card>
+      </div>
+      {tree.length === 0 ? (
+        <div className="m-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
+          {emptyLabel}
+        </div>
+      ) : (
+        <div>{tree.map((node, index) => renderNode(node, 0, String(index + 1)))}</div>
+      )}
+    </section>
   );
 }
 
@@ -419,14 +416,14 @@ function RoleDialog({
   roles: JobRole[];
   departments: JobDepartment[];
   defaultParentId: string | null;
-  onSubmit: (values: RoleFormValues, formQuestions: HrFormQuestion[], currentRole: JobRole | null) => Promise<void>;
+  onSubmit: (values: RoleFormValues, currentRole: JobRole | null) => Promise<void>;
 }) {
   const { profiles } = useProfiles();
   const form = useForm<RoleFormValues>({
     resolver: zodResolver(roleSchema),
     defaultValues: {
       name: "",
-      publicTitle: "",
+      cbo: "",
       departmentId: "",
       parentId: "",
       reportsTo: "",
@@ -434,22 +431,14 @@ function RoleDialog({
       loginRestricted: false,
       isActive: true,
       description: "",
-      publicDescription: "",
     },
   });
-
-  const [questions, setQuestions] = React.useState<HrFormQuestion[]>([]);
-  const [showQSection, setShowQSection] = React.useState(false);
-  const [showQForm, setShowQForm] = React.useState(false);
-  const [newQ, setNewQ] = React.useState<{
-    text: string; type: HrQuestionType; required: boolean; eliminatory: boolean; options: string;
-  }>({ text: '', type: 'text', required: false, eliminatory: false, options: '' });
 
   React.useEffect(() => {
     if (!open) return;
     form.reset({
       name: role?.name ?? "",
-      publicTitle: role?.publicTitle ?? "",
+      cbo: role?.cbo ?? "",
       departmentId: role?.departmentId ?? "",
       parentId: role?.parentId ?? role?.reportsTo ?? defaultParentId ?? "",
       reportsTo: role?.reportsTo ?? role?.parentId ?? defaultParentId ?? "",
@@ -457,39 +446,8 @@ function RoleDialog({
       loginRestricted: role?.loginRestricted ?? false,
       isActive: role?.isActive ?? true,
       description: role?.description ?? "",
-      publicDescription: role?.publicDescription ?? "",
     });
-    setQuestions(role?.formQuestions ?? []);
-    setShowQSection(false);
-    setShowQForm(false);
-    setNewQ({ text: '', type: 'text', required: false, eliminatory: false, options: '' });
   }, [defaultParentId, form, open, role]);
-
-  function addQuestion() {
-    const text = newQ.text.trim();
-    if (!text) return;
-    const options = (newQ.type === 'select' || newQ.type === 'multi_select')
-      ? newQ.options.split('\n').map(o => o.trim()).filter(Boolean)
-      : [];
-    const q: HrFormQuestion = {
-      id: genId(),
-      text,
-      type: newQ.type,
-      required: newQ.required,
-      scored: false,
-      weight: 'medium',
-      eliminatory: newQ.eliminatory,
-      tags: [],
-      config: options.length > 0 ? { options } : undefined,
-    };
-    setQuestions(prev => [...prev, q]);
-    setNewQ({ text: '', type: 'text', required: false, eliminatory: false, options: '' });
-    setShowQForm(false);
-  }
-
-  function removeQuestion(id: string) {
-    setQuestions(prev => prev.filter(q => q.id !== id));
-  }
 
   const reportsToOptions = roles.filter((item) => item.id !== role?.id);
 
@@ -505,41 +463,51 @@ function RoleDialog({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(async (values) => {
-              await onSubmit(values, questions, role);
+              await onSubmit(values, role);
               onOpenChange(false);
             })}
             className="space-y-4 max-h-[80vh] overflow-y-auto pr-1"
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome interno</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Líder de unidade" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="publicTitle"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Título público</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Atendente" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome interno</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Líder de unidade" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="cbo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CBO do cargo</FormLabel>
+                    <FormControl>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="Ex.: 5134-15"
+                        maxLength={7}
+                        {...field}
+                        onChange={(event) => {
+                          const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
+                          field.onChange(digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits);
+                        }}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Usado automaticamente em contratos e integrações trabalhistas.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="departmentId"
@@ -632,7 +600,7 @@ function RoleDialog({
               />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div>
               <FormField
                 control={form.control}
                 name="description"
@@ -646,26 +614,9 @@ function RoleDialog({
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="publicDescription"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição pública</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        rows={4}
-                        placeholder="Texto usado futuramente em vagas."
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                  <FormMessage />
+                </FormItem>
+              )}
               />
             </div>
 
@@ -704,125 +655,6 @@ function RoleDialog({
                   </FormItem>
                 )}
               />
-            </div>
-
-            {/* Formulário de triagem */}
-            <div className="rounded-lg border">
-              <button
-                type="button"
-                onClick={() => setShowQSection(v => !v)}
-                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium"
-              >
-                <span>
-                  Formulário de triagem
-                  {questions.length > 0 && (
-                    <span className="ml-1 text-xs text-muted-foreground">({questions.length})</span>
-                  )}
-                </span>
-                {showQSection ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </button>
-
-              {showQSection && (
-                <div className="border-t px-4 pb-4 pt-3 space-y-3">
-                  {questions.length > 0 && (
-                    <div className="space-y-2">
-                      {questions.map((q, i) => (
-                        <div key={q.id} className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                          <span className="mt-0.5 text-muted-foreground">{i + 1}.</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{q.text}</p>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              <span className="rounded-full bg-secondary px-2 py-0.5 text-xs">
-                                {QUESTION_TYPE_LABELS[q.type]}
-                              </span>
-                              {q.required && (
-                                <span className="rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-xs">Obrigatória</span>
-                              )}
-                              {q.eliminatory && (
-                                <span className="rounded-full bg-red-100 text-red-800 px-2 py-0.5 text-xs">Eliminatória</span>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeQuestion(q.id)}
-                            className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {showQForm ? (
-                    <div className="rounded-md border bg-muted/20 p-3 space-y-3">
-                      <Input
-                        placeholder="Texto da pergunta"
-                        value={newQ.text}
-                        onChange={e => setNewQ(prev => ({ ...prev, text: e.target.value }))}
-                        maxLength={240}
-                      />
-                      <select
-                        value={newQ.type}
-                        onChange={e => setNewQ(prev => ({ ...prev, type: e.target.value as HrQuestionType }))}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-                      >
-                        {QUESTION_TYPES_ORDERED.map(t => (
-                          <option key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</option>
-                        ))}
-                      </select>
-                      {(newQ.type === 'select' || newQ.type === 'multi_select') && (
-                        <Textarea
-                          rows={3}
-                          placeholder="Uma opção por linha"
-                          value={newQ.options}
-                          onChange={e => setNewQ(prev => ({ ...prev, options: e.target.value }))}
-                        />
-                      )}
-                      <div className="flex gap-4 text-sm">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={newQ.required}
-                            onChange={e => setNewQ(prev => ({ ...prev, required: e.target.checked }))}
-                            className="h-3.5 w-3.5"
-                          />
-                          Obrigatória
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={newQ.eliminatory}
-                            onChange={e => setNewQ(prev => ({ ...prev, eliminatory: e.target.checked }))}
-                            className="h-3.5 w-3.5"
-                          />
-                          Eliminatória
-                        </label>
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <Button type="button" size="sm" variant="outline" onClick={() => setShowQForm(false)}>
-                          Cancelar
-                        </Button>
-                        <Button type="button" size="sm" onClick={addQuestion} disabled={!newQ.text.trim()}>
-                          Confirmar
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowQForm(true)}
-                      className="gap-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Adicionar pergunta
-                    </Button>
-                  )}
-                </div>
-              )}
             </div>
 
             <DialogFooter>
@@ -867,14 +699,13 @@ function FunctionDialog({
     resolver: zodResolver(functionSchema),
     defaultValues: {
       name: "",
-      publicTitle: "",
       departmentId: "",
       parentId: "",
       compatibleRoleIds: [],
       defaultProfileId: "",
+      monthlySalary: undefined,
       isActive: true,
       description: "",
-      publicDescription: "",
     },
   });
 
@@ -882,14 +713,13 @@ function FunctionDialog({
     if (!open) return;
     form.reset({
       name: item?.name ?? "",
-      publicTitle: item?.publicTitle ?? "",
       departmentId: item?.departmentId ?? "",
       parentId: item?.parentId ?? defaultParentId ?? "",
       compatibleRoleIds: item?.compatibleRoleIds ?? [],
       defaultProfileId: item?.defaultProfileId ?? "",
+      monthlySalary: item?.salaryRange?.min ?? undefined,
       isActive: item?.isActive ?? true,
       description: item?.description ?? "",
-      publicDescription: item?.publicDescription ?? "",
     });
   }, [defaultParentId, form, item, open]);
 
@@ -913,34 +743,19 @@ function FunctionDialog({
             })}
             className="space-y-4"
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome interno</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Caixa" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="publicTitle"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Título público</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Operador de caixa" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome interno</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Caixa" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
@@ -1055,7 +870,31 @@ function FunctionDialog({
               )}
             />
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="monthlySalary"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Salário mensal (R$)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Ex: 1800"
+                      {...field}
+                      value={field.value ?? ""}
+                    />
+                  </FormControl>
+                  <p className="text-sm text-muted-foreground">
+                    Base salarial da função, usada para preencher a integração do colaborador ao contratar. Gratificações ou adicionais são tratados à parte.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div>
               <FormField
                 control={form.control}
                 name="description"
@@ -1069,26 +908,9 @@ function FunctionDialog({
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="publicDescription"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição pública</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        rows={4}
-                        placeholder="Texto reaproveitável em vagas."
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                  <FormMessage />
+                </FormItem>
+              )}
               />
             </div>
 
@@ -1140,9 +962,224 @@ function StatusBadge({ active }: { active: boolean }) {
   );
 }
 
+function CatalogMetricCard({
+  label,
+  value,
+  description,
+  tone = "slate",
+}: {
+  label: string;
+  value: number;
+  description: string;
+  tone?: "slate" | "pink" | "emerald";
+}) {
+  const valueClass = {
+    slate: "text-slate-950",
+    pink: "text-pink-600",
+    emerald: "text-emerald-600",
+  }[tone];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className={cn("mt-1 text-3xl font-bold leading-none", valueClass)}>{value}</p>
+      <p className="mt-2 text-[11px] text-slate-400">{description}</p>
+    </div>
+  );
+}
+
+function CatalogSearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-10 rounded-xl border-slate-200 bg-white pl-9 text-sm shadow-sm placeholder:text-slate-400 focus-visible:ring-pink-200"
+      />
+    </div>
+  );
+}
+
+type LinkedRolePerson = {
+  id: string;
+  name: string;
+  functions: Array<{
+    id: string;
+    name: string;
+    hierarchyRank: number;
+  }>;
+  unitNames: string[];
+};
+
+function normalizedSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function RoleLinkedPeopleDialog({
+  role,
+  people,
+  onOpenChange,
+}: {
+  role: JobRole | null;
+  people: LinkedRolePerson[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [search, setSearch] = React.useState("");
+  const [functionFilter, setFunctionFilter] = React.useState("__all__");
+  const [unitFilter, setUnitFilter] = React.useState("__all__");
+
+  React.useEffect(() => {
+    setSearch("");
+    setFunctionFilter("__all__");
+    setUnitFilter("__all__");
+  }, [role?.id]);
+
+  const functionOptions = React.useMemo(() => {
+    const options = new Map<string, { id: string; name: string; hierarchyRank: number }>();
+    people.flatMap((person) => person.functions).forEach((item) => {
+      const current = options.get(item.id);
+      if (!current || item.hierarchyRank < current.hierarchyRank) options.set(item.id, item);
+    });
+    return Array.from(options.values()).sort((left, right) =>
+      left.hierarchyRank - right.hierarchyRank
+      || left.name.localeCompare(right.name, "pt-BR")
+    );
+  }, [people]);
+  const functionOrdinalById = React.useMemo(
+    () => new Map(functionOptions.map((item, index) => [item.id, index + 1])),
+    [functionOptions]
+  );
+  const unitOptions = React.useMemo(
+    () => Array.from(new Set(people.flatMap((person) => person.unitNames)))
+      .sort((left, right) => left.localeCompare(right, "pt-BR")),
+    [people]
+  );
+  const filteredPeople = React.useMemo(() => {
+    const query = normalizedSearch(search);
+    return people.filter((person) => (
+      (!query || normalizedSearch(person.name).includes(query))
+      && (functionFilter === "__all__" || person.functions.some((item) => item.id === functionFilter))
+      && (unitFilter === "__all__" || person.unitNames.includes(unitFilter))
+    ));
+  }, [functionFilter, people, search, unitFilter]);
+
+  return (
+    <Dialog open={!!role} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Colaboradores vinculados</DialogTitle>
+          <DialogDescription>
+            {role
+              ? `${role.name} · ${filteredPeople.length} de ${people.length} colaborador(es) ativo(s)`
+              : "Consulte as pessoas vinculadas ao cargo."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por nome..."
+              className="h-10 rounded-xl pl-9"
+            />
+          </div>
+          <Select value={functionFilter} onValueChange={setFunctionFilter}>
+            <SelectTrigger className="h-10 rounded-xl">
+              <SelectValue placeholder="Todas as funções" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas as funções</SelectItem>
+              {functionOptions.map((item, index) => (
+                <SelectItem key={item.id} value={item.id}>{index + 1}ª · {item.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={unitFilter} onValueChange={setUnitFilter}>
+            <SelectTrigger className="h-10 rounded-xl">
+              <SelectValue placeholder="Todas as unidades" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas as unidades</SelectItem>
+              {unitOptions.map((name) => (
+                <SelectItem key={name} value={name}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-slate-200">
+          <div className="sticky top-0 grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <span>Nome</span>
+            <span>Função atual</span>
+            <span>Unidade</span>
+          </div>
+
+          {filteredPeople.length > 0 ? (
+            filteredPeople.map((person) => (
+              <div
+                key={person.id}
+                className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0"
+              >
+                <span className="min-w-0 break-words font-semibold text-slate-900">{person.name}</span>
+                <span className="flex min-w-0 flex-wrap items-start gap-1">
+                  {person.functions.length > 0
+                    ? person.functions.map((item) => (
+                      <Badge key={item.id} variant="secondary" className="whitespace-normal text-left font-medium">
+                        {functionOrdinalById.get(item.id)}ª · {item.name}
+                      </Badge>
+                    ))
+                    : <span className="text-slate-500">Sem função vinculada</span>}
+                </span>
+                <span className="min-w-0 text-slate-600">
+                  {person.unitNames.length > 0
+                    ? person.unitNames.join(", ")
+                    : "Sem unidade vinculada"}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="grid min-h-32 place-items-center px-6 py-8 text-center">
+              <div>
+                <Users2 className="mx-auto h-7 w-7 text-slate-300" />
+                <p className="mt-2 text-sm font-semibold text-slate-700">
+                  {people.length > 0
+                    ? "Nenhum colaborador encontrado com esses filtros."
+                    : "Nenhum colaborador ativo vinculado."}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function DPSettingsRoles() {
   const { firebaseUser, activeUsers } = useAuth();
-  const { departments, roles, functions, loading, error, refresh, access } = useHrBootstrap();
+  const { departments, roles, functions, units, loading, error, refresh, access } = useHrBootstrap();
   const { profiles } = useProfiles();
   const { toast } = useToast();
 
@@ -1156,6 +1193,7 @@ export function DPSettingsRoles() {
   const [defaultFunctionParentId, setDefaultFunctionParentId] = React.useState<string | null>(null);
   const [defaultDepartmentParentId, setDefaultDepartmentParentId] = React.useState<string | null>(null);
   const [syncRole, setSyncRole] = React.useState<JobRole | null>(null);
+  const [linkedPeopleRole, setLinkedPeopleRole] = React.useState<JobRole | null>(null);
   const [syncingRoleId, setSyncingRoleId] = React.useState<string | null>(null);
   const [roleQuery, setRoleQuery] = React.useState("");
   const [functionQuery, setFunctionQuery] = React.useState("");
@@ -1206,6 +1244,108 @@ export function DPSettingsRoles() {
     [departments]
   );
 
+  const functionNameById = React.useMemo(
+    () => new Map(functions.map((item) => [item.id, item.name])),
+    [functions]
+  );
+
+  const functionHierarchyRankById = React.useMemo(() => {
+    const functionById = new Map(functions.map((item) => [item.id, item]));
+    const childrenByParent = new Map<string | null, JobFunction[]>();
+    functions.forEach((item) => {
+      const parentId = item.parentId && functionById.has(item.parentId)
+        ? item.parentId
+        : null;
+      childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), item]);
+    });
+    childrenByParent.forEach((items) => {
+      items.sort((left, right) =>
+        (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER)
+        || left.name.localeCompare(right.name, "pt-BR")
+      );
+    });
+
+    const rankById = new Map<string, number>();
+    const visited = new Set<string>();
+    function visit(item: JobFunction) {
+      if (visited.has(item.id)) return;
+      visited.add(item.id);
+      rankById.set(item.id, rankById.size);
+      (childrenByParent.get(item.id) ?? []).forEach(visit);
+    }
+    (childrenByParent.get(null) ?? []).forEach(visit);
+    functions
+      .filter((item) => !visited.has(item.id))
+      .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"))
+      .forEach(visit);
+    return rankById;
+  }, [functions]);
+
+  const unitNameById = React.useMemo(
+    () => new Map(units.map((unit) => [unit.id, unit.name])),
+    [units]
+  );
+
+  const linkedRolePeople = React.useMemo<LinkedRolePerson[]>(() => {
+    if (!linkedPeopleRole) return [];
+
+    return activeUsers
+      .filter((user) => user.jobRoleId === linkedPeopleRole.id)
+      .map((user) => {
+        const currentFunctions = (user.jobFunctionIds ?? [])
+          .map((id) => {
+            const name = functionNameById.get(id);
+            return name
+              ? {
+                id,
+                name,
+                hierarchyRank: functionHierarchyRankById.get(id) ?? Number.MAX_SAFE_INTEGER,
+              }
+              : null;
+          })
+          .filter((item): item is NonNullable<typeof item> => !!item);
+        const legacyFunctionNames = (user.jobFunctionNames ?? []).filter(Boolean);
+        const resolvedFunctions = currentFunctions.length > 0
+          ? currentFunctions
+          : Array.from(new Set(legacyFunctionNames)).map((name, index) => {
+            const catalogItem = functions.find((item) => item.name === name);
+            return {
+              id: catalogItem?.id ?? `legacy:${name}`,
+              name,
+              hierarchyRank: catalogItem
+                ? functionHierarchyRankById.get(catalogItem.id) ?? Number.MAX_SAFE_INTEGER
+                : Number.MAX_SAFE_INTEGER - legacyFunctionNames.length + index,
+            };
+          });
+        const resolvedFunctionsSorted = [...resolvedFunctions].sort((left, right) =>
+          left.hierarchyRank - right.hierarchyRank
+          || left.name.localeCompare(right.name, "pt-BR")
+        );
+        const unitNames = (user.unitIds ?? [])
+          .map((id) => unitNameById.get(id))
+          .filter((name): name is string => !!name);
+
+        return {
+          id: user.id,
+          name: user.username,
+          functions: resolvedFunctionsSorted,
+          unitNames,
+        };
+      })
+      .sort((left, right) =>
+        (left.functions[0]?.hierarchyRank ?? Number.MAX_SAFE_INTEGER)
+        - (right.functions[0]?.hierarchyRank ?? Number.MAX_SAFE_INTEGER)
+        || left.name.localeCompare(right.name, "pt-BR")
+      );
+  }, [
+    activeUsers,
+    functionHierarchyRankById,
+    functionNameById,
+    functions,
+    linkedPeopleRole,
+    unitNameById,
+  ]);
+
   const roleSyncSummary = React.useMemo(() => {
     const summary = new Map<string, { assigned: number; mismatched: number }>();
 
@@ -1229,12 +1369,12 @@ export function DPSettingsRoles() {
     return summary;
   }, [activeUsers, roles]);
 
-  async function handleRoleSubmit(values: RoleFormValues, formQuestions: HrFormQuestion[], role: JobRole | null) {
+  async function handleRoleSubmit(values: RoleFormValues, role: JobRole | null) {
     if (!firebaseUser) return;
 
     const payload = {
       name: values.name,
-      publicTitle: values.publicTitle || undefined,
+      cbo: values.cbo || undefined,
       departmentId: values.departmentId || null,
       departmentName: values.departmentId ? departmentNameById.get(values.departmentId) ?? null : null,
       parentId: values.parentId || null,
@@ -1243,8 +1383,6 @@ export function DPSettingsRoles() {
       loginRestricted: values.loginRestricted,
       isActive: values.isActive,
       description: values.description || undefined,
-      publicDescription: values.publicDescription || undefined,
-      formQuestions,
     };
 
     try {
@@ -1277,15 +1415,16 @@ export function DPSettingsRoles() {
 
     const payload = {
       name: values.name,
-      publicTitle: values.publicTitle || undefined,
       departmentId: values.departmentId || null,
       departmentName: values.departmentId ? departmentNameById.get(values.departmentId) ?? null : null,
       parentId: values.parentId || null,
       compatibleRoleIds: values.compatibleRoleIds,
       defaultProfileId: values.defaultProfileId || undefined,
+      salaryRange: values.monthlySalary !== undefined
+        ? { min: values.monthlySalary, currency: "BRL" }
+        : undefined,
       isActive: values.isActive,
       description: values.description || undefined,
-      publicDescription: values.publicDescription || undefined,
     };
 
     try {
@@ -1431,33 +1570,40 @@ export function DPSettingsRoles() {
     );
   }
 
+  const activeDepartmentCount = departments.filter((department) => department.isActive !== false).length;
+  const rootDepartmentCount = departments.filter((department) => department.isActive !== false && !department.parentId).length;
+  const subdepartmentCount = departments.filter((department) => department.isActive !== false && !!department.parentId).length;
+  const activeRoleCount = roles.filter((role) => role.isActive).length;
+  const activeFunctionCount = functions.filter((item) => item.isActive).length;
+  const peopleWithRoles = activeUsers.filter((user) => !!user.jobRoleId).length;
+  const configuredFunctions = functions.filter((item) => (item.compatibleRoleIds ?? []).length > 0).length;
+
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Departamentos ativos</div>
-            <div className="mt-1 text-3xl font-semibold">{departments.filter((department) => department.isActive !== false).length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Cargos ativos</div>
-            <div className="mt-1 text-3xl font-semibold">{roles.filter((role) => role.isActive).length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">Funções ativas</div>
-            <div className="mt-1 text-3xl font-semibold">{functions.filter((item) => item.isActive).length}</div>
-          </CardContent>
-        </Card>
+    <div className="space-y-5">
+      <div className="grid gap-3 md:grid-cols-3">
+        <CatalogMetricCard
+          label="Departamentos ativos"
+          value={activeDepartmentCount}
+          description={`${rootDepartmentCount} raiz · ${subdepartmentCount} subdepts.`}
+        />
+        <CatalogMetricCard
+          label="Cargos ativos"
+          value={activeRoleCount}
+          description={`${peopleWithRoles} pessoas cadastradas`}
+          tone="pink"
+        />
+        <CatalogMetricCard
+          label="Funções ativas"
+          value={activeFunctionCount}
+          description={`${configuredFunctions} de ${functions.length} configuradas`}
+          tone="emerald"
+        />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Input value={departmentQuery} onChange={(event) => setDepartmentQuery(event.target.value)} placeholder="Buscar departamento" />
-        <Input value={roleQuery} onChange={(event) => setRoleQuery(event.target.value)} placeholder="Buscar cargo" />
-        <Input value={functionQuery} onChange={(event) => setFunctionQuery(event.target.value)} placeholder="Buscar função" />
+      <div className="grid gap-3 lg:grid-cols-3">
+        <CatalogSearchInput value={departmentQuery} onChange={setDepartmentQuery} placeholder="Buscar departamento" />
+        <CatalogSearchInput value={roleQuery} onChange={setRoleQuery} placeholder="Buscar cargo" />
+        <CatalogSearchInput value={functionQuery} onChange={setFunctionQuery} placeholder="Buscar função" />
       </div>
 
       <HrTreeSection
@@ -1499,8 +1645,19 @@ export function DPSettingsRoles() {
         meta={(role) => (
           <>
             {role.departmentId ? <Badge variant="outline">{departmentNameById.get(role.departmentId) ?? role.departmentName ?? "Departamento removido"}</Badge> : <span>Sem departamento</span>}
+            {role.cbo ? <Badge variant="outline">CBO {role.cbo}</Badge> : null}
             {role.defaultProfileId ? <Badge variant="secondary"><ShieldCheck className="mr-1 h-3.5 w-3.5" />{profileNameById.get(role.defaultProfileId) ?? role.defaultProfileId}</Badge> : null}
             {role.loginRestricted ? <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">Login restrito por escala</Badge> : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setLinkedPeopleRole(role)}
+            >
+              <Users2 className="mr-1 h-3.5 w-3.5" />
+              Ver vinculados ({roleSyncSummary.get(role.id)?.assigned ?? 0})
+            </Button>
             {access.canManageCatalog && role.defaultProfileId && (roleSyncSummary.get(role.id)?.mismatched ?? 0) > 0 ? (
               <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" disabled={syncingRoleId === role.id} onClick={() => setSyncRole(role)}>
                 {syncingRoleId === role.id ? "Aplicando..." : "Aplicar perfil"}
@@ -1585,6 +1742,14 @@ export function DPSettingsRoles() {
         functions={functions}
         defaultParentId={defaultFunctionParentId}
         onSubmit={handleFunctionSubmit}
+      />
+
+      <RoleLinkedPeopleDialog
+        role={linkedPeopleRole}
+        people={linkedRolePeople}
+        onOpenChange={(open) => {
+          if (!open) setLinkedPeopleRole(null);
+        }}
       />
 
       <AlertDialog open={!!syncRole} onOpenChange={(open) => !open && setSyncRole(null)}>

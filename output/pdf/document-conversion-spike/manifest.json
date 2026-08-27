@@ -1,0 +1,484 @@
+{
+  "generatedAt": "2026-07-30T16:14:58.902Z",
+  "converter": "remote-gotenberg",
+  "usedExistingPdf": false,
+  "templateCount": 11,
+  "convertedCount": 10,
+  "failedCount": 1,
+  "safeAreaValidCount": 10,
+  "results": [
+    {
+      "id": "system-receipt-standard",
+      "name": "Recibo de pagamento",
+      "sourcePath": "docs/modelos-documentos/recibos/recibo-v1.docx",
+      "status": "failed",
+      "error": "Conversor remoto indisponível. Configure DOCX_TO_PDF_URL e DOCX_TO_PDF_AUDIENCE."
+    },
+    {
+      "id": "system-admission-employment-probation-contract",
+      "name": "Contrato de Trabalho a Título de Experiência",
+      "sourcePath": "docs/modelos-documentos/admissionais/01-contrato-experiencia-v3.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-employment-probation-contract.pdf",
+      "status": "converted",
+      "pageCount": 4,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 2,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 3,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 4,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Caladea-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Caladea-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-hours-bank-agreement",
+      "name": "Acordo Individual de Banco de Horas",
+      "sourcePath": "docs/modelos-documentos/admissionais/02-banco-horas-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-hours-bank-agreement.pdf",
+      "status": "converted",
+      "pageCount": 2,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 2,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "DAAAAA+Carlito-BoldItalic",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-lgpd-awareness-term",
+      "name": "Termo de Ciência sobre o Tratamento de Dados Pessoais",
+      "sourcePath": "docs/modelos-documentos/admissionais/03-termo-lgpd-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-lgpd-awareness-term.pdf",
+      "status": "converted",
+      "pageCount": 9,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 2,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 3,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 4,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 5,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 6,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 7,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 8,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 9,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-image-voice-consent",
+      "name": "Termo de Consentimento para Uso de Imagem e Voz",
+      "sourcePath": "docs/modelos-documentos/admissionais/04-imagem-voz-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-image-voice-consent.pdf",
+      "status": "converted",
+      "pageCount": 2,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 2,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-goals-awards-policy",
+      "name": "Regulamento de Metas e Prêmios por Desempenho",
+      "sourcePath": "docs/modelos-documentos/admissionais/05-metas-premios-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-goals-awards-policy.pdf",
+      "status": "converted",
+      "pageCount": 2,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 2,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-transportation-voucher-request",
+      "name": "Solicitação de Vale-Transporte",
+      "sourcePath": "docs/modelos-documentos/admissionais/06-vale-transporte-solicitacao-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-transportation-voucher-request.pdf",
+      "status": "converted",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-transportation-voucher-waiver",
+      "name": "Declaração de Não Utilização de Vale-Transporte",
+      "sourcePath": "docs/modelos-documentos/admissionais/06-vale-transporte-renuncia-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-transportation-voucher-waiver.pdf",
+      "status": "converted",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-confidentiality-agreement",
+      "name": "Termo de Confidencialidade e Sigilo",
+      "sourcePath": "docs/modelos-documentos/admissionais/07-confidencialidade-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-confidentiality-agreement.pdf",
+      "status": "converted",
+      "pageCount": 2,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        },
+        {
+          "page": 2,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-electronic-time-tracking-awareness",
+      "name": "Termo de Ciência - Registro Eletrônico de Ponto",
+      "sourcePath": "docs/modelos-documentos/admissionais/08-ponto-eletronico-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-electronic-time-tracking-awareness.pdf",
+      "status": "converted",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    },
+    {
+      "id": "system-admission-bundle-closing-term",
+      "name": "Termo de Encerramento, Ciência e Assinatura",
+      "sourcePath": "docs/modelos-documentos/admissionais/09-termo-encerramento-v2.docx",
+      "outputPath": "output/pdf/document-conversion-spike/system-admission-bundle-closing-term.pdf",
+      "status": "converted",
+      "pageCount": 1,
+      "pageSizes": [
+        {
+          "page": 1,
+          "width": 595.3,
+          "height": 841.89,
+          "a4": true
+        }
+      ],
+      "fonts": [
+        {
+          "name": "BAAAAA+Carlito-Regular",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        },
+        {
+          "name": "CAAAAA+Carlito-Bold",
+          "embedded": true,
+          "subset": true,
+          "unicode": true
+        }
+      ],
+      "allFontsEmbedded": true,
+      "safeArea": {
+        "profileId": "coala-letterhead-v2",
+        "valid": true,
+        "sectionCount": 1,
+        "issues": []
+      }
+    }
+  ]
+}

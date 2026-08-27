@@ -16,6 +16,8 @@ import {
   PurchasingEmptyState,
   PurchasingFilterChip,
   PurchasingHeader,
+  PurchasingKanbanCard,
+  PurchasingKanbanColumn,
   PurchasingMetricCard,
   PurchasingPageFrame,
   PurchasingPeriodControl,
@@ -243,29 +245,23 @@ export default function PurchasingHubPage() {
               ].map((column) => {
                 const columnCards = cards.filter((card) => card.stageLabel === column.label);
                 return (
-                  <div key={column.label} className="flex h-[calc(100vh-360px)] min-h-[380px] flex-col rounded-[14px] border border-zinc-200 bg-white/70 p-3">
-                    <div className="mb-3 flex items-center justify-between">
-                      <PurchasingStatusBadge label={column.label} tone={column.tone} />
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-zinc-500">{columnCards.length}</span>
-                    </div>
-                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-                      {columnCards.map((card) => (
-                        <Link key={`${card.kind}-${card.id}`} href={card.href} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
-                          <span className="block text-[10px] font-bold uppercase tracking-wide text-zinc-400">{new Date(card.date).toLocaleDateString('pt-BR')}</span>
-                          <div className="mt-0.5 flex items-center justify-between gap-2">
-                            <span className="font-mono text-[11px] font-black text-zinc-500">{card.code}</span>
-                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                          </div>
-                          <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{card.title}</p>
-                          <PurchasingItemsPreview orderId={'orderId' in card ? card.orderId : undefined} quotationId={'quotationId' in card ? card.quotationId : undefined} />
-                          <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-                            <span>{card.lines?.[0]?.label ?? '-'}</span>
-                            <span className="font-mono font-black text-zinc-900">{card.amount ?? '-'}</span>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
+                  <PurchasingKanbanColumn key={column.label} label={column.label} tone={column.tone} count={columnCards.length}>
+                    {columnCards.map((card) => (
+                      <PurchasingKanbanCard
+                        key={`${card.kind}-${card.id}`}
+                        href={card.href}
+                        tone={card.tone}
+                        code={card.code}
+                        title={card.title}
+                        meta={new Date(card.date).toLocaleDateString('pt-BR')}
+                        badges={<PurchasingStatusBadge label={card.status} tone={card.tone} />}
+                        footerLeft={card.lines?.[0]?.label ?? '-'}
+                        amount={card.amount ?? '-'}
+                      >
+                        <PurchasingItemsPreview orderId={'orderId' in card ? card.orderId : undefined} quotationId={'quotationId' in card ? card.quotationId : undefined} />
+                      </PurchasingKanbanCard>
+                    ))}
+                  </PurchasingKanbanColumn>
                 );
               })}
             </div>

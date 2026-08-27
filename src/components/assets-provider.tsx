@@ -5,6 +5,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
 import { db } from '@/lib/firebase';
 import { WORKSPACE_ID } from '@/lib/workspace';
+import { warnBackgroundLoadError } from '@/lib/client-background-errors';
 import { useAuth } from '@/hooks/use-auth';
 import type { Asset, AssetCategory, AssetMovement, AssetStatus } from '@/types';
 
@@ -29,6 +30,7 @@ export interface AssetsContextType {
     destinationName: string;
     destinationKioskId?: string;
     newResponsibleName?: string;
+    newResponsibleUserId?: string;
     notes?: string;
   }) => Promise<void>;
 }
@@ -95,7 +97,7 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     refreshAssets()
       .catch((error) => {
-        console.error('Error fetching assets from API:', error);
+        warnBackgroundLoadError('assets/api', error);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -111,7 +113,7 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       },
       (error) => {
-        console.error('Error fetching assets:', error);
+        warnBackgroundLoadError('assets/firestore', error);
         setLoading(false);
       },
     );
@@ -130,7 +132,7 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
 
     let cancelled = false;
     refreshCategories().catch((error) => {
-      console.error('Error fetching asset categories from API:', error);
+      warnBackgroundLoadError('asset-categories/api', error);
     });
 
     const q = query(collection(db, 'assetCategories'), where('workspaceId', '==', WORKSPACE_ID));
@@ -142,7 +144,7 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
         setCategories((current) => (nextCategories.length === 0 && current.length > 0 ? current : nextCategories));
       },
       (error) => {
-        console.error('Error fetching asset categories:', error);
+        warnBackgroundLoadError('asset-categories/firestore', error);
       },
     );
     return () => {
@@ -193,6 +195,7 @@ export function AssetsProvider({ children }: { children: React.ReactNode }) {
     destinationName: string;
     destinationKioskId?: string;
     newResponsibleName?: string;
+    newResponsibleUserId?: string;
     notes?: string;
   }) => {
     await authedFetch(`/api/assets/${assetId}`, {

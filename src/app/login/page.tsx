@@ -16,6 +16,7 @@ import {
   submitHrLoginJustification,
   type HrLoginAccessPayload,
 } from "@/features/hr/lib/client";
+import { isPublicRecruitmentHost as isRecruitmentHost } from "@/lib/public-recruitment-host";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido"),
@@ -31,6 +32,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginAccessGate, setLoginAccessGate] = useState<HrLoginAccessPayload | null>(null);
   const [submittingJustification, setSubmittingJustification] = useState(false);
+  const [isPublicRecruitmentHost, setIsPublicRecruitmentHost] = useState(false);
 
   const {
     register,
@@ -39,6 +41,13 @@ export default function LoginPage() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
+
+  useEffect(() => {
+    if (isRecruitmentHost(window.location.hostname)) {
+      setIsPublicRecruitmentHost(true);
+      window.location.replace("/");
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading && isAuthenticated && !loginAccessGate) {
@@ -99,7 +108,7 @@ export default function LoginPage() {
     }
   }
 
-  if (loading || (isAuthenticated && !loginAccessGate)) {
+  if (isPublicRecruitmentHost || loading || (isAuthenticated && !loginAccessGate)) {
     return <div className="flex h-screen items-center justify-center">Carregando...</div>;
   }
 
@@ -153,7 +162,7 @@ export default function LoginPage() {
                   placeholder="seu@email.com"
                   autoComplete="email"
                   {...register("email")}
-                  className="h-12 rounded-xl border-[1.5px] border-[#e0e0e0] bg-white/70 px-4 text-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-[border-color,box-shadow] focus-visible:border-[#E91E8C] focus-visible:ring-[3px] focus-visible:ring-[#E91E8C]/12 focus-visible:ring-offset-0"
+                  className="h-12 rounded-xl border-[1.5px] border-[#d8d8d8] bg-white px-4 text-[15px] font-semibold text-slate-950 shadow-[0_4px_18px_rgba(15,23,42,0.08)] placeholder:text-slate-500 transition-[border-color,box-shadow] focus-visible:border-[#E91E8C] focus-visible:ring-[3px] focus-visible:ring-[#E91E8C]/20 focus-visible:ring-offset-0"
                 />
                 {errors.email && (
                   <p className="text-xs text-destructive">{errors.email.message}</p>
@@ -171,7 +180,7 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     autoComplete="current-password"
                     {...register("password")}
-                    className="h-12 rounded-xl border-[1.5px] border-[#e0e0e0] bg-white/70 px-4 pr-11 text-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-[border-color,box-shadow] focus-visible:border-[#E91E8C] focus-visible:ring-[3px] focus-visible:ring-[#E91E8C]/12 focus-visible:ring-offset-0"
+                    className="h-12 rounded-xl border-[1.5px] border-[#d8d8d8] bg-white px-4 pr-11 text-[15px] font-semibold text-slate-950 shadow-[0_4px_18px_rgba(15,23,42,0.08)] placeholder:text-slate-500 transition-[border-color,box-shadow] focus-visible:border-[#E91E8C] focus-visible:ring-[3px] focus-visible:ring-[#E91E8C]/20 focus-visible:ring-offset-0"
                   />
                   <button
                     type="button"
@@ -208,7 +217,7 @@ export default function LoginPage() {
             </form>
 
             <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-              © {new Date().getFullYear()} Coala Operação. Todos os direitos reservados.
+              © {new Date().getFullYear()} Coala One. Todos os direitos reservados.
             </p>
           </div>
         </div>

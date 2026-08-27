@@ -14,8 +14,14 @@ export const dynamic = "force-dynamic";
 
 function mapReceiptStatusToTaskStatus(status: string): Task["status"] {
   if (status === "awaiting_delivery") return "pending";
-  if (status === "in_conference" || status === "awaiting_stock" || status === "in_stock_entry" || status === "partially_stocked") return "in_progress";
-  if (status === "stocked" || status === "stocked_with_divergence") return "completed";
+  if (
+    status === "in_conference" ||
+    status === "awaiting_stock" ||
+    status === "in_stock_entry" ||
+    status === "partially_stocked" ||
+    status === "stocked_with_divergence"
+  ) return "in_progress";
+  if (status === "stocked") return "completed";
   if (status === "cancelled") return "rejected";
   return "pending";
 }

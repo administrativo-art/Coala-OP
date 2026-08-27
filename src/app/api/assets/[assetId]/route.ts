@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 
 import { requireUser } from '@/lib/auth-server';
 import { dbAdmin } from '@/lib/firebase-admin';
+import { WORKSPACE_ID } from '@/lib/workspace';
 import type { AssetStatus } from '@/types';
 
 export const runtime = 'nodejs';
@@ -9,6 +11,53 @@ export const dynamic = 'force-dynamic';
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+const BARCODE_SETTINGS_DOC_ID = 'barcode-labels';
+const DEFAULT_GENERATED_LABELS_UNTIL = 1000;
+
+function normalizeAssetCodeInput(value: unknown) {
+  const raw = String(value ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!raw) return '';
+  if (raw.startsWith('PEND-')) return raw;
+  const patMatch = raw.match(/^PAT[-_]?(\d+)$/);
+  if (patMatch) return `PAT-${String(Number(patMatch[1])).padStart(6, '0')}`;
+  const digits = raw.replace(/\D/g, '');
+  return digits ? `PAT-${String(Number(digits)).padStart(6, '0')}` : raw;
+}
+
+async function assertAssetCodeCanBeUsed(code: string, currentAssetId: string) {
+  const match = code.match(/^PAT-(\d+)$/);
+  if (!match) throw new Error('Código patrimonial inválido. Use o formato PAT-000001.');
+
+  const sequence = Number(match[1]);
+  if (!Number.isFinite(sequence) || sequence < 1) {
+    throw new Error('Código patrimonial inválido. Use uma sequência a partir de PAT-000001.');
+  }
+
+  const settingsSnap = await dbAdmin.collection('assetSettings').doc(BARCODE_SETTINGS_DOC_ID).get();
+  const settings = settingsSnap.data() ?? {};
+  const generatedUntil = Math.max(
+    DEFAULT_GENERATED_LABELS_UNTIL,
+    settings.workspaceId === WORKSPACE_ID ? Number(settings.generatedUntil ?? 0) || 0 : 0
+  );
+
+  if (sequence > generatedUntil) {
+    throw new Error(
+      `A etiqueta ${code} ainda não foi gerada. Gere mais etiquetas antes de usar esta numeração. Última etiqueta liberada: PAT-${String(generatedUntil).padStart(6, '0')}.`
+    );
+  }
+
+  const existing = await dbAdmin
+    .collection('assets')
+    .where('workspaceId', '==', WORKSPACE_ID)
+    .where('code', '==', code)
+    .limit(1)
+    .get();
+  const alreadyUsedByAnotherAsset = existing.docs.some((doc) => doc.id !== currentAssetId);
+  if (alreadyUsedByAnotherAsset) {
+    throw new Error(`A etiqueta ${code} já está vinculada a outro patrimônio.`);
+  }
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ assetId: string }> }) {
@@ -32,8 +81,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
   if (!snap.exists) return jsonError('Patrimônio não encontrado.', 404);
   const current = snap.data()!;
   const now = new Date().toISOString();
+  const incomingCode = body.code !== undefined ? normalizeAssetCodeInput(body.code) : String(current.code ?? '');
+  let nextCode = String(current.code ?? '');
+  let nextPlateStatus = current.plateStatus ?? (String(current.code ?? '').startsWith('PEND-') ? 'pendente' : 'vinculada');
+  let plateLinkedAt = current.plateLinkedAt ?? null;
+  let plateLinkedBy = current.plateLinkedBy ?? null;
+
+  if (body.code !== undefined && incomingCode && incomingCode !== current.code) {
+    try {
+      await assertAssetCodeCanBeUsed(incomingCode, assetId);
+      nextCode = incomingCode;
+      nextPlateStatus = 'vinculada';
+      plateLinkedAt = now;
+      plateLinkedBy = userContext.userDoc.id;
+    } catch (error) {
+      return jsonError(error instanceof Error ? error.message : 'Falha ao vincular placa patrimonial.');
+    }
+  } else if (/^PAT-\d+$/.test(nextCode) && nextPlateStatus !== 'vinculada') {
+    nextPlateStatus = 'vinculada';
+    plateLinkedAt = now;
+    plateLinkedBy = userContext.userDoc.id;
+  }
 
   const patch = {
+    code: nextCode,
     name: body.name?.trim?.() ?? current.name,
     category: body.category?.trim?.() || null,
     subcategory: body.subcategory?.trim?.() || null,
@@ -44,7 +115,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
     description: body.description?.trim?.() || null,
     department: body.department?.trim?.() || null,
     exactLocation: body.exactLocation?.trim?.() || null,
+    responsibleUserId: body.responsibleUserId?.trim?.() || null,
     responsibleName: body.responsibleName?.trim?.() || null,
+    responsibilityStatus: body.responsibleUserId ? 'assigned' : null,
+    previousResponsibleUserId: null,
+    previousResponsibleName: null,
+    responsibilityVacatedAt: null,
     inUse: typeof body.inUse === 'boolean' ? body.inUse : current.inUse ?? true,
     possessionStatus: body.possessionStatus?.trim?.() || null,
     purchaseDate: body.purchaseDate || null,
@@ -84,19 +160,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
     retirementDocumentUrl: body.retirementDocumentUrl || null,
     imageUrl: body.imageUrl || null,
     notes: body.notes || null,
+    plateStatus: nextPlateStatus,
+    plateLinkedAt,
+    plateLinkedBy,
     updatedAt: now,
   };
 
   await ref.update(patch);
   await dbAdmin.collection('assetMovements').add({
     assetId,
-    assetCode: current.code,
+    assetCode: nextCode,
     assetName: patch.name,
     type: 'EDICAO',
     userId: userContext.userDoc.id,
     username: userContext.userDoc.username,
     occurredAt: now,
-    notes: body.changeNotes || 'Edição de cadastro.',
+    notes: body.changeNotes || (nextCode !== current.code ? `Vinculação de placa: ${current.code} → ${nextCode}.` : 'Edição de cadastro.'),
   });
 
   return NextResponse.json({ ok: true });
@@ -179,6 +258,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
     const withdrawerName = String(body.withdrawerName ?? '').trim();
     const destinationName = String(body.destinationName ?? '').trim();
     const newResponsibleName = String(body.newResponsibleName ?? '').trim() || null;
+    const newResponsibleUserId = String(body.newResponsibleUserId ?? '').trim() || null;
     if (!withdrawerName || !destinationName) return jsonError('Quem retira e destino são obrigatórios.');
     await dbAdmin.collection('assetMovements').add({
       assetId,
@@ -201,6 +281,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ as
     }
     if (newResponsibleName) {
       assetUpdates.responsibleName = newResponsibleName;
+      assetUpdates.responsibleUserId = newResponsibleUserId ?? FieldValue.delete();
+      assetUpdates.responsibilityStatus = 'assigned';
+      assetUpdates.previousResponsibleUserId = FieldValue.delete();
+      assetUpdates.previousResponsibleName = FieldValue.delete();
+      assetUpdates.responsibilityVacatedAt = FieldValue.delete();
     }
     if (Object.keys(assetUpdates).length > 0) {
       await ref.update({ ...assetUpdates, updatedAt: now });

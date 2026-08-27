@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { mirrorTemplateToLegacy } from "@/features/forms/lib/legacy-bridge";
-import { listFormTemplates } from "@/features/forms/lib/server";
+import { getFormProjectById, listFormTemplates } from "@/features/forms/lib/server";
 import { formTemplateSchema } from "@/features/forms/lib/schemas";
-import { assertFormPermission } from "@/features/forms/lib/server-access";
+import {
+  assertFormAnalyticsPermission,
+  assertFormPermission,
+} from "@/features/forms/lib/server-access";
+import {
+  hasEnabledAnalyticsConfig,
+  validateTemplateAnalyticsPublication,
+} from "@/features/forms/analytics/template-publication";
 import { requireUser } from "@/lib/auth-server";
 import { checklistDbAdmin } from "@/lib/firebase-checklist-admin";
 import { logAction } from "@/lib/log-action";
-import { type FormTemplate } from "@/types/forms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,12 +59,37 @@ export async function POST(request: NextRequest) {
   try {
     const context = await requireUser(request);
     const parsed = formTemplateSchema.parse(await request.json());
+    const project = await getFormProjectById(parsed.form_project_id, context.workspace_id);
+    if (!project) {
+      return NextResponse.json({ error: "Projeto não encontrado neste workspace." }, { status: 404 });
+    }
     assertFormPermission(
       context.permissions,
       context.isDefaultAdmin,
       parsed.form_project_id,
       "manage"
     );
+    if (hasEnabledAnalyticsConfig(parsed.sections)) {
+      assertFormAnalyticsPermission(
+        context.permissions,
+        context.isDefaultAdmin,
+        "configure_templates"
+      );
+      const analyticsReport = await validateTemplateAnalyticsPublication({
+        db: checklistDbAdmin,
+        workspaceId: context.workspace_id,
+        sections: parsed.sections,
+      });
+      if (!analyticsReport.ok) {
+        return NextResponse.json(
+          {
+            error: "Configuração analítica inválida.",
+            validation: analyticsReport,
+          },
+          { status: 422 }
+        );
+      }
+    }
 
     const now = new Date();
     const ref = checklistDbAdmin.collection("form_templates").doc();
@@ -99,12 +129,6 @@ export async function POST(request: NextRequest) {
           username: context.userDoc.username,
         },
       });
-    });
-    await mirrorTemplateToLegacy({
-      templateId: ref.id,
-      template: template as unknown as FormTemplate,
-    }).catch((error) => {
-      console.error("Legacy dual-write failed for form template create:", error);
     });
     await logAction({
       workspace_id: context.workspace_id,

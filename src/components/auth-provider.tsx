@@ -4,12 +4,14 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type User, type PermissionSet, defaultGuestPermissions, defaultAdminPermissions } from '@/types';
 import { db, auth, functions } from '@/lib/firebase';
-import { collection, onSnapshot, doc, query, getDoc, getDocFromCache } from "firebase/firestore";
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
+import { doc, getDoc, getDocFromCache } from "firebase/firestore";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { useProfiles } from '@/hooks/use-profiles';
 import { produce } from 'immer';
 import { ChangePasswordModal } from './change-password-modal';
+import { fetchClientBootstrap } from '@/lib/client-bootstrap';
+import { applyLegacyFormalizationFallbacks } from '@/lib/hr-formalization-permissions';
 import {
   fetchHrLoginAccess,
   type HrLoginAccessPayload,
@@ -32,6 +34,7 @@ export interface AuthContextType {
   terminatedUsers: User[];
   isAuthenticated: boolean;
   loading: boolean;
+  isDefaultAdmin: boolean;
   permissions: PermissionSet;
   login: (email: string, password: string) => Promise<{
     success: boolean;
@@ -39,10 +42,13 @@ export interface AuthContextType {
     loginAccessGate?: HrLoginAccessPayload | null;
   }>;
   logout: () => void;
-  addUser: (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => Promise<{ uid: string } | { error: string }>;
+  addUser: (userData: Omit<User, 'id' | 'email'>, email: string) => Promise<
+    { uid: string; emailSent: boolean; firstAccessExpiresAt?: string; warning?: string } | { error: string }
+  >;
   updateUser: (user: User) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   terminateUser: (payload: TerminateUserPayload) => Promise<void>;
+  reactivateUser: (userId: string) => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   recordLoginAccess: () => Promise<void>;
@@ -76,6 +82,23 @@ function applyCommercialPermissionFallbacks(permissions: PermissionSet) {
   permissions.commercial.technicalSheets.export ||= legacyCanViewSheets || legacyCanEditSheets;
 }
 
+function decodeJwtHeader(token: string): Record<string, unknown> | null {
+  try {
+    const [header] = token.split(".");
+    if (!header) return null;
+    const normalized = header.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function hasEmulatorIdToken(user: FirebaseUser) {
+  const token = await user.getIdToken(false);
+  return decodeJwtHeader(token)?.alg === "none";
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<User | null>(null);
@@ -100,8 +123,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (user) {
+        if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true") {
+          const isEmulatorToken = await hasEmulatorIdToken(user).catch(() => false);
+          if (!isEmulatorToken) {
+            await signOut(auth);
+            setAppUser(null);
+            setPermissions(defaultGuestPermissions);
+            setPermissionsReady(true);
+            setLoading(false);
+            return;
+          }
+        }
+
         const userDocRef = doc(db, 'users', user.uid);
         let userDocSnap;
+        let fallbackUser: User | null = null;
+
+        const loadCurrentUserFallback = async () => {
+          try {
+            const payload = await fetchClientBootstrap(user, ["currentUser"]);
+            return payload.currentUser ?? null;
+          } catch (fallbackError) {
+            console.error("[AuthProvider] Server user fallback failed.", fallbackError);
+            return null;
+          }
+        };
 
         try {
           userDocSnap = await getDoc(userDocRef);
@@ -118,14 +164,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             userDocSnap = await getDocFromCache(userDocRef);
           } catch (cacheError) {
             console.error("[AuthProvider] Cached user document is unavailable.", cacheError);
+            fallbackUser = await loadCurrentUserFallback();
           }
         }
 
-        if (userDocSnap?.exists()) {
+        if (!userDocSnap?.exists() && !fallbackUser) {
+          fallbackUser = await loadCurrentUserFallback();
+        }
+
+        if (userDocSnap?.exists() || fallbackUser) {
           // Força refresh do token para garantir claims atualizados (profileId, isDefaultAdmin)
           await user.getIdToken(true);
           void recordLoginAccess(user);
-          const userData = { id: userDocSnap.id, ...userDocSnap.data() } as User;
+          const userData = fallbackUser ?? ({ id: userDocSnap!.id, ...userDocSnap!.data() } as User);
           setAppUser(userData);
         } else {
           await signOut(auth);
@@ -148,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const canReadUsersDirectory =
       permissions.settings.manageUsers ||
-      permissions.dp?.collaborators?.view === true ||
+      (permissions.dp?.collaborators?.view === true && permissions.dp?.collaborators?.ownProfileOnly !== true) ||
       permissions.dp?.collaborators?.edit === true ||
       permissions.dp?.collaborators?.terminate === true;
 
@@ -157,16 +208,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const q = query(collection(db, "users"));
-    const unsubscribeUsers = onSnapshot(q, (snapshot) => {
-        const usersData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
-        setUsers(usersData);
-    }, (error) => {
+    let active = true;
+    const currentFirebaseUser = firebaseUser ?? auth.currentUser;
+    if (!currentFirebaseUser) {
+      setUsers([appUser]);
+      return;
+    }
+
+    const loadDirectory = async () => {
+      try {
+        const payload = await fetchClientBootstrap(currentFirebaseUser, ["users"]);
+        if (active) setUsers(payload.users?.length ? payload.users : [appUser]);
+      } catch (error) {
         console.error("[AuthProvider] Falha ao carregar diretório de usuários.", error);
-        setUsers([appUser]);
-    });
-    return () => unsubscribeUsers();
-  }, [appUser, permissions, permissionsReady, profilesLoading]);
+        if (active) setUsers([appUser]);
+      }
+    };
+
+    void loadDirectory();
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadDirectory();
+    }, 60000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [appUser, firebaseUser, permissions, permissionsReady, profilesLoading]);
 
   const mergeRecursive = useCallback((target: Record<string, any>, source: Record<string, any>) => {
     if (!source || typeof source !== 'object' || Array.isArray(source)) return;
@@ -230,6 +298,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const finalPermissions = produce(defaultGuestPermissions, (draft: any) => {
         mergeRecursive(draft, userProfile.permissions);
         applyCommercialPermissionFallbacks(draft);
+        applyLegacyFormalizationFallbacks(draft, userProfile.permissions);
     });
 
     setPermissions(finalPermissions);
@@ -305,26 +374,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = '/login'; // reload completo mata todos os listeners
   }, []);
 
-  const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string, password: string) => {
+  const addUser = useCallback(async (userData: Omit<User, 'id' | 'email'>, email: string) => {
     try {
-      // Força refresh do token para garantir que os claims estão atualizados antes de chamar a cloud function
-      await auth.currentUser?.getIdToken(true);
-
-      const createUserFn = httpsCallable(functions, 'createUser');
-      
-      const result = await createUserFn({
-        email,
-        password,
-        userData,
-        username: userData.username,
-        profileId: userData.profileId,
-        assignedKioskIds: userData.assignedKioskIds,
-        avatarUrl: userData.avatarUrl || '',
-        operacional: userData.operacional || false,
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) return { error: 'Usuário não autenticado.' };
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          userData,
+          username: userData.username,
+          profileId: userData.profileId,
+        }),
       });
-
-      const { uid } = result.data as { uid: string };
-      return { uid };
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        return { error: result?.error || 'Erro ao criar usuário.' };
+      }
+      return {
+        uid: String(result.uid),
+        emailSent: result.emailSent === true,
+        firstAccessExpiresAt: typeof result.firstAccessExpiresAt === 'string' ? result.firstAccessExpiresAt : undefined,
+        warning: typeof result.warning === 'string' ? result.warning : undefined,
+      };
     } catch (error: any) {
       console.error("Error adding user:", error);
       return { error: error?.message || 'Erro ao criar usuário.' };
@@ -372,18 +448,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
   }, []);
+
+  const reactivateUser = useCallback(async (userId: string) => {
+    try {
+      const reactivateUserFn = httpsCallable(functions, 'reactivateUser');
+      await reactivateUserFn({ uid: userId });
+    } catch (error) {
+      console.error("Error reactivating user:", error);
+      throw error;
+    }
+  }, []);
   
   const resetPassword = useCallback(async (email: string): Promise<boolean> => {
     try {
-      const actionCodeSettings =
-        typeof window !== "undefined"
-          ? {
-              url: `${window.location.origin}/login`,
-              handleCodeInApp: false,
-            }
-          : undefined;
-      await sendPasswordResetEmail(auth, email, actionCodeSettings);
-      return true;
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      return response.ok;
     } catch (error) {
       console.error("Password reset error:", error);
       return false;
@@ -426,6 +509,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const activeUsers = useMemo(() => users.filter(u => u.isActive !== false), [users]);
   const terminatedUsers = useMemo(() => users.filter(u => u.isActive === false), [users]);
+  const isDefaultAdmin = useMemo(() => {
+    if (!appUser) return false;
+    const userProfile = profiles.find((profile) => profile.id === appUser.profileId);
+    return userProfile?.isDefaultAdmin === true || appUser.profileId === adminProfileId;
+  }, [adminProfileId, appUser, profiles]);
 
   const value = useMemo(() => ({
     user: appUser,
@@ -435,6 +523,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     terminatedUsers,
     isAuthenticated: !!appUser,
     loading: loading || profilesLoading || !permissionsReady,
+    isDefaultAdmin,
     permissions,
     login,
     logout,
@@ -442,12 +531,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateUser,
     deleteUser,
     terminateUser,
+    reactivateUser,
     resetPassword,
     changePassword,
     recordLoginAccess,
   }), [
-    appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading,
-    permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, resetPassword, changePassword, recordLoginAccess,
+    appUser, firebaseUser, users, activeUsers, terminatedUsers, loading, profilesLoading, isDefaultAdmin,
+    permissionsReady, permissions, login, logout, addUser, updateUser, deleteUser, terminateUser, reactivateUser, resetPassword, changePassword, recordLoginAccess,
   ]);
 
   return (

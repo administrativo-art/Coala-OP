@@ -21,7 +21,7 @@ export async function GET(
   try {
     const user = await requireUser(request);
     const { templateId } = await context.params;
-    const template = await getFormTemplateById(templateId);
+    const template = await getFormTemplateById(templateId, user.workspace_id);
 
     if (!template) {
       return NextResponse.json({ error: "Formulário não encontrado." }, { status: 404 });
@@ -64,7 +64,7 @@ export async function PATCH(
   try {
     const user = await requireUser(request);
     const { templateId } = await context.params;
-    const template = await getFormTemplateById(templateId);
+    const template = await getFormTemplateById(templateId, user.workspace_id);
 
     if (!template) {
       return NextResponse.json({ error: "Formulário não encontrado." }, { status: 404 });
@@ -110,6 +110,7 @@ export async function PATCH(
     if (parsed.pending_policy === "cancel") {
       const pendingSnap = await checklistDbAdmin
         .collection("form_executions")
+        .where("workspace_id", "==", user.workspace_id)
         .where("template_id", "==", templateId)
         .where("status", "==", "pending")
         .get();

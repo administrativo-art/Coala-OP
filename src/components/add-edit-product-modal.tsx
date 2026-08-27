@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm, type DefaultValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -10,20 +10,24 @@ import dynamic from 'next/dynamic';
 
 import { useProducts } from '@/hooks/use-products';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { useOperationalItemCategories } from '@/hooks/use-operational-item-categories';
 import { getUnitsForCategory, convertValue, formatQuantity, type UnitCategory, unitCategories, packageTypes, type PackageType } from '@/lib/conversion';
 import { type Product } from '@/types';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useClassifications } from '@/hooks/use-classifications';
+import type { NormalizedProductData, ProductLookupResponse, ProductLookupSourceResult } from '@/lib/barcode/product-lookup-types';
 
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel, FormDescription } from '@/components/ui/form';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, Link2, ScanLine } from 'lucide-react';
+import { Camera, Trash2, Upload, Settings, ImageIcon, Plus, FileText, Tag, Package, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Link2, ScanLine, Search, Database, AlertTriangle, ListChecks, Save, X } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { Switch } from './ui/switch';
@@ -42,25 +46,46 @@ const PhotoCaptureModal = dynamic(
   { ssr: false }
 );
 
+const requiredPositiveNumber = (requiredMessage: string, positiveMessage: string) =>
+    z.preprocess(
+        (value) => {
+            if (value === '' || value === null || value === undefined) return undefined;
+            return typeof value === 'number' ? value : Number(value);
+        },
+        z.number({
+            required_error: requiredMessage,
+            invalid_type_error: requiredMessage,
+        }).finite(requiredMessage).min(0.001, positiveMessage),
+    );
+
 const productFormSchema = z.object({
   baseName: z.string().min(1, 'O nome base é obrigatório.'),
   brand: z.string().optional(),
   barcode: z.string().optional(),
+  ncm: z.string().optional(),
+  cest: z.string().optional(),
   imageUrl: z.string().optional(),
   packageType: z.string().min(1, 'O tipo de embalagem é obrigatório.'),
   category: z.enum(unitCategories),
-  packageSize: z.coerce.number().min(0.001, 'O tamanho do pacote deve ser positivo.'),
+  packageSize: requiredPositiveNumber(
+    'Informe a quantidade da embalagem.',
+    'A quantidade da embalagem deve ser maior que zero.',
+  ),
   unit: z.string().min(1, 'A unidade é obrigatória.'),
   notes: z.string().optional(),
   baseProductId: z.string().optional(),
   operationalCategoryId: z.string().min(1, 'Selecione a categoria do item.'),
   defaultCountingUnit: z.enum(['package', 'base', 'content']).optional(),
-  apparelType: z.string().optional(),
   apparelSize: z.string().optional(),
   apparelColor: z.string().optional(),
-  apparelFit: z.string().optional(),
-  apparelMaterial: z.string().optional(),
-  apparelUsage: z.string().optional(),
+  uniformCareInstructions: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    etapas: z.array(z.object({
+      id: z.string(),
+      text: z.string(),
+    })),
+  })).optional(),
 
   // Conditional sections
   enableLogistics: z.boolean().optional(),
@@ -100,6 +125,14 @@ function normalizeAlias(value: string) {
         .trim();
 }
 
+function normalizeBarcodeDigits(value?: string | null) {
+    return String(value ?? '').replace(/\D/g, '');
+}
+
+function shouldAutoLookupBarcode(value?: string | null) {
+    return [8, 12, 13, 14].includes(normalizeBarcodeDigits(value).length);
+}
+
 interface AddEditProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -108,14 +141,92 @@ interface AddEditProductModalProps {
 }
 
 const WIZARD_STEPS = [
-    { id: 1, label: 'Identificação', icon: FileText, description: 'Foto, nome, vínculo com o produto base e observações.' },
+    { id: 1, label: 'Identificação', icon: FileText, description: 'Foto, nome, atributos principais, vínculo com o produto base e observações.' },
     { id: 2, label: 'Aliases de compra', icon: Tag, description: 'Nomes que os fornecedores usam para este item nos pedidos e notas. O sistema reconhece esses nomes automaticamente nas compras.' },
     { id: 3, label: 'Detalhes logísticos', icon: Package, description: 'O item físico que você compra. Define a conversão para a unidade do estoque.' },
-    { id: 4, label: 'Nutricional', icon: ImageIcon, description: 'Opcional — fotografe a embalagem; o assistente transcreve quando solicitado.' },
 ] as const;
+
+const UNIFORM_INSTRUCTIONS_STEP = {
+    id: 4,
+    label: 'Instruções',
+    icon: ListChecks,
+    description: 'Seções e passos para lavagem, conservação, entrega e uso do uniforme.',
+} as const;
+
+const NUTRITION_STEP = {
+    id: 5,
+    label: 'Nutricional',
+    icon: ImageIcon,
+    description: 'Opcional — fotografe a embalagem; o assistente transcreve quando solicitado.',
+} as const;
+
+const APPAREL_SIZE_OPTIONS = ['ÚNICO', 'P', 'M', 'G', 'GG'] as const;
+
+function makeInstructionId() {
+    return Math.random().toString(36).slice(2, 10);
+}
+
+function makeInstructionSection(name = 'Lavagem') {
+    return {
+        id: makeInstructionId(),
+        name,
+        etapas: [{ id: makeInstructionId(), text: '' }],
+    };
+}
+
+function createEmptyProductFormValues(): DefaultValues<ProductFormValues> {
+    return {
+        baseName: '', brand: '', barcode: '', imageUrl: '',
+        ncm: '', cest: '',
+        packageType: '',
+        category: 'Massa', packageSize: undefined, unit: 'g',
+        notes: '', baseProductId: '',
+        operationalCategoryId: '',
+        apparelSize: '', apparelColor: '',
+        uniformCareInstructions: [makeInstructionSection()],
+        defaultCountingUnit: 'package',
+        enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
+        enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
+        nutritionalTableImageUrl: '', compositionImageUrl: '',
+    };
+}
+
+function normalizeUniformCareInstructions(value: ProductFormValues['uniformCareInstructions']) {
+    return (value ?? [])
+        .map((section) => ({
+            id: section.id || makeInstructionId(),
+            name: String(section.name ?? '').trim(),
+            etapas: (section.etapas ?? [])
+                .map((step) => ({
+                    id: step.id || makeInstructionId(),
+                    text: String(step.text ?? '').trim(),
+                }))
+                .filter((step) => step.text),
+        }))
+        .filter((section) => section.name || section.etapas.length > 0);
+}
+
+function normalizeApparelSizeOption(value?: string | null) {
+    const text = String(value ?? '').trim();
+    const normalized = text
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    if (normalized === 'unico' || normalized === 'tamanho unico') return 'ÚNICO';
+    return text;
+}
+
+function lookupSourceLabel(source: ProductLookupSourceResult['fonte']) {
+    if (source === 'internal') return 'Base interna';
+    if (source === 'open_food_facts') return 'Open Food Facts';
+    if (source === 'gs1') return 'GS1';
+    if (source === 'brazilian_commercial') return 'API brasileira';
+    return 'Cache';
+}
 
 export function AddEditProductModal({ open, onOpenChange, productToEdit, onManageBaseProducts }: AddEditProductModalProps) {
     const { addProduct, updateProduct, getProductFullName } = useProducts();
+    const { firebaseUser } = useAuth();
     const { baseProducts } = useBaseProducts();
     const { classifications } = useClassifications();
     const { activeCategories } = useOperationalItemCategories();
@@ -130,26 +241,32 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const [aliases, setAliases] = useState<string[]>([]);
     const [aliasInput, setAliasInput] = useState('');
     const [currentStep, setCurrentStep] = useState(1);
+    const [barcodeLookup, setBarcodeLookup] = useState<ProductLookupResponse | null>(null);
+    const [selectedLookupProduct, setSelectedLookupProduct] = useState<NormalizedProductData | null>(null);
+    const [barcodeLookupLoading, setBarcodeLookupLoading] = useState(false);
+    const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [highestStepPosition, setHighestStepPosition] = useState(0);
+    const [operationalCategoryOpen, setOperationalCategoryOpen] = useState(false);
+    const [baseProductOpen, setBaseProductOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const instructionFileInputRef = useRef<HTMLInputElement>(null);
     const nutritionalTableFileInputRef = useRef<HTMLInputElement>(null);
     const compositionFileInputRef = useRef<HTMLInputElement>(null);
+    const dialogContentRef = useRef<HTMLDivElement>(null);
 
     const form = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
-        defaultValues: {
-            baseName: '', brand: '', barcode: '', imageUrl: '',
-            packageType: '',
-            category: 'Massa', packageSize: undefined, unit: 'g',
-            notes: '', baseProductId: '',
-            operationalCategoryId: '',
-            apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
-            apparelMaterial: '', apparelUsage: '',
-            defaultCountingUnit: 'package',
-            enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
-            enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
-            nutritionalTableImageUrl: '', compositionImageUrl: '',
-        }
+        defaultValues: createEmptyProductFormValues(),
+    });
+
+    const {
+        fields: uniformInstructionFields,
+        append: appendUniformInstruction,
+        remove: removeUniformInstruction,
+    } = useFieldArray({
+        control: form.control,
+        name: 'uniformCareInstructions',
     });
 
     const groupedBaseProducts = useMemo(() => {
@@ -176,8 +293,29 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const packageTypeWatch = form.watch('packageType');
     const packageSizeWatch = form.watch('packageSize');
     const unitWatch = form.watch('unit');
+    const logisticsMultipleWatch = form.watch('multiplo_caixa');
+    const logisticsLabelWatch = form.watch('rotulo_caixa');
+    const logisticsLabelDisplay =
+        packageTypeWatch === 'Caixa' && logisticsLabelWatch === 'Caixa'
+            ? 'Caixa mestra'
+            : logisticsLabelWatch;
     const countingUnitWatch = form.watch('defaultCountingUnit') || 'package';
-    const isApparel = categoryWatch === 'Vestimenta';
+    const selectedOperationalCategory = useMemo(
+        () => activeCategories.find((category) => category.id === operationalCategoryIdWatch),
+        [activeCategories, operationalCategoryIdWatch],
+    );
+    const isApparel = categoryWatch === 'Vestimenta' || selectedOperationalCategory?.destination === 'uniform';
+    const showNutritionStep = selectedOperationalCategory?.slug === 'insumo' || selectedOperationalCategory?.id === 'insumo';
+    const wizardSteps = useMemo(
+        () => [
+            ...WIZARD_STEPS,
+            ...(isApparel ? [UNIFORM_INSTRUCTIONS_STEP] : []),
+            ...(showNutritionStep ? [NUTRITION_STEP] : []),
+        ],
+        [isApparel, showNutritionStep],
+    );
+    const currentStepMeta = wizardSteps.find((step) => step.id === currentStep) ?? wizardSteps[0];
+    const currentStepPosition = Math.max(0, wizardSteps.findIndex((step) => step.id === currentStep));
 
     const linkedBaseProduct = useMemo(
         () => baseProducts.find((bp) => bp.id === baseProductIdWatch),
@@ -208,18 +346,55 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             form.setValue('packageType', 'Unidade', { shouldDirty: true, shouldValidate: true });
             form.setValue('packageSize', 1, { shouldDirty: true, shouldValidate: true });
             form.setValue('defaultCountingUnit', 'package', { shouldDirty: true, shouldValidate: true });
+            form.setValue('apparelSize', normalizeApparelSizeOption(form.getValues('apparelSize')) || 'ÚNICO', { shouldDirty: true });
             form.setValue('enableLogistics', false, { shouldDirty: true });
         }
     };
 
+    const handleOperationalCategoryChange = (value: string, onChange: (value: string) => void) => {
+        onChange(value);
+        const selectedCategory = activeCategories.find((category) => category.id === value);
+        if (selectedCategory?.destination === 'uniform') {
+            handleCategoryChange('Vestimenta');
+        }
+        if (selectedCategory?.destination === 'asset') {
+            form.setValue('category', 'Unidade', { shouldDirty: true, shouldValidate: true });
+            form.setValue('packageType', 'Unidade', { shouldDirty: true, shouldValidate: true });
+            form.setValue('packageSize', 1, { shouldDirty: true, shouldValidate: true });
+            form.setValue('unit', 'un', { shouldDirty: true, shouldValidate: true });
+            form.setValue('defaultCountingUnit', 'package', { shouldDirty: true, shouldValidate: true });
+            form.setValue('baseProductId', '', { shouldDirty: true });
+            form.setValue('enableLogistics', false, { shouldDirty: true });
+        }
+    };
+
+    const handleBaseProductChange = (value: string, onChange: (value: string) => void) => {
+        const nextValue = value || '';
+        onChange(nextValue);
+        const selectedBaseProduct = baseProducts.find((baseProduct) => baseProduct.id === nextValue);
+        if (!selectedBaseProduct) return;
+
+        handleCategoryChange(selectedBaseProduct.category);
+        form.setValue('unit', selectedBaseProduct.unit, { shouldDirty: true, shouldValidate: true });
+    };
+
+    useEffect(() => {
+        if (!wizardSteps.some((step) => step.id === currentStep)) {
+            setCurrentStep(wizardSteps[wizardSteps.length - 1]?.id ?? 1);
+        }
+    }, [currentStep, wizardSteps]);
+
     useEffect(() => {
         if (open) {
             setCurrentStep(1);
+            setHighestStepPosition(0);
             if (productToEdit) {
                  form.reset({
                     baseName: productToEdit.baseName,
                     brand: productToEdit.brand || '',
                     barcode: productToEdit.barcode || '',
+                    ncm: productToEdit.ncm || '',
+                    cest: productToEdit.cest || '',
                     imageUrl: productToEdit.imageUrl || '',
                     packageType: productToEdit.packageType || '',
                     category: productToEdit.category,
@@ -228,12 +403,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     notes: productToEdit.notes || '',
                     baseProductId: productToEdit.baseProductId || '',
                     operationalCategoryId: productToEdit.operationalCategoryId || '',
-                    apparelType: productToEdit.apparelType || '',
-                    apparelSize: productToEdit.apparelSize || '',
+                    apparelSize: normalizeApparelSizeOption(productToEdit.apparelSize),
                     apparelColor: productToEdit.apparelColor || '',
-                    apparelFit: productToEdit.apparelFit || '',
-                    apparelMaterial: productToEdit.apparelMaterial || '',
-                    apparelUsage: productToEdit.apparelUsage || '',
+                    uniformCareInstructions: productToEdit.uniformCareInstructions?.length
+                        ? productToEdit.uniformCareInstructions
+                        : [makeInstructionSection()],
                     defaultCountingUnit: productToEdit.defaultCountingUnit || 'package',
                     // Switches
                     enableLogistics: !!productToEdit.multiplo_caixa,
@@ -248,22 +422,15 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 });
                 setAliases(productToEdit.aliases ?? []);
             } else {
-                form.reset({
-                    baseName: '', brand: '', barcode: '', imageUrl: '',
-                    packageType: '',
-                    category: 'Massa', packageSize: undefined, unit: 'g',
-                    notes: '', baseProductId: '',
-                    operationalCategoryId: '',
-                    apparelType: '', apparelSize: '', apparelColor: '', apparelFit: '',
-                    apparelMaterial: '', apparelUsage: '',
-                    defaultCountingUnit: 'package',
-                    enableLogistics: false, multiplo_caixa: undefined, rotulo_caixa: '',
-                    enableCountingInstruction: false, countingInstruction: '', countingInstructionImageUrl: '',
-                    nutritionalTableImageUrl: '', compositionImageUrl: '',
-                });
+                form.reset(createEmptyProductFormValues());
                 setAliases([]);
             }
             setAliasInput('');
+            setBarcodeLookup(null);
+            setSelectedLookupProduct(null);
+            setBarcodeLookupError(null);
+            setOperationalCategoryOpen(false);
+            setBaseProductOpen(false);
         }
     }, [open, productToEdit, form]);
 
@@ -275,9 +442,73 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
 
     const handleScanSuccess = (decodedText: string) => {
-        form.setValue('barcode', decodedText, { shouldValidate: true });
+        form.setValue('barcode', decodedText, { shouldDirty: true, shouldValidate: true });
         setIsScannerOpen(false);
+        void handleBarcodeLookup(decodedText);
     };
+
+    const applyLookupProduct = (product: NormalizedProductData) => {
+        const defaultOperationalCategory = activeCategories.find((category) =>
+            category.slug === 'insumo' || category.name.toLowerCase() === 'insumo'
+        );
+        setSelectedLookupProduct(product);
+        form.setValue('baseName', product.nome || '', { shouldDirty: true, shouldValidate: true });
+        form.setValue('brand', product.marca || '', { shouldDirty: true });
+        form.setValue('barcode', product.codigo_barras || product.gtin || '', { shouldDirty: true, shouldValidate: true });
+        form.setValue('imageUrl', product.imagem_url || '', { shouldDirty: true });
+        form.setValue('ncm', product.ncm || '', { shouldDirty: true });
+        form.setValue('cest', product.cest || '', { shouldDirty: true });
+        if (product.unitCategory) form.setValue('category', product.unitCategory, { shouldDirty: true, shouldValidate: true });
+        if (product.quantidade) form.setValue('packageSize', product.quantidade, { shouldDirty: true, shouldValidate: true });
+        if (product.unidade_medida) form.setValue('unit', product.unidade_medida, { shouldDirty: true, shouldValidate: true });
+        if (!form.getValues('packageType')) form.setValue('packageType', 'Unidade', { shouldDirty: true, shouldValidate: true });
+        if (!form.getValues('operationalCategoryId') && defaultOperationalCategory) {
+            form.setValue('operationalCategoryId', defaultOperationalCategory.id, { shouldDirty: true, shouldValidate: true });
+        }
+
+        const lookupNotes = [
+            `Dados preenchidos por lookup de codigo de barras. Fonte: ${product.origem_dados}. Confianca: ${Math.round(product.confianca * 100)}%.`,
+            product.categoria ? `Categoria externa: ${product.categoria}.` : null,
+            product.ingredientes ? `Ingredientes: ${product.ingredientes}` : null,
+        ].filter(Boolean).join('\n');
+        const currentNotes = form.getValues('notes')?.trim();
+        if (lookupNotes && !currentNotes?.includes('Dados preenchidos por lookup de codigo de barras')) {
+            form.setValue('notes', [currentNotes, lookupNotes].filter(Boolean).join('\n\n'), { shouldDirty: true });
+        }
+    };
+
+    async function handleBarcodeLookup(barcodeOverride?: string) {
+        const barcode = (barcodeOverride ?? form.getValues('barcode'))?.trim();
+        setBarcodeLookupError(null);
+        if (!barcode) {
+            setBarcodeLookupError('Informe ou escaneie um codigo de barras antes de consultar.');
+            return;
+        }
+        if (!firebaseUser) {
+            setBarcodeLookupError('Usuario nao autenticado.');
+            return;
+        }
+
+        setBarcodeLookupLoading(true);
+        try {
+            const token = await firebaseUser.getIdToken();
+            const response = await fetch(`/api/products/barcode/${encodeURIComponent(barcode)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || payload.mensagem || 'Falha ao consultar codigo de barras.');
+            const lookup = payload as ProductLookupResponse;
+            setBarcodeLookup(lookup);
+            if (lookup.produto) applyLookupProduct(lookup.produto);
+            if (!lookup.found) setBarcodeLookupError(lookup.mensagem || 'Produto não encontrado nas bases consultadas.');
+        } catch (error) {
+            setBarcodeLookup(null);
+            setSelectedLookupProduct(null);
+            setBarcodeLookupError(error instanceof Error ? error.message : 'Falha ao consultar codigo de barras.');
+        } finally {
+            setBarcodeLookupLoading(false);
+        }
+    }
 
     /** Redimensiona e comprime um data URL para caber no limite do Firestore (1MB/doc). */
     const compressImage = (dataUrl: string, maxSide = 800, quality = 0.82): Promise<string> =>
@@ -326,17 +557,40 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
         }
     };
 
-    const onSubmit = (values: ProductFormValues) => {
+    const buildProductData = (values: ProductFormValues): Omit<Product, 'id'> => {
+        const uniformCareInstructions = normalizeUniformCareInstructions(values.uniformCareInstructions);
 
-
-        const productData: Omit<Product, 'id'> = {
+        return {
             operationalCategoryId: values.operationalCategoryId,
             operationalCategoryName: activeCategories.find((category) => category.id === values.operationalCategoryId)?.name,
             operationalDestination: activeCategories.find((category) => category.id === values.operationalCategoryId)?.destination,
             baseName: values.baseName,
             brand: values.brand,
             barcode: values.barcode,
+            gtin: values.barcode,
             imageUrl: values.imageUrl,
+            description: selectedLookupProduct?.descricao,
+            externalCategory: selectedLookupProduct?.categoria,
+            ingredients: selectedLookupProduct?.ingredientes,
+            nutritionFacts: selectedLookupProduct?.informacoes_nutricionais,
+            ncm: values.ncm,
+            cest: values.cest,
+            dataSource: selectedLookupProduct?.origem_dados,
+            confidence: selectedLookupProduct?.confianca,
+            lastBarcodeLookupAt: selectedLookupProduct?.data_consulta,
+            codigo_barras: values.barcode,
+            nome: values.baseName,
+            marca: values.brand,
+            descricao: selectedLookupProduct?.descricao,
+            categoria_id: values.operationalCategoryId,
+            quantidade: values.packageSize,
+            unidade_medida: values.unit,
+            imagem_url: values.imageUrl,
+            ingredientes: selectedLookupProduct?.ingredientes,
+            informacoes_nutricionais: selectedLookupProduct?.informacoes_nutricionais,
+            origem_dados: selectedLookupProduct?.origem_dados,
+            confianca: selectedLookupProduct?.confianca,
+            data_consulta: selectedLookupProduct?.data_consulta,
             packageType: values.packageType as PackageType,
             category: values.category,
             packageSize: values.packageSize,
@@ -344,12 +598,9 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             notes: values.notes,
             baseProductId: values.baseProductId,
             defaultCountingUnit: values.defaultCountingUnit,
-            apparelType: values.category === 'Vestimenta' ? values.apparelType : undefined,
-            apparelSize: values.category === 'Vestimenta' ? values.apparelSize : undefined,
-            apparelColor: values.category === 'Vestimenta' ? values.apparelColor : undefined,
-            apparelFit: values.category === 'Vestimenta' ? values.apparelFit : undefined,
-            apparelMaterial: values.category === 'Vestimenta' ? values.apparelMaterial : undefined,
-            apparelUsage: values.category === 'Vestimenta' ? values.apparelUsage : undefined,
+            apparelSize: isApparel ? values.apparelSize : undefined,
+            apparelColor: isApparel ? values.apparelColor : undefined,
+            uniformCareInstructions: isApparel ? uniformCareInstructions : undefined,
 
             multiplo_caixa: values.enableLogistics ? values.multiplo_caixa : undefined,
             rotulo_caixa: values.enableLogistics ? values.rotulo_caixa : undefined,
@@ -357,24 +608,70 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             countingInstruction: values.enableCountingInstruction ? values.countingInstruction : undefined,
             countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl : undefined,
 
-            nutritionalTableImageUrl: values.nutritionalTableImageUrl || undefined,
-            compositionImageUrl: values.compositionImageUrl || undefined,
-            nutritionalData: productToEdit?.nutritionalData,
-            compositionText: productToEdit?.compositionText,
-            detectedAllergens: productToEdit?.detectedAllergens,
+            nutritionalTableImageUrl: showNutritionStep ? values.nutritionalTableImageUrl || undefined : undefined,
+            compositionImageUrl: showNutritionStep ? values.compositionImageUrl || undefined : undefined,
+            nutritionalData: showNutritionStep ? productToEdit?.nutritionalData : undefined,
+            compositionText: showNutritionStep ? productToEdit?.compositionText : undefined,
+            detectedAllergens: showNutritionStep ? productToEdit?.detectedAllergens : undefined,
             aliases: aliases.length > 0 ? aliases : undefined,
         };
+    };
 
-        if (productToEdit) {
-            updateProduct({ ...productToEdit, ...productData });
-        } else {
-            addProduct(productData);
+    const createProduct = async (values: ProductFormValues) => {
+        const productData = buildProductData(values);
+        setIsSaving(true);
+        try {
+            if (barcodeLookup?.internalProduct?.id) {
+                if (!firebaseUser) throw new Error('Usuario nao autenticado.');
+                const token = await firebaseUser.getIdToken();
+                const response = await fetch(`/api/products/${barcodeLookup.internalProduct.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(productData),
+                });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Falha ao atualizar produto existente.');
+                }
+            } else if (selectedLookupProduct || barcodeLookup?.sources?.length) {
+                if (!firebaseUser) throw new Error('Usuario nao autenticado.');
+                const token = await firebaseUser.getIdToken();
+                const response = await fetch('/api/products', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({
+                        product: productData,
+                        lookupProduct: selectedLookupProduct ?? undefined,
+                        sources: barcodeLookup?.sources ?? [],
+                    }),
+                });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Falha ao salvar produto.');
+                }
+            } else {
+                await addProduct(productData);
+            }
+            toast({ title: 'Insumo cadastrado', description: 'O cadastro foi salvo com sucesso.' });
+            onOpenChange(false);
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Falha ao salvar produto',
+                description: error instanceof Error ? error.message : 'Tente novamente.',
+            });
+        } finally {
+            setIsSaving(false);
         }
-        onOpenChange(false);
+    };
+
+    const onSubmit = async (values: ProductFormValues) => {
+        if (productToEdit) return;
+        await createProduct(values);
     };
 
     const fieldStep: Partial<Record<keyof ProductFormValues, number>> = {
-        baseName: 1, operationalCategoryId: 1,
+        baseName: 1, operationalCategoryId: 1, apparelSize: 1, apparelColor: 1, uniformCareInstructions: 4,
         packageType: 3, category: 3, packageSize: 3, unit: 3, multiplo_caixa: 3, rotulo_caixa: 3, countingInstruction: 3,
     };
 
@@ -392,13 +689,153 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
             ...(enableLogisticsWatch ? (['multiplo_caixa', 'rotulo_caixa'] as (keyof ProductFormValues)[]) : []),
             ...(enableCountingInstructionWatch ? (['countingInstruction'] as (keyof ProductFormValues)[]) : [])],
         4: [],
+        5: [],
+    };
+
+    const buildEditPayload = (
+        step: number,
+        values: ProductFormValues,
+    ): Partial<Omit<Product, 'id'>> => {
+        const selectedCategory = activeCategories.find((category) => category.id === values.operationalCategoryId);
+
+        if (step === 1) {
+            const lookupFields: Partial<Omit<Product, 'id'>> = selectedLookupProduct
+                ? {
+                    description: selectedLookupProduct.descricao,
+                    externalCategory: selectedLookupProduct.categoria,
+                    ingredients: selectedLookupProduct.ingredientes,
+                    nutritionFacts: selectedLookupProduct.informacoes_nutricionais,
+                    dataSource: selectedLookupProduct.origem_dados,
+                    confidence: selectedLookupProduct.confianca,
+                    lastBarcodeLookupAt: selectedLookupProduct.data_consulta,
+                    descricao: selectedLookupProduct.descricao,
+                    ingredientes: selectedLookupProduct.ingredientes,
+                    informacoes_nutricionais: selectedLookupProduct.informacoes_nutricionais,
+                    origem_dados: selectedLookupProduct.origem_dados,
+                    confianca: selectedLookupProduct.confianca,
+                    data_consulta: selectedLookupProduct.data_consulta,
+                }
+                : {};
+            const dirtyFields = form.formState.dirtyFields;
+            const packageSize = Number(values.packageSize);
+
+            return {
+                operationalCategoryId: values.operationalCategoryId,
+                operationalCategoryName: selectedCategory?.name,
+                operationalDestination: selectedCategory?.destination,
+                baseName: values.baseName,
+                brand: values.brand ?? '',
+                barcode: values.barcode ?? '',
+                gtin: values.barcode ?? '',
+                imageUrl: values.imageUrl ?? '',
+                ncm: values.ncm ?? '',
+                cest: values.cest ?? '',
+                codigo_barras: values.barcode ?? '',
+                nome: values.baseName,
+                marca: values.brand ?? '',
+                categoria_id: values.operationalCategoryId,
+                imagem_url: values.imageUrl ?? '',
+                notes: values.notes ?? '',
+                baseProductId: values.baseProductId ?? '',
+                apparelSize: isApparel ? values.apparelSize ?? '' : '',
+                apparelColor: isApparel ? values.apparelColor ?? '' : '',
+                ...(dirtyFields.category ? { category: values.category } : {}),
+                ...(dirtyFields.unit ? { unit: values.unit, unidade_medida: values.unit } : {}),
+                ...(dirtyFields.packageType ? { packageType: values.packageType as PackageType } : {}),
+                ...(dirtyFields.packageSize && Number.isFinite(packageSize)
+                    ? { packageSize, quantidade: packageSize }
+                    : {}),
+                ...(dirtyFields.defaultCountingUnit ? { defaultCountingUnit: values.defaultCountingUnit } : {}),
+                ...lookupFields,
+            };
+        }
+
+        if (step === 2) {
+            return { aliases };
+        }
+
+        if (step === 3) {
+            const packageSize = Number(values.packageSize);
+            return {
+                packageType: values.packageType as PackageType,
+                category: values.category,
+                packageSize,
+                unit: values.unit,
+                quantidade: packageSize,
+                unidade_medida: values.unit,
+                defaultCountingUnit: values.defaultCountingUnit,
+                multiplo_caixa: values.enableLogistics ? Number(values.multiplo_caixa) : 0,
+                rotulo_caixa: values.enableLogistics ? values.rotulo_caixa ?? '' : '',
+                countingInstruction: values.enableCountingInstruction ? values.countingInstruction ?? '' : '',
+                countingInstructionImageUrl: values.enableCountingInstruction ? values.countingInstructionImageUrl ?? '' : '',
+            };
+        }
+
+        if (step === 4) {
+            return { uniformCareInstructions: normalizeUniformCareInstructions(values.uniformCareInstructions) };
+        }
+
+        if (step === 5) {
+            return {
+                nutritionalTableImageUrl: values.nutritionalTableImageUrl ?? '',
+                compositionImageUrl: values.compositionImageUrl ?? '',
+            };
+        }
+
+        return {};
+    };
+
+    const handleSaveEditStep = async () => {
+        if (!productToEdit) return;
+
+        const currentStepIsValid = await form.trigger(stepFields[currentStep]);
+        if (!currentStepIsValid) {
+            toast({
+                variant: 'destructive',
+                title: 'Revise esta etapa',
+                description: 'Preencha os campos obrigatórios destacados antes de salvar.',
+            });
+            return;
+        }
+
+        const values = form.getValues();
+        setIsSaving(true);
+        try {
+            await updateProduct({
+                id: productToEdit.id,
+                ...buildEditPayload(currentStep, values),
+            });
+            toast({
+                title: 'Alterações salvas',
+                description: `A etapa “${currentStepMeta.label}” foi atualizada.`,
+            });
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Falha ao salvar alterações',
+                description: error instanceof Error ? error.message : 'Tente novamente.',
+            });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleNext = async () => {
-        const valid = await form.trigger(stepFields[currentStep]);
-        if (valid) setCurrentStep((step) => Math.min(WIZARD_STEPS.length, step + 1));
+        const valid = productToEdit ? true : await form.trigger(stepFields[currentStep]);
+        if (valid) {
+            const currentIndex = wizardSteps.findIndex((step) => step.id === currentStep);
+            const nextStep = wizardSteps[currentIndex + 1];
+            if (nextStep) {
+                setHighestStepPosition((position) => Math.max(position, currentIndex + 1));
+                setCurrentStep(nextStep.id);
+            }
+        }
     };
-    const handleBack = () => setCurrentStep((step) => Math.max(1, step - 1));
+    const handleBack = () => {
+        const currentIndex = wizardSteps.findIndex((step) => step.id === currentStep);
+        const previousStep = wizardSteps[currentIndex - 1];
+        if (previousStep) setCurrentStep(previousStep.id);
+    };
 
     const handleAddAlias = () => {
         const nextAlias = aliasInput.trim();
@@ -427,12 +864,14 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
     const editingTitle = productToEdit
         ? `Editar insumo${linkedBaseProduct ? ' derivado' : ''}`
         : 'Adicionar novo insumo';
-    const subtitle = productToEdit ? getProductFullName(productToEdit) : 'Preencha os detalhes do insumo nas etapas abaixo.';
+    const subtitle = productToEdit
+        ? getProductFullName(productToEdit)
+        : 'Preencha os detalhes do insumo nas etapas abaixo.';
 
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="w-[95vw] sm:max-w-5xl p-0 gap-0 overflow-hidden">
+                <DialogContent ref={dialogContentRef} className="w-[95vw] sm:max-w-5xl p-0 gap-0 overflow-hidden">
                     {/* Header */}
                     <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
                         <div className="flex flex-wrap items-center gap-2">
@@ -459,26 +898,36 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                     </DialogHeader>
 
                     <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit, onInvalid)}>
+                    <form
+                        onSubmit={productToEdit
+                            ? (event) => {
+                                event.preventDefault();
+                                void handleSaveEditStep();
+                            }
+                            : form.handleSubmit(onSubmit, onInvalid)}
+                    >
                         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
                             {/* Stepper sidebar */}
                             <aside className="border-r bg-muted/40 px-5 py-6">
-                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {WIZARD_STEPS.length}</p>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStepPosition + 1} de {wizardSteps.length}</p>
                                 <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                    <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${(currentStep / WIZARD_STEPS.length) * 100}%` }} />
+                                    <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${((currentStepPosition + 1) / wizardSteps.length) * 100}%` }} />
                                 </div>
                                 <nav className="space-y-1">
-                                    {WIZARD_STEPS.map((step) => {
+                                    {wizardSteps.map((step, index) => {
                                         const isActive = step.id === currentStep;
-                                        const isDone = step.id < currentStep;
+                                        const isDone = index < currentStepPosition;
+                                        const isLocked = !productToEdit && index > highestStepPosition;
                                         return (
                                             <button
                                                 key={step.id}
                                                 type="button"
+                                                disabled={isLocked}
                                                 onClick={() => setCurrentStep(step.id)}
                                                 className={cn(
                                                     'flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm transition-colors',
                                                     isActive ? 'font-semibold text-foreground' : 'text-muted-foreground hover:bg-muted',
+                                                    isLocked && 'cursor-not-allowed opacity-50 hover:bg-transparent',
                                                 )}
                                             >
                                                 <span className={cn(
@@ -501,11 +950,11 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                     <div className="mb-5 flex items-start justify-between gap-4">
                                         <div className="flex items-start gap-3">
                                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50 text-foreground">
-                                                {React.createElement(WIZARD_STEPS[currentStep - 1].icon, { className: 'h-4 w-4' })}
+                                                {React.createElement(currentStepMeta.icon, { className: 'h-4 w-4' })}
                                             </div>
                                             <div>
-                                                <h3 className="font-semibold leading-tight">{WIZARD_STEPS[currentStep - 1].label}</h3>
-                                                <p className="text-sm text-muted-foreground">{WIZARD_STEPS[currentStep - 1].description}</p>
+                                                <h3 className="font-semibold leading-tight">{currentStepMeta.label}</h3>
+                                                <p className="text-sm text-muted-foreground">{currentStepMeta.description}</p>
                                             </div>
                                         </div>
                                         {currentStep === 1 && linkedBaseProduct && (
@@ -544,16 +993,117 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     <FormItem>
                                                         <div className="flex items-center justify-between">
                                                             <FormLabel>Código de barras</FormLabel>
-                                                            <span className="text-xs text-muted-foreground">EAN-13 / GTIN</span>
+                                                            <span className="text-xs text-muted-foreground">EAN-8 / EAN-13 / UPC / GTIN</span>
                                                         </div>
                                                         <div className="flex gap-2">
-                                                            <FormControl><Input placeholder="Escanear ou digitar" {...field} value={field.value ?? ''} /></FormControl>
+                                                            <FormControl>
+                                                                <Input
+                                                                    placeholder="Escanear ou digitar"
+                                                                    {...field}
+                                                                    value={field.value ?? ''}
+                                                                    onChange={(event) => {
+                                                                        field.onChange(event);
+                                                                        setBarcodeLookup(null);
+                                                                        setSelectedLookupProduct(null);
+                                                                        setBarcodeLookupError(null);
+                                                                    }}
+                                                                    onBlur={(event) => {
+                                                                        field.onBlur();
+                                                                        const value = event.currentTarget.value;
+                                                                        const normalized = normalizeBarcodeDigits(value);
+                                                                        const currentLookupCode = normalizeBarcodeDigits(
+                                                                            barcodeLookup?.produto?.codigo_barras ?? barcodeLookup?.produto?.gtin,
+                                                                        );
+                                                                        if (shouldAutoLookupBarcode(value) && normalized !== currentLookupCode && !barcodeLookupLoading) {
+                                                                            void handleBarcodeLookup(value);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </FormControl>
                                                             <Button type="button" variant="outline" size="icon" onClick={() => setIsScannerOpen(true)}><ScanLine className="h-4 w-4" /></Button>
+                                                            <Button type="button" variant="outline" onClick={() => void handleBarcodeLookup()} disabled={barcodeLookupLoading}>
+                                                                <Search className="mr-1.5 h-4 w-4" />
+                                                                {barcodeLookupLoading ? 'Consultando' : 'Consultar'}
+                                                            </Button>
                                                         </div>
+                                                        {barcodeLookupError ? <p className="text-xs text-destructive">{barcodeLookupError}</p> : null}
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}/>
                                             </div>
+
+                                            {barcodeLookup && (
+                                                <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                                        <div>
+                                                            <p className="flex items-center gap-1.5 text-sm font-semibold">
+                                                                <Database className="h-4 w-4" />
+                                                                Resultado da consulta
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {barcodeLookup.cacheHit ? 'Usando cache recente.' : 'Fontes consultadas em tempo real ou configuradas.'}
+                                                            </p>
+                                                        </div>
+                                                        {barcodeLookup.internalProduct ? (
+                                                            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                                                                Produto já cadastrado
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+
+                                                    {barcodeLookup.conflitos.length > 0 ? (
+                                                        <Alert>
+                                                            <AlertTriangle className="h-4 w-4" />
+                                                            <AlertTitle>Diferenças entre fontes</AlertTitle>
+                                                            <AlertDescription>
+                                                                Revise os campos destacados abaixo e aplique a fonte que preferir antes de salvar.
+                                                            </AlertDescription>
+                                                        </Alert>
+                                                    ) : null}
+
+                                                    <div className="grid gap-2 md:grid-cols-2">
+                                                        {barcodeLookup.sources.map((source, index) => (
+                                                            <div key={`${source.fonte}-${source.status}-${index}`} className="rounded-lg border bg-background p-3">
+                                                                <div className="mb-2 flex items-center justify-between gap-2">
+                                                                    <span className="text-sm font-semibold">{lookupSourceLabel(source.fonte)}</span>
+                                                                    <span className={cn(
+                                                                        'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
+                                                                        source.status === 'found' ? 'bg-emerald-100 text-emerald-700' :
+                                                                            source.status === 'error' ? 'bg-rose-100 text-rose-700' :
+                                                                                source.status === 'skipped' ? 'bg-zinc-100 text-zinc-600' :
+                                                                                    'bg-amber-100 text-amber-700',
+                                                                    )}>
+                                                                        {source.status === 'found' ? 'encontrado' : source.status === 'skipped' ? 'não configurado' : source.status === 'error' ? 'erro' : 'não encontrado'}
+                                                                    </span>
+                                                                </div>
+                                                                {source.dados ? (
+                                                                    <div className="space-y-1 text-xs text-muted-foreground">
+                                                                        <p className="line-clamp-1 font-medium text-foreground">{source.dados.nome}</p>
+                                                                        {source.dados.marca ? <p>Marca: {source.dados.marca}</p> : null}
+                                                                        {source.dados.ncm ? <p>NCM: {source.dados.ncm}</p> : null}
+                                                                        <Button type="button" variant="outline" size="sm" className="mt-2 h-8" onClick={() => applyLookupProduct(source.dados!)}>
+                                                                            Aplicar esta fonte
+                                                                        </Button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-xs text-muted-foreground">{source.mensagem || 'Sem dados para aplicar.'}</p>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    {barcodeLookup.conflitos.length > 0 ? (
+                                                        <div className="space-y-1 text-xs text-muted-foreground">
+                                                            {barcodeLookup.conflitos.slice(0, 4).map((conflict) => (
+                                                                <p key={conflict.campo}>
+                                                                    <span className="font-semibold text-foreground">{conflict.campo}:</span>{' '}
+                                                                    {conflict.valores.map((value) => `${lookupSourceLabel(value.fonte)} = ${String(value.valor)}`).join(' | ')}
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            )}
 
                                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                                 <FormField control={form.control} name="operationalCategoryId" render={({ field }) => (
@@ -562,14 +1112,56 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <FormLabel>Categoria do item <span className="text-rose-500">*</span></FormLabel>
                                                             <span className="text-xs text-muted-foreground">define o fluxo de compra</span>
                                                         </div>
-                                                        <Select onValueChange={field.onChange} value={field.value}>
-                                                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione a categoria do item..."/></SelectTrigger></FormControl>
-                                                            <SelectContent>
-                                                                {activeCategories.filter((category) => category.destination !== 'asset').map((category) => (
-                                                                    <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                        <Popover open={operationalCategoryOpen} onOpenChange={setOperationalCategoryOpen}>
+                                                            <PopoverTrigger asChild>
+                                                                <FormControl>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        role="combobox"
+                                                                        aria-expanded={operationalCategoryOpen}
+                                                                        className="w-full justify-between font-normal"
+                                                                    >
+                                                                        <span className={cn('truncate', !selectedOperationalCategory && 'text-muted-foreground')}>
+                                                                            {selectedOperationalCategory?.name || 'Selecione a categoria do item...'}
+                                                                        </span>
+                                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                    </Button>
+                                                                </FormControl>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent
+                                                                align="start"
+                                                                portalContainer={dialogContentRef.current}
+                                                                className="pointer-events-auto z-[70] w-[var(--radix-popover-trigger-width)] p-0"
+                                                            >
+                                                                <Command>
+                                                                    <CommandInput placeholder="Buscar categoria..." />
+                                                                    <CommandList>
+                                                                        <CommandEmpty>Nenhuma categoria encontrada.</CommandEmpty>
+                                                                        <CommandGroup>
+                                                                            {activeCategories.map((category) => (
+                                                                                <CommandItem
+                                                                                    key={category.id}
+                                                                                    value={`${category.name} ${normalizeAlias(category.name)} ${category.slug || ''}`}
+                                                                                    onSelect={() => {
+                                                                                        handleOperationalCategoryChange(category.id, field.onChange);
+                                                                                        setOperationalCategoryOpen(false);
+                                                                                    }}
+                                                                                >
+                                                                                    <Check className={cn('mr-2 h-4 w-4', field.value === category.id ? 'opacity-100' : 'opacity-0')} />
+                                                                                    <span className="truncate">{category.name}</span>
+                                                                                </CommandItem>
+                                                                            ))}
+                                                                        </CommandGroup>
+                                                                    </CommandList>
+                                                                </Command>
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                        {selectedOperationalCategory?.destination === 'asset' ? (
+                                                            <FormDescription>
+                                                                Esta categoria entra no fluxo de patrimônio: nas compras, cada unidade recebida pode gerar um bem patrimonial individual.
+                                                            </FormDescription>
+                                                        ) : null}
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}/>
@@ -580,19 +1172,109 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                             <span className="text-xs text-muted-foreground">agrupa e converte o estoque</span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            <Select onValueChange={(value) => field.onChange(value || '')} value={field.value || ''}>
-                                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione para agrupar..."/></SelectTrigger></FormControl>
-                                                                <SelectContent>
-                                                                    {groupedBaseProducts.map(([groupName, items]) => (
-                                                                        <SelectGroup key={groupName}>
-                                                                            <SelectLabel>{groupName}</SelectLabel>
-                                                                            {items.map(ap => (<SelectItem key={ap.id} value={ap.id}>{ap.name}</SelectItem>))}
-                                                                        </SelectGroup>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
+                                                            <Popover open={baseProductOpen} onOpenChange={setBaseProductOpen}>
+                                                                <PopoverTrigger asChild>
+                                                                    <FormControl>
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="outline"
+                                                                            role="combobox"
+                                                                            aria-expanded={baseProductOpen}
+                                                                            className="min-w-0 flex-1 justify-between font-normal"
+                                                                        >
+                                                                            <span className={cn('truncate', !linkedBaseProduct && 'text-muted-foreground')}>
+                                                                                {linkedBaseProduct?.name || 'Selecione para agrupar...'}
+                                                                            </span>
+                                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                        </Button>
+                                                                    </FormControl>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent
+                                                                    align="start"
+                                                                    portalContainer={dialogContentRef.current}
+                                                                    className="pointer-events-auto z-[70] w-[var(--radix-popover-trigger-width)] p-0"
+                                                                >
+                                                                    <Command>
+                                                                        <CommandInput placeholder="Buscar insumo base..." />
+                                                                        <CommandList>
+                                                                            <CommandEmpty>Nenhum insumo base encontrado.</CommandEmpty>
+                                                                            {field.value ? (
+                                                                                <CommandGroup>
+                                                                                    <CommandItem
+                                                                                        value="sem insumo base limpar desvincular"
+                                                                                        onSelect={() => {
+                                                                                            handleBaseProductChange('', field.onChange);
+                                                                                            setBaseProductOpen(false);
+                                                                                        }}
+                                                                                    >
+                                                                                        <X className="mr-2 h-4 w-4" />
+                                                                                        Sem insumo base
+                                                                                    </CommandItem>
+                                                                                </CommandGroup>
+                                                                            ) : null}
+                                                                            {groupedBaseProducts.map(([groupName, items]) => (
+                                                                                <CommandGroup key={groupName} heading={groupName}>
+                                                                                    {items.map((baseProduct) => (
+                                                                                        <CommandItem
+                                                                                            key={baseProduct.id}
+                                                                                            value={`${baseProduct.name} ${normalizeAlias(baseProduct.name)} ${baseProduct.unit} ${groupName} ${normalizeAlias(groupName)}`}
+                                                                                            onSelect={() => {
+                                                                                                handleBaseProductChange(baseProduct.id, field.onChange);
+                                                                                                setBaseProductOpen(false);
+                                                                                            }}
+                                                                                        >
+                                                                                            <Check className={cn('mr-2 h-4 w-4', field.value === baseProduct.id ? 'opacity-100' : 'opacity-0')} />
+                                                                                            <span className="min-w-0 flex-1 truncate">{baseProduct.name}</span>
+                                                                                            <span className="ml-2 shrink-0 text-xs text-muted-foreground">{baseProduct.unit}</span>
+                                                                                        </CommandItem>
+                                                                                    ))}
+                                                                                </CommandGroup>
+                                                                            ))}
+                                                                        </CommandList>
+                                                                    </Command>
+                                                                </PopoverContent>
+                                                            </Popover>
                                                             <Button type="button" variant="outline" size="icon" onClick={onManageBaseProducts}><Settings className="h-4 w-4"/></Button>
                                                         </div>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                            </div>
+
+                                            {isApparel && (
+                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <FormField control={form.control} name="apparelSize" render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Tamanho</FormLabel>
+                                                            <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                                                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                                                <SelectContent>{APPAREL_SIZE_OPTIONS.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
+                                                            </Select>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )} />
+                                                    <FormField control={form.control} name="apparelColor" render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Cor</FormLabel>
+                                                            <FormControl><Input placeholder="Ex: Areia" {...field} value={field.value ?? ''} /></FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )} />
+                                                </div>
+                                            )}
+
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                <FormField control={form.control} name="ncm" render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>NCM</FormLabel>
+                                                        <FormControl><Input placeholder="ex: 19019020" {...field} value={field.value ?? ''} /></FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}/>
+                                                <FormField control={form.control} name="cest" render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>CEST</FormLabel>
+                                                        <FormControl><Input placeholder="ex: 17.089.00" {...field} value={field.value ?? ''} /></FormControl>
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}/>
@@ -688,7 +1370,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                             <Card className="space-y-4 border-amber-200 bg-amber-50/60 p-4 dark:bg-amber-900/20">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div>
-                                                        <h4 className="font-medium">Embalagem &amp; conversão</h4>
+                                                        <h4 className="font-medium">Embalagem e conversão</h4>
                                                         <p className="text-sm text-muted-foreground">O item físico que você compra. Define a conversão para a unidade do estoque.</p>
                                                     </div>
                                                     {linkedBaseProduct && baseConversion && (
@@ -700,7 +1382,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                                                     <FormField control={form.control} name="packageType" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel>Tipo de embalagem <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormLabel className="flex min-h-10 items-end">Tipo de embalagem <span className="text-rose-500">*</span></FormLabel>
                                                             <Select onValueChange={field.onChange} value={field.value}>
                                                                 <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                                                                 <SelectContent>{packageTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
@@ -710,7 +1392,7 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     )}/>
                                                     <FormField control={form.control} name="category" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel>Categoria da unidade <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormLabel className="flex min-h-10 items-end">Categoria da unidade <span className="text-rose-500">*</span></FormLabel>
                                                             <Select onValueChange={(value) => handleCategoryChange(value as UnitCategory)} value={field.value}>
                                                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                                                 <SelectContent>{unitCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}</SelectContent>
@@ -720,14 +1402,14 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                     )}/>
                                                     <FormField control={form.control} name="packageSize" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel>Qtd. embalagem <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormLabel className="flex min-h-10 items-end">Qtd. embalagem <span className="text-rose-500">*</span></FormLabel>
                                                             <FormControl><Input type="number" step="any" placeholder="ex: 144" {...field} value={field.value ?? ''} /></FormControl>
                                                             <FormMessage />
                                                         </FormItem>
                                                     )}/>
                                                     <FormField control={form.control} name="unit" render={({ field }) => (
                                                         <FormItem>
-                                                            <FormLabel>Unidade <span className="text-rose-500">*</span></FormLabel>
+                                                            <FormLabel className="flex min-h-10 items-end">Unidade <span className="text-rose-500">*</span></FormLabel>
                                                             <Select onValueChange={field.onChange} value={field.value}>
                                                                 <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                                                 <SelectContent>{getUnitsForCategory(categoryWatch).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
@@ -747,60 +1429,65 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                                 )}
                                             </Card>
 
-                                            {isApparel && (
-                                                <Card className="border-amber-200 bg-amber-50 p-4 dark:bg-amber-900/20">
-                                                    <p className="mb-3 text-sm font-semibold">Atributos do item</p>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <FormField control={form.control} name="apparelSize" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>Tamanho</FormLabel>
-                                                                <Select value={field.value ?? ''} onValueChange={field.onChange}>
-                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                                                    <SelectContent>{['PP','P','M','G','GG','XGG','Único'].map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
-                                                                </Select>
-                                                            </FormItem>
-                                                        )} />
-                                                        <FormField control={form.control} name="apparelColor" render={({ field }) => (<FormItem><FormLabel>Cor</FormLabel><FormControl><Input placeholder="Ex: Preto" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
-                                                        <FormField control={form.control} name="apparelType" render={({ field }) => (<FormItem><FormLabel>Modelo</FormLabel><FormControl><Input placeholder="Ex: Camiseta, Avental" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
-                                                        <FormField control={form.control} name="apparelMaterial" render={({ field }) => (<FormItem><FormLabel>Tecido / material</FormLabel><FormControl><Input placeholder="Ex: Algodão, Poliéster" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
-                                                        <FormField control={form.control} name="apparelUsage" render={({ field }) => (<FormItem className="col-span-2"><FormLabel>Uso</FormLabel><FormControl><Input placeholder="Ex: Cozinha, Atendimento, EPI" {...field} value={field.value ?? ''} /></FormControl></FormItem>)} />
-                                                    </div>
-                                                </Card>
-                                            )}
-
                                             <Card className="p-4">
                                                 <div className="flex items-center justify-between">
                                                     <div className="space-y-0.5">
                                                         <FormLabel className="text-base">Embalagem de agrupamento</FormLabel>
-                                                        <FormDescription>Quando o fornecedor entrega em caixas que agrupam várias unidades.</FormDescription>
+                                                        <FormDescription>
+                                                            Use quando o fornecedor agrupa várias embalagens menores em uma caixa, fardo, pallet ou tambor.
+                                                        </FormDescription>
                                                     </div>
                                                     <FormField control={form.control} name="enableLogistics" render={({ field }) => (<FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>)} />
                                                 </div>
                                                 {enableLogisticsWatch ? (
-                                                    <div className="mt-4 grid grid-cols-2 gap-4 border-t pt-4">
-                                                        <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>Quantidade</FormLabel>
-                                                                <FormControl><Input type="number" step="1" placeholder="Ex: 12" {...field} value={field.value ?? ''} /></FormControl>
-                                                                <FormDescription className="text-xs">Quantas unidades de compra cabem na embalagem de agrupamento (ex: 10 bags por caixa → 10).</FormDescription>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
-                                                        <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (
-                                                            <FormItem>
-                                                                <FormLabel>Tipo de agrupamento</FormLabel>
-                                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
-                                                                    <SelectContent>
-                                                                        <SelectItem value="Caixa">Caixa</SelectItem>
-                                                                        <SelectItem value="Fardo">Fardo</SelectItem>
-                                                                        <SelectItem value="Pallet">Pallet</SelectItem>
-                                                                        <SelectItem value="Tambor">Tambor</SelectItem>
-                                                                    </SelectContent>
-                                                                </Select>
-                                                                <FormMessage />
-                                                            </FormItem>
-                                                        )}/>
+                                                    <div className="mt-4 space-y-4 border-t pt-4">
+                                                        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                                                            Informe quantas <strong>{packageTypeWatch || 'embalagens menores'}</strong> existem em cada agrupamento.
+                                                            Não informe a quantidade de {unitWatch || 'unidades'}.
+                                                        </div>
+                                                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                                            <FormField control={form.control} name="multiplo_caixa" render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel>
+                                                                        Quantas {packageTypeWatch ? `${packageTypeWatch.toLowerCase()}s` : 'embalagens menores'} por agrupamento?
+                                                                    </FormLabel>
+                                                                    <FormControl><Input type="number" step="1" placeholder="Ex: 6" {...field} value={field.value ?? ''} /></FormControl>
+                                                                    <FormDescription className="text-xs">
+                                                                        Exemplo: se uma caixa mestra contém 6 {packageTypeWatch ? `${packageTypeWatch.toLowerCase()}s` : 'embalagens'}, informe 6 — não 1.800 unidades.
+                                                                    </FormDescription>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}/>
+                                                            <FormField control={form.control} name="rotulo_caixa" render={({ field }) => (
+                                                                <FormItem>
+                                                                    <FormLabel>Qual é o tipo do agrupamento?</FormLabel>
+                                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="Caixa">
+                                                                                {packageTypeWatch === 'Caixa' ? 'Caixa mestra' : 'Caixa'}
+                                                                            </SelectItem>
+                                                                            <SelectItem value="Fardo">Fardo</SelectItem>
+                                                                            <SelectItem value="Pallet">Pallet</SelectItem>
+                                                                            <SelectItem value="Tambor">Tambor</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <FormDescription className="text-xs">
+                                                                        Selecione como o fornecedor chama a embalagem externa.
+                                                                    </FormDescription>
+                                                                    <FormMessage />
+                                                                </FormItem>
+                                                            )}/>
+                                                        </div>
+                                                        {logisticsMultipleWatch && logisticsMultipleWatch > 0 && logisticsLabelWatch && (
+                                                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+                                                                <strong>Conversão:</strong> 1 {logisticsLabelDisplay} = {logisticsMultipleWatch}{' '}
+                                                                {packageTypeWatch ? `${packageTypeWatch}(s)` : 'embalagens menores'}
+                                                                {packageSizeWatch && unitWatch
+                                                                    ? ` = ${Number(logisticsMultipleWatch) * Number(packageSizeWatch)} ${unitWatch}`
+                                                                    : ''}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <p className="mt-3 text-xs text-muted-foreground">Desligado — este insumo é comprado por {packageTypeWatch ? packageTypeWatch.toLowerCase() : 'unidade'} avulso.</p>
@@ -874,8 +1561,70 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                                         </div>
                                     )}
 
-                                    {/* ===== STEP 4 — Nutricional ===== */}
-                                    {currentStep === 4 && (
+                                    {/* ===== STEP 4 — Instruções do uniforme ===== */}
+                                    {currentStep === 4 && isApparel && (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <h4 className="font-medium">Instruções do uniforme</h4>
+                                                    <p className="text-sm text-muted-foreground">Cadastre seções como lavagem, secagem, conservação ou uso.</p>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => appendUniformInstruction(makeInstructionSection('Nova seção'))}
+                                                >
+                                                    <Plus className="mr-1.5 h-4 w-4" /> Nova seção
+                                                </Button>
+                                            </div>
+
+                                            {uniformInstructionFields.length === 0 ? (
+                                                <div className="rounded-xl border border-dashed p-6 text-center">
+                                                    <p className="text-sm font-semibold text-muted-foreground">Nenhuma seção cadastrada.</p>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="mt-2"
+                                                        onClick={() => appendUniformInstruction(makeInstructionSection())}
+                                                    >
+                                                        <Plus className="mr-1.5 h-4 w-4" /> Adicionar lavagem
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    {uniformInstructionFields.map((section, sectionIndex) => (
+                                                        <div key={section.id} className="overflow-hidden rounded-xl border bg-white shadow-sm">
+                                                            <div className="flex items-center gap-3 border-b bg-gray-50 px-4 py-2">
+                                                                <span className="text-[10px] font-black uppercase text-gray-300">Seção {sectionIndex + 1}</span>
+                                                                <Input
+                                                                    {...form.register(`uniformCareInstructions.${sectionIndex}.name`)}
+                                                                    className="h-8 border-none bg-transparent p-0 text-sm font-bold text-gray-700 focus-visible:ring-0"
+                                                                    placeholder="Ex: Lavagem"
+                                                                />
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-7 w-7 text-gray-300 hover:text-red-500"
+                                                                    onClick={() => removeUniformInstruction(sectionIndex)}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </div>
+                                                            <div className="space-y-3 p-4">
+                                                                <UniformInstructionSteps control={form.control} register={form.register} sectionIndex={sectionIndex} />
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* ===== STEP 5 — Nutricional ===== */}
+                                    {currentStep === 5 && (
                                         <div className="space-y-4">
                                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                                 {/* Tabela nutricional */}
@@ -968,20 +1717,36 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
 
                         {/* Footer */}
                         <DialogFooter className="flex flex-row items-center justify-between gap-4 border-t px-6 py-4 sm:justify-between">
-                            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                                {productToEdit ? 'Fechar' : 'Cancelar'}
+                            </Button>
                             <div className="hidden flex-col items-center text-center sm:flex">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStep} de {WIZARD_STEPS.length}</span>
-                                <span className="text-sm font-medium">{WIZARD_STEPS[currentStep - 1].label}</span>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Etapa {currentStepPosition + 1} de {wizardSteps.length}</span>
+                                <span className="text-sm font-medium">{currentStepMeta.label}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                {currentStep > 1 && (
+                                {currentStepPosition > 0 && (
                                     <Button type="button" variant="outline" onClick={handleBack}><ChevronLeft className="mr-1 h-4 w-4" /> Voltar</Button>
                                 )}
-                                {currentStep < WIZARD_STEPS.length ? (
-                                    <Button type="button" className="bg-indigo-500 hover:bg-indigo-600" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
-                                ) : (
-                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600">{productToEdit ? 'Salvar alterações' : 'Adicionar insumo'}</Button>
-                                )}
+                                {currentStepPosition < wizardSteps.length - 1 ? (
+                                    <Button type="button" variant="outline" onClick={handleNext}>Avançar <ChevronRight className="ml-1 h-4 w-4" /></Button>
+                                ) : null}
+                                {productToEdit ? (
+                                    <Button
+                                        type="button"
+                                        className="bg-indigo-500 hover:bg-indigo-600"
+                                        disabled={isSaving}
+                                        onClick={() => void handleSaveEditStep()}
+                                    >
+                                        <Save className="mr-1.5 h-4 w-4" />
+                                        {isSaving ? 'Salvando' : 'Salvar alterações'}
+                                    </Button>
+                                ) : currentStepPosition === wizardSteps.length - 1 ? (
+                                    <Button type="submit" className="bg-indigo-500 hover:bg-indigo-600" disabled={isSaving}>
+                                        <Save className="mr-1.5 h-4 w-4" />
+                                        {isSaving ? 'Salvando' : 'Adicionar insumo'}
+                                    </Button>
+                                ) : null}
                             </div>
                         </DialogFooter>
                     </form>
@@ -1004,5 +1769,53 @@ export function AddEditProductModal({ open, onOpenChange, productToEdit, onManag
                 </Dialog>
             )}
         </>
+    );
+}
+
+function UniformInstructionSteps({
+    control,
+    register,
+    sectionIndex,
+}: {
+    control: any;
+    register: any;
+    sectionIndex: number;
+}) {
+    const { fields, append, remove } = useFieldArray({
+        control,
+        name: `uniformCareInstructions.${sectionIndex}.etapas`,
+    });
+
+    return (
+        <div className="space-y-3">
+            {fields.map((field, index) => (
+                <div key={field.id} className="flex items-center gap-3">
+                    <span className="w-5 text-right text-[10px] font-black text-gray-300">{index + 1}.</span>
+                    <Input
+                        {...register(`uniformCareInstructions.${sectionIndex}.etapas.${index}.text`)}
+                        placeholder="Ex: Lavar à mão com sabão neutro..."
+                        className="h-9 flex-1 border-gray-100 bg-gray-50 text-xs transition-colors focus:bg-white"
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-gray-200 hover:text-red-500"
+                        onClick={() => remove(index)}
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                </div>
+            ))}
+            <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="ml-8 h-8 px-2 text-xs font-bold text-gray-400 hover:text-gray-600"
+                onClick={() => append({ id: makeInstructionId(), text: '' })}
+            >
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Adicionar passo
+            </Button>
+        </div>
     );
 }

@@ -26,8 +26,8 @@ export async function GET(request: NextRequest) {
       sections: [
         {
           id: "employees",
-          label: "Colaboradores",
-          href: "/dashboard/settings?department=pessoal&tab=users",
+          label: "Gestão do colaborador",
+          href: "/dashboard/dp/collaborators",
           enabled: access.canView,
         },
         {
@@ -49,10 +49,36 @@ export async function GET(request: NextRequest) {
           enabled: access.canManageCatalog,
         },
         {
+          id: "profile-compliance",
+          label: "Atualização cadastral",
+          href: "/dashboard/settings?department=pessoal&tab=profile-compliance",
+          enabled: access.canView,
+        },
+        {
           id: "recruitment",
           label: "Recrutamento",
           href: "/dashboard/hr/recruitment",
           enabled: access.canView,
+          children: [
+            {
+              id: "recruitment-jobs",
+              label: "Gestão da vaga",
+              href: "/dashboard/hr/recruitment",
+              enabled: access.canView,
+            },
+            {
+              id: "recruitment-integration",
+              label: "Integração",
+              href: "/dashboard/hr/recruitment/integration",
+              enabled: access.canView,
+            },
+            {
+              id: "recruitment-talents",
+              label: "Banco de talentos",
+              href: "/dashboard/hr/recruitment/talents",
+              enabled: access.canView,
+            },
+          ],
         },
       ],
     });

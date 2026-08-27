@@ -54,6 +54,8 @@ export function useHrBootstrap() {
     departments: data?.departments ?? [],
     roles: data?.roles ?? [],
     functions: data?.functions ?? [],
+    units: data?.units ?? [],
+    shiftDefinitions: data?.shiftDefinitions ?? [],
     access: data?.access ?? { canView: false, canManageCatalog: false },
     loading,
     error,

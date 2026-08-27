@@ -30,12 +30,13 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
 
   const [targetValue, setTargetValue] = useState<number>(0);
   const [upValue, setUpValue] = useState<number>(0);
+  const [topValue, setTopValue] = useState<number>(0);
   const [saving, setSaving] = useState(false);
   const [egLoading, setEgLoading] = useState(false);
   const [newEmp, setNewEmp] = useState<Record<string, string>>({});
   const [newPct, setNewPct] = useState<Record<string, string>>({});
 
-  const hasShifts = (period?.shifts?.length ?? 0) > 0;
+  const hasShifts = (period?.shifts?.length ?? 0) > 0 && period?.version !== 2;
 
   const periodEmployeeGoals = useMemo(() =>
     employeeGoals.filter(eg => eg.periodId === period?.id),
@@ -51,6 +52,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
 
   async function rebalanceWith(nextGoals: EmployeeGoal[], nextPeriod = period) {
     if (!nextPeriod) return;
+    if (nextPeriod.version === 2) return;
     const kioskName = kiosks.find(kiosk => kiosk.id === nextPeriod.kioskId)?.name;
     await rebalancePeriodEmployeeGoals(
       nextPeriod,
@@ -72,14 +74,21 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
     if (open && period) {
       setTargetValue(period.targetValue);
       setUpValue(period.upValue ?? period.targetValue * 1.2);
+      setTopValue(period.topValue ?? 0);
     }
   }, [open, period]);
 
   async function handleSavePeriod() {
     if (!period) return;
+    if (topValue > 0 && topValue <= upValue) {
+      toast({ title: 'Meta TOP deve ser maior que a Meta UP', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
-    const nextPeriod = { ...period, targetValue, upValue };
-    await updatePeriod(period.id, { targetValue, upValue });
+    // Metas antigas (sem TOP) continuam com dois níveis se o campo ficar zerado
+    const updates = topValue > 0 ? { targetValue, upValue, topValue } : { targetValue, upValue };
+    const nextPeriod = { ...period, ...updates };
+    await updatePeriod(period.id, updates);
     await rebalanceWith(periodEmployeeGoals, nextPeriod);
     toast({ title: 'Meta atualizada.' });
     setSaving(false);
@@ -142,9 +151,9 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
 
   async function handleAddLegacy() {
     if (!period || !selectedEmployee || !fraction) return;
-    const fractionNum = parseFloat(fraction);
+    const fractionNum = parseFloat(fraction) / 100;
     if (isNaN(fractionNum) || fractionNum <= 0 || fractionNum > 1) {
-      toast({ title: 'Fração inválida', variant: 'destructive' });
+      toast({ title: 'Porcentagem inválida', description: 'Deve ser entre 1 e 100.', variant: 'destructive' });
       return;
     }
     setEgLoading(true);
@@ -178,7 +187,7 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
           {/* ── Valores da meta ── */}
           <div className="space-y-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Valores</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>Meta alvo</Label>
                 <CurrencyInput value={targetValue} onChange={setTargetValue} />
@@ -186,6 +195,10 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
               <div className="space-y-1.5">
                 <Label>Meta UP</Label>
                 <CurrencyInput value={upValue} onChange={setUpValue} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Meta TOP</Label>
+                <CurrencyInput value={topValue} onChange={setTopValue} />
               </div>
             </div>
           </div>
@@ -273,8 +286,11 @@ export function EditGoalPeriodModal({ open, onOpenChange, period }: EditGoalPeri
                       <SelectTrigger className="flex-1"><SelectValue placeholder="Colaborador" /></SelectTrigger>
                       <SelectContent>{availableUsersLegacy.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Input className="w-24" type="number" step="0.01" min="0.01" max="1" placeholder="0.50"
-                      value={fraction} onChange={e => setFraction(e.target.value)} />
+                    <div className="relative w-24">
+                      <Input className="h-10 pr-7" type="number" min="1" max="100" placeholder="50"
+                        value={fraction} onChange={e => setFraction(e.target.value)} />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                    </div>
                     <Button onClick={handleAddLegacy} disabled={!selectedEmployee || !fraction || egLoading}>
                       <Plus className="h-4 w-4" />
                     </Button>

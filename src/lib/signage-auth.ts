@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { type User, type Profile } from '@/types';
 
 import { dbAdmin } from './firebase-admin';
+import { resolveUnitAccess } from './unit-access';
 import { verifyAuth } from './verify-auth';
 
 export type SignageAccess = {
@@ -10,11 +11,14 @@ export type SignageAccess = {
   isAdmin: boolean;
   canView: boolean;
   canManage: boolean;
+  allUnits: boolean;
   allowedKioskIds: string[];
 };
 
 export async function assertSignageAccess(req: NextRequest, mode: 'view' | 'manage' = 'view'): Promise<SignageAccess> {
-  const decodedToken = await verifyAuth(req);
+  // Player/signage é um contexto operacional próprio, fora do login humano
+  // sujeito à confirmação trimestral de dados pessoais.
+  const decodedToken = await verifyAuth(req, { enforceProfileCompliance: false });
   const isAdmin = decodedToken.isDefaultAdmin === true;
   const fallbackUser: User = {
     id: decodedToken.uid,
@@ -32,6 +36,7 @@ export async function assertSignageAccess(req: NextRequest, mode: 'view' | 'mana
       isAdmin: true,
       canView: true,
       canManage: true,
+      allUnits: true,
       allowedKioskIds: [],
     };
   }
@@ -63,11 +68,14 @@ export async function assertSignageAccess(req: NextRequest, mode: 'view' | 'mana
     throw new Error('Sem permissão para gerenciar o signage.');
   }
 
+  const unitAccess = resolveUnitAccess(user, { isDefaultAdmin: isAdmin });
+
   return {
     user,
     isAdmin,
     canView,
     canManage,
-    allowedKioskIds: isAdmin ? [] : user.assignedKioskIds ?? [],
+    allUnits: unitAccess.allUnits,
+    allowedKioskIds: unitAccess.unitIds,
   };
 }

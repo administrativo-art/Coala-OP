@@ -10,7 +10,7 @@ service cloud.firestore {
     }
 
     function isDefaultAdmin() {
-      return isAuth() && request.auth.token.isDefaultAdmin == true;
+      return isAuth() && request.auth.token.get('isDefaultAdmin', false) == true;
     }
 
     // Busca o cache de acesso RH do usuário logado.
@@ -24,18 +24,25 @@ service cloud.firestore {
       return cache.get('rh_role', null);
     }
 
-    function isAdmin()   { return isDefaultAdmin() || rhRole() == 'admin'; }
-    function isManager() { return isAdmin() || rhRole() == 'manager'; }
-    function isEmployee() { return isManager() || rhRole() == 'employee'; }
+    function hasCurrentProfileCompliance() {
+      let cache = rhCache();
+      return isAuth()
+          && cache.get('profile_compliance_status', 'pending') == 'complete'
+          && cache.get('profile_compliance_policy_version', 0) == 1;
+    }
+
+    function isAdmin()   { return hasCurrentProfileCompliance() && (isDefaultAdmin() || rhRole() == 'admin'); }
+    function isManager() { return hasCurrentProfileCompliance() && (isAdmin() || rhRole() == 'manager'); }
+    function isEmployee() { return hasCurrentProfileCompliance() && (isManager() || rhRole() == 'employee'); }
 
     // Retorna true se o usuário logado é o próprio colaborador (via rh_access_cache)
     function isOwner(bizneoId) {
-      return isAuth() && rhCache().get('bizneo_employee_id', null) == bizneoId;
+      return hasCurrentProfileCompliance() && rhCache().get('bizneo_employee_id', null) == bizneoId;
     }
 
     // Manager vê colaboradores da mesma unit_id
     function isSameUnit(employeeUnitId) {
-      return isAuth() && rhCache().get('unit_id', null) == employeeUnitId;
+      return hasCurrentProfileCompliance() && rhCache().get('unit_id', null) == employeeUnitId;
     }
 
     function canReadEmployee(bizneoId, employeeUnitId) {
@@ -47,14 +54,18 @@ service cloud.firestore {
     // Verifica visibilidade de um campo pelo field_map (coala-rh/schema/field_map)
     function fieldVisibility(fieldKey) {
       let fm = get(/databases/$(database)/documents/schema/field_map).data;
-      return fm.fields.get(fieldKey, {}).get('visibility', 'internal');
+      return fm.fields.get(fieldKey, {}).get('visibility', 'confidential');
     }
 
-    function canReadField(fieldKey) {
+    function canReadField(fieldKey, bizneoId) {
       let vis = fieldVisibility(fieldKey);
-      return (vis == 'public'    && isEmployee())
+      return (vis == 'public' && isEmployee())
+          || (vis == 'restricted_partial' && (isManager() || isOwner(bizneoId)))
+          || (vis == 'restricted_total' && isManager())
+          || (vis == 'confidential' && isAdmin())
+          // Legado: permissões antigas salvas no field_map antes do modelo atual.
           || (vis == 'sensitive' && isManager())
-          || (vis == 'internal'  && isAdmin());
+          || (vis == 'internal' && isAdmin());
     }
 
     // ─── rh_access_cache ────────────────────────────────────────────────────
@@ -78,7 +89,7 @@ service cloud.firestore {
       match /field_values/{fieldKey} {
         allow read:   if isAuth()
                       && canReadEmployee(bizneoId, get(/databases/$(database)/documents/employees/$(bizneoId)).data.get('unit_id', ''))
-                      && canReadField(fieldKey);
+                      && canReadField(fieldKey, bizneoId);
         allow create: if false;  // somente CF onFieldUpdate
         allow update: if false;
         allow delete: if false;
@@ -93,30 +104,43 @@ service cloud.firestore {
       allow write:  if isAdmin();
     }
 
-    // ─── jobRoles ────────────────────────────────────────────────────────────
-    // Coleção existente — qualquer autenticado lê; admins escrevem.
+    // ─── Catálogo interno de cargos, funções e departamentos ─────────────────
+    // Os documentos contêm dados internos (incluindo faixas salariais).
+    // Leitura direta fica limitada a RH/gestão; toda escrita passa pelas APIs,
+    // que aplicam validação de schema, permissão e auditoria.
     match /jobRoles/{roleId} {
-      allow read:   if isAuth();
-      allow write:  if isAdmin();
+      allow read:   if isManager();
+      allow write:  if false;
     }
 
-    // ─── jobDepartments ──────────────────────────────────────────────────────
     match /jobDepartments/{deptId} {
-      allow read:   if isAuth();
-      allow write:  if isAdmin();
+      allow read:   if isManager();
+      allow write:  if false;
     }
 
-    // ─── jobFunctions ────────────────────────────────────────────────────────
     match /jobFunctions/{funcId} {
-      allow read:   if isAuth();
-      allow write:  if isAdmin();
+      allow read:   if isManager();
+      allow write:  if false;
     }
 
     // ─── audit_log ──────────────────────────────────────────────────────────
     // Imutável: managers leem (filtrado por equipe no app), admins leem tudo.
     // Criação somente via CF onFieldUpdate.
     match /audit_log/{logId} {
-      allow read:   if isManager();
+      allow read:   if isAdmin()
+                    || (
+                      rhRole() == 'manager'
+                      && hasCurrentProfileCompliance()
+                      && resource.data.employee_id is string
+                      && exists(
+                        /databases/$(database)/documents/employees/$(resource.data.employee_id)
+                      )
+                      && isSameUnit(
+                        get(
+                          /databases/$(database)/documents/employees/$(resource.data.employee_id)
+                        ).data.get('unit_id', '')
+                      )
+                    );
       allow create: if false;
       allow update: if false;
       allow delete: if false;
@@ -128,16 +152,24 @@ service cloud.firestore {
       allow write:  if false;  // somente CFs
     }
 
+    // Configurações operacionais das clínicas de ASO são acessadas somente
+    // pelas APIs de formalização, que aplicam permissões e auditoria.
+    match /asoClinicConfigs/{entityId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
     // ─── sync_log ────────────────────────────────────────────────────────────
     match /sync_log/{logId} {
       allow read:   if isAdmin();
       allow write:  if false;  // somente CF syncFromBizneo
     }
 
-    // ─── candidates / applications / jobOpenings (coleções de recrutamento) ──
-    // Mantidas pelo sistema existente de recrutamento.
-    match /candidates/{id}        { allow read, write: if isAuth() && (isManager() || isDefaultAdmin()); }
-    match /applications/{id}      { allow read, write: if isAuth() && (isManager() || isDefaultAdmin()); }
-    match /jobOpenings/{id}       { allow read: if true; allow write: if isAdmin(); }
+    // Recrutamento é acessado exclusivamente pelas APIs autenticadas.
+    match /candidates/{id}   { allow read, write: if false; }
+    match /applications/{id} { allow read, write: if false; }
+    match /jobOpenings/{id}  { allow read, write: if false; }
   }
 }

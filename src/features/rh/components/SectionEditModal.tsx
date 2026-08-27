@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { FieldMapEntry, EmployeeFieldValue, RhRole, BizneoEmployeeId } from '@/types/rh';
-import { canViewField } from '@/types/rh';
 import { callOnFieldUpdate } from '../lib/rh-client';
+import { formatFieldOptionLabel } from '../lib/field-option-labels';
 
 type FieldInput = {
   key:   string;
@@ -28,7 +35,8 @@ function parseValue(entry: FieldMapEntry, raw: string): unknown {
   return raw || null;
 }
 
-function FieldInput({ entry, value, onChange }: {
+function FieldInput({ fieldKey, entry, value, onChange }: {
+  fieldKey: string;
   entry:    FieldMapEntry;
   value:    string;
   onChange: (v: string) => void;
@@ -37,20 +45,32 @@ function FieldInput({ entry, value, onChange }: {
 
   if (entry.type === 'boolean') {
     return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
-        <option value="">Selecionar…</option>
-        <option value="true">Sim</option>
-        <option value="false">Não</option>
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={`${base} h-10`}>
+          <SelectValue placeholder="Selecionar…" />
+        </SelectTrigger>
+        <SelectContent className="z-[70] rounded-xl">
+          <SelectItem value="true">Sim</SelectItem>
+          <SelectItem value="false">Não</SelectItem>
+        </SelectContent>
+      </Select>
     );
   }
 
   if (entry.type === 'single_select' && entry.options?.length) {
     return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={base}>
-        <option value="">Selecionar…</option>
-        {entry.options.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={`${base} h-10`}>
+          <SelectValue placeholder="Selecionar…" />
+        </SelectTrigger>
+        <SelectContent className="z-[70] rounded-xl">
+          {entry.options.map((option) => (
+            <SelectItem key={option} value={option} className="rounded-lg">
+              {formatFieldOptionLabel(fieldKey, option)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     );
   }
 
@@ -75,7 +95,7 @@ function FieldInput({ entry, value, onChange }: {
                 : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300'
             }`}
           >
-            {o}
+            {formatFieldOptionLabel(fieldKey, o)}
           </button>
         ))}
       </div>
@@ -141,14 +161,14 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
     }
   }, [field, rawValue, employeeId, editKey, onSaved, onClose]);
 
-  if (!field || !canViewField(field.entry.visibility, role)) return null;
+  if (!field) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div className="relative w-full max-w-sm rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
           <h2 className="text-sm font-semibold text-gray-900">Editar campo</h2>
           <button
             type="button"
@@ -161,13 +181,13 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-3">
+        <div className="max-h-[65vh] space-y-2 overflow-auto px-3 py-2.5">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">
               {field.entry.label}
               {field.entry.required && <span className="text-red-500 ml-1">*</span>}
             </label>
-            <FieldInput entry={field.entry} value={rawValue} onChange={setRawValue} />
+            <FieldInput fieldKey={field.key} entry={field.entry} value={rawValue} onChange={setRawValue} />
             {field.entry.help_text && (
               <p className="text-[11px] text-gray-400 mt-1">{field.entry.help_text}</p>
             )}
@@ -178,11 +198,11 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
           )}
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100">
+        <div className="flex justify-end gap-2 border-t border-gray-100 px-3 py-2.5">
           <button
             type="button"
             onClick={onClose}
-            className="text-sm px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            className="h-8 rounded-lg px-3 text-xs text-gray-600 transition-colors hover:bg-gray-100"
           >
             Cancelar
           </button>
@@ -190,7 +210,7 @@ export function SectionEditModal({ employeeId, editKey, fields, role, onClose, o
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="text-sm px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 transition-colors font-medium"
+            className="h-8 rounded-lg bg-violet-600 px-3 text-xs font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
           >
             {saving ? 'Salvando…' : 'Salvar'}
           </button>

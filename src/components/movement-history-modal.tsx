@@ -10,13 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { History, ArrowRight, ArrowDownUp, Download, ChevronsUpDown, CalendarIcon, Search } from 'lucide-react';
-import { useMovementHistory } from '@/hooks/use-movement-history';
 import { Skeleton } from './ui/skeleton';
 import { useProducts } from '@/hooks/use-products';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useBaseProducts } from '@/hooks/use-base-products';
 import { useAuth } from '@/hooks/use-auth';
-import { getMovementQuantityInBaseUnit } from '@/lib/movement-quantity';
 import { type MovementRecord, type MovementType } from '@/types';
 import { Badge } from './ui/badge';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './ui/tooltip';
@@ -36,6 +34,9 @@ const MOVEMENT_TYPE_CONFIG: Record<string, { label: string; color: string }> = {
     'SAIDA_DESCARTE_OUTROS': { label: 'Descarte Outros', color: 'bg-red-100 text-red-800' },
     'SAIDA_CORRECAO': { label: 'Divergência (decréscimo)', color: 'bg-red-100 text-red-800' },
     'ENTRADA_CORRECAO': { label: 'Divergência (acréscimo)', color: 'bg-green-100 text-green-800' },
+    'ENTRADA_DEVOLUCAO_UNIFORME': { label: 'Devolução de uniforme', color: 'bg-emerald-100 text-emerald-800' },
+    'SAIDA_ENTREGA_UNIFORME': { label: 'Entrega de uniforme', color: 'bg-amber-100 text-amber-800' },
+    'MIGRACAO_ESTOQUE_UNIFORME': { label: 'Migração para estoque de uniformes', color: 'bg-violet-100 text-violet-800' },
     'TRANSFERENCIA_SAIDA': { label: 'Transferência (Saída)', color: 'bg-blue-100 text-blue-800' },
     'TRANSFERENCIA_ENTRADA': { label: 'Transferência (Entrada)', color: 'bg-blue-100 text-blue-800' },
     'ENTRADA_ESTORNO': { label: 'Estorno (Entrada)', color: 'bg-red-100 text-red-800' },
@@ -64,11 +65,10 @@ export function MovementHistoryModal({
   initialKioskId, 
   initialDateRange 
 }: MovementHistoryModalProps) {
-  const { history, loading: loadingHistory } = useMovementHistory();
   const { products, getProductFullName, loading: loadingProducts } = useProducts();
   const { kiosks, loading: loadingKiosks } = useKiosks();
   const { baseProducts } = useBaseProducts();
-  const { users } = useAuth();
+  const { firebaseUser } = useAuth();
 
   // Quando o modal é aberto para um insumo específico (a partir da Análise de
   // Movimentação), convertemos as quantidades para a unidade-base, de modo que
@@ -77,8 +77,6 @@ export function MovementHistoryModal({
     () => (initialBaseProductId ? baseProducts.find(b => b.id === initialBaseProductId) : undefined),
     [initialBaseProductId, baseProducts],
   );
-  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
-  
   const [dateRange, setDateRange] = useState<DateRange | undefined>(initialDateRange);
   const [typeFilter, setTypeFilter] = useState(initialType || 'all');
   const [kioskFilter, setKioskFilter] = useState(initialKioskId || 'all');
@@ -86,6 +84,14 @@ export function MovementHistoryModal({
   const [sortKey, setSortKey] = useState<SortKey>('timestamp');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [records, setRecords] = useState<MovementRecord[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [movementTotals, setMovementTotals] = useState({ entries: 0, exits: 0, transfers: 0 });
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateRange, typeFilter, kioskFilter, searchTerm, sortKey, sortDirection, initialBaseProductId]);
 
   // Sync state when props change (specifically when opening from dashboard)
   useEffect(() => {
@@ -93,25 +99,79 @@ export function MovementHistoryModal({
       if (initialDateRange) setDateRange(initialDateRange);
       if (initialType) setTypeFilter(initialType);
       if (initialKioskId) setKioskFilter(initialKioskId);
-      if (initialBaseProductId) {
-          // If we have a base product ID, we search for products that belong to it
-          const bpProducts = products.filter(p => p.baseProductId === initialBaseProductId);
-          if (bpProducts.length > 0) {
-              setSearchTerm(bpProducts[0].baseName || '');
-          }
-      } else {
-          setSearchTerm('');
-      }
+      setSearchTerm('');
       setCurrentPage(1);
     }
-  }, [open, initialDateRange, initialType, initialKioskId, initialBaseProductId, products]);
+  }, [open, initialDateRange, initialType, initialKioskId, initialBaseProductId]);
+
+  useEffect(() => {
+    if (!open || !firebaseUser) return;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setLoadingHistory(true);
+      try {
+        const token = await firebaseUser.getIdToken();
+        const params = new URLSearchParams({
+          page: String(currentPage),
+          pageSize: String(ITEMS_PER_PAGE),
+          type: typeFilter,
+          kioskId: kioskFilter,
+          search: searchTerm,
+          sortKey,
+          sortDirection,
+        });
+        if (dateRange?.from) params.set("from", dateRange.from.toISOString());
+        if (dateRange?.to) {
+          const endDate = new Date(dateRange.to);
+          endDate.setHours(23, 59, 59, 999);
+          params.set("to", endDate.toISOString());
+        }
+        if (initialBaseProductId) params.set("baseProductId", initialBaseProductId);
+
+        const response = await fetch(`/api/stock/movement-history?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload?.error || "Falha ao consultar movimentações.");
+        setRecords(payload.records ?? []);
+        setTotalRecords(Number(payload.total ?? 0));
+        setMovementTotals(payload.totals ?? { entries: 0, exits: 0, transfers: 0 });
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          console.error("Error fetching movement history:", error);
+          setRecords([]);
+          setTotalRecords(0);
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoadingHistory(false);
+      }
+    }, searchTerm ? 300 : 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [
+    open,
+    firebaseUser,
+    currentPage,
+    dateRange,
+    typeFilter,
+    kioskFilter,
+    searchTerm,
+    sortKey,
+    sortDirection,
+    initialBaseProductId,
+  ]);
   
   const loading = loadingHistory || loadingProducts || loadingKiosks;
 
   const enrichedHistory = useMemo(() => {
     if (loading) return [];
     const kioskMap = new Map(kiosks.map(k => [k.id, k.name]));
-    return history.map(record => {
+    return records.map(record => {
       let mainKioskName = 'N/A';
       if(record.type?.startsWith('TRANSFERENCIA')) {
         mainKioskName = kioskMap.get(record.fromKioskId!) || 'N/A';
@@ -125,92 +185,9 @@ export function MovementHistoryModal({
         kioskName: mainKioskName
       };
     });
-  }, [history, products, kiosks, loading]);
+  }, [records, products, kiosks, loading]);
 
-  const filteredAndSortedHistory = useMemo(() => {
-    let filtered = enrichedHistory;
-
-    // Direct Base Product Filter (from drill-down)
-    if (initialBaseProductId) {
-        filtered = filtered.filter(item => {
-            const product = products.find(p => p.id === item.productId);
-            return product?.baseProductId === initialBaseProductId;
-        });
-    }
-
-    if (dateRange?.from) {
-      filtered = filtered.filter(item => {
-        if (!item.timestamp) return false;
-        const itemDate = parseISO(item.timestamp);
-        return isValid(itemDate) && itemDate >= dateRange.from!;
-      });
-    }
-    if (dateRange?.to) {
-      filtered = filtered.filter(item => {
-        if (!item.timestamp) return false;
-        const itemDate = parseISO(item.timestamp);
-        const toDate = new Date(dateRange.to!);
-        toDate.setHours(23, 59, 59, 999);
-        return isValid(itemDate) && itemDate <= toDate;
-      });
-    }
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(item => {
-        const isTransfer = item.type?.includes('TRANSFERENCIA');
-        
-        if (typeFilter === 'ENTRADA') {
-            if (item.type === 'ENTRADA') return true;
-            if (isTransfer) {
-                return kioskFilter !== 'all' ? item.toKioskId === kioskFilter : item.type === 'TRANSFERENCIA_ENTRADA';
-            }
-            return false;
-        } else if (typeFilter === 'SAIDA') {
-            const isExit = item.type?.startsWith('SAIDA_') || item.type === 'ENTRADA_ESTORNO';
-            if (isExit) return true;
-            if (isTransfer) {
-                return kioskFilter !== 'all' ? item.fromKioskId === kioskFilter : item.type === 'TRANSFERENCIA_SAIDA';
-            }
-            return false;
-        } else if (typeFilter === 'AJUSTE') {
-            return (item.type?.includes('CORRECAO') || item.type?.includes('Divergência'));
-        }
-        return item.type === typeFilter;
-      });
-    }
-    if (kioskFilter !== 'all') {
-        filtered = filtered.filter(item => item.fromKioskId === kioskFilter || item.toKioskId === kioskFilter);
-    }
-    if (searchTerm && !initialBaseProductId) {
-        const lowerCaseSearch = searchTerm.toLowerCase();
-        filtered = filtered.filter(item => 
-            (item.productName || '').toLowerCase().includes(lowerCaseSearch) ||
-            (item.lotNumber || '').toLowerCase().includes(lowerCaseSearch) ||
-            (item.username || '').toLowerCase().includes(lowerCaseSearch) ||
-            (item.notes || '').toLowerCase().includes(lowerCaseSearch)
-        );
-    }
-
-    return filtered.sort((a, b) => {
-      const aVal = a[sortKey as keyof MovementRecord];
-      const bVal = b[sortKey as keyof MovementRecord];
-      
-      let compareResult = 0;
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        compareResult = aVal.localeCompare(bVal);
-      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
-        compareResult = aVal - bVal;
-      }
-
-      return sortDirection === 'asc' ? compareResult : -compareResult;
-    });
-  }, [enrichedHistory, dateRange, typeFilter, kioskFilter, searchTerm, sortKey, sortDirection, initialBaseProductId, products]);
-
-  const paginatedHistory = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredAndSortedHistory.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredAndSortedHistory, currentPage]);
-
-  const totalPages = Math.ceil(filteredAndSortedHistory.length / ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(totalRecords / ITEMS_PER_PAGE));
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -221,45 +198,9 @@ export function MovementHistoryModal({
     }
   };
 
-  const { totalEntradas, totalSaidas, totalTransferencias } = useMemo(() => {
-    // Classificação pelo EFEITO no estoque:
-    //  - Entrada: compra, divergência acréscimo (ENTRADA_CORRECAO), estorno de saída (devolve)
-    //  - Saída:   consumo, descarte, divergência decréscimo, correção de saída, estorno de entrada (retira)
-    //  - Transferência: movimento entre unidades (à parte)
-    const classify = (type = ''): 'in' | 'out' | 'transfer' => {
-      if (type.includes('TRANSFERENCIA')) return 'transfer';
-      if (type === 'ENTRADA' || type === 'ENTRADA_CORRECAO' || type === 'SAIDA_ESTORNO') return 'in';
-      return 'out';
-    };
-    return filteredAndSortedHistory.reduce((acc, item) => {
-        // Em modo "insumo específico" (aberto pela Análise), converte para a unidade-base.
-        const product = productMap.get(item.productId);
-        const baseQty = baseProductForTotals && product
-            ? getMovementQuantityInBaseUnit(item, product, baseProductForTotals)
-            : (isNaN(Number(item.quantityChange)) ? 0 : Number(item.quantityChange));
-        const qty = Math.abs(baseQty);
-        const kind = classify(item.type);
-
-        if (kioskFilter !== 'all') {
-            const isToThisKiosk = item.toKioskId === kioskFilter;
-            const isFromThisKiosk = item.fromKioskId === kioskFilter;
-            if (kind === 'transfer') {
-                if (isToThisKiosk) acc.totalEntradas += qty;
-                else if (isFromThisKiosk) acc.totalSaidas += qty;
-                if (isToThisKiosk || isFromThisKiosk) acc.totalTransferencias += qty;
-            } else if (kind === 'in') {
-                if (isToThisKiosk) acc.totalEntradas += qty;
-            } else {
-                if (isFromThisKiosk) acc.totalSaidas += qty;
-            }
-        } else {
-            if (kind === 'transfer') acc.totalTransferencias += qty; // à parte, sem duplicar em entrada/saída
-            else if (kind === 'in') acc.totalEntradas += qty;
-            else acc.totalSaidas += qty;
-        }
-        return acc;
-    }, { totalEntradas: 0, totalSaidas: 0, totalTransferencias: 0 });
-  }, [filteredAndSortedHistory, kioskFilter, baseProductForTotals, productMap]);
+  const totalEntradas = movementTotals.entries;
+  const totalSaidas = movementTotals.exits;
+  const totalTransferencias = movementTotals.transfers;
 
   // Sufixo de unidade nos KPIs quando os totais estão na unidade-base do insumo.
   const unitSuffix = baseProductForTotals ? ` ${baseProductForTotals.unit}` : '';
@@ -334,7 +275,7 @@ export function MovementHistoryModal({
                       </TableRow>
                       </TableHeader>
                       <TableBody>
-                      {paginatedHistory.length > 0 ? paginatedHistory.map((item) => {
+                      {enrichedHistory.length > 0 ? enrichedHistory.map((item) => {
                           let kioskDisplay = '';
                           const timestampDate = item.timestamp ? parseISO(item.timestamp) : null;
 

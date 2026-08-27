@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { format, parseISO } from 'date-fns';
+import { addMonths, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Image from 'next/image';
 import { BackButton } from '@/components/navigation/back-button';
@@ -34,13 +34,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PermissionGuard } from '@/components/permission-guard';
@@ -53,9 +46,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { AccountPlanTreeSelect } from '@/components/purchasing/account-plan-tree-select';
+import { ResultCenterSelect } from '@/components/purchasing/result-center-select';
+import { InstallmentPlanDialog } from '@/components/purchasing/installment-plan-dialog';
 import { ManageOrderItemsModal } from '@/components/purchasing/manage-order-items-modal';
 import { useAuth } from '@/hooks/use-auth';
 import { useBaseProducts } from '@/hooks/use-base-products';
@@ -81,6 +84,7 @@ import {
   type PurchasePaymentCondition,
 } from '@/types';
 import { purchaseTreatmentSkipsOperationalEntry } from '@/lib/purchasing-item-treatment';
+import { cn } from '@/lib/utils';
 
 const RECEIPT_LABELS: Record<string, string> = {
   future_delivery: 'Entrega futura',
@@ -106,6 +110,13 @@ function getPaymentDateLabel(paymentMethod?: PaymentMethod) {
   return paymentMethod === 'card_credit' || paymentMethod === 'card_debit' ? 'Data da compra' : 'Vencimento';
 }
 
+const PENDING_FIELD_CLASS = 'border-amber-400 dark:border-amber-600';
+const MISSING_VALUE_CLASS = 'inline-flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400';
+
+function RequiredMark() {
+  return <span className="text-destructive"> *</span>;
+}
+
 const FREIGHT_PAYMENT_MODE_LABELS: Record<PurchaseFreightPaymentMode, string> = {
   included_with_goods: 'Pago junto com a mercadoria',
   separate: 'Pago em separado',
@@ -123,12 +134,14 @@ type EditForm = {
   paymentMethod: PaymentMethod;
   paymentCondition: PurchasePaymentCondition;
   installmentsCount: number;
+  installmentDueDates: string[];
   paymentDueDate: string;
   estimatedReceiptDate: string;
   deliveryFee: number;
   accountPlanId: string;
   freightAccountPlanId: string;
   freightPaymentMode: PurchaseFreightPaymentMode;
+  freightSupplierName: string;
   resultCenterId: string;
   paymentCardKey: string;
   trackingInfo: string;
@@ -138,6 +151,32 @@ type EditForm = {
 function fmt(value?: number | null) {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function fmtUnit(value?: number | null) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '—';
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+  });
+}
+
+function lineGrossTotal(item: Pick<PurchaseOrderItem, 'quantityOrdered' | 'unitPriceOrdered'>) {
+  return Number(item.quantityOrdered ?? 0) * Number(item.unitPriceOrdered ?? 0);
+}
+
+function lineEffectiveUnitPrice(
+  item: Pick<PurchaseOrderItem, 'quantityOrdered' | 'unitPriceOrdered' | 'discountOrdered' | 'totalOrdered'>,
+) {
+  const quantity = Number(item.quantityOrdered ?? 0);
+  if (!(quantity > 0)) return Number(item.unitPriceOrdered ?? 0);
+  const total =
+    item.totalOrdered != null
+      ? Number(item.totalOrdered ?? 0)
+      : Math.max(lineGrossTotal(item) - Number(item.discountOrdered ?? 0), 0);
+  return Number((total / quantity).toFixed(6));
 }
 
 function isCardPayment(paymentMethod?: PaymentMethod) {
@@ -150,6 +189,14 @@ function getOrderSupplierName(order?: { supplierName?: string; fiscal?: { issuer
 
 function getPaymentCardKey(accountId?: string | null, methodId?: string | null) {
   return accountId && methodId ? `${accountId}::${methodId}` : '';
+}
+
+function buildMonthlyInstallmentDates(firstDueDate: string, count: number) {
+  const parsed = parseISO(firstDueDate);
+  if (Number.isNaN(parsed.getTime())) return [];
+  return Array.from({ length: Math.max(2, count) }, (_, index) =>
+    format(addMonths(parsed, index), 'yyyy-MM-dd'),
+  );
 }
 
 export default function PurchaseOrderPage() {
@@ -180,7 +227,9 @@ export default function PurchaseOrderPage() {
   const [receivedElsewhereNotes, setReceivedElsewhereNotes] = useState('');
   const [markingPaid, setMarkingPaid] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [installmentPlanOpen, setInstallmentPlanOpen] = useState(false);
   const [itemsEditOpen, setItemsEditOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [syncingExpense, setSyncingExpense] = useState(false);
@@ -215,7 +264,15 @@ export default function PurchaseOrderPage() {
     let cancelled = false;
 
     async function ensureLinkedExpense() {
-      if (!firebaseUser || !order || order.status !== 'confirmed' || order.linkedExpenseId || syncingExpense) {
+      if (
+        !firebaseUser ||
+        !order ||
+        order.status !== 'confirmed' ||
+        order.linkedExpenseId ||
+        order.archivedLinkedExpenseId ||
+        order.financialExpenseArchivedAt ||
+        syncingExpense
+      ) {
         return;
       }
       if (expenseSyncAttemptedRef.current === order.id) return;
@@ -259,14 +316,24 @@ export default function PurchaseOrderPage() {
           : undefined;
         const fallbackDiscount = Number(quotationItem?.discount ?? 0);
         const effectiveDiscount = Number(item.discountOrdered ?? fallbackDiscount);
+        const grossTotal = lineGrossTotal(item);
         const effectiveTotal =
           item.discountOrdered == null && fallbackDiscount > 0
-            ? Math.max(Number(item.unitPriceOrdered ?? 0) * Number(item.quantityOrdered ?? 0) - fallbackDiscount, 0)
+            ? Math.max(grossTotal - fallbackDiscount, 0)
             : Number(item.totalOrdered ?? 0);
+        const effectiveUnitPrice = lineEffectiveUnitPrice({
+          ...item,
+          discountOrdered: effectiveDiscount,
+          totalOrdered: effectiveTotal,
+        });
+        const hasLineDiscount = effectiveDiscount > 0 && Math.abs(grossTotal - effectiveTotal) > 0.005;
 
         return {
           ...item,
+          effectiveUnitPrice,
           discountOrdered: effectiveDiscount,
+          grossTotal,
+          hasLineDiscount,
           totalOrdered: effectiveTotal,
         };
       }),
@@ -279,11 +346,12 @@ export default function PurchaseOrderPage() {
   );
   const goodsGrossSubtotal = useMemo(
     () =>
-      displayItems.reduce(
-        (sum, item) => sum + Number(item.quantityOrdered ?? 0) * Number(item.unitPriceOrdered ?? 0),
-        0,
-      ),
+      displayItems.reduce((sum, item) => sum + Number(item.grossTotal ?? 0), 0),
     [displayItems],
+  );
+  const goodsDiscountTotal = useMemo(
+    () => Math.max(goodsGrossSubtotal - goodsSubtotal, 0),
+    [goodsGrossSubtotal, goodsSubtotal],
   );
   const effectiveOrderTotal = useMemo(
     () => goodsSubtotal + Number(order?.deliveryFee ?? 0),
@@ -311,7 +379,11 @@ export default function PurchaseOrderPage() {
     !!order?.accountPlanId &&
     !!order?.resultCenterId &&
     unregisteredStockItems.length === 0 &&
-    ((order?.deliveryFee ?? 0) <= 0 || (!!order?.freightAccountPlanId && !!order?.freightPaymentMode));
+    ((order?.deliveryFee ?? 0) <= 0 || (
+      !!order?.freightAccountPlanId &&
+      !!order?.freightPaymentMode &&
+      (order.freightPaymentMode !== 'separate' || String(order.freightSupplierName || '').trim().length >= 2)
+    ));
   const canEditOrder = !!order && canEdit && !isCancelled && !isReceived;
   const canConfirmOrder = !!order && isCreated && canEdit && !isCancelled;
   const canMarkReceivedElsewhere = !!order && order.status === 'confirmed' && !isReceived && canReceive;
@@ -332,16 +404,23 @@ export default function PurchaseOrderPage() {
 
   const openEdit = () => {
     if (!order) return;
+    const installmentsCount = order.installmentsCount ?? 2;
+    const installmentDueDates =
+      order.installmentDueDates?.length === installmentsCount
+        ? order.installmentDueDates
+        : buildMonthlyInstallmentDates(order.paymentDueDate.slice(0, 10), installmentsCount);
     setEditForm({
       paymentMethod: order.paymentMethod,
       paymentCondition: order.paymentCondition ?? 'cash',
-      installmentsCount: order.installmentsCount ?? 2,
+      installmentsCount,
+      installmentDueDates,
       paymentDueDate: order.paymentDueDate.slice(0, 10),
       estimatedReceiptDate: order.estimatedReceiptDate.slice(0, 10),
       deliveryFee: order.deliveryFee ?? 0,
       accountPlanId: order.accountPlanId ?? purchasingDefaults.goodsAccountPlanId ?? '',
       freightAccountPlanId: order.freightAccountPlanId ?? purchasingDefaults.freightAccountPlanId ?? '',
       freightPaymentMode: order.freightPaymentMode ?? 'separate',
+      freightSupplierName: order.freightSupplierName ?? '',
       resultCenterId: order.resultCenterId ?? '',
       paymentCardKey: getPaymentCardKey(order.paymentAccountId, order.paymentMethodId),
       trackingInfo: order.trackingInfo ?? '',
@@ -349,6 +428,27 @@ export default function PurchaseOrderPage() {
     });
     setEditOpen(true);
   };
+
+  const editPendingFields = useMemo(() => {
+    if (!editForm) return [];
+    const pending: string[] = [];
+    if (!editForm.paymentDueDate) pending.push(getPaymentDateLabel(editForm.paymentMethod));
+    if (editForm.paymentCondition === 'installments' && editForm.installmentDueDates.length < 2) {
+      pending.push('Parcelamento');
+    }
+    if (isCardPayment(editForm.paymentMethod) && !editForm.paymentCardKey) pending.push('Cartão da compra');
+    if (!editForm.accountPlanId) pending.push('Plano de contas da mercadoria');
+    if (!editForm.resultCenterId) pending.push('Centro de resultado');
+    if (editForm.deliveryFee > 0 && !editForm.freightAccountPlanId) pending.push('Plano de contas do frete');
+    if (
+      editForm.deliveryFee > 0 &&
+      editForm.freightPaymentMode === 'separate' &&
+      editForm.freightSupplierName.trim().length < 2
+    ) {
+      pending.push('Favorecido do frete');
+    }
+    return pending;
+  }, [editForm]);
 
   const handleSave = async () => {
     if (!order || !editForm) return;
@@ -368,7 +468,11 @@ export default function PurchaseOrderPage() {
         paymentMethodLabel: isCardPayment(editForm.paymentMethod) ? selectedPaymentCard?.methodLabel ?? null : null,
         paymentCondition: editForm.paymentCondition,
         installmentsCount: editForm.paymentCondition === 'installments' ? editForm.installmentsCount : undefined,
-        paymentDueDate: editForm.paymentDueDate,
+        installmentDueDates: editForm.paymentCondition === 'installments' ? editForm.installmentDueDates : [],
+        paymentDueDate:
+          editForm.paymentCondition === 'installments'
+            ? editForm.installmentDueDates[0]
+            : editForm.paymentDueDate,
         estimatedReceiptDate: order.receiptMode === 'future_delivery' ? editForm.estimatedReceiptDate : undefined,
         deliveryFee: editForm.deliveryFee,
         accountPlanId: editForm.accountPlanId,
@@ -376,6 +480,10 @@ export default function PurchaseOrderPage() {
         freightAccountPlanId: editForm.deliveryFee > 0 ? editForm.freightAccountPlanId : '',
         freightAccountPlanName: editForm.deliveryFee > 0 ? selectedFreightAccountPlan?.name : '',
         freightPaymentMode: editForm.deliveryFee > 0 ? editForm.freightPaymentMode : undefined,
+        freightSupplierName:
+          editForm.deliveryFee > 0 && editForm.freightPaymentMode === 'separate'
+            ? editForm.freightSupplierName.trim()
+            : null,
         resultCenterId: editForm.resultCenterId,
         resultCenterName: selectedResultCenter?.name,
         trackingInfo: editForm.trackingInfo,
@@ -481,21 +589,36 @@ export default function PurchaseOrderPage() {
                 )}
               </div>
 
-              {order.quotationId && (
+              {(order.quotationId || order.linkedExpenseId || order.linkedFreightExpenseId || order.archivedLinkedExpenseId) && (
                 <div className="flex flex-wrap gap-3">
+                  {order.quotationId && (
                   <Link
                     href={`/dashboard/purchasing/quotations/${order.quotationId}`}
                     className="inline-flex text-xs text-primary hover:underline"
                   >
                     Ver cotação de origem
                   </Link>
+                  )}
                   {order.linkedExpenseId && (
                     <Link
                       href={`/dashboard/financial/expenses/new?edit=${order.linkedExpenseId}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}
                       className="inline-flex text-xs text-primary hover:underline"
                     >
-                      Abrir despesa no financeiro
+                      Abrir despesa da mercadoria
                     </Link>
+                  )}
+                  {order.linkedFreightExpenseId && (
+                    <Link
+                      href={`/dashboard/financial/expenses/new?edit=${order.linkedFreightExpenseId}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}
+                      className="inline-flex text-xs text-primary hover:underline"
+                    >
+                      Abrir despesa do frete
+                    </Link>
+                  )}
+                  {!order.linkedExpenseId && order.archivedLinkedExpenseId && (
+                    <span className="inline-flex text-xs font-medium text-muted-foreground">
+                      Despesa financeira anterior arquivada na virada de 01/08/2026
+                    </span>
                   )}
                 </div>
               )}
@@ -517,6 +640,25 @@ export default function PurchaseOrderPage() {
                             : 'Ainda faltam classificações financeiras obrigatórias para confirmar o pedido.'}
                         </p>
                       )}
+                      {!isReadyForConfirmation && canEditOrder && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-1 border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
+                          onClick={() => {
+                            if (unregisteredStockItems.length > 0) {
+                              setEditingItemId(unregisteredStockItems[0]?.id ?? null);
+                              setItemsEditOpen(true);
+                            } else {
+                              openEdit();
+                            }
+                          }}
+                        >
+                          <Pencil className="mr-2 h-3.5 w-3.5" />
+                          {unregisteredStockItems.length > 0 ? 'Revisar itens' : 'Completar dados'}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -537,11 +679,31 @@ export default function PurchaseOrderPage() {
                 </Button>
               )}
               {canConfirmOrder && (
-                <Button onClick={handleConfirmOrder} disabled={confirming || !isReadyForConfirmation}>
-                  {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {!confirming && <CheckCircle2 className="mr-2 h-4 w-4" />}
-                  Confirmar pedido
-                </Button>
+                isReadyForConfirmation ? (
+                  <Button onClick={handleConfirmOrder} disabled={confirming}>
+                    {confirming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {!confirming && <CheckCircle2 className="mr-2 h-4 w-4" />}
+                    Confirmar pedido
+                  </Button>
+                ) : (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span tabIndex={0}>
+                          <Button disabled className="pointer-events-none">
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Confirmar pedido
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        {unregisteredStockItems.length > 0
+                          ? 'Há itens de estoque sem cadastro vinculado.'
+                          : 'Faltam classificações financeiras obrigatórias.'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )
               )}
               {canRegisterPayment && (
                 <Button variant="outline" onClick={handleMarkAsPaid} disabled={markingPaid}>
@@ -620,7 +782,12 @@ export default function PurchaseOrderPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Mercadorias</p>
-              <p className="mt-1 text-2xl font-semibold">{fmt(goodsGrossSubtotal)}</p>
+              <p className="mt-1 text-2xl font-semibold">{fmt(goodsSubtotal)}</p>
+              {goodsDiscountTotal > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Bruto {fmt(goodsGrossSubtotal)} - desconto {fmt(goodsDiscountTotal)}
+                </p>
+              )}
             </div>
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Frete</p>
@@ -633,7 +800,7 @@ export default function PurchaseOrderPage() {
             <div className="rounded-xl border bg-muted/30 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Situação financeira</p>
               <p className="mt-1 text-lg font-semibold">
-                {financial ? FINANCIAL_STATUS_LABELS[financial.status] : 'Sem título'}
+                {financial ? FINANCIAL_STATUS_LABELS[financial.status] : 'Aguardando confirmação'}
               </p>
             </div>
           </div>
@@ -649,9 +816,16 @@ export default function PurchaseOrderPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   {isCreated && canEdit && (
-                    <Button variant="ghost" size="sm" onClick={() => setItemsEditOpen(true)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditingItemId(null);
+                        setItemsEditOpen(true);
+                      }}
+                    >
                       <Pencil className="mr-2 h-3 w-3" />
-                      Editar itens
+                      Gerenciar itens
                     </Button>
                   )}
                   <span className="text-sm text-muted-foreground">{items.length} item(ns)</span>
@@ -690,8 +864,16 @@ export default function PurchaseOrderPage() {
                             <div className="min-w-0">
                               <p className="font-semibold truncate">{displayName}</p>
                               <p className="text-sm text-muted-foreground">
-                                {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x {fmt(item.unitPriceOrdered)}
+                                {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x{' '}
+                                {fmtUnit(item.hasLineDiscount ? item.effectiveUnitPrice : item.unitPriceOrdered)}
+                                {item.hasLineDiscount ? ' líquido' : ''}
                               </p>
+                              {item.hasLineDiscount && (
+                                <p className="text-xs text-muted-foreground">
+                                  Bruto: {item.quantityOrdered} {item.purchaseUnitLabel ?? item.unit} x{' '}
+                                  {fmtUnit(item.unitPriceOrdered)} = {fmt(item.grossTotal)}
+                                </p>
+                              )}
                               {base && base.name !== displayName && (
                                 <p className="text-xs text-muted-foreground">Insumo base: {base.name}</p>
                               )}
@@ -702,9 +884,25 @@ export default function PurchaseOrderPage() {
                               )}
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
+                          <div className="flex shrink-0 items-start gap-3">
+                            {isCreated && canEdit ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingItemId(item.id);
+                                  setItemsEditOpen(true);
+                                }}
+                              >
+                                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                                Editar
+                              </Button>
+                            ) : null}
+                            <div className="text-right">
                             <p className="text-sm text-muted-foreground">Subtotal</p>
                             <p className="font-semibold">{fmt(item.totalOrdered)}</p>
+                            </div>
                           </div>
                         </div>
                         {item.notes && (
@@ -762,10 +960,26 @@ export default function PurchaseOrderPage() {
                       <span>{order.paymentMethodLabel || order.paymentAccountName || 'Não vinculado'}</span>
                     </div>
                   )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{getPaymentDateLabel(order.paymentMethod)}</span>
-                  <span>{format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
-                </div>
+                {order.paymentCondition === 'installments' ? (
+                  <div className="space-y-1.5">
+                    <span className="text-muted-foreground">Vencimentos</span>
+                    <div className="space-y-1 text-right">
+                      {(order.installmentDueDates?.length
+                        ? order.installmentDueDates
+                        : buildMonthlyInstallmentDates(order.paymentDueDate, order.installmentsCount ?? 2)
+                      ).map((date, index) => (
+                        <p key={`${date}-${index}`}>
+                          {index + 1}ª · {format(parseISO(date), 'dd/MM/yyyy')}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{getPaymentDateLabel(order.paymentMethod)}</span>
+                    <span>{format(parseISO(order.paymentDueDate), 'dd/MM/yyyy')}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Valor previsto</span>
                   <span>{fmt(effectiveOrderTotal)}</span>
@@ -790,27 +1004,56 @@ export default function PurchaseOrderPage() {
             </div>
 
             <div className="rounded-2xl border bg-card p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Scale className="h-4 w-4 text-muted-foreground" />
-                <h3 className="font-semibold">Classificação</h3>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Scale className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-semibold">Classificação</h3>
+                </div>
+                {isCreated && canEditOrder && (
+                  <Button variant="ghost" size="sm" className="-my-1 h-7 px-2 text-xs" onClick={openEdit}>
+                    <Pencil className="mr-1.5 h-3 w-3" />
+                    Definir
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-3 text-sm">
                 <div>
                   <p className="text-muted-foreground">Plano de contas da mercadoria</p>
-                  <p className="font-medium">{order.accountPlanName ?? 'Não definido'}</p>
+                  {order.accountPlanName ? (
+                    <p className="font-medium">{order.accountPlanName}</p>
+                  ) : (
+                    <p className={MISSING_VALUE_CLASS}>
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Não definido
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Centro de resultado</p>
-                  <p className="font-medium">{order.resultCenterName ?? 'Não definido'}</p>
+                  {order.resultCenterName ? (
+                    <p className="font-medium">{order.resultCenterName}</p>
+                  ) : (
+                    <p className={MISSING_VALUE_CLASS}>
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Não definido
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Plano de contas do frete</p>
-                  <p className="font-medium">
-                    {order.deliveryFee && order.deliveryFee > 0
-                      ? order.freightAccountPlanName ?? 'Não definida'
-                      : 'Sem frete'}
-                  </p>
+                  {order.deliveryFee && order.deliveryFee > 0 ? (
+                    order.freightAccountPlanName ? (
+                      <p className="font-medium">{order.freightAccountPlanName}</p>
+                    ) : (
+                      <p className={MISSING_VALUE_CLASS}>
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Não definida
+                      </p>
+                    )
+                  ) : (
+                    <p className="font-medium">Sem frete</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-muted-foreground">Liquidação do frete</p>
@@ -820,6 +1063,19 @@ export default function PurchaseOrderPage() {
                       : 'Sem frete'}
                   </p>
                 </div>
+                {order.deliveryFee && order.deliveryFee > 0 && order.freightPaymentMode === 'separate' && (
+                  <div>
+                    <p className="text-muted-foreground">Favorecido do frete</p>
+                    {order.freightSupplierName ? (
+                      <p className="font-medium">{order.freightSupplierName}</p>
+                    ) : (
+                      <p className={MISSING_VALUE_CLASS}>
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Não definido
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -860,255 +1116,342 @@ export default function PurchaseOrderPage() {
         </div>
 
         {editForm && (
-          <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Editar pedido</DialogTitle>
-              </DialogHeader>
+          <Sheet open={editOpen} onOpenChange={setEditOpen}>
+            <SheetContent side="right" className="flex h-full !w-full flex-col gap-0 overflow-hidden p-0 sm:!max-w-[720px]">
+              <SheetHeader className="border-b px-6 py-5">
+                <SheetTitle>Editar pedido</SheetTitle>
+              </SheetHeader>
 
-              <div className="space-y-4 py-2">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Forma de pagamento</Label>
-                    <Select
-                      value={editForm.paymentMethod}
-                      onValueChange={(value) => setEditForm((current) => current && { ...current, paymentMethod: value as PaymentMethod })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_METHODS.map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {PAYMENT_LABELS[method]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Condição de pagamento</Label>
-                    <Select
-                      value={editForm.paymentCondition}
-                      onValueChange={(value) =>
-                        setEditForm((current) =>
-                          current
-                            ? {
-                                ...current,
-                                paymentCondition: value as PurchasePaymentCondition,
-                                installmentsCount:
-                                  value === 'installments' ? Math.max(2, current.installmentsCount) : current.installmentsCount,
-                              }
-                            : current,
-                        )
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">À vista</SelectItem>
-                        <SelectItem value="installments">Parcelado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>{getPaymentDateLabel(editForm.paymentMethod)}</Label>
-                    <Input
-                      type="date"
-                      value={editForm.paymentDueDate}
-                      onChange={(event) => setEditForm((current) => current && { ...current, paymentDueDate: event.target.value })}
-                    />
-                  </div>
-
-                  {isCardPayment(editForm.paymentMethod) && (
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label>Cartão da compra</Label>
-                      <Select
-                        value={editForm.paymentCardKey || '__none__'}
-                        onValueChange={(value) => setEditForm((current) => current && { ...current, paymentCardKey: value === '__none__' ? '' : value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o cartão" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Sem cartão vinculado</SelectItem>
-                          {paymentCards.map((card) => (
-                            <SelectItem key={getPaymentCardKey(card.accountId, card.methodId)} value={getPaymentCardKey(card.accountId, card.methodId)}>
-                              {card.methodLabel}{card.lastDigits ? ` final ${card.lastDigits}` : ''} · {card.accountName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {editForm.paymentCondition === 'installments' && (
-                    <div className="space-y-1.5">
-                      <Label>Parcelas para análise</Label>
-                      <Input
-                        type="number"
-                        min={2}
-                        value={editForm.installmentsCount}
-                        onChange={(event) =>
-                          setEditForm((current) =>
-                            current
-                              ? { ...current, installmentsCount: Math.max(2, Number(event.target.value || 2)) }
-                              : current,
-                          )
-                        }
-                      />
-                    </div>
-                  )}
-
-                  {order.receiptMode === 'future_delivery' && (
-                    <div className="space-y-1.5">
-                      <Label>Entrega prevista</Label>
-                      <Input
-                        type="date"
-                        value={editForm.estimatedReceiptDate}
-                        onChange={(event) => setEditForm((current) => current && { ...current, estimatedReceiptDate: event.target.value })}
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Plano de contas da mercadoria</Label>
-                    <AccountPlanTreeSelect
-                      value={editForm.accountPlanId}
-                      onChange={(value) => setEditForm((current) => current && { ...current, accountPlanId: value })}
-                      options={accountPlans}
-                      placeholder="Selecione o plano de contas"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Centro de resultado</Label>
-                    <Select
-                      value={editForm.resultCenterId}
-                      onValueChange={(value) => setEditForm((current) => current && { ...current, resultCenterId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o centro de resultado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(resultCenters ?? []).map((center) => (
-                          <SelectItem key={center.id} value={center.id}>
-                            {center.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Frete / entrega</Label>
-                    <CurrencyInput
-                      value={editForm.deliveryFee}
-                      onChange={(value) => setEditForm((current) => current && { ...current, deliveryFee: value })}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Plano de contas do frete</Label>
-                    <AccountPlanTreeSelect
-                      value={editForm.deliveryFee > 0 ? editForm.freightAccountPlanId : '__none__'}
-                      onChange={(value) =>
-                        setEditForm((current) =>
-                          current
-                            ? { ...current, freightAccountPlanId: value === '__none__' ? '' : value }
-                            : current,
-                        )
-                      }
-                      options={accountPlans}
-                      placeholder={editForm.deliveryFee > 0 ? 'Selecione o plano de contas' : 'Sem frete'}
-                      noneLabel="Sem frete"
-                      allowNone
-                      disabled={editForm.deliveryFee <= 0}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Liquidação do frete</Label>
-                    <Select
-                      value={editForm.deliveryFee > 0 ? editForm.freightPaymentMode : 'separate'}
-                      onValueChange={(value) =>
-                        setEditForm((current) =>
-                          current
-                            ? { ...current, freightPaymentMode: value as PurchaseFreightPaymentMode }
-                            : current,
-                        )
-                      }
-                      disabled={editForm.deliveryFee <= 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione como o frete será quitado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Use "junto" quando o pagamento cobrir mercadoria e frete no mesmo lançamento bancário.
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                {editPendingFields.length > 0 && (
+                  <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p className="font-medium">
+                      {editPendingFields.length === 1
+                        ? '1 campo obrigatório pendente'
+                        : `${editPendingFields.length} campos obrigatórios pendentes`}
                     </p>
+                    <p className="mt-0.5 text-amber-800">{editPendingFields.join(' · ')}</p>
                   </div>
+                )}
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Informações de rastreio</Label>
-                    <Textarea
-                      rows={3}
-                      placeholder="Código, transportadora, prazo ou link de acompanhamento..."
-                      value={editForm.trackingInfo}
-                      onChange={(event) => setEditForm((current) => current && { ...current, trackingInfo: event.target.value })}
-                    />
-                  </div>
+                <div className="space-y-6">
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pagamento</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Forma de pagamento</Label>
+                        <Select
+                          value={editForm.paymentMethod}
+                          onValueChange={(value) => setEditForm((current) => current && { ...current, paymentMethod: value as PaymentMethod })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_METHODS.map((method) => (
+                              <SelectItem key={method} value={method}>
+                                {PAYMENT_LABELS[method]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Observações</Label>
+                      <div className="space-y-1.5">
+                        <Label>Condição de pagamento</Label>
+                        <Select
+                          value={editForm.paymentCondition}
+                          onValueChange={(value) =>
+                            setEditForm((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    paymentCondition: value as PurchasePaymentCondition,
+                                    installmentsCount:
+                                      value === 'installments' ? Math.max(2, current.installmentsCount) : current.installmentsCount,
+                                    installmentDueDates:
+                                      value === 'installments' && current.installmentDueDates.length < 2
+                                        ? buildMonthlyInstallmentDates(
+                                            current.paymentDueDate,
+                                            Math.max(2, current.installmentsCount),
+                                          )
+                                        : current.installmentDueDates,
+                                  }
+                                : current,
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="cash">À vista</SelectItem>
+                            <SelectItem value="installments">Parcelado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {editForm.paymentCondition === 'installments' ? (
+                        <div className="space-y-1.5">
+                          <Label>Parcelamento<RequiredMark /></Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                              'w-full justify-start font-normal',
+                              editForm.installmentDueDates.length < 2 && PENDING_FIELD_CLASS,
+                            )}
+                            onClick={() => setInstallmentPlanOpen(true)}
+                          >
+                            {editForm.installmentDueDates.length >= 2
+                              ? `${editForm.installmentDueDates.length}x · ${format(parseISO(editForm.installmentDueDates[0]), 'dd/MM/yyyy')} a ${format(parseISO(editForm.installmentDueDates[editForm.installmentDueDates.length - 1]), 'dd/MM/yyyy')}`
+                              : 'Definir parcelas e vencimentos'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <Label>{getPaymentDateLabel(editForm.paymentMethod)}<RequiredMark /></Label>
+                          <Input
+                            type="date"
+                            className={cn(!editForm.paymentDueDate && PENDING_FIELD_CLASS)}
+                            value={editForm.paymentDueDate}
+                            onChange={(event) => setEditForm((current) => current && { ...current, paymentDueDate: event.target.value })}
+                          />
+                        </div>
+                      )}
+
+                      {isCardPayment(editForm.paymentMethod) && (
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>Cartão da compra<RequiredMark /></Label>
+                          <Select
+                            value={editForm.paymentCardKey || '__none__'}
+                            onValueChange={(value) => setEditForm((current) => current && { ...current, paymentCardKey: value === '__none__' ? '' : value })}
+                          >
+                            <SelectTrigger className={cn(!editForm.paymentCardKey && PENDING_FIELD_CLASS)}>
+                              <SelectValue placeholder="Selecione o cartão" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Sem cartão vinculado</SelectItem>
+                              {paymentCards.map((card) => (
+                                <SelectItem key={getPaymentCardKey(card.accountId, card.methodId)} value={getPaymentCardKey(card.accountId, card.methodId)}>
+                                  {card.methodLabel}{card.lastDigits ? ` final ${card.lastDigits}` : ''} · {card.accountName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Classificação financeira</h3>
+                    <div className="grid gap-4">
+                      <div className="space-y-1.5">
+                        <Label>Plano de contas da mercadoria<RequiredMark /></Label>
+                        <AccountPlanTreeSelect
+                          value={editForm.accountPlanId}
+                          onChange={(value) => setEditForm((current) => current && { ...current, accountPlanId: value })}
+                          options={accountPlans}
+                          placeholder="Selecione o plano de contas"
+                          triggerClassName={cn(!editForm.accountPlanId && PENDING_FIELD_CLASS)}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Centro de resultado<RequiredMark /></Label>
+                        <ResultCenterSelect
+                          value={editForm.resultCenterId}
+                          onChange={(value) => setEditForm((current) => current && { ...current, resultCenterId: value })}
+                          options={resultCenters ?? []}
+                          placeholder="Selecione o centro de resultado"
+                          triggerClassName={cn(!editForm.resultCenterId && PENDING_FIELD_CLASS)}
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Frete</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>Frete / entrega</Label>
+                        <CurrencyInput
+                          value={editForm.deliveryFee}
+                          onChange={(value) => setEditForm((current) => current && { ...current, deliveryFee: value })}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          Plano de contas do frete
+                          {editForm.deliveryFee > 0 && <RequiredMark />}
+                        </Label>
+                        <AccountPlanTreeSelect
+                          value={editForm.deliveryFee > 0 ? editForm.freightAccountPlanId : '__none__'}
+                          onChange={(value) =>
+                            setEditForm((current) =>
+                              current
+                                ? { ...current, freightAccountPlanId: value === '__none__' ? '' : value }
+                                : current,
+                            )
+                          }
+                          options={accountPlans}
+                          placeholder={editForm.deliveryFee > 0 ? 'Selecione o plano de contas' : 'Sem frete'}
+                          noneLabel="Sem frete"
+                          allowNone
+                          disabled={editForm.deliveryFee <= 0}
+                          triggerClassName={cn(
+                            editForm.deliveryFee > 0 && !editForm.freightAccountPlanId && PENDING_FIELD_CLASS,
+                          )}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Liquidação do frete</Label>
+                        <Select
+                          value={editForm.deliveryFee > 0 ? editForm.freightPaymentMode : 'separate'}
+                          onValueChange={(value) =>
+                            setEditForm((current) =>
+                              current
+                                ? { ...current, freightPaymentMode: value as PurchaseFreightPaymentMode }
+                                : current,
+                            )
+                          }
+                          disabled={editForm.deliveryFee <= 0}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione como o frete será quitado" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Use "junto" quando o pagamento cobrir mercadoria e frete no mesmo lançamento bancário.
+                        </p>
+                      </div>
+
+                      {editForm.deliveryFee > 0 && editForm.freightPaymentMode === 'separate' && (
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>Favorecido do frete</Label>
+                          <Input
+                            value={editForm.freightSupplierName}
+                            onChange={(event) =>
+                              setEditForm((current) => current && { ...current, freightSupplierName: event.target.value })
+                            }
+                            placeholder="Ex.: transportadora ou motorista"
+                            className={cn(editForm.freightSupplierName.trim().length < 2 && PENDING_FIELD_CLASS)}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            O financeiro criará uma despesa própria para o frete, vinculada à despesa da mercadoria.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Entrega e rastreio</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {order.receiptMode === 'future_delivery' && (
+                        <div className="space-y-1.5">
+                          <Label>Entrega prevista</Label>
+                          <Input
+                            type="date"
+                            value={editForm.estimatedReceiptDate}
+                            onChange={(event) => setEditForm((current) => current && { ...current, estimatedReceiptDate: event.target.value })}
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Informações de rastreio</Label>
+                        <Textarea
+                          rows={3}
+                          placeholder="Código, transportadora, prazo ou link de acompanhamento..."
+                          value={editForm.trackingInfo}
+                          onChange={(event) => setEditForm((current) => current && { ...current, trackingInfo: event.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Observações</h3>
                     <Textarea
                       rows={4}
                       placeholder="Observações sobre a compra..."
                       value={editForm.notes}
                       onChange={(event) => setEditForm((current) => current && { ...current, notes: event.target.value })}
                     />
-                  </div>
+                  </section>
                 </div>
               </div>
 
-              <DialogFooter>
+              <SheetFooter className="border-t bg-background px-6 py-4 sm:items-center">
+                {editPendingFields.length > 0 && (
+                  <p className="text-xs text-muted-foreground sm:mr-auto">
+                    Preencha os campos obrigatórios (
+                    <span className="text-destructive">*</span>
+                    ) para salvar.
+                  </p>
+                )}
                 <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
                   Cancelar
                 </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={
-                    saving ||
-                    !editForm.paymentDueDate ||
-                    (isCardPayment(editForm.paymentMethod) && !editForm.paymentCardKey) ||
-                    !editForm.accountPlanId ||
-                    !editForm.resultCenterId ||
-                    (editForm.deliveryFee > 0 && !editForm.freightAccountPlanId)
-                  }
-                >
+                <Button onClick={handleSave} disabled={saving || editPendingFields.length > 0}>
                   {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
+        )}
+
+        {editForm && (
+          <InstallmentPlanDialog
+            open={installmentPlanOpen}
+            onOpenChange={setInstallmentPlanOpen}
+            dueDates={editForm.installmentDueDates}
+            fallbackStartDate={editForm.paymentDueDate}
+            onSave={(dueDates) =>
+              setEditForm((current) =>
+                current
+                  ? {
+                      ...current,
+                      installmentsCount: dueDates.length,
+                      installmentDueDates: dueDates,
+                      paymentDueDate: dueDates[0],
+                    }
+                  : current,
+              )
+            }
+          />
         )}
 
         <ManageOrderItemsModal
           orderId={params.orderId}
           initialItems={items}
+          initialItemId={editingItemId}
+          deliveryFee={order?.deliveryFee ?? 0}
           open={itemsEditOpen}
-          onOpenChange={setItemsEditOpen}
+          onOpenChange={(nextOpen) => {
+            setItemsEditOpen(nextOpen);
+            if (!nextOpen) setEditingItemId(null);
+          }}
           onSuccess={() => {
             fetchOrderItems(params.orderId).then(setItems);
           }}

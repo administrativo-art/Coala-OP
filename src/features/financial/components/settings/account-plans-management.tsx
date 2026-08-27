@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  AlertCircle, ChevronDown, ChevronRight, GripVertical, Loader2, MoreHorizontal, PlusCircle,
+  AlertCircle, ChevronDown, ChevronRight, GripVertical, Info, Loader2, MoreHorizontal, PlusCircle, X,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
@@ -33,9 +33,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -80,6 +82,7 @@ type Account = {
   parentId?: string | null;
   dre_position?: string | null;
   is_dre_account?: boolean;
+  searchTerms?: string[];
   order?: number;
   active?: boolean;
   isGroup?: boolean;
@@ -172,6 +175,53 @@ function DreBadge({ position, isPatrimonial }: { position?: string | null; isPat
   );
 }
 
+function AccountInfoTooltip({ account }: { account: Account }) {
+  const description = account.description?.trim();
+  const searchTerms = (account.searchTerms ?? []).filter((term) => term.trim().length > 0);
+  const hasMetadata = !!description || searchTerms.length > 0;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+            hasMetadata && "text-slate-500"
+          )}
+          aria-label={`Ver descrição e palavras-chave de ${account.name}`}
+        >
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start" className="max-w-sm p-3">
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Descrição</p>
+            <p className="mt-1 text-xs leading-relaxed text-foreground">
+              {description || "Sem descrição cadastrada."}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Palavras-chave</p>
+            {searchTerms.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {searchTerms.map((term) => (
+                  <span key={term} className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
+                    {term}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">Sem palavras-chave cadastradas.</p>
+            )}
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 // ── sortable row (any depth) ──────────────────────────────────────────────────
 
 function SortableRow({
@@ -256,9 +306,10 @@ function SortableRow({
         <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{number}</span>
 
         {/* name */}
-        <span className={cn("min-w-0 flex-1 truncate", isRoot && "font-semibold")}>
-          {node.name}
-        </span>
+        <div className={cn("flex min-w-0 flex-1 items-center gap-1.5", isRoot && "font-semibold")}>
+          <span className="min-w-0 truncate">{node.name}</span>
+          <AccountInfoTooltip account={node} />
+        </div>
 
         {/* dre badge */}
         <DreBadge position={node.dre_position} isPatrimonial={node.is_dre_account === false} />
@@ -458,6 +509,27 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
   const includeInDre = form.watch("includeInDre");
   const isPatrimonial = form.watch("isPatrimonial");
 
+  // Palavras-chave de busca (chips), fora do zod — mesmo padrão dos aliases de produto.
+  const [searchTerms, setSearchTerms] = useState<string[]>([]);
+  const [searchTermInput, setSearchTermInput] = useState("");
+
+  const normalizeTerm = (value: string) =>
+    value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+
+  function handleAddSearchTerm() {
+    const term = searchTermInput.trim();
+    if (!term) return;
+    const normalized = normalizeTerm(term);
+    if (!searchTerms.some((existing) => normalizeTerm(existing) === normalized)) {
+      setSearchTerms((prev) => [...prev, term]);
+    }
+    setSearchTermInput("");
+  }
+
+  function handleRemoveSearchTerm(term: string) {
+    setSearchTerms((prev) => prev.filter((entry) => entry !== term));
+  }
+
   const parentOptions = useMemo(() => {
     if (!editingAccount) return accounts;
     const blockedIds = collectDescendantIds(accounts, editingAccount.id);
@@ -468,6 +540,8 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
   function openAdd(parentId: string | null = null) {
     setEditingAccount(null);
     form.reset({ name: "", description: "", parentId, includeInDre: false, dre_position: null, isPatrimonial: false });
+    setSearchTerms([]);
+    setSearchTermInput("");
     setDialogOpen(true);
   }
 
@@ -481,6 +555,8 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
       dre_position: account.dre_position ?? null,
       isPatrimonial: account.is_dre_account === false,
     });
+    setSearchTerms(account.searchTerms ?? []);
+    setSearchTermInput("");
     setDialogOpen(true);
   }
 
@@ -489,6 +565,7 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
     // Regra: patrimonial → false, caso contrário → true (sempre explícito)
     const is_dre_account = values.isPatrimonial ? false : true;
     try {
+      const searchTermsPayload = searchTerms.length > 0 ? searchTerms : null;
       if (editingAccount) {
         await apiRequest("PATCH", {
           id: editingAccount.id,
@@ -497,11 +574,12 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
           parentId: values.parentId ?? null,
           dre_position,
           is_dre_account,
+          searchTerms: searchTermsPayload,
         });
         setAccounts((prev) =>
           prev.map((a) =>
             a.id === editingAccount.id
-              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account }
+              ? { ...a, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, searchTerms: searchTermsPayload ?? undefined }
               : a
           )
         );
@@ -515,10 +593,11 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
           dre_position,
           is_dre_account,
           order: siblings.length,
+          searchTerms: searchTermsPayload,
         });
         setAccounts((prev) => [
           ...prev,
-          { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, order: siblings.length, active: true },
+          { id, name: values.name, description: values.description, parentId: values.parentId ?? null, dre_position, is_dre_account, searchTerms: searchTermsPayload ?? undefined, order: siblings.length, active: true },
         ]);
         if (values.parentId) setExpanded((prev) => new Set([...prev, values.parentId!]));
         toast({ title: "Conta criada." });
@@ -584,27 +663,29 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
             </div>
           ) : (
             <>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRootDragEnd}>
-                <SortableContext items={rootItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-1">
-                    {rootItems.map((node, index) => (
-                      <SortableRow
-                        key={node.id}
-                        node={node}
-                        number={`${index + 1}`}
-                        depth={0}
-                        topLevelIndex={index}
-                        expanded={expanded}
-                        canManage={canManage}
-                        onToggle={toggleExpand}
-                        onEdit={openEdit}
-                        onDelete={setDeleteTarget}
-                        onAddChild={(parentId) => openAdd(parentId)}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
+              <TooltipProvider delayDuration={150}>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRootDragEnd}>
+                  <SortableContext items={rootItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-1">
+                      {rootItems.map((node, index) => (
+                        <SortableRow
+                          key={node.id}
+                          node={node}
+                          number={`${index + 1}`}
+                          depth={0}
+                          topLevelIndex={index}
+                          expanded={expanded}
+                          canManage={canManage}
+                          onToggle={toggleExpand}
+                          onEdit={openEdit}
+                          onDelete={setDeleteTarget}
+                          onAddChild={(parentId) => openAdd(parentId)}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </TooltipProvider>
 
               {canManage && (
                 <button
@@ -652,6 +733,46 @@ export default function AccountPlansManagement({ canManage = true }: { canManage
                   </FormItem>
                 )}
               />
+
+              <div className="space-y-2">
+                <Label>Palavras-chave de busca <span className="text-muted-foreground">(opcional)</span></Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={searchTermInput}
+                    onChange={(event) => setSearchTermInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleAddSearchTerm();
+                      }
+                    }}
+                    placeholder="Ex: uniforme, EPI, fardamento..."
+                  />
+                  <Button type="button" variant="outline" onClick={handleAddSearchTerm} disabled={!searchTermInput.trim()}>
+                    Adicionar
+                  </Button>
+                </div>
+                {searchTerms.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {searchTerms.map((term) => (
+                      <span key={term} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+                        {term}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSearchTerm(term)}
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={`Remover ${term}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Termos que direcionam as buscas para esta conta (ex.: &ldquo;uniforme&rdquo; encontra esta conta mesmo que o nome não contenha a palavra).
+                </p>
+              </div>
 
               <FormField
                 control={form.control}

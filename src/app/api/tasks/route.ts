@@ -7,15 +7,35 @@ import {
 } from "@/features/tasks/lib/server-access";
 import {
   createManualTask,
-  ensureDefaultTaskProject,
   listTaskProjects,
   listTaskStatuses,
+  listTaskSubprojects,
   listTasks,
 } from "@/features/tasks/lib/server";
-import { type TaskOrigin } from "@/types";
+import { resolveTaskBootstrapPolicy } from "@/features/tasks/lib/query-policy";
+import { type Task, type TaskOrigin } from "@/types";
+import { canAccessUnit } from "@/lib/unit-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function isTaskParticipantType(value: unknown): value is Task["assigneeType"] {
+  return (
+    value === "user" ||
+    value === "profile" ||
+    value === "role" ||
+    value === "team" ||
+    value === "unit"
+  );
+}
+
+function asStringArray(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const entries = value
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean);
+  return entries.length ? entries : undefined;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,12 +48,16 @@ export async function GET(request: NextRequest) {
       "view"
     );
 
-    await ensureDefaultTaskProject(context);
+    const policy = resolveTaskBootstrapPolicy(request.nextUrl.searchParams.get("scope"));
     const projects = await listTaskProjects(context.workspace_id);
+    const subprojects = await listTaskSubprojects(projects.map((project) => project.id));
     const statuses = await listTaskStatuses(projects.map((project) => project.id));
-    const tasks = await listTasks(context.workspace_id);
+    const tasks = await listTasks(context, {
+      limit: policy.limit,
+      statuses: policy.statuses,
+    });
 
-    return NextResponse.json({ projects, statuses, tasks });
+    return NextResponse.json({ projects, subprojects, statuses, tasks, scope: policy.scope });
   } catch (error) {
     const status =
       error instanceof Error &&
@@ -74,6 +98,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (
+      typeof body.unitId === "string" &&
+      !canAccessUnit(context.userDoc, body.unitId, {
+        isDefaultAdmin: context.isDefaultAdmin,
+      })
+    ) {
+      return NextResponse.json(
+        { error: "A unidade da tarefa está fora do seu escopo de acesso." },
+        { status: 403 }
+      );
+    }
+
     const origin =
       body?.origin &&
       typeof body.origin === "object" &&
@@ -89,19 +125,39 @@ export async function POST(request: NextRequest) {
         ...(typeof body.description === "string"
           ? { description: body.description.trim() }
           : {}),
-        ...(body.assigneeType === "profile" || body.assigneeType === "user"
+        ...(isTaskParticipantType(body.assigneeType)
           ? { assigneeType: body.assigneeType }
           : {}),
         ...(typeof body.assigneeId === "string" ? { assigneeId: body.assigneeId } : {}),
         ...(typeof body.requiresApproval === "boolean"
           ? { requiresApproval: body.requiresApproval }
           : {}),
-        ...(body.approverType === "profile" || body.approverType === "user"
+        ...(isTaskParticipantType(body.approverType)
           ? { approverType: body.approverType }
           : {}),
         ...(typeof body.approverId === "string" ? { approverId: body.approverId } : {}),
         ...(typeof body.dueDate === "string" ? { dueDate: body.dueDate } : {}),
         ...(typeof body.projectId === "string" ? { projectId: body.projectId } : {}),
+        ...(typeof body.subprojectId === "string" ? { subprojectId: body.subprojectId } : {}),
+        ...(typeof body.subprojectName === "string" ? { subprojectName: body.subprojectName } : {}),
+        ...(typeof body.unitId === "string" ? { unitId: body.unitId } : {}),
+        ...(typeof body.unitName === "string" ? { unitName: body.unitName } : {}),
+        ...(typeof body.originLink === "string" ? { originLink: body.originLink } : {}),
+        ...(body.priority === "low" ||
+        body.priority === "normal" ||
+        body.priority === "high" ||
+        body.priority === "urgent"
+          ? { priority: body.priority }
+          : {}),
+        ...(asStringArray(body.watcherUserIds)
+          ? { watcherUserIds: asStringArray(body.watcherUserIds) }
+          : {}),
+        ...(asStringArray(body.watcherProfileIds)
+          ? { watcherProfileIds: asStringArray(body.watcherProfileIds) }
+          : {}),
+        ...(asStringArray(body.watcherRoleIds)
+          ? { watcherRoleIds: asStringArray(body.watcherRoleIds) }
+          : {}),
         ...(origin && (origin.kind === "manual" || origin.kind === "legacy")
           ? { origin }
           : {}),

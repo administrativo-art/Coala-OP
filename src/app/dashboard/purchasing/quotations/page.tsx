@@ -18,6 +18,8 @@ import {
   PurchasingEmptyState,
   PurchasingFilterChip,
   PurchasingHeader,
+  PurchasingKanbanCard,
+  PurchasingKanbanColumn,
   PurchasingMetricCard,
   PurchasingPageFrame,
   PurchasingPeriodControl,
@@ -205,29 +207,23 @@ export default function QuotationsPage() {
               ].map((column) => {
                 const columnCards = cards.filter((entry) => entry.cfg.bucket === column.bucket);
                 return (
-                  <div key={column.label} className="flex h-[calc(100vh-360px)] min-h-[380px] flex-col rounded-[14px] border border-zinc-200 bg-white/70 p-3">
-                    <div className="mb-3 flex items-center justify-between">
-                      <PurchasingStatusBadge label={column.label} tone={column.tone} />
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-zinc-500">{columnCards.length}</span>
-                    </div>
-                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-                      {columnCards.map(({ quotation, cfg, supplier }) => (
-                        <Link key={quotation.id} href={`/dashboard/purchasing/quotations/${quotation.id}`} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
-                          <span className="block text-[10px] font-bold uppercase tracking-wide text-zinc-400">{new Date(quotation.createdAt).toLocaleDateString('pt-BR')}</span>
-                          <div className="mt-0.5 flex items-center justify-between gap-2">
-                            <span className="font-mono text-[11px] font-black text-zinc-500">{quotationCode(quotation.id)}</span>
-                            <PurchasingStatusBadge label={cfg.label} tone={cfg.tone} />
-                          </div>
-                          <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{supplier}</p>
-                          <PurchasingItemsPreview quotationId={quotation.id} />
-                          <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-                            <span>{quotation.mode === 'remote' ? 'Remota' : 'In loco'}</span>
-                            <span>{quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString('pt-BR') : 'Sem data'}</span>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
+                  <PurchasingKanbanColumn key={column.label} label={column.label} tone={column.tone} count={columnCards.length}>
+                    {columnCards.map(({ quotation, cfg, supplier }) => (
+                      <PurchasingKanbanCard
+                        key={quotation.id}
+                        href={`/dashboard/purchasing/quotations/${quotation.id}`}
+                        tone={cfg.tone}
+                        code={quotationCode(quotation.id)}
+                        title={supplier}
+                        meta={new Date(quotation.createdAt).toLocaleDateString('pt-BR')}
+                        badges={<PurchasingStatusBadge label={cfg.label} tone={cfg.tone} />}
+                        footerLeft={quotation.mode === 'remote' ? 'Remota' : 'In loco'}
+                        amount={quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString('pt-BR') : 'Sem data'}
+                      >
+                        <PurchasingItemsPreview quotationId={quotation.id} />
+                      </PurchasingKanbanCard>
+                    ))}
+                  </PurchasingKanbanColumn>
                 );
               })}
             </div>

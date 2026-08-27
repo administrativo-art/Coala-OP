@@ -28,6 +28,7 @@ import { GoalsProvider } from '@/components/goals-provider';
 import { useGoals } from '@/contexts/goals-context';
 import { type SalesReport } from '@/types';
 import { getUserDisplayName } from '@/lib/user-display';
+import { canAccessUnit } from '@/lib/unit-access';
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MONTH_NUMS = [1,2,3,4,5,6,7,8,9,10,11,12];
@@ -37,7 +38,7 @@ const COLORS = ['#E91E8C','#6366F1','#10B981','#F59E0B','#EF4444','#8B5CF6','#06
 const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function getReportsByPreset(
-  reports: SalesReport[], kioskId: string, isAdmin: boolean, user: any, preset: string
+  reports: SalesReport[], kioskId: string, user: any, isDefaultAdmin: boolean, preset: string
 ): SalesReport[] {
   const today = new Date();
   let start: Date, end: Date;
@@ -50,7 +51,7 @@ function getReportsByPreset(
   }
   return reports.filter(r => {
     const km = kioskId === 'all' || r.kioskId === kioskId;
-    const um = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+    const um = Boolean(user) && canAccessUnit(user, r.kioskId, { isDefaultAdmin });
     if (!r.day) {
       if (preset === 'yesterday' || preset === 'today') return false;
       const ms = new Date(r.year, r.month - 1, 1);
@@ -70,19 +71,18 @@ export function SalesAnalysisDashboard() {
 function SalesAnalysisDashboardInner() {
   const { salesReports, loading: reportsLoading } = useSalesReports();
   const { kiosks } = useKiosks();
-  const { user, permissions, users, firebaseUser } = useAuth();
+  const { user, users, firebaseUser, isDefaultAdmin } = useAuth();
   const { periods, employeeGoals, templates } = useGoals();
   const { simulations } = useProductSimulation();
   const { categories } = useProductSimulationCategories();
   const { toast } = useToast();
 
-  const isAdmin = permissions.settings.manageUsers;
   const loading = reportsLoading;
 
   const availableKiosks = useMemo(() => {
-    if (isAdmin) return kiosks;
-    return kiosks.filter(k => user?.assignedKioskIds?.includes(k.id));
-  }, [kiosks, user, isAdmin]);
+    if (!user) return [];
+    return kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin }));
+  }, [isDefaultAdmin, kiosks, user]);
 
   // Filtros
   const [selectedKioskId, setSelectedKioskId] = useState<string>('all');
@@ -176,7 +176,7 @@ function SalesAnalysisDashboardInner() {
 
     return salesReports.filter(r => {
       const kioskMatch = selectedKioskId === 'all' || r.kioskId === selectedKioskId;
-      const userKioskMatch = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+      const userKioskMatch = Boolean(user) && canAccessUnit(user!, r.kioskId, { isDefaultAdmin });
 
       let dateMatch = false;
       if (r.day) {
@@ -197,7 +197,7 @@ function SalesAnalysisDashboardInner() {
 
       return kioskMatch && userKioskMatch && dateMatch;
     });
-  }, [salesReports, selectedKioskId, dateRange, activePreset, isAdmin, user]);
+  }, [salesReports, selectedKioskId, dateRange, activePreset, isDefaultAdmin, user]);
 
   const simulationMap = useMemo(() => new Map(simulations.map(s => [s.id, s])), [simulations]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -231,7 +231,7 @@ function SalesAnalysisDashboardInner() {
 
     const prevReports = salesReports.filter(r => {
       const kioskMatch = selectedKioskId === 'all' || r.kioskId === selectedKioskId;
-      const userKioskMatch = isAdmin || user?.assignedKioskIds?.includes(r.kioskId);
+      const userKioskMatch = Boolean(user) && canAccessUnit(user!, r.kioskId, { isDefaultAdmin });
       
       if (!r.day) return false;
       const reportDate = new Date(r.year, r.month - 1, r.day);
@@ -245,7 +245,7 @@ function SalesAnalysisDashboardInner() {
     const variation = prevTotal > 0 ? ((totalUnits - prevTotal) / prevTotal) * 100 : null;
 
     return { totalUnits, topProduct, variation, uniqueProducts: productRanking.length, totalCoupons };
-  }, [productRanking, selectedKioskId, salesReports, isAdmin, user, dateRange, filteredReports]);
+  }, [productRanking, selectedKioskId, salesReports, isDefaultAdmin, user, dateRange, filteredReports]);
 
   // ── CURVA ABC ─────────────────────────────────────────────────────────────
   const abcCurve = useMemo(() => {
@@ -312,12 +312,12 @@ function SalesAnalysisDashboardInner() {
   // ── COMPARATIVO QUIOSQUES ──────────────────────────────────────────────────
   const kioskComparison = useMemo(() => {
     const byKiosk: Record<string, { kioskName: string; total: number }> = {};
-    filteredReports.filter(r => isAdmin || user?.assignedKioskIds?.includes(r.kioskId)).forEach(r => {
+    filteredReports.filter((report) => Boolean(user) && canAccessUnit(user!, report.kioskId, { isDefaultAdmin })).forEach(r => {
       if (!byKiosk[r.kioskId]) byKiosk[r.kioskId] = { kioskName: r.kioskName || r.kioskId, total: 0 };
       r.items.forEach(item => { byKiosk[r.kioskId].total += item.quantity; });
     });
     return Object.entries(byKiosk).map(([kioskId, data]) => ({ kioskId, ...data })).sort((a, b) => b.total - a.total);
-  }, [filteredReports, isAdmin, user]);
+  }, [filteredReports, isDefaultAdmin, user]);
 
   const [hourlySelectedProduct, setHourlySelectedProduct] = useState<string>('all');
   const [comboSearch, setComboSearch] = useState('');
@@ -433,7 +433,6 @@ function SalesAnalysisDashboardInner() {
     }));
 
     return availableKiosks
-      .filter(k => isAdmin || user?.assignedKioskIds?.includes(k.id))
       .map(kiosk => ({
         kioskId: kiosk.id,
         kioskName: kiosk.name,
@@ -445,7 +444,7 @@ function SalesAnalysisDashboardInner() {
           isLastYear: p.isLastYear,
         })),
       }));
-  }, [salesReports, availableKiosks, isAdmin, user, kioskHistoryMonths]);
+  }, [salesReports, availableKiosks, kioskHistoryMonths]);
 
   // ── PAINEL: HORÁRIOS — por quiosque ─────────────────────────────────────
   const buildHourlyData = (reports: SalesReport[]) => {
@@ -498,13 +497,12 @@ function SalesAnalysisDashboardInner() {
 
   const panelHourlyByKiosk = useMemo(() => {
     return availableKiosks
-      .filter(k => isAdmin || user?.assignedKioskIds?.includes(k.id))
       .map(kiosk => ({
         kioskId: kiosk.id,
         kioskName: kiosk.name,
         data: buildHourlyData(filteredReports.filter(r => r.kioskId === kiosk.id)),
       }));
-  }, [filteredReports, availableKiosks, isAdmin, user]);
+  }, [filteredReports, availableKiosks]);
 
   // ── PAINEL: EVOLUÇÃO — usa meses presentes em filteredReports ────────────
   const panelEvolution = useMemo(() => {
@@ -644,6 +642,7 @@ function SalesAnalysisDashboardInner() {
         prevDay: sumKioskRange(dateMap, prevMonthSameDay, prevMonthSameDay),
         targetValue: mainPeriod?.targetValue ?? 0,
         upValue: mainPeriod?.upValue ?? 0,
+        topValue: mainPeriod?.topValue ?? 0,
       };
     }).filter(k => k.month > 0 || k.week > 0 || k.day > 0).sort((a, b) => b.month - a.month);
 
@@ -701,7 +700,7 @@ function SalesAnalysisDashboardInner() {
     const byEmpKiosk = new Map<string, {
       employeeId: string; kioskId: string;
       dailyRev: Record<string, number>;
-      targetValue: number; upValue: number;
+      targetValue: number; upValue: number; topValue: number;
     }>();
 
     for (const eg of employeeGoals) {
@@ -714,15 +713,19 @@ function SalesAnalysisDashboardInner() {
       const upValue = period && period.targetValue > 0
         ? period.upValue * (eg.targetValue / period.targetValue)
         : 0;
+      const topValue = period && period.targetValue > 0 && period.topValue
+        ? period.topValue * (eg.targetValue / period.targetValue)
+        : 0;
 
       const key = `${eg.employeeId}|||${eg.kioskId}`;
       if (!byEmpKiosk.has(key)) {
-        byEmpKiosk.set(key, { employeeId: eg.employeeId, kioskId: eg.kioskId, dailyRev: {}, targetValue: eg.targetValue, upValue });
+        byEmpKiosk.set(key, { employeeId: eg.employeeId, kioskId: eg.kioskId, dailyRev: {}, targetValue: eg.targetValue, upValue, topValue });
       } else {
         // Same period can contain multiple goals for the employee, for example split shifts.
         const entry = byEmpKiosk.get(key)!;
         entry.targetValue += eg.targetValue;
         entry.upValue += upValue;
+        entry.topValue += topValue;
       }
       const entry = byEmpKiosk.get(key)!;
       for (const [date, amount] of Object.entries(eg.dailyProgress)) {
@@ -733,7 +736,7 @@ function SalesAnalysisDashboardInner() {
     }
 
     return Array.from(byEmpKiosk.values())
-      .map(({ employeeId, kioskId, dailyRev, targetValue, upValue }) => {
+      .map(({ employeeId, kioskId, dailyRev, targetValue, upValue, topValue }) => {
         const monthRevenue = Object.values(dailyRev).reduce((s, v) => s + v, 0);
         const u = users.find(u => u.id === employeeId);
         const kiosk = kiosks.find(k => k.id === kioskId);
@@ -745,6 +748,7 @@ function SalesAnalysisDashboardInner() {
           monthRevenue,
           targetValue,
           upValue,
+          topValue,
         };
       })
       .filter(c => c.monthRevenue > 0)
@@ -1281,18 +1285,19 @@ function SalesAnalysisDashboardInner() {
                 </span>
               );
 
-              const FatBlock = ({ label, month, prevMonth, week, prevWeek, day, prevDay, targetValue, upValue }: {
+              const FatBlock = ({ label, month, prevMonth, week, prevWeek, day, prevDay, targetValue, upValue, topValue }: {
                 label: string;
                 month: number; prevMonth: number;
                 week: number; prevWeek: number;
                 day: number; prevDay: number;
-                targetValue?: number; upValue?: number;
+                targetValue?: number; upValue?: number; topValue?: number;
               }) => {
                 const pctMonth = prevMonth > 0 ? ((month - prevMonth) / prevMonth) * 100 : null;
                 const pctWeek  = prevWeek  > 0 ? ((week  - prevWeek)  / prevWeek)  * 100 : null;
                 const pctDay   = prevDay   > 0 ? ((day   - prevDay)   / prevDay)   * 100 : null;
                 const pctAlvo  = targetValue && targetValue > 0 ? (month / targetValue) * 100 : null;
                 const pctUp    = upValue    && upValue    > 0 ? (month / upValue)    * 100 : null;
+                const pctTop   = topValue   && topValue   > 0 ? (month / topValue)   * 100 : null;
                 return (
                   <Card>
                     <CardContent className="pt-4">
@@ -1317,7 +1322,7 @@ function SalesAnalysisDashboardInner() {
                         </div>
                       </div>
                       {(targetValue || upValue) ? (
-                        <div className="grid grid-cols-2 gap-3 pt-3 border-t divide-x divide-border">
+                        <div className={cn("grid gap-3 pt-3 border-t divide-x divide-border", topValue ? "grid-cols-3" : "grid-cols-2")}>
                           <div>
                             <p className="text-[10px] text-muted-foreground">Meta alvo</p>
                             <p className="text-sm font-semibold leading-tight">R$ {fmt(targetValue ?? 0)}</p>
@@ -1336,6 +1341,17 @@ function SalesAnalysisDashboardInner() {
                               </span>
                             )}
                           </div>
+                          {topValue ? (
+                            <div className="pl-3">
+                              <p className="text-[10px] text-muted-foreground">Meta TOP</p>
+                              <p className="text-sm font-semibold leading-tight">R$ {fmt(topValue)}</p>
+                              {pctTop !== null && (
+                                <span className={cn("text-[10px] font-bold", pctTop >= 100 ? "text-green-500" : pctTop >= 70 ? "text-yellow-500" : "text-destructive")}>
+                                  {pctTop.toFixed(1)}% atingido
+                                </span>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </CardContent>
@@ -1361,6 +1377,7 @@ function SalesAnalysisDashboardInner() {
                       day={k.day}             prevDay={k.prevDay}
                       targetValue={k.targetValue}
                       upValue={k.upValue}
+                      topValue={k.topValue}
                     />
                   ))}
                 </div>
@@ -1397,14 +1414,18 @@ function SalesAnalysisDashboardInner() {
                             <th className="px-4 py-2.5 text-right">% Alvo</th>
                             <th className="px-4 py-2.5 text-right">Meta UP</th>
                             <th className="px-4 py-2.5 text-right">% UP</th>
+                            <th className="px-4 py-2.5 text-right">Meta TOP</th>
+                            <th className="px-4 py-2.5 text-right">% TOP</th>
                           </tr>
                         </thead>
                         <tbody>
                           {collaborators.map((c, i) => {
                             const pctAlvo = c.targetValue > 0 ? (c.monthRevenue / c.targetValue) * 100 : null;
                             const pctUp   = c.upValue    > 0 ? (c.monthRevenue / c.upValue)    * 100 : null;
+                            const pctTop  = c.topValue   > 0 ? (c.monthRevenue / c.topValue)   * 100 : null;
                             const colorAlvo = pctAlvo === null ? '' : pctAlvo >= 100 ? 'text-green-600' : pctAlvo >= 70 ? 'text-yellow-600' : 'text-destructive';
                             const colorUp   = pctUp   === null ? '' : pctUp   >= 100 ? 'text-green-600' : pctUp   >= 70 ? 'text-yellow-600' : 'text-destructive';
+                            const colorTop  = pctTop  === null ? '' : pctTop  >= 100 ? 'text-green-600' : pctTop  >= 70 ? 'text-yellow-600' : 'text-destructive';
                             return (
                               <tr key={i} className="border-t hover:bg-muted/50 transition-colors">
                                 <td className="px-4 py-2.5 font-medium">{c.userName}</td>
@@ -1423,6 +1444,14 @@ function SalesAnalysisDashboardInner() {
                                 <td className="px-4 py-2.5 text-right tabular-nums">
                                   {pctUp !== null
                                     ? <span className={cn('font-bold', colorUp)}>{pctUp.toFixed(1)}%</span>
+                                    : '—'}
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">
+                                  {c.topValue > 0 ? `R$ ${fmt(c.topValue)}` : '—'}
+                                </td>
+                                <td className="px-4 py-2.5 text-right tabular-nums">
+                                  {pctTop !== null
+                                    ? <span className={cn('font-bold', colorTop)}>{pctTop.toFixed(1)}%</span>
                                     : '—'}
                                 </td>
                               </tr>

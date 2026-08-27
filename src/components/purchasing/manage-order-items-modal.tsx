@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from 'react';
-import { Check, ChevronsUpDown, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Plus, Trash2, X } from 'lucide-react';
 
 import {
   Dialog,
@@ -49,6 +49,7 @@ import { cn } from '@/lib/utils';
 type DraftItem = {
   key: string;
   id?: string;
+  quotationItemId?: string;
   isRegistered: boolean;
   productId: string;
   baseItemId: string;
@@ -59,6 +60,8 @@ type DraftItem = {
   purchaseUnitType: PurchaseUnitType;
   quantityOrdered: number;
   unitPriceOrdered: number;
+  lineGrossOrdered: number;
+  preserveLineGross: boolean;
   discountOrdered: number;
   entryType: PurchaseStockEntryType;
   itemTreatment: PurchaseItemTreatment;
@@ -74,6 +77,8 @@ type DraftItem = {
 interface Props {
   orderId: string;
   initialItems: PurchaseOrderItem[];
+  initialItemId?: string | null;
+  deliveryFee?: number;
   open: boolean;
   onOpenChange: (value: boolean) => void;
   onSuccess?: () => void;
@@ -100,6 +105,8 @@ function newDraftItem(): DraftItem {
     purchaseUnitType: 'content',
     quantityOrdered: 0,
     unitPriceOrdered: 0,
+    lineGrossOrdered: 0,
+    preserveLineGross: false,
     discountOrdered: 0,
     entryType: 'stock',
     itemTreatment: 'stock',
@@ -129,6 +136,15 @@ function fmtQuantity(value: number) {
   return value.toLocaleString('pt-BR', {
     maximumFractionDigits: 3,
   });
+}
+
+function calculateLineGross(quantity: number, unitPrice: number) {
+  return Math.max(Number(quantity || 0) * Number(unitPrice || 0), 0);
+}
+
+function calculateUnitPriceFromGross(lineGross: number, quantity: number) {
+  if (!quantity || quantity <= 0) return 0;
+  return Math.max(Number(lineGross || 0) / quantity, 0);
 }
 
 function shouldLinkAlias(candidate: string, product: Product | undefined, productLabel: string) {
@@ -309,18 +325,18 @@ function AssetLinkField({
   );
 }
 
-export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChange, onSuccess }: Props) {
+export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = null, deliveryFee = 0, open, onOpenChange, onSuccess }: Props) {
   const { products, getProductFullName, updateProduct } = useProducts();
   const { activeCategories } = useOperationalItemCategories();
   const { assets } = useAssets();
-  const { updateOrder } = usePurchaseOrders();
+  const { updateOrder, updateOrderItem } = usePurchaseOrders();
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [activeItemKey, setActiveItemKey] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setItems(
-        initialItems.map((item) => {
+      const nextItems = initialItems.map((item) => {
           const product = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
           const productLabel = product ? getProductFullName(product) : '';
           const aliasCandidate = item.itemName?.trim() ?? '';
@@ -335,9 +351,12 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                 activeCategories.find((category) => category.destination === entryType)
               : undefined;
 
+          const lineGrossOrdered = calculateLineGross(item.quantityOrdered, item.unitPriceOrdered);
+
           return {
             key: item.id,
             id: item.id,
+            quotationItemId: item.quotationItemId,
             isRegistered: !!(item.productId || item.baseItemId),
             productId: item.productId ?? '',
             baseItemId: item.baseItemId,
@@ -348,6 +367,8 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             purchaseUnitType: item.purchaseUnitType ?? 'content',
             quantityOrdered: item.quantityOrdered,
             unitPriceOrdered: item.unitPriceOrdered,
+            lineGrossOrdered,
+            preserveLineGross: lineGrossOrdered > 0,
             discountOrdered: item.discountOrdered ?? 0,
             entryType,
             itemTreatment,
@@ -359,10 +380,15 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             aliasCandidate,
             linkAlias: !!aliasCandidate && shouldLinkAlias(aliasCandidate, product, productLabel),
           };
-        }),
+        });
+      setItems(nextItems);
+      setActiveItemKey(
+        nextItems.some((item) => item.key === initialItemId)
+          ? String(initialItemId)
+          : nextItems[0]?.key ?? '',
       );
     }
-  }, [activeCategories, open, initialItems, products]);
+  }, [activeCategories, open, initialItemId, initialItems, products]);
 
   const updateItem = (key: string, patch: Partial<DraftItem>) => {
     setItems((prev) =>
@@ -434,6 +460,20 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
             next.linkAlias = shouldLinkAlias(next.aliasCandidate, product, next.itemName);
           }
         }
+        if (patch.quantityOrdered != null && patch.unitPriceOrdered == null && patch.lineGrossOrdered == null) {
+          if (next.preserveLineGross && next.lineGrossOrdered > 0) {
+            next.unitPriceOrdered = calculateUnitPriceFromGross(next.lineGrossOrdered, next.quantityOrdered);
+          } else {
+            next.lineGrossOrdered = calculateLineGross(next.quantityOrdered, next.unitPriceOrdered);
+          }
+        }
+        if (patch.unitPriceOrdered != null && patch.lineGrossOrdered == null) {
+          next.lineGrossOrdered = calculateLineGross(next.quantityOrdered, next.unitPriceOrdered);
+          next.preserveLineGross = false;
+        }
+        if (patch.lineGrossOrdered != null && patch.unitPriceOrdered == null) {
+          next.unitPriceOrdered = calculateUnitPriceFromGross(next.lineGrossOrdered, next.quantityOrdered);
+        }
         return next;
       }),
     );
@@ -462,12 +502,24 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
     [getProductFullName, products],
   );
 
-  const total = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantityOrdered * item.unitPriceOrdered - item.discountOrdered, 0),
+  const goodsGrossTotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.lineGrossOrdered, 0),
     [items],
   );
 
-  const validItems = items.filter((item) => {
+  const discountTotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.discountOrdered, 0),
+    [items],
+  );
+
+  const goodsNetTotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.lineGrossOrdered - item.discountOrdered, 0),
+    [items],
+  );
+
+  const orderEstimatedTotal = goodsNetTotal + deliveryFee;
+
+  const isItemValid = (item: DraftItem) => {
     const category = activeCategories.find((entry) => entry.id === item.operationalCategoryId);
     const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(item.itemTreatment);
     const canUseManualItem =
@@ -483,14 +535,65 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
     const hasRequiredCategory = skipsOperationalEntry || !!category;
     const hasRequiredUnit = skipsOperationalEntry ? item.unit.trim().length > 0 : true;
     return hasRequiredCategory && hasItem && hasRequiredUnit && item.quantityOrdered > 0 && item.unitPriceOrdered > 0;
+  };
+
+  const validItems = items.filter(isItemValid);
+  const activeItemIndex = items.findIndex((item) => item.key === activeItemKey);
+  const activeItem = activeItemIndex >= 0 ? items[activeItemIndex] : undefined;
+  const singleItemMode = Boolean(initialItemId);
+  const canSave = singleItemMode
+    ? Boolean(activeItem && activeItem.id && isItemValid(activeItem))
+    : items.length > 0 && validItems.length === items.length;
+
+  const serializeItem = (item: DraftItem) => ({
+    baseItemId: item.baseItemId,
+    productId: item.productId || undefined,
+    itemName: item.itemName || undefined,
+    operationalCategoryId: item.operationalCategoryId || undefined,
+    operationalCategoryName: item.operationalCategoryName,
+    itemDestination: item.entryType,
+    quotationItemId: item.quotationItemId,
+    unit: item.unit,
+    purchaseUnitType: item.purchaseUnitType,
+    purchaseUnitLabel: item.unit,
+    quantityOrdered: item.quantityOrdered,
+    unitPriceOrdered: calculateUnitPriceFromGross(item.lineGrossOrdered, item.quantityOrdered),
+    discountOrdered: item.discountOrdered,
+    entryType: item.entryType,
+    itemTreatment: item.itemTreatment,
+    linkedAssetId: item.linkedAssetId ?? null,
+    linkedAssetCode: item.linkedAssetCode ?? null,
+    linkedAssetName: item.linkedAssetName ?? null,
+    componentAction: item.componentAction ?? null,
+    notes: item.notes || undefined,
   });
 
+  const getItemLabel = (item: DraftItem, index: number) =>
+    item.itemName.trim() || item.aliasCandidate.trim() || `Item ${index + 1}`;
+
+  const handleAddItem = () => {
+    const item = newDraftItem();
+    setItems((current) => [...current, item]);
+    setActiveItemKey(item.key);
+  };
+
+  const handleRemoveItem = (key: string) => {
+    setItems((current) => {
+      const currentIndex = current.findIndex((item) => item.key === key);
+      const nextItems = current.filter((item) => item.key !== key);
+      const nextActiveItem = nextItems[Math.min(Math.max(currentIndex, 0), nextItems.length - 1)];
+      setActiveItemKey(nextActiveItem?.key ?? '');
+      return nextItems;
+    });
+  };
+
   const handleSave = async () => {
-    if (validItems.length === 0) return;
+    if (!canSave || !activeItem) return;
     setSubmitting(true);
     try {
+      const aliasCandidates = singleItemMode ? [activeItem] : items;
       const aliasUpdates = new Map<string, { product: Product; aliases: string[] }>();
-      validItems
+      aliasCandidates
         .filter((item) => item.linkAlias && item.productId && item.aliasCandidate.trim())
         .forEach((item) => {
           const product = products.find((entry) => entry.id === item.productId);
@@ -503,33 +606,22 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
           aliasUpdates.set(product.id, current);
         });
 
-      await updateOrder(orderId, {
-        items: validItems.map((item) => ({
-          baseItemId: item.baseItemId,
-          productId: item.productId || undefined,
-          itemName: item.itemName || undefined,
-          operationalCategoryId: item.operationalCategoryId || undefined,
-          operationalCategoryName: item.operationalCategoryName,
-          itemDestination: item.entryType,
-          unit: item.unit,
-          purchaseUnitType: item.purchaseUnitType,
-          purchaseUnitLabel: item.unit,
-          quantityOrdered: item.quantityOrdered,
-          unitPriceOrdered: item.unitPriceOrdered,
-          discountOrdered: item.discountOrdered,
-          entryType: item.entryType,
-          itemTreatment: item.itemTreatment,
-          linkedAssetId: item.linkedAssetId ?? null,
-          linkedAssetCode: item.linkedAssetCode ?? null,
-          linkedAssetName: item.linkedAssetName ?? null,
-          componentAction: item.componentAction ?? null,
-          notes: item.notes || undefined,
-        })),
-      });
+      if (singleItemMode && activeItem.id) {
+        await updateOrderItem(orderId, activeItem.id, {
+          ...serializeItem(activeItem),
+          productId: activeItem.productId || null,
+          itemName: activeItem.itemName || null,
+          operationalCategoryId: activeItem.operationalCategoryId || null,
+          operationalCategoryName: activeItem.operationalCategoryName ?? null,
+          notes: activeItem.notes || null,
+        });
+      } else {
+        await updateOrder(orderId, { items: items.map(serializeItem) });
+      }
       await Promise.all(
         [...aliasUpdates.values()].map(({ product, aliases }) =>
           updateProduct({
-            ...product,
+            id: product.id,
             aliases: [...(product.aliases ?? []), ...aliases],
           }),
         ),
@@ -547,22 +639,71 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] w-[min(96vw,760px)] overflow-y-auto sm:max-w-none">
         <DialogHeader>
-          <DialogTitle>Gerenciar itens do pedido</DialogTitle>
+          <DialogTitle>{singleItemMode ? 'Editar insumo do pedido' : 'Gerenciar itens do pedido'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-muted-foreground">
-              Apenas itens com quantidade e preço serão salvos.
-            </p>
-            <Button type="button" variant="outline" size="sm" onClick={() => setItems((prev) => [...prev, newDraftItem()])}>
-              <Plus className="mr-2 h-4 w-4" />
-              Adicionar item
-            </Button>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {activeItem ? getItemLabel(activeItem, activeItemIndex) : 'Nenhum item selecionado'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {singleItemMode
+                    ? 'Apenas este item será atualizado.'
+                    : 'Edite um item por vez. Quantidade e preço são obrigatórios.'}
+                </p>
+              </div>
+              {!singleItemMode ? (
+                <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar item
+                </Button>
+              ) : null}
+            </div>
+
+            {!singleItemMode && items.length > 0 ? (
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/20 p-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={activeItemIndex <= 0}
+                  onClick={() => setActiveItemKey(items[activeItemIndex - 1]?.key ?? activeItemKey)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Select value={activeItemKey} onValueChange={setActiveItemKey}>
+                  <SelectTrigger className="flex-1 bg-background">
+                    <SelectValue placeholder="Selecione um item" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {items.map((item, index) => (
+                      <SelectItem key={item.key} value={item.key}>
+                        {index + 1}. {getItemLabel(item, index)}{isItemValid(item) ? '' : ' — revisar'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={activeItemIndex < 0 || activeItemIndex >= items.length - 1}
+                  onClick={() => setActiveItemKey(items[activeItemIndex + 1]?.key ?? activeItemKey)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <span className="min-w-16 text-center text-xs text-muted-foreground">
+                  {activeItemIndex + 1} de {items.length}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-3">
-            {items.map((item) => {
+            {activeItem ? [activeItem].map((item) => {
               const selectedCategory = activeCategories.find((category) => category.id === item.operationalCategoryId);
               const categoryDestination = selectedCategory?.destination;
               const selectedRawProduct = item.productId ? products.find((entry) => entry.id === item.productId) : undefined;
@@ -633,15 +774,17 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                       <div className="hidden sm:block" />
                     )}
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setItems((prev) => prev.filter((current) => current.key !== item.key))}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {!singleItemMode ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => handleRemoveItem(item.key)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-semibold text-muted-foreground">
@@ -779,6 +922,19 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                   />
                 </div>
                 </div>
+                {item.lineGrossOrdered > 0 && (
+                  <p className="rounded-md bg-background px-3 py-2 text-xs text-muted-foreground">
+                    Total do item:{' '}
+                    <span className="font-medium text-foreground">
+                      {fmtCurrency(Math.max(item.lineGrossOrdered - item.discountOrdered, 0))}
+                    </span>
+                    {item.discountOrdered > 0 && (
+                      <>
+                        {' '}· bruto {fmtCurrency(item.lineGrossOrdered)} menos desconto {fmtCurrency(item.discountOrdered)}
+                      </>
+                    )}
+                  </p>
+                )}
                 <div className="space-y-2">
                   <div className="grid gap-3 sm:grid-cols-2">
                     {item.itemTreatment === 'asset_component' && (
@@ -843,21 +999,34 @@ export function ManageOrderItemsModal({ orderId, initialItems, open, onOpenChang
                 </div>
               </div>
             );
-            })}
+            }) : (
+              <p className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+                Nenhum item disponível para edição.
+              </p>
+            )}
           </div>
         </div>
 
         <DialogFooter className="items-center sm:justify-between gap-3 border-t pt-4">
-          <p className="text-sm font-semibold">
-            Subtotal estimado: {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
+          <div className="space-y-1 text-sm">
+            <p className="font-semibold">
+              Total estimado: {fmtCurrency(orderEstimatedTotal)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {fmtCurrency(goodsGrossTotal)} em itens
+              {discountTotal > 0 ? ` - ${fmtCurrency(discountTotal)} em descontos` : ''}
+              {deliveryFee > 0 ? ` + ${fmtCurrency(deliveryFee)} de frete` : ''}
+              {' = '}
+              <span className="font-medium text-foreground">{fmtCurrency(orderEstimatedTotal)}</span>
+            </p>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={submitting || validItems.length === 0}>
+            <Button onClick={handleSave} disabled={submitting || !canSave}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar alterações
+              {singleItemMode ? 'Salvar este item' : 'Salvar alterações'}
             </Button>
           </div>
         </DialogFooter>

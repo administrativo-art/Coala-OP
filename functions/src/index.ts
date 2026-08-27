@@ -8,6 +8,7 @@ import { setGlobalOptions } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { syncDayAdmin } from './pdv-sync.js';
 import { randomUUID } from 'node:crypto';
+import { applyUserTerminationEffects } from './user-termination-effects.js';
 
 // ─── Módulo RH (Coala RH v1.3) ───────────────────────────────────────────────
 export { syncRhAccessCache, syncFromBizneo, manualSyncFromBizneo } from './rh/sync.js';
@@ -15,17 +16,28 @@ export { onFieldUpdate } from './rh/field-update.js';
 export { scheduledDateAlerts, scheduledProfileCompletion } from './rh/automations.js';
 export { onTermination, lgpdScheduledCleanup } from './rh/termination.js';
 export { checkFieldMapConsistency } from './rh/propagation.js';
+export { cashClosureDailySync } from './cash-closure-jobs.js';
+export { cashClosureLineWritten, cashClosureSummaryWritten, cashClosureSummaryReinforcement } from './cash-closure-summaries.js';
+export { interCobrancaReconciliation } from './inter-cobranca-jobs.js';
+export { interPaymentReconciliation } from './inter-payment-jobs.js';
+export { interStatementSync } from './inter-statement-jobs.js';
+export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-job.js';
 
 setGlobalOptions({ maxInstances: 10 });
 
 const db = getFirestore('coala');
 const checklistDb = getFirestore('coala-checklist');
 const hrDb = getFirestore('coala-rh');
+const financialDb = getFirestore('coala-financeiro');
 const auth = getAuth();
 const STORAGE_BUCKET = process.env.FIREBASE_STORAGE_BUCKET ?? 'smart-converter-752gf.firebasestorage.app';
 const BIZNEO_BASE_URL = 'https://coala.bizneohr.com/api/v1';
+const DOCUMENT_UPLOAD_BATCHES = 'documentUploadBatches';
+const DOCUMENT_UPLOAD_ITEMS = 'documentUploadItems';
+const MAX_EXPIRED_DOCUMENT_BATCHES_PER_RUN = 50;
 
 const BRT = 'America/Sao_Paulo';
+const BIZNEO_COLLABORATOR_IMPORT_ENABLED = false;
 const DEV_DELETE_USER_UIDS = new Set(
   (process.env.DEV_DELETE_USER_UIDS ?? 'U0Q9YZIl7XhQU2B0tB5U6Zpt5Td2')
     .split(',')
@@ -103,6 +115,21 @@ function parseBizneoTimestamp(value?: string | null): Timestamp | undefined {
   if (!value) return undefined;
   const date = new Date(`${value}T12:00:00`);
   return Number.isNaN(date.getTime()) ? undefined : Timestamp.fromDate(date);
+}
+
+async function canManageUserAccess(token: Record<string, any>): Promise<boolean> {
+  if (token.isDefaultAdmin) return true;
+
+  const profileId = token.profileId;
+  if (!profileId) return false;
+
+  const profileDoc = await db.collection('profiles').doc(profileId).get();
+  const perms = profileDoc.data()?.permissions;
+
+  return Boolean(
+    perms?.settings?.manageUsers === true ||
+    perms?.dp?.collaborators?.terminate === true
+  );
 }
 
 function resolveBizneoAdmissionDate(user: BizneoUserPayload): string | null {
@@ -561,12 +588,116 @@ export const cleanupExpiredActionLogs = onSchedule({
   console.log(`[cleanupExpiredActionLogs] ${snap.size} log(s) removido(s).`);
 });
 
+// Remove uploads de RH abandonados. A análise guarda arquivos em uma área
+// temporária até a confirmação do usuário; este job mantém essa área limitada.
+export const cleanupExpiredEmployeeDocumentBatches = onSchedule({
+  schedule: 'every 24 hours',
+  timeZone: BRT,
+  retryCount: 1,
+}, async () => {
+  const expired = await hrDb
+    .collection(DOCUMENT_UPLOAD_BATCHES)
+    .where('expiresAt', '<', Timestamp.now())
+    .limit(MAX_EXPIRED_DOCUMENT_BATCHES_PER_RUN)
+    .get();
+
+  let removedItems = 0;
+  for (const batchDoc of expired.docs) {
+    const batchId = batchDoc.id;
+    await getStorage().bucket(STORAGE_BUCKET)
+      .deleteFiles({ prefix: `hr/pending-document-batches/${batchId}/` })
+      .catch((cause) => console.warn(`[cleanupExpiredEmployeeDocumentBatches] Storage ${batchId}:`, cause));
+
+    const items = await hrDb.collection(DOCUMENT_UPLOAD_ITEMS).where('batchId', '==', batchId).get();
+    for (const itemDoc of items.docs) {
+      await hrDb.recursiveDelete(itemDoc.ref);
+      removedItems += 1;
+    }
+    await hrDb.recursiveDelete(batchDoc.ref);
+  }
+
+  console.log(`[cleanupExpiredEmployeeDocumentBatches] ${expired.size} lote(s) e ${removedItems} item(ns) removidos.`);
+});
+
+// Reconcilia somente a âncora de retenção. Não exclui documentos: as políticas
+// jurídicas continuam pendentes e o descarte só poderá existir após aprovação.
+export const reconcileGeneratedDocumentRetention = onSchedule({
+  schedule: '30 3 * * *',
+  timeZone: BRT,
+  retryCount: 2,
+  memory: '256MiB',
+}, async () => {
+  const terminated = await db.collection('users')
+    .where('employmentStatus', '==', 'terminated')
+    .limit(100)
+    .get();
+  let updated = 0;
+  const unresolved: string[] = [];
+  for (const user of terminated.docs) {
+    const rawEndedAt = user.get('terminationDate');
+    const endedAt = typeof rawEndedAt === 'string'
+      ? rawEndedAt
+      : typeof rawEndedAt?.toDate === 'function'
+        ? rawEndedAt.toDate().toISOString()
+        : null;
+    if (!endedAt || Number.isNaN(new Date(endedAt).getTime())) {
+      unresolved.push(user.id);
+      continue;
+    }
+    const documents = await db.collection('generatedDocuments')
+      .where('employeeId', '==', user.id)
+      .get();
+    const targets = documents.docs.filter((document) =>
+      document.get('retentionAnchorType') === 'employment_end'
+      && !document.get('retentionUntil')
+    );
+    for (let offset = 0; offset < targets.length; offset += 200) {
+      const batch = db.batch();
+      targets.slice(offset, offset + 200).forEach((document) => {
+        const until = new Date(endedAt);
+        // Prazo provisório já registrado na versão da política. O job apenas
+        // materializa a data; nenhuma exclusão usa esta data enquanto o estado
+        // da política for pending_legal.
+        until.setUTCFullYear(until.getUTCFullYear() + 5);
+        const fields = {
+          retentionAnchorAt: endedAt,
+          retentionUntil: until.toISOString(),
+          retentionCalculatedAt: Timestamp.now(),
+          retentionCalculatedBy: 'system:scheduled-retention-reconciliation',
+        };
+        batch.set(document.ref, fields, { merge: true });
+        batch.set(document.ref.collection('audit').doc('resolvedValues'), fields, { merge: true });
+        updated += 1;
+      });
+      await batch.commit();
+    }
+  }
+  await db.collection('systemJobReports').doc('generated-document-retention-latest').set({
+    job: 'reconcileGeneratedDocumentRetention',
+    scannedEmployees: terminated.size,
+    updatedDocuments: updated,
+    unresolvedEmployeeIds: unresolved,
+    emptyReconciliation: unresolved.length === 0,
+    ranAt: Timestamp.now(),
+  });
+  console.log('[reconcileGeneratedDocumentRetention] Concluído.', {
+    scannedEmployees: terminated.size,
+    updatedDocuments: updated,
+    unresolved: unresolved.length,
+  });
+});
+
 export const syncBizneoUsersMonthly = onSchedule({
   schedule: '0 3 1 * *',
   timeZone: BRT,
   retryCount: 2,
   memory: '512MiB',
+  secrets: ['BIZNEO_TOKEN'],
 }, async () => {
+  if (!BIZNEO_COLLABORATOR_IMPORT_ENABLED) {
+    console.log('[syncBizneoUsersMonthly] Importação de colaboradores do Bizneo desativada por política operacional.');
+    return;
+  }
   console.log('[syncBizneoUsersMonthly] Iniciando sincronização mensal Bizneo.');
   const result = await syncBizneoUsersIntoCoala('monthly-schedule');
   console.log('[syncBizneoUsersMonthly] Concluído.', result);
@@ -797,19 +928,29 @@ export const terminateUser = onCall(
   { cors: internalAppCors },
   async (request: any) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
-    if (!request.auth.token.isDefaultAdmin) {
-      throw new HttpsError('permission-denied', 'Apenas administradores podem desligar usuários.');
+    if (!(await canManageUserAccess(request.auth.token))) {
+      throw new HttpsError('permission-denied', 'Sem permissão para desligar usuários.');
     }
 
-    const { uid, inactivationType, terminationReason, terminationCause, terminationNotes, terminationDate } = request.data;
+    const { uid, inactivationType, terminationNotes } = request.data;
     if (!uid) throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
+
+    const targetRef = db.collection('users').doc(uid);
+    const targetSnapshot = await targetRef.get();
+    if (!targetSnapshot.exists) throw new HttpsError('not-found', 'Usuário não encontrado.');
+    const normalizedType = inactivationType === 'contract_termination' ? 'contract_termination' : 'temporary';
+    if (normalizedType === 'contract_termination') {
+      throw new HttpsError(
+        'failed-precondition',
+        'Desligamentos contratuais devem ser iniciados pelo fluxo formal de terminationProcesses.'
+      );
+    }
 
     try {
       // 1. Desativa no Firebase Auth para bloquear login sem perder o UID.
       await auth.updateUser(uid, { disabled: true });
 
       // 2. Mantém o documento no Firestore marcado como inativo.
-      const normalizedType = inactivationType === 'contract_termination' ? 'contract_termination' : 'temporary';
       const nowIso = new Date().toISOString();
       const updatePayload: Record<string, unknown> = {
         isActive: false,
@@ -818,26 +959,77 @@ export const terminateUser = onCall(
           type: normalizedType,
           at: nowIso,
           actorUid: request.auth.uid,
-          reason: terminationReason ?? null,
-          cause: terminationCause ?? null,
+          reason: 'Inativação temporária',
+          cause: null,
           notes: terminationNotes ?? null,
-          terminationDate: normalizedType === 'contract_termination' ? (terminationDate ?? nowIso) : null,
+          terminationDate: null,
+          employmentRelationshipType: targetSnapshot.get('employmentRelationshipType') ?? null,
         }),
       };
 
-      if (normalizedType === 'contract_termination') {
-        updatePayload.terminationDate = terminationDate ?? nowIso;
-        updatePayload.terminationReason = terminationReason ?? null;
-        updatePayload.terminationCause = terminationCause ?? null;
-        updatePayload.terminationNotes = terminationNotes ?? null;
-      }
-
-      await db.collection('users').doc(uid).update(updatePayload);
+      await targetRef.update(updatePayload);
 
       return { success: true };
     } catch (error: any) {
       console.error('Erro ao desligar usuário:', error);
       throw new HttpsError('internal', error.message || 'Erro ao desligar usuário.');
+    }
+  }
+);
+
+// --- Reativação DP: reabilita no Auth e marca o cadastro como ativo novamente ---
+export const reactivateUser = onCall(
+  { cors: internalAppCors },
+  async (request: any) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
+    if (!(await canManageUserAccess(request.auth.token))) {
+      throw new HttpsError('permission-denied', 'Sem permissão para reativar usuários.');
+    }
+
+    const { uid } = request.data;
+    if (!uid) throw new HttpsError('invalid-argument', 'O UID do usuário é obrigatório.');
+
+    try {
+      await auth.updateUser(uid, { disabled: false });
+
+      await db.collection('users').doc(uid).update({
+        isActive: true,
+        inactivationType: FieldValue.delete(),
+        terminationDate: FieldValue.delete(),
+        terminationReason: FieldValue.delete(),
+        terminationCause: FieldValue.delete(),
+        terminationNotes: FieldValue.delete(),
+        terminationRelationshipType: FieldValue.delete(),
+        terminationProcessId: FieldValue.delete(),
+        employmentStatus: 'active',
+        terminationEffectsVersion: FieldValue.delete(),
+        terminationEffectsAppliedAt: FieldValue.delete(),
+        terminationEffectsReportPath: FieldValue.delete(),
+        inactivationHistory: FieldValue.arrayUnion({
+          type: 'reactivation',
+          at: new Date().toISOString(),
+          actorUid: request.auth.uid,
+          reason: 'Reativação/recontratação',
+          cause: null,
+          notes: null,
+          terminationDate: null,
+        }),
+      });
+
+      const employees = await hrDb.collection('employees').where('auth_uid', '==', uid).get();
+      const employeeWrites = hrDb.batch();
+      employees.docs.forEach((employee) => employeeWrites.set(employee.ref, {
+        status: 'active',
+        employment_status: 'active',
+        is_active: true,
+        reactivated_at: new Date().toISOString(),
+      }, { merge: true }));
+      if (!employees.empty) await employeeWrites.commit();
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Erro ao reativar usuário:', error);
+      throw new HttpsError('internal', error.message || 'Erro ao reativar usuário.');
     }
   }
 );
@@ -855,6 +1047,24 @@ export const onUserProfileChange = onDocumentWritten(
     }
 
     const userData = event.data.after.data()!;
+    const isContractTermination = userData.isActive === false && (
+      userData.inactivationType === 'contract_termination' || userData.employmentStatus === 'terminated'
+    );
+    if (isContractTermination && userData.terminationEffectsVersion !== 1) {
+      const report = await applyUserTerminationEffects({
+        db,
+        hrDb,
+        checklistDb,
+        userId,
+        user: userData,
+      });
+      await event.data.after.ref.set({
+        terminationEffectsVersion: report.version,
+        terminationEffectsAppliedAt: report.appliedAt,
+        terminationEffectsReportPath: `terminationImpactReports/${userId}__${report.effectiveDate}`,
+      }, { merge: true });
+      console.log(`✅ Efeitos do desligamento aplicados para ${userId}`, report.counts);
+    }
     const profileId = userData.profileId;
 
     if (!profileId) {
@@ -887,11 +1097,22 @@ export const onProfileChange = onDocumentWritten(
 
     const profileData = event.data?.after.exists ? event.data.after.data() : null;
     const isDefaultAdmin = profileData?.isDefaultAdmin === true;
+    const financialPermissions = profileData?.permissions?.financial ?? { view: false };
 
-    const promises = usersSnap.docs.map(userDoc =>
-      auth.setCustomUserClaims(userDoc.id, { profileId, isDefaultAdmin })
-        .then(() => console.log(`✅ ${userDoc.data().username || userDoc.id} atualizado`))
-    );
+    const promises = usersSnap.docs.map(async (userDoc) => {
+      const active = userDoc.data().isActive !== false && userDoc.data().active !== false;
+      await Promise.all([
+        auth.setCustomUserClaims(userDoc.id, { profileId, isDefaultAdmin, financial: financialPermissions }),
+        financialDb.collection('users').doc(userDoc.id).set({
+          profileId,
+          active,
+          isDefaultAdmin,
+          permissions: financialPermissions,
+          syncedAt: FieldValue.serverTimestamp(),
+        }, { merge: true }),
+      ]);
+      console.log(`✅ ${userDoc.data().username || userDoc.id} atualizado`);
+    });
 
     await Promise.all(promises);
     console.log(`🎉 ${promises.length} usuário(s) atualizados para profileId=${profileId}`);

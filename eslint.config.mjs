@@ -31,6 +31,7 @@ export default defineConfig([
     name: "coala/existing-debt-baseline",
     files: ["**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"],
     rules: {
+      "@next/next/no-assign-module-variable": "warn",
       "prefer-const": "warn",
     },
   },

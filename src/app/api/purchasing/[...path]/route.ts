@@ -4,8 +4,17 @@ import { addMonths } from 'date-fns';
 
 import { dbAdmin } from '@/lib/firebase-admin';
 import { financialDbAdmin } from '@/lib/firebase-financial-admin';
-import { verifyAuth } from '@/lib/verify-auth';
+import { requireUser, type ServerUserContext } from '@/lib/auth-server';
 import { PURCHASING_COLLECTIONS } from '@/lib/purchasing-constants';
+import {
+  canCancelPurchase,
+  canCreatePurchase,
+  canCreateQuotation,
+  canFinalizeQuotation,
+  canManagePurchaseFinancials,
+  canReceivePurchase,
+  canViewPurchasing,
+} from '@/lib/purchasing-permissions';
 import {
   calculatePricePerBaseUnit,
   calculateStockQuantityFromPurchase,
@@ -17,9 +26,17 @@ import {
   purchaseTreatmentCreatesAsset,
   purchaseTreatmentSkipsOperationalEntry,
 } from '@/lib/purchasing-item-treatment';
+import { buildPurchaseExpenseComponents } from '@/lib/purchase-financial-expenses';
+import {
+  UNIFORM_STOCK_ID,
+  UNIFORM_STOCK_NAME,
+  uniformLotId,
+} from '@/lib/uniform';
 import {
   type Product,
   type BaseProduct,
+  type PurchaseDivergenceExcessBillingMode,
+  type PurchaseDivergenceResolutionAction,
   type PurchaseItemTreatment,
   type PurchaseStockEntryType,
 } from '@/types';
@@ -33,12 +50,79 @@ function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-async function assertAuth(request: NextRequest) {
+// Lançamento só é válido em conta folha e ativa: a DRE lê a posição da própria
+// conta, então grupo/inativa geraria classificação perdida.
+async function validateAccountPlanForPosting(accountPlanId: unknown): Promise<string | null> {
+  if (!accountPlanId || typeof accountPlanId !== 'string') return null;
+  const doc = await financialDbAdmin.collection('accounts').doc(accountPlanId).get();
+  if (!doc.exists) return 'Plano de contas informado não existe.';
+  if (doc.data()?.active === false) return 'Plano de contas informado está inativo.';
+  const children = await financialDbAdmin
+    .collection('accounts')
+    .where('parentId', '==', accountPlanId)
+    .limit(1)
+    .get();
+  if (!children.empty) return 'Selecione uma conta específica do plano de contas, não um grupo.';
+  return null;
+}
+
+async function getUserContext(request: NextRequest) {
   try {
-    return await verifyAuth(request);
+    return await requireUser(request);
   } catch {
     return null;
   }
+}
+
+function isAllowed(
+  context: ServerUserContext,
+  check: (permissions: ServerUserContext['permissions']) => boolean,
+) {
+  return context.isDefaultAdmin || check(context.permissions);
+}
+
+function canPostPath(context: ServerUserContext, path: string[]) {
+  const [resource, id, child] = path;
+  if (resource === 'barcode' && id === 'lookup') {
+    return isAllowed(context, (permissions) =>
+      canCreateQuotation(permissions) || canCreatePurchase(permissions));
+  }
+  if (resource === 'quotations' && !id) {
+    return isAllowed(context, canCreateQuotation);
+  }
+  if (resource === 'quotations' && child === 'items') {
+    return isAllowed(context, canCreateQuotation);
+  }
+  if (resource === 'quotations' && child === 'finalize') {
+    return isAllowed(context, canFinalizeQuotation);
+  }
+  if (resource === 'quotations' && child === 'cancel') {
+    return isAllowed(context, (permissions) =>
+      canCreateQuotation(permissions) || canFinalizeQuotation(permissions));
+  }
+  if (resource === 'orders' && !id) {
+    return isAllowed(context, canCreatePurchase);
+  }
+  if (resource === 'orders' && child === 'confirm') {
+    return isAllowed(context, canCreatePurchase);
+  }
+  if (resource === 'orders' && child === 'cancel') {
+    return isAllowed(context, canCancelPurchase);
+  }
+  if (resource === 'orders' && child === 'mark-received-elsewhere') {
+    return isAllowed(context, canReceivePurchase);
+  }
+  if (resource === 'orders' && child === 'sync-expense') {
+    return isAllowed(context, canManagePurchaseFinancials);
+  }
+  if (resource === 'receipts') {
+    return isAllowed(context, canReceivePurchase);
+  }
+  return null;
+}
+
+function permissionError() {
+  return jsonError('Sem permissão para esta operação de compras.', 403);
 }
 
 function docData(doc: FirebaseFirestore.DocumentSnapshot) {
@@ -49,28 +133,26 @@ function collectionData(snapshot: FirebaseFirestore.QuerySnapshot) {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
-async function nextAssetCode() {
-  const counterRef = dbAdmin.collection('counters').doc('assets');
-  const next = await dbAdmin.runTransaction(async (tx) => {
-    const snap = await tx.get(counterRef);
-    const current = Number(snap.data()?.next ?? 1);
-    tx.set(counterRef, { next: current + 1, updatedAt: new Date().toISOString() }, { merge: true });
-    return current;
-  });
-  return `PAT-${String(next).padStart(6, '0')}`;
-}
-
-function buildExpenseInstallments(totalValue: number, count: number, firstDueDateIso: string) {
+function buildExpenseInstallments(
+  totalValue: number,
+  count: number,
+  firstDueDateIso: string,
+  installmentDueDates?: string[],
+) {
   const safeCount = Math.max(2, count);
   const baseValue = Number.parseFloat((totalValue / safeCount).toFixed(2));
   const diff = Number.parseFloat((totalValue - baseValue * safeCount).toFixed(2));
   const firstDueDate = new Date(firstDueDateIso);
+  const customDates =
+    installmentDueDates?.length === safeCount
+      ? installmentDueDates.map((date) => new Date(date))
+      : null;
 
   return Array.from({ length: safeCount }, (_, index) => {
     const value = index === safeCount - 1 ? Number.parseFloat((baseValue + diff).toFixed(2)) : baseValue;
     return {
       number: index + 1,
-      dueDate: Timestamp.fromDate(addMonths(firstDueDate, index)),
+      dueDate: Timestamp.fromDate(customDates?.[index] ?? addMonths(firstDueDate, index)),
       value,
       status: 'pending',
     };
@@ -83,6 +165,25 @@ function normalizeFreightPaymentMode(
 ): 'included_with_goods' | 'separate' | null {
   if (!(deliveryFee > 0)) return null;
   return rawValue === 'included_with_goods' ? 'included_with_goods' : 'separate';
+}
+
+function purchaseLineNetTotal(item: Record<string, any>) {
+  const quantity = Number(item.quantityOrdered ?? 0);
+  const unitPrice = Number(item.unitPriceOrdered ?? 0);
+  const discount = Number(item.discountOrdered ?? 0);
+  return Math.max(quantity * unitPrice - discount, 0);
+}
+
+function purchaseLineEffectiveUnitPrice(item: Record<string, any>) {
+  const quantity = Number(item.quantityOrdered ?? 0);
+  if (!(quantity > 0)) return Number(item.unitPriceOrdered ?? 0);
+
+  const total =
+    item.totalOrdered != null
+      ? Math.max(Number(item.totalOrdered ?? 0), 0)
+      : purchaseLineNetTotal(item);
+
+  return Number((total / quantity).toFixed(6));
 }
 
 function normalizePurchaseStockEntryType(value: unknown): PurchaseStockEntryType {
@@ -121,6 +222,79 @@ function purchaseItemTreatmentFields(item: Record<string, any>) {
     linkedAssetName: item.linkedAssetName ?? null,
     componentAction: item.componentAction ?? null,
   };
+}
+
+const DIVERGENCE_RESOLUTION_LABELS: Record<PurchaseDivergenceResolutionAction, string> = {
+  accept_charged: 'Aceitar excedente/diferença com cobrança',
+  bonus: 'Registrar excedente como bonificação',
+  return_excess: 'Marcar excedente para devolução',
+  keep_pending: 'Manter saldo pendente',
+  close_shortage: 'Fechar saldo como não entregue',
+  request_replacement: 'Solicitar reposição',
+  credit_discount: 'Registrar crédito/desconto',
+  correct_entry: 'Corrigir lançamento',
+};
+
+function normalizeDivergenceResolutionAction(value: unknown): PurchaseDivergenceResolutionAction | null {
+  return typeof value === 'string' && value in DIVERGENCE_RESOLUTION_LABELS
+    ? (value as PurchaseDivergenceResolutionAction)
+    : null;
+}
+
+function normalizeDivergenceExcessBillingMode(value: unknown): PurchaseDivergenceExcessBillingMode {
+  return value === 'custom_unit_price' ? 'custom_unit_price' : 'same_unit_price';
+}
+
+function isClosingDivergenceAction(action?: PurchaseDivergenceResolutionAction | null) {
+  return (
+    action === 'accept_charged' ||
+    action === 'bonus' ||
+    action === 'return_excess' ||
+    action === 'close_shortage' ||
+    action === 'credit_discount' ||
+    action === 'correct_entry'
+  );
+}
+
+function itemHasCommercialDivergence(item: Record<string, any>) {
+  const quantityReceived = Number(item.quantityReceived ?? 0);
+  const quantityOrdered = Number(item.quantityOrdered ?? 0);
+  const unitPriceConfirmed = Number(item.unitPriceConfirmed ?? 0);
+  const unitPriceOrdered = Number(item.unitPriceOrdered ?? 0);
+  return (
+    Math.abs(quantityReceived - quantityOrdered) > 0.001 ||
+    Math.abs(unitPriceConfirmed - unitPriceOrdered) > 0.01 ||
+    !!item.divergenceReason ||
+    item.receiptDisposition === 'receive_less' ||
+    item.receiptDisposition === 'receive_more' ||
+    item.receiptDisposition === 'exchange_pending' ||
+    item.receiptDisposition === 'returned' ||
+    item.status === 'divergent'
+  );
+}
+
+function chargeableReceiptItemTotal(item: Record<string, any>) {
+  const action = normalizeDivergenceResolutionAction(item.divergenceResolutionAction);
+  const quantityReceived = Number(item.quantityReceived ?? 0);
+  const quantityOrdered = Number(item.quantityOrdered ?? quantityReceived);
+  const unitPriceConfirmed = Number(item.unitPriceConfirmed ?? item.unitPriceOrdered ?? 0);
+
+  if (action === 'bonus' || action === 'return_excess') {
+    return Math.max(Math.min(quantityReceived, quantityOrdered), 0) * unitPriceConfirmed;
+  }
+
+  if (action === 'accept_charged' && quantityReceived > quantityOrdered) {
+    const orderedQuantity = Math.max(quantityOrdered, 0);
+    const excessQuantity = Math.max(quantityReceived - quantityOrdered, 0);
+    const excessBillingMode = normalizeDivergenceExcessBillingMode(item.divergenceExcessBillingMode);
+    const excessUnitPrice =
+      excessBillingMode === 'custom_unit_price'
+        ? Number(item.divergenceExcessUnitPrice ?? unitPriceConfirmed)
+        : unitPriceConfirmed;
+    return orderedQuantity * unitPriceConfirmed + excessQuantity * excessUnitPrice;
+  }
+
+  return Math.max(quantityReceived, 0) * unitPriceConfirmed;
 }
 
 function buildPurchaseAuditNotes(orderData: Record<string, any>) {
@@ -216,81 +390,152 @@ async function lookupBarcode(rawBarcode: string | null) {
 }
 
 async function internalSyncExpense(orderId: string, orderData: any, uid: string) {
+  if (orderData.archivedLinkedExpenseId || orderData.financialExpenseArchivedAt) {
+    return null;
+  }
+
   const supplierSnap = orderData.supplierId ? await dbAdmin.collection('entities').doc(orderData.supplierId).get() : null;
   const supplier = supplierSnap?.data() as Record<string, any> | undefined;
 
   const financialSnap = await financialDbAdmin
     .collection('expenses')
     .where('purchaseOrderId', '==', orderId)
-    .limit(1)
+    .limit(10)
     .get();
 
   const totalValue = Number(orderData.totalEstimated ?? 0);
-  const basePayload = {
-    description: `Compra ${supplier?.fantasyName || supplier?.name || orderData.supplierId || orderId}`,
-    supplier: supplier?.fantasyName || supplier?.name || '',
-    accountPlan: orderData.accountPlanId ?? '',
-    accountPlanName: orderData.accountPlanName ?? '',
+  const goodsSupplierName = supplier?.fantasyName || supplier?.name || orderData.supplierName || orderData.supplierId || orderId;
+  const components = buildPurchaseExpenseComponents({
+    totalValue,
+    deliveryFee: orderData.deliveryFee,
+    freightPaymentMode: normalizeFreightPaymentMode(Number(orderData.deliveryFee ?? 0), orderData.freightPaymentMode),
+    goodsSupplier: goodsSupplierName,
+    freightSupplier: orderData.freightSupplierName,
+    goodsAccountPlanId: orderData.accountPlanId,
+    goodsAccountPlanName: orderData.accountPlanName,
+    freightAccountPlanId: orderData.freightAccountPlanId,
+    freightAccountPlanName: orderData.freightAccountPlanName,
+  });
+  const existingExpenses = financialSnap.docs;
+  const linkedGoodsId = String(orderData.linkedExpenseId || '').trim();
+  const linkedFreightId = String(orderData.linkedFreightExpenseId || '').trim();
+  const existingGoods = existingExpenses.find((document) => document.id === linkedGoodsId)
+    ?? existingExpenses.find((document) => ['goods', 'combined'].includes(String(document.data().purchaseExpenseRole || '')))
+    ?? existingExpenses.find((document) => document.data().purchaseExpenseRole !== 'freight');
+  const existingFreight = existingExpenses.find((document) => document.id === linkedFreightId)
+    ?? existingExpenses.find((document) => document.data().purchaseExpenseRole === 'freight');
+  const goodsRef = existingGoods?.ref ?? financialDbAdmin.collection('expenses').doc();
+  const freightRef = existingFreight?.ref ?? financialDbAdmin.collection('expenses').doc(`purchase_freight_${orderId}`);
+  const freightComponent = components.find((component) => component.role === 'freight');
+  const primaryComponent = components.find((component) => component.role !== 'freight');
+  if (!primaryComponent) throw new Error('A compra não gerou uma despesa principal válida.');
+
+  const sharedPayload = {
     paymentAccountId: orderData.paymentAccountId ?? null,
     paymentAccountName: orderData.paymentAccountName ?? null,
     paymentMethodId: orderData.paymentMethodId ?? null,
     paymentMethodLabel: orderData.paymentMethodLabel ?? null,
-    totalValue,
     dueDate: Timestamp.fromDate(new Date(orderData.paymentDueDate)),
     competenceDate: Timestamp.fromDate(new Date(orderData.createdAt ?? orderData.paymentDueDate)),
-    paymentMethod: orderData.paymentCondition === 'installments' ? 'installments' : 'single',
-    installments:
-      orderData.paymentCondition === 'installments'
-        ? buildExpenseInstallments(totalValue, Number(orderData.installmentsCount ?? 2), orderData.paymentDueDate)
-        : null,
-    installmentType: orderData.paymentCondition === 'installments' ? 'equal' : null,
-    installmentPeriodicity: orderData.paymentCondition === 'installments' ? 'monthly' : null,
-    firstInstallmentDueDate:
-      orderData.paymentCondition === 'installments' ? Timestamp.fromDate(new Date(orderData.paymentDueDate)) : null,
     isApportioned: false,
-    resultCenter: orderData.resultCenterId ?? null,
+    resultCenter: orderData.resultCenterName ?? orderData.resultCenterId ?? null,
+    resultCenterId: orderData.resultCenterId ?? null,
+    resultCenterName: orderData.resultCenterName ?? null,
     apportionments: null,
-    notes: buildPurchaseAuditNotes(orderData),
     status: 'pending',
     originModule: 'purchasing',
     originStatus: 'pending_audit',
     purchaseOrderId: orderId,
+    purchaseOrderTotalValue: totalValue,
+    purchaseGoodsAmount: Math.max(totalValue - Number(orderData.deliveryFee ?? 0), 0),
+    purchaseFreightAmount: Number(orderData.deliveryFee ?? 0),
+    freightPaymentMode: normalizeFreightPaymentMode(Number(orderData.deliveryFee ?? 0), orderData.freightPaymentMode),
     purchaseFinancialStatus: orderData.paymentCondition === 'installments' ? 'installments_pending_audit' : 'pending_audit',
-    createdBy: uid,
     updatedAt: Timestamp.now(),
   };
 
-  let expenseId: string;
-  if (financialSnap.empty) {
-    const expenseRef = financialDbAdmin.collection('expenses').doc();
-    expenseId = expenseRef.id;
-    await expenseRef.set({ ...basePayload, createdAt: Timestamp.now() });
-  } else {
-    const existing = financialSnap.docs[0];
-    expenseId = existing.id;
-    await existing.ref.set(basePayload, { merge: true });
+  function componentPayload(component: (typeof components)[number], relatedExpenseId: string | null) {
+    const canInstall = component.role !== 'freight' && orderData.paymentCondition === 'installments';
+    return {
+      ...sharedPayload,
+      description: component.description,
+      supplier: component.supplier,
+      accountPlan: component.accountPlanId,
+      accountId: component.accountPlanId,
+      accountPlanId: component.accountPlanId,
+      accountPlanName: component.accountPlanName,
+      totalValue: component.totalValue,
+      hasAccountAllocations: component.hasAccountAllocations,
+      accountAllocations: component.accountAllocations,
+      paymentMethod: canInstall ? 'installments' : 'single',
+      installments: canInstall
+        ? buildExpenseInstallments(
+            component.totalValue,
+            Number(orderData.installmentsCount ?? 2),
+            orderData.paymentDueDate,
+            orderData.installmentDueDates,
+          )
+        : null,
+      installmentType: canInstall ? 'equal' : null,
+      installmentPeriodicity: canInstall ? 'monthly' : null,
+      firstInstallmentDueDate: canInstall ? Timestamp.fromDate(new Date(orderData.paymentDueDate)) : null,
+      purchaseExpenseRole: component.role,
+      purchaseComponentType: component.role === 'freight' ? 'inbound_freight' : 'goods',
+      relatedPurchaseExpenseId: relatedExpenseId,
+      notes: component.role === 'freight'
+        ? `${buildPurchaseAuditNotes(orderData)}\n\nFrete vinculado à despesa ${goodsRef.id} do pedido ${orderId}.`
+        : buildPurchaseAuditNotes(orderData),
+    };
   }
 
+  const now = Timestamp.now();
+  const expenseBatch = financialDbAdmin.batch();
+  expenseBatch.set(goodsRef, {
+    ...componentPayload(primaryComponent, freightComponent ? freightRef.id : null),
+    ...(existingGoods ? {} : { createdAt: now, createdBy: uid }),
+  }, { merge: true });
+  if (freightComponent) {
+    expenseBatch.set(freightRef, {
+      ...componentPayload(freightComponent, goodsRef.id),
+      ...(existingFreight ? {} : { createdAt: now, createdBy: uid }),
+    }, { merge: true });
+  } else if (existingFreight) {
+    expenseBatch.set(existingFreight.ref, {
+      status: 'cancelled',
+      originStatus: 'superseded_by_purchase_sync',
+      cancelledReason: 'O frete passou a ser pago junto com a mercadoria ou foi removido do pedido.',
+      updatedAt: now,
+    }, { merge: true });
+  }
+  await expenseBatch.commit();
+
   await Promise.all([
-    dbAdmin.collection('purchase_orders').doc(orderId).set({ linkedExpenseId: expenseId }, { merge: true }),
+    dbAdmin.collection('purchase_orders').doc(orderId).set({
+      linkedExpenseId: goodsRef.id,
+      linkedFreightExpenseId: freightComponent ? freightRef.id : FieldValue.delete(),
+    }, { merge: true }),
     dbAdmin
       .collection('purchase_financials')
       .where('purchaseOrderId', '==', orderId)
+      .limit(10)
       .get()
       .then((snapshot) =>
-        Promise.all(snapshot.docs.map((doc) => doc.ref.set({ linkedExpenseId: expenseId }, { merge: true }))),
+        Promise.all(snapshot.docs.map((doc) => doc.ref.set({
+          linkedExpenseId: goodsRef.id,
+          linkedFreightExpenseId: freightComponent ? freightRef.id : FieldValue.delete(),
+        }, { merge: true }))),
       ),
   ]);
 
-  return expenseId;
+  return goodsRef.id;
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource, id, child, childId] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  if (!isAllowed(userContext, canViewPurchasing)) return permissionError();
 
   if (resource === 'barcode' && id === 'lookup') {
     return lookupBarcode(request.nextUrl.searchParams.get('barcode'));
@@ -359,11 +604,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
-  const [resource, id, child, childId, action] = path;
+  const [resource, id, child] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  const canPost = canPostPath(userContext, path);
+  if (canPost === false) return permissionError();
+  const decoded = userContext.decoded;
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
 
@@ -475,9 +722,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
   }
 
   if (resource === 'orders' && !id) {
+    for (const accountField of [body.accountPlanId, body.freightAccountPlanId]) {
+      const accountError = await validateAccountPlanForPosting(accountField);
+      if (accountError) return jsonError(accountError);
+    }
     const ref = dbAdmin.collection('purchase_orders').doc();
     const items = Array.isArray(body.items) ? body.items : [];
-    const itemsTotal = items.reduce((sum: number, item: any) => sum + (Number(item.quantityOrdered || 0) * Number(item.unitPriceOrdered || 0)), 0);
+    const itemsTotal = items.reduce((sum: number, item: any) => sum + purchaseLineNetTotal(item), 0);
     const deliveryFee = Number(body.deliveryFee ?? 0);
     const totalEstimated = Number(body.totalEstimated ?? (itemsTotal + deliveryFee));
 
@@ -513,11 +764,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       paymentMethodId: body.paymentMethodId ?? null,
       paymentMethodLabel: body.paymentMethodLabel ?? null,
       installmentsCount: Number(body.installmentsCount ?? 1),
+      installmentDueDates: Array.isArray(body.installmentDueDates) ? body.installmentDueDates : null,
       accountPlanId: body.accountPlanId ?? null,
       accountPlanName: body.accountPlanName ?? null,
       freightAccountPlanId: body.freightAccountPlanId ?? null,
       freightAccountPlanName: body.freightAccountPlanName ?? null,
       freightPaymentMode,
+      freightSupplierId: freightPaymentMode === 'separate' ? body.freightSupplierId ?? null : null,
+      freightSupplierName: freightPaymentMode === 'separate' ? body.freightSupplierName ?? null : null,
       resultCenterId: body.resultCenterId ?? null,
       resultCenterName: body.resultCenterName ?? null,
       trackingInfo: body.trackingInfo ?? null,
@@ -536,6 +790,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const q = Number(item.quantityOrdered || 0);
         const p = Number(item.unitPriceOrdered || 0);
         const d = Number(item.discountOrdered || 0);
+        const totalOrdered = purchaseLineNetTotal({ quantityOrdered: q, unitPriceOrdered: p, discountOrdered: d });
+        const netUnitPriceOrdered = purchaseLineEffectiveUnitPrice({
+          quantityOrdered: q,
+          unitPriceOrdered: p,
+          discountOrdered: d,
+          totalOrdered,
+        });
         const treatmentFields = purchaseItemTreatmentFields(item);
         const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         batch.set(itemRef, {
@@ -551,8 +812,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
           quantityOrdered: q,
           unitPriceOrdered: p,
+          netUnitPriceOrdered,
           discountOrdered: d,
-          totalOrdered: Math.max((q * p) - d, 0),
+          totalOrdered,
           quotationItemId: item.quotationItemId ?? null,
           entryType: itemDestination,
           ...treatmentFields,
@@ -580,6 +842,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         totalEstimated += (doc.data().totalOrdered || 0);
       });
       totalEstimated += (order.deliveryFee || 0);
+    }
+    const confirmationFreightAmount = Number(order.deliveryFee ?? 0);
+    const confirmationFreightMode = normalizeFreightPaymentMode(
+      confirmationFreightAmount,
+      order.freightPaymentMode,
+    );
+    if (
+      confirmationFreightAmount > 0 &&
+      !String(order.freightAccountPlanId || '').trim()
+    ) {
+      return jsonError('Informe o plano de contas do frete antes de confirmar a compra.');
+    }
+    if (
+      confirmationFreightAmount > 0 &&
+      confirmationFreightMode === 'separate' &&
+      String(order.freightSupplierName || '').trim().length < 2
+    ) {
+      return jsonError('Informe o favorecido do frete antes de confirmar a compra.');
     }
 
     batch.update(orderRef, { 
@@ -616,6 +896,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       const receiptItemRef = receiptRef.collection('items').doc();
       const treatmentFields = purchaseItemTreatmentFields(item);
       const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
+      const effectiveUnitPriceOrdered = purchaseLineEffectiveUnitPrice(item);
       batch.set(receiptItemRef, {
         purchaseReceiptId: receiptRef.id,
         purchaseOrderItemId: itemDoc.id,
@@ -629,7 +910,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         purchaseUnitType: item.purchaseUnitType || 'content',
         purchaseUnitLabel: item.purchaseUnitLabel || item.unit,
         quantityOrdered: item.quantityOrdered,
-        unitPriceOrdered: item.unitPriceOrdered,
+        unitPriceOrdered: effectiveUnitPriceOrdered,
+        grossUnitPriceOrdered: item.unitPriceOrdered ?? effectiveUnitPriceOrdered,
+        discountOrdered: Number(item.discountOrdered ?? 0),
+        totalOrdered: item.totalOrdered ?? purchaseLineNetTotal(item),
         quantityReceived: 0,
         unitPriceConfirmed: 0,
         status: 'pending',
@@ -654,6 +938,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       goodsAmountEstimated,
       freightAmountEstimated,
       freightPaymentMode,
+      freightSupplierId: freightPaymentMode === 'separate' ? order.freightSupplierId ?? null : null,
+      freightSupplierName: freightPaymentMode === 'separate' ? order.freightSupplierName ?? null : null,
       paymentMethod: order.paymentMethod ?? null,
       paymentAccountId: order.paymentAccountId ?? null,
       paymentAccountName: order.paymentAccountName ?? null,
@@ -675,22 +961,74 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
 
   if (resource === 'orders' && id && child === 'cancel') {
-    await dbAdmin.collection('purchase_orders').doc(id).update({ status: 'cancelled', cancelledAt: now, updatedAt: now });
+    const orderRef = dbAdmin.collection('purchase_orders').doc(id);
+    const [orderSnap, receiptsSnap, purchaseFinancialsSnap, expensesSnap] = await Promise.all([
+      orderRef.get(),
+      dbAdmin.collection('purchase_receipts').where('purchaseOrderId', '==', id).get(),
+      dbAdmin.collection('purchase_financials').where('purchaseOrderId', '==', id).get(),
+      financialDbAdmin.collection('expenses').where('purchaseOrderId', '==', id).get(),
+    ]);
 
-    // Try to cancel the financial expense as well
-    const financialSnap = await financialDbAdmin
-      .collection('expenses')
-      .where('purchaseOrderId', '==', id)
-      .limit(1)
-      .get();
-    
-    if (!financialSnap.empty) {
-      await financialSnap.docs[0].ref.update({
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+
+    const hasStockEntry =
+      Boolean(orderSnap.data()?.receivedAt) ||
+      receiptsSnap.docs.some((receipt) => receipt.data().status === 'stocked');
+    if (hasStockEntry) {
+      return jsonError(
+        'A compra já gerou entrada no estoque. Reverta a movimentação antes de cancelar o pedido.',
+        409,
+      );
+    }
+
+    const cancellationNote = `Cancelado junto com o pedido de compra em ${new Date().toLocaleDateString('pt-BR')}.`;
+    const purchasingBatch = dbAdmin.batch();
+    purchasingBatch.update(orderRef, {
+      status: 'cancelled',
+      cancelledAt: now,
+      cancelledBy: decoded.uid,
+      updatedAt: now,
+    });
+
+    for (const receiptDoc of receiptsSnap.docs) {
+      purchasingBatch.update(receiptDoc.ref, {
         status: 'cancelled',
-        updatedAt: Timestamp.now(),
-        notes: `Cancelado junto com o pedido de compra em ${new Date().toLocaleDateString('pt-BR')}.`,
+        cancelledAt: now,
+        cancelledBy: decoded.uid,
+        updatedAt: now,
+      });
+      const receiptItemsSnap = await receiptDoc.ref.collection('items').get();
+      receiptItemsSnap.forEach((itemDoc) => {
+        purchasingBatch.update(itemDoc.ref, {
+          status: 'cancelled',
+          cancelledAt: now,
+          updatedAt: now,
+        });
       });
     }
+
+    purchaseFinancialsSnap.forEach((financialDoc) => {
+      purchasingBatch.update(financialDoc.ref, {
+        status: 'cancelled',
+        cancelledAt: now,
+        cancelledBy: decoded.uid,
+        updatedAt: now,
+      });
+    });
+    await purchasingBatch.commit();
+
+    const financialBatch = financialDbAdmin.batch();
+    expensesSnap.forEach((expenseDoc) => {
+      const previousNotes = expenseDoc.data().notes;
+      financialBatch.update(expenseDoc.ref, {
+        status: 'cancelled',
+        cancelledAt: now,
+        cancelledBy: decoded.uid,
+        updatedAt: now,
+        notes: previousNotes ? `${previousNotes}\n\n${cancellationNote}` : cancellationNote,
+      });
+    });
+    await financialBatch.commit();
 
     return NextResponse.json({ ok: true });
   }
@@ -725,7 +1063,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     for (const itemDoc of receiptItemsSnap.docs) {
       const item = itemDoc.data();
       const quantityReceived = Number(item.quantityOrdered ?? 0);
-      const unitPriceConfirmed = Number(item.unitPriceOrdered ?? 0);
+      const unitPriceConfirmed = purchaseLineEffectiveUnitPrice(item);
       const totalItemConfirmed = quantityReceived * unitPriceConfirmed;
       totalConfirmed += totalItemConfirmed;
 
@@ -800,6 +1138,227 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     return 'received';
   }
 
+  if (resource === 'receipts' && id && child === 'resolve-divergence') {
+    const receiptRef = dbAdmin.collection('purchase_receipts').doc(id);
+    const receiptSnap = await receiptRef.get();
+    if (!receiptSnap.exists) return jsonError('Recebimento não encontrado.', 404);
+    const receipt = receiptSnap.data()!;
+
+    const items = Array.isArray(body.items) ? body.items : [];
+    if (items.length === 0) return jsonError('Informe ao menos uma divergência para tratar.');
+
+    const orderRef = dbAdmin.collection('purchase_orders').doc(receipt.purchaseOrderId);
+    const orderSnap = await orderRef.get();
+    const order = orderSnap.data() ?? {};
+    const receiptItemsSnap = await receiptRef.collection('items').get();
+    const receiptItems = receiptItemsSnap.docs.map((itemDoc) => ({
+      id: itemDoc.id,
+      ref: itemDoc.ref,
+      data: itemDoc.data(),
+    }));
+    const receiptItemsById = new Map(receiptItems.map((item) => [item.id, item]));
+    const resolutions = new Map<
+      string,
+      {
+        action: PurchaseDivergenceResolutionAction;
+        notes?: string;
+        excessBillingMode?: PurchaseDivergenceExcessBillingMode;
+        excessUnitPrice?: number | null;
+      }
+    >();
+
+    for (const item of items) {
+      const receiptItemId = String(item.receiptItemId ?? '');
+      const action = normalizeDivergenceResolutionAction(item.action);
+      if (!receiptItemId || !action) return jsonError('Ação de divergência inválida.', 400);
+      if (!receiptItemsById.has(receiptItemId)) return jsonError('Item de recebimento inválido.', 404);
+      const excessBillingMode =
+        action === 'accept_charged'
+          ? normalizeDivergenceExcessBillingMode(item.excessBillingMode)
+          : undefined;
+      const excessUnitPrice: number | null =
+        action === 'accept_charged' && excessBillingMode === 'custom_unit_price'
+          ? Number(item.excessUnitPrice)
+          : null;
+      const invalidCustomExcessPrice =
+        excessBillingMode === 'custom_unit_price' &&
+        (excessUnitPrice === null || !Number.isFinite(excessUnitPrice) || excessUnitPrice < 0);
+      if (
+        action === 'accept_charged' &&
+        invalidCustomExcessPrice
+      ) {
+        return jsonError('Informe um valor válido para o excedente.', 400);
+      }
+      resolutions.set(receiptItemId, {
+        action,
+        notes: typeof item.notes === 'string' ? item.notes.trim() : '',
+        excessBillingMode,
+        excessUnitPrice,
+      });
+    }
+
+    const batch = dbAdmin.batch();
+    const nextItems: Array<Record<string, any>> = [];
+    const username = body.username ?? 'Sistema';
+
+    for (const item of receiptItems) {
+      const resolution = resolutions.get(item.id);
+      const nextItem = { ...item.data };
+
+      if (resolution) {
+        const { action, notes, excessBillingMode, excessUnitPrice } = resolution;
+        const quantityReceived = Number(nextItem.quantityReceived ?? 0);
+        const quantityOrdered = Number(nextItem.quantityOrdered ?? 0);
+        const hasExcess = quantityReceived > quantityOrdered;
+        const nextExcessBillingMode =
+          action === 'accept_charged' && hasExcess
+            ? excessBillingMode ?? 'same_unit_price'
+            : null;
+        const nextExcessUnitPrice =
+          action === 'accept_charged' && hasExcess && nextExcessBillingMode === 'custom_unit_price'
+            ? excessUnitPrice
+            : null;
+        const nextTotalConfirmed = chargeableReceiptItemTotal({
+          ...nextItem,
+          divergenceResolutionAction: action,
+          divergenceExcessBillingMode: nextExcessBillingMode,
+          divergenceExcessUnitPrice: nextExcessUnitPrice,
+        });
+        const status =
+          action === 'keep_pending' || action === 'request_replacement'
+            ? 'partial'
+            : quantityReceived > 0
+            ? 'received'
+            : 'cancelled';
+        const disposition =
+          action === 'keep_pending' ||
+          action === 'request_replacement' ||
+          action === 'close_shortage' ||
+          action === 'credit_discount'
+            ? 'receive_less'
+            : action === 'return_excess' || action === 'bonus' || action === 'accept_charged'
+            ? 'receive_more'
+            : nextItem.receiptDisposition ?? 'receive';
+        const auditEntry = {
+          action,
+          label: DIVERGENCE_RESOLUTION_LABELS[action],
+          excessBillingMode: nextExcessBillingMode,
+          excessUnitPrice: nextExcessUnitPrice,
+          notes: notes || null,
+          resolvedAt: now,
+          resolvedBy: decoded.uid,
+          resolvedByName: username,
+        };
+
+        Object.assign(nextItem, {
+          status,
+          receiptDisposition: disposition,
+          divergenceResolutionAction: action,
+          divergenceExcessBillingMode: nextExcessBillingMode,
+          divergenceExcessUnitPrice: nextExcessUnitPrice,
+          totalConfirmed: nextTotalConfirmed,
+          divergenceResolvedAt: now,
+          divergenceResolvedBy: decoded.uid,
+          resolutionNotes: notes || DIVERGENCE_RESOLUTION_LABELS[action],
+        });
+
+        batch.update(item.ref, {
+          status,
+          receiptDisposition: disposition,
+          divergenceResolutionAction: action,
+          divergenceExcessBillingMode: nextExcessBillingMode,
+          divergenceExcessUnitPrice: nextExcessUnitPrice,
+          totalConfirmed: nextTotalConfirmed,
+          divergenceResolvedAt: now,
+          divergenceResolvedBy: decoded.uid,
+          resolutionNotes: notes || DIVERGENCE_RESOLUTION_LABELS[action],
+          divergenceResolutionHistory: FieldValue.arrayUnion(auditEntry),
+          updatedAt: now,
+        });
+      }
+
+      nextItems.push(nextItem);
+    }
+
+    let goodsConfirmed = 0;
+    let hasOpenBalance = false;
+    let hasUnresolvedDivergence = false;
+
+    for (const item of nextItems) {
+      goodsConfirmed += chargeableReceiptItemTotal(item);
+
+      const action = normalizeDivergenceResolutionAction(item.divergenceResolutionAction);
+      const itemDiverges = itemHasCommercialDivergence(item);
+      const hasResolution = !!action;
+      const keepsBalanceOpen = action === 'keep_pending' || action === 'request_replacement';
+
+      if (keepsBalanceOpen || (!isClosingDivergenceAction(action) && item.status === 'partial')) {
+        hasOpenBalance = true;
+      }
+
+      if (itemDiverges && !hasResolution) {
+        hasUnresolvedDivergence = true;
+      }
+    }
+
+    const finalStatus = hasOpenBalance
+      ? 'partially_stocked'
+      : hasUnresolvedDivergence
+      ? 'stocked_with_divergence'
+      : 'stocked';
+    const deliveryFee = Number(order.deliveryFee ?? 0);
+    const financialConfirmed = goodsConfirmed + deliveryFee;
+    const resolutionSummary = items
+      .map((item: any) => {
+        const action = normalizeDivergenceResolutionAction(item.action);
+        return action ? DIVERGENCE_RESOLUTION_LABELS[action] : null;
+      })
+      .filter(Boolean)
+      .join('; ');
+
+    batch.update(receiptRef, {
+      status: finalStatus,
+      totalConfirmed: goodsConfirmed,
+      divergenceResolvedAt: finalStatus === 'stocked' ? now : null,
+      divergenceResolvedBy: decoded.uid,
+      divergenceResolutionSummary: resolutionSummary || null,
+      ...(finalStatus === 'stocked' ? { receivedAt: now } : {}),
+      updatedAt: now,
+      notes: body.notes ?? receipt.notes ?? null,
+    });
+
+    batch.update(orderRef, {
+      totalConfirmed: goodsConfirmed,
+      ...(finalStatus === 'stocked' ? { receivedAt: now } : {}),
+      updatedAt: now,
+    });
+
+    const finSnap = await dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', receipt.purchaseOrderId)
+      .get();
+    finSnap.forEach((financialDoc) => {
+      batch.update(financialDoc.ref, {
+        status:
+          finalStatus === 'stocked'
+            ? 'confirmed'
+            : finalStatus === 'partially_stocked'
+            ? 'forecasted'
+            : 'divergent',
+        amountConfirmed: financialConfirmed,
+        updatedAt: now,
+      });
+    });
+
+    await batch.commit();
+    return NextResponse.json({
+      ok: true,
+      status: finalStatus,
+      totalConfirmed: goodsConfirmed,
+      amountConfirmed: financialConfirmed,
+    });
+  }
+
   if (resource === 'receipts' && id && child === 'save-conference') {
     const batch = dbAdmin.batch();
     const receiptRef = dbAdmin.collection('purchase_receipts').doc(id);
@@ -830,7 +1389,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const treatmentFields = purchaseItemTreatmentFields({ ...(orderItem ?? {}), ...item });
         const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         const quantityOrdered = Number(orderItem?.quantityOrdered ?? item.quantityReceived);
-        const unitPriceOrdered = Number(orderItem?.unitPriceOrdered ?? item.unitPriceConfirmed);
+        const unitPriceOrdered = purchaseLineEffectiveUnitPrice(
+          orderItem ?? existingReceiptItem ?? { quantityOrdered, unitPriceOrdered: item.unitPriceConfirmed },
+        );
         const disposition = item.receiptDisposition ?? 'receive';
         const previousReceived = Number(existingReceiptItem?.quantityReceived ?? 0);
         const currentReceived =
@@ -994,6 +1555,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         const entryType = getTreatmentEntryType(treatmentFields.itemTreatment);
         const skipsOperationalEntry = purchaseTreatmentSkipsOperationalEntry(treatmentFields.itemTreatment);
         const createsAsset = purchaseTreatmentCreatesAsset(treatmentFields.itemTreatment);
+        const destinationKioskId = entryType === 'uniform'
+          ? UNIFORM_STOCK_ID
+          : String(body.destinationKioskId ?? '').trim();
+        const destinationKioskName = entryType === 'uniform'
+          ? UNIFORM_STOCK_NAME
+          : String(body.destinationKioskName ?? '').trim();
+
+        if (!skipsOperationalEntry && entryType !== 'uniform' && !destinationKioskId) {
+          return jsonError('Defina o quiosque de destino para os itens de estoque ou patrimônio.');
+        }
 
         const baseProductDoc = item.baseItemId
           ? await dbAdmin.collection('baseProducts').doc(item.baseItemId).get()
@@ -1015,7 +1586,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           orderItem?.unit ??
           '';
 
-        const confirmedUnitPrice = existingReceiptItem?.unitPriceConfirmed ?? orderItem?.unitPriceOrdered ?? 0;
+        const orderedUnitPrice = purchaseLineEffectiveUnitPrice(orderItem ?? existingReceiptItem ?? {});
+        const confirmedUnitPrice = Number(existingReceiptItem?.unitPriceConfirmed || orderedUnitPrice || 0);
         const previousReceived = Number(existingReceiptItem?.quantityReceived ?? 0);
         const pendingStockEntryRaw = existingReceiptItem?.quantityPendingStockEntry;
         const pendingStockEntry = Number(pendingStockEntryRaw ?? 0);
@@ -1034,7 +1606,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
             cumulativeReceived,
             quantityOrdered,
             confirmedUnitPrice,
-            Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+            orderedUnitPrice || confirmedUnitPrice,
             existingReceiptItem?.divergenceReason,
           );
           if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
@@ -1100,7 +1672,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
             cumulativeReceived,
             quantityOrdered,
             confirmedUnitPrice,
-            Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+            orderedUnitPrice || confirmedUnitPrice,
             existingReceiptItem?.divergenceReason,
           );
           if (receiptItemStatus === 'divergent' || receiptItemStatus === 'partial') hasDivergence = true;
@@ -1112,16 +1684,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
             : null;
           const assetsToCreate = Math.max(0, assetCount - (existingAssetsSnap?.size ?? 0));
           for (let index = 0; index < assetsToCreate; index += 1) {
-            const code = await nextAssetCode();
             const assetRef = dbAdmin.collection('assets').doc();
+            const code = `PEND-${assetRef.id.slice(0, 8).toUpperCase()}`;
             const assetName = item.itemName || existingReceiptItem?.itemName || orderItem?.itemName || baseProduct?.name || item.baseItemId || 'Patrimônio';
             batch.set(assetRef, {
               workspaceId: WORKSPACE_ID,
               code,
               name: assetName,
               category: 'Patrimônio',
-              currentKioskId: body.destinationKioskId,
-              currentKioskName: body.destinationKioskName,
+              currentKioskId: destinationKioskId,
+              currentKioskName: destinationKioskName,
               status: 'ativo',
               purchaseDate: order.purchaseDate ?? order.fiscal?.issuedAt?.slice?.(0, 10) ?? order.createdAt?.slice?.(0, 10) ?? null,
               purchaseValue: confirmedUnitPrice,
@@ -1133,6 +1705,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               accountingAccount: order.accountPlanId ?? null,
               documentUrl: order.documentUrl ?? order.fiscal?.documentUrl ?? null,
               sourceType: 'purchase_receipt',
+              plateStatus: 'pendente',
               purchaseOrderId: receipt.purchaseOrderId,
               purchaseReceiptId: id,
               purchaseReceiptItemId: item.receiptItemId,
@@ -1145,13 +1718,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               assetCode: code,
               assetName,
               type: 'CRIACAO',
-              toKioskId: body.destinationKioskId,
-              toKioskName: body.destinationKioskName,
+              toKioskId: destinationKioskId,
+              toKioskName: destinationKioskName,
               toStatus: 'ativo',
               userId: decoded.uid,
               username: body.username ?? 'Sistema',
               occurredAt: now,
-              notes: 'Entrada via recebimento de compra.',
+              notes: 'Entrada via recebimento de compra. Placa patrimonial pendente de vinculação.',
               sourceType: 'purchase_receipt',
               sourceId: id,
             });
@@ -1189,7 +1762,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
           cumulativeReceived,
           quantityOrdered,
           confirmedUnitPrice,
-          Number(orderItem?.unitPriceOrdered ?? confirmedUnitPrice),
+          orderedUnitPrice || confirmedUnitPrice,
           existingReceiptItem?.divergenceReason,
         );
 
@@ -1254,25 +1827,39 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               },
             });
 
-            const lotKey = `${item.productId}_${body.destinationKioskId}_${lot.lotCode}_${
-              lot.expiryDate ?? 'noval'
-            }`;
+            const lotKey = entryType === 'uniform'
+              ? uniformLotId({
+                  productId: item.productId,
+                  condition: 'novo',
+                  status: 'disponivel',
+                  lotNumber: lot.lotCode,
+                })
+              : `${item.productId}_${destinationKioskId}_${lot.lotCode}_${lot.expiryDate ?? 'noval'}`;
             const stockLotRef = dbAdmin.collection('lots').doc(lotKey);
             batch.set(
               stockLotRef,
               {
+                workspaceId: WORKSPACE_ID,
                 productId: item.productId,
                 productName: item.productName ?? item.baseItemId,
                 lotNumber: lot.lotCode,
                 expiryDate: lot.expiryDate ?? null,
-                kioskId: body.destinationKioskId,
-                quantity: Timestamp.fromMillis(stockConversion.stockQuantity), // increment hack? no, use FieldValue
+                kioskId: destinationKioskId,
+                quantity: FieldValue.increment(stockConversion.stockQuantity),
+                ...(entryType === 'uniform'
+                  ? {
+                      condition: 'novo',
+                      uniformStockStatus: 'disponivel',
+                      apparelType: product.apparelType ?? null,
+                      apparelSize: product.apparelSize ?? null,
+                      apparelColor: product.apparelColor ?? null,
+                      imageUrl: product.imageUrl ?? null,
+                    }
+                  : {}),
                 updatedAt: Timestamp.now(),
               },
               { merge: true },
             );
-            // Need to fix increment logic for Admin SDK:
-            batch.update(stockLotRef, { quantity: FieldValue.increment(stockConversion.stockQuantity) });
 
             const movRef = dbAdmin.collection('movementHistory').doc();
             batch.set(movRef, {
@@ -1282,8 +1869,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
               lotNumber: lot.lotCode,
               type: 'ENTRADA',
               quantityChange: stockConversion.stockQuantity,
-              toKioskId: body.destinationKioskId,
-              toKioskName: body.destinationKioskName,
+              toKioskId: destinationKioskId,
+              toKioskName: destinationKioskName,
               userId: decoded.uid,
               username: body.username ?? 'Sistema',
               timestamp: now,
@@ -1361,6 +1948,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
 
     const order = orderSnap.data() as Record<string, any>;
+    if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt) {
+      return jsonError('A despesa anterior deste pedido foi arquivada na virada financeira de 01/08/2026.', 409);
+    }
     const supplierSnap = order.supplierId ? await dbAdmin.collection('entities').doc(order.supplierId).get() : null;
     const supplier = supplierSnap?.data() as Record<string, any> | undefined;
 
@@ -1382,14 +1972,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       paymentMethod: order.paymentCondition === 'installments' ? 'installments' : 'single',
       installments:
         order.paymentCondition === 'installments'
-          ? buildExpenseInstallments(totalValue, Number(order.installmentsCount ?? 2), order.paymentDueDate)
+          ? buildExpenseInstallments(
+              totalValue,
+              Number(order.installmentsCount ?? 2),
+              order.paymentDueDate,
+              order.installmentDueDates,
+            )
           : null,
       installmentType: order.paymentCondition === 'installments' ? 'equal' : null,
       installmentPeriodicity: order.paymentCondition === 'installments' ? 'monthly' : null,
       firstInstallmentDueDate:
         order.paymentCondition === 'installments' ? Timestamp.fromDate(new Date(order.paymentDueDate)) : null,
       isApportioned: false,
-      resultCenter: order.resultCenterId ?? null,
+      resultCenter: order.resultCenterName ?? order.resultCenterId ?? null,
+      resultCenterId: order.resultCenterId ?? null,
       apportionments: null,
       notes: buildPurchaseAuditNotes(order),
       status: 'pending',
@@ -1433,11 +2029,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource, id, child, childId] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  const canPatch =
+    resource === 'quotations'
+      ? isAllowed(userContext, canCreateQuotation)
+      : resource === 'orders'
+        ? isAllowed(userContext, canCreatePurchase)
+        : null;
+  if (canPatch === false) return permissionError();
   const body = await request.json().catch(() => ({}));
   const now = new Date().toISOString();
 
@@ -1479,6 +2081,96 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     return NextResponse.json({ ok: true });
   }
 
+  if (resource === 'orders' && id && child === 'items' && childId) {
+    const orderRef = dbAdmin.collection('purchase_orders').doc(id);
+    const itemRef = orderRef.collection('items').doc(childId);
+    const [orderSnap, itemSnap, itemsSnap] = await Promise.all([
+      orderRef.get(),
+      itemRef.get(),
+      orderRef.collection('items').get(),
+    ]);
+    if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    if (!itemSnap.exists) return jsonError('Item do pedido não encontrado.', 404);
+
+    const currentOrder = orderSnap.data()!;
+    const currentItem = itemSnap.data() ?? {};
+    const nextItem = { ...currentItem, ...body };
+    const quantity = Number(nextItem.quantityOrdered ?? 0);
+    const unitPrice = Number(nextItem.unitPriceOrdered ?? 0);
+    const discount = Number(nextItem.discountOrdered ?? 0);
+    if (quantity <= 0 || unitPrice <= 0) {
+      return jsonError('Quantidade e preço unitário devem ser maiores que zero.');
+    }
+
+    const totalOrdered = purchaseLineNetTotal({
+      quantityOrdered: quantity,
+      unitPriceOrdered: unitPrice,
+      discountOrdered: discount,
+    });
+    const netUnitPriceOrdered = purchaseLineEffectiveUnitPrice({
+      quantityOrdered: quantity,
+      unitPriceOrdered: unitPrice,
+      discountOrdered: discount,
+      totalOrdered,
+    });
+    const treatmentFields = purchaseItemTreatmentFields(nextItem);
+    const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
+    const nextTotalEstimated = Math.max(
+      itemsSnap.docs.reduce((sum, itemDocument) => {
+        if (itemDocument.id === childId) return sum + totalOrdered;
+        return sum + purchaseLineNetTotal(itemDocument.data());
+      }, 0) + Number(currentOrder.deliveryFee ?? 0),
+      0,
+    );
+
+    const batch = dbAdmin.batch();
+    batch.update(itemRef, {
+      baseItemId: nextItem.baseItemId || '',
+      productId: nextItem.productId ?? null,
+      itemName: nextItem.itemName ?? null,
+      operationalCategoryId: nextItem.operationalCategoryId ?? null,
+      operationalCategoryName: nextItem.operationalCategoryName ?? null,
+      itemDestination,
+      unit: nextItem.unit || '',
+      purchaseUnitType: nextItem.purchaseUnitType ?? 'content',
+      purchaseUnitLabel: nextItem.purchaseUnitLabel ?? (nextItem.unit || ''),
+      quantityOrdered: quantity,
+      unitPriceOrdered: unitPrice,
+      netUnitPriceOrdered,
+      discountOrdered: discount,
+      totalOrdered,
+      quotationItemId: nextItem.quotationItemId ?? null,
+      entryType: itemDestination,
+      ...treatmentFields,
+      notes: nextItem.notes ?? null,
+    });
+    batch.update(orderRef, { totalEstimated: nextTotalEstimated, updatedAt: now });
+    await batch.commit();
+
+    const financialSnap = await dbAdmin
+      .collection('purchase_financials')
+      .where('purchaseOrderId', '==', id)
+      .get();
+    if (!financialSnap.empty) {
+      const deliveryFee = Number(currentOrder.deliveryFee ?? 0);
+      await Promise.all(
+        financialSnap.docs.map((financialDoc) =>
+          financialDoc.ref.set(
+            {
+              amountEstimated: nextTotalEstimated,
+              goodsAmountEstimated: Math.max(nextTotalEstimated - deliveryFee, 0),
+              freightAmountEstimated: deliveryFee,
+              updatedAt: now,
+            },
+            { merge: true },
+          ),
+        ),
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
   if (resource === 'orders' && id && !child) {
     const orderRef = dbAdmin.collection('purchase_orders').doc(id);
     const orderSnap = await orderRef.get();
@@ -1486,13 +2178,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     const currentOrder = orderSnap.data()!;
 
     const { items, ...rest } = body;
+    for (const accountField of [rest.accountPlanId, rest.freightAccountPlanId]) {
+      const accountError = await validateAccountPlanForPosting(accountField);
+      if (accountError) return jsonError(accountError);
+    }
     const batch = dbAdmin.batch();
 
     // If items are provided, we need to recalculate the totalEstimated
     if (Array.isArray(items)) {
       const itemsTotal = items.reduce(
         (sum: number, item: any) =>
-          sum + (Number(item.quantityOrdered || 0) * Number(item.unitPriceOrdered || 0)) - Number(item.discountOrdered || 0),
+          sum + purchaseLineNetTotal(item),
         0,
       );
       const deliveryFee = Number(rest.deliveryFee ?? currentOrder.deliveryFee ?? 0);
@@ -1510,6 +2206,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         const q = Number(item.quantityOrdered || 0);
         const p = Number(item.unitPriceOrdered || 0);
         const d = Number(item.discountOrdered || 0);
+        const totalOrdered = purchaseLineNetTotal({ quantityOrdered: q, unitPriceOrdered: p, discountOrdered: d });
+        const netUnitPriceOrdered = purchaseLineEffectiveUnitPrice({
+          quantityOrdered: q,
+          unitPriceOrdered: p,
+          discountOrdered: d,
+          totalOrdered,
+        });
         const treatmentFields = purchaseItemTreatmentFields(item);
         const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
         batch.set(itemRef, {
@@ -1525,8 +2228,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
           purchaseUnitLabel: item.purchaseUnitLabel ?? (item.unit || ''),
           quantityOrdered: q,
           unitPriceOrdered: p,
+          netUnitPriceOrdered,
           discountOrdered: d,
-          totalOrdered: Math.max((q * p) - d, 0),
+          totalOrdered,
           quotationItemId: item.quotationItemId ?? null,
           entryType: itemDestination,
           ...treatmentFields,
@@ -1548,6 +2252,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
         rest.freightPaymentMode ?? currentOrder.freightPaymentMode,
       );
     }
+    const normalizedFreightPaymentMode =
+      'freightPaymentMode' in rest ? rest.freightPaymentMode : currentOrder.freightPaymentMode ?? null;
+    if (normalizedFreightPaymentMode !== 'separate') {
+      rest.freightSupplierId = null;
+      rest.freightSupplierName = null;
+    }
 
     batch.update(orderRef, { ...rest, updatedAt: now });
     await batch.commit();
@@ -1555,8 +2265,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
     const nextTotalEstimated = Number(rest.totalEstimated ?? currentOrder.totalEstimated ?? 0);
     const nextDeliveryFee = normalizedDeliveryFee;
     const nextGoodsAmountEstimated = Math.max(nextTotalEstimated - nextDeliveryFee, 0);
-    const nextFreightPaymentMode =
-      'freightPaymentMode' in rest ? rest.freightPaymentMode : currentOrder.freightPaymentMode ?? null;
+    const nextFreightPaymentMode = normalizedFreightPaymentMode;
+    const nextFreightSupplierId = nextFreightPaymentMode === 'separate'
+      ? rest.freightSupplierId ?? currentOrder.freightSupplierId ?? null
+      : null;
+    const nextFreightSupplierName = nextFreightPaymentMode === 'separate'
+      ? rest.freightSupplierName ?? currentOrder.freightSupplierName ?? null
+      : null;
     const financialSnap = await dbAdmin
       .collection('purchase_financials')
       .where('purchaseOrderId', '==', id)
@@ -1570,6 +2285,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
               goodsAmountEstimated: nextGoodsAmountEstimated,
               freightAmountEstimated: nextDeliveryFee,
               freightPaymentMode: nextFreightPaymentMode,
+              freightSupplierId: nextFreightSupplierId,
+              freightSupplierName: nextFreightSupplierName,
               accountPlanId: rest.accountPlanId ?? currentOrder.accountPlanId ?? null,
               accountPlanName: rest.accountPlanName ?? currentOrder.accountPlanName ?? null,
               freightAccountPlanId: rest.freightAccountPlanId ?? currentOrder.freightAccountPlanId ?? null,
@@ -1583,6 +2300,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
               paymentMethodLabel: rest.paymentMethodLabel ?? currentOrder.paymentMethodLabel ?? null,
               paymentCondition: rest.paymentCondition ?? currentOrder.paymentCondition ?? null,
               installmentsCount: rest.installmentsCount ?? currentOrder.installmentsCount ?? null,
+              installmentDueDates: rest.installmentDueDates ?? currentOrder.installmentDueDates ?? null,
               paymentDueDate: rest.paymentDueDate ?? currentOrder.paymentDueDate ?? null,
               updatedAt: now,
             },
@@ -1598,11 +2316,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ p
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
-  const decoded = await assertAuth(request);
-  if (!decoded) return jsonError('Não autorizado.', 401);
-
   const path = (await context.params).path ?? [];
   const [resource, id, child, childId] = path;
+  const userContext = await getUserContext(request);
+  if (!userContext) return jsonError('Não autorizado.', 401);
+  if (resource === 'quotations' && !isAllowed(userContext, canCreateQuotation)) {
+    return permissionError();
+  }
 
   if (resource === 'quotations' && id && child === 'items' && childId) {
     await dbAdmin.collection('quotations').doc(id).collection('items').doc(childId).delete();

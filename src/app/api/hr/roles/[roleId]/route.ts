@@ -10,6 +10,11 @@ import {
   serializeHrValue,
 } from "@/features/hr/lib/server-access";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { dbAdmin } from "@/lib/firebase-admin";
+import {
+  applyRecruitmentScoring,
+  getRecruitmentScoringBlockMessage,
+} from "@/lib/recruitment-scoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +36,15 @@ export async function PATCH(
     const payload = normalizeJobRolePatch(
       jobRolePatchSchema.parse(await request.json())
     );
+    if (payload.formQuestions !== undefined) {
+      const scoringBlock = getRecruitmentScoringBlockMessage(
+        applyRecruitmentScoring(payload.formQuestions, "role_100").snapshot
+      );
+      if (scoringBlock) {
+        return NextResponse.json({ error: scoringBlock }, { status: 400 });
+      }
+    }
+
     if (payload.parentId === roleId || payload.reportsTo === roleId) {
       return NextResponse.json(
         { error: "Um cargo não pode ser pai dele mesmo." },
@@ -44,6 +58,19 @@ export async function PATCH(
       createdAt: current.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+
+    if (nextData.isActive !== false && !nextData.defaultProfileId) {
+      return NextResponse.json(
+        { error: "Todo cargo ativo deve possuir um perfil de acesso padrão." },
+        { status: 400 }
+      );
+    }
+    if (typeof nextData.defaultProfileId === "string") {
+      const profile = await dbAdmin.collection("profiles").doc(nextData.defaultProfileId).get();
+      if (!profile.exists) {
+        return NextResponse.json({ error: "Perfil de acesso não encontrado." }, { status: 400 });
+      }
+    }
 
     await roleRef.set(nextData);
     const saved = await roleRef.get();

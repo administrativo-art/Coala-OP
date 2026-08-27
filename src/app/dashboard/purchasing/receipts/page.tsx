@@ -16,6 +16,8 @@ import {
   PurchasingEmptyState,
   PurchasingFilterChip,
   PurchasingHeader,
+  PurchasingKanbanCard,
+  PurchasingKanbanColumn,
   PurchasingMetricCard,
   PurchasingPageFrame,
   PurchasingPeriodControl,
@@ -30,18 +32,18 @@ import {
   type PurchasingTone,
 } from '@/components/purchasing/purchasing-ui';
 
-const statusConfig: Record<PurchaseReceipt['status'], { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'done' }> = {
+const statusConfig: Record<PurchaseReceipt['status'], { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'divergence' | 'done' }> = {
   awaiting_delivery: { label: 'A receber', tone: 'cyan', progress: 5, bucket: 'waiting' },
   in_conference: { label: 'Em conferência', tone: 'purple', progress: 6, bucket: 'conference' },
   awaiting_stock: { label: 'Aguardando estoque', tone: 'blue', progress: 7, bucket: 'conference' },
   in_stock_entry: { label: 'Entrada em estoque', tone: 'green', progress: 7, bucket: 'conference' },
   partially_stocked: { label: 'Recebimento parcial', tone: 'amber', progress: 6, bucket: 'partial' },
   stocked: { label: 'Concluída', tone: 'green', progress: 8, bucket: 'done' },
-  stocked_with_divergence: { label: 'Em processo', tone: 'purple', progress: 7, bucket: 'conference' },
+  stocked_with_divergence: { label: 'Tratamento de divergência', tone: 'rose', progress: 7, bucket: 'divergence' },
   cancelled: { label: 'Cancelada', tone: 'zinc', progress: 1, bucket: 'done' },
 };
 
-const fallbackStatusConfig: { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'done' } = {
+const fallbackStatusConfig: { label: string; tone: PurchasingTone; progress: number; bucket: 'waiting' | 'partial' | 'conference' | 'divergence' | 'done' } = {
   label: 'Pendente',
   tone: 'zinc',
   progress: 1,
@@ -69,7 +71,7 @@ export default function ReceiptsPage() {
     [orders],
   );
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'waiting' | 'partial' | 'conference' | 'delayed' | 'done'>('all');
+  const [filter, setFilter] = useState<'all' | 'waiting' | 'partial' | 'conference' | 'divergence' | 'delayed' | 'done'>('all');
   const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
   const [period, setPeriod] = useState(createDefaultPurchasingPeriod);
   const canView = canViewPurchasing(permissions);
@@ -86,7 +88,8 @@ export default function ReceiptsPage() {
 
   const waiting = periodReceipts.filter((r) => r.status === 'awaiting_delivery');
   const partial = periodReceipts.filter((r) => r.status === 'partially_stocked');
-  const conference = periodReceipts.filter((r) => ['in_conference', 'awaiting_stock', 'in_stock_entry', 'stocked_with_divergence'].includes(r.status));
+  const conference = periodReceipts.filter((r) => ['in_conference', 'awaiting_stock', 'in_stock_entry'].includes(r.status));
+  const divergence = periodReceipts.filter((r) => r.status === 'stocked_with_divergence');
   const done = periodReceipts.filter((r) => r.status === 'stocked');
   const delayed = periodReceipts.filter((r) => ['awaiting_delivery', 'in_conference', 'awaiting_stock', 'in_stock_entry', 'partially_stocked', 'stocked_with_divergence'].includes(r.status) && r.expectedDate && new Date(r.expectedDate).getTime() < Date.now());
 
@@ -108,17 +111,18 @@ export default function ReceiptsPage() {
 
   return (
     <PermissionGuard allowed={canView}>
-      <PurchasingPageFrame>
+      <PurchasingPageFrame fullWidth>
         <PurchasingHeader
           crumb={['Coala', 'Compras', 'Recebimentos']}
           title="Recebimentos"
           description="Conferência da mercadoria recebida, divergências, NF-e e lançamento financeiro."
         />
 
-        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-5">
+        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
           <PurchasingMetricCard label="A receber" value={waiting.length} detail="aguardando chegada" tone="cyan" icon={<Truck className="h-5 w-5" />} />
           <PurchasingMetricCard label="Parciais" value={partial.length} detail="com saldo aberto" tone="amber" icon={<AlertTriangle className="h-5 w-5" />} />
           <PurchasingMetricCard label="Em processo" value={conference.length} detail="conferência/estoque" tone="purple" icon={<PackageCheck className="h-5 w-5" />} />
+          <PurchasingMetricCard label="Divergências" value={divergence.length} detail="precisa tratar" tone="rose" icon={<AlertTriangle className="h-5 w-5" />} />
           <PurchasingMetricCard label="Atrasados" value={delayed.length} detail="previsão vencida" tone="rose" icon={<AlertTriangle className="h-5 w-5" />} />
           <PurchasingMetricCard label="Concluídos" value={done.length} detail="despesa lançada" tone="green" icon={<CheckCircle2 className="h-5 w-5" />} />
         </div>
@@ -135,6 +139,7 @@ export default function ReceiptsPage() {
           <PurchasingFilterChip active={filter === 'waiting'} label="Aguardando" count={waiting.length} tone="cyan" onClick={() => setFilter('waiting')} />
           <PurchasingFilterChip active={filter === 'partial'} label="Parcial" count={partial.length} tone="amber" onClick={() => setFilter('partial')} />
           <PurchasingFilterChip active={filter === 'conference'} label="Em processo" count={conference.length} tone="purple" onClick={() => setFilter('conference')} />
+          <PurchasingFilterChip active={filter === 'divergence'} label="Divergência" count={divergence.length} tone="rose" onClick={() => setFilter('divergence')} />
           <PurchasingFilterChip active={filter === 'delayed'} label="Atrasado" count={delayed.length} tone="rose" onClick={() => setFilter('delayed')} />
           <PurchasingFilterChip active={filter === 'done'} label="Concluída" count={done.length} tone="green" onClick={() => setFilter('done')} />
         </PurchasingToolbar>
@@ -165,40 +170,40 @@ export default function ReceiptsPage() {
           </div>
         ) : view === 'kanban' ? (
           <div className="overflow-x-auto pb-3">
-            <div className="grid min-w-[1280px] grid-cols-6 gap-3">
+            <div className="grid min-w-[1480px] grid-cols-7 gap-3">
               {[
                 { label: 'A receber', tone: 'cyan' as const },
                 { label: 'Em conferência', tone: 'purple' as const },
                 { label: 'Aguardando estoque', tone: 'blue' as const },
                 { label: 'Entrada em estoque', tone: 'green' as const },
                 { label: 'Recebimento parcial', tone: 'amber' as const },
+                { label: 'Tratamento de divergência', tone: 'rose' as const },
                 { label: 'Concluída', tone: 'green' as const },
               ].map((column) => {
-                const columnCards = cards.filter((entry) => entry.cfg.label === column.label || (column.label === 'Em conferência' && entry.receipt.status === 'stocked_with_divergence'));
+                const columnCards = cards.filter((entry) => entry.cfg.label === column.label);
                 return (
-                  <div key={column.label} className="flex h-[calc(100vh-360px)] min-h-[380px] flex-col rounded-[14px] border border-zinc-200 bg-white/70 p-3">
-                    <div className="mb-3 flex items-center justify-between">
-                      <PurchasingStatusBadge label={column.label} tone={column.tone} />
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-zinc-500">{columnCards.length}</span>
-                    </div>
-                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-                      {columnCards.map(({ receipt }) => (
-                        <Link key={receipt.id} href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`} className="block rounded-[10px] border border-zinc-200 bg-white p-3 shadow-sm hover:bg-zinc-50">
-                          <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                  <PurchasingKanbanColumn key={column.label} label={column.label} tone={column.tone} count={columnCards.length}>
+                    {columnCards.map(({ receipt, cfg }) => (
+                      <PurchasingKanbanCard
+                        key={receipt.id}
+                        href={`/dashboard/purchasing/orders/${receipt.purchaseOrderId}/receipt`}
+                        tone={cfg.tone}
+                        code={receiptCode(receipt.purchaseOrderId)}
+                        title={receipt.supplierName || 'Recebimento de compra'}
+                        meta={
+                          <span className="flex items-center justify-between gap-2">
                             <span>Compra {new Date(purchaseDateById.get(receipt.purchaseOrderId) ?? receipt.createdAt).toLocaleDateString('pt-BR')}</span>
-                            {receipt.expectedDate && <span>Receb. prev. {new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}</span>}
-                          </div>
-                          <span className="mt-0.5 block font-mono text-[11px] font-black text-zinc-500">{receiptCode(receipt.purchaseOrderId)}</span>
-                          <p className="mt-2 line-clamp-2 text-sm font-black leading-tight text-zinc-950">{receipt.supplierName || 'Recebimento de compra'}</p>
-                          <PurchasingItemsPreview receiptId={receipt.id} />
-                          <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-                            <span>{receipt.receiptMode === 'immediate_pickup' ? 'Retirada' : 'Entrega'}</span>
-                            <span className="font-mono font-black text-zinc-900">{purchasingCompactMoney(receiptDisplayTotal(receipt))}</span>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
+                            {receipt.expectedDate ? <span>Prev. {new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}</span> : null}
+                          </span>
+                        }
+                        badges={<PurchasingStatusBadge label={cfg.label} tone={cfg.tone} />}
+                        footerLeft={receipt.receiptMode === 'immediate_pickup' ? 'Retirada' : 'Entrega'}
+                        amount={purchasingCompactMoney(receiptDisplayTotal(receipt))}
+                      >
+                        <PurchasingItemsPreview receiptId={receipt.id} />
+                      </PurchasingKanbanCard>
+                    ))}
+                  </PurchasingKanbanColumn>
                 );
               })}
             </div>

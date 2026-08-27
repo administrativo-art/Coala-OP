@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
       permissions: context.permissions,
       isDefaultAdmin: context.isDefaultAdmin,
       workspaceId: context.workspace_id,
+      userId: context.userDoc.id,
     });
 
     return NextResponse.json(payload);

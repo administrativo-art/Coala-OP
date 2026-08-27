@@ -1,13 +1,13 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { addMonths, addWeeks, format } from "date-fns";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { addMonths, addWeeks, format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { addDoc, getDoc, Timestamp, updateDoc } from "firebase/firestore";
+import { addDoc, doc, getDoc, getDocs, limit, query, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import type { FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2, CalendarIcon, Check, ChevronLeft, ChevronRight, ChevronsUpDown, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound, X } from "lucide-react";
+import { Building2, CalendarIcon, Check, ChevronLeft, ChevronRight, ChevronsUpDown, CircleHelp, CreditCard, FileText, Loader2, Plus, PlusCircle, Trash2, UserRound, X } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useEntities } from "@/hooks/use-entities";
@@ -19,8 +19,40 @@ import {
   type ExpenseFormValues,
 } from "@/features/financial/lib/schemas";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
+import {
+  PLANNED_PAYMENT_METHOD_LABELS,
+  type PlannedPaymentMethodType,
+} from "@/features/financial/lib/card-invoices";
+import {
+  expenseSeriesPosition,
+  selectExpenseSeriesEntries,
+  type ExpenseSeriesEntry,
+  type ExpenseSeriesUpdateScope,
+} from "@/features/financial/lib/expense-series";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency } from "@/features/financial/lib/utils";
+import {
+  buildEqualRateio,
+  distributeRateioPercentages,
+  resolveResultCenterName,
+  resolveRateioForCompetence,
+  type ExpenseRateioPolicy,
+  type RateioCriterion,
+  type ResultCenterNameMap,
+} from "@/features/financial/lib/expense-rateio";
+import {
+  accountAllocationDifference,
+  accountAllocationTotal,
+} from "@/features/financial/lib/expense-account-allocations";
+import {
+  personAllocationAccountTotals,
+  personAllocationDifference,
+  personAllocationsAreValid,
+} from "@/features/financial/lib/expense-person-allocations";
+import {
+  consultExpenseProvision,
+  expenseProvisionIdentity,
+} from "@/features/financial/lib/expense-provisions";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +60,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -37,7 +69,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { financialDb } from "@/lib/firebase-financial";
 
 type InstallmentPreview = {
   number: number;
@@ -63,6 +97,10 @@ function toOptionalDate(value: any): Date | undefined {
 
 function normalizeExpenseDescriptionLabel(value: string) {
   return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+}
+
+function toRateioDateString(value: Date) {
+  return format(value, "yyyy-MM-dd");
 }
 
 function buildRecurringOccurrences(
@@ -105,9 +143,12 @@ const ACCOUNT_GROUP_LABELS: Record<string, string> = {
   financeiro: "Financeiro",
   nao_operacional: "Não Operacional",
   ir_csll: "IR / CSLL",
+  patrimonial: "Ativo Imobilizado | Bens Duráveis",
+  investimentos: "Aplicações | Investimentos",
+  outros: "Outros",
 };
 
-const ACCOUNT_GROUP_ORDER = ["fiscal", "insumos", "estoque", "rh", "administrativo", "marketing", "tecnologia", "ocupacao", "financeiro", "nao_operacional", "ir_csll", "receita"];
+const ACCOUNT_GROUP_ORDER = ["fiscal", "insumos", "estoque", "rh", "administrativo", "marketing", "tecnologia", "ocupacao", "financeiro", "patrimonial", "investimentos", "nao_operacional", "ir_csll", "receita", "outros"];
 
 function SectionHeading({
   icon,
@@ -398,7 +439,11 @@ function QuickAddEntityDialog({
   );
 }
 
-export function ExpenseForm() {
+type ExpenseFormProps = {
+  presentation?: "page" | "modal";
+};
+
+export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const { firebaseUser, users, permissions } = useAuth();
   const { entities } = useEntities();
   const { kiosks, loading: unitsLoading } = useKiosks();
@@ -406,11 +451,24 @@ export function ExpenseForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
+  const inboxMessageId = searchParams.get("inbox");
   const returnTo = searchParams.get("returnTo");
   const importTransactionId = searchParams.get("importTransaction");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingExpense, setIsLoadingExpense] = useState(false);
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
+  const [loadedObligationId, setLoadedObligationId] = useState<string | null>(null);
+  const [loadedRecurrenceGroupId, setLoadedRecurrenceGroupId] = useState<string | null>(null);
+  const [loadedSeriesEntry, setLoadedSeriesEntry] = useState<ExpenseSeriesEntry | null>(null);
+  const [loadedSeriesTotal, setLoadedSeriesTotal] = useState<number | null>(null);
+  const [loadedProvisionIdentity, setLoadedProvisionIdentity] = useState<{
+    provisionSeriesKey: string;
+    provisionType: string;
+    provisionCompetence: string | null;
+  } | null>(null);
+  const [seriesUpdateDialogOpen, setSeriesUpdateDialogOpen] = useState(false);
+  const [seriesUpdateScope, setSeriesUpdateScope] = useState<ExpenseSeriesUpdateScope>("single");
+  const [pendingSeriesValues, setPendingSeriesValues] = useState<ExpenseFormValues | null>(null);
   const [importTransactionData, setImportTransactionData] = useState<any | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
@@ -418,7 +476,8 @@ export function ExpenseForm() {
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [currentStep, setCurrentStep] = useState<"identification" | "classification" | "schedule" | "review">(
+  const submissionInFlightRef = useRef(false);
+  const [currentStep, setCurrentStep] = useState<"identification" | "classification" | "individualization" | "schedule" | "review">(
     "identification"
   );
 
@@ -428,14 +487,144 @@ export function ExpenseForm() {
   const { data: expenseDescriptions, refresh: refreshExpenseDescriptions } = useFinancialCollection<any>(
     financialCollection("expenseDescriptions")
   );
+  const { data: resultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
+  const { data: bankAccounts } = useFinancialCollection<any>(financialCollection("bankAccounts"));
+  const form = useForm<ExpenseFormValues>({
+    resolver: zodResolver(expenseFormSchema),
+    defaultValues: {
+      isApportioned: false,
+      paymentMethod: "single",
+      plannedPaymentMethodType: undefined,
+      plannedBankAccountId: "",
+      plannedBankAccountName: "",
+      plannedPaymentMethodId: "",
+      plannedPaymentMethodLabel: "",
+      apportionments: [{ resultCenter: "", percentage: 100 }],
+      rateioCriterion: "equal",
+      rateioEffectiveFrom: startOfMonth(addMonths(new Date(), 1)),
+      rateioFirstMonthMode: "full",
+      hasAccountAllocations: false,
+      accountAllocations: [],
+      hasPersonAllocations: false,
+      personAllocations: [],
+      variedInstallments: [],
+      accountPlan: "",
+      description: "",
+      supplier: "",
+      notes: "",
+      resultCenter: "",
+      totalValue: 0,
+      installments: 2,
+      installmentType: "equal",
+      installmentPeriodicity: "monthly",
+      recurrenceFirstDueDate: undefined,
+      recurrenceEndDate: undefined,
+    },
+    mode: "onChange",
+  });
+  const inboxPrefillLoadedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!firebaseUser || !inboxMessageId || editId || importTransactionId || inboxPrefillLoadedRef.current === inboxMessageId) return;
+    inboxPrefillLoadedRef.current = inboxMessageId;
+    let cancelled = false;
+    void firebaseUser.getIdToken()
+      .then((token) => fetch(`/api/financial/inbox/${encodeURIComponent(inboxMessageId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }))
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Falha ao carregar a cobrança.");
+        if (cancelled) return;
+        const message = payload.message;
+        const classification = message?.classification || {};
+        form.setValue("description", String(message?.subject || "Cobrança recebida"), { shouldValidate: true });
+        form.setValue("supplier", String(classification.supplierName || message?.from || ""), { shouldValidate: true });
+        form.setValue("notes", `Cobrança recebida por e-mail (${message?.id || inboxMessageId}).`, { shouldValidate: true });
+        if (Number.isInteger(classification.amountCents) && classification.amountCents > 0) {
+          form.setValue("totalValue", classification.amountCents / 100, { shouldValidate: true });
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(classification.dueDate || "")) {
+          form.setValue("dueDate", new Date(`${classification.dueDate}T12:00:00-03:00`), { shouldValidate: true });
+        }
+        if (/^\d{4}-\d{2}$/.test(classification.competence || "")) {
+          form.setValue("competenceDate", new Date(`${classification.competence}-01T12:00:00-03:00`), { shouldValidate: true });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar a cobrança." });
+      });
+    return () => { cancelled = true; };
+  }, [editId, firebaseUser, form, importTransactionId, inboxMessageId, toast]);
+  const resultCenterNameById = useMemo(() => {
+    const map: ResultCenterNameMap = {};
+    (resultCenters || []).forEach((center) => {
+      if (typeof center.id === "string" && typeof center.name === "string" && center.name.trim()) {
+        map[center.id] = center.name.trim();
+      }
+    });
+    return map;
+  }, [resultCenters]);
   const units = useMemo(
     () => [...kiosks].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
     [kiosks]
   );
+  const personResultCenterOptions = useMemo(() => {
+    const byName = new Map<string, { id: string; name: string }>();
+    (resultCenters || []).forEach((center: any) => {
+      if (typeof center?.name === "string" && center.name.trim()) {
+        byName.set(center.name.trim(), { id: String(center.id), name: center.name.trim() });
+      }
+    });
+    units.forEach((unit) => {
+      if (!byName.has(unit.name)) byName.set(unit.name, { id: unit.id, name: unit.name });
+    });
+    return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+  }, [resultCenters, units]);
 
-  const activeAccounts = useMemo(
-    () => (accounts || []).filter((a: any) => a.active !== false),
-    [accounts]
+  const hasAccountAllocations = form.watch("hasAccountAllocations");
+
+  const postingAccounts = useMemo(() => {
+    const all = accounts || [];
+    // Contas com filhas são nós de grupo: a DRE lê a posição da própria conta,
+    // então o lançamento precisa ir em uma folha.
+    const parentIds = new Set(all.map((a: any) => a.parentId).filter(Boolean));
+    return all.filter((a: any) => a.active !== false && !parentIds.has(a.id));
+  }, [accounts]);
+
+  const allocationHeaderAccounts = useMemo(() => {
+    const all = accounts || [];
+    const parentIds = new Set(all.map((account: any) => account.parentId).filter(Boolean));
+    return all.filter((account: any) => account.active !== false && parentIds.has(account.id));
+  }, [accounts]);
+
+  const activeAccounts = hasAccountAllocations ? allocationHeaderAccounts : postingAccounts;
+
+  const plannedPaymentInstruments = useMemo(
+    () =>
+      (bankAccounts || [])
+        .filter((account: any) => account.active !== false)
+        .flatMap((account: any) =>
+          (account.paymentMethods || []).map((method: any) => ({
+            key: `${account.id}:${method.id}`,
+            accountId: account.id as string,
+            accountName: account.name as string,
+            methodId: method.id as string,
+            methodLabel: method.label as string,
+            type: method.type as PlannedPaymentMethodType,
+            lastDigits: method.lastDigits as string | undefined,
+            closingDay: method.closingDay as number | undefined,
+            dueDay: method.dueDay as number | undefined,
+          }))
+        )
+        .sort((left: any, right: any) =>
+          `${left.accountName} ${left.methodLabel}`.localeCompare(
+            `${right.accountName} ${right.methodLabel}`,
+            "pt-BR",
+            { sensitivity: "base" }
+          )
+        ),
+    [bankAccounts]
   );
 
   const groupedAccounts = useMemo(() => {
@@ -456,34 +645,28 @@ export function ExpenseForm() {
     const q = accountPlanSearch.trim().toLowerCase();
     if (!q) return groupedAccounts;
     return groupedAccounts
-      .map((g) => ({ ...g, accounts: g.accounts.filter((a: any) => a.name.toLowerCase().includes(q) || (ACCOUNT_GROUP_LABELS[a.group] || "").toLowerCase().includes(q)) }))
+      .map((g) => ({
+        ...g,
+        accounts: g.accounts.filter((a: any) =>
+          a.name.toLowerCase().includes(q) ||
+          (ACCOUNT_GROUP_LABELS[a.group] || "").toLowerCase().includes(q) ||
+          (typeof a.description === "string" && a.description.toLowerCase().includes(q)) ||
+          // Palavras-chave cadastradas no plano de contas.
+          (Array.isArray(a.searchTerms) && a.searchTerms.some((term: string) => term.toLowerCase().includes(q)))
+        ),
+      }))
       .filter((g) => g.accounts.length > 0);
   }, [groupedAccounts, accountPlanSearch]);
 
-  const form = useForm<ExpenseFormValues>({
-    resolver: zodResolver(expenseFormSchema),
-    defaultValues: {
-      isApportioned: false,
-      paymentMethod: "single",
-      apportionments: [{ resultCenter: "", percentage: 100 }],
-      variedInstallments: [],
-      accountPlan: "",
-      description: "",
-      supplier: "",
-      notes: "",
-      resultCenter: "",
-      totalValue: 0,
-      installments: 2,
-      installmentType: "equal",
-      installmentPeriodicity: "monthly",
-      recurrenceFirstDueDate: undefined,
-      recurrenceEndDate: undefined,
-    },
-    mode: "onChange",
-  });
-
   const paymentMethod = form.watch("paymentMethod");
+  const plannedBankAccountId = form.watch("plannedBankAccountId");
+  const plannedPaymentMethodId = form.watch("plannedPaymentMethodId");
+  const plannedPaymentMethodType = form.watch("plannedPaymentMethodType");
+  const plannedPaymentMethodLabel = form.watch("plannedPaymentMethodLabel");
   const accountPlanValue = form.watch("accountPlan");
+  const accountAllocations = form.watch("accountAllocations");
+  const hasPersonAllocations = form.watch("hasPersonAllocations");
+  const personAllocations = form.watch("personAllocations");
   const installmentType = form.watch("installmentType");
   const installmentsQty = form.watch("installments");
   const totalValue = form.watch("totalValue");
@@ -500,10 +683,185 @@ export function ExpenseForm() {
   const variedInstallments = form.watch("variedInstallments");
   const isApportioned = form.watch("isApportioned");
   const apportionments = form.watch("apportionments");
+  const rateioCriterion = form.watch("rateioCriterion");
+  const rateioEffectiveFrom = form.watch("rateioEffectiveFrom");
+  const rateioFirstMonthMode = form.watch("rateioFirstMonthMode");
   const selectedAccountPlan = useMemo(
-    () => activeAccounts.find((a: any) => a.id === accountPlanValue),
-    [accountPlanValue, activeAccounts]
+    // Busca na lista completa: despesas antigas podem apontar para conta-grupo ou inativa.
+    () => (accounts || []).find((a: any) => a.id === accountPlanValue),
+    [accountPlanValue, accounts]
   );
+  const accountAllocationOptions = useMemo(() => {
+    if (!hasAccountAllocations || !accountPlanValue) return [];
+    return [...postingAccounts].sort((left, right) => {
+      const groupComparison = String(ACCOUNT_GROUP_LABELS[left.group] ?? left.group ?? "")
+        .localeCompare(String(ACCOUNT_GROUP_LABELS[right.group] ?? right.group ?? ""), "pt-BR");
+      return groupComparison || String(left.name).localeCompare(String(right.name), "pt-BR");
+    });
+  }, [accountPlanValue, hasAccountAllocations, postingAccounts]);
+  const {
+    fields: accountAllocationFields,
+    replace: replaceAccountAllocations,
+    append: appendAccountAllocation,
+    remove: removeAccountAllocation,
+  } = useFieldArray({ control: form.control, name: "accountAllocations" });
+  const {
+    fields: personAllocationFields,
+    replace: replacePersonAllocations,
+    append: appendPersonAllocation,
+    remove: removePersonAllocation,
+  } = useFieldArray({ control: form.control, name: "personAllocations" });
+  const allocatedAccountTotal = accountAllocationTotal(accountAllocations);
+  const accountAllocationRemaining = accountAllocationDifference(accountAllocations, totalValue || 0);
+  const allocatedPersonTotal = (personAllocations || []).reduce(
+    (total, allocation) => total + (Number(allocation.amount) || 0),
+    0,
+  );
+  const personAllocationRemaining = personAllocationDifference(personAllocations, totalValue || 0);
+  const personAccountTotals = personAllocationAccountTotals(personAllocations);
+  const personAllocationAccountOptions = useMemo(() => {
+    if (hasAccountAllocations) {
+      return (accountAllocations || [])
+        .filter((allocation) => allocation.accountPlanId && Number(allocation.amount) > 0)
+        .map((allocation) => {
+          const account = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+          return {
+            id: allocation.accountPlanId,
+            name: account?.name || allocation.accountPlanId,
+            amount: Number(allocation.amount) || 0,
+            isDreAccount: account?.is_dre_account !== false,
+          };
+        });
+    }
+    if (!accountPlanValue || !selectedAccountPlan) return [];
+    return [{
+      id: accountPlanValue,
+      name: selectedAccountPlan.name || accountPlanValue,
+      amount: Number(totalValue) || 0,
+      isDreAccount: selectedAccountPlan.is_dre_account !== false,
+    }];
+  }, [accountAllocations, accountPlanValue, accounts, hasAccountAllocations, selectedAccountPlan, totalValue]);
+  const financialEmployees = useMemo(
+    () => [...(users || [])].sort((left, right) => (
+      (left.username || left.email).localeCompare(right.username || right.email, "pt-BR")
+    )),
+    [users],
+  );
+  const plannedPaymentSelection =
+    plannedBankAccountId && plannedPaymentMethodId
+      ? `${plannedBankAccountId}:${plannedPaymentMethodId}`
+      : "none";
+  const selectedPlannedInstrument = useMemo(
+    () => plannedPaymentInstruments.find((instrument: any) => instrument.key === plannedPaymentSelection) ?? null,
+    [plannedPaymentInstruments, plannedPaymentSelection]
+  );
+
+  function handlePlannedPaymentChange(value: string) {
+    const instrument = plannedPaymentInstruments.find((item: any) => item.key === value);
+    form.setValue("plannedPaymentMethodType", instrument?.type, { shouldDirty: true });
+    form.setValue("plannedBankAccountId", instrument?.accountId || "", { shouldDirty: true });
+    form.setValue("plannedBankAccountName", instrument?.accountName || "", { shouldDirty: true });
+    form.setValue("plannedPaymentMethodId", instrument?.methodId || "", { shouldDirty: true });
+    form.setValue("plannedPaymentMethodLabel", instrument?.methodLabel || "", { shouldDirty: true });
+  }
+
+  function allocationRowsForParent(parentId: string) {
+    const all = (accounts || []).filter((account: any) => account.active !== false);
+    const childrenByParent = new Map<string, any[]>();
+    all.forEach((account: any) => {
+      if (!account.parentId) return;
+      const children = childrenByParent.get(account.parentId) || [];
+      children.push(account);
+      childrenByParent.set(account.parentId, children);
+    });
+    const leaves: any[] = [];
+    const visit = (id: string) => {
+      (childrenByParent.get(id) || []).forEach((child) => {
+        if ((childrenByParent.get(child.id) || []).length > 0) visit(child.id);
+        else leaves.push(child);
+      });
+    };
+    visit(parentId);
+    return leaves
+      .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+      .map((account) => ({ accountPlanId: account.id, amount: 0 }));
+  }
+
+  function handleAccountAllocationMode(checked: boolean) {
+    form.setValue("hasAccountAllocations", checked, { shouldDirty: true, shouldValidate: true });
+    form.setValue("accountPlan", "", { shouldDirty: true, shouldValidate: true });
+    replaceAccountAllocations([]);
+    form.setValue("hasPersonAllocations", false, { shouldDirty: true, shouldValidate: true });
+    replacePersonAllocations([]);
+    setAccountPlanSearch("");
+  }
+
+  function handleAccountPlanSelection(accountId: string) {
+    form.setValue("accountPlan", accountId, { shouldDirty: true, shouldValidate: true });
+    if (hasAccountAllocations) replaceAccountAllocations(allocationRowsForParent(accountId));
+    if (hasPersonAllocations) replacePersonAllocations([]);
+    setAccountPlanOpen(false);
+  }
+
+  function handlePersonAllocationMode(checked: boolean) {
+    form.setValue("hasPersonAllocations", checked, { shouldDirty: true, shouldValidate: true });
+    if (!checked) {
+      replacePersonAllocations([]);
+      return;
+    }
+    const firstAccount = personAllocationAccountOptions[0];
+    if (!firstAccount || personAllocationFields.length > 0) return;
+    appendPersonAllocation({
+      id: crypto.randomUUID(),
+      accountPlanId: firstAccount.id,
+      employeeId: "",
+      employeeName: "",
+      analysisType: firstAccount.isDreAccount ? "employer_cost" : "employee_deduction",
+      amount: firstAccount.amount,
+      resultCenter: !isApportioned ? resultCenterValue || "" : "",
+      payrollDocumentId: "",
+      contractReference: "",
+      creditorName: "",
+    });
+  }
+
+  function handleAddPersonAllocation() {
+    const firstAccount = personAllocationAccountOptions[0];
+    appendPersonAllocation({
+      id: crypto.randomUUID(),
+      accountPlanId: firstAccount?.id || "",
+      employeeId: "",
+      employeeName: "",
+      analysisType: firstAccount?.isDreAccount === false ? "employee_deduction" : "employer_cost",
+      amount: 0,
+      resultCenter: !isApportioned ? resultCenterValue || "" : "",
+      payrollDocumentId: "",
+      contractReference: "",
+      creditorName: "",
+    });
+  }
+
+  function fillPersonAllocationRemaining(index: number) {
+    const otherCents = (personAllocations || [])
+      .filter((_, currentIndex) => currentIndex !== index)
+      .reduce((total, allocation) => total + Math.round((Number(allocation.amount) || 0) * 100), 0);
+    const remainingCents = Math.max(0, Math.round((Number(totalValue) || 0) * 100) - otherCents);
+    form.setValue(`personAllocations.${index}.amount`, remainingCents / 100, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  function fillAccountAllocationRemaining(index: number) {
+    const otherCents = (accountAllocations || [])
+      .filter((_, currentIndex) => currentIndex !== index)
+      .reduce((total, allocation) => total + Math.round((Number(allocation.amount) || 0) * 100), 0);
+    const remainingCents = Math.max(0, Math.round((Number(totalValue) || 0) * 100) - otherCents);
+    form.setValue(`accountAllocations.${index}.amount`, remainingCents / 100, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
   const activeExpenseDescriptions = useMemo(
     () =>
       [...(expenseDescriptions || [])]
@@ -512,6 +870,8 @@ export function ExpenseForm() {
     [expenseDescriptions]
   );
   const canManageExpenseDescriptions = !!permissions.financial?.settings?.manageExpenseDescriptions;
+  const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
+  const canEditPersonnelCosts = canViewPersonnelCosts && permissions.financial?.personnelCosts?.edit === true;
   const canQuickAddExpenseDescriptions =
     !!permissions.financial?.expenses?.create ||
     !!permissions.financial?.expenses?.edit ||
@@ -626,12 +986,89 @@ export function ExpenseForm() {
 
   const {
     fields: apportionmentFields,
-    append: appendApportionment,
-    remove: removeApportionment,
+    replace: replaceApportionments,
   } = useFieldArray({
     control: form.control,
     name: "apportionments",
   });
+
+  function rebalanceRateio(
+    rows: NonNullable<ExpenseFormValues["apportionments"]>,
+    criterion: RateioCriterion
+  ) {
+    if (rows.length === 0 || criterion === "fixed") return rows;
+    const weights = rows.map((row) =>
+      criterion === "equal" ? 1 : Math.max(0, Number(row.basisValue) || 0)
+    );
+    const percentages = distributeRateioPercentages(weights);
+    return rows.map((row, index) => ({ ...row, percentage: percentages[index] }));
+  }
+
+  function handleRateioToggle(checked: boolean) {
+    form.setValue("isApportioned", checked, { shouldDirty: true, shouldValidate: true });
+    if (!checked) return;
+
+    const participationStartDate =
+      paymentMethod === "recurring"
+        ? rateioEffectiveFrom || recurrenceFirstDueDate || startOfMonth(addMonths(new Date(), 1))
+        : undefined;
+    replaceApportionments(
+      buildEqualRateio(
+        units.map((unit) => unit.name),
+        participationStartDate ? format(participationStartDate, "yyyy-MM-dd") : undefined
+      ).map((item) => ({
+        ...item,
+        participationStartDate,
+      }))
+    );
+    form.setValue("rateioCriterion", "equal", { shouldDirty: true, shouldValidate: true });
+  }
+
+  function handleRateioCriterionChange(criterion: RateioCriterion) {
+    const currentRows = form.getValues("apportionments") || [];
+    const preparedRows = currentRows.map((row) => ({
+      ...row,
+      basisValue:
+        criterion === "revenue" || criterion === "headcount"
+          ? Number(row.basisValue) || 1
+          : row.basisValue,
+    }));
+    replaceApportionments(rebalanceRateio(preparedRows, criterion));
+    form.setValue("rateioCriterion", criterion, { shouldDirty: true, shouldValidate: true });
+  }
+
+  function handleAddRateioUnit() {
+    const currentRows = form.getValues("apportionments") || [];
+    const selectedCenters = new Set(currentRows.map((row) => row.resultCenter));
+    const nextUnit = units.find((unit) => !selectedCenters.has(unit.name));
+    if (!nextUnit) return;
+
+    const nextRows = [
+      ...currentRows,
+      {
+        resultCenter: nextUnit.name,
+        percentage: 0,
+        basisValue: rateioCriterion === "revenue" || rateioCriterion === "headcount" ? 1 : undefined,
+        participationStartDate:
+          paymentMethod === "recurring"
+            ? rateioEffectiveFrom || startOfMonth(addMonths(new Date(), 1))
+            : undefined,
+      },
+    ];
+    replaceApportionments(rebalanceRateio(nextRows, rateioCriterion));
+  }
+
+  function handleRemoveRateioUnit(index: number) {
+    const nextRows = (form.getValues("apportionments") || []).filter((_, rowIndex) => rowIndex !== index);
+    replaceApportionments(rebalanceRateio(nextRows, rateioCriterion));
+  }
+
+  function handleRateioBasisChange(index: number, value: number) {
+    const nextRows = (form.getValues("apportionments") || []).map((row, rowIndex) =>
+      rowIndex === index ? { ...row, basisValue: value } : row
+    );
+    replaceApportionments(rebalanceRateio(nextRows, rateioCriterion));
+  }
 
   const {
     fields: variedFields,
@@ -682,6 +1119,21 @@ export function ExpenseForm() {
   }, [form, paymentMethod]);
 
   useEffect(() => {
+    if (
+      paymentMethod !== "recurring" ||
+      !recurrenceFirstDueDate ||
+      editId ||
+      form.formState.dirtyFields.rateioEffectiveFrom
+    ) {
+      return;
+    }
+    form.setValue("rateioEffectiveFrom", startOfMonth(recurrenceFirstDueDate), {
+      shouldDirty: false,
+      shouldValidate: true,
+    });
+  }, [editId, form, paymentMethod, recurrenceFirstDueDate]);
+
+  useEffect(() => {
     if (editId || !importTransactionId) return;
 
     let active = true;
@@ -700,6 +1152,10 @@ export function ExpenseForm() {
           ...form.getValues(),
           paymentMethod: "single",
           accountPlan: data.accountPlanId || "",
+          hasAccountAllocations: false,
+          accountAllocations: [],
+          hasPersonAllocations: false,
+          personAllocations: [],
           description: data.description || "",
           supplier: data.supplier || "",
           resultCenter: data.resultCenterName || "",
@@ -709,6 +1165,9 @@ export function ExpenseForm() {
           dueDate: transactionDate,
           isApportioned: false,
           apportionments: [{ resultCenter: "", percentage: 100 }],
+          rateioCriterion: "equal",
+          rateioEffectiveFrom: startOfMonth(transactionDate || new Date()),
+          rateioFirstMonthMode: "full",
         });
         setImportTransactionData({ id: snapshot.id, ...data });
       } catch (error) {
@@ -725,7 +1184,7 @@ export function ExpenseForm() {
   }, [editId, form, importTransactionId, toast]);
 
   useEffect(() => {
-    if (!editId) return;
+    if (!editId || resultCenters === null) return;
 
     let active = true;
 
@@ -763,17 +1222,70 @@ export function ExpenseForm() {
           if (!data || !active) return;
         }
 
+        const nextOpenCompetence = startOfMonth(addMonths(new Date(), 1));
+        const storedPolicy = data.rateioPolicy as ExpenseRateioPolicy | undefined;
+        const loadedApportionments = (storedPolicy?.participants || data.apportionments || [
+          { resultCenter: "", percentage: 100 },
+        ]).map((item: any) => ({
+          resultCenter: resolveResultCenterName(item.resultCenter, resultCenterNameById),
+          percentage: Number(item.percentage) || 0,
+          basisValue: item.basisValue == null ? undefined : Number(item.basisValue),
+          participationStartDate: item.participationStartDate
+            ? toOptionalDate(`${String(item.participationStartDate).slice(0, 10)}T12:00:00`)
+            : undefined,
+        }));
         const resetData: any = {
           accountPlan: data.accountPlan,
+          hasAccountAllocations:
+            data.hasAccountAllocations === true && Array.isArray(data.accountAllocations) && data.accountAllocations.length > 0,
+          accountAllocations: Array.isArray(data.accountAllocations)
+            ? data.accountAllocations.map((allocation: any) => ({
+                accountPlanId: String(allocation.accountPlanId ?? ""),
+                amount: Number(allocation.amount) || 0,
+              }))
+            : [],
+          hasPersonAllocations:
+            data.hasPersonAllocations === true && Array.isArray(data.personAllocations) && data.personAllocations.length > 0,
+          personAllocations: Array.isArray(data.personAllocations)
+            ? data.personAllocations.map((allocation: any) => ({
+                id: String(allocation.id ?? crypto.randomUUID()),
+                accountPlanId: String(allocation.accountPlanId ?? ""),
+                employeeId: String(allocation.employeeId ?? ""),
+                employeeName: String(allocation.employeeName ?? ""),
+                analysisType:
+                  allocation.analysisType === "employee_deduction" || allocation.analysisType === "informational"
+                    ? allocation.analysisType
+                    : "employer_cost",
+                amount: Number(allocation.amount) || 0,
+                resultCenter: resolveResultCenterName(allocation.resultCenter, resultCenterNameById),
+                payrollDocumentId: String(allocation.payrollDocumentId ?? ""),
+                contractReference: String(allocation.contractReference ?? ""),
+                creditorName: String(allocation.creditorName ?? ""),
+              }))
+            : [],
           description: data.description,
           supplier: data.supplier,
           notes: data.notes,
           totalValue: data.totalValue,
           competenceDate: toOptionalDate(data.competenceDate),
           paymentMethod: data.paymentMethod || "single",
+          plannedPaymentMethodType: data.plannedPaymentMethodType || undefined,
+          plannedBankAccountId: data.plannedBankAccountId || "",
+          plannedBankAccountName: data.plannedBankAccountName || "",
+          plannedPaymentMethodId: data.plannedPaymentMethodId || "",
+          plannedPaymentMethodLabel: data.plannedPaymentMethodLabel || "",
           isApportioned: data.isApportioned,
-          resultCenter: data.resultCenter || "",
-          apportionments: data.apportionments || [{ resultCenter: "", percentage: 100 }],
+          resultCenter: resolveResultCenterName(data.resultCenter, resultCenterNameById),
+          apportionments: loadedApportionments,
+          rateioCriterion:
+            data.rateioCriterion || storedPolicy?.criterion || (data.isApportioned ? "fixed" : "equal"),
+          rateioEffectiveFrom: data.recurrenceGroupId
+            ? nextOpenCompetence
+            : toOptionalDate(data.rateioEffectiveFrom) ||
+              (storedPolicy?.effectiveFrom
+                ? toOptionalDate(`${storedPolicy.effectiveFrom}T12:00:00`)
+                : toOptionalDate(data.competenceDate)),
+          rateioFirstMonthMode: data.rateioFirstMonthMode || storedPolicy?.firstMonthMode || "full",
           installments: data.installments?.length || 2,
         };
 
@@ -798,6 +1310,22 @@ export function ExpenseForm() {
 
         form.reset(resetData);
         setLoadedStatus(data.status ?? null);
+        setLoadedObligationId(data.obligationId ?? `obl_${editId}`);
+        setLoadedProvisionIdentity(data.provisionSeriesKey ? {
+          provisionSeriesKey: String(data.provisionSeriesKey),
+          provisionType: String(data.provisionType || "actual"),
+          provisionCompetence: typeof data.provisionCompetence === "string" ? data.provisionCompetence : null,
+        } : null);
+        setLoadedRecurrenceGroupId(data.recurrenceGroupId ?? null);
+        setLoadedSeriesEntry({
+          id: editId,
+          recurrenceIndex: data.recurrenceIndex,
+          installmentNumber: data.installmentNumber,
+          dueDate: data.dueDate,
+          installments: data.installments,
+        });
+        const seriesTotal = Number(data.recurrenceTotal ?? data.installmentTotal);
+        setLoadedSeriesTotal(Number.isFinite(seriesTotal) && seriesTotal > 0 ? seriesTotal : null);
       } catch (error) {
         console.error(error);
         toast({ variant: "destructive", title: "Erro ao carregar despesa." });
@@ -811,7 +1339,7 @@ export function ExpenseForm() {
     return () => {
       active = false;
     };
-  }, [editId, firebaseUser, form, toast]);
+  }, [editId, firebaseUser, form, resultCenterNameById, resultCenters, toast]);
 
   const equalInstallments = useMemo<InstallmentPreview[]>(() => {
     if (
@@ -890,10 +1418,11 @@ export function ExpenseForm() {
     () => [
       { id: "identification", label: "Identificação" },
       { id: "classification", label: "Classificação" },
-      { id: "schedule", label: "Vencimento & parcelas" },
+      ...(canEditPersonnelCosts ? [{ id: "individualization", label: "Individualização" } as const] : []),
+      { id: "schedule", label: "Vencimento e parcelas" },
       { id: "review", label: "Revisão" },
     ] as const,
-    []
+    [canEditPersonnelCosts]
   );
   const activeStepIndex = steps.findIndex((step) => step.id === currentStep);
   const previewDueDate =
@@ -908,6 +1437,21 @@ export function ExpenseForm() {
     { label: "Descrição", ok: (descriptionValue || "").trim().length >= 3 },
     { label: "Fornecedor", ok: (supplierValue || "").trim().length >= 3 },
     { label: "Plano de contas", ok: !!accountPlanValue },
+    {
+      label: "Apropriações contábeis",
+      ok: !hasAccountAllocations || Math.abs(accountAllocationRemaining) < 0.001,
+    },
+    {
+      label: "Individualização",
+      ok: !hasPersonAllocations || personAllocationsAreValid({
+        accountPlan: accountPlanValue,
+        totalValue,
+        hasAccountAllocations,
+        accountAllocations,
+        hasPersonAllocations,
+        personAllocations,
+      }),
+    },
     { label: "Unidade ou rateio", ok: isApportioned ? rateioTotal === 100 : !!resultCenterValue },
     { label: "Valor", ok: Number(totalValue || 0) > 0 },
     { label: "Vencimento", ok: !!previewDueDate },
@@ -960,13 +1504,65 @@ export function ExpenseForm() {
   }
 
   function buildExpensePayload(values: ExpenseFormValues) {
-    const account = activeAccounts.find((item: any) => item.id === values.accountPlan);
+    const account = (accounts || []).find((item: any) => item.id === values.accountPlan);
     const installmentsToSave = buildInstallmentsFromValues(values);
+    const inferredProvisionIdentity = expenseProvisionIdentity({
+      description: values.description,
+      accountPlanName: account?.name,
+      competenceDate: values.competenceDate,
+      provisionType: "actual",
+      personAllocations: values.hasPersonAllocations ? values.personAllocations : null,
+    });
+    const provisionIdentity = loadedProvisionIdentity?.provisionType === "forecast"
+      ? {
+          ...loadedProvisionIdentity,
+          provisionCompetence: values.competenceDate ? format(values.competenceDate, "yyyy-MM") : loadedProvisionIdentity.provisionCompetence,
+        }
+      : inferredProvisionIdentity || (loadedProvisionIdentity ? {
+          ...loadedProvisionIdentity,
+          provisionCompetence: values.competenceDate ? format(values.competenceDate, "yyyy-MM") : loadedProvisionIdentity.provisionCompetence,
+        } : null);
+    const storedAccountAllocations = values.hasAccountAllocations
+      ? (values.accountAllocations || []).map((allocation) => {
+          const allocationAccount = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+          return {
+            accountPlanId: allocation.accountPlanId,
+            accountPlanName: allocationAccount?.name || allocation.accountPlanId,
+            amount: Number((Number(allocation.amount) || 0).toFixed(2)),
+          };
+        })
+      : null;
+    const storedPersonAllocations = values.hasPersonAllocations
+      ? (values.personAllocations || []).map((allocation) => {
+          const allocationAccount = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+          const employee = (users || []).find((item) => item.id === allocation.employeeId);
+          return {
+            id: allocation.id || crypto.randomUUID(),
+            accountPlanId: allocation.accountPlanId,
+            accountPlanName: allocationAccount?.name || allocation.accountPlanId,
+            employeeId: allocation.employeeId,
+            employeeName: employee?.username || allocation.employeeName,
+            analysisType: allocation.analysisType,
+            amount: Number((Number(allocation.amount) || 0).toFixed(2)),
+            resultCenter: allocation.resultCenter,
+            payrollDocumentId: allocation.payrollDocumentId?.trim() || null,
+            contractReference: allocation.contractReference?.trim() || null,
+            creditorName: allocation.creditorName?.trim() || null,
+          };
+        })
+      : null;
 
     return {
       accountPlan: values.accountPlan || "",
       accountId: values.accountPlan || "",
       accountPlanName: account?.name || values.accountPlan || "",
+      provisionSeriesKey: provisionIdentity?.provisionSeriesKey ?? null,
+      provisionType: provisionIdentity?.provisionType ?? null,
+      provisionCompetence: provisionIdentity?.provisionCompetence ?? null,
+      hasAccountAllocations: values.hasAccountAllocations,
+      accountAllocations: storedAccountAllocations,
+      hasPersonAllocations: values.hasPersonAllocations,
+      personAllocations: storedPersonAllocations,
       description: values.description || "",
       supplier: values.supplier ?? "",
       notes: values.notes ?? "",
@@ -989,12 +1585,28 @@ export function ExpenseForm() {
           ? Timestamp.fromDate(values.dueDate)
           : null,
       paymentMethod: values.paymentMethod,
+      plannedPaymentMethodType: values.plannedPaymentMethodType ?? null,
+      plannedBankAccountId: values.plannedBankAccountId || null,
+      plannedBankAccountName: values.plannedBankAccountName || null,
+      plannedPaymentMethodId: values.plannedPaymentMethodId || null,
+      plannedPaymentMethodLabel: values.plannedPaymentMethodLabel || null,
       installmentType: values.paymentMethod === "installments" ? values.installmentType ?? null : null,
       installmentPeriodicity:
         values.paymentMethod === "installments" ? values.installmentPeriodicity ?? null : null,
       isApportioned: values.isApportioned,
       resultCenter: values.isApportioned ? null : values.resultCenter ?? null,
-      apportionments: values.isApportioned ? values.apportionments : null,
+      apportionments: values.isApportioned
+        ? (values.apportionments || []).map((item) => ({
+            resultCenter: item.resultCenter,
+            percentage: Number(item.percentage) || 0,
+          }))
+        : null,
+      rateioCriterion: values.isApportioned ? values.rateioCriterion : null,
+      rateioEffectiveFrom:
+        values.isApportioned && values.rateioEffectiveFrom
+          ? Timestamp.fromDate(startOfMonth(values.rateioEffectiveFrom))
+          : null,
+      rateioFirstMonthMode: values.isApportioned ? values.rateioFirstMonthMode : null,
       installments: installmentsToSave,
       recurrenceFirstDueDate:
         values.paymentMethod === "recurring" && values.recurrenceFirstDueDate
@@ -1008,31 +1620,122 @@ export function ExpenseForm() {
     };
   }
 
+  async function reconcileProvisionAfterSave(expenseId: string, payload: ReturnType<typeof buildExpensePayload>) {
+    if (!firebaseUser || payload.provisionType !== "actual" || !payload.provisionCompetence || !payload.provisionSeriesKey) return "not_applicable";
+    const snapshot = await getDocs(
+      query(
+        financialCollection("expenses"),
+        where("provisionSeriesKey", "==", payload.provisionSeriesKey),
+        where("provisionType", "==", "forecast"),
+        where("provisionCompetence", "==", payload.provisionCompetence),
+        where("status", "==", "provisioned"),
+        limit(11),
+      ),
+    );
+    const related = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+    const consultation = consultExpenseProvision({ id: expenseId, ...payload }, related);
+    if (consultation.status !== "matched" || !consultation.provision.id) return consultation.status;
+
+    const now = Timestamp.now();
+    const obligationId = String((consultation.provision as any).obligationId || `obl_${consultation.provision.id}`);
+    const batch = writeBatch(financialDb);
+    batch.update(financialDoc("expenses", expenseId), {
+      obligationId,
+      reconciledProvisionId: consultation.provision.id,
+      provisionReconciliationStatus: "reconciled",
+      provisionedValue: consultation.provisionedValue,
+      provisionVariance: consultation.variance,
+      provisionReconciledAt: now,
+      provisionReconciledBy: firebaseUser.uid,
+      updatedAt: now,
+    });
+    batch.update(financialDoc("expenses", consultation.provision.id), {
+      obligationId,
+      status: "reconciled",
+      replacedByExpenseId: expenseId,
+      actualValue: consultation.actualValue,
+      provisionVariance: consultation.variance,
+      provisionReconciliationStatus: "reconciled",
+      provisionReconciledAt: now,
+      provisionReconciledBy: firebaseUser.uid,
+      updatedAt: now,
+    });
+    await batch.commit();
+    return "reconciled";
+  }
+
+  function buildRateioPolicy(values: ExpenseFormValues, versionId: string): ExpenseRateioPolicy | null {
+    if (!values.isApportioned) return null;
+    const effectiveDate = startOfMonth(
+      values.rateioEffectiveFrom ||
+        values.recurrenceFirstDueDate ||
+        values.competenceDate ||
+        values.dueDate ||
+        new Date()
+    );
+
+    return {
+      versionId,
+      criterion: values.rateioCriterion,
+      effectiveFrom: toRateioDateString(effectiveDate),
+      firstMonthMode: values.rateioFirstMonthMode,
+      participants: (values.apportionments || []).map((item) => ({
+        resultCenter: item.resultCenter,
+        percentage: Number(item.percentage) || 0,
+        ...(item.basisValue == null ? {} : { basisValue: Number(item.basisValue) || 0 }),
+        participationStartDate: toRateioDateString(
+          item.participationStartDate || effectiveDate
+        ),
+      })),
+    };
+  }
+
+  function leaveExpenseForm(destination = returnTo || FINANCIAL_ROUTES.expenses) {
+    if (presentation === "modal") {
+      window.location.assign(destination);
+      return;
+    }
+
+    router.push(destination);
+    router.refresh();
+  }
+
   async function handleSaveDraft() {
     if (!firebaseUser) return;
+    if (submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
     setIsSaving(true);
 
     try {
       const values = form.getValues();
+      const draftRateioVersionId = values.isApportioned ? crypto.randomUUID() : null;
       const payload = {
         ...buildExpensePayload(values),
+        rateioVersionId: draftRateioVersionId,
+        rateioPolicy: draftRateioVersionId
+          ? buildRateioPolicy(values, draftRateioVersionId)
+          : null,
         status: "draft",
         createdBy: firebaseUser.uid,
         draftSavedAt: Timestamp.now(),
       };
 
       if (editId) {
-        await updateDoc(financialDoc("expenses", editId), payload);
-      } else {
-        await addDoc(financialCollection("expenses"), {
+        await updateDoc(financialDoc("expenses", editId), {
           ...payload,
+          obligationId: loadedObligationId || `obl_${editId}`,
+        });
+      } else {
+        const expenseRef = doc(financialCollection("expenses"));
+        await setDoc(expenseRef, {
+          ...payload,
+          obligationId: `obl_${expenseRef.id}`,
           createdAt: Timestamp.now(),
         });
       }
 
       toast({ title: "Rascunho salvo." });
-      router.push(`${FINANCIAL_ROUTES.expenses}?status=draft`);
-      router.refresh();
+      leaveExpenseForm(`${FINANCIAL_ROUTES.expenses}?status=draft`);
     } catch (error) {
       console.error(error);
       toast({
@@ -1041,12 +1744,18 @@ export function ExpenseForm() {
         description: "Não foi possível guardar o preenchimento atual.",
       });
     } finally {
+      submissionInFlightRef.current = false;
       setIsSaving(false);
     }
   }
 
-  async function onSubmit(values: ExpenseFormValues) {
+  async function onSubmit(
+    values: ExpenseFormValues,
+    updateScope: ExpenseSeriesUpdateScope = "single"
+  ) {
     if (!firebaseUser) return;
+    if (submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
     setIsSaving(true);
 
     try {
@@ -1077,39 +1786,153 @@ export function ExpenseForm() {
         ...buildExpensePayload(values),
         ...importPaymentMetadata,
       };
+      const editPayload = editId
+        ? {
+            ...payload,
+            obligationId: loadedObligationId || `obl_${editId}`,
+            ...(!importTransactionId ? { status: loadedStatus || "pending" } : {}),
+          }
+        : payload;
+      const rateioVersionId = values.isApportioned ? crypto.randomUUID() : null;
+      const rateioPolicy = rateioVersionId ? buildRateioPolicy(values, rateioVersionId) : null;
 
       let savedExpenseId = editId || "";
 
-      if (editId && values.paymentMethod !== "recurring") {
-        await updateDoc(financialDoc("expenses", editId), payload);
+      if (editId && loadedRecurrenceGroupId && updateScope !== "single") {
+        const groupSnapshot = await getDocs(
+          query(
+            financialCollection("expenses"),
+            where("recurrenceGroupId", "==", loadedRecurrenceGroupId)
+          )
+        );
+        const currentEntry = loadedSeriesEntry || { id: editId };
+        const groupEntries = groupSnapshot.docs.map((expenseDoc) => ({
+          id: expenseDoc.id,
+          ...(expenseDoc.data() as Omit<ExpenseSeriesEntry, "id">),
+        }));
+        const selectedIds = new Set(
+          selectExpenseSeriesEntries(groupEntries, currentEntry, updateScope).map((entry) => entry.id)
+        );
+        const selectedExpenses = groupSnapshot.docs.filter((expenseDoc) => selectedIds.has(expenseDoc.id));
+
+        if (selectedExpenses.length === 0) throw new Error("Nenhuma parcela relacionada foi encontrada.");
+
+        const batch = writeBatch(financialDb);
+        const dirtyFields = form.formState.dirtyFields;
+
+        selectedExpenses.forEach((expenseDoc) => {
+          const existing = expenseDoc.data() as any;
+
+          if (expenseDoc.id === editId) {
+            batch.update(expenseDoc.ref, {
+              ...editPayload,
+              rateioVersionId,
+              rateioPolicy,
+              updatedBy: firebaseUser.uid,
+            });
+            return;
+          }
+
+          const sharedPatch: Record<string, unknown> = {};
+          if (dirtyFields.accountPlan) {
+            sharedPatch.accountPlan = editPayload.accountPlan;
+            sharedPatch.accountId = editPayload.accountId;
+            sharedPatch.accountPlanName = editPayload.accountPlanName;
+          }
+          if (dirtyFields.hasAccountAllocations || dirtyFields.accountAllocations) {
+            sharedPatch.hasAccountAllocations = editPayload.hasAccountAllocations;
+            sharedPatch.accountAllocations = editPayload.accountAllocations;
+          }
+          if (dirtyFields.hasPersonAllocations || dirtyFields.personAllocations) {
+            sharedPatch.hasPersonAllocations = editPayload.hasPersonAllocations;
+            sharedPatch.personAllocations = editPayload.personAllocations;
+          }
+          if (dirtyFields.description) sharedPatch.description = editPayload.description;
+          if (dirtyFields.supplier) sharedPatch.supplier = editPayload.supplier;
+          if (dirtyFields.notes) sharedPatch.notes = editPayload.notes;
+          const plannedPaymentChanged =
+            !!dirtyFields.plannedPaymentMethodType ||
+            !!dirtyFields.plannedBankAccountId ||
+            !!dirtyFields.plannedBankAccountName ||
+            !!dirtyFields.plannedPaymentMethodId ||
+            !!dirtyFields.plannedPaymentMethodLabel;
+          if (plannedPaymentChanged) {
+            sharedPatch.plannedPaymentMethodType = editPayload.plannedPaymentMethodType;
+            sharedPatch.plannedBankAccountId = editPayload.plannedBankAccountId;
+            sharedPatch.plannedBankAccountName = editPayload.plannedBankAccountName;
+            sharedPatch.plannedPaymentMethodId = editPayload.plannedPaymentMethodId;
+            sharedPatch.plannedPaymentMethodLabel = editPayload.plannedPaymentMethodLabel;
+          }
+
+          const isSettledOrClosed =
+            existing.status === "paid" ||
+            existing.competenceClosed === true ||
+            existing.periodStatus === "closed";
+          if (dirtyFields.totalValue && !isSettledOrClosed) {
+            sharedPatch.totalValue = editPayload.totalValue;
+            if (Array.isArray(existing.installments) && existing.installments.length === 1) {
+              sharedPatch.installments = existing.installments.map((installment: any) => ({
+                ...installment,
+                value: values.totalValue,
+              }));
+            }
+          }
+
+          const rateioChanged =
+            !!dirtyFields.isApportioned ||
+            !!dirtyFields.resultCenter ||
+            !!dirtyFields.apportionments ||
+            !!dirtyFields.rateioCriterion ||
+            !!dirtyFields.rateioEffectiveFrom ||
+            !!dirtyFields.rateioFirstMonthMode;
+          const competence = toOptionalDate(existing.competenceDate) || toOptionalDate(existing.dueDate);
+          const resolvedApportionments = rateioPolicy && competence
+            ? resolveRateioForCompetence(rateioPolicy, competence)
+            : null;
+
+          if (rateioChanged && (!values.isApportioned || (resolvedApportionments && resolvedApportionments.length > 0))) {
+            sharedPatch.isApportioned = values.isApportioned;
+            sharedPatch.resultCenter = values.isApportioned ? null : values.resultCenter ?? null;
+            sharedPatch.apportionments = values.isApportioned ? resolvedApportionments : null;
+            sharedPatch.rateioCriterion = values.isApportioned ? values.rateioCriterion : null;
+            sharedPatch.rateioEffectiveFrom =
+              values.isApportioned && values.rateioEffectiveFrom
+                ? Timestamp.fromDate(startOfMonth(values.rateioEffectiveFrom))
+                : null;
+            sharedPatch.rateioFirstMonthMode = values.isApportioned ? values.rateioFirstMonthMode : null;
+            sharedPatch.rateioVersionId = rateioVersionId;
+            sharedPatch.rateioPolicy = rateioPolicy;
+          }
+
+          batch.update(expenseDoc.ref, {
+            ...sharedPatch,
+            updatedAt: Timestamp.now(),
+            updatedBy: firebaseUser.uid,
+          });
+        });
+        await batch.commit();
+        toast({
+          title: "Parcelas relacionadas atualizadas.",
+          description: `${selectedExpenses.length} parcela${selectedExpenses.length === 1 ? " foi atualizada" : "s foram atualizadas"}. Vencimentos, competências e pagamentos das demais foram preservados.`,
+        });
+      } else if (editId) {
+        await updateDoc(financialDoc("expenses", editId), {
+          ...editPayload,
+          rateioVersionId,
+          rateioPolicy,
+        });
         toast({ title: "Despesa atualizada." });
       } else if (values.paymentMethod === "recurring") {
         const recurrenceGroupId = crypto.randomUUID();
-        const [firstOccurrence, ...remainingOccurrences] = recurringOccurrences;
+        const occurrenceDocuments = recurringOccurrences.map((occurrence) => {
+            const resolvedApportionments = rateioPolicy
+              ? resolveRateioForCompetence(rateioPolicy, occurrence.competenceDate)
+              : null;
+            if (values.isApportioned && (!resolvedApportionments || resolvedApportionments.length === 0)) {
+              throw new Error("A vigência do rateio não pode começar depois da primeira competência da recorrência.");
+            }
 
-        if (editId && firstOccurrence) {
-          await updateDoc(financialDoc("expenses", editId), {
-            ...payload,
-            totalValue: firstOccurrence.value,
-            competenceDate: Timestamp.fromDate(firstOccurrence.competenceDate),
-            dueDate: Timestamp.fromDate(firstOccurrence.dueDate),
-            installments: [
-              {
-                number: 1,
-                dueDate: Timestamp.fromDate(firstOccurrence.dueDate),
-                value: firstOccurrence.value,
-                status: "pending",
-              },
-            ],
-            recurrenceGroupId,
-            recurrenceIndex: firstOccurrence.number,
-            recurrenceTotal: recurringOccurrences.length,
-          });
-        }
-
-        await Promise.all(
-          (editId ? remainingOccurrences : recurringOccurrences).map((occurrence) =>
-            addDoc(financialCollection("expenses"), {
+            return {
               ...payload,
               totalValue: occurrence.value,
               competenceDate: Timestamp.fromDate(occurrence.competenceDate),
@@ -1127,21 +1950,49 @@ export function ExpenseForm() {
               recurrenceTotal: recurringOccurrences.length,
               recurrenceFirstDueDate: Timestamp.fromDate(values.recurrenceFirstDueDate!),
               recurrenceEndDate: Timestamp.fromDate(values.recurrenceEndDate!),
+              apportionments: values.isApportioned ? resolvedApportionments : null,
+              rateioVersionId,
+              rateioPolicy,
               status: "pending",
               createdBy: firebaseUser.uid,
               createdAt: Timestamp.now(),
-            })
-          )
-        );
+            };
+          });
+
+        const occurrenceRefs = occurrenceDocuments.map(() => doc(financialCollection("expenses")));
+        await Promise.all(occurrenceDocuments.map((occurrenceDocument, index) => setDoc(occurrenceRefs[index], {
+          ...occurrenceDocument,
+          obligationId: `obl_${occurrenceRefs[index].id}`,
+        })));
         toast({ title: "Despesas recorrentes lançadas." });
       } else {
-        const createdExpense = await addDoc(financialCollection("expenses"), {
+        const createdExpense = doc(financialCollection("expenses"));
+        await setDoc(createdExpense, {
           ...payload,
+          obligationId: `obl_${createdExpense.id}`,
+          rateioVersionId,
+          rateioPolicy,
           createdBy: firebaseUser.uid,
           createdAt: Timestamp.now(),
         });
         savedExpenseId = createdExpense.id;
         toast({ title: "Despesa lançada." });
+      }
+
+      if (savedExpenseId && payload.provisionType === "actual") {
+        const reconciliation = await reconcileProvisionAfterSave(savedExpenseId, payload);
+        if (reconciliation === "reconciled") {
+          toast({
+            title: "Provisão conciliada.",
+            description: "A previsão da competência foi substituída pelo valor real sem duplicar a DRE.",
+          });
+        } else if (reconciliation === "ambiguous") {
+          toast({
+            variant: "destructive",
+            title: "Há mais de uma provisão para esta competência.",
+            description: "A despesa foi salva, mas a conciliação precisa de revisão.",
+          });
+        }
       }
 
       if (importTransactionId && savedExpenseId) {
@@ -1151,18 +2002,75 @@ export function ExpenseForm() {
         });
       }
 
-      router.push(returnTo || FINANCIAL_ROUTES.expenses);
-      router.refresh();
+      if (inboxMessageId && savedExpenseId) {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch(`/api/financial/inbox/${encodeURIComponent(inboxMessageId)}/link`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ expenseId: savedExpenseId }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "A despesa foi salva, mas não foi possível vinculá-la à cobrança.");
+        toast({ title: "Cobrança vinculada à despesa." });
+      }
+
+      leaveExpenseForm(inboxMessageId ? FINANCIAL_ROUTES.inbox : undefined);
     } catch (error) {
       console.error(error);
       toast({
         variant: "destructive",
         title: "Erro ao salvar despesa",
-        description: "Não foi possível concluir a operação.",
+        description: error instanceof Error ? error.message : "Não foi possível concluir a operação.",
       });
     } finally {
+      submissionInFlightRef.current = false;
       setIsSaving(false);
     }
+  }
+
+  function hasSeriesSharedChanges() {
+    const dirtyFields = form.formState.dirtyFields;
+    return !!(
+      dirtyFields.accountPlan ||
+      dirtyFields.hasAccountAllocations ||
+      dirtyFields.accountAllocations ||
+      dirtyFields.hasPersonAllocations ||
+      dirtyFields.personAllocations ||
+      dirtyFields.description ||
+      dirtyFields.supplier ||
+      dirtyFields.notes ||
+      dirtyFields.plannedPaymentMethodType ||
+      dirtyFields.plannedBankAccountId ||
+      dirtyFields.plannedBankAccountName ||
+      dirtyFields.plannedPaymentMethodId ||
+      dirtyFields.plannedPaymentMethodLabel ||
+      dirtyFields.totalValue ||
+      dirtyFields.isApportioned ||
+      dirtyFields.resultCenter ||
+      dirtyFields.apportionments ||
+      dirtyFields.rateioCriterion ||
+      dirtyFields.rateioEffectiveFrom ||
+      dirtyFields.rateioFirstMonthMode
+    );
+  }
+
+  async function handleValidatedSubmit(values: ExpenseFormValues) {
+    if (editId && loadedRecurrenceGroupId && hasSeriesSharedChanges()) {
+      setPendingSeriesValues(values);
+      setSeriesUpdateScope("single");
+      setSeriesUpdateDialogOpen(true);
+      return;
+    }
+
+    await onSubmit(values, "single");
+  }
+
+  async function handleConfirmSeriesUpdate() {
+    if (!pendingSeriesValues) return;
+    const values = pendingSeriesValues;
+    setSeriesUpdateDialogOpen(false);
+    setPendingSeriesValues(null);
+    await onSubmit(values, seriesUpdateScope);
   }
 
   async function handleFinalizeClick() {
@@ -1172,7 +2080,7 @@ export function ExpenseForm() {
     }
 
     await form.handleSubmit(
-      onSubmit,
+      handleValidatedSubmit,
       (errors: FieldErrors<ExpenseFormValues>) => {
         const flattenedErrors = flattenFormErrors(errors);
         console.error("Expense form validation errors:", flattenedErrors, errors);
@@ -1199,11 +2107,15 @@ export function ExpenseForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="min-h-[calc(100vh-5rem)]">
-        <div className="flex min-h-[calc(100vh-5rem)] bg-black/25 backdrop-blur-[2px]">
-          <div className="hidden flex-1 xl:block" />
-
-          <div className="ml-auto flex w-full max-w-[1220px] overflow-hidden rounded-l-[32px] border border-border/70 bg-background shadow-2xl">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleFinalizeClick();
+        }}
+        className="min-h-[calc(100vh-5rem)]"
+      >
+        <div className="min-h-[calc(100vh-5rem)] py-2">
+          <div className="mx-auto flex w-full max-w-[1480px] overflow-hidden rounded-2xl border border-border/70 bg-background shadow-sm">
             <div className="flex min-w-0 flex-1 flex-col border-r">
               <div className="border-b px-6 py-5">
                 <div className="flex items-start justify-between gap-4">
@@ -1219,7 +2131,7 @@ export function ExpenseForm() {
                       variant="ghost"
                       size="icon"
                       className="rounded-full"
-                      onClick={() => router.push(returnTo || FINANCIAL_ROUTES.expenses)}
+                      onClick={() => leaveExpenseForm()}
                     >
                       <X className="h-4 w-4" />
                       <span className="sr-only">Fechar</span>
@@ -1487,10 +2399,28 @@ export function ExpenseForm() {
 
                       <FormField
                         control={form.control}
+                        name="hasAccountAllocations"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-xl border p-4">
+                            <div>
+                              <FormLabel>Compor em mais de uma conta</FormLabel>
+                              <p className="text-sm text-muted-foreground">
+                                Mantém um único título e distribui o valor entre contas contábeis, mesmo que estejam em grupos diferentes.
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch checked={field.value} onCheckedChange={handleAccountAllocationMode} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
                         name="accountPlan"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Plano de contas</FormLabel>
+                            <FormLabel>{hasAccountAllocations ? "Conta de referência do título" : "Plano de contas"}</FormLabel>
                             <Popover open={accountPlanOpen} onOpenChange={setAccountPlanOpen}>
                               <PopoverTrigger asChild>
                                 <FormControl>
@@ -1506,7 +2436,7 @@ export function ExpenseForm() {
                                         {selectedAccountPlan.name}
                                       </span>
                                     ) : (
-                                      "Selecione o plano de contas"
+                                      hasAccountAllocations ? "Selecione a conta de referência" : "Selecione o plano de contas"
                                     )}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                   </Button>
@@ -1538,9 +2468,14 @@ export function ExpenseForm() {
                                                 "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
                                                 field.value === account.id && "bg-muted/30 font-medium"
                                               )}
-                                              onClick={() => { field.onChange(account.id); setAccountPlanOpen(false); }}
+                                              onClick={() => handleAccountPlanSelection(account.id)}
                                             >
-                                              <span className="truncate">{account.name}</span>
+                                              <span className="min-w-0">
+                                                <span className="block truncate">{account.name}</span>
+                                                {account.description && (
+                                                  <span className="block truncate text-xs text-muted-foreground">{account.description}</span>
+                                                )}
+                                              </span>
                                               {field.value === account.id && <Check className="ml-2 h-4 w-4 shrink-0 text-primary" />}
                                             </button>
                                           ))}
@@ -1555,6 +2490,121 @@ export function ExpenseForm() {
                           </FormItem>
                         )}
                       />
+
+                      {hasAccountAllocations && (
+                        <div className="space-y-4 rounded-xl border p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium">Apropriações contábeis</p>
+                              <p className="text-sm text-muted-foreground">
+                                Cada linha alimentará sua posição própria na DRE, mas todas continuarão ligadas ao mesmo vencimento e pagamento.
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={
+                                accountAllocationOptions.length === 0
+                                || (accountAllocations || []).length >= accountAllocationOptions.length
+                              }
+                              onClick={() => {
+                                const selected = new Set((accountAllocations || []).map((item) => item.accountPlanId));
+                                const next = accountAllocationOptions.find((account: any) => !selected.has(account.id));
+                                if (next) appendAccountAllocation({ accountPlanId: next.id, amount: 0 });
+                              }}
+                            >
+                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar conta
+                            </Button>
+                          </div>
+
+                          {accountAllocationFields.length === 0 ? (
+                            <div className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                              Selecione uma conta de referência para iniciar a composição.
+                            </div>
+                          ) : accountAllocationFields.map((allocationField, index) => (
+                            <div
+                              key={allocationField.id}
+                              className="grid gap-3 rounded-lg border bg-muted/15 p-3 md:grid-cols-[minmax(220px,1fr),180px,auto,40px]"
+                            >
+                              <FormField
+                                control={form.control}
+                                name={`accountAllocations.${index}.accountPlanId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Conta</FormLabel>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                      <FormControl>
+                                        <SelectTrigger><SelectValue placeholder="Selecione a conta" /></SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {accountAllocationOptions.map((account: any) => (
+                                          <SelectItem
+                                            key={account.id}
+                                            value={account.id}
+                                            disabled={(accountAllocations || []).some(
+                                              (item, rowIndex) => rowIndex !== index && item.accountPlanId === account.id
+                                            )}
+                                          >
+                                            {account.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`accountAllocations.${index}.amount`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Valor</FormLabel>
+                                    <FormControl>
+                                      <CurrencyInput value={field.value ?? 0} onChange={field.onChange} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="self-end"
+                                onClick={() => fillAccountAllocationRemaining(index)}
+                              >
+                                Preencher restante
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="self-end"
+                                disabled={accountAllocationFields.length <= 2}
+                                onClick={() => removeAccountAllocation(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2 text-sm">
+                            <span>Apropriado: <strong>{formatCurrency(allocatedAccountTotal)}</strong></span>
+                            <span className={cn(
+                              "font-medium",
+                              Math.abs(accountAllocationRemaining) < 0.001 ? "text-emerald-600" : "text-amber-700"
+                            )}>
+                              {accountAllocationRemaining >= 0 ? "Restante" : "Excedente"}: {formatCurrency(Math.abs(accountAllocationRemaining))}
+                            </span>
+                          </div>
+                          {(form.formState.errors.accountAllocations as any)?.message && (
+                            <p className="text-sm font-medium text-destructive">
+                              {(form.formState.errors.accountAllocations as any).message}
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       {!isApportioned && (
                         <FormField
@@ -1594,7 +2644,7 @@ export function ExpenseForm() {
                               <p className="text-sm text-muted-foreground">Distribua o valor proporcionalmente entre centros de resultado.</p>
                             </div>
                             <FormControl>
-                              <Switch checked={field.value} onCheckedChange={field.onChange} />
+                              <Switch checked={field.value} onCheckedChange={handleRateioToggle} />
                             </FormControl>
                           </FormItem>
                         )}
@@ -1602,18 +2652,105 @@ export function ExpenseForm() {
 
                       {isApportioned && (
                         <div className="space-y-4 rounded-xl border p-4">
-                          <div className="flex items-center justify-between">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <p className="font-medium">Rateio</p>
-                              <p className="text-sm text-muted-foreground">A soma deve fechar em 100%.</p>
+                              <p className="text-sm text-muted-foreground">
+                                Ao ativar, todas as unidades entram com divisão igual. Você pode remover unidades ou mudar o critério.
+                              </p>
                             </div>
-                            <Button type="button" variant="outline" size="sm" onClick={() => appendApportionment({ resultCenter: "", percentage: 0 })}>
-                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRateioCriterionChange("equal")}
+                              >
+                                Dividir igualmente
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={handleAddRateioUnit}
+                                disabled={units.length === 0 || (apportionments || []).length >= units.length}
+                              >
+                                <PlusCircle className="mr-2 h-4 w-4" /> Adicionar unidade
+                              </Button>
+                            </div>
                           </div>
 
+                          <div className={cn("grid gap-4", paymentMethod === "recurring" ? "lg:grid-cols-3" : "lg:grid-cols-1")}>
+                            <FormField
+                              control={form.control}
+                              name="rateioCriterion"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Critério</FormLabel>
+                                  <Select value={field.value} onValueChange={(value) => handleRateioCriterionChange(value as RateioCriterion)}>
+                                    <FormControl>
+                                      <SelectTrigger><SelectValue /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="equal">Igualitário</SelectItem>
+                                      <SelectItem value="fixed">Percentual fixo</SelectItem>
+                                      <SelectItem value="revenue">Por faturamento-base</SelectItem>
+                                      <SelectItem value="headcount">Por número de funcionários</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            {paymentMethod === "recurring" && (
+                              <FormField
+                                control={form.control}
+                                name="rateioEffectiveFrom"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <DatePickerField
+                                      label={loadedRecurrenceGroupId ? "Nova vigência a partir de" : "Vigência a partir de"}
+                                      value={field.value}
+                                      onChange={(value) => field.onChange(value ? startOfMonth(value) : undefined)}
+                                    />
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+
+                            {paymentMethod === "recurring" && (
+                              <FormField
+                                control={form.control}
+                                name="rateioFirstMonthMode"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Primeiro mês da unidade</FormLabel>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                      <FormControl>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="full">Integral</SelectItem>
+                                        <SelectItem value="prorated">Proporcional aos dias</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+
+                          {loadedRecurrenceGroupId && paymentMethod === "recurring" && (
+                            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                              A nova versão será aplicada somente às competências pendentes a partir da vigência. Pagamentos e competências anteriores não serão alterados.
+                            </div>
+                          )}
+
                           {apportionmentFields.map((field, index) => (
-                            <div key={field.id} className="grid gap-4 md:grid-cols-[1fr,180px,48px]">
+                            <div key={field.id} className="grid gap-4 rounded-lg border bg-muted/15 p-3 lg:grid-cols-[minmax(180px,1fr),160px,160px,minmax(180px,220px),48px]">
                               <FormField
                                 control={form.control}
                                 name={`apportionments.${index}.resultCenter`}
@@ -1628,7 +2765,13 @@ export function ExpenseForm() {
                                       </FormControl>
                                       <SelectContent>
                                         {units.map((unit) => (
-                                          <SelectItem key={unit.id} value={unit.name}>
+                                          <SelectItem
+                                            key={unit.id}
+                                            value={unit.name}
+                                            disabled={(apportionments || []).some(
+                                              (item, rowIndex) => rowIndex !== index && item.resultCenter === unit.name
+                                            )}
+                                          >
                                             {unit.name}
                                           </SelectItem>
                                         ))}
@@ -1645,14 +2788,69 @@ export function ExpenseForm() {
                                   <FormItem>
                                     <FormLabel>Percentual</FormLabel>
                                     <FormControl>
-                                      <Input type="number" min="0" max="100" step="0.01" {...field} />
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        step="0.01"
+                                        value={field.value ?? 0}
+                                        readOnly={rateioCriterion === "revenue" || rateioCriterion === "headcount"}
+                                        onChange={(event) => {
+                                          field.onChange(Number(event.target.value));
+                                          if (rateioCriterion !== "fixed") {
+                                            form.setValue("rateioCriterion", "fixed", { shouldDirty: true });
+                                          }
+                                        }}
+                                      />
                                     </FormControl>
+                                    <p className="text-xs text-muted-foreground">
+                                      {formatCurrency(((totalValue || 0) * (Number(field.value) || 0)) / 100)}
+                                    </p>
                                     <FormMessage />
                                   </FormItem>
                                 )}
                               />
+
+                              {(rateioCriterion === "revenue" || rateioCriterion === "headcount") ? (
+                                <FormField
+                                  control={form.control}
+                                  name={`apportionments.${index}.basisValue`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>{rateioCriterion === "revenue" ? "Faturamento-base" : "Funcionários"}</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          step={rateioCriterion === "headcount" ? "1" : "0.01"}
+                                          value={field.value ?? ""}
+                                          onChange={(event) => handleRateioBasisChange(index, Number(event.target.value))}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              ) : <div />}
+
+                              {paymentMethod === "recurring" ? (
+                                <FormField
+                                  control={form.control}
+                                  name={`apportionments.${index}.participationStartDate`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <DatePickerField
+                                        label="Início da participação"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                      />
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              ) : <div />}
                               <div className="flex items-end">
-                                <Button type="button" variant="ghost" size="icon" onClick={() => removeApportionment(index)}>
+                                <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveRateioUnit(index)}>
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -1662,6 +2860,264 @@ export function ExpenseForm() {
                           <p className={cn("text-sm font-medium", rateioTotal === 100 ? "text-emerald-600" : "text-amber-600")}>
                             Rateio atual: {rateioTotal.toFixed(2)}%
                           </p>
+                          {paymentMethod === "recurring" && rateioFirstMonthMode === "full" && (
+                            <p className="text-xs text-muted-foreground">
+                              Por padrão, uma unidade inaugurada no meio do mês deve começar no mês seguinte. Para entrar no próprio mês, escolha proporcional aos dias.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {currentStep === "individualization" && canEditPersonnelCosts && (
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-semibold">Individualização</h2>
+                        <p className="text-sm text-muted-foreground">
+                          Vincule cada parte do título ao colaborador, contrato e centro responsáveis pelo valor.
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+                        <p className="font-medium">O favorecido bancário continua sendo único.</p>
+                        <p className="mt-1 text-sky-800">
+                          Aqui entram os vínculos analíticos. Em uma guia de FGTS, por exemplo, o recebedor é o órgão arrecadador e cada linha identifica o colaborador correspondente.
+                        </p>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="hasPersonAllocations"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-xl border p-4">
+                            <div>
+                              <FormLabel>Individualizar por colaborador ou contrato</FormLabel>
+                              <p className="text-sm text-muted-foreground">
+                                A soma por pessoa deverá fechar cada conta contábil e o total do título.
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch checked={field.value} onCheckedChange={handlePersonAllocationMode} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+
+                      {hasPersonAllocations ? (
+                        <div className="space-y-4 rounded-xl border p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium">Vínculos analíticos</p>
+                              <p className="text-sm text-muted-foreground">
+                                Repita o colaborador quando houver mais de um contrato ou mais de um centro de resultado.
+                              </p>
+                            </div>
+                            <Button type="button" variant="outline" size="sm" onClick={handleAddPersonAllocation}>
+                              <PlusCircle className="mr-2 h-4 w-4" /> Adicionar vínculo
+                            </Button>
+                          </div>
+
+                          {personAllocationFields.map((allocationField, index) => (
+                            <div key={allocationField.id} className="space-y-3 rounded-xl border bg-muted/15 p-3">
+                              <div className="grid gap-3 lg:grid-cols-4">
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.accountPlanId`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Conta contábil</FormLabel>
+                                      <Select
+                                        value={field.value || "none"}
+                                        onValueChange={(value) => {
+                                          const nextValue = value === "none" ? "" : value;
+                                          field.onChange(nextValue);
+                                          const account = personAllocationAccountOptions.find((item) => item.id === nextValue);
+                                          if (account) {
+                                            form.setValue(
+                                              `personAllocations.${index}.analysisType`,
+                                              account.isDreAccount ? "employer_cost" : "employee_deduction",
+                                              { shouldDirty: true, shouldValidate: true },
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione a conta" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="none">Selecione a conta</SelectItem>
+                                          {personAllocationAccountOptions.map((account) => (
+                                            <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.employeeId`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Colaborador</FormLabel>
+                                      <Select
+                                        value={field.value || "none"}
+                                        onValueChange={(value) => {
+                                          const nextValue = value === "none" ? "" : value;
+                                          field.onChange(nextValue);
+                                          const employee = financialEmployees.find((item) => item.id === nextValue);
+                                          form.setValue(
+                                            `personAllocations.${index}.employeeName`,
+                                            employee?.username || employee?.email || "",
+                                            { shouldDirty: true, shouldValidate: true },
+                                          );
+                                        }}
+                                      >
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione o colaborador" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="none">Selecione o colaborador</SelectItem>
+                                          {financialEmployees.map((employee) => (
+                                            <SelectItem key={employee.id} value={employee.id}>
+                                              {employee.username || employee.email}{employee.isActive === false ? " · inativo" : ""}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.analysisType`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Natureza na análise</FormLabel>
+                                      <Select value={field.value} onValueChange={field.onChange}>
+                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="employer_cost">Custo da empresa</SelectItem>
+                                          <SelectItem value="employee_deduction">Desconto do colaborador</SelectItem>
+                                          <SelectItem value="informational">Somente informativo</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.amount`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Valor</FormLabel>
+                                      <div className="flex gap-2">
+                                        <FormControl><CurrencyInput value={field.value ?? 0} onChange={field.onChange} /></FormControl>
+                                        <Button type="button" variant="outline" onClick={() => fillPersonAllocationRemaining(index)}>
+                                          Restante
+                                        </Button>
+                                      </div>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+
+                              <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(180px,1fr)_40px]">
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.resultCenter`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Centro de resultado</FormLabel>
+                                      <Select value={field.value || "none"} onValueChange={(value) => field.onChange(value === "none" ? "" : value)}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione o centro" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                          <SelectItem value="none">Selecione o centro</SelectItem>
+                                          {personResultCenterOptions.map((center) => <SelectItem key={center.id} value={center.name}>{center.name}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.payrollDocumentId`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Documento de folha no RH</FormLabel>
+                                      <FormControl><Input placeholder="ID do contracheque ou da rescisão" {...field} /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.contractReference`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Contrato ou rubrica</FormLabel>
+                                      <FormControl><Input placeholder="Ex.: Empréstimo 1" {...field} /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name={`personAllocations.${index}.creditorName`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Credor relacionado</FormLabel>
+                                      <FormControl><Input placeholder="Instituição, se conhecida" {...field} /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <Button type="button" variant="ghost" size="icon" className="self-end" onClick={() => removePersonAllocation(index)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+
+                          <div className="space-y-2 rounded-lg bg-muted/30 px-3 py-3 text-sm">
+                            {personAllocationAccountOptions.map((account) => {
+                              const actual = personAccountTotals.get(account.id) || 0;
+                              const matches = Math.round(actual * 100) === Math.round(account.amount * 100);
+                              return (
+                                <div key={account.id} className="flex items-center justify-between gap-3">
+                                  <span>{account.name}</span>
+                                  <span className={cn("font-mono font-semibold", matches ? "text-emerald-600" : "text-amber-700")}>
+                                    {formatCurrency(actual)} / {formatCurrency(account.amount)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            <div className="flex items-center justify-between gap-3 border-t pt-2">
+                              <span>Total individualizado</span>
+                              <span className={cn("font-mono font-semibold", Math.abs(personAllocationRemaining) < 0.001 ? "text-emerald-600" : "text-amber-700")}>
+                                {formatCurrency(allocatedPersonTotal)} / {formatCurrency(totalValue || 0)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {(form.formState.errors.personAllocations as any)?.message ? (
+                            <p className="text-sm font-medium text-destructive">
+                              {(form.formState.errors.personAllocations as any).message}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                          Ative a individualização quando o título consolidar valores de mais de um colaborador ou contrato.
                         </div>
                       )}
                     </div>
@@ -1672,6 +3128,39 @@ export function ExpenseForm() {
                       <div>
                         <h2 className="text-base font-semibold">Vencimento e parcelas</h2>
                         <p className="text-sm text-muted-foreground">Quando pagar e como dividir.</p>
+                      </div>
+
+                      <div className="rounded-xl border bg-muted/15 p-4">
+                        <FormLabel>Forma de pagamento prevista</FormLabel>
+                        <p className="mb-3 mt-1 text-xs text-muted-foreground">
+                          Define onde a despesa será conferida. O meio efetivo continuará sendo registrado no pagamento.
+                        </p>
+                        <Select value={plannedPaymentSelection} onValueChange={handlePlannedPaymentChange}>
+                          <SelectTrigger className="bg-background">
+                            <SelectValue placeholder="Não informado" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Não informado</SelectItem>
+                            {plannedPaymentInstruments.map((instrument: any) => (
+                              <SelectItem key={instrument.key} value={instrument.key}>
+                                {instrument.accountName} · {instrument.methodLabel}
+                                {instrument.lastDigits ? ` · final ${instrument.lastDigits}` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        {plannedPaymentMethodType === "credit_card" && selectedPlannedInstrument ? (
+                          <div className="mt-3 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-800">
+                            <CreditCard className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>
+                              Esta despesa aparecerá na fatura mensal de <strong>{selectedPlannedInstrument.methodLabel}</strong>.
+                              {paymentMethod === "recurring"
+                                ? " Cada ocorrência mensal será lançada no ciclo correspondente."
+                                : " A fatura será conciliada separadamente com a saída bancária."}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="grid gap-4 md:grid-cols-2">
@@ -1807,11 +3296,11 @@ export function ExpenseForm() {
                           </div>
                           <div className="text-right">
                             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</p>
-                            <p className="font-mono text-3xl font-bold">{formatCurrency(totalValue || 0)}</p>
+                            <p className="font-mono text-2xl font-bold">{formatCurrency(totalValue || 0)}</p>
                           </div>
                         </div>
 
-                        <div className="mt-4 grid gap-4 md:grid-cols-4">
+                        <div className="mt-4 grid gap-4 md:grid-cols-5">
                           <div>
                             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
                             <p className="text-sm font-medium">{selectedAccountPlan?.name || "—"}</p>
@@ -1834,7 +3323,70 @@ export function ExpenseForm() {
                                 : "recorrente"}
                             </p>
                           </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pagamento previsto</p>
+                            <p className="text-sm font-medium">
+                              {plannedPaymentMethodType
+                                ? plannedPaymentMethodLabel || PLANNED_PAYMENT_METHOD_LABELS[plannedPaymentMethodType]
+                                : "Não informado"}
+                            </p>
+                          </div>
                         </div>
+
+                        {hasAccountAllocations && accountAllocationFields.length > 0 ? (
+                          <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                              Composição contábil do título
+                            </p>
+                            <div className="mt-2 space-y-1.5">
+                              {(accountAllocations || []).map((allocation) => {
+                                const account = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+                                return (
+                                  <div key={allocation.accountPlanId} className="flex items-center justify-between gap-3 text-sm">
+                                    <span>{account?.name || allocation.accountPlanId || "Subconta pendente"}</span>
+                                    <span className="font-mono font-semibold">{formatCurrency(Number(allocation.amount) || 0)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {canViewPersonnelCosts && hasPersonAllocations && personAllocationFields.length > 0 ? (
+                          <div className="mt-4 rounded-lg border bg-muted/20 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                Individualização por colaborador
+                              </p>
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {personAllocationFields.length} vínculo{personAllocationFields.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            <div className="mt-2 space-y-2">
+                              {(personAllocations || []).map((allocation, index) => {
+                                const account = (accounts || []).find((item: any) => item.id === allocation.accountPlanId);
+                                const analysisLabel = allocation.analysisType === "employer_cost"
+                                  ? "Custo da empresa"
+                                  : allocation.analysisType === "employee_deduction"
+                                  ? "Desconto do colaborador"
+                                  : "Informativo";
+                                return (
+                                  <div key={allocation.id || `${allocation.employeeId}-${index}`} className="flex flex-wrap items-start justify-between gap-3 rounded-md border bg-background px-3 py-2 text-sm">
+                                    <div>
+                                      <p className="font-medium">{allocation.employeeName || "Colaborador pendente"}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {account?.name || allocation.accountPlanId || "Conta pendente"} · {analysisLabel} · {allocation.resultCenter || "Centro pendente"}
+                                        {allocation.payrollDocumentId ? ` · Documento RH ${allocation.payrollDocumentId}` : ""}
+                                        {allocation.contractReference ? ` · ${allocation.contractReference}` : ""}
+                                      </p>
+                                    </div>
+                                    <span className="font-mono font-semibold">{formatCurrency(Number(allocation.amount) || 0)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
 
                         {notesValue ? (
                           <div className="mt-4 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
@@ -1853,7 +3405,7 @@ export function ExpenseForm() {
 
               <div className="border-t bg-background px-6 py-4">
                 <div className={cn("flex flex-wrap items-center justify-between gap-3")}>
-                  <Button type="button" variant="ghost" onClick={() => router.push(returnTo || FINANCIAL_ROUTES.expenses)}>
+                  <Button type="button" variant="ghost" onClick={() => leaveExpenseForm()}>
                     Cancelar
                   </Button>
 
@@ -1890,7 +3442,7 @@ export function ExpenseForm() {
               </div>
             </div>
 
-            <aside className="w-[344px] shrink-0 bg-muted/20">
+            <aside className="hidden w-[344px] shrink-0 bg-muted/20 xl:block">
               <div className="border-b px-5 py-5">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pré-visualização</p>
                 <h3 className="mt-1 text-sm font-semibold">Como aparecerá na fila</h3>
@@ -1926,7 +3478,19 @@ export function ExpenseForm() {
                     </div>
                     <div>
                       <p className="font-medium text-muted-foreground">Plano</p>
-                      <p className="mt-1">{selectedAccountPlan?.order || "—"}</p>
+                      <p className="mt-1">
+                        {selectedAccountPlan?.name || "—"}
+                        {hasAccountAllocations ? ` · ${(accountAllocations || []).length} apropriações` : ""}
+                        {hasPersonAllocations ? ` · ${(personAllocations || []).length} vínculos` : ""}
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="font-medium text-muted-foreground">Pagamento previsto</p>
+                      <p className="mt-1">
+                        {plannedPaymentMethodType
+                          ? plannedPaymentMethodLabel || PLANNED_PAYMENT_METHOD_LABELS[plannedPaymentMethodType]
+                          : "Não informado"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1957,6 +3521,136 @@ export function ExpenseForm() {
             </aside>
           </div>
         </div>
+
+        <Dialog
+          open={seriesUpdateDialogOpen}
+          onOpenChange={(open) => {
+            if (isSaving) return;
+            setSeriesUpdateDialogOpen(open);
+            if (!open) setPendingSeriesValues(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Onde aplicar as alterações?</DialogTitle>
+              <DialogDescription>
+                Esta despesa pertence a um grupo de parcelas. Escolha o alcance antes de atualizar.
+              </DialogDescription>
+            </DialogHeader>
+
+            <TooltipProvider delayDuration={150}>
+              <RadioGroup
+                value={seriesUpdateScope}
+                onValueChange={(value) => setSeriesUpdateScope(value as ExpenseSeriesUpdateScope)}
+                className="space-y-2"
+              >
+                <label
+                  htmlFor="series-update-single"
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
+                    seriesUpdateScope === "single" && "border-primary bg-primary/5"
+                  )}
+                >
+                  <RadioGroupItem id="series-update-single" value="single" className="mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Somente esta parcela</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Explicação: somente esta parcela">
+                            <CircleHelp className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          Altera apenas o lançamento aberto nesta tela. Nenhuma outra parcela do grupo é modificada.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">As demais parcelas permanecem exatamente como estão.</p>
+                  </div>
+                </label>
+
+                <label
+                  htmlFor="series-update-future"
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
+                    seriesUpdateScope === "current-and-future" && "border-primary bg-primary/5"
+                  )}
+                >
+                  <RadioGroupItem id="series-update-future" value="current-and-future" className="mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Esta e as próximas</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Explicação: esta e as próximas parcelas">
+                            <CircleHelp className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          Aplica os campos compartilhados à parcela atual e às posteriores. Parcelas anteriores ficam preservadas.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {loadedSeriesEntry && expenseSeriesPosition(loadedSeriesEntry)
+                        ? `Da parcela ${expenseSeriesPosition(loadedSeriesEntry)}/${loadedSeriesTotal || "—"} em diante.`
+                        : "Da parcela selecionada em diante."}
+                    </p>
+                  </div>
+                </label>
+
+                <label
+                  htmlFor="series-update-all"
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted/30",
+                    seriesUpdateScope === "all" && "border-primary bg-primary/5"
+                  )}
+                >
+                  <RadioGroupItem id="series-update-all" value="all" className="mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Todas as parcelas relacionadas</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Explicação: todas as parcelas relacionadas">
+                            <CircleHelp className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          Aplica os campos compartilhados a todo o grupo, inclusive às parcelas anteriores. Dados de pagamento permanecem intactos.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">Inclui parcelas anteriores, atuais e futuras existentes.</p>
+                  </div>
+                </label>
+              </RadioGroup>
+            </TooltipProvider>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800">
+              Nas demais parcelas, vencimento, competência, numeração, status e liquidação são preservados. O valor de parcelas pagas ou de competências fechadas também não é alterado.
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => {
+                  setSeriesUpdateDialogOpen(false);
+                  setPendingSeriesValues(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button type="button" disabled={isSaving} onClick={() => void handleConfirmSeriesUpdate()}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Aplicar alterações
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <QuickAddEntityDialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onCreated={(name) => form.setValue("supplier", name)} />
       </form>

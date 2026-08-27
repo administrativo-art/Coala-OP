@@ -4,9 +4,10 @@ import { requireUser } from "@/lib/auth-server";
 import {
   assertTaskPermission,
   assertTasksModuleEnabled,
+  canActOnTask,
 } from "@/features/tasks/lib/server-access";
-import { updateTaskStatus } from "@/features/tasks/lib/server";
-import { type Task } from "@/types";
+import { getTaskById, updateTaskStatus } from "@/features/tasks/lib/server";
+import { type Task, type TaskCompletionResult } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,16 +20,29 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
   try {
     const context = await requireUser(request);
     await assertTasksModuleEnabled(context.workspace_id);
-    assertTaskPermission(
-      context.permissions,
-      context.isDefaultAdmin,
-      null,
-      "manage"
-    );
 
     const { taskId } = await contextArg.params;
+    const currentTask = await getTaskById(taskId);
+    if (!currentTask) {
+      return NextResponse.json(
+        { error: "Tarefa não encontrada." },
+        { status: 404 }
+      );
+    }
+
+    if (!canActOnTask(context, currentTask)) {
+      return NextResponse.json(
+        { error: "Sem permissão para atuar nesta tarefa ou unidade." },
+        { status: 403 }
+      );
+    }
+
     const body = (await request.json().catch(() => null)) as
-      | { status?: Task["status"]; details?: string }
+      | {
+          status?: Task["status"];
+          completionResult?: TaskCompletionResult;
+          details?: string;
+        }
       | null;
 
     if (!body?.status) {
@@ -42,6 +56,9 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
       context,
       taskId,
       status: body.status,
+      ...(typeof body.completionResult === "string"
+        ? { completionResult: body.completionResult }
+        : {}),
       ...(typeof body.details === "string" ? { details: body.details } : {}),
     });
 

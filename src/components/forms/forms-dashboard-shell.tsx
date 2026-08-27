@@ -2,39 +2,82 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
+  BadgeCheck,
+  Bell,
+  Boxes,
+  Building2,
   CalendarClock,
+  CalendarDays,
   ChevronDown,
   CheckSquare,
   ClipboardCheck,
   ClipboardList,
   Clock,
   Copy,
+  Camera,
   FileText,
+  Flag,
+  Folder,
   FolderKanban,
+  Gauge,
+  HeartPulse,
+  Home,
+  Landmark,
   Layers3,
   Lock,
   MapPin,
+  Megaphone,
+  Package,
   Pencil,
   Plus,
+  Save,
+  Shield,
+  Shirt,
+  ShoppingBag,
+  ShoppingCart,
+  Sparkles,
+  Store,
+  Thermometer,
   Trash2,
+  Truck,
+  Utensils,
+  Users,
   UserCheck,
+  WalletCards,
+  Warehouse,
+  Workflow,
+  Wrench,
+  Zap,
 } from "lucide-react";
 
 import type { FormExecution, FormProject, FormTemplate, FormType } from "@/types/forms";
 import { useAuth } from "@/hooks/use-auth";
 import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
+import { FormsAnalyticsOverview } from "@/components/forms/analytics-overview";
+import { FormsAnalyticsTaxonomyManager } from "@/components/forms/analytics-taxonomy-manager";
+import { RetentionPolicyManager } from "@/components/forms/retention-policy-manager";
 import {
+  anonymizeDueAnalyticsOccurrences,
+  backfillAnalyticsRetention,
+  createFormModel,
   createFormProject,
   createFormTemplate,
   createFormType,
+  deleteFormModel,
   deleteFormProject,
+  executeAnalyticsReprocess,
   fetchFormModels,
   fetchFormsBootstrap,
+  recomputeAnalyticsAggregates,
+  runFormsScheduler,
+  simulateAnalyticsReprocess,
+  updateFormModel,
   updateFormTemplateApplication,
   updateFormProject,
+  type AnalyticsSimulationReport,
 } from "@/features/forms/lib/client";
 import { cn } from "@/lib/utils";
 import {
@@ -92,7 +135,60 @@ const APPLICATION_MODE_LABELS: Record<string, string> = {
   event: "Evento do sistema",
 };
 
-const PROJECT_COLOR_PRESETS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#0ea5e9"];
+const PROJECT_COLOR_PRESETS = [
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#0ea5e9",
+  "#14b8a6",
+  "#84cc16",
+  "#eab308",
+  "#f97316",
+  "#ec4899",
+  "#d946ef",
+  "#06b6d4",
+  "#3b82f6",
+  "#64748b",
+  "#111827",
+  "#92400e",
+  "#be123c",
+];
+
+const PROJECT_ICON_PRESETS = [
+  { value: "clipboard", icon: ClipboardList },
+  { value: "building", icon: Building2 },
+  { value: "store", icon: Store },
+  { value: "warehouse", icon: Warehouse },
+  { value: "home", icon: Home },
+  { value: "shield", icon: Shield },
+  { value: "thermometer", icon: Thermometer },
+  { value: "zap", icon: Zap },
+  { value: "checklist", icon: CheckSquare },
+  { value: "flag", icon: Flag },
+  { value: "camera", icon: Camera },
+  { value: "wallet", icon: WalletCards },
+  { value: "users", icon: Users },
+  { value: "folder", icon: Folder },
+  { value: "package", icon: Package },
+  { value: "boxes", icon: Boxes },
+  { value: "truck", icon: Truck },
+  { value: "wrench", icon: Wrench },
+  { value: "sparkles", icon: Sparkles },
+  { value: "shirt", icon: Shirt },
+  { value: "badge-check", icon: BadgeCheck },
+  { value: "landmark", icon: Landmark },
+  { value: "workflow", icon: Workflow },
+  { value: "shopping-bag", icon: ShoppingBag },
+  { value: "shopping-cart", icon: ShoppingCart },
+  { value: "utensils", icon: Utensils },
+  { value: "gauge", icon: Gauge },
+  { value: "heart-pulse", icon: HeartPulse },
+  { value: "megaphone", icon: Megaphone },
+  { value: "bell", icon: Bell },
+  { value: "calendar", icon: CalendarDays },
+] as const;
 
 const DEFAULT_FORM_MODELS = [
   {
@@ -160,9 +256,13 @@ type UiFormModel = {
   id: string;
   name: string;
   description?: string;
+  category?: string;
+  context?: "operational" | "recruitment";
+  is_active?: boolean;
   sections: Array<{
     id: string;
     title: string;
+    order?: number;
     items: Array<{
       id: string;
       title: string;
@@ -175,6 +275,45 @@ type UiFormModel = {
     }>;
   }>;
 };
+
+const FORM_ITEM_TYPE_OPTIONS = [
+  { value: "checkbox", label: "Checkbox" },
+  { value: "text", label: "Texto" },
+  { value: "number", label: "Número" },
+  { value: "temperature", label: "Temperatura" },
+  { value: "yes_no", label: "Sim/não" },
+  { value: "select", label: "Seleção" },
+  { value: "multi_select", label: "Múltipla seleção" },
+  { value: "photo", label: "Foto" },
+  { value: "signature", label: "Assinatura" },
+  { value: "date", label: "Data" },
+  { value: "file_upload", label: "Arquivo" },
+  { value: "location", label: "Localização" },
+] as const;
+
+type FormItemTypeValue = (typeof FORM_ITEM_TYPE_OPTIONS)[number]["value"];
+
+type ModelFormItemState = {
+  id: string;
+  title: string;
+  type: FormItemTypeValue;
+};
+
+type ModelFormSectionState = {
+  id: string;
+  title: string;
+  items: ModelFormItemState[];
+};
+
+type ModelFormState = {
+  name: string;
+  description: string;
+  category: string;
+  context: "operational" | "recruitment";
+  sections: ModelFormSectionState[];
+};
+
+type ModelDialogMode = "create" | "edit" | "customize";
 
 const STATUS_META: Record<
   FormExecution["status"],
@@ -209,6 +348,10 @@ const STATUS_META: Record<
 
 function getExecutionStatusMeta(status: FormExecution["status"]) {
   return STATUS_META[status] ?? STATUS_META.pending;
+}
+
+function getProjectIcon(iconValue?: string) {
+  return PROJECT_ICON_PRESETS.find((entry) => entry.value === iconValue)?.icon ?? ClipboardList;
 }
 
 function countTemplateItems(template: FormTemplate) {
@@ -281,36 +424,145 @@ function formatRelative(value: unknown) {
   return `${absDays} dia(s) ${diffMs < 0 ? "atrás" : "à frente"}`;
 }
 
+function makeDraftId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeItemType(value?: string): FormItemTypeValue {
+  return FORM_ITEM_TYPE_OPTIONS.some((option) => option.value === value)
+    ? (value as FormItemTypeValue)
+    : "text";
+}
+
+function createDefaultModelItem(): ModelFormItemState {
+  return {
+    id: makeDraftId("item"),
+    title: "Nova pergunta",
+    type: "text",
+  };
+}
+
+function createDefaultModelSection(): ModelFormSectionState {
+  return {
+    id: makeDraftId("section"),
+    title: "Seção principal",
+    items: [createDefaultModelItem()],
+  };
+}
+
+function createEmptyModelForm(): ModelFormState {
+  return {
+    name: "",
+    description: "",
+    category: "",
+    context: "operational",
+    sections: [createDefaultModelSection()],
+  };
+}
+
+function modelToFormState(model: UiFormModel, mode: ModelDialogMode): ModelFormState {
+  return {
+    name: mode === "customize" ? `${model.name} personalizado` : model.name,
+    description: model.description ?? "",
+    category: model.category ?? "",
+    context: model.context ?? "operational",
+    sections:
+      model.sections.length > 0
+        ? model.sections.map((section) => ({
+            id: section.id || makeDraftId("section"),
+            title: section.title,
+            items:
+              section.items.length > 0
+                ? section.items.map((item) => ({
+                    id: item.id || makeDraftId("item"),
+                    title: item.title,
+                    type: normalizeItemType(item.type),
+                  }))
+                : [createDefaultModelItem()],
+          }))
+        : [createDefaultModelSection()],
+  };
+}
+
+function isModelFormInvalid(modelForm: ModelFormState) {
+  return (
+    modelForm.name.trim().length < 2 ||
+    modelForm.sections.length === 0 ||
+    modelForm.sections.some(
+      (section) =>
+        section.title.trim().length === 0 ||
+        section.items.length === 0 ||
+        section.items.some((item) => item.title.trim().length < 2)
+    )
+  );
+}
+
 function KpiCard({
   label,
   value,
   subtitle,
   tone,
+  unit,
 }: {
   label: string;
   value: number;
   subtitle: string;
   tone: "amber" | "blue" | "emerald" | "red" | "purple";
+  unit?: string;
 }) {
-  const toneClass =
-    tone === "amber"
-      ? "from-amber-50 to-white text-amber-700 border-amber-200"
-      : tone === "blue"
-        ? "from-blue-50 to-white text-blue-700 border-blue-200"
-        : tone === "emerald"
-          ? "from-emerald-50 to-white text-emerald-700 border-emerald-200"
-          : tone === "purple"
-            ? "from-violet-50 to-white text-violet-700 border-violet-200"
-            : "from-red-50 to-white text-red-700 border-red-200";
+  const toneMeta = {
+    amber: {
+      accent: "bg-amber-500",
+      icon: Clock,
+      iconWrap: "border-amber-100 bg-amber-50 text-amber-700",
+      value: "text-amber-700",
+    },
+    blue: {
+      accent: "bg-blue-500",
+      icon: UserCheck,
+      iconWrap: "border-blue-100 bg-blue-50 text-blue-700",
+      value: "text-blue-700",
+    },
+    emerald: {
+      accent: "bg-emerald-500",
+      icon: CheckSquare,
+      iconWrap: "border-emerald-100 bg-emerald-50 text-emerald-700",
+      value: "text-emerald-700",
+    },
+    red: {
+      accent: "bg-rose-500",
+      icon: CalendarClock,
+      iconWrap: "border-rose-100 bg-rose-50 text-rose-700",
+      value: "text-rose-700",
+    },
+    purple: {
+      accent: "bg-violet-500",
+      icon: BarChart3,
+      iconWrap: "border-violet-100 bg-violet-50 text-violet-700",
+      value: "text-violet-700",
+    },
+  }[tone];
+  const Icon = toneMeta.icon;
 
   return (
-    <Card className={cn("bg-gradient-to-br", toneClass)}>
-      <CardContent className="p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+    <Card className="relative overflow-hidden border-slate-200 bg-white shadow-sm">
+      <div className={cn("absolute inset-x-0 top-0 h-1", toneMeta.accent)} />
+      <CardContent className="flex min-h-[116px] flex-col justify-between gap-4 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-semibold uppercase leading-none tracking-[0.12em] text-muted-foreground">
+              {label}
+            </p>
+            <p className={cn("mt-3 flex items-baseline gap-1 text-3xl font-semibold leading-none tabular-nums", toneMeta.value)}>
+              <span>{value}</span>
+              {unit ? <span className="text-sm font-medium text-muted-foreground">{unit}</span> : null}
+            </p>
+          </div>
+          <span className={cn("inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border", toneMeta.iconWrap)}>
+            <Icon className="h-4 w-4" />
+          </span>
+        </div>
+        <p className="text-xs leading-snug text-muted-foreground">{subtitle}</p>
       </CardContent>
     </Card>
   );
@@ -354,40 +606,81 @@ type TemplateFormState = {
 
 export function FormsDashboardShell() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { firebaseUser } = useAuth();
   const { units, shiftDefinitions } = useDPBootstrap();
   const { toast } = useToast();
   const [projects, setProjects] = useState<FormProject[]>([]);
   const [formTypes, setFormTypes] = useState<FormType[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
+  const [templateOptions, setTemplateOptions] = useState<FormTemplate[]>([]);
   const [executions, setExecutions] = useState<FormExecution[]>([]);
   const [models, setModels] = useState<UiFormModel[]>([]);
   const [canCreateProjects, setCanCreateProjects] = useState(false);
   const [canManageTemplates, setCanManageTemplates] = useState(false);
   const [canViewAnalytics, setCanViewAnalytics] = useState(false);
+  const [canReprocessAnalytics, setCanReprocessAnalytics] = useState(false);
+  const [canManageTaxonomy, setCanManageTaxonomy] = useState(false);
+  const [canResolveOccurrences, setCanResolveOccurrences] = useState(false);
+  const [canValidateResolution, setCanValidateResolution] = useState(false);
+  const [canManageRetentionPolicy, setCanManageRetentionPolicy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [subprojectDialogOpen, setSubprojectDialogOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [projectDeleteTarget, setProjectDeleteTarget] = useState<FormProject | null>(null);
+  const [modelArchiveTarget, setModelArchiveTarget] = useState<UiFormModel | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
   const [projectsInitialized, setProjectsInitialized] = useState(false);
   const [editingProject, setEditingProject] = useState<FormProject | null>(null);
-  const [saving, setSaving] = useState<"project" | "template" | "deleteProject" | null>(null);
+  const [modelDialogMode, setModelDialogMode] = useState<ModelDialogMode>("create");
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [saving, setSaving] = useState<"project" | "template" | "deleteProject" | "scheduler" | "model" | "archiveModel" | null>(null);
+  const [analyticsOperation, setAnalyticsOperation] = useState<
+    "simulate" | "execute" | "recompute" | "backfill" | "anonymize" | null
+  >(null);
+  const [analyticsFilters, setAnalyticsFilters] = useState(() => {
+    const to = new Date();
+    const from = new Date(to);
+    from.setDate(from.getDate() - 29);
+    return {
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+      projectId: "all",
+      templateId: "all",
+      retentionDays: "365",
+      batchLimit: "200",
+    };
+  });
+  const [analyticsSimulation, setAnalyticsSimulation] = useState<{
+    simulation: AnalyticsSimulationReport;
+    simulatedAt: string;
+    scope: {
+      execution_ids: string[];
+      execution_count: number;
+      workspace_timezone: string;
+      fromLocalDate: string;
+      toLocalDate: string;
+    };
+  } | null>(null);
+  const [analyticsLastResult, setAnalyticsLastResult] = useState<string | null>(null);
   const [projectForm, setProjectForm] = useState({
     name: "",
     description: "",
     color: "",
+    icon: "clipboard",
   });
+  const [modelForm, setModelForm] = useState<ModelFormState>(() => createEmptyModelForm());
   const [subprojectForm, setSubprojectForm] = useState({
     form_project_id: "",
     name: "",
     description: "",
   });
   const [templateForm, setTemplateForm] = useState<TemplateFormState>({
-    source: "model",
-    model_id: DEFAULT_FORM_MODELS[0]?.id ?? "",
+    source: "blank",
+    model_id: "",
     duplicate_template_id: "",
     form_project_id: "",
     form_type_id: "",
@@ -403,6 +696,8 @@ export function FormsDashboardShell() {
     item_type: "text",
     selected_model_item_ids: [] as string[],
   });
+  const defaultTab = searchParams.get("tab") === "models" ? "models" : searchParams.get("tab") === "templates" ? "templates" : "operations";
+  const ProjectIcon = getProjectIcon(projectForm.icon);
 
   const templatesByProject = useMemo(() => {
     return templates.reduce<Record<string, FormTemplate[]>>((accumulator, template) => {
@@ -464,11 +759,12 @@ export function FormsDashboardShell() {
   }, [executions]);
 
   const availableModels = useMemo(() => {
-    if (models.length > 0) return models;
-    return DEFAULT_FORM_MODELS.map((model) => ({
+    const defaultModels = DEFAULT_FORM_MODELS.map((model) => ({
       id: model.id,
       name: model.name,
       description: model.description,
+      context: "operational" as const,
+      is_active: true,
       sections: model.sections.map((section) => ({
         id: section.id,
         title: section.title,
@@ -479,6 +775,11 @@ export function FormsDashboardShell() {
         })),
       })),
     }));
+    const storedModelIds = new Set(models.map((model) => model.id));
+    return [
+      ...models,
+      ...defaultModels.filter((model) => !storedModelIds.has(model.id)),
+    ];
   }, [models]);
 
   const selectedModel = useMemo(() => {
@@ -494,8 +795,15 @@ export function FormsDashboardShell() {
   }, [selectedModel]);
 
   const selectedDuplicateTemplate = useMemo(() => {
-    return templates.find((template) => template.id === templateForm.duplicate_template_id) ?? null;
-  }, [templateForm.duplicate_template_id, templates]);
+    return templateOptions.find((template) => template.id === templateForm.duplicate_template_id) ?? null;
+  }, [templateForm.duplicate_template_id, templateOptions]);
+
+  const sortedTemplateOptions = useMemo(() => {
+    return [...templateOptions].sort((left, right) => {
+      if (left.is_active !== right.is_active) return left.is_active ? -1 : 1;
+      return String(left.name).localeCompare(String(right.name), "pt-BR");
+    });
+  }, [templateOptions]);
 
   const projectSummaries = useMemo(() => {
     return projects.map((project) => {
@@ -591,11 +899,17 @@ export function FormsDashboardShell() {
           setProjects(data.projects);
           setFormTypes(data.types ?? []);
           setTemplates(data.templates);
+          setTemplateOptions(data.template_options ?? data.templates);
           setExecutions(data.executions);
           setModels(modelsPayload.models as UiFormModel[]);
           setCanCreateProjects(data.access.can_create_projects);
           setCanManageTemplates(data.access.can_manage_templates);
           setCanViewAnalytics(data.access.can_view_analytics);
+          setCanReprocessAnalytics(data.access.can_reprocess_occurrences);
+          setCanManageRetentionPolicy(data.access.can_manage_retention_policy);
+          setCanManageTaxonomy(data.access.can_manage_analytics_taxonomy);
+          setCanResolveOccurrences(data.access.can_resolve_occurrences);
+          setCanValidateResolution(data.access.can_validate_occurrence_resolution);
         }
       } catch (requestError) {
         if (!cancelled) {
@@ -619,7 +933,7 @@ export function FormsDashboardShell() {
   }, [firebaseUser]);
 
   function resetProjectForm() {
-    setProjectForm({ name: "", description: "", color: "" });
+    setProjectForm({ name: "", description: "", color: "", icon: "clipboard" });
     setEditingProject(null);
   }
 
@@ -634,8 +948,128 @@ export function FormsDashboardShell() {
       name: project.name,
       description: project.description ?? "",
       color: project.color ?? "",
+      icon: project.icon ?? "clipboard",
     });
     setProjectDialogOpen(true);
+  }
+
+  function isStoredModel(modelId: string) {
+    return models.some((model) => model.id === modelId);
+  }
+
+  function openCreateModelDialog() {
+    setModelDialogMode("create");
+    setEditingModelId(null);
+    setModelForm(createEmptyModelForm());
+    setModelDialogOpen(true);
+  }
+
+  function openEditModelDialog(model: UiFormModel) {
+    const stored = isStoredModel(model.id);
+    setModelDialogMode(stored ? "edit" : "customize");
+    setEditingModelId(stored ? model.id : null);
+    setModelForm(modelToFormState(model, stored ? "edit" : "customize"));
+    setModelDialogOpen(true);
+  }
+
+  function updateModelSection(sectionId: string, patch: Partial<ModelFormSectionState>) {
+    setModelForm((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === sectionId ? { ...section, ...patch } : section
+      ),
+    }));
+  }
+
+  function addModelSection() {
+    setModelForm((current) => ({
+      ...current,
+      sections: [...current.sections, createDefaultModelSection()],
+    }));
+  }
+
+  function removeModelSection(sectionId: string) {
+    setModelForm((current) => ({
+      ...current,
+      sections:
+        current.sections.length <= 1
+          ? current.sections
+          : current.sections.filter((section) => section.id !== sectionId),
+    }));
+  }
+
+  function updateModelItem(
+    sectionId: string,
+    itemId: string,
+    patch: Partial<ModelFormItemState>
+  ) {
+    setModelForm((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              items: section.items.map((item) =>
+                item.id === itemId ? { ...item, ...patch } : item
+              ),
+            }
+          : section
+      ),
+    }));
+  }
+
+  function addModelItem(sectionId: string) {
+    setModelForm((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === sectionId
+          ? { ...section, items: [...section.items, createDefaultModelItem()] }
+          : section
+      ),
+    }));
+  }
+
+  function removeModelItem(sectionId: string, itemId: string) {
+    setModelForm((current) => ({
+      ...current,
+      sections: current.sections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              items:
+                section.items.length <= 1
+                  ? section.items
+                  : section.items.filter((item) => item.id !== itemId),
+            }
+          : section
+      ),
+    }));
+  }
+
+  function buildModelPayload() {
+    return {
+      name: modelForm.name.trim(),
+      description: modelForm.description.trim() || undefined,
+      category: modelForm.category.trim() || undefined,
+      context: modelForm.context,
+      is_active: true,
+      sections: modelForm.sections.map((section, sectionIndex) => ({
+        id: section.id,
+        title: section.title.trim(),
+        order: sectionIndex,
+        items: section.items.map((item, itemIndex) => ({
+          id: item.id,
+          order: itemIndex,
+          title: item.title.trim(),
+          type: item.type,
+          required: true,
+          weight: 1,
+          block_next: false,
+          criticality: "medium",
+          action_required: item.type === "temperature" || item.type === "yes_no",
+        })),
+      })),
+    };
   }
 
   function toggleProject(projectId: string) {
@@ -753,11 +1187,17 @@ export function FormsDashboardShell() {
     setProjects(data.projects);
     setFormTypes(data.types ?? []);
     setTemplates(data.templates);
+    setTemplateOptions(data.template_options ?? data.templates);
     setExecutions(data.executions);
     setModels(modelsPayload.models as UiFormModel[]);
     setCanCreateProjects(data.access.can_create_projects);
     setCanManageTemplates(data.access.can_manage_templates);
     setCanViewAnalytics(data.access.can_view_analytics);
+    setCanReprocessAnalytics(data.access.can_reprocess_occurrences);
+    setCanManageRetentionPolicy(data.access.can_manage_retention_policy);
+    setCanManageTaxonomy(data.access.can_manage_analytics_taxonomy);
+    setCanResolveOccurrences(data.access.can_resolve_occurrences);
+    setCanValidateResolution(data.access.can_validate_occurrence_resolution);
   }
 
   async function handleSaveProject() {
@@ -770,7 +1210,7 @@ export function FormsDashboardShell() {
           name: projectForm.name,
           description: projectForm.description,
           color: projectForm.color,
-          icon: editingProject.icon ?? "",
+          icon: projectForm.icon,
           is_active: true,
           members: editingProject.members ?? [],
         });
@@ -779,7 +1219,7 @@ export function FormsDashboardShell() {
           name: projectForm.name,
           description: projectForm.description,
           color: projectForm.color,
-          icon: "",
+          icon: projectForm.icon,
           is_active: true,
           members: [],
         });
@@ -814,6 +1254,61 @@ export function FormsDashboardShell() {
       toast({
         variant: "destructive",
         title: deleteError instanceof Error ? deleteError.message : "Falha ao excluir projeto.",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleSaveModel() {
+    if (!firebaseUser) return;
+
+    if (isModelFormInvalid(modelForm)) {
+      toast({
+        variant: "destructive",
+        title: "Preencha o nome, as seções e as perguntas do modelo.",
+      });
+      return;
+    }
+
+    try {
+      setSaving("model");
+      const payload = buildModelPayload();
+      if (modelDialogMode === "edit" && editingModelId) {
+        await updateFormModel(firebaseUser, editingModelId, payload);
+      } else {
+        await createFormModel(firebaseUser, payload);
+      }
+
+      await reloadBootstrap();
+      setModelDialogOpen(false);
+      setEditingModelId(null);
+      setModelForm(createEmptyModelForm());
+      toast({ title: modelDialogMode === "edit" ? "Modelo atualizado" : "Modelo criado" });
+    } catch (saveError) {
+      toast({
+        variant: "destructive",
+        title: saveError instanceof Error ? saveError.message : "Falha ao salvar modelo.",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleArchiveModel() {
+    if (!firebaseUser || !modelArchiveTarget) return;
+
+    try {
+      setSaving("archiveModel");
+      await deleteFormModel(firebaseUser, modelArchiveTarget.id);
+      setModels((current) => current.filter((model) => model.id !== modelArchiveTarget.id));
+      setModelArchiveTarget(null);
+      await reloadBootstrap();
+      toast({ title: "Modelo arquivado" });
+    } catch (archiveError) {
+      toast({
+        variant: "destructive",
+        title: archiveError instanceof Error ? archiveError.message : "Falha ao arquivar modelo.",
       });
     } finally {
       setSaving(null);
@@ -868,13 +1363,13 @@ export function FormsDashboardShell() {
         context: templateForm.context,
         name:
           templateForm.name ||
-          selectedModel?.name ||
-          selectedDuplicateTemplate?.name ||
-          "Novo formulário",
+          (templateForm.source === "model" ? selectedModel?.name : undefined) ||
+          (templateForm.source === "duplicate" ? selectedDuplicateTemplate?.name : undefined) ||
+          "Formulário em branco",
         description:
           templateForm.description ||
-          selectedModel?.description ||
-          selectedDuplicateTemplate?.description ||
+          (templateForm.source === "model" ? selectedModel?.description : undefined) ||
+          (templateForm.source === "duplicate" ? selectedDuplicateTemplate?.description : undefined) ||
           "",
         occurrence_type: templateForm.occurrence_type,
         application_mode: templateForm.application_mode,
@@ -920,8 +1415,8 @@ export function FormsDashboardShell() {
       setTemplateDialogOpen(false);
       setTemplateForm((current) => ({
         ...current,
-        source: "model",
-        model_id: availableModels[0]?.id ?? DEFAULT_FORM_MODELS[0]?.id ?? "",
+        source: "blank",
+        model_id: "",
         duplicate_template_id: "",
         form_type_id: "",
         name: "",
@@ -945,6 +1440,194 @@ export function FormsDashboardShell() {
     }
   }
 
+  async function handleRunScheduler() {
+    if (!firebaseUser) return;
+
+    try {
+      setSaving("scheduler");
+      const today = new Date().toISOString().slice(0, 10);
+      const result = await runFormsScheduler(firebaseUser, {
+        fromDate: today,
+        toDate: today,
+      });
+      await reloadBootstrap();
+      toast({
+        title: "Pendências geradas",
+        description: `${result.created_count} formulário(s) criado(s); ${result.skipped_count} ignorado(s); ${result.overdue_updated} marcado(s) como atrasado(s).`,
+      });
+    } catch (schedulerError) {
+      toast({
+        variant: "destructive",
+        title: schedulerError instanceof Error ? schedulerError.message : "Falha ao gerar pendências.",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  function buildAnalyticsScopeBody() {
+    return {
+      from: analyticsFilters.from,
+      to: analyticsFilters.to,
+      ...(analyticsFilters.projectId !== "all"
+        ? { projectId: analyticsFilters.projectId }
+        : {}),
+      ...(analyticsFilters.templateId !== "all"
+        ? { templateId: analyticsFilters.templateId }
+        : {}),
+    };
+  }
+
+  async function handleSimulateReprocess() {
+    if (!firebaseUser) return;
+
+    try {
+      setAnalyticsOperation("simulate");
+      setAnalyticsLastResult(null);
+      const result = await simulateAnalyticsReprocess(firebaseUser, buildAnalyticsScopeBody());
+      setAnalyticsSimulation({
+        simulation: result.simulation,
+        simulatedAt: result.simulated_at,
+        scope: result.scope,
+      });
+      toast({
+        title: "Simulação concluída",
+        description: `${result.simulation.totals.executions_ok} execução(ões) prontas para reprocessar.`,
+      });
+    } catch (operationError) {
+      toast({
+        variant: "destructive",
+        title:
+          operationError instanceof Error
+            ? operationError.message
+            : "Falha ao simular reprocessamento.",
+      });
+    } finally {
+      setAnalyticsOperation(null);
+    }
+  }
+
+  async function handleExecuteReprocess() {
+    if (!firebaseUser || !analyticsSimulation) return;
+
+    try {
+      setAnalyticsOperation("execute");
+      const result = await executeAnalyticsReprocess(firebaseUser, {
+        ...buildAnalyticsScopeBody(),
+        simulation: analyticsSimulation.simulation,
+        simulatedAt: analyticsSimulation.simulatedAt,
+        recomputeAggregates: true,
+      });
+      const ok = result.results.filter((entry) => entry.status === "ok").length;
+      const errors = result.results.filter((entry) => entry.status === "error").length;
+      setAnalyticsLastResult(
+        `Reprocessamento: ${ok} ok, ${errors} erro(s). Agregados: ${result.aggregates?.days ?? 0} dia(s).`
+      );
+      setAnalyticsSimulation(null);
+      toast({
+        title: "Reprocessamento executado",
+        description: `${ok} execução(ões) reprocessadas; ${errors} erro(s).`,
+      });
+    } catch (operationError) {
+      toast({
+        variant: "destructive",
+        title:
+          operationError instanceof Error
+            ? operationError.message
+            : "Falha ao executar reprocessamento.",
+      });
+    } finally {
+      setAnalyticsOperation(null);
+    }
+  }
+
+  async function handleRecomputeAggregates() {
+    if (!firebaseUser) return;
+
+    try {
+      setAnalyticsOperation("recompute");
+      const result = await recomputeAnalyticsAggregates(firebaseUser, {
+        from: analyticsFilters.from,
+        to: analyticsFilters.to,
+      });
+      setAnalyticsLastResult(
+        `Agregados recomputados: ${result.days} dia(s), ${result.rows_read} ocorrência(s) lidas.`
+      );
+      toast({
+        title: "Agregados recomputados",
+        description: `${result.days} dia(s), ${result.rows_read} ocorrência(s) lidas.`,
+      });
+    } catch (operationError) {
+      toast({
+        variant: "destructive",
+        title:
+          operationError instanceof Error
+            ? operationError.message
+            : "Falha ao recomputar agregados.",
+      });
+    } finally {
+      setAnalyticsOperation(null);
+    }
+  }
+
+  async function handleRetentionBackfill() {
+    if (!firebaseUser) return;
+
+    try {
+      setAnalyticsOperation("backfill");
+      const result = await backfillAnalyticsRetention(firebaseUser, {
+        retentionDays: Number(analyticsFilters.retentionDays),
+        batchLimit: Number(analyticsFilters.batchLimit),
+      });
+      setAnalyticsLastResult(
+        `Backfill: ${result.stamped} registro(s) carimbados. ${result.has_more ? "Há mais lotes." : "Sem lote restante."}`
+      );
+      toast({
+        title: "Backfill executado",
+        description: `${result.stamped} registro(s) carimbados.`,
+      });
+    } catch (operationError) {
+      toast({
+        variant: "destructive",
+        title:
+          operationError instanceof Error
+            ? operationError.message
+            : "Falha no backfill de retenção.",
+      });
+    } finally {
+      setAnalyticsOperation(null);
+    }
+  }
+
+  async function handleAnonymizeDue() {
+    if (!firebaseUser) return;
+
+    try {
+      setAnalyticsOperation("anonymize");
+      const result = await anonymizeDueAnalyticsOccurrences(firebaseUser, {
+        batchLimit: Number(analyticsFilters.batchLimit),
+        keepOriginalInVault: true,
+      });
+      setAnalyticsLastResult(
+        `Anonimização: ${result.anonymized} registro(s), ${result.vaulted} preservado(s) no cofre.`
+      );
+      toast({
+        title: "Anonimização executada",
+        description: `${result.anonymized} registro(s) anonimizados.`,
+      });
+    } catch (operationError) {
+      toast({
+        variant: "destructive",
+        title:
+          operationError instanceof Error
+            ? operationError.message
+            : "Falha ao anonimizar ocorrências.",
+      });
+    } finally {
+      setAnalyticsOperation(null);
+    }
+  }
+
   if (loading) {
     return <Skeleton className="h-80 w-full" />;
   }
@@ -964,7 +1647,7 @@ export function FormsDashboardShell() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -977,6 +1660,16 @@ export function FormsDashboardShell() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canManageTemplates ? (
+            <Button
+              variant="outline"
+              onClick={() => void handleRunScheduler()}
+              disabled={saving === "scheduler"}
+            >
+              <CalendarClock className="mr-2 h-4 w-4" />
+              {saving === "scheduler" ? "Gerando..." : "Gerar pendentes de hoje"}
+            </Button>
+          ) : null}
           {canCreateProjects ? (
             <Button variant="outline" onClick={openCreateProjectDialog}>
               <Plus className="mr-2 h-4 w-4" />
@@ -991,11 +1684,15 @@ export function FormsDashboardShell() {
                 const firstSubproject = firstProject ? (subprojectsByProject[firstProject.id] ?? [])[0] : undefined;
                 setTemplateForm((current) => ({
                   ...current,
-                  source: "model",
+                  source: "blank",
+                  model_id: "",
+                  duplicate_template_id: "",
                   form_project_id: current.form_project_id || firstProject?.id || "",
                   form_type_id: current.form_type_id || firstSubproject?.id || "",
+                  name: "",
+                  description: "",
+                  selected_model_item_ids: [],
                 }));
-                selectAllModelItems();
                 setTemplateDialogOpen(true);
               }}
             >
@@ -1006,15 +1703,15 @@ export function FormsDashboardShell() {
         </div>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <KpiCard label="Pendentes" value={stats.pending} subtitle="Preenchimentos aguardando início" tone="amber" />
         <KpiCard label="Em andamento" value={stats.inProgress} subtitle="Preenchimentos já assumidos" tone="blue" />
         <KpiCard label="Concluídas" value={stats.completed} subtitle="Fluxos encerrados" tone="emerald" />
         <KpiCard label="Atrasadas" value={stats.overdue} subtitle="Preenchimentos em atenção" tone="red" />
-        <KpiCard label="Tempo médio" value={stats.averageDuration} subtitle="Minutos por preenchimento" tone="purple" />
+        <KpiCard label="Tempo médio" value={stats.averageDuration} subtitle="Por preenchimento concluído" tone="purple" unit="min" />
       </div>
 
-      <Tabs defaultValue="operations" className="space-y-4">
+      <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList className="h-auto rounded-full bg-slate-100/80 p-1">
           <TabsTrigger value="operations">Projetos</TabsTrigger>
           <TabsTrigger value="templates">Formulários</TabsTrigger>
@@ -1032,12 +1729,17 @@ export function FormsDashboardShell() {
               </CardContent>
             </Card>
           ) : (
-            projectSummaries.map(({ project, subprojects, templates: projectTemplates, executions: projectExecutions, completionRate, items }) => {
+            <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
+            {projectSummaries.map(({ project, subprojects, templates: projectTemplates, executions: projectExecutions, completionRate, items }) => {
               const isExpanded = expandedProjectIds.includes(project.id);
+              const pendingExecutions = projectExecutions.filter((execution) => execution.status === "pending").length;
               return (
-              <Card key={project.id}>
-                <CardHeader className="pb-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <Card
+                key={project.id}
+                className="overflow-hidden"
+              >
+                <CardHeader className="p-4">
+                  <div className="flex flex-col gap-3">
                     <button
                       type="button"
                       onClick={() => toggleProject(project.id)}
@@ -1050,35 +1752,55 @@ export function FormsDashboardShell() {
                         )}
                       />
                       <span
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
                         style={{ backgroundColor: project.color || "#5b5cf6" }}
                       >
-                        <FolderKanban className="h-5 w-5" />
+                        <FolderKanban className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 space-y-1">
-                        <CardTitle className="text-lg">{project.name}</CardTitle>
-                        <CardDescription className="line-clamp-2">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <CardTitle className="line-clamp-1 text-base">{project.name}</CardTitle>
+                          {project.source === "unit_auto" ? (
+                            <Badge variant="outline" className="shrink-0 text-[10px]">
+                              Unidade
+                            </Badge>
+                          ) : null}
+                        </span>
+                        <CardDescription className="line-clamp-1">
                           {project.description?.trim() || "Projeto operacional no domínio de formulários."}
                         </CardDescription>
                       </span>
                     </button>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">{projectTemplates.length} formulário(s)</Badge>
-                      <Badge variant="outline">{subprojects.length} subprojeto(s)</Badge>
-                      <Badge variant="outline">{projectExecutions.length} preenchimento(s)</Badge>
-                      <Badge variant="outline">{items} pergunta(s)</Badge>
-                      <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                        {completionRate}% concluído
-                      </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="grid grid-cols-4 overflow-hidden rounded-2xl border bg-muted/20 text-center">
+                        {[
+                          { value: projectTemplates.length, label: "Forms", className: "text-foreground" },
+                          { value: projectExecutions.length, label: "Preench.", className: "text-foreground" },
+                          { value: pendingExecutions, label: "Pendentes", className: "text-amber-600" },
+                          { value: `${completionRate}%`, label: "Concluído", className: "text-emerald-600" },
+                        ].map((metric, metricIndex) => (
+                          <div
+                            key={metric.label}
+                            className={cn(
+                              "min-w-[58px] px-2 py-1.5",
+                              metricIndex > 0 && "border-l"
+                            )}
+                          >
+                            <p className={cn("text-xs font-semibold leading-none", metric.className)}>{metric.value}</p>
+                            <p className="mt-1 text-[9px] uppercase leading-none text-muted-foreground">{metric.label}</p>
+                          </div>
+                        ))}
+                      </div>
                       {canCreateProjects ? (
                         <>
-                          <Button variant="ghost" size="sm" onClick={() => openEditProjectDialog(project)}>
-                            <Pencil className="mr-2 h-4 w-4" />
+                          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => openEditProjectDialog(project)}>
+                            <Pencil className="mr-1.5 h-3.5 w-3.5" />
                             Editar projeto
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-8 px-2 text-xs"
                             onClick={() => {
                               setSubprojectForm({
                                 form_project_id: project.id,
@@ -1088,16 +1810,16 @@ export function FormsDashboardShell() {
                               setSubprojectDialogOpen(true);
                             }}
                           >
-                            <Plus className="mr-2 h-4 w-4" />
+                            <Plus className="mr-1.5 h-3.5 w-3.5" />
                             Novo subprojeto
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-destructive hover:text-destructive"
+                            className="h-8 px-2 text-xs text-destructive hover:text-destructive"
                             onClick={() => setProjectDeleteTarget(project)}
                           >
-                            <Trash2 className="mr-2 h-4 w-4" />
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                             Excluir
                           </Button>
                         </>
@@ -1105,8 +1827,8 @@ export function FormsDashboardShell() {
                     </div>
                   </div>
                 </CardHeader>
-                {isExpanded ? (
-                <CardContent className="space-y-4 border-t pt-4">
+                {isExpanded && (subprojects.length > 0 || projectExecutions.length > 0) ? (
+                <CardContent className="space-y-4 pt-4">
                   {subprojects.length > 0 ? (
                     <div className="space-y-4">
                       {subprojects.map((subproject) => {
@@ -1129,11 +1851,15 @@ export function FormsDashboardShell() {
                                   onClick={() => {
                                     setTemplateForm((current) => ({
                                       ...current,
+                                      source: "blank",
+                                      model_id: "",
+                                      duplicate_template_id: "",
                                       form_project_id: project.id,
                                       form_type_id: subproject.id,
-                                      source: "model",
+                                      name: "",
+                                      description: "",
+                                      selected_model_item_ids: [],
                                     }));
-                                    selectAllModelItems();
                                     setTemplateDialogOpen(true);
                                   }}
                                 >
@@ -1143,7 +1869,7 @@ export function FormsDashboardShell() {
                               </div>
                             </div>
                             {subprojectTemplates.length > 0 ? (
-                              <div className="grid gap-3 xl:grid-cols-3">
+                              <div className="grid gap-3">
                                 {subprojectTemplates.map((template) => {
                                   const templateExecutions = projectExecutions.filter(
                                     (execution) => execution.template_id === template.id
@@ -1192,11 +1918,7 @@ export function FormsDashboardShell() {
                         );
                       })}
                     </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-                      Este projeto ainda não tem subprojetos. Crie um subprojeto para organizar os formulários.
-                    </div>
-                  )}
+                  ) : null}
 
                   {projectExecutions.length > 0 ? (
                     <div className="space-y-3">
@@ -1234,16 +1956,13 @@ export function FormsDashboardShell() {
                         })}
                       </div>
                     </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                      Nenhum preenchimento recente para este projeto.
-                    </div>
-                  )}
+                  ) : null}
                 </CardContent>
                 ) : null}
               </Card>
               );
-            })
+            })}
+            </div>
           )}
         </TabsContent>
 
@@ -1323,57 +2042,59 @@ export function FormsDashboardShell() {
         </TabsContent>
 
         <TabsContent value="models" className="space-y-4">
+          <div className="flex flex-col gap-2">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Modelos-base</h2>
+              <p className="text-sm text-muted-foreground">
+                Estruturas reutilizáveis para criar formulários operacionais.
+              </p>
+            </div>
+          </div>
           <div className="grid gap-4 xl:grid-cols-3">
             {availableModels.map((model, modelIndex) => {
               const itemCount = model.sections.reduce((total, section) => total + section.items.length, 0);
               const visual = getModelVisual(model.id, modelIndex);
               const Icon = visual.icon;
               return (
-                <Card key={model.id}>
-                  <CardHeader>
-                    <div className={cn("mb-2 flex h-10 w-10 items-center justify-center rounded-xl", visual.className)}>
-                      <Icon className="h-5 w-5" />
+                <Card key={model.id} className="border-slate-200 shadow-sm">
+                  <CardContent className="flex min-h-[180px] flex-col justify-between p-6">
+                    <div className="space-y-4">
+                      <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", visual.className)}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="font-semibold">{model.name}</h3>
+                        <p className="line-clamp-2 text-sm text-muted-foreground">{model.description}</p>
+                      </div>
                     </div>
-                    <CardTitle className="text-base">{model.name}</CardTitle>
-                    <CardDescription>{model.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">{model.sections.length} seção(ões)</Badge>
-                      <Badge variant="outline">{itemCount} pergunta(s)</Badge>
+                    <div className="mt-5 flex items-center justify-between gap-3">
+                      <span className="text-xs text-muted-foreground">{itemCount} itens</span>
+                      {projects.length > 0 && canManageTemplates ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const firstProject = projects[0];
+                            const firstSubproject = firstProject ? (subprojectsByProject[firstProject.id] ?? [])[0] : undefined;
+                            setTemplateForm((current) => ({
+                              ...current,
+                              source: "model",
+                              model_id: model.id,
+                              form_project_id: current.form_project_id || firstProject?.id || "",
+                              form_type_id: current.form_type_id || firstSubproject?.id || "",
+                              name: model.name,
+                              description: model.description ?? "",
+                            }));
+                            selectAllModelItems(model.id);
+                            setTemplateDialogOpen(true);
+                          }}
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Usar modelo
+                        </Button>
+                      ) : null}
                     </div>
-                    <div className="space-y-2">
-                      {model.sections.slice(0, 3).map((section) => (
-                        <div key={section.id} className="rounded-xl border bg-muted/20 p-3">
-                          <p className="text-sm font-medium">{section.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {section.items.length} pergunta(s)
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                    {projects.length > 0 && canManageTemplates ? (
-                      <Button
-                        className="w-full"
-                        variant="outline"
-                        onClick={() => {
-                          const itemIds = model.sections.flatMap((section) => section.items.map((item) => item.id));
-                          setTemplateForm((current) => ({
-                            ...current,
-                            source: "model",
-                            model_id: model.id,
-                            form_project_id: current.form_project_id || projects[0]?.id || "",
-                            name: model.name,
-                            description: model.description ?? "",
-                            selected_model_item_ids: itemIds,
-                          }));
-                          setTemplateDialogOpen(true);
-                        }}
-                      >
-                        <Copy className="mr-2 h-4 w-4" />
-                        Criar formulário
-                      </Button>
-                    ) : null}
                   </CardContent>
                 </Card>
               );
@@ -1382,6 +2103,15 @@ export function FormsDashboardShell() {
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
+          <FormsAnalyticsOverview
+            canResolve={canResolveOccurrences}
+            canValidate={canValidateResolution}
+          />
+
+          {canManageTaxonomy ? <FormsAnalyticsTaxonomyManager /> : null}
+
+          {canManageRetentionPolicy ? <RetentionPolicyManager /> : null}
+
           <div className="grid gap-4 xl:grid-cols-2">
             <Card>
               <CardHeader>
@@ -1436,79 +2166,414 @@ export function FormsDashboardShell() {
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Operação de analytics
+              </CardTitle>
+              <CardDescription>
+                Reprocessamento histórico e recomputação dos agregados derivados.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="space-y-2">
+                  <Label>De</Label>
+                  <Input
+                    type="date"
+                    value={analyticsFilters.from}
+                    onChange={(event) =>
+                      setAnalyticsFilters((current) => ({
+                        ...current,
+                        from: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Até</Label>
+                  <Input
+                    type="date"
+                    value={analyticsFilters.to}
+                    onChange={(event) =>
+                      setAnalyticsFilters((current) => ({
+                        ...current,
+                        to: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Projeto</Label>
+                  <Select
+                    value={analyticsFilters.projectId}
+                    onValueChange={(value) =>
+                      setAnalyticsFilters((current) => ({
+                        ...current,
+                        projectId: value,
+                        templateId: "all",
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Formulário</Label>
+                  <Select
+                    value={analyticsFilters.templateId}
+                    onValueChange={(value) =>
+                      setAnalyticsFilters((current) => ({
+                        ...current,
+                        templateId: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {templates
+                        .filter(
+                          (template) =>
+                            analyticsFilters.projectId === "all" ||
+                            template.form_project_id === analyticsFilters.projectId
+                        )
+                        .map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 xl:grid-cols-3">
+                <div className="rounded-lg border p-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Reprocessamento</p>
+                    <p className="text-xs text-muted-foreground">
+                      Simula antes de executar e recomputa os agregados do período.
+                    </p>
+                  </div>
+                  {analyticsSimulation ? (
+                    <div className="mt-4 rounded-md bg-muted/40 p-3 text-xs">
+                      <p className="font-semibold">
+                        {analyticsSimulation.simulation.totals.executions_ok} execução(ões) prontas
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        {analyticsSimulation.simulation.totals.evaluations} avaliações ·{" "}
+                        {analyticsSimulation.simulation.totals.occurrences} ocorrências ·{" "}
+                        {analyticsSimulation.simulation.totals.superseded} atuais substituídas
+                      </p>
+                    </div>
+                  ) : null}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!canReprocessAnalytics || analyticsOperation !== null}
+                      onClick={() => void handleSimulateReprocess()}
+                    >
+                      {analyticsOperation === "simulate" ? "Simulando..." : "Simular"}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={
+                        !canReprocessAnalytics ||
+                        !analyticsSimulation ||
+                        analyticsOperation !== null
+                      }
+                      onClick={() => void handleExecuteReprocess()}
+                    >
+                      {analyticsOperation === "execute" ? "Executando..." : "Executar"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Agregados diários</p>
+                    <p className="text-xs text-muted-foreground">
+                      Recalcula os buckets derivados para dashboards de períodos longos.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-4"
+                    disabled={!canReprocessAnalytics || analyticsOperation !== null}
+                    onClick={() => void handleRecomputeAggregates()}
+                  >
+                    {analyticsOperation === "recompute" ? "Recomputando..." : "Recomputar período"}
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Privacidade</p>
+                    <p className="text-xs text-muted-foreground">
+                      Carimba retenção e anonimiza ocorrências pessoais vencidas.
+                    </p>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      <Label>Dias</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={analyticsFilters.retentionDays}
+                        onChange={(event) =>
+                          setAnalyticsFilters((current) => ({
+                            ...current,
+                            retentionDays: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Lote</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={500}
+                        value={analyticsFilters.batchLimit}
+                        onChange={(event) =>
+                          setAnalyticsFilters((current) => ({
+                            ...current,
+                            batchLimit: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!canManageRetentionPolicy || analyticsOperation !== null}
+                      onClick={() => void handleRetentionBackfill()}
+                    >
+                      {analyticsOperation === "backfill" ? "Carimbando..." : "Backfill"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!canManageRetentionPolicy || analyticsOperation !== null}
+                      onClick={() => void handleAnonymizeDue()}
+                    >
+                      {analyticsOperation === "anonymize" ? "Anonimizando..." : "Anonimizar vencidas"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {analyticsSimulation ? (
+                <div className="rounded-lg border">
+                  <div className="flex flex-col gap-2 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">Impacto da simulação</p>
+                      <p className="text-xs text-muted-foreground">
+                        {analyticsSimulation.scope.execution_count} execução(ões) no escopo ·{" "}
+                        {analyticsSimulation.scope.fromLocalDate} até {analyticsSimulation.scope.toLocalDate}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-3 overflow-hidden rounded-md border text-center text-xs">
+                      <div className="px-3 py-2">
+                        <p className="font-semibold">{analyticsSimulation.simulation.totals.evaluations}</p>
+                        <p className="text-muted-foreground">Avaliações</p>
+                      </div>
+                      <div className="border-l px-3 py-2">
+                        <p className="font-semibold">{analyticsSimulation.simulation.totals.occurrences}</p>
+                        <p className="text-muted-foreground">Ocorrências</p>
+                      </div>
+                      <div className="border-l px-3 py-2">
+                        <p className="font-semibold">{analyticsSimulation.simulation.totals.superseded}</p>
+                        <p className="text-muted-foreground">Substituídas</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="max-h-80 overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Execução</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Avaliações</TableHead>
+                          <TableHead className="text-right">Ocorrências</TableHead>
+                          <TableHead className="text-right">Substituídas</TableHead>
+                          <TableHead>Mensagem</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {analyticsSimulation.simulation.executions.map((entry) => (
+                          <TableRow key={entry.execution_id}>
+                            <TableCell className="font-mono text-xs">{entry.execution_id}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={entry.status === "ok" ? "default" : "outline"}
+                                className={cn(
+                                  entry.status === "error" && "border-rose-200 bg-rose-50 text-rose-700",
+                                  entry.status === "skipped" && "border-amber-200 bg-amber-50 text-amber-700"
+                                )}
+                              >
+                                {entry.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">{entry.will_create_evaluations}</TableCell>
+                            <TableCell className="text-right">{entry.will_create_occurrences}</TableCell>
+                            <TableCell className="text-right">{entry.will_supersede}</TableCell>
+                            <TableCell className="max-w-[260px] truncate text-xs text-muted-foreground">
+                              {entry.error ?? entry.skip_reason ?? "Pronta"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 xl:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-semibold">Jobs agendados</p>
+                  <div className="mt-3 space-y-3 text-xs">
+                    <div className="rounded-md bg-muted/40 p-3">
+                      <p className="font-medium">Recomputar agregados</p>
+                      <p className="mt-1 break-all font-mono text-muted-foreground">
+                        GET /api/forms/analytics/jobs/recompute-daily?workspace_id=&lt;workspace&gt;&days=2
+                      </p>
+                    </div>
+                    <div className="rounded-md bg-muted/40 p-3">
+                      <p className="font-medium">Anonimizar vencidas</p>
+                      <p className="mt-1 break-all font-mono text-muted-foreground">
+                        GET /api/forms/analytics/jobs/anonymize-due?workspace_id=&lt;workspace&gt;&batch_limit=200
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-semibold">Configuração operacional</p>
+                  <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                      <span>CRON_SECRET</span>
+                      <Badge variant="outline">obrigatório</Badge>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                      <span>FORMS_ANALYTICS_PERSONAL_RETENTION_DAYS</span>
+                      <Badge variant="outline">{analyticsFilters.retentionDays} dias</Badge>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                      <span>FORMS_ANALYTICS_JOB_WORKSPACE_IDS</span>
+                      <Badge variant="outline">opcional</Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {analyticsLastResult ? (
+                <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                  {analyticsLastResult}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
       <Dialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen}>
-        <DialogContent className="max-w-2xl overflow-hidden p-0">
+        <DialogContent className="max-w-xl overflow-hidden rounded-2xl p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
-            <div className="flex items-start gap-3">
-              <div
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
-                style={{ backgroundColor: projectForm.color || PROJECT_COLOR_PRESETS[0] }}
-              >
-                <FolderKanban className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle>{editingProject ? "Editar projeto" : "Novo projeto"}</DialogTitle>
-                <DialogDescription>
-                  Base operacional que agrupa formulários, aplicações e preenchimentos.
-                </DialogDescription>
-              </div>
-            </div>
+            <DialogTitle>{editingProject ? "Editar projeto" : "Novo projeto"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-5 px-6 py-5">
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
-              <div className="space-y-2">
-                <Label>Nome do projeto</Label>
-                <Input
-                  value={projectForm.name}
-                  onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="Ex: Operação · Lojas"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Cor</Label>
-                <div className="grid grid-cols-6 gap-2 rounded-xl border p-2">
-                  {PROJECT_COLOR_PRESETS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className={cn(
-                        "h-8 rounded-lg border transition-transform hover:scale-105",
-                        (projectForm.color || PROJECT_COLOR_PRESETS[0]) === color && "ring-2 ring-primary ring-offset-2"
-                      )}
-                      style={{ backgroundColor: color }}
-                      aria-label={`Usar cor ${color}`}
-                      onClick={() => setProjectForm((current) => ({ ...current, color }))}
-                    />
-                  ))}
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="flex items-center gap-4">
+                <div
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+                  style={{ backgroundColor: projectForm.color || PROJECT_COLOR_PRESETS[0] }}
+                >
+                  <ProjectIcon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold">{projectForm.name || "Nome do projeto"}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {projectForm.description || "Prévia do card do projeto"}
+                  </p>
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Nome do projeto</Label>
+              <Input
+                value={projectForm.name}
+                onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Ex.: Operação · Lojas"
+              />
             </div>
             <div className="space-y-2">
               <Label>Descrição</Label>
               <Textarea
                 value={projectForm.description}
                 onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
-                placeholder="Ex: Rotinas diárias de abertura, fechamento e controle operacional."
+                placeholder="Para que serve este projeto?"
                 className="min-h-24"
               />
             </div>
-            <div className="rounded-xl border bg-muted/30 p-4">
-              <div className="flex items-center gap-3">
-                <div
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white"
-                  style={{ backgroundColor: projectForm.color || PROJECT_COLOR_PRESETS[0] }}
-                >
-                  <FolderKanban className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{projectForm.name || "Nome do projeto"}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {projectForm.description || "Este projeto aparecerá no acordeon do painel de formulários."}
-                  </p>
-                </div>
+            <div className="space-y-2">
+              <Label>Ícone</Label>
+              <div className="flex flex-wrap gap-2">
+                {PROJECT_ICON_PRESETS.map((entry) => {
+                  const Icon = entry.icon;
+                  const active = projectForm.icon === entry.value;
+                  return (
+                    <button
+                      key={entry.value}
+                      type="button"
+                      className={cn(
+                        "flex h-10 w-10 items-center justify-center rounded-lg border transition-colors",
+                        active ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20" : "text-muted-foreground hover:bg-muted"
+                      )}
+                      onClick={() => setProjectForm((current) => ({ ...current, icon: entry.value }))}
+                      aria-label={`Usar ícone ${entry.value}`}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Cor</Label>
+              <div className="flex flex-wrap gap-2">
+                {PROJECT_COLOR_PRESETS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={cn(
+                      "h-9 w-9 rounded-lg border transition-transform hover:scale-105",
+                      (projectForm.color || PROJECT_COLOR_PRESETS[0]) === color && "ring-2 ring-primary ring-offset-2"
+                    )}
+                    style={{ backgroundColor: color }}
+                    aria-label={`Usar cor ${color}`}
+                    onClick={() => setProjectForm((current) => ({ ...current, color }))}
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -1517,7 +2582,7 @@ export function FormsDashboardShell() {
               Cancelar
             </Button>
             <Button onClick={() => void handleSaveProject()} disabled={saving === "project" || !projectForm.name.trim()}>
-              {saving === "project" ? "Salvando..." : "Salvar projeto"}
+              {saving === "project" ? "Salvando..." : editingProject ? "Salvar projeto" : "Criar projeto"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1590,57 +2655,70 @@ export function FormsDashboardShell() {
       </Dialog>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-hidden p-0">
+        <DialogContent className="!w-[min(94vw,1040px)] !max-w-[1040px] overflow-hidden rounded-2xl p-0">
           <DialogHeader className="border-b px-6 py-5 text-left">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm">
-                <ClipboardList className="h-5 w-5" />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white">
+                <ClipboardList className="h-4 w-4" />
               </div>
-              <div className="min-w-0">
+              <div>
                 <DialogTitle>Novo formulário</DialogTitle>
-                <DialogDescription>
-                  Crie a partir de um modelo, em branco ou duplicando.
-                </DialogDescription>
+                <DialogDescription>Crie a partir de um modelo, em branco ou duplicando.</DialogDescription>
               </div>
             </div>
           </DialogHeader>
-
-          <div className="max-h-[calc(92vh-145px)] space-y-5 overflow-y-auto px-6 py-5">
-            <div className="inline-flex rounded-full bg-slate-100 p-1">
-              {[
-                { value: "model", label: "A partir de modelo" },
-                { value: "blank", label: "Em branco" },
-                { value: "duplicate", label: "Duplicar" },
-              ].map((option) => {
-                const active = templateForm.source === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={cn(
-                      "rounded-full px-5 py-2 text-sm font-semibold transition-colors",
-                      active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                    onClick={() => {
+          <div className="space-y-5 px-6 py-5">
+            <div className="space-y-3 rounded-2xl border bg-muted/10 p-4">
+              <div className="grid gap-4 md:grid-cols-[minmax(0,360px)_1fr]">
+                <div className="space-y-2">
+                  <Label>Usar estrutura existente</Label>
+                  <Select
+                    value={templateForm.source}
+                    onValueChange={(value) => {
+                      const nextSource = value as TemplateDialogSource;
+                      const firstModel = availableModels[0];
+                      const modelId = nextSource === "model"
+                        ? templateForm.model_id || firstModel?.id || ""
+                        : "";
+                      const selectedModelForSource = availableModels.find((model) => model.id === modelId);
+                      const itemIds = selectedModelForSource?.sections.flatMap((section) =>
+                        section.items.map((item) => item.id)
+                      ) ?? [];
                       setTemplateForm((current) => ({
                         ...current,
-                        source: option.value as TemplateDialogSource,
-                        selected_model_item_ids:
-                          option.value === "model" && current.selected_model_item_ids.length === 0
-                            ? selectedModel?.sections.flatMap((section) => section.items.map((item) => item.id)) ?? []
-                            : current.selected_model_item_ids,
+                        source: nextSource,
+                        model_id: modelId,
+                        duplicate_template_id:
+                          nextSource === "duplicate" ? current.duplicate_template_id : "",
+                        selected_model_item_ids: nextSource === "model" ? itemIds : [],
                       }));
                     }}
                   >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="blank">Nenhuma, criar em branco</SelectItem>
+                      <SelectItem value="model">Modelos</SelectItem>
+                      <SelectItem value="duplicate">Formulários publicados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {templateForm.source === "blank" ? (
+                  <div className="rounded-xl border border-dashed bg-background px-4 py-3 text-sm text-muted-foreground">
+                    Para criar um formulário em branco, deixe “Usar estrutura existente” como “Nenhuma”.
+                    O sistema criará uma seção inicial e uma pergunta inicial para você editar na próxima tela.
+                  </div>
+                ) : null}
+                {templateForm.source === "duplicate" && selectedDuplicateTemplate?.is_active === false ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Este formulário não está ativo. A cópia usará apenas a estrutura, sem histórico de preenchimentos.
+                  </div>
+                ) : null}
+              </div>
 
-            {templateForm.source === "model" ? (
-              <div className="space-y-4">
-                <div className="grid gap-3 lg:grid-cols-3">
+              {templateForm.source === "model" ? (
+                <div className="grid gap-4 md:grid-cols-3">
                   {availableModels.map((model, modelIndex) => {
                     const visual = getModelVisual(model.id, modelIndex);
                     const Icon = visual.icon;
@@ -1651,8 +2729,8 @@ export function FormsDashboardShell() {
                         key={model.id}
                         type="button"
                         className={cn(
-                          "relative min-h-40 rounded-xl border p-4 text-left transition-colors",
-                          active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/40"
+                          "relative min-h-[132px] rounded-xl border p-4 text-left transition-colors",
+                          active ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-background hover:bg-muted/40"
                         )}
                         onClick={() => {
                           const itemIds = model.sections.flatMap((section) => section.items.map((item) => item.id));
@@ -1666,123 +2744,51 @@ export function FormsDashboardShell() {
                         }}
                       >
                         {active ? (
-                          <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                            <CheckSquare className="h-3.5 w-3.5" />
+                          <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                            <CheckSquare className="h-3 w-3" />
                           </span>
                         ) : null}
-                        <span className={cn("flex h-10 w-10 items-center justify-center rounded-xl", visual.className)}>
-                          <Icon className="h-5 w-5" />
+                        <span className={cn("mb-3 flex h-9 w-9 items-center justify-center rounded-lg", visual.className)}>
+                          <Icon className="h-4 w-4" />
                         </span>
-                        <span className="mt-4 block text-sm font-semibold">{model.name}</span>
-                        <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
-                          {model.description}
-                        </span>
-                        <span className="mt-4 block text-xs text-muted-foreground">{itemCount} itens</span>
+                        <span className="block text-sm font-semibold">{model.name}</span>
+                        <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">{model.description}</span>
+                        <span className="mt-3 block text-xs text-muted-foreground">{itemCount} itens</span>
                       </button>
                     );
                   })}
                 </div>
+              ) : null}
 
-                <div className="rounded-xl border p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold">Perguntas do modelo</p>
-                      <p className="text-xs text-muted-foreground">
-                        Selecione quais perguntas serão mantidas no formulário final.
-                      </p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => selectAllModelItems()}>
-                      <CheckSquare className="mr-2 h-4 w-4" />
-                      Selecionar tudo
-                    </Button>
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    {selectedModel?.sections.map((section) => {
-                      const sectionSelectedCount = section.items.filter((item) => selectedModelItemIds.has(item.id)).length;
-                      const sectionChecked = sectionSelectedCount === section.items.length;
-                      return (
-                        <div key={section.id} className="rounded-xl border bg-background p-3">
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              checked={sectionChecked}
-                              onCheckedChange={(checked) => toggleModelSection(section.id, checked === true)}
-                            />
-                            <div>
-                              <p className="text-sm font-medium">{section.title}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {sectionSelectedCount}/{section.items.length} pergunta(s) selecionada(s)
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-3 grid gap-2 md:grid-cols-2">
-                            {section.items.map((item) => (
-                              <label key={item.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-                                <Checkbox
-                                  checked={selectedModelItemIds.has(item.id)}
-                                  onCheckedChange={(checked) => toggleModelItem(item.id, checked === true)}
-                                />
-                                <span>{item.title}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {templateForm.source === "duplicate" ? (
-              <div className="rounded-xl border p-4">
-                <Label>Formulário base</Label>
-                <Select
-                  value={templateForm.duplicate_template_id}
-                  onValueChange={(value) => {
-                    const template = templates.find((entry) => entry.id === value);
-                    setTemplateForm((current) => ({
-                      ...current,
-                      duplicate_template_id: value,
-                      name: current.name || (template ? `${template.name} - cópia` : ""),
-                      description: current.description || template?.description || "",
-                    }));
-                  }}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Selecione um formulário para duplicar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        {template.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-
-            {templateForm.source === "blank" ? (
-              <div className="grid gap-4 rounded-xl border p-4 md:grid-cols-2">
+              {templateForm.source === "duplicate" ? (
                 <div className="space-y-2">
-                  <Label>Primeira seção</Label>
-                  <Input
-                    value={templateForm.section_title}
-                    onChange={(event) => setTemplateForm((current) => ({ ...current, section_title: event.target.value }))}
-                    placeholder="Primeira seção"
-                  />
+                  <Label>Formulário publicado</Label>
+                  <Select
+                    value={templateForm.duplicate_template_id}
+                    onValueChange={(value) => {
+                      const template = templateOptions.find((entry) => entry.id === value);
+                      setTemplateForm((current) => ({
+                        ...current,
+                        duplicate_template_id: value,
+                        name: current.name || (template ? `${template.name} - cópia` : ""),
+                        description: current.description || template?.description || "",
+                      }));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um formulário" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortedTemplateOptions.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name} · {template.is_active ? "Publicado" : "Inativo"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Primeira pergunta</Label>
-                  <Input
-                    value={templateForm.item_title}
-                    onChange={(event) => setTemplateForm((current) => ({ ...current, item_title: event.target.value }))}
-                    placeholder="Primeira pergunta"
-                  />
-                </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -1790,7 +2796,13 @@ export function FormsDashboardShell() {
                 <Input
                   value={templateForm.name}
                   onChange={(event) => setTemplateForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="Ex: Checklist de abertura"
+                  placeholder={
+                    templateForm.source === "model"
+                      ? selectedModel?.name ?? "Nome do formulário"
+                      : templateForm.source === "duplicate"
+                        ? selectedDuplicateTemplate?.name ?? "Nome do formulário"
+                        : "Ex.: Checklist de abertura"
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -1823,6 +2835,7 @@ export function FormsDashboardShell() {
                 <Select
                   value={templateForm.form_type_id}
                   onValueChange={(value) => setTemplateForm((current) => ({ ...current, form_type_id: value }))}
+                  disabled={!templateForm.form_project_id}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o subprojeto" />
@@ -1835,9 +2848,6 @@ export function FormsDashboardShell() {
                     ))}
                   </SelectContent>
                 </Select>
-                {templateForm.form_project_id && (subprojectsByProject[templateForm.form_project_id] ?? []).length === 0 ? (
-                  <p className="text-xs text-destructive">Crie um subprojeto antes de criar o formulário.</p>
-                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>Recorrência</Label>
@@ -1850,10 +2860,10 @@ export function FormsDashboardShell() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="daily">Diária</SelectItem>
+                    <SelectItem value="daily">Diário</SelectItem>
                     <SelectItem value="weekly">Semanal</SelectItem>
                     <SelectItem value="monthly">Mensal</SelectItem>
-                    <SelectItem value="custom">Personalizada</SelectItem>
+                    <SelectItem value="custom">Personalizado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1866,7 +2876,6 @@ export function FormsDashboardShell() {
                       ...current,
                       application_mode: value,
                       occurrence_type: value === "manual" ? "manual" : current.occurrence_type === "manual" ? "daily" : current.occurrence_type,
-                      shift_definition_ids: value === "schedule" ? current.shift_definition_ids : [],
                     }))
                   }
                 >
@@ -1883,109 +2892,15 @@ export function FormsDashboardShell() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea
-                value={templateForm.description}
-                onChange={(event) => setTemplateForm((current) => ({ ...current, description: event.target.value }))}
-                placeholder="Descreva quando e por que este formulário será usado."
-                className="min-h-20"
-              />
-            </div>
-
-            <div className="rounded-xl border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">Escopo de aplicação</p>
-                  <p className="text-xs text-muted-foreground">
-                    Defina as unidades e, quando usar escala, os períodos/turnos do formulário.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">{templateForm.unit_ids.length} unidade(s)</Badge>
-                  {templateForm.application_mode === "schedule" ? (
-                    <Badge variant="outline">{templateForm.shift_definition_ids.length} período(s)</Badge>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label>Unidades</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setTemplateForm((current) => ({
-                          ...current,
-                          unit_ids:
-                            current.unit_ids.length === units.length
-                              ? []
-                              : units.map((unit) => unit.id),
-                        }))
-                      }
-                    >
-                      {templateForm.unit_ids.length === units.length ? "Limpar" : "Selecionar todas"}
-                    </Button>
-                  </div>
-                  {units.length > 0 ? (
-                    <div className="grid max-h-36 gap-2 overflow-y-auto rounded-xl border p-3 md:grid-cols-2">
-                      {units.map((unit) => (
-                        <label key={unit.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
-                          <Checkbox
-                            checked={templateForm.unit_ids.includes(unit.id)}
-                            onCheckedChange={(checked) => toggleTemplateArrayField("unit_ids", unit.id, checked === true)}
-                          />
-                          <span>{unit.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
-                      Nenhuma unidade do DP carregada neste contexto.
-                    </div>
-                  )}
-                </div>
-
-                {templateForm.application_mode === "schedule" ? (
-                  <div className="space-y-2">
-                    <Label>Períodos/turnos</Label>
-                    {shiftDefinitions.length > 0 ? (
-                      <div className="grid max-h-36 gap-2 overflow-y-auto rounded-xl border p-3 md:grid-cols-2">
-                        {shiftDefinitions.map((shift) => (
-                          <label key={shift.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50">
-                            <Checkbox
-                              checked={templateForm.shift_definition_ids.includes(shift.id)}
-                              onCheckedChange={(checked) => toggleTemplateArrayField("shift_definition_ids", shift.id, checked === true)}
-                            />
-                            <span>{shift.name} · {shift.startTime}-{shift.endTime}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
-                        Nenhum período de escala carregado neste contexto.
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="rounded-xl border bg-muted/30 p-4">
-              <p className="text-sm font-medium">Resumo</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {templateForm.source === "model"
-                  ? `${selectedModelItemIds.size}/${selectedModelTotalItems} pergunta(s) do modelo serão usadas.`
-                  : templateForm.source === "duplicate"
-                    ? selectedDuplicateTemplate
-                      ? `A estrutura de "${selectedDuplicateTemplate.name}" será copiada.`
-                      : "Selecione um formulário para duplicar."
-                    : "Será criado um formulário em branco com uma seção e uma pergunta inicial."}
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              {templateForm.source === "model"
+                ? `${selectedModelItemIds.size || selectedModelTotalItems} itens serão criados a partir do modelo.`
+                : templateForm.source === "duplicate"
+                  ? selectedDuplicateTemplate
+                    ? `A estrutura de "${selectedDuplicateTemplate.name}" será copiada.`
+                    : "Selecione um formulário para duplicar."
+                  : "Uma seção e uma pergunta inicial serão criadas."}
+            </p>
           </div>
           <DialogFooter className="border-t bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>
@@ -2001,7 +2916,191 @@ export function FormsDashboardShell() {
                 (templateForm.source === "duplicate" && !templateForm.duplicate_template_id)
               }
             >
+              <Save className="mr-2 h-4 w-4" />
               {saving === "template" ? "Criando..." : "Criar formulário"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={modelDialogOpen}
+        onOpenChange={(open) => {
+          setModelDialogOpen(open);
+          if (!open) {
+            setEditingModelId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500 text-white shadow-sm">
+                <Layers3 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>
+                  {modelDialogMode === "edit"
+                    ? "Editar modelo"
+                    : modelDialogMode === "customize"
+                      ? "Personalizar modelo"
+                      : "Novo modelo"}
+                </DialogTitle>
+                <DialogDescription>
+                  Estrutura base para criação de formulários.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="max-h-[calc(92vh-145px)] space-y-5 overflow-y-auto px-6 py-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Nome do modelo</Label>
+                <Input
+                  value={modelForm.name}
+                  onChange={(event) => setModelForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Ex: Checklist de fechamento"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Categoria</Label>
+                <Input
+                  value={modelForm.category}
+                  onChange={(event) => setModelForm((current) => ({ ...current, category: event.target.value }))}
+                  placeholder="Ex: Operação"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea
+                value={modelForm.description}
+                onChange={(event) => setModelForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Descreva o uso esperado deste modelo."
+                className="min-h-20"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Seções e perguntas</p>
+                  <p className="text-xs text-muted-foreground">
+                    A ordem abaixo será usada quando um formulário for criado por este modelo.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addModelSection}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nova seção
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {modelForm.sections.map((section, sectionIndex) => (
+                  <div key={section.id} className="rounded-xl border p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold">
+                        {sectionIndex + 1}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <Label>Título da seção</Label>
+                        <Input
+                          value={section.title}
+                          onChange={(event) => updateModelSection(section.id, { title: event.target.value })}
+                          placeholder="Título da seção"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="self-end text-muted-foreground hover:text-destructive sm:self-auto"
+                        disabled={modelForm.sections.length <= 1}
+                        onClick={() => removeModelSection(section.id)}
+                        aria-label="Remover seção"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      {section.items.map((item) => (
+                        <div key={item.id} className="grid gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_180px_40px] md:items-end">
+                          <div className="space-y-2">
+                            <Label>Pergunta</Label>
+                            <Input
+                              value={item.title}
+                              onChange={(event) => updateModelItem(section.id, item.id, { title: event.target.value })}
+                              placeholder="Texto da pergunta"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Tipo</Label>
+                            <Select
+                              value={item.type}
+                              onValueChange={(value) =>
+                                updateModelItem(section.id, item.id, { type: value as FormItemTypeValue })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {FORM_ITEM_TYPE_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-muted-foreground hover:text-destructive"
+                            disabled={section.items.length <= 1}
+                            onClick={() => removeModelItem(section.id, item.id)}
+                            aria-label="Remover pergunta"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => addModelItem(section.id)}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Nova pergunta
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t bg-background px-6 py-4">
+            <Button type="button" variant="outline" onClick={() => setModelDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleSaveModel()}
+              disabled={saving === "model" || isModelFormInvalid(modelForm)}
+            >
+              {saving === "model"
+                ? "Salvando..."
+                : modelDialogMode === "edit"
+                  ? "Salvar modelo"
+                  : "Criar modelo"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2026,6 +3125,30 @@ export function FormsDashboardShell() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {saving === "deleteProject" ? "Excluindo..." : "Excluir projeto"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={modelArchiveTarget !== null} onOpenChange={(open) => !open && setModelArchiveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Arquivar modelo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O modelo "{modelArchiveTarget?.name}" deixará de aparecer na lista. Formulários já criados a partir dele permanecem preservados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving === "archiveModel"}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={saving === "archiveModel"}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleArchiveModel();
+              }}
+            >
+              {saving === "archiveModel" ? "Arquivando..." : "Arquivar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

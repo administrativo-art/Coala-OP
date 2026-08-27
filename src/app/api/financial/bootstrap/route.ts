@@ -130,6 +130,14 @@ export async function POST(request: NextRequest) {
         (typeof decoded.email === "string" ? decoded.email : null),
       profileId,
       globalUserId: decoded.uid,
+      unitId: typeof userData.unitId === "string" ? userData.unitId : null,
+      unitIds: Array.isArray(userData.unitIds) ? userData.unitIds : [],
+      assignedKioskIds: Array.isArray(userData.assignedKioskIds) ? userData.assignedKioskIds : [],
+      unitAccessScope:
+        userData.unitAccessScope === "all" || userData.unitAccessScope === "selected"
+          ? userData.unitAccessScope
+          : "linked",
+      unitAccessUnitIds: Array.isArray(userData.unitAccessUnitIds) ? userData.unitAccessUnitIds : [],
       active: true,
       isDefaultAdmin,
       permissions: financialPermissions ?? null,

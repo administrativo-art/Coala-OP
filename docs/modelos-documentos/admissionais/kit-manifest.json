@@ -1,0 +1,87 @@
+{
+  "kitId": "admission_documents",
+  "name": "Documentos admissionais",
+  "category": "Informações admissionais",
+  "version": "2.0",
+  "editableOutput": "docx",
+  "signatureOutput": "single_merged_pdf",
+  "models": [
+    {
+      "id": "employment_probation_contract",
+      "order": 1,
+      "name": "Contrato de Trabalho a Título de Experiência",
+      "file": "01-contrato-experiencia-v2.docx",
+      "selectableByHr": true,
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "hours_bank_agreement",
+      "order": 2,
+      "name": "Acordo Individual de Banco de Horas",
+      "file": "02-banco-horas-v2.docx",
+      "selectableByHr": true,
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "lgpd_awareness_term",
+      "order": 3,
+      "name": "Termo de Ciência sobre o Tratamento de Dados Pessoais",
+      "file": "03-termo-lgpd-v2.docx",
+      "selectableByHr": true,
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "image_voice_consent",
+      "order": 4,
+      "name": "Termo de Consentimento para Uso de Imagem e Voz",
+      "file": "04-imagem-voz-v2.docx",
+      "selectableByHr": true,
+      "signatureScope": "independent",
+      "excludedFromBundle": true
+    },
+    {
+      "id": "goals_awards_policy",
+      "order": 5,
+      "name": "Regulamento de Metas e Prêmios por Desempenho",
+      "file": "05-metas-premios-v2.docx",
+      "selectableByHr": true,
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "transportation_voucher_request",
+      "order": 6,
+      "name": "Solicitação de Vale-Transporte",
+      "file": "06-vale-transporte-solicitacao-v2.docx",
+      "selectableByHr": false,
+      "selectedByDecision": "requested",
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "transportation_voucher_waiver",
+      "order": 6,
+      "name": "Declaração de Não Utilização de Vale-Transporte",
+      "file": "06-vale-transporte-renuncia-v2.docx",
+      "selectableByHr": false,
+      "selectedByDecision": "waived",
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "confidentiality_agreement",
+      "order": 7,
+      "name": "Termo de Confidencialidade e Sigilo",
+      "file": "07-confidencialidade-v2.docx",
+      "selectableByHr": true,
+      "signatureScope": "bundle"
+    },
+    {
+      "id": "admission_bundle_closing_term",
+      "order": 8,
+      "name": "Termo de Encerramento, Ciência e Assinatura",
+      "file": "09-termo-encerramento-v2.docx",
+      "selectableByHr": false,
+      "alwaysAppendLast": true,
+      "dynamicComponentIndex": true,
+      "signatureScope": "bundle"
+    }
+  ]
+}

@@ -2,30 +2,33 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuth() && request.auth.token.get('isDefaultAdmin', false) == true;
+    }
+
     // Avatars — qualquer usuário autenticado lê; o próprio usuário ou admin escreve
     match /avatars/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
+      allow read: if isAuth();
+      allow write: if isAuth()
         && (
           request.auth.uid == userId ||
-          request.auth.token.isDefaultAdmin == true
+          isAdmin()
         )
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
-    // Documentos de despacho — leitura autenticada, escrita só para admins
+    // Uploads operacionais e de patrimônio acontecem somente por rotas server-side.
     match /dispatch/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.token.isDefaultAdmin == true;
+      allow read, write: if false;
     }
 
-    // Fotos de patrimônio — qualquer usuário autenticado lê e escreve
-    match /assets/{assetId}/{fileName} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+    match /assets/{allPaths=**} {
+      allow read, write: if false;
     }
 
     // Signage — uploads acontecem por rota server-side autenticada; arquivos são servidos por download token.
@@ -33,10 +36,9 @@ service firebase.storage {
       allow read, write: if false;
     }
 
-    // Qualquer outro arquivo — leitura autenticada, escrita negada por padrão
+    // Arquivos server-side são acessados somente por URLs com token específico.
     match /{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if false;
+      allow read, write: if false;
     }
   }
 }

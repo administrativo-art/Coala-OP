@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncDayAdmin } from '@/lib/integrations/pdv-legal-admin';
-import { dbAdmin, authAdmin } from '@/lib/firebase-admin';
+import { dbAdmin } from '@/lib/firebase-admin';
 import { resolvePdvFilialId } from '@/lib/kiosk-identifiers';
+import { requireUser, type ServerUserContext } from '@/lib/auth-server';
+import { filterUnitsByAccess } from '@/lib/unit-access';
 
 /**
  * Endpoint para sincronização AUTÔNOMA do PDV Legal.
@@ -18,14 +20,23 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('Authorization');
   const syncSecret = process.env.PDV_SYNC_SECRET;
   const isSecretValid = syncSecret && authHeader === `Bearer ${syncSecret}`;
+  let userContext: ServerUserContext | null = null;
 
   if (!isSecretValid) {
-    // Tenta verificar como Firebase ID Token
     try {
-      if (!authHeader?.startsWith('Bearer ')) throw new Error('header ausente');
-      await authAdmin.verifyIdToken(authHeader.slice(7));
+      userContext = await requireUser(req);
     } catch {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const canSync =
+      userContext.isDefaultAdmin ||
+      userContext.permissions.stock.analysis.consumption;
+    if (!canSync) {
+      return NextResponse.json(
+        { success: false, error: 'Sem permissão para sincronizar vendas do PDV.' },
+        { status: 403 },
+      );
     }
   }
 
@@ -35,10 +46,23 @@ export async function GET(req: NextRequest) {
     const allKiosks = kiosksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
     
     // Mapeamento final: prioriza Firestore, depois fallback padrão da aplicação.
-    const validKiosks = allKiosks.map(k => {
+    let validKiosks = allKiosks.map(k => {
       const pdvId = resolvePdvFilialId(k);
       return pdvId ? { ...k, pdvFilialId: pdvId } : null;
     }).filter(Boolean) as any[];
+
+    if (userContext) {
+      validKiosks = filterUnitsByAccess(validKiosks, userContext.userDoc, {
+        isDefaultAdmin: userContext.isDefaultAdmin,
+      });
+    }
+
+    if (kioskId && !validKiosks.some((kiosk) => kiosk.id === kioskId)) {
+      return NextResponse.json(
+        { success: false, error: 'Quiosque não autorizado ou sem integração configurada.' },
+        { status: 403 },
+      );
+    }
 
     const results: any[] = [];
     const errors: any[] = [];
@@ -48,6 +72,16 @@ export async function GET(req: NextRequest) {
       // Garantir que as datas sejam tratadas como UTC para o loop
       let current = new Date(startStr + 'T12:00:00Z');
       const end = new Date(endStr + 'T12:00:00Z');
+      if (Number.isNaN(current.getTime()) || Number.isNaN(end.getTime()) || current > end) {
+        return NextResponse.json({ success: false, error: 'Período inválido.' }, { status: 400 });
+      }
+      const totalDays = Math.floor((end.getTime() - current.getTime()) / 86400000) + 1;
+      if (totalDays > 370) {
+        return NextResponse.json(
+          { success: false, error: 'O período máximo para sincronização é de 370 dias.' },
+          { status: 400 },
+        );
+      }
 
       while (current <= end) {
         const dayStr = current.toISOString().split('T')[0];

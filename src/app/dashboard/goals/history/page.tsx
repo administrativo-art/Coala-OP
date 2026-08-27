@@ -1,11 +1,9 @@
 "use client";
 
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { format, eachDayOfInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  ArrowLeft,
   CalendarRange,
   ChevronDown,
   ChevronUp,
@@ -25,6 +23,7 @@ import { EmployeeDailyModal } from '@/components/goals-tracking-dashboard';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/navigation/back-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { type GoalPeriodDoc, type EmployeeGoal } from '@/types';
@@ -194,7 +193,7 @@ function PeriodCard({
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-2 lg:min-w-[440px]">
+            <div className={`grid ${period.topValue ? 'grid-cols-5 lg:min-w-[540px]' : 'grid-cols-4 lg:min-w-[440px]'} gap-2`}>
               <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 p-2.5">
                 <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">Meta alvo</div>
                 <div className="mt-1 text-sm font-black">R$ {fmt(period.targetValue)}</div>
@@ -203,6 +202,12 @@ function PeriodCard({
                 <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">Meta UP</div>
                 <div className="mt-1 text-sm font-black text-blue-600">R$ {fmt(period.upValue ?? 0)}</div>
               </div>
+              {period.topValue ? (
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 p-2.5">
+                  <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">Meta TOP</div>
+                  <div className="mt-1 text-sm font-black text-violet-600">R$ {fmt(period.topValue)}</div>
+                </div>
+              ) : null}
               <div className="rounded-xl bg-slate-50 dark:bg-slate-900/40 p-2.5">
                 <div className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">Realizado</div>
                 <div className="mt-1 text-sm font-black">R$ {fmt(period.currentValue)}</div>
@@ -287,7 +292,7 @@ function PeriodCard({
                     <span className="text-right">Realizado</span>
                     <span className="text-right">%</span>
                     <span className="text-right">Dias c/ venda</span>
-                    <span className="text-right">Pace médio/dia</span>
+                    <span className="text-right">Média/dia</span>
                   </div>
                   {mergedEmployees.map((emp) => {
                     const pct = emp.targetValue > 0 ? (emp.currentValue / emp.targetValue) * 100 : 0;
@@ -327,7 +332,7 @@ function PeriodCard({
                     <div className="mt-1 text-sm font-black text-zinc-800">{kioskDaysWithSales} dias</div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-                    <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Pace médio geral</div>
+                    <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Média/dia geral</div>
                     <div className="mt-1 text-sm font-black text-zinc-800">R$ {fmt(kioskAvgPace)}/dia</div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
@@ -435,9 +440,7 @@ export default function GoalsHistoryPage() {
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/dashboard/goals/analysis"><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Link>
-            </Button>
+            <BackButton fallbackHref="/dashboard/goals/analysis" label="Voltar" variant="ghost" size="sm" />
             <div>
               <h1 className="text-3xl font-bold">Histórico de Metas</h1>
               <p className="text-sm text-muted-foreground">Períodos organizados por mês, com detalhes de turnos e colaboradores.</p>

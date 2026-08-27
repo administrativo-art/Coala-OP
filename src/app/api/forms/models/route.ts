@@ -36,8 +36,7 @@ export async function POST(request: NextRequest) {
     const context = await requireUser(request);
     const canManage =
       context.isDefaultAdmin ||
-      context.permissions.forms.global.manage_templates ||
-      context.permissions.dp.checklists.manageTemplates;
+      context.permissions.forms.global.manage_templates;
 
     if (!canManage) {
       return NextResponse.json({ error: "Sem permissão para criar modelos." }, { status: 403 });

@@ -1,13 +1,18 @@
 import { addDays, format } from "date-fns";
 import { NextRequest, NextResponse } from "next/server";
 
-import { createManualTask } from "@/features/tasks/lib/server";
+import { createManualTask, ensureTaskProject, ensureTaskSubproject } from "@/features/tasks/lib/server";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { type ReturnRequest } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const RETURN_REQUEST_ASSIGNEE_ID = "__return_request_handler__";
+const RETURN_REQUEST_ORIGIN_LINK = "/dashboard/stock/returns";
+const STOCK_TASK_PROJECT_SLUG = "stock";
+const RETURN_REQUEST_SUBPROJECT_SLUG = "return-requests";
 
 function canReadRequests(context: Awaited<ReturnType<typeof requireUser>>) {
   return context.isDefaultAdmin || !!context.permissions?.stock?.returns?.view;
@@ -140,18 +145,43 @@ export async function POST(request: NextRequest) {
       return { requestPayload: payload, newCount: nextCount };
     });
 
+    const projectId = await ensureTaskProject(context, {
+      slug: STOCK_TASK_PROJECT_SLUG,
+      name: "Gestão de Estoque",
+      description: "Projeto macro das tarefas operacionais de estoque.",
+    });
+    const subprojectId = await ensureTaskSubproject(context, {
+      projectId,
+      slug: RETURN_REQUEST_SUBPROJECT_SLUG,
+      name: "Avarias e devoluções",
+      description: "Quadro de tarefas geradas por chamados de avaria, devolução e bonificação.",
+    });
+
     const task = await createManualTask({
       context,
       input: {
         title: `Avaria ${requestPayload.numero}: ${productName}`,
-        description: motivo,
-        assigneeType: "profile",
-        assigneeId: "admin",
+        description: [
+          `Tipo: ${tipo === "devolucao" ? "Devolução" : "Bonificação"}`,
+          `Insumo: ${productName}`,
+          `Lote: ${lote}`,
+          `Quantidade: ${quantidade}`,
+          `Motivo: ${motivo}`,
+        ].join("\n"),
+        assigneeType: "role",
+        assigneeId: RETURN_REQUEST_ASSIGNEE_ID,
         origin: {
           kind: "legacy",
           type: "return_request",
           id: requestRef.id,
         },
+        projectId,
+        subprojectId,
+        subprojectName: "Avarias e devoluções",
+        priority: "high",
+        watcherUserIds: [context.userDoc.id],
+        visibilityScope: "workspace",
+        originLink: RETURN_REQUEST_ORIGIN_LINK,
       },
     });
 

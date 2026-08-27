@@ -41,14 +41,14 @@ export default function ForgotPasswordPage() {
     if (success) {
       toast({
         title: "E-mail enviado!",
-        description: "Verifique sua caixa de entrada para as instruções de redefinição de senha.",
+        description: "Se o e-mail estiver cadastrado, você receberá as instruções de redefinição.",
       });
       router.push('/login');
     } else {
       toast({
         variant: "destructive",
         title: "Erro",
-        description: "Não foi possível enviar o e-mail de redefinição. Verifique se o e-mail está correto.",
+        description: "Não foi possível processar a solicitação agora. Tente novamente em alguns minutos.",
       });
     }
   };

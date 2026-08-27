@@ -55,7 +55,7 @@ export function GoalsAiAnalysisModal({ open, onOpenChange, isLoading, analysisRe
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-muted/5">
               <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
               <p className="text-lg font-medium">Processando montanhas de dados...</p>
-              <p className="text-sm opacity-70">A IA está calculando pace, projeções e rankings de equipe.</p>
+              <p className="text-sm opacity-70">A IA está calculando ritmo de vendas, projeções e rankings de equipe.</p>
             </div>
           ) : analysisResult ? (
             <ScrollArea className="h-full">
@@ -93,7 +93,7 @@ export function GoalsAiAnalysisModal({ open, onOpenChange, isLoading, analysisRe
                 {/* ── SEÇÃO 2: PACE E PROJEÇÃO ── */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-blue-500" /> Diagnóstico de Pace e Projeção
+                    <TrendingUp className="h-4 w-4 text-blue-500" /> Diagnóstico de Ritmo e Projeção
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="p-3 border rounded-lg bg-card">
@@ -101,11 +101,11 @@ export function GoalsAiAnalysisModal({ open, onOpenChange, isLoading, analysisRe
                       <p className="text-lg font-bold">R$ {fmt(analysisResult.paceAnalysis.currentPace)}</p>
                     </div>
                     <div className="p-3 border rounded-lg bg-card border-blue-500/30">
-                      <p className="text-[10px] text-muted-foreground uppercase">Pace Necessário (Base)</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">Ritmo Necessário (Base)</p>
                       <p className="text-lg font-bold text-blue-600">R$ {fmt(analysisResult.paceAnalysis.requiredPace)}</p>
                     </div>
                     <div className="p-3 border rounded-lg bg-card border-violet-500/30">
-                      <p className="text-[10px] text-muted-foreground uppercase">Pace Necessário (UP)</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">Ritmo Necessário (UP)</p>
                       <p className="text-lg font-bold text-violet-600">R$ {fmt(analysisResult.paceAnalysis.requiredUpPace)}</p>
                     </div>
                     <div className="p-3 border rounded-lg bg-card border-emerald-500/30">
