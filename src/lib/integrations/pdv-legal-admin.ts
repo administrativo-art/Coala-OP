@@ -1,3 +1,5 @@
+import "server-only";
+
 import { dbAdmin } from '@/lib/firebase-admin';
 import { type SalesReport, type SalesReportItem, type ConsumptionReport, type ConsumptionAnalysisItem, type ProductSimulation, type ProductSimulationItem, type BaseProduct } from '@/types';
 import { convertValue } from '@/lib/conversion';

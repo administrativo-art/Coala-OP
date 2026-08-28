@@ -1,0 +1,11 @@
+export const PDVLEGAL_SECRET_NAMES = [
+  'PDVLEGAL_COD_EMPRESA',
+  'PDVLEGAL_TOKEN',
+  'PDVLEGAL_USERNAME',
+  'PDVLEGAL_PASSWORD',
+] as const;
+
+export const PDVLEGAL_SECRET_CONSUMERS = [
+  'hourlyPdvSync',
+  'syncGoalsForRange',
+] as const;

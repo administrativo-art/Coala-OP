@@ -7,6 +7,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { syncDayAdmin } from './pdv-sync.js';
+import { PDVLEGAL_SECRET_NAMES } from './pdv-secret-contract.js';
 import { randomUUID } from 'node:crypto';
 import { applyUserTerminationEffects } from './user-termination-effects.js';
 
@@ -709,7 +710,8 @@ export const syncBizneoUsersMonthly = onSchedule({
 export const hourlyPdvSync = onSchedule({
   schedule: "0 8-23 * * *", // Cada hora das 08:00 às 23:00
   timeZone: "America/Sao_Paulo",
-  retryCount: 2
+  retryCount: 2,
+  secrets: [...PDVLEGAL_SECRET_NAMES],
 }, async () => {
   // Compute BRT date using proper offset (UTC-3)
   const nowUtc = new Date();
@@ -755,7 +757,12 @@ export const hourlyPdvSync = onSchedule({
 
 // --- Sincronizar metas para um intervalo de datas (trigger manual) ---
 export const syncGoalsForRange = onCall(
-  { cors: true, timeoutSeconds: 540, memory: '512MiB' },
+  {
+    cors: true,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+    secrets: [...PDVLEGAL_SECRET_NAMES],
+  },
   async (request: any) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Não autenticado.');
 
