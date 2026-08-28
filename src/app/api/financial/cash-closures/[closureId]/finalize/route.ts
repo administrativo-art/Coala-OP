@@ -21,19 +21,19 @@ function throwFinalizationError(cause: unknown): never {
   if (message.includes("não encontrado")) {
     throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND", cause });
   }
-  if (message.includes("Preencha o dinheiro")) {
+  if (message.includes("Preencha as contagens")) {
     throw new AppError({
       code: "CASH_CLOSURE_COUNT_INCOMPLETE",
       kind: "VALIDATION",
-      safeMessage: "Preencha todos os valores manuais antes de finalizar a contagem.",
+      safeMessage: "Preencha as contagens do Caixa e do Financeiro antes de finalizar.",
       cause,
     });
   }
-  if (message.includes("Toda divergência precisa")) {
+  if (message.includes("Toda falta")) {
     throw new AppError({
       code: "CASH_CLOSURE_DIVERGENCE_NOTE_REQUIRED",
       kind: "VALIDATION",
-      safeMessage: "Informe uma justificativa para cada divergência antes de finalizar.",
+      safeMessage: "Informe as justificativas das faltas do Caixa e do Financeiro antes de finalizar.",
       cause,
     });
   }
@@ -55,7 +55,7 @@ export const POST = withApiErrorHandling<RouteContext>({
   const current = await getCashClosure(closureId);
   if (!current) throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND" });
   try {
-    assertCashClosureAccess(context, "edit", current.closure.kioskId);
+    assertCashClosureAccess(context, "approve", current.closure.kioskId);
   } catch (cause) {
     throw new AppError({ code: "CASH_CLOSURE_FINALIZE_FORBIDDEN", kind: "AUTHORIZATION", cause });
   }

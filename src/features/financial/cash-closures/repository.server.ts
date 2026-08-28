@@ -11,13 +11,14 @@ import {
   mergeBuiltClosureForPersistence,
   normalizeCashClosureWithLines,
   recalculateCountedLine,
+  recalculateExpectedLine,
   recalculateReportedLine,
   recomputeCashClosureFromLines,
+  restoreCalculatedExpectedLine,
   withPdvAutomaticClosureTotals,
 } from "./persistence";
 import { assertCashClosureTransition, canEditCashClosure } from "./state-machine";
 import { refreshCashClosureSummaries } from "./summaries.server";
-import { resolveCashClosureSingleCount } from "./single-count";
 import type {
   BuiltCashClosure,
   CashClosure,
@@ -25,6 +26,7 @@ import type {
   CashClosureAuditAction,
   CashClosureAuditLog,
   CashClosureDraftLineInput,
+  CashClosureExpectedAdjustmentInput,
   CashClosureLine,
   CashClosureSource,
   CashClosureStatus,
@@ -335,13 +337,13 @@ export async function saveCashClosureDraft(
       if (automatic || permissions.editReported) {
         const reportedCents = automatic
           ? current.expectedCents
-          : update.reportedCents !== undefined ? update.reportedCents : update.countedCents ?? null;
+          : update.reportedCents !== undefined ? update.reportedCents : next.reportedCents;
         if (reportedCents !== null && (!Number.isSafeInteger(reportedCents) || reportedCents < 0)) {
           throw new Error(`Valor informado inválido na linha ${current.id}.`);
         }
         const reportedNote = automatic
           ? null
-          : update.reportedNote !== undefined ? update.reportedNote : update.note ?? null;
+          : update.reportedNote !== undefined ? update.reportedNote : next.reportedNote;
         const normalizedReportedNote = reportedNote?.trim() || null;
         if (next.reportedCents !== reportedCents || next.reportedNote !== normalizedReportedNote) {
           next = recalculateReportedLine(
@@ -354,11 +356,15 @@ export async function saveCashClosureDraft(
         }
       }
       if (automatic || permissions.editCounted) {
-        const countedCents = automatic ? current.expectedCents : update.countedCents ?? null;
+        const countedCents = automatic
+          ? current.expectedCents
+          : update.countedCents !== undefined ? update.countedCents : next.countedCents;
         if (countedCents !== null && (!Number.isSafeInteger(countedCents) || countedCents < 0)) {
           throw new Error(`Valor conferido inválido na linha ${current.id}.`);
         }
-        const countedNote = automatic ? null : update.note ?? null;
+        const countedNote = automatic
+          ? null
+          : update.note !== undefined ? update.note : next.note;
         const normalizedCountedNote = countedNote?.trim() || null;
         if (next.countedCents !== countedCents || next.note !== normalizedCountedNote) {
           next = recalculateCountedLine(
@@ -431,6 +437,129 @@ export async function saveCashClosureDraft(
   return result;
 }
 
+export async function adjustCashClosureExpected(
+  id: string,
+  input: CashClosureExpectedAdjustmentInput,
+  actor: CashClosureActor,
+) {
+  const ref = closureRef(id);
+  const result = await financialDbAdmin.runTransaction(async (transaction) => {
+    const [closureSnapshot, linesSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(ref.collection("lines")),
+    ]);
+    if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
+    const closure = snapshotValue<CashClosure>(closureSnapshot);
+    if (!canEditCashClosure(closure.status)) {
+      throw new Error("O esperado só pode ser corrigido em fechamento ainda não finalizado.");
+    }
+    if (!Number.isSafeInteger(input.correctedExpectedCents) || input.correctedExpectedCents < 0) {
+      throw new Error("Valor esperado corrigido inválido.");
+    }
+    const reason = input.reason.trim();
+    if (reason.length < 3) throw new Error("Informe o motivo da correção.");
+    const normalized = normalizeCashClosureWithLines(
+      closure,
+      linesSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
+    );
+    const current = normalized.lines.find((line) => line.id === input.lineId);
+    if (!current) throw new Error("Linha do fechamento não encontrada.");
+    if (current.expectedCents === input.correctedExpectedCents) {
+      throw new Error("O novo valor deve ser diferente do esperado atual.");
+    }
+    const now = new Date().toISOString();
+    const nextLine = recalculateExpectedLine(
+      current,
+      input.correctedExpectedCents,
+      reason,
+      actor.userId,
+      now,
+    );
+    const lines = normalized.lines.map((line) => line.id === input.lineId ? nextLine : line);
+    const nextClosure = recomputeCashClosureFromLines(closure, lines, now);
+    transaction.set(ref.collection("lines").doc(input.lineId), nextLine);
+    transaction.set(ref, nextClosure);
+    writeAudit(transaction, {
+      workspaceId: closure.workspaceId,
+      closureId: id,
+      lineId: input.lineId,
+      action: "expected_amount_adjusted",
+      actor,
+      createdAt: now,
+      previousValue: {
+        calculatedExpectedCents: current.calculatedExpectedCents,
+        expectedCents: current.expectedCents,
+        adjustmentCents: current.expectedAdjustmentCents,
+      },
+      newValue: {
+        calculatedExpectedCents: nextLine.calculatedExpectedCents,
+        expectedCents: nextLine.expectedCents,
+        adjustmentCents: nextLine.expectedAdjustmentCents,
+      },
+      reason,
+    });
+    return { closure: nextClosure, lines };
+  });
+  await refreshCashClosureSummaries(result.closure);
+  return result;
+}
+
+export async function restoreCashClosureExpected(
+  id: string,
+  input: { lineId: string; reason: string },
+  actor: CashClosureActor,
+) {
+  const ref = closureRef(id);
+  const result = await financialDbAdmin.runTransaction(async (transaction) => {
+    const [closureSnapshot, linesSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(ref.collection("lines")),
+    ]);
+    if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
+    const closure = snapshotValue<CashClosure>(closureSnapshot);
+    if (!canEditCashClosure(closure.status)) {
+      throw new Error("O cálculo só pode ser restaurado em fechamento ainda não finalizado.");
+    }
+    const normalized = normalizeCashClosureWithLines(
+      closure,
+      linesSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
+    );
+    const current = normalized.lines.find((line) => line.id === input.lineId);
+    if (!current) throw new Error("Linha do fechamento não encontrada.");
+    if (current.expectedAdjustedAt === null) throw new Error("Esta linha não possui ajuste manual.");
+    const reason = input.reason.trim();
+    if (reason.length < 3) throw new Error("Informe o motivo da restauração.");
+    const now = new Date().toISOString();
+    const nextLine = restoreCalculatedExpectedLine(current, now);
+    const lines = normalized.lines.map((line) => line.id === input.lineId ? nextLine : line);
+    const nextClosure = recomputeCashClosureFromLines(closure, lines, now);
+    transaction.set(ref.collection("lines").doc(input.lineId), nextLine);
+    transaction.set(ref, nextClosure);
+    writeAudit(transaction, {
+      workspaceId: closure.workspaceId,
+      closureId: id,
+      lineId: input.lineId,
+      action: "expected_amount_restored",
+      actor,
+      createdAt: now,
+      previousValue: {
+        calculatedExpectedCents: current.calculatedExpectedCents,
+        expectedCents: current.expectedCents,
+        adjustmentCents: current.expectedAdjustmentCents,
+      },
+      newValue: {
+        calculatedExpectedCents: nextLine.calculatedExpectedCents,
+        expectedCents: nextLine.expectedCents,
+        adjustmentCents: 0,
+      },
+      reason,
+    });
+    return { closure: nextClosure, lines };
+  });
+  await refreshCashClosureSummaries(result.closure);
+  return result;
+}
+
 function cashDepositAfterFinalization(closure: CashClosure, eligibleCents: number, now: string) {
   if (closure.cashDeposit.adjustmentId) {
     return {
@@ -480,34 +609,17 @@ export async function finalizeCashClosure(id: string, actor: CashClosureActor) {
     const closure = normalized.closure;
     assertCashClosureTransition(closure.status, "approved");
     const now = new Date().toISOString();
-    const singleCountByLineId = new Map(normalized.lines.map((line) => [
-      line.id,
-      resolveCashClosureSingleCount(line, closure.status),
-    ]));
-    if ([...singleCountByLineId.values()].some((singleCount) => singleCount.cents === null)) {
-      throw new Error("Preencha o dinheiro e os demais valores manuais antes de finalizar.");
+    if (normalized.lines.some((line) => line.reportedCents === null || line.countedCents === null)) {
+      throw new Error("Preencha as contagens do Caixa e do Financeiro antes de finalizar.");
     }
     if (normalized.lines.some((line) => {
-      const singleCount = singleCountByLineId.get(line.id)!;
-      return singleCount.cents !== line.expectedCents && !singleCount.note;
+      const cashierDifference = (line.reportedDifferenceCents ?? 0) < 0 && !line.reportedNote?.trim();
+      const financeDifference = (line.differenceCents ?? 0) < 0 && !line.note?.trim();
+      return cashierDifference || financeDifference;
     })) {
-      throw new Error("Toda divergência precisa de uma observação antes da finalização.");
+      throw new Error("Toda falta apurada pelo Caixa ou pelo Financeiro precisa de justificativa antes da finalização.");
     }
-    const normalizedById = new Map(normalized.lines.map((line) => [line.id, line]));
-    const lines = lineSnapshot.docs.map((document) => {
-      const current = normalizedById.get(document.id)!;
-      const automatic = isPdvAutoCountedChannel(current.channel);
-      const singleCount = singleCountByLineId.get(current.id)!;
-      const next = recalculateCountedLine(
-        current,
-        singleCount.cents,
-        singleCount.note,
-        automatic ? "system:pdv" : actor.userId,
-        now,
-      );
-      if (JSON.stringify(next) !== JSON.stringify(current)) transaction.set(document.ref, next);
-      return next;
-    });
+    const lines = normalized.lines;
     const recalculated = recomputeCashClosureFromLines(closure, lines, now);
     const eligibleCents = recalculated.countedCashCents;
     const next: CashClosure = {

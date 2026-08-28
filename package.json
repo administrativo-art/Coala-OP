@@ -38,7 +38,6 @@
     "migrate:das-accounts": "node scripts/migrate-das-account-structure.mjs",
     "migrate:dare-accounts": "node scripts/migrate-dare-account-structure.mjs",
     "migrate:cash-closure-permissions": "node --import tsx scripts/migrate-cash-closure-permissions.mts",
-    "migrate:cash-closure-single-count": "node --conditions=react-server --import tsx scripts/migrate-cash-closure-single-count.mts",
     "migrate:cash-deposit-inter": "node --import tsx scripts/migrate-cash-deposit-inter-fields.mts",
     "migrate:central-pdv-links": "node --import tsx scripts/migrate-central-pdv-unit-links.mts",
     "migrate:company-contacts": "node --import tsx scripts/migrate-company-department-contacts.mts",

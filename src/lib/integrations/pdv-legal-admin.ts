@@ -76,8 +76,12 @@ function responseRows(raw: unknown): unknown[] {
 }
 
 async function pdvGet(path: string): Promise<unknown> {
-  const { COD_EMPRESA, API_TOKEN } = getEnv();
   const accessToken = await getAccessToken();
+  return pdvGetWithAccessToken(path, accessToken);
+}
+
+async function pdvGetWithAccessToken(path: string, accessToken: string): Promise<unknown> {
+  const { COD_EMPRESA, API_TOKEN } = getEnv();
   const response = await fetch(`${BASE_URL}${path}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -92,6 +96,16 @@ async function pdvGet(path: string): Promise<unknown> {
     throw new PdvApiError(`Falha ao consultar o PDV Legal (HTTP ${response.status}).`, 'FETCH_FAILED', detail.slice(0, 300));
   }
   return response.json().catch(() => null);
+}
+
+export async function fetchPdvLegalCashMovementSources(accessToken: string, date: string) {
+  const encodedDate = encodeURIComponent(date);
+  const [withdrawals, supplies, paymentMethods] = await Promise.all([
+    pdvGetWithAccessToken(`/sangriasuprimento/getSangria/${encodedDate}`, accessToken),
+    pdvGetWithAccessToken(`/sangriasuprimento/getSuprimento/${encodedDate}`, accessToken),
+    pdvGetWithAccessToken("/formapagamentopdv/get", accessToken),
+  ]);
+  return { withdrawals, supplies, paymentMethods };
 }
 
 export async function fetchPdvLegalProfiles(): Promise<PdvLegalProfile[]> {

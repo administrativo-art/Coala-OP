@@ -27,6 +27,17 @@ export const cashClosureReasonSchema = z.object({
   reason: z.string().trim().min(3, "Informe um motivo com pelo menos 3 caracteres.").max(1000),
 });
 
+export const cashClosureExpectedAdjustmentSchema = z.object({
+  lineId: z.string().trim().min(1).max(300),
+  correctedExpectedCents: z.number().int().safe().min(0).max(100_000_000),
+  reason: z.string().trim().min(3, "Informe o motivo da correção.").max(1000),
+});
+
+export const restoreCashClosureExpectedSchema = z.object({
+  lineId: z.string().trim().min(1).max(300),
+  reason: z.string().trim().min(3, "Informe o motivo da restauração.").max(1000),
+});
+
 export const cashClosureListQuerySchema = z.object({
   kioskId: z.string().trim().min(1).max(160).optional(),
   year: z.coerce.number().int().min(2020).max(2200).optional(),
