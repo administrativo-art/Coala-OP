@@ -355,6 +355,14 @@ export type CltTerminationProcess = {
     completedAt?: string | null;
     completedBy?: string | null;
   } | null;
+  financialProvisionClosure?: {
+    status: "completed" | "failed";
+    cancelledCount: number;
+    cancelledExpenseIds: string[];
+    completedAt?: string | null;
+    attemptedAt: string;
+    error?: string | null;
+  } | null;
   asoWorkflow?: Record<string, unknown> | null;
   operational?: {
     uniformsReturned: boolean;
