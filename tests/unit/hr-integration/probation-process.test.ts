@@ -5,6 +5,7 @@ import { completeProbationEvaluation, createProbationProcess, decideProbation, p
 describe("acompanhamento da experiência", () => {
   it("libera as avaliações somente depois da formalização", () => {
     assert.equal(probationIsReleasedAfterFormalization({ status: "in_progress", currentStage: "documents" }), false);
+    assert.equal(probationIsReleasedAfterFormalization({ status: "active", currentStage: "integration", formalizationCompletedAt: "2026-01-01T10:00:00.000Z" }), true);
     assert.equal(probationIsReleasedAfterFormalization({ status: "completed", currentStage: "done" }), true);
     assert.equal(probationIsReleasedAfterFormalization({ status: "cancelled", currentStage: "done", completedAt: "2026-01-01T10:00:00.000Z" }), false);
   });

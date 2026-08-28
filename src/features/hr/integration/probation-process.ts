@@ -17,9 +17,13 @@ export function probationIsReleasedAfterFormalization(process: {
   status?: string | null;
   currentStage?: string | null;
   completedAt?: string | null;
+  formalizationCompletedAt?: string | null;
 }) {
   if (process.status === "cancelled") return false;
-  return process.status === "completed" || process.currentStage === "done" || Boolean(process.completedAt);
+  return process.status === "completed"
+    || process.currentStage === "done"
+    || Boolean(process.completedAt)
+    || Boolean(process.formalizationCompletedAt);
 }
 
 export function createProbationProcess(admissionDate: string | null, input: Partial<ProbationRuntimeConfig> | undefined, now: string): ProbationProcessState {

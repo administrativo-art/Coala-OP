@@ -67,7 +67,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const aso = record(record(onboarding.asoWorkflow).asoDocument);
   const missing = missingAccountantPrerequisites({ documents, asoApproved: text(aso.status) === 'approved', publicFormAnswers: onboarding.publicFormAnswers });
   if (missing.length) return NextResponse.json({ error: `A etapa do contador ainda não pode começar. Falta: ${missing.join('; ')}.` }, { status: 409 });
-  if (!text(onboarding.expectedAdmissionDate, 10)) return NextResponse.json({ error: 'Revise e informe a data prevista de admissão antes de gerar o formulário.' }, { status: 409 });
+  if (!text(onboarding.expectedAdmissionDate, 10)) return NextResponse.json({ error: 'Revise e informe a data de admissão antes de gerar o formulário.' }, { status: 409 });
 
   const [roleSnapshot, functionSnapshot] = await Promise.all([
     text(onboarding.jobRoleId) ? hrDbAdmin.collection('jobRoles').doc(text(onboarding.jobRoleId)).get() : Promise.resolve(null),

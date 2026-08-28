@@ -7,6 +7,17 @@ import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { getFeatureFlags } from '@/lib/feature-flags';
 import { onboardingPublicLinkExpired } from '@/lib/hr/onboarding-public-link';
+import {
+  analyzeEmployeeDocumentWithAi,
+  employeeDocumentAiConfiguration,
+} from '@/lib/hr/employee-document-ai';
+import {
+  buildOnboardingDocumentExtractionRecord,
+  inferredOnboardingDocumentTypeCode,
+  onboardingDocumentExtractionCacheId,
+  type OnboardingDocumentExtractionRecord,
+} from '@/features/hr/onboarding/document-ai-extraction';
+import type { OnboardingDocument } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -141,6 +152,89 @@ async function assertPublicUploadAllowed(request: NextRequest, formData: FormDat
   return null;
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+async function analyzeOnboardingUpload(params: {
+  onboardingToken: string;
+  onboardingDocumentId: string;
+  file: File;
+  contentHash: string;
+}) {
+  const onboardingQuery = await hrDbAdmin
+    .collection('onboardingProcesses')
+    .where('publicToken', '==', params.onboardingToken)
+    .limit(1)
+    .get();
+  if (onboardingQuery.empty) return null;
+
+  const processSnapshot = onboardingQuery.docs[0];
+  const process = processSnapshot.data();
+  if (process.employmentRelationshipType === 'pj' || params.onboardingDocumentId === 'profile_photo') {
+    return null;
+  }
+
+  const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
+  const document = documents.find(item => item.id === params.onboardingDocumentId);
+  const expectedDocumentTypeCode = document?.documentTypeCode
+    || inferredOnboardingDocumentTypeCode(params.onboardingDocumentId);
+  if (!expectedDocumentTypeCode) return null;
+
+  const configuration = employeeDocumentAiConfiguration();
+  const cacheRef = processSnapshot.ref
+    .collection('documentExtractions')
+    .doc(onboardingDocumentExtractionCacheId(params.onboardingDocumentId, params.contentHash));
+  const cachedSnapshot = await cacheRef.get();
+  if (cachedSnapshot.exists) {
+    const cached = cachedSnapshot.data() as OnboardingDocumentExtractionRecord;
+    if (
+      cached.aiAnalysis?.provider === 'openai'
+      && cached.aiAnalysis.model === configuration.model
+      && cached.aiAnalysis.promptVersion === configuration.promptVersion
+      && cached.aiAnalysis.schemaVersion === configuration.schemaVersion
+    ) {
+      return cached;
+    }
+  }
+
+  const startedAt = Date.now();
+  const expectedEmployeeName = trimText(record(process.publicFormAnswers).fullName, 160)
+    || trimText(process.candidateName, 160)
+    || null;
+  const result = await analyzeEmployeeDocumentWithAi({
+    file: params.file,
+    expectedEmployeeName,
+  });
+  const analyzedAt = new Date().toISOString();
+  const extraction = buildOnboardingDocumentExtractionRecord({
+    documentId: params.onboardingDocumentId,
+    sourceFileHashSha256: params.contentHash,
+    expectedDocumentTypeCode,
+    result,
+    analyzedAt,
+    durationMs: Date.now() - startedAt,
+  });
+  await cacheRef.set(extraction);
+  await processSnapshot.ref.collection('audit').add({
+    action: 'DOCUMENT_AI_ANALYZED',
+    documentId: params.onboardingDocumentId,
+    sourceFileHashSha256: params.contentHash,
+    provider: extraction.aiAnalysis.provider,
+    model: extraction.aiAnalysis.model,
+    reviewStatus: extraction.reviewStatus,
+    inputTokens: extraction.aiAnalysis.inputTokens ?? null,
+    outputTokens: extraction.aiAnalysis.outputTokens ?? null,
+    estimatedCostUsd: extraction.aiAnalysis.estimatedCostUsd ?? null,
+    promptVersion: extraction.aiAnalysis.promptVersion ?? null,
+    schemaVersion: extraction.aiAnalysis.schemaVersion ?? null,
+    at: analyzedAt,
+  });
+  return extraction;
+}
+
 export async function POST(request: NextRequest) {
   const access = await assertHrAccess(request, 'view').catch(() => null);
   const formData = await request.formData();
@@ -178,6 +272,7 @@ export async function POST(request: NextRequest) {
     return jsonError('PDF protegido por senha não é aceito. Envie uma cópia sem proteção.');
   }
 
+  const contentHash = createHash('sha256').update(buffer).digest('hex');
   await bucket.file(objectPath).save(buffer, {
     metadata: {
       contentType: file.type,
@@ -189,10 +284,20 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  const extraction = onboardingToken && onboardingDocumentId
+    ? await analyzeOnboardingUpload({
+        onboardingToken,
+        onboardingDocumentId,
+        file: new File([buffer], file.name, { type: file.type }),
+        contentHash,
+      })
+    : null;
+
   const url = `https://firebasestorage.googleapis.com/v0/b/${firebaseClientConfig.storageBucket}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
   return NextResponse.json({
     url,
     path: objectPath,
-    sha256: createHash('sha256').update(buffer).digest('hex'),
+    sha256: contentHash,
+    analysisStatus: extraction?.aiAnalysis.status ?? 'not_applicable',
   }, { status: 201 });
 }
