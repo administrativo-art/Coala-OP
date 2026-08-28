@@ -98,6 +98,12 @@ import { isAsoAppointmentAfterAdmission } from '@/features/hr/aso/dates';
 import { clinicLocationFromConfig, clinicLocationLabel } from '@/features/hr/aso/clinic-location';
 import { ASO_GUIDE_TEMPLATE_VERSION } from '@/features/hr/aso/guide-version';
 import { shouldPollAsoPayment } from '@/features/hr/aso/payment-status';
+import { OnboardingProductionLine } from '@/features/hr/onboarding/production-line';
+import {
+  OnboardingDetailNavigation,
+  onboardingConceptualStageNumber,
+} from '@/features/hr/onboarding/detail-navigation';
+import { OnboardingDocumentWorkbench } from '@/features/hr/onboarding/document-workbench';
 import { readHrJsonResponse } from '@/features/hr/lib/client-response';
 import {
   applicableOnboardingDocuments,
@@ -117,7 +123,7 @@ import {
   Globe, PauseCircle, Archive, Plus, Pencil, SlidersHorizontal,
   FolderOpen, Copy, ArrowLeft, MapPin, Sparkles, Users, RotateCw,
   Download, Send, Eye, Wallet, RefreshCw, GraduationCap, Check, FileCheck2,
-  Info, LockKeyhole,
+  Info, LockKeyhole, ShieldCheck,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -3260,7 +3266,7 @@ function DeleteConfirmModal({ candidate, getToken, onClose, onDeleted }: {
           </div>
         </div>
         <p className="text-sm text-slate-400">Esta ação é permanente e não pode ser desfeita.</p>
-        {error && <ErrorLine msg={error} />}
+        {error ? <ErrorLine msg={error} /> : null}
         <div className="flex gap-2 pt-1">
           <button onClick={onClose} className="flex-1 px-3 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-xl">
             Cancelar
@@ -7176,11 +7182,6 @@ function accountantCurrentStepNumber(process: OnboardingProcess) {
   return documentsConfirmed ? 3 : formValidated ? 2 : 1;
 }
 
-function defaultAccountantCollapsedSteps(process: OnboardingProcess) {
-  const current = accountantCurrentStepNumber(process);
-  return new Set([1, 2, 3].filter(step => step !== current));
-}
-
 function getFinalizationDraft(process: OnboardingProcess | null): OnboardingFinalizationSettings {
   if (!process) {
     return {
@@ -7565,7 +7566,7 @@ function StartOnboardingModal({
   const [integrationTemplateId, setIntegrationTemplateId] = useState('');
   const [compatibleTemplates, setCompatibleTemplates] = useState<IntegrationTemplateMetadataClient[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
-  const [formStep, setFormStep] = useState<1 | 2>(1);
+  const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
   const [candidateName, setCandidateName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
   const [jobRoleId, setJobRoleId] = useState('');
@@ -7700,6 +7701,23 @@ function StartOnboardingModal({
       return;
     }
     setFormStep(2);
+  }
+
+  function continueToReviewStep() {
+    setError(null);
+    if (finalizationSettings.transportVoucherValue == null) {
+      setError('Informe o valor diário do vale-transporte, mesmo quando for R$ 0,00.');
+      return;
+    }
+    if (requiresPdvAccess && !activeUnits.find(unit => unit.id === unitId)?.pdvFilialId) {
+      setError('A unidade selecionada ainda não possui uma filial do PDV Legal vinculada.');
+      return;
+    }
+    if (requiresPdvAccess && !pdvProfileId) {
+      setError('Selecione o perfil de acesso do PDV Legal.');
+      return;
+    }
+    setFormStep(3);
   }
 
   useEffect(() => {
@@ -7858,17 +7876,22 @@ function StartOnboardingModal({
               {error ? <div className="mt-4"><ErrorLine msg={error} /></div> : null}
             </div>
           </div>
-        ) : <form onSubmit={formStep === 1 ? event => { event.preventDefault(); continueToAccessStep(); } : handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        ) : <form onSubmit={formStep === 1 ? event => { event.preventDefault(); continueToAccessStep(); } : formStep === 2 ? event => { event.preventDefault(); continueToReviewStep(); } : handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="border-b border-slate-100 px-5 py-3">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 sm:gap-3">
               <button type="button" onClick={() => setFormStep(1)} className={`flex items-center gap-2 text-left ${formStep === 1 ? 'text-pink-700' : 'text-slate-500'}`}>
-                <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${formStep === 1 ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-500'}`}>1</span>
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${formStep === 1 ? 'bg-pink-600 text-white' : 'bg-emerald-100 text-emerald-700'}`}>{formStep > 1 ? '✓' : '1'}</span>
                 <span><span className="block text-xs font-black">Identificação</span><span className="hidden text-[10px] font-medium sm:block">Pessoa, cargo e vínculo</span></span>
               </button>
-              <span className="h-px w-10 bg-slate-200 sm:w-20" />
-              <div className={`flex items-center justify-end gap-2 text-left ${formStep === 2 ? 'text-pink-700' : 'text-slate-400'}`}>
-                <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black ${formStep === 2 ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-400'}`}>2</span>
+              <span className="h-px w-5 bg-slate-200 sm:w-10" />
+              <button type="button" disabled={formStep === 1} onClick={() => setFormStep(2)} className={`flex items-center justify-center gap-2 text-left ${formStep === 2 ? 'text-pink-700' : formStep > 2 ? 'text-slate-500' : 'text-slate-400'}`}>
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${formStep === 2 ? 'bg-pink-600 text-white' : formStep > 2 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>{formStep > 2 ? '✓' : '2'}</span>
                 <span><span className="block text-xs font-black">Acessos e comportamento</span><span className="hidden text-[10px] font-medium sm:block">Sistema, PDV e benefícios</span></span>
+              </button>
+              <span className="h-px w-5 bg-slate-200 sm:w-10" />
+              <div className={`flex items-center justify-end gap-2 text-left ${formStep === 3 ? 'text-pink-700' : 'text-slate-400'}`}>
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${formStep === 3 ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-400'}`}>3</span>
+                <span><span className="block text-xs font-black">Revisão</span><span className="hidden text-[10px] font-medium sm:block">Confira antes de iniciar</span></span>
               </div>
             </div>
           </div>
@@ -7938,8 +7961,8 @@ function StartOnboardingModal({
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Data prevista de admissão
-                    <input type="date" value={expectedAdmissionDate} onChange={event => setExpectedAdmissionDate(event.target.value)} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
+                    Data prevista de admissão <span className="text-rose-500">*</span>
+                    <input type="date" value={expectedAdmissionDate} onChange={event => setExpectedAdmissionDate(event.target.value)} required className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
                     1º período de experiência <span className="text-rose-500">*</span>
@@ -7962,7 +7985,7 @@ function StartOnboardingModal({
                 )}
                 {error ? <ErrorLine msg={error} /> : null}
               </div>
-            ) : (
+            ) : formStep === 2 ? (
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-4">
                   <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
@@ -8002,14 +8025,46 @@ function StartOnboardingModal({
                 </div>
                 {error ? <div className="lg:col-span-2"><ErrorLine msg={error} /></div> : null}
               </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-700">Pronto para iniciar</p>
+                  <p className="mt-1 text-sm font-bold text-emerald-950">Confira os dados e os acessos. A criação envia o convite imediatamente.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    ['Pessoa', candidateName],
+                    ['E-mail', candidateEmail],
+                    ['Cargo e função', `${activeRoles.find(role => role.id === jobRoleId)?.name ?? '—'} · ${availableFunctions.find(item => item.id === functionId)?.name ?? '—'}`],
+                    ['Unidade', activeUnits.find(unit => unit.id === unitId)?.name ?? '—'],
+                    ['Empresa contratante', employerUnits.find(unit => unit.id === employerUnitId)?.name ?? '—'],
+                    ['Admissão prevista', expectedAdmissionDate ? formatOnboardingDateOnly(expectedAdmissionDate) : 'A definir'],
+                    ['Período de experiência', probationPreview ? `${probationPreview.config.firstPeriodDays} + ${probationPreview.config.secondPeriodDays} dias` : '—'],
+                    ['PDV Legal', requiresPdvAccess ? pdvProfiles.find(profile => profile.id === pdvProfileId)?.name ?? 'Perfil não definido' : 'Não solicitado'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</span>
+                      <span className="mt-1 block text-sm font-bold text-slate-800">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <span className={`rounded-xl border px-3 py-2.5 text-xs font-bold ${generateSignatureDocuments ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>Documentos para assinatura: {generateSignatureDocuments ? 'sim' : 'não'}</span>
+                  <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600">Operacional: {finalizationSettings.operational ? 'sim' : 'não'}</span>
+                  <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-600">Participa de metas: {finalizationSettings.participatesInGoals ? 'sim' : 'não'}</span>
+                </div>
+                {error ? <ErrorLine msg={error} /> : null}
+              </div>
             )}
           </div>
 
           <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-white px-5 py-3 sm:flex-row sm:justify-end">
             <button type="button" onClick={onClose} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
-            {formStep === 2 ? <button type="button" onClick={() => { setFormStep(1); setError(null); }} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">Voltar</button> : null}
+            {formStep > 1 ? <button type="button" onClick={() => { setFormStep(current => current === 3 ? 2 : 1); setError(null); }} className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">Voltar</button> : null}
             {formStep === 1 ? (
               <button type="submit" className="inline-flex h-9 items-center justify-center rounded-lg bg-pink-600 px-4 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700">Continuar</button>
+            ) : formStep === 2 ? (
+              <button type="submit" className="inline-flex h-9 items-center justify-center rounded-lg bg-pink-600 px-4 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700">Revisar integração</button>
             ) : (
               <button type="submit" disabled={submitting || finalizationSettings.transportVoucherValue == null || (requiresPdvAccess && (!pdvProfileId || !activeUnits.find(unit => unit.id === unitId)?.pdvFilialId))} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-pink-600 px-4 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700 disabled:cursor-not-allowed disabled:opacity-60">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}Iniciar integração
@@ -8504,8 +8559,17 @@ function TrainingPanel({ process, getToken, canManage, onRefresh }: { process: O
   );
 }
 
-function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSensitiveData, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh, onProcessUpdated, onAsoPaymentUpdated, onAsoWorkflowUpdated }: {
+type OnboardingProcessScope = 'active' | 'completed' | 'cancelled';
+type OnboardingPageInfo = Record<OnboardingProcessScope, {
+  limit: number;
+  hasMore: boolean;
+  cursorId: string | null;
+}>;
+
+function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunctions, units, shiftDefinitions, getToken, canManage, canViewAso, canManageAso, canViewAccountant, canManageAccountant, canViewSensitiveData, canViewSignatures, canGenerateDocuments, canReviewDocuments, canSendSignatures, onRefresh, onLoadMore, onProcessUpdated, onAsoPaymentUpdated, onAsoWorkflowUpdated }: {
   processes: OnboardingProcess[];
+  pageInfo: OnboardingPageInfo;
+  loadingMoreScope: OnboardingProcessScope | null;
   roles: JobRole[];
   jobFunctions: JobFunction[];
   units: DPUnit[];
@@ -8522,6 +8586,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   canReviewDocuments: boolean;
   canSendSignatures: boolean;
   onRefresh: () => void;
+  onLoadMore: (scope: OnboardingProcessScope) => void;
   onProcessUpdated: (process: OnboardingProcess) => void;
   onAsoPaymentUpdated: (processId: string, workflow: AsoPaymentWorkflowPatch) => void;
   onAsoWorkflowUpdated: (processId: string, workflow: NonNullable<OnboardingProcess['asoWorkflow']>) => void;
@@ -8548,7 +8613,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const [asoStartResult, setAsoStartResult] = useState<AsoProcessStartResult | null>(null);
   const [asoPhaseIndex, setAsoPhaseIndex] = useState<number | null>(null);
   const [asoCollapsed, setAsoCollapsed] = useState(false);
-  const [documentsCollapsed, setDocumentsCollapsed] = useState(false);
+  const [candidateDataCollapsed, setCandidateDataCollapsed] = useState(false);
   const [asoClinics, setAsoClinics] = useState<Array<{ id: string; active: boolean; asoPrice: number; schedulingEmail: string; address?: { street?: string; number?: string; complement?: string; district?: string; city?: string; state?: string; postalCode?: string; reference?: string; mapsUrl?: string } | null; entity?: { name?: string } | null; paymentProfile?: { configured?: boolean; validated?: boolean } }>>([]);
   const [asoClinicsLoading, setAsoClinicsLoading] = useState(false);
   const [asoClinicsError, setAsoClinicsError] = useState<string | null>(null);
@@ -8561,7 +8626,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const [accountantFormTextDraft, setAccountantFormTextDraft] = useState<AccountantFormTextDraft>(() => ({ ...EMPTY_ACCOUNTANT_FORM_TEXT_DRAFT }));
   const [accountantFormEditing, setAccountantFormEditing] = useState(false);
   const [accountantSelectedDocumentIds, setAccountantSelectedDocumentIds] = useState<string[]>([]);
-  const [accountantCollapsedSteps, setAccountantCollapsedSteps] = useState<Set<number>>(() => new Set([2, 3]));
+  const [accountantActiveStep, setAccountantActiveStep] = useState(1);
   const [expectedAdmissionDateDraft, setExpectedAdmissionDateDraft] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReasonDraft, setCancelReasonDraft] = useState('');
@@ -8630,8 +8695,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     setPhaseId(requested.currentStage ?? requested.stages?.[0]?.id ?? null);
     setAsoPhaseIndex(null);
     setAsoCollapsed(false);
-    setDocumentsCollapsed(false);
-    setAccountantCollapsedSteps(defaultAccountantCollapsedSteps(requested));
+    setCandidateDataCollapsed(false);
+    setAccountantActiveStep(accountantCurrentStepNumber(requested));
     setView('detail');
   }, [processes, selectedId]);
 
@@ -8654,30 +8719,39 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     }
   }, [canViewSignatures, getToken, selectedProcess?.id]);
 
+  const refreshSelectedProcess = useCallback(async () => {
+    if (!selectedProcess?.id) return;
+    try {
+      const payload = await apiFetch(`/api/hr/onboarding/${selectedProcess.id}`, getToken) as { process?: OnboardingProcess };
+      if (payload.process) onProcessUpdated(payload.process);
+    } catch {
+      // O próximo ciclo tenta novamente sem substituir os dados já exibidos.
+    }
+  }, [getToken, onProcessUpdated, selectedProcess?.id]);
+
   useEffect(() => {
     if (view !== 'detail' || !selectedProcess?.id) return;
     void loadSignatureWorkflow();
   }, [loadSignatureWorkflow, selectedProcess?.id, view]);
 
   useEffect(() => {
-    const pending = signatureWorkflow?.documents.some(document =>
+    const signaturePending = signatureWorkflow?.documents.some(document =>
       document.selected && ['sent', 'viewed', 'partially_signed', 'signed'].includes(document.status)
+    ) ?? false;
+    const accessPending = Boolean(
+      selectedProcess?.collaboratorUserId
+      && selectedProcess.accessProvisioning?.status !== 'completed'
+      && selectedProcess.status !== 'cancelled'
+      && selectedProcess.status !== 'completed'
     );
-    if (!pending || !selectedProcess?.id) return;
-    const timer = window.setInterval(() => {
-      void loadSignatureWorkflow();
-      onRefresh();
-    }, 10_000);
+    if ((!signaturePending && !accessPending) || !selectedProcess?.id || view !== 'detail') return;
+    const refreshPendingState = () => {
+      if (signaturePending) void loadSignatureWorkflow();
+      void refreshSelectedProcess();
+    };
+    const timer = window.setInterval(refreshPendingState, 10_000);
     return () => window.clearInterval(timer);
-  }, [loadSignatureWorkflow, onRefresh, selectedProcess?.id, signatureWorkflow?.documents]);
-
-  useEffect(() => {
-    if (!selectedProcess?.collaboratorUserId) return;
-    if (selectedProcess.accessProvisioning?.status === 'completed') return;
-    if (selectedProcess.status === 'cancelled' || selectedProcess.status === 'completed') return;
-    const timer = window.setInterval(onRefresh, 10_000);
-    return () => window.clearInterval(timer);
-  }, [onRefresh, selectedProcess?.accessProvisioning?.status, selectedProcess?.collaboratorUserId, selectedProcess?.status]);
+  }, [loadSignatureWorkflow, refreshSelectedProcess, selectedProcess?.accessProvisioning?.status, selectedProcess?.collaboratorUserId, selectedProcess?.id, selectedProcess?.status, signatureWorkflow?.documents, view]);
 
   useEffect(() => {
     setFinalizationDraft(getFinalizationDraft(selectedProcess));
@@ -8708,7 +8782,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     if (asoAdmissionAlertKeyRef.current === alertKey) return;
     asoAdmissionAlertKeyRef.current = alertKey;
     window.alert(
-      `Atenção: o exame admissional foi agendado para ${formatOnboardingDateOnly(appointmentDate)}, depois da admissão prevista para ${formatOnboardingDateOnly(admissionDate)}. Revise a data de admissão ou solicite à clínica um agendamento anterior.`,
+      `Atenção: o exame admissional foi agendado para ${formatOnboardingDateOnly(appointmentDate)}, depois da data de admissão em ${formatOnboardingDateOnly(admissionDate)}. Revise a data de admissão ou solicite à clínica um agendamento anterior.`,
     );
   }, [
     selectedProcess?.asoWorkflow?.appointment?.date,
@@ -8811,14 +8885,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     } finally {
       setUpdating(null);
     }
-  }
-
-  async function saveExpectedAdmissionDate(process: OnboardingProcess) {
-    if (!expectedAdmissionDateDraft || expectedAdmissionDateDraft === process.expectedAdmissionDate?.slice(0, 10)) return;
-    await patchProcess(process.id, {
-      action: 'update_expected_admission_date',
-      expectedAdmissionDate: expectedAdmissionDateDraft,
-    });
   }
 
   async function allowIdentityCorrection(process: OnboardingProcess) {
@@ -8959,21 +9025,42 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     setAccountantActionBusy(action); setError(null);
     try {
       await apiFetch(`/api/hr/onboarding/${selectedProcess.id}/accountant-workflow`, getToken, { method: 'PATCH', body: JSON.stringify({ action, ...body }) });
-      if (action === 'validate_form') setAccountantCollapsedSteps(new Set([1, 3]));
-      if (action === 'confirm_documents') setAccountantCollapsedSteps(new Set([1, 2]));
+      if (action === 'validate_form') setAccountantActiveStep(2);
+      if (action === 'confirm_documents') setAccountantActiveStep(3);
       onRefresh();
       return true;
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Falha ao atualizar a etapa do contador.'); return false; }
     finally { setAccountantActionBusy(null); }
   }
 
+  async function uploadAccountantRegistryByRh(file: File) {
+    if (!selectedProcess) return false;
+    setAccountantActionBusy('upload_registry');
+    setError(null);
+    try {
+      const token = await getToken();
+      const formData = new FormData();
+      formData.set('file', file);
+      const response = await fetch(`/api/hr/onboarding/${selectedProcess.id}/accountant-workflow`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      await readHrJsonResponse(response, 'Falha ao anexar a Ficha de Registro.');
+      setAccountantActiveStep(3);
+      setPhaseId('accountant');
+      onRefresh();
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Falha ao anexar a Ficha de Registro.');
+      return false;
+    } finally {
+      setAccountantActionBusy(null);
+    }
+  }
+
   function toggleAccountantStep(step: number) {
-    setAccountantCollapsedSteps(current => {
-      const next = new Set(current);
-      if (next.has(step)) next.delete(step);
-      else next.add(step);
-      return next;
-    });
+    setAccountantActiveStep(step);
   }
 
   async function saveAccountantFormFields() {
@@ -9100,10 +9187,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }
 
   async function saveFinalization(processId: string) {
-    await patchProcess(processId, {
+    const payload = await patchProcess(processId, {
       action: 'save_finalization',
       finalizationSettings: finalizationDraft,
     });
+    if (payload?.process?.currentStage === 'integration') setPhaseId('integration');
   }
 
   async function createCollaborator(processId: string) {
@@ -9112,6 +9200,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
   async function createFirstAccessLink(processId: string) {
     await patchProcess(processId, { action: 'create_first_access_link' });
+  }
+
+  async function completeOnboarding(processId: string) {
+    const payload = await patchProcess(processId, { action: 'complete' });
+    if (payload?.process?.currentStage === 'done') setPhaseId('done');
   }
 
   function processDocProgress(process: OnboardingProcess) {
@@ -9154,8 +9247,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     setPhaseId(process.currentStage ?? process.stages?.[0]?.id ?? null);
     setAsoPhaseIndex(null);
     setAsoCollapsed(false);
-    setDocumentsCollapsed(false);
-    setAccountantCollapsedSteps(defaultAccountantCollapsedSteps(process));
+    setCandidateDataCollapsed(false);
+    setAccountantActiveStep(accountantCurrentStepNumber(process));
     setView('detail');
     const url = new URL(window.location.href);
     url.searchParams.set('process', process.id);
@@ -9168,8 +9261,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     setPhaseId(null);
     setAsoPhaseIndex(null);
     setAsoCollapsed(false);
-    setDocumentsCollapsed(false);
-    setAccountantCollapsedSteps(new Set([2, 3]));
+    setCandidateDataCollapsed(false);
+    setAccountantActiveStep(1);
     const url = new URL(window.location.href);
     url.searchParams.delete('process');
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
@@ -9192,495 +9285,36 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     return typeof document.fileUrl === 'string' && document.fileUrl.trim().length > 0;
   }
 
-  function hasMeaningfulExtractionRecord(value: unknown) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-    return Object.values(value as Record<string, unknown>).some(entry => {
-      if (entry === null || entry === undefined) return false;
-      if (typeof entry === 'string') return entry.trim().length > 0;
-      if (Array.isArray(entry)) return entry.length > 0;
-      if (typeof entry === 'object') return Object.keys(entry as Record<string, unknown>).length > 0;
-      return true;
-    });
-  }
-
-  function hasDocumentExtraction(document: OnboardingDocument) {
-    const legacy = document as OnboardingDocument & {
-      extractedData?: unknown;
-      aiExtractedData?: unknown;
-    };
-    return hasMeaningfulExtractionRecord(document.extractedFields) ||
-      hasMeaningfulExtractionRecord(legacy.extractedData) ||
-      hasMeaningfulExtractionRecord(legacy.aiExtractedData);
-  }
-
-  function DocumentRow({ process, document, mode }: {
-    process: OnboardingProcess;
-    document: OnboardingDocument;
-    mode: 'collect' | 'review';
-  }) {
-    const actionKey = `${process.id}:document_status`;
-    const isApproved = document.status === 'approved';
-    const isRejected = document.status === 'rejected';
-    const hasFile = hasAuditableDocumentFile(document);
-    const canChangeDocumentStatus = canActOnCurrentPhase && mode === 'review';
-    const statusColor = isApproved
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      : document.status === 'ai_approved'
-        ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
-        : document.status === 'review_required'
-          ? 'bg-amber-50 text-amber-700 border-amber-200'
-          : document.status === 'received'
-            ? 'bg-blue-50 text-blue-700 border-blue-200'
-            : document.status === 'rejected'
-              ? 'bg-red-50 text-red-700 border-red-200'
-              : 'bg-slate-100 text-slate-400 border-slate-200';
-    const statusText = isApproved
-      ? 'text-emerald-700'
-      : document.status === 'ai_approved'
-        ? 'text-cyan-700'
-        : document.status === 'review_required'
-          ? 'text-amber-700'
-          : document.status === 'received'
-            ? 'text-blue-700'
-              : document.status === 'rejected'
-                ? 'text-red-600'
-                : 'text-slate-400';
-
-    if (mode === 'review' && isApproved) {
-      return (
-        <div className="flex min-w-0 items-center gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-emerald-200 bg-emerald-100 text-emerald-600">
-            <Check className="h-3.5 w-3.5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-black text-slate-900">
-              {document.label}
-              {document.required !== false && <span className="ml-0.5 text-pink-600">*</span>}
-            </p>
-            <p className="mt-0.5 truncate text-[10px] font-bold text-emerald-700">
-              Aprovado{document.updatedAt ? ` · ${formatOnboardingDate(document.updatedAt)}` : ''}
-            </p>
-          </div>
-          {document.fileUrl ? (
-            <a
-              href={document.fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Ver documento"
-              aria-label={`Ver ${document.label}`}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-100"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </a>
-          ) : (
-            <span title="Arquivo indisponível" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-300">
-              <FileText className="h-3.5 w-3.5" />
-            </span>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 ${mode === 'review' ? 'sm:col-span-2' : ''}`}>
-        <div className="flex min-w-0 items-center gap-3">
-          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${statusColor}`}>
-            {isApproved
-              ? <CheckCircle2 className="h-4 w-4" />
-              : isRejected
-                ? <XCircle className="h-4 w-4" />
-                : <FileText className="h-4 w-4" />}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900">
-              {document.label}
-              {document.required !== false && <span className="ml-0.5 text-pink-600">*</span>}
-            </p>
-            <p className={`mt-0.5 text-xs font-semibold ${statusText}`}>
-              {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
-              {document.updatedAt ? ` · ${formatOnboardingDate(document.updatedAt)}` : ''}
-            </p>
-            {document.fileUrl ? (
-              <a
-                href={document.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-500"
-              >
-                <ExternalLink className="h-3 w-3" /> Ver arquivo enviado
-              </a>
-            ) : (
-              <p className="mt-1 text-xs font-semibold text-slate-400">Nenhum arquivo enviado</p>
-            )}
-          </div>
-        </div>
-        {canManage && (
-          <div className="flex shrink-0 gap-1.5">
-            {mode === 'collect' ? (
-              document.fileUrl ? (
-                <a
-                  href={document.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Abrir documento
-                </a>
-              ) : (
-                <span className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-400">
-                  Aguardando envio
-                </span>
-              )
-            ) : (
-              <>
-                {document.fileUrl ? (
-                  <a
-                    href={document.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Abrir documento
-                  </a>
-                ) : (
-                  <span className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-400">
-                    Sem arquivo
-                  </span>
-                )}
-                <button
-                  type="button"
-                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus || isApproved}
-                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'approved' })}
-                  className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-[11px] font-bold ${isApproved
-                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50'}`}
-                  title={isApproved ? 'Documento já aprovado.' : !hasFile ? 'Envie ou abra um arquivo antes de aprovar.' : !canChangeDocumentStatus ? 'A aprovação só fica ativa na fase atual de Conferência.' : undefined}
-                >
-                  {isApproved ? <CheckCircle2 className="h-3 w-3" /> : null}
-                  {isApproved ? 'Aprovado' : 'Aprovar'}
-                </button>
-                <button
-                  type="button"
-                  disabled={updating === actionKey || !hasFile || !canChangeDocumentStatus || isRejected}
-                  onClick={() => patchProcess(process.id, { action: 'document_status', documentId: document.id, status: 'rejected' })}
-                  className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-[11px] font-bold ${isRejected
-                    ? 'border border-red-200 bg-red-50 text-red-700'
-                    : 'bg-red-600 text-white hover:bg-red-500 disabled:opacity-50'}`}
-                  title={isRejected ? 'Documento já reprovado.' : !hasFile ? 'Não há arquivo anexado para reprovar.' : !canChangeDocumentStatus ? 'A reprovação só fica ativa na fase atual de Conferência.' : undefined}
-                >
-                  {isRejected ? <XCircle className="h-3 w-3" /> : null}
-                  {isRejected ? 'Reprovado' : 'Reprovar'}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
   // ── Grid landing ──────────────────────────────────────────────────────────
   if (view === 'grid' || !selectedProcess) {
     return (
-      <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-hidden">
-        <div className="flex flex-wrap items-end justify-between gap-5">
-          <div className="min-w-0">
-            <span className="text-[11px] font-black uppercase tracking-[0.09em] text-pink-600">
-              {processStateFilter === 'active' ? 'Pessoal · Integração' : 'Pessoal · Histórico'}
-            </span>
-            <h1 className="mt-0.5 text-lg font-black tracking-tight text-slate-900">
-              {processStateFilter === 'completed'
-                ? 'Integrações concluídas'
-                : processStateFilter === 'cancelled'
-                  ? 'Integrações encerradas'
-                  : 'Candidatos em formalização'}
-            </h1>
-            <p className="mt-1 max-w-xl text-xs font-medium text-slate-500">
-              {processStateFilter === 'completed'
-                ? `${activeProcesses.length} processo${activeProcesses.length === 1 ? '' : 's'} finalizado${activeProcesses.length === 1 ? '' : 's'}. Consulte a linha do tempo e os registros de auditoria.`
-                : processStateFilter === 'cancelled'
-                  ? `${activeProcesses.length} processo${activeProcesses.length === 1 ? '' : 's'} encerrado${activeProcesses.length === 1 ? '' : 's'} sem finalização. Consulte o motivo, a etapa e os registros de auditoria.`
-                  : `${activeProcesses.length} pessoa${activeProcesses.length === 1 ? '' : 's'} em processo. Selecione um card para abrir a linha do tempo e conduzir cada fase da integração.`}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2.5">
-            {canManage && (
-              <a
-                href="/dashboard/settings?department=pessoal&tab=recruitment&section=integration"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
-              >
-                <FolderOpen className="h-4 w-4 text-pink-600" />
-                Modelos de integração
-              </a>
-            )}
-            {canManage && (
-              <button
-                type="button"
-                onClick={() => setShowStartModal(true)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-pink-600 px-3 text-xs font-bold text-white shadow-md shadow-pink-600/20 hover:bg-pink-700"
-              >
-                <Plus className="h-4 w-4" />
-                Nova integração
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative min-w-[240px] flex-1">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-              placeholder="Buscar candidato, cargo ou unidade…"
-              className="h-[46px] w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-900 placeholder-slate-400 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-            />
-          </div>
-          <div className="relative min-w-[170px]">
-            <select
-              value={processStateFilter}
-              onChange={event => {
-                setProcessStateFilter(event.target.value as 'active' | 'completed' | 'cancelled');
-                setPhaseFilter('all');
-                setHealthFilter('all');
-              }}
-              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-            >
-              <option value="active">Em andamento</option>
-              <option value="completed">Concluídas</option>
-              <option value="cancelled">Encerradas</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-          <div className="relative min-w-[180px]">
-            <select
-              value={phaseFilter}
-              onChange={event => setPhaseFilter(event.target.value)}
-              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-            >
-              <option value="all">Todas as fases</option>
-              {phaseOptions.map(option => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-          {processStateFilter === 'active' ? (
-            <div className="relative min-w-[175px]">
-              <select
-                value={healthFilter}
-                onChange={event => setHealthFilter(event.target.value as 'all' | OnboardingHealth)}
-                className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-                aria-label="Filtrar por situação operacional"
-              >
-                <option value="all">Todas as situações</option>
-                <option value="overdue">Atrasados</option>
-                <option value="blocked">Bloqueados</option>
-                <option value="hr_action">Ação do RH</option>
-                <option value="waiting_person">Aguardando pessoa</option>
-                <option value="on_track">Em dia</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </div>
-          ) : null}
-          <div className="relative min-w-[200px]">
-            <select
-              value={onboardingSortMode}
-              onChange={event => setOnboardingSortMode(event.target.value as OnboardingSortMode)}
-              className="h-[46px] w-full appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-[13.5px] font-bold text-slate-600 shadow-sm outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-500/15"
-              aria-label="Ordenar integrações"
-            >
-              <option value="priority">Prioridade operacional</option>
-              <option value="admission">Admissão mais próxima</option>
-              <option value="stalled">Parado há mais tempo</option>
-              <option value="name">Nome</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            aria-label="Atualizar"
-            className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
-          >
-            <RotateCw className="h-4 w-4" />
-          </button>
-        </div>
-
-        {processStateFilter === 'active' ? (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm" aria-label="Legenda das situações operacionais">
-            <span className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">Saúde do processo</span>
-            {(['on_track', 'waiting_person', 'hr_action', 'blocked', 'overdue'] as OnboardingHealth[]).map(health => (
-              <button
-                key={health}
-                type="button"
-                onClick={() => setHealthFilter(current => current === health ? 'all' : health)}
-                className={`inline-flex items-center gap-1.5 text-[11.5px] font-bold transition ${
-                  healthFilter === health ? ONBOARDING_HEALTH_META[health].textClass : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <span className={`h-2.5 w-2.5 rounded-full ${ONBOARDING_HEALTH_META[health].dotClass}`} />
-                {ONBOARDING_HEALTH_META[health].label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {error && <ErrorLine msg={error} />}
-
-        {filtered.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white py-16 text-center">
-            <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-            <p className="text-sm font-medium text-slate-500">
-              {search
-                ? 'Nenhum candidato corresponde à busca.'
-                : processStateFilter === 'completed'
-                  ? 'Nenhuma integração concluída.'
-                  : processStateFilter === 'cancelled'
-                    ? 'Nenhuma integração encerrada.'
-                    : 'Nenhuma integração em andamento.'}
-            </p>
-            {!search && processStateFilter === 'active' && (
-              <p className="mt-1 text-xs text-slate-400">Use “Nova integração” para iniciar uma formalização.</p>
-            )}
-          </div>
-        ) : (
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
-            {filtered.map(process => {
-              const documentProgress = processDocProgress(process);
-              const processProgress = onboardingProgress(process);
-              const operationalStatus = resolveOnboardingOperationalStatus(process, new Date(linkClock));
-              const healthMeta = ONBOARDING_HEALTH_META[operationalStatus.health];
-              const isPj = process.employmentRelationshipType === 'pj' && Boolean(process.pjWorkflow);
-              const color = colorForProcess(process.id);
-              const profilePhotoUrl = onboardingProfilePhotoUrl(process);
-              return (
-                <article
-                  key={process.id}
-                  onClick={() => openProcess(process)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      openProcess(process);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  className={`group flex w-full flex-col rounded-2xl border border-l-4 border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-pink-200 hover:shadow-md ${healthMeta.borderClass}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black text-white"
-                      style={{ backgroundColor: color }}
-                    >
-                      {profilePhotoUrl ? (
-                        <img src={profilePhotoUrl} alt={process.candidateName ?? 'Foto da candidata'} className="h-full w-full object-cover" />
-                      ) : candidateInitials(process.candidateName)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[15px] font-black text-slate-900">{process.candidateName ?? 'Candidato sem nome'}</div>
-                      <div className="mt-0.5 truncate text-xs font-medium text-slate-500">{process.candidateEmail ?? 'E-mail não informado'}</div>
-                    </div>
-                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[9.5px] font-black uppercase tracking-wide ${healthMeta.badgeClass}`}>
-                      {healthMeta.label}
-                    </span>
-                  </div>
-
-                  <div className="mt-3.5 rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <div className="truncate text-[13px] font-bold text-slate-700">
-                      {isPj ? 'Prestadora de serviços · PJ' : process.jobRoleName ?? 'Cargo não informado'}
-                      {!isPj && process.functionName ? ` · ${process.functionName}` : ''}
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                      <MapPin className="h-3.5 w-3.5" />
-                      {isPj ? process.employerUnitName ?? 'Contratante não definida' : process.unitName ?? 'Unidade não definida'}
-                    </div>
-                  </div>
-
-                  <div className={`mt-3 rounded-xl border px-3 py-3 ${healthMeta.badgeClass}`}>
-                    <div className="flex items-start gap-2.5">
-                      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${healthMeta.dotClass}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12.5px] font-black leading-snug">{operationalStatus.headline}</p>
-                        <p className="mt-1 line-clamp-2 text-[10.5px] font-semibold leading-relaxed opacity-80">{operationalStatus.detail}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate text-[10.5px] font-black uppercase tracking-wide text-slate-400">{processProgress.label}</span>
-                      <span className="shrink-0 text-xs font-black text-pink-600">Fase {processProgress.current} de {processProgress.total}</span>
-                    </div>
-                    <div
-                      className="mt-2 grid gap-1"
-                      style={{ gridTemplateColumns: `repeat(${Math.max(processProgress.total, 1)}, minmax(0, 1fr))` }}
-                      role="img"
-                      aria-label={`${processProgress.current} de ${processProgress.total} fases`}
-                    >
-                      {processProgress.steps.map(stage => (
-                        <span
-                          key={stage.id}
-                          className={`h-1.5 rounded-full ${
-                            stage.state === 'done'
-                              ? 'bg-emerald-500'
-                              : stage.state === 'active'
-                                ? 'bg-pink-600'
-                                : 'bg-slate-200'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[10.5px] font-bold text-slate-500">
-                    <span className={`rounded-lg px-2.5 py-1 ${documentProgress.approved === documentProgress.total && documentProgress.total > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100'}`}>
-                      {documentProgress.approved}/{documentProgress.total} aprovados
-                    </span>
-                    {operationalStatus.daysInStage > 0 ? (
-                      <span className="rounded-lg bg-slate-50 px-2.5 py-1">{operationalStatus.daysInStage}d nesta etapa</span>
-                    ) : null}
-                  </div>
-
-                  {process.status === 'cancelled' ? (
-                    <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50/70 px-3 py-2.5">
-                      <p className="text-[10px] font-black uppercase tracking-wide text-rose-600">Motivo do encerramento</p>
-                      <p className="mt-1 line-clamp-2 text-xs font-semibold leading-relaxed text-rose-900">
-                        {process.cancelReason ?? 'Motivo não registrado.'}
-                      </p>
-                      <p className="mt-1.5 text-[10.5px] font-bold text-rose-500">
-                        {process.cancelledAt ? `Encerrada em ${formatOnboardingDate(process.cancelledAt)}` : 'Data não registrada'}
-                        {process.cancelledByEmail ? ` · por ${process.cancelledByEmail}` : ''}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
-                      <Clock className="h-3.5 w-3.5" />
-                      Atualizado em {formatOnboardingDate(process.updatedAt)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={event => {
-                        event.stopPropagation();
-                        openProcess(process);
-                      }}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-pink-600"
-                    >
-                      Abrir<ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-
-        {showStartModal && (
+      <>
+        <OnboardingProductionLine
+          processes={filtered}
+          now={linkClock}
+          processStateFilter={processStateFilter}
+          phaseFilter={phaseFilter}
+          healthFilter={healthFilter}
+          sortMode={onboardingSortMode}
+          search={search}
+          canManage={canManage}
+          hasMore={pageInfo[processStateFilter].hasMore}
+          loadingMore={loadingMoreScope === processStateFilter}
+          onProcessStateFilterChange={(next) => {
+            setProcessStateFilter(next);
+            setPhaseFilter('all');
+            setHealthFilter('all');
+          }}
+          onPhaseFilterChange={setPhaseFilter}
+          onHealthFilterChange={setHealthFilter}
+          onSortModeChange={setOnboardingSortMode}
+          onSearchChange={setSearch}
+          onRefresh={onRefresh}
+          onOpen={openProcess}
+          onNew={() => setShowStartModal(true)}
+          onLoadMore={() => onLoadMore(processStateFilter)}
+        />
+        {showStartModal ? (
           <StartOnboardingModal
             roles={roles}
             jobFunctions={jobFunctions}
@@ -9694,9 +9328,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
               openProcess(process);
             }}
           />
-        )}
-      </div>
+        ) : null}
+      </>
     );
+
   }
 
   const canCancelSelectedProcess = canManage &&
@@ -9819,40 +9454,22 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const progress = processDocProgress(selectedProcess);
   const answers = selectedProcess.publicFormAnswers;
   const currentStageId = selectedProcess.currentStage ?? selectedProcess.stages?.[0]?.id ?? null;
-  const activePhaseId = phaseId ?? currentStageId;
-  const isTrainingPhase = activePhaseId === 'training';
+  const requestedActivePhaseId = phaseId ?? currentStageId;
+  const activePhaseId = requestedActivePhaseId === 'training'
+    ? 'probation'
+    : requestedActivePhaseId;
   const isProbationPhase = activePhaseId === 'probation';
-  const isExperienceGroupPhase = isTrainingPhase || isProbationPhase;
+  const isExperienceGroupPhase = isProbationPhase;
   // 'probation' não é mais reconstruída por consolidatedOnboardingStages (ver ONBOARDING_STAGE_IDS
   // em recruitment-onboarding.ts) — o acompanhamento de experiência é dirigido por `probationV2`,
   // exibido como uma linha sintética no grupo "Experiência", igual ao treinamento.
   const visibleStages = consolidatedOnboardingStages(selectedProcess);
-  const trainingItems = [...(selectedProcess.trainingItems ?? [])].sort((a, b) => a.order - b.order);
-  const trainingDoneCount = trainingItems.filter(item => item.status === 'done').length;
   const probationV2 = selectedProcess.probationV2 ?? null;
   const probationReleased = probationIsReleasedAfterFormalization(selectedProcess);
-  const probationRowState: 'done' | 'active' | 'pending' = !probationV2
-    ? 'pending'
-    : !probationReleased
-      ? 'pending'
-    : probationV2.status === 'effective' || probationV2.status === 'terminated'
-      ? 'done'
-      : probationV2.status === 'awaiting_admission'
-        ? 'pending'
-        : 'active';
-  const activeStage: { label: string; dueDays?: number | null } | null = isTrainingPhase
-    ? { label: 'Treinamento' }
-    : isProbationPhase
-      ? { label: 'Avaliações de experiência' }
-      : (visibleStages.find(stage => stage.id === activePhaseId) ?? null);
-  const activeDetails = isTrainingPhase
-    ? { owner: 'Liderança', focus: 'Trilhas de integração e capacitação dos primeiros dias.' }
-    : isProbationPhase
-      ? { owner: 'Liderança', focus: 'Acompanhamento dos primeiros 90 dias, com avaliações e decisão de efetivação.' }
+  const activeDetails = isProbationPhase
+      ? { owner: 'Liderança', focus: 'Trilhas de integração, avaliações dos primeiros 90 dias e decisão de efetivação.' }
       : (activePhaseId ? ONBOARDING_STAGE_DETAILS[activePhaseId as OnboardingStageId] : null);
-  const activeKind = isTrainingPhase
-    ? 'training' as const
-    : isProbationPhase
+  const activeKind = isProbationPhase
       ? 'experiencia' as const
       : (activePhaseId ? ONBOARDING_STAGE_KIND[activePhaseId as OnboardingStageId] : 'generico');
   const accent = colorForProcess(selectedProcess.id);
@@ -9873,11 +9490,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const finalizationSaved = !!selectedProcess.finalizationSettings;
   const userCreated = !!selectedProcess.collaboratorUserId;
   const readyToCreate = finalizationSaved &&
-    (selectedProcess.currentStage === 'formalization_validation' || selectedProcess.status === 'ready_to_create_user');
+    selectedProcess.currentStage === 'integration';
   const canCreateCollaborator = canManage && !userCreated && readyToCreate &&
     selectedProcess.status !== 'cancelled' && selectedProcess.status !== 'completed';
-  const canComplete = canManage && userCreated && integrationsResolved &&
-    selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const canEditExpectedAdmissionDate = canManage &&
     canUpdateExpectedAdmissionDate(selectedProcess);
   const canEditAccountantFormFields = canEditExpectedAdmissionDate
@@ -9889,6 +9504,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   const firstAccessExpired = !!selectedProcess.firstAccess?.expiresAt &&
     new Date(selectedProcess.firstAccess.expiresAt).getTime() <= linkClock;
   const formalizationAccessCompleted = selectedProcess.accessProvisioning?.status === 'completed';
+  const canComplete = canManage && userCreated && formalizationAccessCompleted && integrationsResolved &&
+    selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const accessIndicators = [
     {
       label: 'Cadastro criado',
@@ -10064,19 +9681,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   )
     .map(document => presentOnboardingDocumentForAnswers(document, answers))
     .filter(document => document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
-  const documentsWithExtraction = reviewDocuments.filter(hasDocumentExtraction).length;
-  const auditableDocuments = reviewDocuments.filter(hasAuditableDocumentFile).length;
-  const bulkApprovalDocuments = reviewDocuments.filter(document =>
-    hasAuditableDocumentFile(document) &&
-    document.status !== 'approved' &&
-    document.status !== 'rejected'
-  );
-  const approvedAuditableDocuments = reviewDocuments.filter(document =>
-    hasAuditableDocumentFile(document) && document.status === 'approved'
-  ).length;
-  const allAuditableDocumentsApproved = auditableDocuments > 0 && approvedAuditableDocuments === auditableDocuments;
-  const bulkApprovalActionKey = `${selectedProcessId}:document_status_bulk`;
-  const canBulkApproveDocuments = canActOnCurrentPhase && bulkApprovalDocuments.length > 0;
   const accountantRequiredDocuments = reviewDocuments.filter(document => document.required !== false && document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
   const accountantAttachedDocuments = reviewDocuments.filter(document => hasAuditableDocumentFile(document) && document.id !== 'aso_admission' && document.documentTypeCode !== 'ASO_ADMISSION');
   const accountantAutomaticDocuments = accountantAttachedDocuments.filter(document => isAutomaticAccountantDocument(document) && document.status === 'approved');
@@ -10175,22 +9779,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     done ? 'done' : index === asoCurrentStep - 1 ? 'current' : 'upcoming'
   )) as Array<'done' | 'current' | 'upcoming'>;
   const asoSelectedStepState = asoStepStates[asoSelectedStepIndex] ?? 'upcoming';
-  const currentFormalizationStageIndex = visibleStages.findIndex(stage => stage.id === selectedProcess.currentStage);
-  const currentFormalizationStageNumber = currentFormalizationStageIndex >= 0
-    ? currentFormalizationStageIndex + 1
-    : visibleStages.length;
   const pendingRequiredDocumentCount = accountantRequiredDocuments.filter(document => document.status !== 'approved').length;
-  const approvedReviewDocumentCount = reviewDocuments.filter(document => document.status === 'approved').length;
-  const rejectedReviewDocumentCount = reviewDocuments.filter(document => document.status === 'rejected').length;
-  const pendingReviewDocumentCount = reviewDocuments.length - approvedReviewDocumentCount - rejectedReviewDocumentCount;
-  const publicLinkExpiresAt = onboardingPublicLinkExpiresAt(selectedProcess);
-  const publicLinkHoursRemaining = publicLinkExpiresAt
-    ? Math.max(0, Math.ceil((publicLinkExpiresAt.getTime() - linkClock) / 3_600_000))
-    : null;
-  const publicLinkExpiringSoon = linkActive
-    && publicLinkHoursRemaining !== null
-    && publicLinkHoursRemaining <= 12
-    && (!selectedProcess.publicFormSubmittedAt || pendingRequiredDocumentCount > 0);
   const firstStageChecklist = [
     {
       label: selectedProcess.publicFormSubmittedAt ? 'Dados do formulário recebidos' : 'Dados do formulário aguardando envio',
@@ -10214,61 +9803,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
     },
   ];
 
-  async function approveReviewDocumentsInBulk() {
-    if (!canBulkApproveDocuments) return;
-    const documentCount = bulkApprovalDocuments.length;
-    const countLabel = `${documentCount} documento${documentCount === 1 ? '' : 's'}`;
-    const confirmed = window.confirm(`Aprovar ${countLabel} em lote? Confirme apenas se você já abriu e verificou os arquivos.`);
-    if (!confirmed) return;
-
-    await patchProcess(selectedProcessId, {
-      action: 'document_status_bulk',
-      documentIds: bulkApprovalDocuments.map(document => document.id),
-      status: 'approved',
-    });
-  }
-
-  function renderBulkApproveDocumentsButton() {
-    if (!canManage || reviewDocuments.length === 0) return null;
-    if (bulkApprovalDocuments.length === 0) {
-      if (!allAuditableDocumentsApproved) return null;
-      return (
-        <div
-          aria-live="polite"
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Todos aprovados
-          <span className="ml-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] leading-none">
-            {approvedAuditableDocuments}
-          </span>
-        </div>
-      );
-    }
-    const isLoading = updating === bulkApprovalActionKey;
-    return (
-      <button
-        type="button"
-        disabled={isLoading || !canBulkApproveDocuments}
-        onClick={() => void approveReviewDocumentsInBulk()}
-        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-        title={!canActOnCurrentPhase
-          ? 'A aprovação em lote só fica ativa na fase atual de Conferência.'
-          : bulkApprovalDocuments.length === 0
-            ? 'Não há documentos enviados pendentes para aprovar.'
-            : undefined}
-      >
-        {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-        Aprovar em lote
-        {bulkApprovalDocuments.length > 0 ? (
-          <span className="ml-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] leading-none">
-            {bulkApprovalDocuments.length}
-          </span>
-        ) : null}
-      </button>
-    );
-  }
-
   let genericStatus = 'Etapa concluída';
   let genericDesc = activeDetails?.focus ?? '';
   if (activePhaseId === 'signature_preparation') {
@@ -10284,7 +9818,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
   }
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[1240px] space-y-4 overflow-x-hidden" style={{ animation: 'none' }}>
+    <div className="w-full min-w-0 space-y-4 overflow-x-hidden" style={{ animation: 'none' }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
@@ -10346,21 +9880,29 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             </p>
             <span className={`mt-2 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-black ${selectedProcess.expectedAdmissionDate ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
               <Calendar className="h-3.5 w-3.5 shrink-0" />
-              Admissão prevista: {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
+              Data de admissão: {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Recebidos</div>
-              <div className="mt-1 text-[19px] font-black text-slate-900">{progress.received}/{progress.total}</div>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <div className="min-w-[92px] rounded-2xl border border-[#eeebe4] bg-[#faf9f6] px-4 py-2.5">
+              <div className="text-[9.5px] font-black uppercase tracking-wide text-stone-400">Documentos</div>
+              <div className="mt-1 text-[19px] font-black text-emerald-600">{progress.approved}/{progress.total}</div>
+              <div className="text-[10px] font-semibold text-stone-400">aprovados</div>
             </div>
-            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Aprovados</div>
-              <div className="mt-1 text-[19px] font-black text-emerald-600">{progress.approved}</div>
+            <div className="min-w-[92px] rounded-2xl border border-[#eeebe4] bg-[#faf9f6] px-4 py-2.5">
+              <div className="text-[9.5px] font-black uppercase tracking-wide text-stone-400">Etapa</div>
+              <div className="mt-1 text-[19px] font-black text-slate-950">{onboardingConceptualStageNumber(selectedProcess)}/7</div>
+              <div className="text-[10px] font-semibold text-stone-400">do processo</div>
             </div>
-            <div className="min-w-[78px] rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-center">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Pendentes</div>
-              <div className="mt-1 text-[19px] font-black text-amber-600">{progress.pending}</div>
+            <div className="min-w-[92px] rounded-2xl border border-[#eeebe4] bg-[#faf9f6] px-4 py-2.5">
+              <div className="text-[9.5px] font-black uppercase tracking-wide text-stone-400">Parada</div>
+              <div className={`mt-1 text-[19px] font-black ${selectedOperationalStatus.daysInStage > 2 ? 'text-amber-600' : 'text-slate-950'}`}>{selectedOperationalStatus.daysInStage}d</div>
+              <div className="text-[10px] font-semibold text-stone-400">nesta etapa</div>
+            </div>
+            <div className="min-w-[92px] rounded-2xl border border-[#eeebe4] bg-[#faf9f6] px-4 py-2.5">
+              <div className="text-[9.5px] font-black uppercase tracking-wide text-stone-400">Responsável</div>
+              <div className="mt-2 text-[13px] font-black text-slate-950">{selectedOperationalStatus.responsible === 'rh' ? 'RH' : selectedOperationalStatus.responsible === 'person' ? 'Pessoa' : selectedOperationalStatus.responsible === 'third_party' ? 'Terceiro' : selectedOperationalStatus.responsible === 'system' ? 'Sistema' : 'Concluído'}</div>
+              <div className="mt-1 text-[10px] font-semibold text-stone-400">próxima ação</div>
             </div>
           </div>
         </div>
@@ -10385,6 +9927,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             </div>
           </div>
         ) : null}
+
+        <div className="px-6 pt-4">
+          <OnboardingDetailNavigation
+            process={selectedProcess}
+            activePhaseId={activePhaseId}
+            onSelect={setPhaseId}
+          />
+        </div>
 
         <div className="px-6 pt-4">
           <section className={`rounded-2xl border p-4 ${selectedHealthMeta.badgeClass}`} aria-labelledby="onboarding-next-action-title">
@@ -10432,228 +9982,9 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
         <div className="flex flex-wrap items-start gap-5 p-6">
           {/* timeline */}
-          <aside className="w-full min-w-[250px] flex-[0_1_280px] rounded-2xl border border-slate-100 bg-slate-50/90 p-4 lg:max-w-[280px]">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[10.5px] font-black uppercase tracking-[0.08em] text-slate-600">Formalização e acessos</p>
-              {visibleStages.length > 0 ? <span className="shrink-0 rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[9px] font-black text-pink-600">Etapa {currentFormalizationStageNumber} de {visibleStages.length}</span> : null}
-            </div>
-            <p className="mt-1 text-[9.5px] font-semibold text-slate-400">Sequência obrigatória — uma etapa por vez</p>
-            <div className="mt-3 space-y-0.5">
-              {visibleStages.map((stage, index, stages) => {
-                const state = stageState(selectedProcess, stage.id);
-                const details = ONBOARDING_STAGE_DETAILS[stage.id];
-                const isActivePhase = stage.id === activePhaseId;
-                const stageStateLabel = state === 'done' ? 'Concluída' : state === 'active' ? 'Etapa atual' : 'A seguir';
-                return (
-                  <button
-                    key={stage.id}
-                    type="button"
-                    onClick={() => setPhaseId(stage.id)}
-                    className={`flex w-full gap-2.5 rounded-xl border px-2 py-2 text-left transition ${
-                      isActivePhase ? 'border-pink-200 bg-pink-50/80 shadow-sm' : 'border-transparent hover:border-slate-100 hover:bg-white/70'
-                    }`}
-                  >
-                    <span className="flex flex-col items-center">
-                      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[10px] font-black ${
-                        state === 'done'
-                          ? 'border-emerald-500 bg-emerald-500 text-white'
-                          : state === 'active'
-                            ? 'border-pink-600 bg-pink-600 text-white'
-                            : 'border-slate-200 bg-white text-slate-400'
-                      }`}>
-                        {state === 'done' ? <Check className="h-3.5 w-3.5" /> : index + 1}
-                      </span>
-                      {index < stages.length - 1 ? (
-                        <span className={`my-0.5 min-h-[18px] w-px flex-1 ${state === 'done' ? 'bg-emerald-300' : 'bg-slate-200'}`} />
-                      ) : null}
-                    </span>
-                    <span className="min-w-0 flex-1 pb-2">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className={`text-[11px] font-black leading-snug ${
-                          isActivePhase ? 'text-pink-600' : state === 'done' ? 'text-slate-700' : 'text-slate-400'
-                        }`}>
-                          {stage.label}
-                        </span>
-                        {stage.dueDays ? (
-                          <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[8.5px] font-bold text-slate-400">
-                            {stage.dueDays}d
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className={`mt-1 block text-[8.5px] font-black uppercase tracking-wide ${isActivePhase ? 'text-pink-400' : 'text-slate-400'}`}>{stageStateLabel} <span className="px-0.5">·</span> {details.owner}</span>
-                      <span className={`mt-1.5 block text-[9px] font-semibold leading-snug ${isActivePhase ? 'text-pink-500/80' : 'text-slate-400'}`}>{details.focus}</span>
-                    </span>
-                  </button>
-                );
-              })}
-              {visibleStages.length === 0 && (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
-                  Nenhuma etapa configurada.
-                </p>
-              )}
-            </div>
-
-            <div className="mt-4 border-t border-dashed border-slate-300 pt-3">
-              <div className="flex items-center gap-2"><p className="text-[9.5px] font-black uppercase tracking-[0.08em] text-slate-500">Experiência</p><span className="rounded-full bg-violet-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-violet-600">Paralelo</span></div>
-              <p className="mt-1 text-[8.5px] font-semibold text-slate-400">Avaliações liberadas após concluir a formalização</p>
-            </div>
-            <div className="mt-3 space-y-2">
-              {(() => {
-                const isActivePhase = isProbationPhase;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setPhaseId('probation')}
-                    className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${
-                      isActivePhase ? 'border-pink-200 bg-pink-50/70 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${
-                        probationRowState === 'done'
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-                          : probationRowState === 'active'
-                            ? 'border-pink-200 bg-pink-50 text-pink-600'
-                            : 'border-slate-100 bg-slate-50 text-slate-400'
-                      }`}>
-                      {probationRowState === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <FileCheck2 className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className={`text-[10.5px] font-black ${
-                          isActivePhase ? 'text-pink-600' : probationRowState === 'done' ? 'text-slate-700' : 'text-slate-600'
-                        }`}>
-                          Avaliações de experiência
-                        </span>
-                        {probationReleased && probationV2?.schedule?.totalDays ? (
-                          <span className="shrink-0 text-[8.5px] font-bold text-slate-400">
-                            {probationV2.schedule.totalDays}d
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="mt-0.5 block text-[8.5px] font-semibold text-slate-400">{probationReleased ? `Liderança${probationV2?.schedule?.totalDays ? ` · ${probationV2.schedule.totalDays} dias` : ''}` : 'Aguardando formalização'}</span>
-                    </span>
-                  </button>
-                );
-              })()}
-              {(() => {
-                const trainingState = trainingItems.length === 0
-                  ? 'pending'
-                  : trainingDoneCount === trainingItems.length
-                    ? 'done'
-                    : 'active';
-                const isActivePhase = isTrainingPhase;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setPhaseId('training')}
-                    className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${
-                      isActivePhase ? 'border-pink-200 bg-pink-50/70 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border ${
-                        trainingState === 'done'
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-                          : trainingState === 'active'
-                            ? 'border-pink-200 bg-pink-50 text-pink-600'
-                            : 'border-slate-100 bg-slate-50 text-slate-400'
-                      }`}>
-                        {trainingState === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <GraduationCap className="h-3.5 w-3.5" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className={`text-[10.5px] font-black ${
-                          isActivePhase ? 'text-pink-600' : trainingState === 'done' ? 'text-slate-700' : 'text-slate-600'
-                        }`}>
-                          Treinamento
-                        </span>
-                        {trainingItems.length > 0 && (
-                          <span className="shrink-0 text-[8.5px] font-bold text-slate-400">
-                            {trainingDoneCount}/{trainingItems.length}
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-0.5 block text-[8.5px] font-semibold text-slate-400">Liderança · {trainingDoneCount}/{trainingItems.length} trilhas</span>
-                    </span>
-                  </button>
-                );
-              })()}
-            </div>
-          </aside>
 
           {/* phase panel */}
-          <div className="min-w-[320px] flex-[100_1_380px]">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
-              <div className="min-w-0">
-                <span className="text-[11px] font-black uppercase tracking-[0.07em] text-pink-600">
-                  {activeKind === 'coleta' ? 'Formalização'
-                    : activeKind === 'revisao' ? 'Formalização'
-                    : activeKind === 'contador' ? 'Formalização'
-                    : activeKind === 'validacao' ? 'Finalização da formalização'
-                    : activeKind === 'integracao' ? 'Acessos'
-                    : activeKind === 'assinatura' ? 'Assinatura'
-                    : activeKind === 'experiencia' ? 'Experiência'
-                    : activeKind === 'training' ? 'Experiência'
-                    : 'Etapa'}
-                </span>
-                <h3 className="mt-1 text-lg font-black tracking-tight text-slate-900">{activeStage?.label ?? 'Etapa'}</h3>
-                <p className="mt-1 max-w-[440px] text-[13px] font-medium text-slate-500">{activeDetails?.focus}</p>
-              </div>
-              <div className="flex min-w-[290px] flex-col items-stretch gap-2 sm:items-end">
-                <div className="flex flex-wrap justify-end gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11.5px] font-bold text-slate-600">
-                    <Users className="h-3.5 w-3.5 text-slate-400" />
-                    {activeDetails?.owner}
-                  </span>
-                  {activeStage?.dueDays ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] font-bold text-amber-700">
-                      <Clock className="h-3.5 w-3.5" />
-                      Prazo {activeStage.dueDays} dia{activeStage.dueDays === 1 ? '' : 's'}
-                    </span>
-                  ) : null}
-                  <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-bold ${
-                    isCurrentPhase
-                      ? 'border-pink-200 bg-pink-50 text-pink-700'
-                      : isFuturePhase
-                        ? 'border-slate-200 bg-slate-50 text-slate-500'
-                        : isPastPhase
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : 'border-slate-200 bg-slate-50 text-slate-500'
-                  }`}>
-                    {isCurrentPhase ? 'Etapa atual' : isFuturePhase ? 'Etapa futura' : isPastPhase ? 'Etapa concluída' : 'Etapa'}
-                  </span>
-                </div>
-                {canEditExpectedAdmissionDate && (activeKind === 'coleta' || activeKind === 'revisao') ? (
-                  <div className="flex flex-wrap items-end justify-end gap-2 rounded-xl border border-violet-200 bg-violet-50/70 p-2">
-                    <label className="min-w-[175px] flex-1 sm:flex-none">
-                      <span className="flex items-center gap-1 text-[9.5px] font-black uppercase tracking-wide text-violet-700">
-                        <Calendar className="h-3.5 w-3.5 shrink-0" /> Data prevista para admissão
-                      </span>
-                      <input
-                        type="date"
-                        value={expectedAdmissionDateDraft}
-                        onChange={event => setExpectedAdmissionDateDraft(event.target.value)}
-                        className="mt-1 h-9 w-full rounded-lg border border-violet-200 bg-white px-2.5 text-xs font-black text-slate-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      disabled={!expectedAdmissionDateDraft || expectedAdmissionDateDraft === selectedProcess.expectedAdmissionDate?.slice(0, 10) || updating === `${selectedProcess.id}:update_expected_admission_date`}
-                      onClick={() => void saveExpectedAdmissionDate(selectedProcess)}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-violet-700 px-3 text-[11px] font-black text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {updating === `${selectedProcess.id}:update_expected_admission_date` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                      Salvar
-                    </button>
-                  </div>
-                ) : (
-                  <span className={`inline-flex items-center gap-1.5 self-end rounded-lg border px-2.5 py-1.5 text-[11px] font-black ${selectedProcess.expectedAdmissionDate ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-                    <Calendar className="h-3.5 w-3.5 shrink-0" />
-                    Admissão prevista: {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}
-                  </span>
-                )}
-              </div>
-            </div>
-
+          <div className="min-w-0 flex-1">
             {isFuturePhase ? (
               <div role="alert" className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-amber-950 shadow-sm">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700">
@@ -10670,17 +10001,29 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
 
             {/* PRIMEIRA FASE CONSOLIDADA: COLETA, CONFERÊNCIA E ASO */}
             {(activeKind === 'coleta' || activeKind === 'revisao') && (
-              <div className="mt-4 flex flex-col gap-4">
-                <section className="order-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2.5">
-                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Dados fornecidos pelo candidato</p>
-                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
-                    selectedProcess.publicFormSubmittedAt ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                  }`}>
-                    {selectedProcess.publicFormSubmittedAt ? 'Enviado' : 'Aguardando'}
+              <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+                <div className="order-2 flex min-w-0 flex-col gap-4 lg:col-start-2">
+                <section className="order-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setCandidateDataCollapsed(current => !current)}
+                  className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-left"
+                  aria-expanded={!candidateDataCollapsed}
+                >
+                  <span className="text-xs font-black uppercase tracking-wide text-slate-500">Dados fornecidos pelo candidato</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
+                      selectedProcess.publicFormSubmittedAt ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    }`}>
+                      {selectedProcess.publicFormSubmittedAt ? 'Enviado' : 'Aguardando'}
+                    </span>
+                    <span className={`grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-transform ${candidateDataCollapsed ? '-rotate-90' : ''}`}>
+                      <ChevronDown className="h-4 w-4" />
+                    </span>
                   </span>
-                </div>
-                <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+                </button>
+                {!candidateDataCollapsed ? <>
+                <div className="mt-3 grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
                   {formRows.map(([label, value]) => (
                     <div key={label} className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
                       <div className="break-words text-[10.5px] font-black uppercase leading-tight tracking-wide text-slate-400 [overflow-wrap:anywhere]">{label}</div>
@@ -10704,13 +10047,14 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </div>
                   </div>
                 ) : null}
+                </> : null}
                 </section>
 
-                {canViewAso ? <div className="order-2 rounded-2xl border border-cyan-300 bg-cyan-50/70 p-4 shadow-sm">
+                {canViewAso ? <div className="order-1 rounded-2xl border border-cyan-300 bg-cyan-50/70 p-4 shadow-sm">
                   <button
                     type="button"
                     onClick={() => setAsoCollapsed(current => !current)}
-                    className="flex w-full flex-wrap items-start justify-between gap-3 text-left"
+                    className="grid w-full grid-cols-1 items-start gap-3 text-left sm:grid-cols-[minmax(0,1fr)_auto]"
                     aria-expanded={!asoCollapsed}
                   >
                     <div className="min-w-0">
@@ -10718,7 +10062,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       <h4 className="mt-1 text-sm font-black text-slate-900">Solicitação e acompanhamento do exame</h4>
                       <p className="mt-1 max-w-2xl text-xs font-semibold leading-relaxed text-slate-600">O PDF da solicitação segue anexado ao e-mail da clínica. A clínica confirma a data do exame; a empresa define a data de admissão.</p>
                     </div>
-                    <span className="flex shrink-0 items-center gap-2">
+                    <span className="flex shrink-0 items-center gap-2 sm:justify-self-end">
                       <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${asoWorkflow?.asoDocument?.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : asoProcessStarted ? 'bg-blue-100 text-blue-700' : asoRequest ? 'bg-violet-100 text-violet-700' : 'bg-amber-100 text-amber-700'}`}>
                         {asoWorkflow?.asoDocument?.status === 'approved' ? 'Concluído' : asoProcessStarted ? 'Em andamento' : asoRequestReady ? 'Pronto para envio' : 'Em preparação'}
                       </span>
@@ -10811,7 +10155,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="text-[9.5px] font-black uppercase text-slate-400">Colaboradora</span><p className="mt-1 text-xs font-black text-slate-800">{asoRequest?.candidateName ?? selectedProcess.candidateName}</p><p className="mt-0.5 break-all text-[10.5px] font-semibold text-slate-500">{asoRequest?.candidateEmail ?? selectedProcess.candidateEmail}</p></div>
                       <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="text-[9.5px] font-black uppercase text-slate-400">CPF e função</span><p className="mt-1 text-xs font-black text-slate-800">{formatOnboardingCpf(asoRequest?.candidateCpf ?? answers?.cpf)}</p><p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">{asoRequest?.jobFunction ?? selectedProcess.functionName ?? selectedProcess.jobRoleName}</p></div>
-                      <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="text-[9.5px] font-black uppercase text-slate-400">Exame e admissão</span><p className="mt-1 text-xs font-black text-slate-800">ASO {asoRequest?.examType === 'dismissal' ? 'demissional' : 'admissional'}</p><p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">Admissão prevista: {formatOnboardingDateOnly(asoRequest?.expectedAdmissionDate ?? selectedProcess.expectedAdmissionDate)}</p></div>
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="text-[9.5px] font-black uppercase text-slate-400">Exame e admissão</span><p className="mt-1 text-xs font-black text-slate-800">ASO {asoRequest?.examType === 'dismissal' ? 'demissional' : 'admissional'}</p><p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">Data de admissão: {formatOnboardingDateOnly(asoRequest?.expectedAdmissionDate ?? selectedProcess.expectedAdmissionDate)}</p></div>
                       <label className="rounded-xl border border-slate-100 bg-slate-50 p-3 sm:col-span-2"><span className="text-[9.5px] font-black uppercase text-slate-400">CNPJ responsável</span>{canManageAsoProcess && !asoConfigurationLocked ? <select value={selectedProcess.employerUnitId ?? ''} disabled={updating === `${selectedProcess.id}:set_employer_unit`} onChange={event => { if (event.target.value) void patchProcess(selectedProcess.id, { action: 'set_employer_unit', employerUnitId: event.target.value }); }} className="mt-1 h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-[11.5px] font-bold text-slate-700"><option value="">Selecione o CNPJ responsável</option>{availableEmployerUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name} · {CnpjValidator.format(unit.cnpj ?? '')}</option>)}</select> : <p className="mt-1 text-xs font-black text-slate-800">{asoRequest?.companyName ?? selectedProcess.employerUnitName ?? 'Não selecionado'} · {CnpjValidator.format(asoRequest?.companyCnpj ?? selectedProcess.employerCnpj ?? '')}</p>}</label>
                       <label className="rounded-xl border border-slate-100 bg-slate-50 p-3"><span className="text-[9.5px] font-black uppercase text-slate-400">Clínica do ASO</span>{canManageAsoProcess && !asoConfigurationLocked ? <><select value={asoClinicEntityId} disabled={asoClinicsLoading || asoClinics.length === 0} onChange={event => setAsoClinicEntityId(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-[11.5px] font-bold text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"><option value="">{asoClinicsLoading ? 'Carregando clínicas...' : asoClinicsError ? 'Clínicas indisponíveis' : asoClinics.length === 0 ? 'Nenhuma clínica configurada' : 'Selecione a clínica'}</option>{asoClinics.map(clinic => <option key={clinic.id} value={clinic.id} disabled={!clinic.paymentProfile?.configured || !clinic.paymentProfile?.validated}>{clinic.entity?.name ?? 'Clínica'} · {Number(clinic.asoPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}{!clinic.paymentProfile?.validated ? ' · PIX pendente' : ''}</option>)}</select>{asoClinicsError ? <span className="mt-1 block text-[10px] font-semibold text-rose-600">{asoClinicsError}</span> : null}</> : <p className="mt-1 text-xs font-black text-slate-800">{asoRequest?.clinicName ?? asoWorkflow?.clinic?.name ?? 'Não selecionada'}</p>}</label>
                       <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 sm:col-span-2"><span className="text-[9.5px] font-black uppercase text-slate-400">Envio à clínica</span><p className="mt-1 break-all text-xs font-black text-slate-800">{asoRequest?.clinicEmail ?? asoSelectedClinic?.schedulingEmail ?? 'Selecione a clínica'}</p><p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">A solicitação em PDF seguirá anexada ao e-mail da clínica.</p></div>
@@ -10859,7 +10203,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         <div className="mt-3 grid gap-2 sm:grid-cols-3">
                           {[
                             { label: 'Dados essenciais do formulário', done: asoFormDataReady, detail: asoFormDataReady ? 'Nome, CPF e função disponíveis' : 'Complete nome, CPF e função' },
-                            { label: 'Data prevista de admissão', done: accountantAdmissionDateReady, detail: accountantAdmissionDateReady ? formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate) : 'Defina a data prevista' },
+                            { label: 'Data de admissão', done: accountantAdmissionDateReady, detail: accountantAdmissionDateReady ? formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate) : 'Defina a data de admissão' },
                             { label: 'Documentos obrigatórios', done: accountantDocumentsReady, detail: accountantDocumentsReady ? 'Todos aprovados' : `${pendingRequiredDocumentCount} em conferência paralela` },
                           ].map(item => (
                             <div key={item.label} className={`rounded-xl border p-3 ${item.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
@@ -10920,7 +10264,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                           },
                         ].map(item => <div key={item.label} className={`rounded-xl border p-3 ${item.failed ? 'border-rose-200 bg-rose-50' : item.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}><div className="flex items-start gap-2">{item.failed ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600"/> : item.done ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600"/> : <Clock className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"/>}<div className="min-w-0"><p className="text-[11px] font-black text-slate-800">{item.label}</p><p className="mt-0.5 break-words text-[10.5px] font-semibold leading-relaxed text-slate-500">{item.detail}</p></div></div>{item.tracking ? <AsoEmailTrackingMilestones communication={item.tracking} includeReply={item.includeReply} /> : null}{item.appointmentControls ? <div className="mt-3 border-t border-slate-200 pt-3"><p className="text-[9px] font-black uppercase tracking-wide text-violet-700">Retorno e confirmação</p><p className="mt-1 text-[10px] font-semibold leading-relaxed text-slate-500">O link enviado à clínica preenche data e horário automaticamente. Se necessário, o RH pode informar os dados antes de confirmar.</p><div className="mt-2 grid gap-2 sm:grid-cols-2"><input type="date" value={asoAppointmentDraft.date} onChange={event => setAsoAppointmentDraft(current => ({ ...current, date: event.target.value }))} className="h-9 min-w-0 rounded-lg border bg-white px-3 text-xs"/><input type="time" value={asoAppointmentDraft.time} onChange={event => setAsoAppointmentDraft(current => ({ ...current, time: event.target.value }))} className="h-9 min-w-0 rounded-lg border bg-white px-3 text-xs"/></div><div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-violet-100 bg-white px-3 py-2"><p className="text-[9px] font-black uppercase tracking-wide text-violet-600">Local do exame</p>{asoClinicLocationText ? <TooltipProvider delayDuration={150}><Tooltip><TooltipTrigger asChild><button type="button" aria-label="Ver endereço completo da clínica" className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-violet-100 text-violet-600 hover:bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-300"><Info className="h-3 w-3"/></button></TooltipTrigger><TooltipContent side="top" align="end" className="max-w-[320px] text-xs font-semibold leading-relaxed"><p>{asoClinicLocationText}</p></TooltipContent></Tooltip></TooltipProvider> : null}</div>{asoAppointmentDraftAfterAdmission ? <div role="alert" className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/><p className="text-[10px] font-bold leading-relaxed">O exame está depois da admissão prevista para {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}. O registro será permitido, mas o RH deverá revisar o cronograma.</p></div> : null}{canManageAsoProcess ? <div className="mt-2 flex justify-end"><button type="button" disabled={!!asoActionBusy || !asoAppointmentDraft.date || !asoAppointmentDraft.time} onClick={() => void asoAction('confirm_appointment', asoAppointmentDraft)} className="h-8 rounded-md bg-violet-700 px-2.5 text-[9px] font-black text-white disabled:opacity-50">{asoActionBusy === 'confirm_appointment' ? 'Enviando aviso...' : 'Confirmar e avisar candidato(a)'}</button></div> : null}</div> : null}</div>)}
                       </div>
-                      {asoAppointmentAfterAdmission ? <div role="alert" className="mt-3 flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600"/><div><p className="text-xs font-black">Exame marcado depois da admissão prevista</p><p className="mt-1 text-[11px] font-semibold leading-relaxed">A clínica informou {formatOnboardingDateOnly(asoWorkflow?.appointment?.date)}, mas a empresa definiu a admissão para {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}. Revise a admissão ou solicite um exame anterior.</p></div></div> : null}
+                      {asoAppointmentAfterAdmission ? <div role="alert" className="mt-3 flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600"/><div><p className="text-xs font-black">Exame marcado depois da data de admissão</p><p className="mt-1 text-[11px] font-semibold leading-relaxed">A clínica informou {formatOnboardingDateOnly(asoWorkflow?.appointment?.date)}, mas a empresa definiu a admissão para {formatOnboardingDateOnly(selectedProcess.expectedAdmissionDate)}. Revise a admissão ou solicite um exame anterior.</p></div></div> : null}
                     </>}
                     </section> : null}
 
@@ -10972,124 +10316,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   </>}
                 </div> : null}
 
-                <section className="order-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <button
-                  type="button"
-                  onClick={() => setDocumentsCollapsed(current => !current)}
-                  className="flex w-full items-center justify-between gap-3 text-left"
-                  aria-expanded={!documentsCollapsed}
-                >
-                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Documentação obrigatória{activeKind === 'revisao' ? ' · conferência' : ''}</p>
-                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-transform ${documentsCollapsed ? '-rotate-90' : ''}`}>
-                    <ChevronDown className="h-4 w-4" />
-                  </span>
-                </button>
-                {documentsCollapsed ? (
-                  <div className="mt-3 border-t border-slate-100 pt-3">
-                    <div className="flex flex-wrap gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> {approvedReviewDocumentCount} aprovado{approvedReviewDocumentCount === 1 ? '' : 's'}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">
-                        <Clock className="h-3.5 w-3.5" /> {pendingReviewDocumentCount} pendente{pendingReviewDocumentCount === 1 ? '' : 's'}
-                      </span>
-                      {rejectedReviewDocumentCount > 0 ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-700">
-                          <XCircle className="h-3.5 w-3.5" /> {rejectedReviewDocumentCount} reprovado{rejectedReviewDocumentCount === 1 ? '' : 's'}
-                        </span>
-                      ) : null}
-                    </div>
-                    {reviewDocuments.length > 0 ? (
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        {reviewDocuments.map(document => {
-                          const approved = document.status === 'approved';
-                          const rejected = document.status === 'rejected';
-                          return (
-                            <div key={document.id} className={`flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2.5 ${
-                              approved
-                                ? 'border-emerald-200 bg-emerald-50/70'
-                                : rejected
-                                  ? 'border-rose-200 bg-rose-50/70'
-                                  : 'border-amber-200 bg-amber-50/60'
-                            }`}>
-                              {approved
-                                ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                                : rejected
-                                  ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
-                                  : <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />}
-                              <span className="min-w-0">
-                                <span className="block truncate text-[10.5px] font-black text-slate-800">{document.label}</span>
-                                <span className={`mt-0.5 block text-[9.5px] font-bold ${approved ? 'text-emerald-700' : rejected ? 'text-rose-700' : 'text-amber-700'}`}>
-                                  {ONBOARDING_DOCUMENT_STATUS_LABELS[document.status] ?? document.status}
-                                </span>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="mt-2 rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs font-semibold text-slate-500">Nenhum documento configurado para esta integração.</p>
-                    )}
-                  </div>
-                ) : <>
-                {publicLinkExpiringSoon ? (
-                  <div role="alert" className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950">
-                    <div className="flex min-w-0 items-start gap-2.5">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-black">Link expira em {publicLinkHoursRemaining}h</p>
-                        <p className="mt-0.5 text-[11px] font-semibold leading-relaxed text-amber-800">
-                          {pendingRequiredDocumentCount > 0
-                            ? `${pendingRequiredDocumentCount} documento${pendingRequiredDocumentCount === 1 ? '' : 's'} obrigatório${pendingRequiredDocumentCount === 1 ? '' : 's'} ainda ${pendingRequiredDocumentCount === 1 ? 'está pendente' : 'estão pendentes'}.`
-                            : 'O formulário ainda não foi concluído.'}
-                          {' '}{onboardingPublicLinkExtensionUsed(selectedProcess) ? 'A prorrogação única já foi utilizada.' : 'Considere prorrogar o acesso por 24h.'}
-                        </p>
-                      </div>
-                    </div>
-                    {canManage && !onboardingPublicLinkExtensionUsed(selectedProcess) ? (
-                      <button
-                        type="button"
-                        disabled={updating === `${selectedProcess.id}:extend_public_link`}
-                        onClick={() => patchProcess(selectedProcess.id, { action: 'extend_public_link' })}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 text-[11px] font-black text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-                      >
-                        {updating === `${selectedProcess.id}:extend_public_link` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
-                        Prorrogar 24h
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {activeKind === 'revisao' ? (documentsWithExtraction > 0 ? (
-                  <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3.5">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white"><Sparkles className="h-4 w-4" /></span>
-                      <div className="min-w-0"><div className="text-[13px] font-black text-blue-800">Copiloto extraiu dados de {documentsWithExtraction} documento{documentsWithExtraction === 1 ? '' : 's'}</div><div className="mt-0.5 text-xs font-semibold text-blue-700">Confira os campos extraídos e abra o arquivo anexado antes de aprovar ou reprovar.</div></div>
-                    </div>
-                    {renderBulkApproveDocumentsButton()}
-                  </div>
-                ) : (
-                  <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-slate-500"><FileText className="h-4 w-4" /></span>
-                      <div className="min-w-0"><div className="text-[13px] font-black text-slate-800">Conferência manual de documentos</div><div className="mt-0.5 text-xs font-semibold text-slate-500">{auditableDocuments > 0 ? `${auditableDocuments} arquivo${auditableDocuments === 1 ? '' : 's'} ${auditableDocuments === 1 ? 'disponível' : 'disponíveis'} para auditoria. Abra o documento antes de aprovar.` : 'Nenhum arquivo foi enviado ainda. A aprovação fica bloqueada até existir documento anexado.'}</div></div>
-                    </div>
-                    {renderBulkApproveDocumentsButton()}
-                  </div>
-                )) : null}
-                <div className={`mt-3 ${activeKind === 'revisao' ? 'grid gap-2 sm:grid-cols-2' : 'space-y-2'}`}>
-                  {reviewDocuments.map(document => (
-                    <DocumentRow key={document.id} process={selectedProcess} document={document} mode={activeKind === 'revisao' ? 'review' : 'collect'} />
-                  ))}
-                  {reviewDocuments.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
-                      Nenhum documento configurado para esta integração.
-                    </p>
-                  )}
-                </div>
-                </>}
-                </section>
-
-                <div className="order-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm">
+                <div className="order-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 shadow-sm">
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-black text-slate-900">Link do formulário público</div>
                     <div className={`mt-0.5 text-xs font-bold ${linkActive ? 'text-blue-600' : 'text-slate-400'}`}>
@@ -11144,27 +10371,113 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     ) : null}
                   </div>
                 </div>
+                </div>
+
+                <div className="order-1 min-w-0 lg:col-start-1">
+                  <OnboardingDocumentWorkbench
+                    documents={reviewDocuments}
+                    canReview={canReviewDocuments}
+                    disabled={activeKind !== 'revisao' || !canActOnCurrentPhase || processIsReadOnly}
+                    busyAction={updating}
+                    onStatusChange={(documentId, status, note) => patchProcess(selectedProcess.id, {
+                      action: 'document_status',
+                      documentId,
+                      status,
+                      note,
+                    })}
+                    onBulkStatusChange={(documentIds, status, note) => patchProcess(selectedProcess.id, {
+                      action: 'document_status_bulk',
+                      documentIds,
+                      status,
+                      note,
+                    })}
+                    onConfirmField={(documentId, fieldKey) => patchProcess(selectedProcess.id, {
+                      action: 'confirm_document_field',
+                      documentId,
+                      fieldKey,
+                    })}
+                    onCorrectField={(documentId, fieldKey, value) => patchProcess(selectedProcess.id, {
+                      action: 'correct_document_field',
+                      documentId,
+                      fieldKey,
+                      value,
+                    })}
+                  />
+                </div>
               </div>
             )}
 
             {/* CONTADOR */}
             {activeKind === 'contador' && canViewAccountant && (
               <div className="mt-4 space-y-4">
-                <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
-                  <button type="button" onClick={() => toggleAccountantStep(1)} aria-expanded={!accountantCollapsedSteps.has(1)} className="flex w-full items-start justify-between gap-3 text-left">
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-wide text-blue-700">Etapa 1 de 3</span>
-                        <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${accountantFormValidated ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{accountantFormValidated ? 'Concluída' : 'Etapa atual'}</span>
-                      </span>
-                      <span className="mt-1 block text-sm font-black text-slate-900">Revise os campos do formulário da contabilidade</span>
-                    </span>
-                    <span className={`mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-white text-blue-700 transition-transform ${accountantCollapsedSteps.has(1) ? '-rotate-90' : ''}`}>
-                      <ChevronDown className="h-4 w-4" />
-                    </span>
-                  </button>
-                  {!accountantCollapsedSteps.has(1) ? <>
-                  <p className="mt-1 text-xs font-semibold text-slate-600">Os campos começam bloqueados. Use “Editar” para alterar e confirme em “OK”; o PDF timbrado será atualizado automaticamente em uma única nova versão, preservada para auditoria.</p>
+                <div className="flex flex-col items-stretch gap-2 md:flex-row md:gap-0" aria-label="Etapas do envio para a contabilidade">
+                  {[
+                    {
+                      number: 1,
+                      label: 'Formulário admissional',
+                      hint: 'conferir e editar os dados',
+                      state: accountantFormValidated ? 'Concluído' : 'Em andamento',
+                      done: accountantFormValidated,
+                      current: !accountantFormValidated,
+                    },
+                    {
+                      number: 2,
+                      label: 'Documentos do pacote',
+                      hint: 'anexos automáticos e opcionais',
+                      state: accountantDocumentSelectionConfirmed ? 'Concluído' : accountantFormValidated ? 'Em andamento' : 'A seguir',
+                      done: accountantDocumentSelectionConfirmed,
+                      current: accountantFormValidated && !accountantDocumentSelectionConfirmed,
+                    },
+                    {
+                      number: 3,
+                      label: 'Envio e Ficha de Registro',
+                      hint: 'e-mail, acompanhamento e retorno',
+                      state: selectedProcess.accountantWorkflow?.registryDocument?.status === 'approved'
+                        ? 'Concluído'
+                        : accountantDocumentSelectionConfirmed ? 'Em andamento' : 'A seguir',
+                      done: selectedProcess.accountantWorkflow?.registryDocument?.status === 'approved',
+                      current: accountantDocumentSelectionConfirmed
+                        && selectedProcess.accountantWorkflow?.registryDocument?.status !== 'approved',
+                    },
+                  ].map((step, index) => {
+                    const selected = accountantActiveStep === step.number;
+                    return <React.Fragment key={step.number}>
+                      <button
+                        type="button"
+                        onClick={() => toggleAccountantStep(step.number)}
+                        aria-current={selected ? 'step' : undefined}
+                        className={`min-w-0 flex-1 rounded-xl border border-b-[3px] px-3 py-3 text-left transition ${
+                          selected
+                            ? 'border-slate-900 border-b-slate-900 bg-white shadow-sm'
+                            : step.done
+                              ? 'border-emerald-100 border-b-emerald-400 bg-emerald-50/50 hover:bg-emerald-50'
+                              : 'border-stone-200 border-b-stone-200 bg-stone-50/70 hover:bg-white'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg font-mono text-[11px] font-bold ${
+                            step.done
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : step.current
+                                ? 'bg-slate-900 text-white'
+                                : 'bg-stone-200 text-stone-500'
+                          }`}>{step.number}</span>
+                          <span className={`min-w-0 truncate text-[12.5px] font-black ${selected ? 'text-slate-950' : 'text-stone-700'}`}>{step.label}</span>
+                        </span>
+                        <span className="mt-1.5 block text-[10.5px] font-semibold leading-snug text-stone-500">{step.hint}</span>
+                        <span className={`mt-1 block text-[9.5px] font-black uppercase tracking-wide ${step.done ? 'text-emerald-600' : step.current ? 'text-slate-900' : 'text-stone-400'}`}>{step.state}</span>
+                      </button>
+                      {index < 2 ? <span className="hidden w-6 shrink-0 items-center justify-center text-stone-300 md:flex"><ChevronRight className="h-4 w-4" /></span> : null}
+                    </React.Fragment>;
+                  })}
+                </div>
+
+                {accountantActiveStep === 1 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.08em] text-stone-500">Formulário admissional</p>
+                    <h4 className="mt-1 text-sm font-black text-slate-900">Dados que vão para o contador</h4>
+                    <p className="mt-1 text-xs font-semibold text-slate-600">Os campos começam bloqueados. Use “Editar” para alterar e confirme em “OK”; o PDF timbrado será atualizado automaticamente em uma única nova versão, preservada para auditoria.</p>
+                  </div>
                   {canEditAccountantFormFields ? <div className="mt-3 flex justify-end">
                     {accountantFormEditing ? <button type="button" disabled={!!accountantActionBusy || !!updating || !expectedAdmissionDateDraft || (canManageAccountantProcess && !accountantFormTextValid) || (canManageAccountantProcess && canViewSensitiveData && !accountantSalaryDraftValid)} onClick={() => void saveAccountantFormFields()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50">{accountantActionBusy === 'set_monthly_salary' || accountantActionBusy === 'set_form_data' || updating === `${selectedProcess.id}:update_expected_admission_date` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}OK</button> : <button type="button" disabled={!!accountantActionBusy || !!updating} onClick={() => setAccountantFormEditing(true)} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 text-xs font-black text-blue-700 disabled:opacity-50"><Pencil className="h-3.5 w-3.5" />Editar</button>}
                   </div> : null}
@@ -11175,7 +10488,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         if (field.key === 'employeeCpf') setAccountantFormTextDraft(previous => ({ ...previous, employeeCpf: formatOnboardingCpf(previous.employeeCpf) }));
                       }} disabled={!accountantFormEditing || !canManageAccountantProcess || !!accountantActionBusy} type="text" className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold normal-case text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" />}
                     </label>)}
-                    <label className="min-w-0 text-[10px] font-black uppercase tracking-wide text-slate-600">Data prevista para admissão
+                    <label className="min-w-0 text-[10px] font-black uppercase tracking-wide text-slate-600">Data de admissão
                       <input value={expectedAdmissionDateDraft} onChange={event => setExpectedAdmissionDateDraft(event.target.value)} disabled={!accountantFormEditing || !canEditExpectedAdmissionDate || !!accountantActionBusy} type="date" className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700" />
                     </label>
                     {canViewSensitiveData ? <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-wide text-slate-600">Remuneração mensal
@@ -11191,23 +10504,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     {selectedProcess.accountantWorkflow?.latestFormId && !accountantFormRequiresRegeneration && !accountantFormValidated && canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantSalaryReady} onClick={() => void accountantAction('validate_form')} className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5"/>{accountantActionBusy === 'validate_form' ? 'Validando...' : 'Validar e avançar para documentos'}</button> : null}
                     {accountantFormValidated ? <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-100 px-3 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5"/>Versão validada</span> : null}
                   </div>
-                  </> : null}
-                </div>
+                </div> : null}
 
-                  <div className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-4">
-                    <button type="button" onClick={() => toggleAccountantStep(2)} aria-expanded={!accountantCollapsedSteps.has(2)} className="flex w-full items-start justify-between gap-3 text-left">
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-[10px] font-black uppercase tracking-wide text-cyan-800">Etapa 2 de 3</span>
-                          <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${accountantDocumentSelectionConfirmed ? 'bg-emerald-100 text-emerald-700' : accountantFormValidated ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-200 text-slate-600'}`}>{accountantDocumentSelectionConfirmed ? 'Concluída' : accountantFormValidated ? 'Etapa atual' : 'Bloqueada'}</span>
-                        </span>
-                        <span className="mt-1 block text-sm font-black text-slate-900">Selecione os documentos para enviar junto com o formulário</span>
-                      </span>
-                      <span className={`mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cyan-200 bg-white text-cyan-800 transition-transform ${accountantCollapsedSteps.has(2) ? '-rotate-90' : ''}`}>
-                        <ChevronDown className="h-4 w-4" />
-                      </span>
-                    </button>
-                    {!accountantCollapsedSteps.has(2) ? <>
+                  {accountantActiveStep === 2 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.08em] text-stone-500">Pacote admissional</p>
+                    <h4 className="mt-1 text-sm font-black text-slate-900">O que vai no e-mail do contador</h4>
                     <p className="mt-1 text-xs font-semibold text-slate-600">O formulário, o ASO, a identificação da candidata e os documentos dos filhos são anexos automáticos. O RH seleciona abaixo somente os demais documentos; itens ainda não aprovados ficam visíveis, mas bloqueados.</p>
                     {!accountantFormValidated ? <p className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white/80 p-3 text-xs font-bold text-slate-600"><LockKeyhole className="h-4 w-4 shrink-0"/>Gere e valide o formulário na etapa 1 para liberar a confirmação dos documentos.</p> : null}
                     <section className="mt-4 rounded-2xl border border-emerald-200 bg-white/80 p-3">
@@ -11264,54 +10565,75 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <p className="mt-2 text-[11px] font-bold text-cyan-900">Selecionados pelo RH: {accountantSelectedDocumentIds.length} de {accountantSelectableDocuments.length} documentos opcionais.</p>
                     {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantFormValidated} onClick={() => void accountantAction('confirm_documents', { selectedDocumentIds: accountantSelectedDocumentIds })} className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">{accountantActionBusy === 'confirm_documents' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <CheckCircle2 className="h-3.5 w-3.5"/>}{accountantDocumentSelectionConfirmed ? 'Documentos confirmados' : 'Confirmar documentos e avançar'}</button> : null}
                     </section>
-                    </> : null}
-                  </div>
+                  </div> : null}
 
-                  <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
-                    <button type="button" onClick={() => toggleAccountantStep(3)} aria-expanded={!accountantCollapsedSteps.has(3)} className="flex w-full items-start justify-between gap-3 text-left">
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-[10px] font-black uppercase tracking-wide text-violet-700">Etapa 3 de 3</span>
-                          <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${selectedProcess.accountantWorkflow?.email?.sentAt ? 'bg-emerald-100 text-emerald-700' : accountantDocumentSelectionConfirmed ? 'bg-violet-100 text-violet-700' : 'bg-slate-200 text-slate-600'}`}>{selectedProcess.accountantWorkflow?.email?.sentAt ? 'Enviado' : accountantDocumentSelectionConfirmed ? 'Etapa atual' : 'Bloqueada'}</span>
-                        </span>
-                        <span className="mt-1 block text-sm font-black text-slate-900">Envie e acompanhe a resolução do e-mail para o contador</span>
-                      </span>
-                      <span className={`mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-white text-violet-700 transition-transform ${accountantCollapsedSteps.has(3) ? '-rotate-90' : ''}`}>
-                        <ChevronDown className="h-4 w-4" />
-                      </span>
-                    </button>
-                    {!accountantCollapsedSteps.has(3) ? <>
-                    <p className="mt-1 text-xs font-semibold text-slate-600">O e-mail levará {2 + accountantAutomaticDocuments.length} anexos automáticos e somente os documentos opcionais marcados acima. Depois do envio, acompanhe entrega, abertura, acesso ao link e retorno da Ficha de Registro de Empregado.</p>
-                    <AsoEmailTrackingMilestones
-                      communication={{
-                        emailStatus: selectedProcess.accountantWorkflow?.email?.status,
-                        sentAt: selectedProcess.accountantWorkflow?.email?.sentAt,
-                        deliveredAt: selectedProcess.accountantWorkflow?.email?.deliveredAt,
-                        openedAt: selectedProcess.accountantWorkflow?.email?.openedAt,
-                        clickedAt: selectedProcess.accountantWorkflow?.email?.clickedAt,
-                        repliedAt: selectedProcess.accountantWorkflow?.registryDocument?.uploadedAt,
-                      }}
-                      includeReply
-                      replyLabel="Ficha anexada"
-                    />
-                    {!accountantDocumentSelectionConfirmed ? <p className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white/80 p-3 text-xs font-bold text-slate-600"><LockKeyhole className="h-4 w-4 shrink-0"/>Confirme os documentos na etapa 2 para liberar o envio ao contador.</p> : null}
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                      <input value={accountantEmail} onChange={event => setAccountantEmail(event.target.value)} disabled={!accountantDocumentSelectionConfirmed || !!accountantActionBusy} type="email" placeholder="E-mail do contador" className="h-9 min-w-0 flex-1 rounded-lg border px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:bg-slate-100" />
-                      {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantEmail || !accountantDocumentSelectionConfirmed} onClick={() => void accountantAction('send_email', { accountantEmail, selectedDocumentIds: accountantSelectedDocumentIds })} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{accountantActionBusy === 'send_email' ? 'Enviando...' : selectedProcess.accountantWorkflow?.email?.sentAt ? 'Reenviar pacote' : 'Enviar ao contador'}</button> : null}
+                  {accountantActiveStep === 3 ? <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-stone-500">Envio ao contador</p>
+                      <h4 className="mt-1 text-sm font-black text-slate-900">E-mail com o pacote admissional</h4>
                     </div>
-                    {selectedProcess.accountantWorkflow?.suggestedRecipientEmail ? <p className="mt-2 text-[11px] font-semibold text-violet-700">Contato sugerido pelo cadastro: {selectedProcess.accountantWorkflow.suggestedRecipientDepartment ?? 'Setor'} · {selectedProcess.accountantWorkflow.suggestedRecipientCompanyName ?? 'Empresa'}.</p> : null}
-                    {selectedProcess.accountantWorkflow?.email?.sentAt ? <p className="mt-2 text-[11px] font-bold text-slate-600">E-mail: {selectedProcess.accountantWorkflow.email.status ?? 'accepted'}{selectedProcess.accountantWorkflow.email.deliveredAt ? ' · entregue' : ''}{selectedProcess.accountantWorkflow.email.openedAt ? ' · aberto' : ''}{selectedProcess.accountantWorkflow.email.clickedAt ? ' · link acessado' : ''}.</p> : null}
-                    {selectedProcess.accountantWorkflow?.package?.attachmentCount ? <p className="mt-1 text-[11px] font-semibold text-slate-500">Último pacote: {selectedProcess.accountantWorkflow.package.attachmentCount} anexos, com {selectedProcess.accountantWorkflow.package.selectedDocumentIds?.length ?? 0} selecionados pelo RH.</p> : null}
-                    </> : null}
-                  </div>
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      <section className="rounded-2xl border border-stone-200 bg-stone-50/50 p-4">
+                        <p className="text-xs font-semibold leading-relaxed text-slate-600">O e-mail levará {2 + accountantAutomaticDocuments.length} anexos automáticos e somente os documentos opcionais marcados. Depois do envio, o retorno fica registrado ao lado.</p>
+                        {!accountantDocumentSelectionConfirmed ? <p className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white/80 p-3 text-xs font-bold text-slate-600"><LockKeyhole className="h-4 w-4 shrink-0"/>Confirme os documentos na etapa 2 para liberar o envio ao contador.</p> : null}
+                        <label className="mt-3 block text-[9.5px] font-black uppercase tracking-wide text-stone-500">
+                          Destinatário
+                          <span className="mt-1 flex flex-col gap-2 normal-case sm:flex-row">
+                            <input value={accountantEmail} onChange={event => setAccountantEmail(event.target.value)} disabled={!accountantDocumentSelectionConfirmed || !!accountantActionBusy} type="email" placeholder="E-mail do contador" className="h-9 min-w-0 flex-1 rounded-lg border border-stone-200 bg-white px-3 text-xs font-semibold text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100" />
+                            {canManageAccountantProcess ? <button type="button" disabled={!!accountantActionBusy || !accountantEmail || !accountantDocumentSelectionConfirmed} onClick={() => void accountantAction('send_email', { accountantEmail, selectedDocumentIds: accountantSelectedDocumentIds })} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50"><Send className="h-3.5 w-3.5"/>{accountantActionBusy === 'send_email' ? 'Enviando...' : selectedProcess.accountantWorkflow?.email?.sentAt ? 'Reenviar pacote' : 'Enviar ao contador'}</button> : null}
+                          </span>
+                        </label>
+                        {selectedProcess.accountantWorkflow?.suggestedRecipientEmail ? <p className="mt-2 text-[11px] font-semibold text-violet-700">Contato sugerido pelo cadastro: {selectedProcess.accountantWorkflow.suggestedRecipientDepartment ?? 'Setor'} · {selectedProcess.accountantWorkflow.suggestedRecipientCompanyName ?? 'Empresa'}.</p> : null}
+                        {selectedProcess.accountantWorkflow?.email?.sentAt ? <p className="mt-2 text-[11px] font-bold text-slate-600">E-mail: {selectedProcess.accountantWorkflow.email.status ?? 'accepted'}{selectedProcess.accountantWorkflow.email.deliveredAt ? ' · entregue' : ''}{selectedProcess.accountantWorkflow.email.openedAt ? ' · aberto' : ''}{selectedProcess.accountantWorkflow.email.clickedAt ? ' · link acessado' : ''}.</p> : null}
+                        {selectedProcess.accountantWorkflow?.package?.attachmentCount ? <p className="mt-1 text-[11px] font-semibold text-slate-500">Último pacote: {selectedProcess.accountantWorkflow.package.attachmentCount} anexos, com {selectedProcess.accountantWorkflow.package.selectedDocumentIds?.length ?? 0} selecionados pelo RH.</p> : null}
+                      </section>
 
-                {selectedProcess.accountantWorkflow?.registryDocument?.storagePath ? <div className="rounded-2xl border border-pink-200 bg-pink-50/60 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-wide text-pink-700">4. Ficha de Registro de Empregado</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">Ficha recebida da contabilidade</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-600">{selectedProcess.accountantWorkflow.registryDocument.fileName} · situação: {selectedProcess.accountantWorkflow.registryDocument.status}</p>
-                  {selectedProcess.accountantWorkflow.registryDocument.rejectionReason ? <p className="mt-2 rounded-lg bg-rose-100 p-2 text-xs font-bold text-rose-700">Motivo: {selectedProcess.accountantWorkflow.registryDocument.rejectionReason}</p> : null}
-                  <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void openAccountantAsset('registry')} className="h-9 rounded-lg border border-pink-200 bg-white px-3 text-xs font-black text-pink-700">Abrir ficha</button>{canManageAccountantProcess && selectedProcess.accountantWorkflow.registryDocument.status !== 'approved' ? <><button type="button" disabled={!!accountantActionBusy} onClick={() => void accountantAction('review_registry', { decision: 'approved' })} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Aprovar ficha</button><button type="button" disabled={!!accountantActionBusy} onClick={() => { const reason = window.prompt('Motivo da rejeição:'); if (reason) void accountantAction('review_registry', { decision: 'rejected', reason }); }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-black text-white">Rejeitar</button></> : null}</div>
-                </div> : selectedProcess.accountantWorkflow?.email?.sentAt ? <div className="rounded-xl border border-dashed border-pink-200 bg-pink-50/40 p-4 text-xs font-semibold text-pink-800">Aguardando o contador enviar a Ficha de Registro de Empregado pelo link exclusivo.</div> : null}
+                      <section className="rounded-2xl border border-stone-200 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.08em] text-stone-500">Acompanhamento</p>
+                        <AsoEmailTrackingMilestones
+                          communication={{
+                            emailStatus: selectedProcess.accountantWorkflow?.email?.status,
+                            sentAt: selectedProcess.accountantWorkflow?.email?.sentAt,
+                            deliveredAt: selectedProcess.accountantWorkflow?.email?.deliveredAt,
+                            openedAt: selectedProcess.accountantWorkflow?.email?.openedAt,
+                            clickedAt: selectedProcess.accountantWorkflow?.email?.clickedAt,
+                            repliedAt: selectedProcess.accountantWorkflow?.registryDocument?.uploadedAt,
+                          }}
+                          includeReply
+                          replyLabel="Ficha anexada"
+                        />
+                        {selectedProcess.accountantWorkflow?.registryDocument?.storagePath ? <div className="mt-3 rounded-xl border border-pink-200 bg-pink-50/60 p-3">
+                          <p className="text-[10px] font-black uppercase tracking-wide text-pink-700">4 · Ficha de Registro de Empregado</p>
+                          <p className="mt-1 text-sm font-black text-slate-900">{selectedProcess.accountantWorkflow.registryDocument.uploadSource === 'rh' ? 'Ficha anexada pelo RH' : 'Ficha recebida da contabilidade'}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-600">{selectedProcess.accountantWorkflow.registryDocument.fileName} · situação: {selectedProcess.accountantWorkflow.registryDocument.status}</p>
+                          {selectedProcess.accountantWorkflow.registryDocument.rejectionReason ? <p className="mt-2 rounded-lg bg-rose-100 p-2 text-xs font-bold text-rose-700">Motivo: {selectedProcess.accountantWorkflow.registryDocument.rejectionReason}</p> : null}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button type="button" onClick={() => void openAccountantAsset('registry')} className="h-9 rounded-lg border border-pink-200 bg-white px-3 text-xs font-black text-pink-700">Abrir ficha</button>
+                            {canManageAccountantProcess && selectedProcess.accountantWorkflow.registryDocument.status !== 'approved' ? <>
+                              <button type="button" disabled={!!accountantActionBusy} onClick={() => void accountantAction('review_registry', { decision: 'approved' })} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white disabled:opacity-50">Aprovar ficha</button>
+                              <button type="button" disabled={!!accountantActionBusy} onClick={() => { const reason = window.prompt('Motivo da rejeição:'); if (reason) void accountantAction('review_registry', { decision: 'rejected', reason }); }} className="h-9 rounded-lg bg-rose-600 px-3 text-xs font-black text-white disabled:opacity-50">Rejeitar</button>
+                            </> : null}
+                            {canManageAccountantProcess && selectedProcess.accountantWorkflow.registryDocument.status === 'rejected' ? <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-pink-200 bg-white px-3 text-xs font-black text-pink-700 hover:bg-pink-50">
+                              {accountantActionBusy === 'upload_registry' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                              {accountantActionBusy === 'upload_registry' ? 'Anexando...' : 'Substituir pelo RH'}
+                              <input type="file" accept="application/pdf,.pdf" disabled={!!accountantActionBusy} className="hidden" onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void uploadAccountantRegistryByRh(file); }} />
+                            </label> : null}
+                          </div>
+                        </div> : accountantDocumentSelectionConfirmed ? <div className="mt-3 rounded-xl border border-dashed border-pink-200 bg-pink-50/40 p-3">
+                          <p className="text-[10px] font-black uppercase tracking-wide text-pink-700">4 · Ficha de Registro de Empregado</p>
+                          <p className="mt-1 text-xs font-semibold leading-relaxed text-pink-800">Aguardando o contador enviar a ficha pelo link exclusivo. Se o RH receber o documento por outro canal, também pode anexá-lo aqui.</p>
+                          {canManageAccountantProcess ? <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <label className={`inline-flex h-9 items-center gap-2 rounded-lg bg-pink-600 px-3 text-xs font-black text-white ${accountantActionBusy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-pink-700'}`}>
+                              {accountantActionBusy === 'upload_registry' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                              {accountantActionBusy === 'upload_registry' ? 'Anexando...' : 'Anexar ficha pelo RH'}
+                              <input type="file" accept="application/pdf,.pdf" disabled={!!accountantActionBusy} className="hidden" onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void uploadAccountantRegistryByRh(file); }} />
+                            </label>
+                            <span className="text-[10.5px] font-semibold text-pink-700">PDF de até 15 MB · o anexo conclui esta etapa automaticamente.</span>
+                          </div> : null}
+                        </div> : null}
+                      </section>
+                    </div>
+                  </div> : null}
               </div>
             )}
 
@@ -11337,6 +10659,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                   shiftDefinitions={shiftDefinitions}
                   unitId={selectedProcess.unitId}
                   disabled={!canActOnCurrentPhase || userCreated}
+                  compact
                   transportVoucherMode="summary"
                   transportVoucherAnswered={selectedProcess.publicFormAnswers?.wantsTransportVoucher === 'yes' || selectedProcess.publicFormAnswers?.wantsTransportVoucher === 'no'}
                 />
@@ -11351,26 +10674,29 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     {updating === `${selectedProcess.id}:save_finalization`
                       ? <Loader2 className="h-4 w-4 animate-spin" />
                       : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-                    Salvar configurações finais
+                    Confirmar validação e avançar para acessos
                   </button>
                 ) : null}
+              </div>
+            )}
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            {/* INTEGRACAO */}
+            {activeKind === 'integracao' && (
+              <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="text-xs font-black uppercase tracking-wide text-slate-700">Liberação de acesso</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">
-                        A formalização avança automaticamente quando o e-mail for entregue e a senha for cadastrada.
-                      </p>
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-700">Cadastro e primeiro acesso</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Crie o colaborador, envie o acesso e acompanhe a ativação da conta.</p>
                     </div>
                     {formalizationAccessCompleted ? (
                       <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">Concluído</span>
                     ) : null}
                   </div>
 
-                  <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  <div className="mt-3 space-y-2">
                     {accessIndicators.map(indicator => (
-                      <div key={indicator.label} className="rounded-xl border border-white bg-white px-3 py-3 shadow-sm">
+                      <div key={indicator.label} className={`rounded-xl border px-3 py-3 ${indicator.state === 'done' ? 'border-emerald-200 bg-emerald-50' : indicator.state === 'failed' ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50'}`}>
                         <div className="flex items-center gap-2">
                           {indicator.state === 'done' ? (
                             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
@@ -11381,17 +10707,13 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                           )}
                           <span className="text-[12px] font-black text-slate-900">{indicator.label}</span>
                         </div>
-                        <p className={`mt-1.5 text-[10.5px] font-semibold ${indicator.state === 'failed' ? 'text-rose-600' : 'text-slate-500'}`}>
-                          {indicator.detail}
-                        </p>
+                        <p className={`mt-1.5 text-[10.5px] font-semibold ${indicator.state === 'failed' ? 'text-rose-600' : indicator.state === 'done' ? 'text-emerald-700' : 'text-slate-500'}`}>{indicator.detail}</p>
                       </div>
                     ))}
                   </div>
 
                   {selectedProcess.candidateEmail ? (
-                    <p className="mt-3 text-[11px] font-semibold text-slate-500">
-                      Destinatário: <span className="font-black text-slate-700">{selectedProcess.candidateEmail}</span>
-                    </p>
+                    <p className="mt-3 break-all text-[11px] font-semibold text-slate-500">Destinatário: <span className="font-black text-slate-700">{selectedProcess.candidateEmail}</span></p>
                   ) : null}
 
                   {canManage && !userCreated ? (
@@ -11399,16 +10721,10 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       type="button"
                       disabled={!canCreateCollaborator || updating === `${selectedProcess.id}:create_collaborator`}
                       onClick={() => createCollaborator(selectedProcess.id)}
-                      className={`mt-3 inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl text-[13.5px] font-bold text-white ${
-                        canCreateCollaborator
-                          ? 'bg-pink-600 shadow-lg shadow-pink-600/25 hover:bg-pink-700'
-                          : 'cursor-not-allowed bg-slate-300'
-                      }`}
+                      className={`mt-3 inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl text-[13.5px] font-bold text-white ${canCreateCollaborator ? 'bg-pink-600 shadow-lg shadow-pink-600/25 hover:bg-pink-700' : 'cursor-not-allowed bg-slate-300'}`}
                     >
-                      {updating === `${selectedProcess.id}:create_collaborator`
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <UserPlus className="h-4 w-4" />}
-                      {canCreateCollaborator ? 'Criar cadastro e enviar acesso' : 'Salve as configurações para enviar'}
+                      {updating === `${selectedProcess.id}:create_collaborator` ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                      {canCreateCollaborator ? 'Criar cadastro e enviar acesso' : 'Conclua a validação para criar o acesso'}
                     </button>
                   ) : null}
 
@@ -11419,21 +10735,15 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                       onClick={() => createFirstAccessLink(selectedProcess.id)}
                       className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[12.5px] font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                     >
-                      {updating === `${selectedProcess.id}:create_first_access_link`
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <RotateCw className="h-4 w-4" />}
+                      {updating === `${selectedProcess.id}:create_first_access_link` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
                       {firstAccessExpired || emailDeliveryFailed ? 'Gerar novo link e reenviar acesso' : 'Reenviar e-mail de acesso'}
                     </button>
                   ) : null}
-                </div>
-              </div>
-            )}
+                </section>
 
-            {/* INTEGRACAO */}
-            {activeKind === 'integracao' && (
-              <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-4 py-3.5">
-                  <p className="text-[14px] font-black text-slate-950">Sistemas</p>
+                  <p className="text-[14px] font-black text-slate-950">Integrações externas</p>
                   <p className="mt-0.5 text-[11.5px] font-semibold text-slate-500">
                     Cadastre, acompanhe e sincronize os acessos do novo colaborador.
                   </p>
@@ -11458,7 +10768,7 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     </div>
                   ) : null}
                 </div>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid gap-2.5 sm:grid-cols-2">
                   {[
                     { name: 'Bizneo HR', desc: 'Sincroniza dados cadastrais e ponto.', alert: bizneoAlert },
                     { name: 'PDV Legal', desc: 'Habilita operação no ponto de venda.', alert: pdvAlert },
@@ -11500,12 +10810,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                           check.completed
                             ? 'border-emerald-200 bg-emerald-50'
                             : 'border-slate-200 bg-slate-50'
-                        } ${canManage && canActOnCurrentPhase ? 'cursor-pointer hover:border-pink-200' : 'cursor-not-allowed opacity-70'}`}
+                        } ${canManage && canActOnCurrentPhase && userCreated ? 'cursor-pointer hover:border-pink-200' : 'cursor-not-allowed opacity-70'}`}
                       >
                         <input
                           type="checkbox"
                           checked={check.completed}
-                          disabled={!canManage || !canActOnCurrentPhase || updating === `${selectedProcess.id}:set_access_operational_check`}
+                          disabled={!canManage || !canActOnCurrentPhase || !userCreated || updating === `${selectedProcess.id}:set_access_operational_check`}
                           onChange={event => void patchProcess(selectedProcess.id, {
                             action: 'set_access_operational_check',
                             checkId: check.id,
@@ -11536,28 +10846,6 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     {updating === `${selectedProcess.id}:verify_integrations` ? 'Sincronizando códigos...' : 'Sincronizar acessos'}
                   </button>
                 ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5">
-                  <div className="min-w-0">
-                    <div className="text-[12.5px] font-black text-slate-900">Acesso ao Coala One</div>
-                    <div className={`mt-0.5 text-xs font-bold ${passwordCreated ? 'text-emerald-600' : userCreated ? 'text-blue-600' : 'text-slate-400'}`}>
-                      {passwordCreated ? 'Senha cadastrada' : userCreated ? 'Aguardando primeiro acesso' : 'Cadastro ainda não criado'}
-                    </div>
-                  </div>
-                  {userCreated && selectedProcess.firstAccess?.status !== 'used' ? (
-                    <button
-                      type="button"
-                      disabled={updating === `${selectedProcess.id}:create_first_access_link`}
-                      onClick={() => createFirstAccessLink(selectedProcess.id)}
-                      className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-[12.5px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      {updating === `${selectedProcess.id}:create_first_access_link`
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <RotateCw className="h-3.5 w-3.5" />}
-                      Reenviar acesso
-                    </button>
-                  ) : null}
-                </div>
-
                 {canManage && (
                   <>
                     {!finalizationSaved && !userCreated ? (
@@ -11565,15 +10853,11 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                         Salve a validação final antes de criar o colaborador.
                       </p>
                     ) : null}
-                    {!userCreated ? (
-                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-bold text-amber-800">
-                        Retorne à etapa Formalização · Finalização para criar o cadastro e enviar o acesso.
-                      </p>
-                    ) : (
+                    {userCreated ? (
                       <button
                         type="button"
                         disabled={!canComplete || updating === `${selectedProcess.id}:complete`}
-                        onClick={() => patchProcess(selectedProcess.id, { action: 'complete' })}
+                        onClick={() => void completeOnboarding(selectedProcess.id)}
                         className="inline-flex h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-[13.5px] font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {updating === `${selectedProcess.id}:complete`
@@ -11581,14 +10865,17 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                           : <CheckCircle2 className="h-4 w-4" />}
                         {selectedProcess.status === 'completed'
                           ? 'Integração finalizada'
-                          : integrationsResolved
-                            ? 'Finalizar integração'
-                            : 'Sincronize Bizneo e PDV para avançar'}
+                          : !formalizationAccessCompleted
+                            ? 'Aguardando primeiro acesso'
+                            : integrationsResolved
+                              ? 'Finalizar integração'
+                              : 'Sincronize Bizneo e PDV para avançar'}
                       </button>
-                    )}
+                    ) : null}
                   </>
                 )}
                 </div>
+              </div>
               </div>
             )}
 
@@ -11788,7 +11075,20 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
             )}
 
             {/* GENERICO */}
-            {activeKind === 'generico' && (
+            {activeKind === 'generico' && activePhaseId === 'done' ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm">
+                <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-100 text-emerald-600">
+                  <CheckCircle2 className="h-7 w-7" />
+                </span>
+                <h3 className="mt-3 text-lg font-black tracking-tight text-slate-950">Integração finalizada</h3>
+                <p className="mx-auto mt-1.5 max-w-2xl text-[13px] font-medium leading-relaxed text-slate-600">
+                  Formalização concluída, acessos ativos e histórico consolidado. Documentos, comunicações e decisões permanecem preservados no processo para consulta e auditoria.
+                </p>
+                <span className="mt-4 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700">
+                  <ShieldCheck className="h-4 w-4" /> Histórico auditável preservado
+                </span>
+              </div>
+            ) : activeKind === 'generico' ? (
               <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-5 py-[18px]">
                 <div className="flex items-center gap-2.5">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-600">
@@ -11798,12 +11098,12 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                 </div>
                 <p className="mt-3 text-[13px] font-medium leading-relaxed text-slate-500">{genericDesc}</p>
               </div>
-            )}
+            ) : null}
 
-            {/* EXPERIENCIA (avaliações de experiência + efetivação) */}
+            {/* EXPERIÊNCIA E TREINAMENTO */}
             {activeKind === 'experiencia' && (
-              selectedProcess.probationV2 ? (
-                <div className="mt-4">
+              <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
+                {selectedProcess.probationV2 ? (
                   <ProbationV2Panel
                     process={selectedProcess}
                     getToken={getToken}
@@ -11811,9 +11111,8 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     formalizationComplete={probationReleased}
                     onRefresh={onRefresh}
                   />
-                </div>
-              ) : (
-                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-5 py-[18px]">
+                ) : (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 px-5 py-[18px]">
                   <div className="flex items-center gap-2.5">
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-600">
                       <CheckCircle2 className="h-4 w-4" />
@@ -11821,19 +11120,22 @@ function OnboardingView({ processes, roles, jobFunctions, units, shiftDefinition
                     <div className="text-sm font-black text-slate-900">{genericStatus}</div>
                   </div>
                   <p className="mt-3 text-[13px] font-medium leading-relaxed text-slate-500">{genericDesc}</p>
-                </div>
-              )
-            )}
+                  </div>
+                )}
 
-            {/* TREINAMENTO */}
-            {activeKind === 'training' && (
-              <div className="mt-4 rounded-2xl border border-slate-100 bg-white">
-                <TrainingPanel
-                  process={selectedProcess}
-                  getToken={getToken}
-                  canManage={canManage && !processIsReadOnly}
-                  onRefresh={onRefresh}
-                />
+                <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white">
+                  <div className="border-b border-violet-100 bg-violet-50/70 px-5 py-4">
+                    <p className="text-[11px] font-black uppercase tracking-[0.08em] text-violet-700">Treinamento</p>
+                    <h3 className="mt-1 text-base font-black text-slate-950">Trilhas atribuídas</h3>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Acompanhe as atividades de capacitação dos primeiros dias.</p>
+                  </div>
+                  <TrainingPanel
+                    process={selectedProcess}
+                    getToken={getToken}
+                    canManage={canManage && selectedProcess.status !== 'cancelled'}
+                    onRefresh={onRefresh}
+                  />
+                </section>
               </div>
             )}
           </div>
@@ -11872,6 +11174,12 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
   const [shiftDefinitions, setShiftDefinitions] = useState<DPShiftDefinition[]>([]);
   const [openings, setOpenings] = useState<JobOpening[]>([]);
   const [onboardingProcesses, setOnboardingProcesses] = useState<OnboardingProcess[]>([]);
+  const [onboardingPageInfo, setOnboardingPageInfo] = useState<OnboardingPageInfo>({
+    active: { limit: 120, hasMore: false, cursorId: null },
+    completed: { limit: 40, hasMore: false, cursorId: null },
+    cancelled: { limit: 40, hasMore: false, cursorId: null },
+  });
+  const [loadingMoreOnboardingScope, setLoadingMoreOnboardingScope] = useState<OnboardingProcessScope | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -11945,9 +11253,9 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
         canViewRecruitment
           ? fetch('/api/hr/openings', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<JobOpening[]>(response, 'Falha ao carregar vagas.'))
           : Promise.resolve([]),
-        canViewFormalization
-          ? fetch('/api/hr/onboarding', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<{ processes?: OnboardingProcess[] }>(response, 'Falha ao carregar integrações.'))
-          : Promise.resolve({ processes: [] }),
+        canViewFormalization && section === 'integration'
+          ? fetch('/api/hr/onboarding', { headers: { Authorization: `Bearer ${token}` } }).then(response => readHrJsonResponse<{ processes?: OnboardingProcess[]; pageInfo?: OnboardingPageInfo }>(response, 'Falha ao carregar integrações.'))
+          : Promise.resolve({ processes: [], pageInfo: undefined }),
       ]);
       setCandidates(candidatesRes as Candidate[]);
       setRoles(rolesRes.roles);
@@ -11956,6 +11264,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
       setShiftDefinitions(rolesRes.shiftDefinitions ?? []);
       setOpenings(openingsRes as JobOpening[]);
       setOnboardingProcesses(Array.isArray(onboardingRes?.processes) ? onboardingRes.processes as OnboardingProcess[] : []);
+      if (onboardingRes?.pageInfo) setOnboardingPageInfo(onboardingRes.pageInfo);
       hasLoadedDataRef.current = true;
       setError(null);
     } catch (err) {
@@ -11965,7 +11274,34 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
     } finally {
       if (isInitialLoad) setLoading(false);
     }
-  }, [authLoading, firebaseUser, canView, canViewFormalization, canViewRecruitment, getToken]);
+  }, [authLoading, firebaseUser, canView, canViewFormalization, canViewRecruitment, getToken, section]);
+
+  const loadMoreOnboarding = useCallback(async (scope: OnboardingProcessScope) => {
+    if (!firebaseUser || loadingMoreOnboardingScope || !onboardingPageInfo[scope].hasMore) return;
+    const cursorId = onboardingPageInfo[scope].cursorId;
+    if (!cursorId) return;
+    setLoadingMoreOnboardingScope(scope);
+    setRefreshError(null);
+    try {
+      const token = await getToken();
+      const params = new URLSearchParams({ scope, cursorId });
+      const payload = await fetch(`/api/hr/onboarding?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then(response => readHrJsonResponse<{ processes?: OnboardingProcess[]; pageInfo?: Partial<OnboardingPageInfo> }>(response, 'Falha ao carregar mais integrações.'));
+      const received = Array.isArray(payload.processes) ? payload.processes : [];
+      setOnboardingProcesses(current => {
+        const byId = new Map(current.map(process => [process.id, process]));
+        received.forEach(process => byId.set(process.id, process));
+        return Array.from(byId.values());
+      });
+      const nextPageInfo = payload.pageInfo?.[scope];
+      if (nextPageInfo) setOnboardingPageInfo(current => ({ ...current, [scope]: nextPageInfo }));
+    } catch (caught) {
+      setRefreshError(caught instanceof Error ? caught.message : 'Falha ao carregar mais integrações.');
+    } finally {
+      setLoadingMoreOnboardingScope(null);
+    }
+  }, [firebaseUser, getToken, loadingMoreOnboardingScope, onboardingPageInfo]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -12742,6 +12078,8 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
       {section === 'integration' && (
         <OnboardingView
           processes={onboardingProcesses}
+          pageInfo={onboardingPageInfo}
+          loadingMoreScope={loadingMoreOnboardingScope}
           roles={roles}
           jobFunctions={functions}
           units={units}
@@ -12758,6 +12096,7 @@ export function RecruitmentShell({ section = 'jobs' }: { section?: RecruitmentSe
           canReviewDocuments={canReviewDocuments}
           canSendSignatures={canSendSignatures}
           onRefresh={loadData}
+          onLoadMore={loadMoreOnboarding}
           onProcessUpdated={updateOnboardingProcess}
           onAsoPaymentUpdated={updateOnboardingAsoPayment}
           onAsoWorkflowUpdated={updateOnboardingAsoWorkflow}

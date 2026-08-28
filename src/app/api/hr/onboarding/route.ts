@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
+import { FieldPath, type Query } from 'firebase-admin/firestore';
 
 import { assertFormalizationAccess, serializeHrValue } from '@/features/hr/lib/server-access';
 import { shiftDefinitionMatchesUnit } from '@/lib/dp-shift-definitions';
@@ -18,10 +19,10 @@ import { probationConfigSchema, type IntegrationTemplateVersion } from '@/featur
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { CnpjValidator } from '@/lib/company/cnpj-validator';
 import { resolveCompanyProcessContact } from '@/lib/company/company-process-contact.server';
-import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { fetchPdvLegalFiliais, fetchPdvLegalProfiles } from '@/lib/integrations/pdv-legal-admin';
 import { createPjOnboardingWorkflow, sanitizePjServiceItems } from '@/features/hr/onboarding-pj/core';
+import { redactOnboardingProcess } from '@/features/hr/onboarding/process-redaction.server';
 import {
   resolveConfiguredMonthlySalary,
   salaryBaseFunctionId,
@@ -37,6 +38,24 @@ import {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const ACTIVE_ONBOARDING_STATUSES = [
+  'pending_setup',
+  'collecting_documents',
+  'reviewing_documents',
+  'accountant_pending',
+  'contract_pending',
+  'ready_to_create_user',
+  'awaiting_first_access',
+  'active',
+] as const;
+const ONBOARDING_OVERVIEW_LIMITS = {
+  active: 120,
+  completed: 40,
+  cancelled: 40,
+} as const;
+const ONBOARDING_PAGE_LIMIT = 40;
+type OnboardingScope = keyof typeof ONBOARDING_OVERVIEW_LIMITS;
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -117,8 +136,10 @@ async function createPjOnboarding(params: {
 
   const existing = await hrDbAdmin.collection('onboardingProcesses')
     .where('providerCnpj', '==', providerCnpj)
+    .where('status', 'in', [...ACTIVE_ONBOARDING_STATUSES])
+    .limit(1)
     .get();
-  const duplicate = existing.docs.find(document => !['cancelled', 'completed'].includes(String(document.get('status') ?? '')));
+  const duplicate = existing.docs[0];
   if (duplicate) return jsonError('Já existe uma integração em andamento para este CNPJ.', 409);
 
   const now = new Date().toISOString();
@@ -231,81 +252,88 @@ async function createPjOnboarding(params: {
   }, { status: 201 });
 }
 
-function redactOnboardingProcess(
-  process: Record<string, unknown>,
-  access: Awaited<ReturnType<typeof assertFormalizationAccess>>,
-) {
-  const result = structuredClone(process) as Record<string, unknown>;
-  const allowed = (action: Parameters<typeof hasFormalizationPermission>[1]) =>
-    hasFormalizationPermission(access.permissions, action, access.isDefaultAdmin);
-  const accountantWorkflow = result.accountantWorkflow && typeof result.accountantWorkflow === 'object' && !Array.isArray(result.accountantWorkflow)
-    ? result.accountantWorkflow as Record<string, unknown>
-    : null;
-  const accountantFormData = accountantWorkflow?.formData && typeof accountantWorkflow.formData === 'object' && !Array.isArray(accountantWorkflow.formData)
-    ? accountantWorkflow.formData as Record<string, unknown>
-    : null;
-  const configuredSalary = asNumber(result.monthlySalary) ?? asNumber(accountantFormData?.monthlySalary);
-  result.monthlySalaryConfigured = configuredSalary !== null && configuredSalary > 0;
-
-  if (!allowed('aso.view')) delete result.asoWorkflow;
-  if (!allowed('accountant.view')) delete result.accountantWorkflow;
-  if (!allowed('consents.view')) {
-    delete result.consentimento_imagem_voz;
-    delete result.publicPrivacyAcceptance;
-  }
-  if (!allowed('onboarding.manage')) {
-    delete result.publicToken;
-    delete result.publicTokenExtendedBy;
-  }
-  if (!allowed('documents.view')) {
-    const documents = Array.isArray(result.documents) ? result.documents : [];
-    result.documents = documents.map(entry => {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
-      const document = { ...(entry as Record<string, unknown>) };
-      delete document.fileUrl;
-      delete document.storagePath;
-      delete document.hashSha256;
-      return document;
-    });
-  }
-  if (!allowed('sensitiveData.view')) {
-    delete result.monthlySalary;
-    if (accountantFormData) delete accountantFormData.monthlySalary;
-    const answers = result.publicFormAnswers && typeof result.publicFormAnswers === 'object' && !Array.isArray(result.publicFormAnswers)
-      ? { ...(result.publicFormAnswers as Record<string, unknown>) }
-      : null;
-    if (answers) {
-      for (const key of ['cpf', 'rg', 'identityNumber', 'bankName', 'bankAgency', 'bankAccount', 'pixKey']) {
-        delete answers[key];
-      }
-      if (Array.isArray(answers.children)) {
-        answers.children = answers.children.map(child => {
-          if (!child || typeof child !== 'object' || Array.isArray(child)) return child;
-          const safeChild = { ...(child as Record<string, unknown>) };
-          delete safeChild.cpf;
-          return safeChild;
-        });
-      }
-      result.publicFormAnswers = answers;
-    }
-  }
-  return result;
-}
-
 export async function GET(request: NextRequest) {
   const access = await assertFormalizationAccess(request, 'view').catch(() => null);
   if (!access) return jsonError('Sem permissão para acessar onboarding.', 403);
 
-  const snapshot = await hrDbAdmin
-    .collection('onboardingProcesses')
-    .orderBy('createdAt', 'desc')
-    .get();
+  const collection = hrDbAdmin.collection('onboardingProcesses');
+  const scopedQuery = (scope: OnboardingScope) => {
+    const scoped = scope === 'active'
+      ? collection.where('status', 'in', [...ACTIVE_ONBOARDING_STATUSES])
+      : collection.where('status', '==', scope);
+    return scoped
+      .orderBy('createdAt', 'desc')
+      .orderBy(FieldPath.documentId(), 'desc') as Query;
+  };
+
+  const requestedScope = request.nextUrl.searchParams.get('scope');
+  if (requestedScope) {
+    if (!['active', 'completed', 'cancelled'].includes(requestedScope)) {
+      return jsonError('Escopo de paginação inválido.');
+    }
+    const scope = requestedScope as OnboardingScope;
+    const cursorId = request.nextUrl.searchParams.get('cursorId');
+    let query = scopedQuery(scope);
+    if (cursorId) {
+      const cursorDocument = await collection.doc(cursorId).get();
+      if (!cursorDocument.exists) return jsonError('Cursor de paginação expirado.', 409);
+      const cursorStatus = String(cursorDocument.get('status') ?? '');
+      const cursorMatchesScope = scope === 'active'
+        ? ACTIVE_ONBOARDING_STATUSES.includes(cursorStatus as (typeof ACTIVE_ONBOARDING_STATUSES)[number])
+        : cursorStatus === scope;
+      if (!cursorMatchesScope) return jsonError('Cursor de paginação não pertence a esta lista.', 409);
+      query = query.startAfter(cursorDocument);
+    }
+    const snapshot = await query.limit(ONBOARDING_PAGE_LIMIT + 1).get();
+    const pageDocuments = snapshot.docs.slice(0, ONBOARDING_PAGE_LIMIT);
+    const lastDocument = pageDocuments.at(-1);
+    return NextResponse.json({
+      processes: pageDocuments.map(doc => redactOnboardingProcess({
+        id: doc.id,
+        ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),
+      }, access)),
+      pageInfo: {
+        [scope]: {
+          limit: ONBOARDING_PAGE_LIMIT,
+          hasMore: snapshot.docs.length > ONBOARDING_PAGE_LIMIT,
+          cursorId: lastDocument?.id ?? null,
+        },
+      },
+    });
+  }
+
+  const overviewQuery = (scope: OnboardingScope) => scopedQuery(scope)
+    .limit(ONBOARDING_OVERVIEW_LIMITS[scope] + 1);
+  const [activeSnapshot, completedSnapshot, cancelledSnapshot] = await Promise.all([
+    overviewQuery('active').get(),
+    overviewQuery('completed').get(),
+    overviewQuery('cancelled').get(),
+  ]);
+  const snapshots = {
+    active: activeSnapshot,
+    completed: completedSnapshot,
+    cancelled: cancelledSnapshot,
+  };
+  const pageInfo = Object.fromEntries(
+    (Object.keys(snapshots) as OnboardingScope[]).map(scope => {
+      const pageDocuments = snapshots[scope].docs.slice(0, ONBOARDING_OVERVIEW_LIMITS[scope]);
+      const lastDocument = pageDocuments.at(-1);
+      return [scope, {
+      limit: ONBOARDING_OVERVIEW_LIMITS[scope],
+      hasMore: snapshots[scope].docs.length > ONBOARDING_OVERVIEW_LIMITS[scope],
+      cursorId: lastDocument?.id ?? null,
+    }];
+    }),
+  );
+  const documents = (Object.keys(snapshots) as OnboardingScope[])
+    .flatMap(scope => snapshots[scope].docs.slice(0, ONBOARDING_OVERVIEW_LIMITS[scope]));
 
   return NextResponse.json({
-    processes: snapshot.docs.map(doc => redactOnboardingProcess({
+    processes: documents.map(doc => redactOnboardingProcess({
       id: doc.id,
       ...((serializeHrValue(doc.data()) as Record<string, unknown>) ?? {}),
     }, access)),
+    pageInfo,
   });
 }
 
@@ -350,6 +378,7 @@ export async function POST(request: NextRequest) {
     return jsonError('Selecione o tipo de vínculo: CLT, PJ ou Estágio.');
   }
   if (!employerUnitId) return jsonError('Selecione o CNPJ responsável pela contratação.');
+  if (!expectedAdmissionDate) return jsonError('Informe a data prevista de admissão.');
   if (integrationMode === 'import' && !integrationTemplateId) return jsonError('Selecione o modelo que será importado.');
   if (transportVoucherValue === null || transportVoucherValue < 0) {
     return jsonError('Informe o valor diário do vale-transporte.');

@@ -277,7 +277,8 @@ function normalizedFieldConfidences(value: unknown): Record<string, number> {
 function estimateCostUsd(model: string, inputTokens: number | null, outputTokens: number | null) {
   if (inputTokens == null && outputTokens == null) return null;
   const normalized = model.toLowerCase();
-  const rates = normalized.includes("luna") ? [1, 6] : normalized.includes("sol") ? [5, 30] : [2.5, 15];
+  // Standard synchronous processing, per 1M tokens (OpenAI pricing, 2026-08-25).
+  const rates = normalized.includes("luna") ? [0.2, 1.2] : normalized.includes("sol") ? [4, 20] : [2, 12];
   return Number((((inputTokens ?? 0) * rates[0] + (outputTokens ?? 0) * rates[1]) / 1_000_000).toFixed(8));
 }
 
@@ -354,6 +355,7 @@ async function uploadFileToOpenAi(file: File, apiKey: string) {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
+    signal: AbortSignal.timeout(15_000),
   });
   const payload = await response.json() as OpenAiFileResponse;
   if (!response.ok || !payload.id) {
@@ -367,6 +369,7 @@ async function deleteOpenAiFile(fileId: string, apiKey: string) {
     await fetch(`${OPENAI_FILES_URL}/${encodeURIComponent(fileId)}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10_000),
     });
   } catch {
     // Best-effort cleanup. The definitive copy remains only in private Storage after confirmation.
@@ -384,9 +387,10 @@ async function createOpenAiResponse({
   fileName: string;
   expectedEmployeeName?: string | null;
 }) {
-  const model = process.env.OPENAI_DOCUMENT_MODEL || "gpt-5.6-terra";
+  const model = employeeDocumentAiConfiguration().model;
   const requestBody: Record<string, unknown> = {
     model,
+    store: false,
     input: [
       {
         role: "user",
@@ -422,6 +426,7 @@ async function createOpenAiResponse({
       "Content-Type": "application/json",
     },
     body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(40_000),
   });
   const payload = await response.json() as OpenAiResponse;
   if (!response.ok) {
@@ -430,6 +435,14 @@ async function createOpenAiResponse({
   const inputTokens = typeof payload.usage?.input_tokens === "number" ? payload.usage.input_tokens : null;
   const outputTokens = typeof payload.usage?.output_tokens === "number" ? payload.usage.output_tokens : null;
   return { model, text: outputText(payload), inputTokens, outputTokens, estimatedCostUsd: estimateCostUsd(model, inputTokens, outputTokens) };
+}
+
+export function employeeDocumentAiConfiguration() {
+  return {
+    model: process.env.OPENAI_DOCUMENT_MODEL?.trim() || "gpt-5.6-terra",
+    promptVersion: EMPLOYEE_DOCUMENT_PROMPT.version,
+    schemaVersion: EMPLOYEE_DOCUMENT_PROMPT.schemaVersion!,
+  };
 }
 
 function normalizeAiResult(raw: RawAiResult, response: { model: string; inputTokens: number | null; outputTokens: number | null; estimatedCostUsd: number | null }): AiEmployeeDocumentAnalysis {
