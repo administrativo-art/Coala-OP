@@ -65,7 +65,7 @@ export type BuiltCashClosureLine = {
 /**
  * Saída do motor de fechamento (Fase 1, sem persistência). Cobre apenas o
  * lado "esperado" (PDV). Pix e cartões também nascem informados e conferidos
- * pelo próprio PDV; dinheiro e demais canais aguardam Caixa e Financeiro.
+ * pelo próprio PDV; dinheiro e demais canais aguardam a contagem manual.
  */
 export type BuiltCashClosure = {
   workspaceId: string;

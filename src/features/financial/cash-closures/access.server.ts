@@ -4,7 +4,7 @@ import type { ServerUserContext } from "@/lib/auth-server";
 import { canAccessUnit } from "@/lib/unit-access";
 import type { CashClosureLine } from "./types";
 
-export type CashClosurePermission = "view" | "edit" | "approve" | "reopen" | "resync";
+export type CashClosurePermission = "view" | "edit" | "reopen" | "resync";
 
 export function canUseCashClosure(
   context: ServerUserContext,
@@ -39,7 +39,11 @@ export function assertCashClosureDivergenceApproval(
 ) {
   const thresholdCents = cashClosureSeniorDivergenceCents();
   const maximumDifferenceCents = lines.reduce(
-    (maximum, line) => Math.max(maximum, Math.abs(line.differenceCents ?? 0)),
+    (maximum, line) => Math.max(
+      maximum,
+      Math.abs(line.differenceCents ?? 0),
+      Math.abs(line.reportedDifferenceCents ?? 0),
+    ),
     0,
   );
   if (

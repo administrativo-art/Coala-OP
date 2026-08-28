@@ -29,6 +29,28 @@ export function formatClosureMonthLabel(year: number, month: number) {
   return `${label.charAt(0).toLocaleUpperCase("pt-BR")}${label.slice(1)}`;
 }
 
+export function shiftClosureDate(date: string, days: number) {
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match || !Number.isInteger(days)) {
+    throw new Error(`Data de fechamento ou deslocamento inválido: "${date}" (${days}).`);
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const shifted = new Date(Date.UTC(year, month - 1, day));
+  if (
+    shifted.getUTCFullYear() !== year
+    || shifted.getUTCMonth() !== month - 1
+    || shifted.getUTCDate() !== day
+  ) {
+    throw new Error(`Data de fechamento inválida: "${date}".`);
+  }
+
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+}
+
 const HAS_EXPLICIT_OFFSET = /[Zz]$|[+-]\d{2}:?\d{2}$/;
 const NAIVE_DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/;
 const NAIVE_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/;

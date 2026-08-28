@@ -17,6 +17,7 @@ import {
 } from "./persistence";
 import { assertCashClosureTransition, canEditCashClosure } from "./state-machine";
 import { refreshCashClosureSummaries } from "./summaries.server";
+import { resolveCashClosureSingleCount } from "./single-count";
 import type {
   BuiltCashClosure,
   CashClosure,
@@ -317,7 +318,7 @@ export async function saveCashClosureDraft(
     );
     const closure = normalized.closure;
     if (!canEditCashClosure(closure.status)) {
-      throw new Error("Somente fechamentos em rascunho ou reabertos podem ser editados.");
+      throw new Error("Somente fechamentos ainda não finalizados podem ser editados.");
     }
 
     const updateById = new Map(updates.map((update) => [update.id, update]));
@@ -430,7 +431,40 @@ export async function saveCashClosureDraft(
   return result;
 }
 
-export async function submitCashClosure(id: string, actor: CashClosureActor) {
+function cashDepositAfterFinalization(closure: CashClosure, eligibleCents: number, now: string) {
+  if (closure.cashDeposit.adjustmentId) {
+    return {
+      ...closure.cashDeposit,
+      eligibleCents,
+      status: "adjusted" as const,
+      manualSplitRequired: false,
+      allocationReason: null,
+      pendingSince: now,
+    };
+  }
+  if (eligibleCents > 0) {
+    return {
+      eligibleCents,
+      batchId: null,
+      batchItemId: null,
+      status: "not_allocated" as const,
+      manualSplitRequired: false,
+      allocationReason: "pending_allocator" as const,
+      pendingSince: now,
+    };
+  }
+  return {
+    eligibleCents: 0,
+    batchId: null,
+    batchItemId: null,
+    status: "not_eligible" as const,
+    manualSplitRequired: false,
+    allocationReason: null,
+    pendingSince: null,
+  };
+}
+
+export async function finalizeCashClosure(id: string, actor: CashClosureActor) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
     const [closureSnapshot, lineSnapshot] = await Promise.all([
@@ -444,191 +478,50 @@ export async function submitCashClosure(id: string, actor: CashClosureActor) {
       lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
     );
     const closure = normalized.closure;
-    assertCashClosureTransition(closure.status, "pending_review");
+    assertCashClosureTransition(closure.status, "approved");
     const now = new Date().toISOString();
-    if (normalized.lines.some((line) => line.reportedCents === null)) {
+    const singleCountByLineId = new Map(normalized.lines.map((line) => [
+      line.id,
+      resolveCashClosureSingleCount(line, closure.status),
+    ]));
+    if ([...singleCountByLineId.values()].some((singleCount) => singleCount.cents === null)) {
       throw new Error("Preencha o dinheiro e os demais valores manuais antes de finalizar.");
     }
-    if (normalized.lines.some((line) => line.reportedDifferenceCents !== 0 && !line.reportedNote?.trim())) {
+    if (normalized.lines.some((line) => {
+      const singleCount = singleCountByLineId.get(line.id)!;
+      return singleCount.cents !== line.expectedCents && !singleCount.note;
+    })) {
       throw new Error("Toda divergência precisa de uma observação antes da finalização.");
     }
     const normalizedById = new Map(normalized.lines.map((line) => [line.id, line]));
     const lines = lineSnapshot.docs.map((document) => {
       const current = normalizedById.get(document.id)!;
-      const next = isPdvAutoCountedChannel(current.channel)
-        ? recalculateCountedLine(current, current.expectedCents, null, "system:pdv", now)
-        : current;
+      const automatic = isPdvAutoCountedChannel(current.channel);
+      const singleCount = singleCountByLineId.get(current.id)!;
+      const next = recalculateCountedLine(
+        current,
+        singleCount.cents,
+        singleCount.note,
+        automatic ? "system:pdv" : actor.userId,
+        now,
+      );
       if (JSON.stringify(next) !== JSON.stringify(current)) transaction.set(document.ref, next);
       return next;
     });
-    const next: CashClosure = {
-      ...recomputeCashClosureFromLines(closure, lines, now),
-      status: "pending_review",
-      submittedAt: now,
-      submittedBy: actor.userId,
-    };
-    transaction.set(ref, next);
-    writeAudit(transaction, {
-      workspaceId: closure.workspaceId,
-      closureId: id,
-      action: "submitted",
-      actor,
-      createdAt: now,
-      previousValue: closure.status,
-      newValue: next.status,
-    });
-    return next;
-  });
-  await refreshCashClosureSummaries(result);
-  return result;
-}
-
-export async function saveCashClosureConference(
-  id: string,
-  updates: CashClosureDraftLineInput[],
-  actor: CashClosureActor,
-) {
-  const ref = closureRef(id);
-  const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const [closureSnapshot, lineSnapshot] = await Promise.all([
-      transaction.get(ref),
-      transaction.get(ref.collection("lines")),
-    ]);
-    if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
-    const normalized = normalizeCashClosureWithLines(
-      snapshotValue<CashClosure>(closureSnapshot),
-      lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
-    );
-    if (normalized.closure.status !== "pending_review") {
-      throw new Error("A conferência financeira só pode ser preenchida durante a revisão.");
-    }
-
-    const updateById = new Map(updates.map((update) => [update.id, update]));
-    if (updateById.size !== updates.length) throw new Error("Há linhas duplicadas no payload.");
-    const normalizedById = new Map(normalized.lines.map((line) => [line.id, line]));
-    const now = new Date().toISOString();
-    const nextLines = lineSnapshot.docs.map((document) => {
-      const current = normalizedById.get(document.id)!;
-      const update = updateById.get(current.id);
-      if (!update) return current;
-      updateById.delete(current.id);
-      const countedCents = isPdvAutoCountedChannel(current.channel)
-        ? current.expectedCents
-        : update.countedCents ?? null;
-      if (countedCents !== null && (!Number.isSafeInteger(countedCents) || countedCents < 0)) {
-        throw new Error(`Valor conferido inválido na linha ${current.id}.`);
-      }
-      const normalizedNote = update.note?.trim() || null;
-      if (current.countedCents === countedCents && current.note === normalizedNote) return current;
-      const next = recalculateCountedLine(
-        current,
-        countedCents,
-        update.note ?? null,
-        isPdvAutoCountedChannel(current.channel) ? "system:pdv" : actor.userId,
-        now,
-      );
-      transaction.set(document.ref, next);
-      if (current.countedCents !== next.countedCents) {
-        writeAudit(transaction, {
-          workspaceId: normalized.closure.workspaceId,
-          closureId: id,
-          lineId: current.id,
-          action: "counted_amount_updated",
-          actor,
-          createdAt: now,
-          previousValue: current.countedCents,
-          newValue: next.countedCents,
-        });
-      }
-      if (current.note !== next.note) {
-        writeAudit(transaction, {
-          workspaceId: normalized.closure.workspaceId,
-          closureId: id,
-          lineId: current.id,
-          action: "note_updated",
-          actor,
-          createdAt: now,
-          previousValue: current.note,
-          newValue: next.note,
-        });
-      }
-      return next;
-    });
-    if (updateById.size > 0) throw new Error("Uma ou mais linhas não pertencem a este fechamento.");
-    const nextClosure = recomputeCashClosureFromLines(normalized.closure, nextLines, now);
-    transaction.set(ref, nextClosure);
-    return { closure: nextClosure, lines: nextLines };
-  });
-  await refreshCashClosureSummaries(result.closure);
-  return result;
-}
-
-export async function approveCashClosure(id: string, reason: string, actor: CashClosureActor) {
-  const cleanReason = reason.trim();
-  if (!cleanReason) throw new Error("Informe o motivo ou parecer da aprovação.");
-  const ref = closureRef(id);
-  const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const [closureSnapshot, lineSnapshot] = await Promise.all([
-      transaction.get(ref),
-      transaction.get(ref.collection("lines")),
-    ]);
-    if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
-    const normalized = normalizeCashClosureWithLines(
-      snapshotValue<CashClosure>(closureSnapshot),
-      lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
-    );
-    const closure = normalized.closure;
-    assertCashClosureTransition(closure.status, "approved");
-    const lines = normalized.lines;
-    if (lines.some((line) => line.countedCents === null)) throw new Error("O fechamento ainda possui linhas pendentes.");
-    if (lines.some((line) => (
-      line.differenceCents !== 0 || line.conferenceDifferenceCents !== 0
-    ) && !line.note?.trim())) {
-      throw new Error("Toda diferença da conferência financeira precisa de uma observação.");
-    }
-    const now = new Date().toISOString();
     const recalculated = recomputeCashClosureFromLines(closure, lines, now);
     const eligibleCents = recalculated.countedCashCents;
     const next: CashClosure = {
       ...recalculated,
       status: "approved",
+      submittedAt: now,
+      submittedBy: actor.userId,
       approvedAt: now,
       approvedBy: actor.userId,
-      approvalReason: cleanReason,
+      approvalReason: "Contagem finalizada",
       approvedWithDivergence:
-        recalculated.divergentLineCount > 0 ||
-        recalculated.reportedDivergentLineCount > 0 ||
-        lines.some((line) => (line.conferenceDifferenceCents ?? 0) !== 0),
+        recalculated.divergentLineCount > 0 || recalculated.reportedDivergentLineCount > 0,
       cashDepositEligibleCents: eligibleCents,
-      cashDeposit:
-        closure.cashDeposit.adjustmentId
-          ? {
-              ...closure.cashDeposit,
-              eligibleCents,
-              status: "adjusted",
-              manualSplitRequired: false,
-              allocationReason: null,
-              pendingSince: now,
-            }
-          : eligibleCents > 0
-          ? {
-              eligibleCents,
-              batchId: null,
-              batchItemId: null,
-              status: "not_allocated",
-              manualSplitRequired: false,
-              allocationReason: "pending_allocator",
-              pendingSince: now,
-            }
-          : {
-              eligibleCents: 0,
-              batchId: null,
-              batchItemId: null,
-              status: "not_eligible",
-              manualSplitRequired: false,
-              allocationReason: null,
-              pendingSince: null,
-            },
+      cashDeposit: cashDepositAfterFinalization(closure, eligibleCents, now),
     };
     transaction.set(ref, next);
     writeAudit(transaction, {
@@ -638,8 +531,12 @@ export async function approveCashClosure(id: string, reason: string, actor: Cash
       actor,
       createdAt: now,
       previousValue: closure.status,
-      newValue: { status: next.status, approvedWithDivergence: next.approvedWithDivergence },
-      reason: cleanReason,
+      newValue: {
+        status: next.status,
+        approvedWithDivergence: next.approvedWithDivergence,
+        cashDepositEligibleCents: eligibleCents,
+      },
+      reason: next.approvalReason,
     });
     return next;
   });

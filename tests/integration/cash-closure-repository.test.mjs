@@ -11,17 +11,18 @@ assert.equal(process.env.FIREBASE_PROJECT_ID, PROJECT_ID);
 assert.equal(process.env.GOOGLE_CLOUD_PROJECT, PROJECT_ID);
 
 const {
-  approveCashClosure,
+  finalizeCashClosure,
   getCashClosure,
   listCashClosureAuditLogs,
   listCashClosures,
-  reopenCashClosure,
-  saveCashClosureConference,
   saveCashClosureDraft,
-  submitCashClosure,
   upsertClosureFromPdv,
 } = await import("../../src/features/financial/cash-closures/repository.server.ts");
-const { cashClosureId } = await import("../../src/features/financial/cash-closures/persistence.ts");
+const {
+  processCashDepositQueue,
+  reopenCashClosureWithDepositHandling,
+} = await import("../../src/features/financial/cash-deposits/repository.server.ts");
+const { cashClosureId, recalculateCountedLine } = await import("../../src/features/financial/cash-closures/persistence.ts");
 const { financialDbAdmin } = await import("../../src/lib/firebase-financial-admin.ts");
 
 const actor = { userId: "integration-user", userName: "Teste de integração" };
@@ -30,6 +31,9 @@ const collections = [
   "cashClosureAuditLogs",
   "cashClosureMonthlySummaries",
   "cashClosureUnitSummaries",
+  "cashDepositAdjustments",
+  "cashDepositBatches",
+  "cashDepositQueues",
 ];
 
 function builtClosure({ workspaceId, kioskId, date }) {
@@ -129,31 +133,38 @@ test("repository persiste fechamento, linhas, totais, transições e auditoria a
   assert.equal(drafted.closure.reportedTotalCents, 14_800);
   assert.equal(drafted.closure.reportedDifferenceTotalCents, -200);
 
-  const submitted = await submitCashClosure(closureId, actor);
-  assert.equal(submitted.status, "pending_review");
+  const finalized = await finalizeCashClosure(closureId, actor);
+  assert.equal(finalized.status, "approved");
+  assert.equal(finalized.countedTotalCents, 14_800);
+  assert.equal(finalized.differenceTotalCents, -200);
+  assert.equal(finalized.cashDepositEligibleCents, 9_800);
+  await processCashDepositQueue(workspaceId, kioskId, actor);
   await assert.rejects(
-    () => submitCashClosure(closureId, actor),
-    /pending_review não pode avançar para pending_review/,
+    () => finalizeCashClosure(closureId, actor),
+    /approved não pode avançar para approved/,
   );
-
-  const conferenced = await saveCashClosureConference(
-    closureId,
-    [{ id: cashLine.id, countedCents: 9_900, note: "Diferença conferida pelo financeiro" }],
-    actor,
-  );
-  assert.equal(conferenced.closure.countedTotalCents, 14_900);
-  assert.equal(conferenced.closure.differenceTotalCents, -100);
-
-  const approved = await approveCashClosure(closureId, "Conferência concluída", actor);
-  assert.equal(approved.status, "approved");
-  assert.equal(approved.cashDepositEligibleCents, 9_900);
   await assert.rejects(
     () => saveCashClosureDraft(closureId, [{ id: cashLine.id, reportedCents: 10_000 }], actor),
-    /Somente fechamentos em rascunho ou reabertos/,
+    /Somente fechamentos ainda não finalizados/,
   );
 
-  const reopened = await reopenCashClosure(closureId, "Ajuste solicitado", actor);
-  assert.equal(reopened.status, "reopened");
+  const afterFinalization = await getCashClosure(closureId);
+  assert.ok(afterFinalization);
+  const finalizedCashLine = afterFinalization.lines.find((line) => line.channel === "cash");
+  assert.ok(finalizedCashLine);
+  assert.equal(finalizedCashLine.countedCents, finalizedCashLine.reportedCents);
+  assert.equal(finalizedCashLine.note, finalizedCashLine.reportedNote);
+  assert.equal(finalizedCashLine.countedBy, actor.userId);
+  assert.equal(afterFinalization.closure.cashDeposit.status, "allocated");
+  assert.ok(afterFinalization.closure.cashDeposit.batchId);
+
+  const reopened = await reopenCashClosureWithDepositHandling({
+    workspaceId,
+    closureId,
+    reason: "Ajuste solicitado",
+    actor,
+  });
+  assert.equal(reopened.closure.status, "reopened");
 
   const persisted = await getCashClosure(closureId);
   assert.ok(persisted);
@@ -167,10 +178,8 @@ test("repository persiste fechamento, linhas, totais, transições e auditoria a
     "created_from_pdv",
     "reported_amount_updated",
     "reported_note_updated",
-    "submitted",
-    "counted_amount_updated",
-    "note_updated",
     "approved",
+    "deposit_allocated",
     "reopened",
   ]) {
     assert.equal(actions.has(action), true, `auditoria ausente: ${action}`);
@@ -183,4 +192,48 @@ test("repository persiste fechamento, linhas, totais, transições e auditoria a
   }), actor);
   const workspaceAClosures = await listCashClosures({ workspaceId, limit: 10 });
   assert.deepEqual(workspaceAClosures.map((closure) => closure.id), [closureId]);
+});
+
+test("finaliza revisão legada usando a contagem do Financeiro já preenchida", async () => {
+  const workspaceId = "workspace-integration-legacy";
+  const kioskId = "kiosk-integration-legacy";
+  const date = "2035-07-08";
+  const closureId = cashClosureId(kioskId, date);
+
+  await upsertClosureFromPdv(builtClosure({ workspaceId, kioskId, date }), actor);
+  const initial = await getCashClosure(closureId);
+  assert.ok(initial);
+  const cashLine = initial.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+  await saveCashClosureDraft(
+    closureId,
+    [{ id: cashLine.id, reportedCents: 9_800, reportedNote: "Contagem enviada pelo Caixa" }],
+    actor,
+  );
+  const submitted = await getCashClosure(closureId);
+  assert.ok(submitted);
+  const submittedCashLine = submitted.lines.find((line) => line.channel === "cash");
+  assert.ok(submittedCashLine);
+  await financialDbAdmin.collection("cashClosures").doc(closureId).set({ status: "pending_review" }, { merge: true });
+  const legacyFinanceLine = recalculateCountedLine(
+    submittedCashLine,
+    9_900,
+    "Contagem feita pelo Financeiro",
+    "finance-user",
+    "2035-07-08T20:00:00.000Z",
+  );
+  await financialDbAdmin.collection("cashClosures").doc(closureId)
+    .collection("lines").doc(cashLine.id).set(legacyFinanceLine);
+
+  const finalized = await finalizeCashClosure(closureId, actor);
+  await processCashDepositQueue(workspaceId, kioskId, actor);
+  const persisted = await getCashClosure(closureId);
+  assert.ok(persisted);
+  const persistedCashLine = persisted.lines.find((line) => line.channel === "cash");
+  assert.ok(persistedCashLine);
+  assert.equal(finalized.status, "approved");
+  assert.equal(finalized.cashDepositEligibleCents, 9_900);
+  assert.equal(persistedCashLine.countedCents, 9_900);
+  assert.equal(persistedCashLine.note, "Contagem feita pelo Financeiro");
+  assert.equal(persisted.closure.cashDeposit.status, "allocated");
 });

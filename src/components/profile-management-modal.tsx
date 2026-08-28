@@ -747,8 +747,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Fechamento do caixa</h4>
                                   {renderPermissionSwitch("permissions.financial.cashClosures.view" as any, "Visualizar fechamentos", "Permite consultar os fechamentos diários e mensais das unidades.", !financialViewWatch)}
                                   <div className="pl-6 space-y-2">
-                                    {renderPermissionSwitch("permissions.financial.cashClosures.edit" as any, "Preencher conferência", "Permite informar a contagem do caixa enquanto o fechamento estiver editável.", !financialCashClosuresViewWatch, true)}
-                                    {renderPermissionSwitch("permissions.financial.cashClosures.approve" as any, "Finalizar conferência", "Permite concluir a conferência financeira do fechamento.", !financialCashClosuresViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.financial.cashClosures.edit" as any, "Contar e finalizar", "Permite informar a contagem, finalizar o fechamento e enviar o dinheiro para os depósitos.", !financialCashClosuresViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.cashClosures.reopen" as any, "Reabrir fechamento", "Permite reabrir um fechamento já concluído para correção.", !financialCashClosuresViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.cashClosures.resync" as any, "Ressincronizar PDV", "Permite atualizar os valores registrados pelo PDV.", !financialCashClosuresViewWatch, true)}
                                   </div>

@@ -3,10 +3,10 @@ import type { CashClosureStatus } from "./types";
 const TRANSITIONS: Record<CashClosureStatus, readonly CashClosureStatus[]> = {
   not_synced: ["draft", "sync_error"],
   sync_error: ["draft"],
-  draft: ["pending_review", "sync_error"],
+  draft: ["approved", "sync_error"],
   pending_review: ["approved", "reopened"],
   approved: ["reopened"],
-  reopened: ["pending_review", "approved", "sync_error"],
+  reopened: ["approved", "sync_error"],
 };
 
 export function canTransitionCashClosure(from: CashClosureStatus, to: CashClosureStatus) {
@@ -20,5 +20,5 @@ export function assertCashClosureTransition(from: CashClosureStatus, to: CashClo
 }
 
 export function canEditCashClosure(status: CashClosureStatus) {
-  return status === "draft" || status === "reopened";
+  return status === "draft" || status === "reopened" || status === "pending_review";
 }
