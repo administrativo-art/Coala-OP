@@ -81,7 +81,9 @@ export function reconcileCashDepositBatch(input: {
     }
   }
   const itemsByClosure = new Map<string, number>();
-  for (const item of input.items.filter((candidate) => candidate.source !== "cash_adjustment")) {
+  for (const item of input.items.filter((candidate) =>
+    candidate.source === "cash_counted" || candidate.source === "manual_split"
+  )) {
     itemsByClosure.set(item.closureId, (itemsByClosure.get(item.closureId) ?? 0) + item.amountCents);
   }
   for (const [closureId, amountCents] of itemsByClosure) {

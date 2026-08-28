@@ -193,3 +193,80 @@ test("Pix e cartões são conferidos automaticamente e guardam o intervalo do op
     assert.equal(line.metadata.lastCouponAt, "2026-07-07 18:42:00");
   }
 });
+
+test("dinheiro esperado inclui suprimentos e subtrai sangrias do mesmo operador", () => {
+  const closure = buildCashClosureFromPdv(
+    [
+      coupon({
+        codcupom: "12",
+        usuariorecebimento_id: "10",
+        valortotal: 100,
+        formaPgtos: [{ nome: "DINHEIRO", valortotal: 100 }],
+      }),
+    ],
+    {
+      ...BASE_CTX,
+      operatorNameById: { "10": "Maria" },
+      cashMovements: [
+        {
+          id: "supply-1",
+          kind: "supply",
+          amountCents: 4_000,
+          occurredAt: "2026-07-07 09:00:00",
+          date: "2026-07-07",
+          operatorId: "10",
+          terminalId: "1",
+          paymentMethodId: "1",
+          paymentMethodName: "Dinheiro",
+          isCash: false,
+          cancelled: false,
+        },
+        {
+          id: "withdrawal-1",
+          kind: "withdrawal",
+          amountCents: 2_000,
+          occurredAt: "2026-07-07 15:00:00",
+          date: "2026-07-07",
+          operatorId: "10",
+          terminalId: "1",
+          paymentMethodId: "1",
+          paymentMethodName: "Dinheiro",
+          isCash: true,
+          cancelled: false,
+        },
+      ],
+    },
+  );
+
+  const [cashLine] = closure.lines;
+  assert.equal(cashLine.calculatedExpectedAmountCents, 12_000);
+  assert.equal(cashLine.expectedAmountCents, 12_000);
+  assert.equal(cashLine.metadata.grossCashCents, 10_000);
+  assert.equal(cashLine.metadata.supplyCents, 4_000);
+  assert.equal(cashLine.metadata.withdrawalCents, 2_000);
+  assert.equal(cashLine.metadata.cashMovements?.length, 2);
+  assert.equal(closure.expectedTotalCents, 12_000);
+});
+
+test("movimento sem operador reconhecido vira pendência e não altera o esperado", () => {
+  const closure = buildCashClosureFromPdv([], {
+    ...BASE_CTX,
+    cashMovements: [{
+      id: "withdrawal-unassigned",
+      kind: "withdrawal",
+      amountCents: 2_000,
+      occurredAt: "2026-07-07 15:00:00",
+      date: "2026-07-07",
+      operatorId: "999",
+      terminalId: "1",
+      paymentMethodId: "1",
+      paymentMethodName: "Dinheiro",
+      isCash: true,
+      cancelled: false,
+    }],
+  });
+
+  assert.equal(closure.lines.length, 0);
+  assert.equal(closure.source.unassignedMovementCount, 1);
+  assert.match(closure.source.integrityWarnings[0], /operador não reconhecido/);
+});

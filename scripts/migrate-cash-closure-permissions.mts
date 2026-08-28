@@ -23,12 +23,14 @@ for (const document of snapshot.docs) {
   const data = document.data();
   const admin = data.isDefaultAdmin === true;
   const currentFinancial = data.permissions?.financial ?? {};
-  const cashClosures = currentFinancial.cashClosures ?? {
-    view: admin,
-    edit: admin,
-    approve: admin,
-    reopen: admin,
-    resync: admin,
+  const currentCashClosures = currentFinancial.cashClosures ?? {};
+  const cashClosures = {
+    view: currentCashClosures.view ?? admin,
+    edit: currentCashClosures.edit ?? admin,
+    approve: currentCashClosures.approve ?? admin,
+    adjustExpected: currentCashClosures.adjustExpected ?? admin,
+    reopen: currentCashClosures.reopen ?? admin,
+    resync: currentCashClosures.resync ?? admin,
   };
   const cashDeposits = currentFinancial.cashDeposits ?? {
     view: admin,
@@ -36,7 +38,10 @@ for (const document of snapshot.docs) {
     cancel: admin,
     adjust: admin,
   };
-  if (currentFinancial.cashClosures && currentFinancial.cashDeposits) continue;
+  if (
+    currentFinancial.cashClosures?.adjustExpected !== undefined
+    && currentFinancial.cashDeposits
+  ) continue;
   changes.push({ id: document.id, admin });
   if (execute) {
     batch.set(document.ref, {

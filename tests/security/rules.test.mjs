@@ -701,7 +701,7 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
       const db = context.firestore();
       const financialPermissions = {
         view: true,
-        cashClosures: { view: true, edit: true, approve: false, reopen: false, resync: false },
+        cashClosures: { view: true, edit: true, approve: false, adjustExpected: false, reopen: false, resync: false },
         cashDeposits: { view: true, issue: false, cancel: false, adjust: false },
       };
       await Promise.all([
@@ -761,7 +761,7 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
     const outsider = env.authenticatedContext("other-unit");
     await assertSucceeds(getDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07")));
     await assertFails(getDoc(doc(outsider.firestore(), "cashClosures/tirirical_2026-07-07")));
-    await assertSucceeds(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/lines/10_cash"), {
+    await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/lines/10_cash"), {
       countedCents: 9900,
       note: "Falta conferida",
     }));
@@ -789,6 +789,14 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
     }));
     await assertFails(setDoc(doc(operator.firestore(), "cashDepositReconciliationRuns/forged"), {
       status: "success",
+    }));
+    await assertFails(setDoc(doc(operator.firestore(), "cashCoinBalances/forged"), {
+      kioskId: "tirirical",
+      pendingExchangeCents: 100,
+    }));
+    await assertFails(setDoc(doc(operator.firestore(), "cashCoinEvents/forged"), {
+      kioskId: "tirirical",
+      amountCents: 100,
     }));
   } finally {
     await env.cleanup();

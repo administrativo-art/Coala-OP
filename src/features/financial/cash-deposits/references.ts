@@ -47,6 +47,8 @@ export const CASH_DEPOSIT_SOURCE_LABEL: Record<CashDepositBatchItemSource, strin
   cash_counted: "Fechamento aprovado",
   cash_adjustment: "Ajuste de fechamento",
   manual_split: "Divisão manual",
+  coin_hold: "Moedas separadas para troca",
+  coin_exchange: "Moedas trocadas por cédulas",
 };
 
 export type CashDepositDayComposition = {

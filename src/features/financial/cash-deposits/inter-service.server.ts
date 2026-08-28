@@ -29,7 +29,7 @@ import {
   type InterCobrancaDocument,
   type InterCobrancaEvent,
 } from "./inter-cobranca";
-import type { CashDepositBatch } from "./types";
+import { normalizeCashDepositBatch, type CashDepositBatch } from "./types";
 import { resolveConfiguredInterCobrancaPayer } from "./payer.server";
 
 const BATCHES = "cashDepositBatches";
@@ -123,7 +123,7 @@ async function prepareIssue(input: {
   return financialDbAdmin.runTransaction(async (transaction) => {
     const batchSnapshot = await transaction.get(batchRef);
     if (!batchSnapshot.exists) throw new Error("Bloco de depósito não encontrado.");
-    const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+    const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
     if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco de depósito não encontrado.");
     if (batch.status === "paid") throw new Error("Este bloco já foi liquidado.");
 
@@ -139,6 +139,9 @@ async function prepareIssue(input: {
     }
     if (!["open", "locked", "failed", "cancelled"].includes(batch.status)) {
       throw new Error("Este bloco não está disponível para emissão.");
+    }
+    if (!batch.coinPreparedAt) {
+      throw new Error("Separe as moedas do bloco antes de emitir o boleto.");
     }
 
     const attempt = ids.length + 1;
@@ -464,7 +467,7 @@ async function relatedBatchStates(
       continue;
     }
     const snapshot = await transaction.get(financialDbAdmin.collection(BATCHES).doc(id));
-    if (snapshot.exists) states.set(id, snapshotValue<CashDepositBatch>(snapshot).status);
+    if (snapshot.exists) states.set(id, normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(snapshot)).status);
   }
   return states;
 }
@@ -478,7 +481,7 @@ async function applyInterDetail(cobrancaId: string, detail: InterCobrancaDetail)
     const batchRef = financialDbAdmin.collection(BATCHES).doc(cobranca.batchId);
     const batchSnapshot = await transaction.get(batchRef);
     if (!batchSnapshot.exists) throw new Error("Bloco vinculado à cobrança não encontrado.");
-    const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+    const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
     const closureSnapshots = [];
     for (const closureId of batch.closureIds) {
       closureSnapshots.push(await transaction.get(financialDbAdmin.collection("cashClosures").doc(closureId)));
@@ -654,7 +657,7 @@ export async function cancelInterCobrancaForBatch(input: {
   if (reason.length > 50) throw new Error("O motivo do cancelamento deve ter no máximo 50 caracteres.");
   const batchSnapshot = await financialDbAdmin.collection(BATCHES).doc(input.batchId).get();
   if (!batchSnapshot.exists) throw new Error("Bloco não encontrado.");
-  const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+  const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
   if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco não encontrado.");
   if (!batch.interCobrancaId) throw new Error("O bloco não possui cobrança Inter.");
   const cobrancaSnapshot = await financialDbAdmin.collection(COBRANCAS).doc(batch.interCobrancaId).get();
@@ -687,7 +690,7 @@ export async function getInterCobrancaPdfForBatch(input: {
 }) {
   const batchSnapshot = await financialDbAdmin.collection(BATCHES).doc(input.batchId).get();
   if (!batchSnapshot.exists) throw new Error("Bloco não encontrado.");
-  const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+  const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
   if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco não encontrado.");
   if (!batch.interCobrancaId) throw new Error("O bloco não possui cobrança Inter.");
   const cobrancaSnapshot = await financialDbAdmin.collection(COBRANCAS).doc(batch.interCobrancaId).get();
@@ -700,7 +703,7 @@ export async function getInterCobrancaPdfForBatch(input: {
 export async function getInterCobrancaForBatch(batchId: string) {
   const batchSnapshot = await financialDbAdmin.collection(BATCHES).doc(batchId).get();
   if (!batchSnapshot.exists) return null;
-  const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+  const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
   if (!batch.interCobrancaId) return { batch, cobranca: null };
   const cobrancaSnapshot = await financialDbAdmin.collection(COBRANCAS).doc(batch.interCobrancaId).get();
   return {

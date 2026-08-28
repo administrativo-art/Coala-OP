@@ -27,6 +27,7 @@ export type CashClosureChannelTotals = Record<CashClosureChannel, number>;
 export type CashClosureSource = {
   provider: "pdvlegal";
   endpoint: "cupom/get";
+  movementEndpoints?: readonly ["sangriasuprimento/getSangria", "sangriasuprimento/getSuprimento"];
   couponCount: number;
   validCouponCount: number;
   ignoredCancelledCouponCount: number;
@@ -36,11 +37,34 @@ export type CashClosureSource = {
   rawPaymentNames: string[];
   unknownPaymentNames: string[];
   integrityWarnings: string[];
+  movementCount?: number;
+  ignoredCancelledMovementCount?: number;
+  ignoredNonCashMovementCount?: number;
+  unassignedMovementCount?: number;
+};
+
+export type CashClosureCashMovementKind = "supply" | "withdrawal";
+
+export type CashClosureCashMovement = {
+  id: string;
+  kind: CashClosureCashMovementKind;
+  amountCents: number;
+  occurredAt: string;
+  date: string;
+  operatorId: string | null;
+  terminalId: string | null;
+  paymentMethodId: string | null;
+  paymentMethodName: string | null;
+  isCash: boolean;
+  cancelled: boolean;
 };
 
 export type CashClosureLineMetadata = {
   grossCashCents?: number;
   changeCents?: number;
+  supplyCents?: number;
+  withdrawalCents?: number;
+  cashMovements?: CashClosureCashMovement[];
   paymentRowCount?: number;
   firstCouponAt?: string;
   lastCouponAt?: string;
@@ -52,6 +76,7 @@ export type BuiltCashClosureLine = {
   channel: CashClosureChannel;
   channelLabel: string;
   expectedAmountCents: number;
+  calculatedExpectedAmountCents: number;
   reportedAmountCents: number | null;
   reportedDifferenceAmountCents: number | null;
   countedAmountCents: number | null;
@@ -65,7 +90,8 @@ export type BuiltCashClosureLine = {
 /**
  * Saída do motor de fechamento (Fase 1, sem persistência). Cobre apenas o
  * lado "esperado" (PDV). Pix e cartões também nascem informados e conferidos
- * pelo próprio PDV; dinheiro e demais canais aguardam a contagem manual.
+ * pelo próprio PDV; dinheiro e demais canais aguardam as declarações manuais
+ * e independentes do Caixa e do Financeiro.
  */
 export type BuiltCashClosure = {
   workspaceId: string;
@@ -93,6 +119,7 @@ export type CashClosureBuildContext = {
   date: string;
   /** `usuariorecebimento_id` do PDV → nome legível, de `fetchPdvLegalUsers()`. */
   operatorNameById?: Record<string, string>;
+  cashMovements?: CashClosureCashMovement[];
 };
 
 export type CashClosureDepositStatus =
@@ -176,7 +203,13 @@ export type CashClosureLine = {
   operatorName: string;
   channel: CashClosureChannel;
   channelLabel: string;
+  calculatedExpectedCents: number;
   expectedCents: number;
+  expectedAdjustmentCents: number;
+  expectedAdjustmentReason: string | null;
+  expectedAdjustedBy: string | null;
+  expectedAdjustedAt: string | null;
+  expectedAdjustmentNeedsReview: boolean;
   reportedCents: number | null;
   reportedDifferenceCents: number | null;
   countedCents: number | null;
@@ -199,6 +232,8 @@ export type CashClosureAuditAction =
   | "pdv_resynced"
   | "reported_amount_updated"
   | "reported_note_updated"
+  | "expected_amount_adjusted"
+  | "expected_amount_restored"
   | "counted_amount_updated"
   | "note_updated"
   | "submitted"
@@ -236,6 +271,12 @@ export type CashClosureDraftLineInput = {
   countedCents?: number | null;
   reportedNote?: string | null;
   note?: string | null;
+};
+
+export type CashClosureExpectedAdjustmentInput = {
+  lineId: string;
+  correctedExpectedCents: number;
+  reason: string;
 };
 
 export type CashClosureWithLines = {

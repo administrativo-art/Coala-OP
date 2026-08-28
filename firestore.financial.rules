@@ -465,14 +465,9 @@ service cloud.firestore {
       match /lines/{lineId} {
         allow read: if canViewCashClosures()
           && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId);
-        allow update: if canEditCashClosures()
-          && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId)
-          && get(/databases/$(database)/documents/cashClosures/$(closureId)).data.status == 'draft'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['countedCents', 'note'])
-          && (request.resource.data.countedCents == null
-            || (request.resource.data.countedCents is int && request.resource.data.countedCents >= 0))
-          && (request.resource.data.note == null || request.resource.data.note is string);
-        allow create, delete: if false;
+        // Escritas passam exclusivamente pelas APIs, que separam as permissões
+        // do Caixa, do Financeiro e do ajuste auditado do esperado.
+        allow create, update, delete: if false;
       }
     }
 
@@ -502,6 +497,16 @@ service cloud.firestore {
     }
 
     match /cashDepositAdjustments/{adjustmentId} {
+      allow read, write: if false;
+    }
+
+    // O saldo e o histórico de trocas de moedas são mantidos pelas APIs
+    // transacionais; não há escrita direta pelo navegador.
+    match /cashCoinBalances/{balanceId} {
+      allow read, write: if false;
+    }
+
+    match /cashCoinEvents/{eventId} {
       allow read, write: if false;
     }
 
