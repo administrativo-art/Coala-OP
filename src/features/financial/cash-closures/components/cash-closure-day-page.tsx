@@ -167,7 +167,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     const requestRevision = draftRevision.current;
     setLoading(true);
     try {
-      const payload = await api(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`);
+      const payload = await api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`);
       if (!isCurrentDraftRevision(requestRevision, draftRevision.current)) {
         setSaveState("dirty");
         return;
@@ -212,9 +212,9 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
             if (!draft || !["draft", "reopened", "pending_review"].includes(draft.closure.status)) return null;
             return { revision: draftRevision.current, value: draft };
           },
-          persist: (draft) => api(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`, {
+          persist: (draft) => api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`, {
             method: "PATCH",
-            body: JSON.stringify({
+            json: {
               lines: draft.lines.map((line) => ({
                 id: line.id,
                 reportedCents: line.reportedCents,
@@ -222,7 +222,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
                 countedCents: line.countedCents,
                 note: line.note,
               })),
-            }),
+            },
           }),
           commit: (payload) => {
             const nextData = { closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) };
@@ -288,9 +288,9 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     try {
       if (["dirty", "saving", "error"].includes(saveState)) await save();
       const requestRevision = draftRevision.current;
-      const payload = await api("/api/financial/cash-closures/sync", {
+      const payload = await api<CashClosureApiPayload>("/api/financial/cash-closures/sync", {
         method: "POST",
-        body: JSON.stringify({ kioskId, date }),
+        json: { kioskId, date },
       });
       if (!isCurrentDraftRevision(requestRevision, draftRevision.current)) {
         setSaveState("dirty");
