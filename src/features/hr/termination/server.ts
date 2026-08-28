@@ -49,6 +49,7 @@ import { terminationReasonsForRelationship } from "@/lib/hr/employment-relations
 import { recalculateEmploymentEndRetention } from "@/features/hr/documents/document-retention.server";
 import { createPaymentRequest, refreshPaymentRequest } from "@/features/financial/payment-requests/service.server";
 import { getPaymentRequest } from "@/features/financial/payment-requests/repository.server";
+import { cancelFutureEmployeeForecasts } from "@/features/financial/employee-provisions/termination.server";
 import { resolveCompanyProcessContact } from "@/lib/company/company-process-contact.server";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { resolveDocumentLegalEntitySnapshot } from "@/features/hr/documents/legal-entity-snapshot.server";
@@ -571,6 +572,47 @@ async function createHrTask(context: ServerUserContext, process: CltTerminationP
       visibilityScope: "project",
     },
   });
+}
+
+async function closeFutureFinancialProvisions(
+  context: ServerUserContext,
+  process: CltTerminationProcess,
+  terminationDate: string,
+  now: string,
+): Promise<NonNullable<CltTerminationProcess["financialProvisionClosure"]>> {
+  try {
+    const result = await cancelFutureEmployeeForecasts({
+      employeeId: process.employeeId,
+      terminationDate,
+      terminationProcessId: process.id,
+      actorId: context.userDoc.id,
+    });
+    return {
+      status: "completed",
+      cancelledCount: result.cancelledCount,
+      cancelledExpenseIds: result.cancelledExpenseIds,
+      attemptedAt: now,
+      completedAt: now,
+      error: null,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha desconhecida ao cancelar previsões futuras.";
+    await createHrTask(
+      context,
+      process,
+      `Revisar provisões futuras — ${process.employeeName}`,
+      `O desligamento foi concluído, mas as provisões futuras de salário e vale-transporte não puderam ser canceladas automaticamente. Erro: ${message}`,
+      "financial-provisions-cancellation",
+    ).catch(() => undefined);
+    return {
+      status: "failed",
+      cancelledCount: 0,
+      cancelledExpenseIds: [],
+      attemptedAt: now,
+      completedAt: null,
+      error: message,
+    };
+  }
 }
 
 export async function createManagedTermination(params: {
@@ -1873,11 +1915,13 @@ export async function completeEmployeeResignation(params: {
     authAdmin.updateUser(process.employeeId, { disabled: true }),
     dbAdmin.collection("users").doc(process.employeeId).set({ isActive: false, employmentStatus: "terminated", inactivationType: "contract_termination", terminationDate: process.notice.contractEndDate, terminationReason: process.terminationReason ?? (process.processType === "clt_employee_resignation" ? "Pedido de demissão" : null), terminationCause: process.terminationCause ?? null, terminationNotes: process.terminationNotes ?? null, terminationInternalReason: process.terminationInternalReason ?? null, terminationRelationshipType: process.employmentRelationshipType, terminationProcessId: process.id, terminationEmployerUnitId: process.employer?.unitId ?? null, terminationEmployerName: process.employer?.legalName ?? null, terminationEmployerCnpj: process.employer?.cnpj ?? null, terminationEmployerEntityId: process.employer?.entityId ?? null, updatedAt: now }, { merge: true }),
   ]);
+  const financialProvisionClosure = await closeFutureFinancialProvisions(params.context, process, process.notice.contractEndDate, now);
   const updated = await saveTermination({
     ...process,
     status: "completed",
     steps,
     internalClosure: { status: reservations.length ? "completed_with_reservations" : "completed", reservations, communication, completedAt: now, completedBy: params.context.userDoc.id },
+    financialProvisionClosure,
     accessRevocation: { ...(process.accessRevocation ?? { pdv: { status: "not_applicable" }, bizneo: { status: "not_applicable" }, healthPlan: { status: "not_applicable" } }), coalaOne: { status: "completed", completedAt: now } },
     completedAt: now,
     lastActivityAt: now,
@@ -1885,6 +1929,15 @@ export async function completeEmployeeResignation(params: {
   });
   await hrDbAdmin.collection("terminationActiveByEmployee").doc(process.employeeId).delete().catch(() => undefined);
   await recalculateEmploymentEndRetention({ employeeId: process.employeeId, employmentEndedAt: process.notice.contractEndDate, actorId: params.context.userDoc.id });
+  await appendTerminationEvent(process.id, {
+    type: financialProvisionClosure.status === "completed" ? "FINANCIAL_PROVISIONS_CLOSED" : "FINANCIAL_PROVISIONS_CLOSURE_FAILED",
+    at: now,
+    ...eventActor(params.context),
+    message: financialProvisionClosure.status === "completed"
+      ? `${financialProvisionClosure.cancelledCount} provisão(ões) futura(s) de salário e vale-transporte cancelada(s).`
+      : "O cancelamento automático das provisões futuras falhou e gerou uma tarefa de revisão.",
+    data: { cancelledExpenseIds: financialProvisionClosure.cancelledExpenseIds, error: financialProvisionClosure.error ?? null },
+  });
   await appendTerminationEvent(process.id, { type: reservations.length ? "COMPLETED_WITH_RESERVATIONS" : "COMPLETED", at: now, ...eventActor(params.context), message: reservations.length ? "Desligamento finalizado com ressalvas de ASO e/ou uniformes." : "Desligamento concluído sem pendências." });
   return updated;
 }
@@ -1925,10 +1978,12 @@ export async function completeTermination(params: { context: ServerUserContext; 
       updatedAt: now,
     }, { merge: true }),
   ]);
+  const financialProvisionClosure = await closeFutureFinancialProvisions(params.context, process, process.notice.contractEndDate, now);
   const updated = await saveTermination({
     ...process,
     status: "completed",
     steps,
+    financialProvisionClosure,
     accessRevocation: {
       ...(process.accessRevocation ?? {
         pdv: { status: "not_applicable" },
@@ -1946,6 +2001,15 @@ export async function completeTermination(params: { context: ServerUserContext; 
     employeeId: process.employeeId,
     employmentEndedAt: process.notice.contractEndDate,
     actorId: params.context.userDoc.id,
+  });
+  await appendTerminationEvent(process.id, {
+    type: financialProvisionClosure.status === "completed" ? "FINANCIAL_PROVISIONS_CLOSED" : "FINANCIAL_PROVISIONS_CLOSURE_FAILED",
+    at: now,
+    ...eventActor(params.context),
+    message: financialProvisionClosure.status === "completed"
+      ? `${financialProvisionClosure.cancelledCount} provisão(ões) futura(s) de salário e vale-transporte cancelada(s).`
+      : "O cancelamento automático das provisões futuras falhou e gerou uma tarefa de revisão.",
+    data: { cancelledExpenseIds: financialProvisionClosure.cancelledExpenseIds, error: financialProvisionClosure.error ?? null },
   });
   await appendTerminationEvent(process.id, { type: "COMPLETED", at: now, ...eventActor(params.context), message: "Desligamento concluído e cadastro do colaborador inativado." });
   return updated;

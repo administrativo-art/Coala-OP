@@ -26,6 +26,22 @@ describe('respostas JSON do cliente de RH', () => {
     );
   });
 
+  test('preserva a mensagem segura do envelope central de erro', async () => {
+    await assert.rejects(
+      () => readHrJsonResponse(
+        new Response(JSON.stringify({
+          error: {
+            code: 'ACCOUNTANT_REGISTRY_FILE_INVALID',
+            message: 'Envie a Ficha de Registro em PDF.',
+            requestId: 'request-1',
+          },
+        }), { status: 400 }),
+        'Falha ao anexar.',
+      ),
+      /Envie a Ficha de Registro em PDF\./,
+    );
+  });
+
   test('não expõe erro de JSON quando uma resposta 200 é inválida', async () => {
     await assert.rejects(
       () => readHrJsonResponse(new Response('upstream response inválida', { status: 200 }), 'Falha ao carregar.'),
