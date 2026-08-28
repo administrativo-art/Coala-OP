@@ -42,6 +42,7 @@ import { formatClosureMonthLabel, formatClosureTime } from "../date";
 import type { CashClosure, CashClosureLine, CashClosureWithLines } from "../types";
 import { isPdvAutoCountedChannel } from "../channel-normalization";
 import { cashDepositBatchReferenceFromId } from "../../cash-deposits/references";
+import { isCurrentDraftRevision, persistLatestDraft } from "../latest-draft-save";
 import { CentsInput } from "./cents-input";
 import { CashControlNavigation } from "./cash-control-navigation";
 
@@ -140,6 +141,8 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
   const [reasonAction, setReasonAction] = useState<"approve" | "reopen" | null>(null);
   const [reason, setReason] = useState("");
   const latestData = useRef<CashClosureWithLines | null>(null);
+  const draftRevision = useRef(0);
+  const saveInFlight = useRef<Promise<void> | null>(null);
   const intervalBackfillAttempted = useRef(false);
   const closureId = `${kioskId}_${date}`;
   const [dateYear, dateMonth] = date.split("-").map(Number);
@@ -152,10 +155,17 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
 
   const load = useCallback(async () => {
     if (!firebaseUser) return;
+    const requestRevision = draftRevision.current;
     setLoading(true);
     try {
       const payload = await api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`);
-      setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
+      if (!isCurrentDraftRevision(requestRevision, draftRevision.current)) {
+        setSaveState("dirty");
+        return;
+      }
+      const nextData = { closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) };
+      latestData.current = nextData;
+      setData(nextData);
       setOperatorAvatars(payload.operatorAvatars ?? {});
       setSeniorDivergenceCents(payload.settings?.seniorDivergenceCents ?? 1_000);
       setSaveState("idle");
@@ -179,34 +189,58 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
   );
 
   const save = useCallback(async () => {
+    if (saveInFlight.current) return saveInFlight.current;
+
     const current = latestData.current;
     if (!current || !["draft", "reopened", "pending_review"].includes(current.closure.status)) return;
-    setSaveState("saving");
+
+    const request = (async () => {
+      setSaveState("saving");
+      try {
+        const didCommit = await persistLatestDraft({
+          read: () => {
+            const draft = latestData.current;
+            if (!draft || !["draft", "reopened", "pending_review"].includes(draft.closure.status)) return null;
+            return { revision: draftRevision.current, value: draft };
+          },
+          persist: (draft) => api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`, {
+            method: "PATCH",
+            json: {
+              lines: draft.lines.map((line) => ({
+                id: line.id,
+                reportedCents: line.reportedCents,
+                reportedNote: line.reportedNote,
+                countedCents: line.countedCents,
+                note: line.note,
+              })),
+            },
+          }),
+          commit: (payload) => {
+            const nextData = { closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) };
+            latestData.current = nextData;
+            setData(nextData);
+            setSaveState("saved");
+          },
+        });
+        if (!didCommit) setSaveState("idle");
+      } catch (error) {
+        setSaveState("error");
+        toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha no autosave." });
+        throw error;
+      }
+    })();
+
+    saveInFlight.current = request;
     try {
-      const payload = await api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`, {
-        method: "PATCH",
-        json: {
-          lines: current.lines.map((line) => ({
-            id: line.id,
-            reportedCents: line.reportedCents,
-            reportedNote: line.reportedNote,
-            countedCents: line.countedCents,
-            note: line.note,
-          })),
-        },
-      });
-      setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
-      setSaveState("saved");
-    } catch (error) {
-      setSaveState("error");
-      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha no autosave." });
-      throw error;
+      await request;
+    } finally {
+      if (saveInFlight.current === request) saveInFlight.current = null;
     }
   }, [api, closureId, toast]);
 
   useEffect(() => {
     if (saveState !== "dirty" || !editable) return;
-    const timer = window.setTimeout(() => { void save(); }, 1000);
+    const timer = window.setTimeout(() => { void save().catch(() => undefined); }, 1000);
     return () => window.clearTimeout(timer);
   }, [editable, save, saveState, data?.lines]);
 
@@ -220,32 +254,43 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
   }, [saveState]);
 
   function updateLine(id: string, patch: Partial<Pick<CashClosureLine, "reportedCents" | "reportedNote" | "countedCents" | "note">>) {
-    setData((current) => {
-      if (!current) return current;
-      const lines = current.lines.map((line) => {
-        if (line.id !== id) return line;
-        const next = { ...line, ...patch };
-        next.reportedDifferenceCents = next.reportedCents === null ? null : next.reportedCents - next.expectedCents;
-        next.conferenceDifferenceCents = next.countedCents === null || next.reportedCents === null
-          ? null
-          : next.countedCents - next.reportedCents;
-        next.differenceCents = next.countedCents === null ? null : next.countedCents - next.expectedCents;
-        next.status = next.differenceCents === null ? "pending" : next.differenceCents === 0 ? "matched" : "divergent";
-        return next;
-      });
-      return { ...current, lines };
+    const current = latestData.current;
+    if (!current) return;
+    const lines = current.lines.map((line) => {
+      if (line.id !== id) return line;
+      const next = { ...line, ...patch };
+      next.reportedDifferenceCents = next.reportedCents === null ? null : next.reportedCents - next.expectedCents;
+      next.conferenceDifferenceCents = next.countedCents === null || next.reportedCents === null
+        ? null
+        : next.countedCents - next.reportedCents;
+      next.differenceCents = next.countedCents === null ? null : next.countedCents - next.expectedCents;
+      next.status = next.differenceCents === null ? "pending" : next.differenceCents === 0 ? "matched" : "divergent";
+      return next;
     });
+    const nextData = { ...current, lines };
+    draftRevision.current += 1;
+    latestData.current = nextData;
+    setData(nextData);
     setSaveState("dirty");
   }
 
   const sync = useCallback(async () => {
     setWorking("sync");
     try {
+      if (["dirty", "saving", "error"].includes(saveState)) await save();
+      const requestRevision = draftRevision.current;
       const payload = await api<CashClosureApiPayload>("/api/financial/cash-closures/sync", {
         method: "POST",
         json: { kioskId, date },
       });
-      setData({ closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) });
+      if (!isCurrentDraftRevision(requestRevision, draftRevision.current)) {
+        setSaveState("dirty");
+        toast({ title: "PDV ressincronizado; alterações locais mantidas para salvar." });
+        return;
+      }
+      const nextData = { closure: payload.closure, lines: withPdvAutomaticCounts(payload.lines) };
+      latestData.current = nextData;
+      setData(nextData);
       setSaveState("idle");
       toast({ title: payload.created ? "Fechamento criado a partir do PDV." : "Fechamento ressincronizado." });
     } catch (error) {
@@ -253,7 +298,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
     } finally {
       setWorking(null);
     }
-  }, [api, date, kioskId, toast]);
+  }, [api, date, kioskId, save, saveState, toast]);
 
   useEffect(() => {
     const needsIntervalBackfill =
@@ -385,7 +430,7 @@ export function CashClosureDayPage({ kioskId, date }: Props) {
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 font-bold"><Link href={monthHref}><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao mês</Link></Button>
         {permissions.financial.cashClosures.resync && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void sync()} disabled={!!working}><RefreshCw className="mr-2 h-4 w-4" />Ressincronizar</Button>}
-        {editable && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void save()} disabled={saveState === "saving" || !!working}><Save className="mr-2 h-4 w-4" />Salvar</Button>}
+        {editable && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => void save().catch(() => undefined)} disabled={saveState === "saving" || !!working}><Save className="mr-2 h-4 w-4" />Salvar</Button>}
         {cashierEditable && <Button className="h-10 rounded-xl bg-pink-600 px-4 font-extrabold text-white hover:bg-pink-700" onClick={() => void submit()} disabled={!!working}><Send className="mr-2 h-4 w-4" />Enviar ao Financeiro</Button>}
         {permissions.financial.cashClosures.approve && data.closure.status === "pending_review" && <Button className="h-10 rounded-xl bg-emerald-700 px-4 font-extrabold hover:bg-emerald-800" onClick={() => setReasonAction("approve")}><CheckCircle2 className="mr-2 h-4 w-4" />Finalizar conferência</Button>}
         {permissions.financial.cashClosures.reopen && ["pending_review", "approved"].includes(data.closure.status) && <Button variant="outline" className="h-10 rounded-xl border-stone-200 font-bold" onClick={() => setReasonAction("reopen")}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</Button>}
