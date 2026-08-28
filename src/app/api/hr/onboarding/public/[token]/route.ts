@@ -52,6 +52,7 @@ import {
   onboardingDocumentExtractionCacheId,
   type OnboardingDocumentExtractionRecord,
 } from '@/features/hr/onboarding/document-ai-extraction';
+import { reportSystemError } from '@/lib/observability';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -826,7 +827,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
   try {
     submittedExtractions = await loadSubmittedDocumentExtractions(doc.ref, rawDocuments);
   } catch (error) {
-    console.error('[onboarding] Falha ao carregar a extração dos documentos enviados.', error);
+    reportSystemError({
+      error,
+      code: 'ONBOARDING_DOCUMENT_EXTRACTION_LOAD_FAILED',
+      source: 'api',
+      operation: 'load-onboarding-document-extractions',
+      routeOrJob: '/api/hr/onboarding/public/[token]',
+      metadata: { processId: doc.id },
+    });
     return jsonError('Não foi possível validar a análise dos documentos enviados.', 500);
   }
 

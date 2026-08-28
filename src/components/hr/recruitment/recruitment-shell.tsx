@@ -9046,8 +9046,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'Falha ao anexar a Ficha de Registro.');
+      await readHrJsonResponse(response, 'Falha ao anexar a Ficha de Registro.');
       setAccountantActiveStep(3);
       setPhaseId('accountant');
       onRefresh();

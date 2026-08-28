@@ -17,6 +17,7 @@ import { adminApp } from '@/lib/firebase-admin';
 import { firebaseClientConfig } from '@/lib/firebase-client-config';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
+import { AppError, withApiErrorHandling } from '@/lib/observability';
 import { invalidateAccountantFormVersion } from '@/features/hr/accountant/form-version';
 import { maritalStatusIsInformed } from '@/features/hr/onboarding/marital-status';
 import { applyOnboardingSignatureMode, normalizeOnboardingStages } from '@/lib/recruitment-onboarding';
@@ -134,34 +135,74 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   return NextResponse.json({ workflow, events: events.docs.map((document) => ({ id: document.id, ...document.data() })) });
 }
 
-export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export const POST = withApiErrorHandling({
+  source: 'api',
+  operation: 'upload-accountant-registry',
+  routeOrJob: '/api/hr/onboarding/[id]/accountant-workflow',
+}, async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
   const access = await assertFormalizationAccess(request, 'accountant.manage').catch(() => null);
-  if (!access) return NextResponse.json({ error: 'Sem permissão.' }, { status: 403 });
+  if (!access) {
+    throw new AppError({
+      code: 'ACCOUNTANT_REGISTRY_UPLOAD_FORBIDDEN',
+      kind: 'AUTHORIZATION',
+      safeMessage: 'Sem permissão.',
+    });
+  }
 
   const { id } = await context.params;
   const processRef = hrDbAdmin.collection('onboardingProcesses').doc(id);
   const snapshot = await processRef.get();
-  if (!snapshot.exists) return NextResponse.json({ error: 'Integração não encontrada.' }, { status: 404 });
+  if (!snapshot.exists) {
+    throw new AppError({
+      code: 'ONBOARDING_PROCESS_NOT_FOUND',
+      kind: 'NOT_FOUND',
+      safeMessage: 'Integração não encontrada.',
+    });
+  }
 
   const process = snapshot.data() ?? {};
   const workflow = record(process.accountantWorkflow);
   const currentRegistry = record(workflow.registryDocument);
   const preflight = accountantRhRegistryUploadPreflight(process);
-  if (!preflight.ok) return NextResponse.json({ error: preflight.error }, { status: preflight.status });
+  if (!preflight.ok) {
+    throw new AppError({
+      code: 'ACCOUNTANT_REGISTRY_UPLOAD_NOT_READY',
+      kind: preflight.status === 409 ? 'CONFLICT' : 'VALIDATION',
+      safeMessage: preflight.error,
+      httpStatus: preflight.status,
+    });
+  }
   if (preflight.unchanged) {
     return NextResponse.json({ ok: true, unchanged: true, completed: true, nextStage: text(process.currentStage, 80) });
   }
 
   const form = await request.formData();
   const validation = await prepareAccountantRegistryUpload(form.get('file'));
-  if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: validation.status });
+  if (!validation.ok) {
+    throw new AppError({
+      code: 'ACCOUNTANT_REGISTRY_FILE_INVALID',
+      kind: 'VALIDATION',
+      safeMessage: validation.error,
+      httpStatus: validation.status,
+    });
+  }
   if (text(currentRegistry.hashSha256, 80) === validation.upload.hashSha256
     || await registryUploadAlreadyExists(id, validation.upload.hashSha256)) {
-    return NextResponse.json({ error: 'Este mesmo arquivo já foi anexado anteriormente.' }, { status: 409 });
+    throw new AppError({
+      code: 'ACCOUNTANT_REGISTRY_FILE_DUPLICATED',
+      kind: 'CONFLICT',
+      safeMessage: 'Este mesmo arquivo já foi anexado anteriormente.',
+    });
   }
 
   const completion = completionAfterAccountant(process);
-  if (!completion) return NextResponse.json({ error: 'Não foi possível identificar a próxima etapa da integração.' }, { status: 409 });
+  if (!completion) {
+    throw new AppError({
+      code: 'ACCOUNTANT_STAGE_COMPLETION_INVALID',
+      kind: 'CONFLICT',
+      safeMessage: 'Não foi possível identificar a próxima etapa da integração.',
+    });
+  }
 
   const now = new Date().toISOString();
   const registryDocument = await storeAccountantRegistryUpload({
@@ -199,9 +240,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   ]);
 
   return NextResponse.json({ ok: true, completed: true, nextStage: completion.next.id });
-}
+});
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export const PATCH = withApiErrorHandling({
+  source: 'api',
+  operation: 'update-accountant-workflow',
+  routeOrJob: '/api/hr/onboarding/[id]/accountant-workflow',
+}, async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
   const access = await assertFormalizationAccess(request, 'accountant.manage').catch(() => null);
   if (!access) return NextResponse.json({ error: 'Sem permissão.' }, { status: 403 });
   const { id } = await context.params;
@@ -419,7 +464,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const reviewedRegistry = { ...registry, status: decision, reviewedAt: now, reviewedBy: access.decoded.uid, rejectionReason: decision === 'rejected' ? reason : null };
     if (decision === 'approved') {
       const completion = completionAfterAccountant(process);
-      if (!completion) return NextResponse.json({ error: 'Não foi possível identificar a próxima etapa da integração.' }, { status: 409 });
+      if (!completion) {
+        throw new AppError({
+          code: 'ACCOUNTANT_STAGE_COMPLETION_INVALID',
+          kind: 'CONFLICT',
+          safeMessage: 'Não foi possível identificar a próxima etapa da integração.',
+        });
+      }
       await Promise.all([
         processRef.set({ stages: completion.stages, currentStage: completion.next.id, currentStageStartedAt: now, status: nextStatus(completion.next.id), accountantWorkflow: { ...workflow, status: 'completed', registryDocument: reviewedRegistry, updatedAt: now }, updatedAt: now }, { merge: true }),
         addEvent(id, 'ACCOUNTANT_REGISTRY_APPROVED', access, { versionId: text(registry.versionId), nextStage: completion.next.id }),
@@ -434,4 +485,4 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 });
-}
+});
