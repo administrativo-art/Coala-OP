@@ -20,7 +20,10 @@ import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-
 import { syncApprovedOnboardingPhotoToAvatar } from '@/lib/hr/profile-photo-avatar.server';
 import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
 import { setPjWorkflowStep } from '@/features/hr/onboarding-pj/core';
-import { confirmExtractedDocumentField } from '@/features/hr/onboarding/document-field-confirmation';
+import {
+  confirmExtractedDocumentField,
+  correctExtractedDocumentField,
+} from '@/features/hr/onboarding/document-field-confirmation';
 import { redactOnboardingProcess } from '@/features/hr/onboarding/process-redaction.server';
 import {
   createOnboardingPublicLinkWindow,
@@ -812,7 +815,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') return jsonError('Payload inválido.');
   const action = asString(body.action);
-  const requiredPermission = action === 'document_status' || action === 'document_status_bulk' || action === 'confirm_document_field'
+  const requiredPermission = action === 'document_status' || action === 'document_status_bulk' || action === 'confirm_document_field' || action === 'correct_document_field'
     ? 'documents.review'
     : 'onboarding.manage';
   const access = await assertFormalizationAccess(request, requiredPermission).catch(() => null);
@@ -839,11 +842,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (action === 'update_expected_admission_date') {
     if (!canUpdateExpectedAdmissionDate(process as OnboardingProcess)) {
-      return jsonError('A data prevista só pode ser alterada até a conclusão da etapa do contador.', 409);
+      return jsonError('A data de admissão só pode ser alterada na etapa do contador.', 409);
     }
     const expectedAdmissionDate = normalizeOnboardingDateOnly(body.expectedAdmissionDate);
     if (!expectedAdmissionDate) {
-      return jsonError('Informe uma data prevista para admissão válida.');
+      return jsonError('Informe uma data de admissão válida.');
     }
     update.expectedAdmissionDate = expectedAdmissionDate;
     update.expectedAdmissionDateUpdatedAt = now;
@@ -948,6 +951,25 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!confirmation.ok) return jsonError('O campo extraído não está disponível neste documento.', 409);
     update.documents = confirmation.documents;
     changedDocumentsCount = 1;
+  } else if (action === 'correct_document_field') {
+    const documentId = asString(body.documentId);
+    const fieldKey = asString(body.fieldKey);
+    if (!documentId || !fieldKey) return jsonError('Documento ou campo inválido.');
+    const documents = Array.isArray(process.documents) ? process.documents as OnboardingDocument[] : [];
+    const correction = correctExtractedDocumentField({
+      documents,
+      documentId,
+      fieldKey,
+      value: body.value,
+      now,
+      actorId: access.decoded.uid,
+    });
+    if (!correction.ok && correction.reason === 'document_not_found') return jsonError('Documento não encontrado.', 404);
+    if (!correction.ok && correction.reason === 'field_not_found') return jsonError('O campo extraído não está disponível neste documento.', 409);
+    if (!correction.ok && correction.reason === 'unsupported_value') return jsonError('Este campo composto deve ser revisado diretamente no cadastro.', 409);
+    if (!correction.ok) return jsonError('Informe um valor válido para corrigir o campo.');
+    update.documents = correction.documents;
+    changedDocumentsCount = 1;
   } else if (action === 'document_status_bulk') {
     const documentIds = asStringArray(body.documentIds);
     const status = asString(body.status) as OnboardingDocument['status'] | null;
@@ -997,14 +1019,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       }
     }
     if (process.currentStage === 'formalization_validation' && currentStage !== 'formalization_validation') {
-      const accessProvisioning = asRecord(process.accessProvisioning);
-      const accessEmail = asRecord(accessProvisioning.email);
-      const firstAccess = asRecord(process.firstAccess);
-      const accessReady = Boolean(asString(process.collaboratorUserId)) &&
-        accessEmail.status === 'delivered' &&
-        firstAccess.status === 'used';
-      if (!accessReady) {
-        return jsonError('A formalização só avança após criar o cadastro, confirmar a entrega do e-mail e cadastrar a senha.', 409);
+      if (Object.keys(asRecord(process.finalizationSettings)).length === 0) {
+        return jsonError('Salve a validação da formalização antes de avançar para os acessos.', 409);
       }
     }
     if (process.currentStage === 'integration' && currentStage !== 'integration' && !requiredOnboardingIntegrationsResolved(process.integrationAlerts)) {
@@ -1015,7 +1031,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     update.status = nextStatusForStage(currentStage);
   } else if (action === 'save_finalization') {
     if (process.currentStage !== 'formalization_validation') {
-      return jsonError('As configurações finais só podem ser salvas na etapa Formalização · Finalização.', 400);
+      return jsonError('As configurações finais só podem ser salvas na etapa Validação da formalização.', 400);
     }
     const finalization = asRecord(body.finalizationSettings);
     const needsTransportVoucher = asBoolean(finalization.needsTransportVoucher) ?? false;
@@ -1036,6 +1052,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       transportVoucherValue: needsTransportVoucher ? asNumber(finalization.transportVoucherValue) ?? null : null,
       shiftDefinitionId,
     };
+    update.currentStage = 'integration';
+    update.currentStageStartedAt = now;
+    update.status = 'ready_to_create_user';
+    update.formalizationCompletedAt = now;
   } else if (action === 'extend_public_link') {
     if (!process.publicToken || process.publicTokenClosedAt || process.status === 'cancelled' || process.status === 'completed') {
       return jsonError('Este link não pode mais ser prorrogado.', 400);
@@ -1061,8 +1081,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (pjWorkflow.finance?.status !== 'approved' || pjWorkflow.access?.status !== 'configured') {
         return jsonError('Aprovação financeira e configuração dos acessos são obrigatórias.', 400);
       }
-    } else if (process.currentStage !== 'formalization_validation' && process.status !== 'ready_to_create_user') {
-      return jsonError('Valide a formalização antes de criar o colaborador.', 400);
+    } else if (process.currentStage !== 'integration') {
+      return jsonError('Conclua a validação da formalização antes de criar o colaborador.', 400);
     }
     if (!isPj && (!asRecord(process.finalizationSettings) || Object.keys(asRecord(process.finalizationSettings)).length === 0)) {
       return jsonError('Salve a validação final antes de criar o colaborador.', 400);
@@ -1096,8 +1116,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       completedBy: access.decoded.uid,
     };
     update.status = isPj ? 'active' : 'awaiting_first_access';
-    update.currentStage = isPj ? 'integration' : 'formalization_validation';
-    if ((isPj ? 'integration' : 'formalization_validation') !== process.currentStage) {
+    update.currentStage = 'integration';
+    if (process.currentStage !== 'integration') {
       update.currentStageStartedAt = now;
     }
     update.publicToken = null;
@@ -1212,6 +1232,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   } else if (action === 'complete') {
     if (!process.collaboratorUserId) return jsonError('Crie o colaborador antes de finalizar o onboarding.');
     if (process.currentStage !== 'integration') return jsonError('A integração não está na etapa de acessos.', 409);
+    const accessProvisioning = asRecord(process.accessProvisioning);
+    const accessEmail = asRecord(accessProvisioning.email);
+    const firstAccess = asRecord(process.firstAccess);
+    if (accessProvisioning.status !== 'completed' || accessEmail.status !== 'delivered' || firstAccess.status !== 'used') {
+      return jsonError('Confirme a entrega do e-mail e o primeiro acesso antes de finalizar.', 409);
+    }
     if (!requiredOnboardingIntegrationsResolved(process.integrationAlerts)) {
       return jsonError('Confirme a sincronização do Bizneo e do PDV Legal antes de finalizar.', 409);
     }

@@ -378,6 +378,7 @@ export async function POST(request: NextRequest) {
     return jsonError('Selecione o tipo de vínculo: CLT, PJ ou Estágio.');
   }
   if (!employerUnitId) return jsonError('Selecione o CNPJ responsável pela contratação.');
+  if (!expectedAdmissionDate) return jsonError('Informe a data prevista de admissão.');
   if (integrationMode === 'import' && !integrationTemplateId) return jsonError('Selecione o modelo que será importado.');
   if (transportVoucherValue === null || transportVoucherValue < 0) {
     return jsonError('Informe o valor diário do vale-transporte.');

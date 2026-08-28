@@ -38,6 +38,12 @@ env:
     secret: RESEND_API_KEY
   - variable: RESEND_WEBHOOK_SECRET
     secret: RESEND_WEBHOOK_SECRET
+  - variable: OPENAI_API_KEY
+    secret: OPENAI_API_KEY
+  - variable: OPENAI_DOCUMENT_MODEL
+    value: "gpt-5.6-terra"
+  - variable: OPENAI_FINANCIAL_DOCUMENT_MODEL
+    value: "gpt-5.6-terra"
   - variable: FINANCIAL_INBOUND_ADDRESS
     value: "cobrancas@entrada.coalashakes.com"
   - variable: ASO_INBOUND_DOMAIN

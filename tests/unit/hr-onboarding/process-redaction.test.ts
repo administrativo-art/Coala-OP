@@ -17,7 +17,14 @@ test('a leitura pontual aplica a mesma proteção de documentos e dados sensíve
     monthlySalary: 1787.3,
     accountantWorkflow: { formData: { monthlySalary: 1787.3 } },
     publicFormAnswers: { cpf: '12345678900', fullName: 'Pessoa Teste' },
-    documents: [{ id: 'identity', fileUrl: 'https://storage/document', hashSha256: 'hash' }],
+    documents: [{
+      id: 'identity',
+      fileUrl: 'https://storage/document',
+      hashSha256: 'hash',
+      extractedFields: { cpf: '12345678900' },
+      fieldConfidences: { cpf: 0.99 },
+      aiAnalysis: { model: 'gpt-5.6-terra' },
+    }],
   }, accessWith());
 
   assert.equal(result.monthlySalaryConfigured, true);
@@ -26,6 +33,8 @@ test('a leitura pontual aplica a mesma proteção de documentos e dados sensíve
   assert.equal('publicToken' in result, false);
   assert.equal((result.publicFormAnswers as Record<string, unknown>).cpf, undefined);
   assert.equal((result.documents as Array<Record<string, unknown>>)[0].fileUrl, undefined);
+  assert.equal((result.documents as Array<Record<string, unknown>>)[0].extractedFields, undefined);
+  assert.equal((result.documents as Array<Record<string, unknown>>)[0].aiAnalysis, undefined);
 });
 
 test('mantém o arquivo quando o perfil possui visualização documental', () => {

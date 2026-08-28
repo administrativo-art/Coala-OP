@@ -46,6 +46,12 @@ export function redactOnboardingProcess(
       delete document.fileUrl;
       delete document.storagePath;
       delete document.hashSha256;
+      delete document.fileHashSha256;
+      delete document.extractedFields;
+      delete document.fieldConfidences;
+      delete document.confirmedExtractedFields;
+      delete document.correctedExtractedFields;
+      delete document.aiAnalysis;
       return document;
     });
   }
