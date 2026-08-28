@@ -12,10 +12,16 @@ AppError
   → StructuredConsoleSink
   → stdout/stderr estruturado
   → Cloud Logging
-  → Error Reporting
+  → Error Reporting (camada opcional; API atualmente desabilitada)
 ```
 
 O domínio não importa SDK do Google. O App Hosting/Cloud Run já coleta stdout e stderr; por isso não há Sentry, client library adicional, sink remoto, polling ou persistência de eventos no Firestore.
+
+## Estado validado em produção
+
+A fundação foi promovida em 27/08/2026 pelo merge `bb5e439dfce4818d3cf921c88eaded97769da3a3`, build `build-2026-08-27-003`, revisão `studio-build-2026-08-27-003` e rollout `rollout-2026-08-27-003` com 100% do tráfego. Um evento sintético autenticado provou, no Cloud Logging, release correta, `eventId`, fingerprint, severidade, sanitização e stack com três linhas/dois frames. O smoke não leu nem gravou dados de negócio.
+
+Essa evidência valida a ingestão pelo Cloud Logging, mas não o agrupamento real do Error Reporting. A API do Error Reporting respondeu `SERVICE_DISABLED` na auditoria somente leitura de 27/08/2026. A compatibilidade formal do formato permanece; alertas e triagem inicial não dependem dessa API.
 
 ## Contrato de SystemErrorEvent
 
@@ -105,10 +111,22 @@ O sink traduz o evento interno para JSON compatível com o ambiente Google:
 - `message` com stack sanitizada multiline;
 - labels pesquisáveis para `errorCode`, `fingerprint` e `release`.
 
-A compatibilidade estrutural é testada localmente. Captura, agrupamento e pesquisa reais só poderão ser afirmados após rollout autorizado e smoke test.
+A compatibilidade estrutural é testada localmente, e a captura/pesquisa real foi validada no Cloud Logging após o rollout de 27/08/2026. O agrupamento no Error Reporting continua inconclusivo porque a API está desabilitada.
+
+## Operação
+
+- inventário, baselines e custos: `google-observability-audit.md`;
+- matriz, thresholds, exclusões e ativação/rollback: `observability-alerts-runbook.md`;
+- especificação exata e preview da Fase A: `observability-phase-a.md`;
+- falhas que exigem triagem antes de paging: `observability-triage-backlog.md`;
+- consultas e exports sanitizados: `observability-queries.md`;
+- fluxo humano e uso explicit-only da skill: `error-triage-runbook.md`;
+- prazos provisórios: `error-triage-sla.md`.
+
+A Fase A foi ativada sob autorização explícita em 28/08/2026: 1 uptime check, 2 métricas e 8 policies, sem notification channel ou dashboard. Alerta registrado não significa notificação enviada. A cobertura `06:00–23:00 BRT` é apenas referência enquanto não houver canal e responsáveis; nenhum SLA por e-mail/paging está ativo.
 
 ## Custo e limites
 
 Não há `setInterval`, listener, query ou escrita Firestore. Cada falha client-side aceita gera no máximo uma requisição HTTP e um evento de log. O teto local é 600 requisições/hora por aba em uma tempestade contínua; com o limite máximo de 32 KiB, o teto teórico de payload é 18,75 MiB/hora por aba, não uma carga periódica.
 
-A auditoria histórica de 26/08/2026, preservada em `google-observability-audit.md`, indicou volume muito abaixo da franquia do Logging. O volume deve ser medido novamente após rollout; nenhuma estimativa local substitui essa validação.
+A medição de 30 dias encerrada em 27/08/2026 encontrou aproximadamente 0,254 GiB de logs no projeto, ainda muito abaixo da franquia mensal de 50 GiB do Logging. Essa fotografia não é garantia de custo futuro; alta cardinalidade, retenção adicional e crescimento de volume precisam continuar sendo revistos.
