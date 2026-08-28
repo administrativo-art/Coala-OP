@@ -11,7 +11,6 @@ import {
 import { resolveOperatorAvatarUrls } from "@/features/financial/cash-closures/operator-avatars";
 import {
   getCashClosure,
-  saveCashClosureConference,
   saveCashClosureDraft,
 } from "@/features/financial/cash-closures/repository.server";
 import { saveCashClosureDraftSchema } from "@/features/financial/cash-closures/schemas";
@@ -58,20 +57,15 @@ export async function PATCH(request: NextRequest, routeContext: RouteContext) {
   try {
     const { context, closureId, result } = await loadAuthorized(request, routeContext, "view");
     const input = saveCashClosureDraftSchema.parse(await request.json());
-    if (result.closure.status === "pending_review") {
-      assertCashClosureAccess(context, "approve", result.closure.kioskId);
-      return NextResponse.json(await saveCashClosureConference(closureId, input.lines, cashClosureActor(context)));
-    }
     const editReported = canUseCashClosure(context, "edit", result.closure.kioskId);
-    const editCounted = canUseCashClosure(context, "approve", result.closure.kioskId);
-    if (!editReported && !editCounted) {
+    if (!editReported) {
       throw new Error("Sem permissão para editar este fechamento de caixa.");
     }
     return NextResponse.json(await saveCashClosureDraft(
       closureId,
       input.lines,
       cashClosureActor(context),
-      { editReported, editCounted },
+      { editReported, editCounted: false },
     ));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao salvar fechamento.";

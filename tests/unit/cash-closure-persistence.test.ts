@@ -75,7 +75,7 @@ test("ressincronização atualiza esperado e preserva contado e observação", (
   assert.equal(second.lines[0].status, "divergent");
 });
 
-test("mantém separados o informado pelo Caixa e a conferência do Financeiro", () => {
+test("preserva os campos da conferência legada sem misturá-los durante a normalização", () => {
   const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
   const reported = recalculateReportedLine(
     first.lines[0],
@@ -99,7 +99,7 @@ test("mantém separados o informado pelo Caixa e a conferência do Financeiro", 
   assert.equal(counted.note, "Financeiro contou R$ 2,00 a mais que o Caixa");
 });
 
-test("registro legado usa o valor antigo como Caixa e exige nova conferência antes da aprovação", () => {
+test("registro legado recupera o valor antigo como contagem editável", () => {
   const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
   const legacyLine = recalculateCountedLine(
     first.lines[0],

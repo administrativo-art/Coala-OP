@@ -6,6 +6,7 @@ import {
   compareClosureTimestamps,
   formatClosureMonthLabel,
   formatClosureTime,
+  shiftClosureDate,
 } from "../../src/features/financial/cash-closures/date";
 
 test("mês é exibido com capitalização natural em português", () => {
@@ -33,4 +34,16 @@ test("formata horário local do PDV e respeita o fuso de Belém", () => {
   assert.equal(formatClosureTime("2026-07-07 08:05:00"), "08:05");
   assert.equal(formatClosureTime("2026-07-08T02:50:00.000Z"), "23:50");
   assert.ok(compareClosureTimestamps("2026-07-07 08:05:00", "2026-07-07 18:42:00") < 0);
+});
+
+test("avança o dia civil do fechamento atravessando mês, ano e fevereiro bissexto", () => {
+  assert.equal(shiftClosureDate("2026-08-05", 1), "2026-08-06");
+  assert.equal(shiftClosureDate("2026-08-31", 1), "2026-09-01");
+  assert.equal(shiftClosureDate("2026-12-31", 1), "2027-01-01");
+  assert.equal(shiftClosureDate("2028-02-28", 1), "2028-02-29");
+});
+
+test("rejeita data civil inválida ao calcular a navegação do fechamento", () => {
+  assert.throws(() => shiftClosureDate("2026-02-30", 1));
+  assert.throws(() => shiftClosureDate("05/08/2026", 1));
 });
