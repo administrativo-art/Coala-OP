@@ -82,6 +82,16 @@ Um invariante pode estar `GARANTIDO` sem estar validado em produção. Evidênci
 - **Limitações:** A proteção depende da configuração remota permanecer ativa; esta tarefa apenas revalidou SHAs/trees e não alterou configuração.
 - **Validação em produção:** CONFIRMADA para a promoção documentada em `docs/engineering/production-validation-2026-08-27.md`.
 
+## PDV-SECRETS-1
+
+- **Estado:** GARANTIDO
+- **Regra:** As credenciais do PDV Legal são secrets de runtime vinculadas somente às Functions autorizadas `hourlyPdvSync` e `syncGoalsForRange`. Nenhuma credencial ativa pode ser distribuída como variável comum, exposta ao cliente ou reutilizada por consumidor não autorizado.
+- **Motivação:** Fazer a configuração declarada no repositório corresponder à restrição já aplicada no runtime e impedir que um deploy futuro volte a distribuir as credenciais para todas as Functions.
+- **Mecanismo de proteção:** Catálogo e allowlist em `functions/src/pdv-secret-contract.ts`, opções `secrets` explícitas nas duas Functions, fronteira `server-only` no módulo Next.js e referências `secret` no App Hosting.
+- **Teste:** `tests/unit/functions-pdv-secret-contract.test.ts` inspeciona estruturalmente as declarações das Functions, compara consumidores com a allowlist e impede env comum, hardcode nominal, logging nominal e exposição `NEXT_PUBLIC_*`/client-side.
+- **Limitações:** O teste não lê nem valida valores reais, rotação ou validade das credenciais no provedor. Scripts operacionais locais continuam podendo receber os nomes via ambiente durante execução autorizada, sem vínculo de runtime de Function.
+- **Validação em produção:** A configuração remota equivalente foi observada em 28/08/2026 nas 34 Functions: somente `hourlyPdvSync` e `syncGoalsForRange` possuíam os quatro vínculos em `secretEnvironmentVariables`, sem as chaves em `environmentVariables`. Esta mudança ainda não foi redeployada; o runtime já estava no estado seguro antes dela.
+
 ## Contratos adiados por dependência funcional
 
 ### HOST-PUBLIC-*
