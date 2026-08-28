@@ -22,6 +22,8 @@ A skill é explicit-only. Ela aceita export JSON/JSONL sanitizado e inventário 
 
 Ela não consulta serviços externos, publica issue, faz commit, push, deploy ou rollout. Correlação por fingerprint não é causa confirmada.
 
+O fluxo operacional, a sanitização do export e os critérios humanos para transformar um grupo em issue estão em `error-triage-runbook.md`; as consultas read-only ficam em `observability-queries.md`.
+
 ## Validação
 
 ```bash
