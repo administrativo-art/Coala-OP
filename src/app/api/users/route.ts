@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth-server";
 import { EMAIL_SENDERS, sendEmail } from "@/lib/email/resend";
 import { renderFirstAccessEmail } from "@/lib/email/first-access-template";
 import { createFirstAccessLink } from "@/lib/first-access-links";
+import { parseUserDateInput } from "@/features/hr/lib/user-date-input";
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { isEmploymentRelationshipType } from "@/lib/hr/employment-relationship";
@@ -65,16 +66,11 @@ function personRecordType(userData: Record<string, unknown>) {
   return "employee";
 }
 
-function dateTimestamp(value: unknown) {
+function dateTimestamp(value: unknown, label: string) {
   if (!value) return undefined;
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return Timestamp.fromDate(new Date(`${value}T12:00:00`));
-  }
-  const source = record(value);
-  const seconds = Number(source.seconds ?? source._seconds);
-  const nanoseconds = Number(source.nanoseconds ?? source._nanoseconds ?? 0);
-  if (Number.isFinite(seconds)) return new Timestamp(seconds, Number.isFinite(nanoseconds) ? nanoseconds : 0);
-  return undefined;
+  const parsed = parseUserDateInput(value);
+  if (!parsed) throw new Error(`${label} inválida.`);
+  return Timestamp.fromDate(parsed);
 }
 
 function cleanUserData(value: unknown) {
@@ -84,8 +80,8 @@ function cleanUserData(value: unknown) {
     if (!USER_DATA_FIELDS.has(key) || entry === undefined) continue;
     cleaned[key] = entry;
   }
-  const admissionDate = dateTimestamp(source.admissionDate);
-  const birthDate = dateTimestamp(source.birthDate);
+  const admissionDate = dateTimestamp(source.admissionDate, "Data de admissão");
+  const birthDate = dateTimestamp(source.birthDate, "Data de nascimento");
   if (admissionDate) cleaned.admissionDate = admissionDate;
   else delete cleaned.admissionDate;
   if (birthDate) cleaned.birthDate = birthDate;

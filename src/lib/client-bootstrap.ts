@@ -38,17 +38,18 @@ export type ClientBootstrapPayload = {
   employeeGoals?: EmployeeGoal[];
 };
 
-function reviveFirestoreValues(value: unknown): unknown {
+export function reviveFirestoreValues(value: unknown): unknown {
   if (!value || typeof value !== "object") return value;
 
   const marker = value as {
     __type?: unknown;
+    type?: unknown;
     seconds?: unknown;
     nanoseconds?: unknown;
   };
 
   if (
-    marker.__type === "firestore-timestamp" &&
+    (marker.__type === "firestore-timestamp" || marker.type === "firestore/timestamp/1.0") &&
     typeof marker.seconds === "number" &&
     typeof marker.nanoseconds === "number"
   ) {

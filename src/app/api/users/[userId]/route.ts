@@ -4,6 +4,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { resolveCollaboratorCore } from "@/features/hr/lib/collaborator-core.server";
 import { syncTransportVoucherProjection } from "@/features/hr/lib/collaborator-data-contract.server";
 import { recordTransportVoucherDecision } from "@/features/hr/lib/transport-voucher-decision.server";
+import { parseUserDateInput } from "@/features/hr/lib/user-date-input";
 import { requireUser } from "@/lib/auth-server";
 import { dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -90,6 +91,25 @@ function hasOwn(payload: Record<string, unknown>, field: string) {
   return Object.prototype.hasOwnProperty.call(payload, field);
 }
 
+function normalizeUserDateFields(payload: Record<string, unknown>) {
+  const fields = [
+    ["admissionDate", "Data de admissão"],
+    ["birthDate", "Data de nascimento"],
+  ] as const;
+
+  for (const [field, label] of fields) {
+    if (!hasOwn(payload, field)) continue;
+    const value = payload[field];
+    if (value === null || value === "") {
+      payload[field] = null;
+      continue;
+    }
+    const parsed = parseUserDateInput(value);
+    if (!parsed) throw new Error(`${label} inválida.`);
+    payload[field] = Timestamp.fromDate(parsed);
+  }
+}
+
 function comparable(value: unknown) {
   if (value && typeof value === "object" && "seconds" in value && "nanoseconds" in value) {
     return value;
@@ -131,6 +151,7 @@ export async function PATCH(
     for (const field of SERVER_ONLY_FIELDS) {
       delete payload[field];
     }
+    normalizeUserDateFields(payload);
 
     const userRef = dbAdmin.collection("users").doc(userId);
     const existingUserSnap = await userRef.get();
