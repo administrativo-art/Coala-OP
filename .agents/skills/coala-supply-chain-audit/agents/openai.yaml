@@ -1,0 +1,7 @@
+interface:
+  display_name: "Auditoria de dependências Coala"
+  short_description: "Inventaria riscos de supply chain sem atualizar"
+  default_prompt: "Use $coala-supply-chain-audit para auditar dependências localmente sem atualizar pacotes."
+
+policy:
+  allow_implicit_invocation: false

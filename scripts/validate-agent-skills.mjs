@@ -50,3 +50,49 @@ if (realpathSync(linkTarget) !== realpathSync(skillRoot)) {
 }
 
 process.stdout.write("Skill coala-error-triage validada.\n");
+
+const supplySkillRoot = join(repositoryRoot, ".agents", "skills", "coala-supply-chain-audit");
+for (const relativePath of [
+  "SKILL.md",
+  "agents/openai.yaml",
+  "evals/cases.json",
+  "scripts/inventory-dependencies.mjs",
+]) {
+  const path = join(supplySkillRoot, relativePath);
+  if (!existsSync(path)) throw new Error(`Arquivo obrigatório da supply chain ausente: ${relativePath}`);
+}
+
+const supplySkill = readFileSync(join(supplySkillRoot, "SKILL.md"), "utf8");
+for (const expected of [
+  "name: coala-supply-chain-audit",
+  "disable-model-invocation: true",
+  "user-invocable: true",
+  "Use somente por invocação explícita",
+  "O fluxo padrão não usa rede",
+]) {
+  if (!supplySkill.includes(expected)) throw new Error(`Contrato ausente na skill de supply chain: ${expected}`);
+}
+if (/TODO|PLACEHOLDER|TBD/.test(supplySkill)) {
+  throw new Error("Skill de supply chain contém placeholder não resolvido.");
+}
+
+const supplyOpenai = readFileSync(join(supplySkillRoot, "agents", "openai.yaml"), "utf8");
+if (!supplyOpenai.includes("allow_implicit_invocation: false") || !supplyOpenai.includes("$coala-supply-chain-audit")) {
+  throw new Error("Skill de supply chain deve permanecer explicit-only.");
+}
+
+const supplyCases = JSON.parse(readFileSync(join(supplySkillRoot, "evals", "cases.json"), "utf8"));
+if (!Array.isArray(supplyCases) || supplyCases.length < 2) {
+  throw new Error("Evals da skill de supply chain estão ausentes ou incompletos.");
+}
+
+const supplyClaudeEntry = join(repositoryRoot, ".claude", "skills", "coala-supply-chain-audit");
+if (!existsSync(supplyClaudeEntry) || !lstatSync(supplyClaudeEntry).isSymbolicLink()) {
+  throw new Error("Entrada Claude da supply chain deve ser symlink para a implementação canônica.");
+}
+const supplyLinkTarget = resolve(dirname(supplyClaudeEntry), readlinkSync(supplyClaudeEntry));
+if (realpathSync(supplyLinkTarget) !== realpathSync(supplySkillRoot)) {
+  throw new Error("Entrada Claude não aponta para .agents/skills/coala-supply-chain-audit.");
+}
+
+process.stdout.write("Skill coala-supply-chain-audit validada.\n");
