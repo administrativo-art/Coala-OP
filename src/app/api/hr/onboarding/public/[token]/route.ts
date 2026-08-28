@@ -47,6 +47,11 @@ import {
 } from '@/features/hr/onboarding/public-form-revision';
 import { resolveSubmittedImageVoiceAuthorization } from '@/features/hr/onboarding/image-voice-consent-state';
 import { ONBOARDING_MARITAL_STATUSES } from '@/features/hr/onboarding/marital-status';
+import {
+  mergeOnboardingDocumentExtraction,
+  onboardingDocumentExtractionCacheId,
+  type OnboardingDocumentExtractionRecord,
+} from '@/features/hr/onboarding/document-ai-extraction';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -242,6 +247,27 @@ function requiredDocumentsSubmitted(documents: OnboardingDocument[]) {
     if (document.required === false) return true;
     return !canCandidateUploadDocument(document);
   });
+}
+
+async function loadSubmittedDocumentExtractions(
+  processRef: FirebaseFirestore.DocumentReference,
+  rawDocuments: Record<string, unknown>,
+) {
+  const submitted = Object.entries(rawDocuments).flatMap(([documentId, value]) => {
+    const data = record(value);
+    const hash = trimText(data.sha256, 64).toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(hash)) return [];
+    return [{ documentId, hash }];
+  });
+  if (submitted.length > 30) throw new Error('Quantidade de documentos acima do limite permitido.');
+
+  const snapshots = await Promise.all(submitted.map(({ documentId, hash }) => processRef
+    .collection('documentExtractions')
+    .doc(onboardingDocumentExtractionCacheId(documentId, hash))
+    .get()));
+  return new Map(snapshots.flatMap((snapshot, index) => snapshot.exists
+    ? [[`${submitted[index].documentId}:${submitted[index].hash}`, snapshot.data() as OnboardingDocumentExtractionRecord] as const]
+    : []));
 }
 
 function getClientKey(request: NextRequest, token: string) {
@@ -796,20 +822,37 @@ export async function POST(request: NextRequest, context: { params: Promise<{ to
     return jsonError('Documento já enviado. Ele só pode ser substituído se o RH reprovar.', 403);
   }
 
+  let submittedExtractions: Map<string, OnboardingDocumentExtractionRecord>;
+  try {
+    submittedExtractions = await loadSubmittedDocumentExtractions(doc.ref, rawDocuments);
+  } catch (error) {
+    console.error('[onboarding] Falha ao carregar a extração dos documentos enviados.', error);
+    return jsonError('Não foi possível validar a análise dos documentos enviados.', 500);
+  }
+
   const nextDocuments = expectedDocuments.map((document) => {
     const submitted = rawDocuments[document.id];
     if (!submitted || typeof submitted !== 'object' || Array.isArray(submitted)) return document;
     const submittedData = submitted as Record<string, unknown>;
     const fileUrl = isAllowedStorageUrl(submittedData.fileUrl) ? submittedData.fileUrl : null;
     if (!fileUrl) return document;
+    const sourceFileHashSha256 = /^[a-f0-9]{64}$/i.test(trimText(submittedData.sha256, 64))
+      ? trimText(submittedData.sha256, 64).toLowerCase()
+      : (document as OnboardingDocument & { fileHashSha256?: string | null }).fileHashSha256 ?? '';
+    const extraction = sourceFileHashSha256
+      ? submittedExtractions.get(`${document.id}:${sourceFileHashSha256}`)
+      : null;
+    const extracted = mergeOnboardingDocumentExtraction({
+      document,
+      sourceFileHashSha256,
+      extraction,
+    });
     return {
       ...document,
-      status: 'received' as const,
+      ...extracted,
       fileUrl,
       filePath: trimText(submittedData.filePath, 700) || (document.filePath ?? null),
-      fileHashSha256: /^[a-f0-9]{64}$/i.test(trimText(submittedData.sha256, 64))
-        ? trimText(submittedData.sha256, 64).toLowerCase()
-        : (document as OnboardingDocument & { fileHashSha256?: string | null }).fileHashSha256 ?? null,
+      fileHashSha256: sourceFileHashSha256 || null,
       note: trimText(submittedData.note, 500) || (document.note ?? null),
       receivedAt: now,
       approvedAt: null,

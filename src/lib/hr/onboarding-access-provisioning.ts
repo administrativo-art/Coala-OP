@@ -49,7 +49,7 @@ export async function maybeAdvanceAfterFirstAccess(onboardingId: string) {
       return { advanced: false as const, reason: status };
     }
 
-    if (process.currentStage !== "formalization_validation") {
+    if (process.currentStage !== "formalization_validation" && process.currentStage !== "integration") {
       return { advanced: false as const, reason: "already_advanced" as const };
     }
 
@@ -57,8 +57,8 @@ export async function maybeAdvanceAfterFirstAccess(onboardingId: string) {
     transaction.set(ref, {
       status: "active",
       currentStage: "integration",
-      currentStageStartedAt: completedAt,
-      formalizationCompletedAt: completedAt,
+      ...(process.currentStage === "integration" ? {} : { currentStageStartedAt: completedAt }),
+      formalizationCompletedAt: asString(process.formalizationCompletedAt) ?? completedAt,
       accessProvisioning: {
         ...accessProvisioning,
         status: "completed",

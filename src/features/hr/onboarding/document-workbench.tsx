@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, Download, ExternalLink, FileText, Loader2, RotateCcw, Sparkles, XCircle } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Download, ExternalLink, FileText, Loader2, Pencil, RotateCcw, Sparkles, XCircle } from "lucide-react";
 
 import { onboardingDocumentPreviewKind } from "@/features/hr/onboarding/document-preview";
 import type { OnboardingDocument } from "@/types";
@@ -16,6 +16,7 @@ type DocumentWorkbenchProps = {
   onStatusChange: (documentId: string, status: OnboardingDocument["status"], note?: string) => Promise<unknown> | unknown;
   onBulkStatusChange: (documentIds: string[], status: "approved" | "rejected", note?: string) => Promise<unknown> | unknown;
   onConfirmField: (documentId: string, fieldKey: string) => Promise<unknown> | unknown;
+  onCorrectField: (documentId: string, fieldKey: string, value: string | boolean) => Promise<unknown> | unknown;
 };
 
 const STATUS_LABELS: Record<OnboardingDocument["status"], string> = {
@@ -53,6 +54,46 @@ function valueText(value: unknown): string {
   return String(value);
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  cpf: "CPF",
+  employeeName: "Nome",
+  motherName: "Nome da mãe",
+  fatherName: "Nome do pai",
+  registrationNumber: "Matrícula",
+  pisPasep: "PIS/PASEP",
+  ctpsNumber: "Número da CTPS",
+  ctpsSeries: "Série da CTPS",
+  ctpsIssueDate: "Emissão da CTPS",
+  cnhNumber: "Número da CNH",
+  cnhCategory: "Categoria da CNH",
+  cnhExpiryDate: "Validade da CNH",
+  cnhFirstLicenseDate: "Primeira habilitação",
+  maritalStatus: "Estado civil",
+  birthDate: "Data de nascimento",
+  dependentName: "Nome do dependente",
+  dependentBirthDate: "Nascimento do dependente",
+  dependentCpf: "CPF do dependente",
+  dependentRg: "RG do dependente",
+  dependents: "Dependentes identificados",
+  issueDate: "Data de emissão",
+  examDate: "Data do exame",
+  fitnessStatus: "Resultado do exame",
+  signatureDetected: "Assinatura identificada",
+  vaccinationRecordDetected: "Caderneta de vacinação identificada",
+  schoolAttendanceDetected: "Frequência escolar identificada",
+};
+
+function fieldLabel(key: string) {
+  return FIELD_LABELS[key] ?? key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ");
+}
+
+function hasMeaningfulExtractedValue(value: unknown) {
+  if (value === null || value === undefined || value === "" || value === false) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
+}
+
 function confidenceTone(confidence?: number) {
   if (confidence === undefined) return { label: "—", className: "bg-stone-100 text-stone-500" };
   const percentage = Math.round(confidence <= 1 ? confidence * 100 : confidence);
@@ -69,12 +110,15 @@ export function OnboardingDocumentWorkbench({
   onStatusChange,
   onBulkStatusChange,
   onConfirmField,
+  onCorrectField,
 }: DocumentWorkbenchProps) {
   const [filter, setFilter] = useState<DocumentFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(documents[0]?.id ?? null);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [rejecting, setRejecting] = useState(false);
   const [bulkRejecting, setBulkRejecting] = useState(false);
+  const [editingFieldKey, setEditingFieldKey] = useState<string | null>(null);
+  const [fieldDraft, setFieldDraft] = useState("");
   const filtered = useMemo(() => documents.filter((document) => filterMatches(document, filter)), [documents, filter]);
   const selected = documents.find((document) => document.id === selectedId) ?? filtered[0] ?? documents[0] ?? null;
   const actionable = documents.filter((document) => hasFile(document) && !["approved", "rejected"].includes(document.status));
@@ -93,6 +137,11 @@ export function OnboardingDocumentWorkbench({
   }, [documents, selectedId]);
 
   useEffect(() => {
+    setEditingFieldKey(null);
+    setFieldDraft("");
+  }, [selectedId]);
+
+  useEffect(() => {
     setCheckedIds((current) => current.filter((id) => actionable.some((document) => document.id === id)));
   }, [documents]);
 
@@ -106,11 +155,22 @@ export function OnboardingDocumentWorkbench({
     setBulkRejecting(false);
   }
 
+  async function saveFieldCorrection() {
+    if (!selected || !editingFieldKey || !fieldDraft.trim()) return;
+    const current = selected.extractedFields?.[editingFieldKey];
+    const value = typeof current === "boolean" ? fieldDraft === "true" : fieldDraft.trim();
+    await onCorrectField(selected.id, editingFieldKey, value);
+    setEditingFieldKey(null);
+    setFieldDraft("");
+  }
+
   if (!documents.length) {
     return <div className="rounded-[20px] border border-dashed border-stone-300 bg-white p-8 text-center text-sm font-semibold text-stone-500">Nenhum documento configurado para esta integração.</div>;
   }
 
-  const extracted = selected ? Object.entries(selected.extractedFields ?? {}) : [];
+  const extracted = selected
+    ? Object.entries(selected.extractedFields ?? {}).filter(([, value]) => hasMeaningfulExtractedValue(value))
+    : [];
   const selectedHasFile = selected ? hasFile(selected) : false;
   const selectedCanAct = Boolean(selected && selectedHasFile && canReview && !disabled);
   const selectedPreviewKind = selected ? onboardingDocumentPreviewKind(selected) : "unknown";
@@ -169,6 +229,28 @@ export function OnboardingDocumentWorkbench({
               ) : <div className="grid h-[260px] place-items-center p-8 text-center"><span><FileText className="mx-auto h-8 w-8 text-stone-300" /><span className="mt-2 block text-xs font-bold text-stone-500">Aguardando o envio deste documento.</span></span></div>}
             </div>
 
+            {selected.aiAnalysis ? (
+              <div className={`rounded-xl border p-3 ${selected.aiAnalysis.status === "completed" ? "border-sky-200 bg-sky-50/70" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {selected.aiAnalysis.status === "completed" ? <Sparkles className="h-4 w-4 text-sky-700" /> : <AlertTriangle className="h-4 w-4 text-amber-700" />}
+                  <span className={`text-[11px] font-black uppercase tracking-wide ${selected.aiAnalysis.status === "completed" ? "text-sky-800" : "text-amber-800"}`}>
+                    {selected.aiAnalysis.status === "completed" ? "Analisado pelo Copiloto" : "Análise automática requer atenção"}
+                  </span>
+                  <span className="ml-auto rounded-lg bg-white/80 px-2 py-1 text-[9px] font-black text-slate-500">{selected.aiAnalysis.model}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-bold text-slate-600">
+                  {selected.aiAnalysis.pageCount ? <span>{selected.aiAnalysis.pageCount} página{selected.aiAnalysis.pageCount === 1 ? "" : "s"}</span> : null}
+                  {typeof selected.aiAnalysis.documentTypeConfidence === "number" ? <span>Tipo: {Math.round(selected.aiAnalysis.documentTypeConfidence * 100)}%</span> : null}
+                  {typeof selected.aiAnalysis.estimatedCostUsd === "number" ? <span>Custo: US$ {selected.aiAnalysis.estimatedCostUsd.toFixed(4)}</span> : null}
+                </div>
+                {[...(selected.aiAnalysis.issues ?? []), ...(selected.aiAnalysis.warnings ?? [])].length ? (
+                  <ul className="mt-2 space-y-1 text-[10px] font-semibold text-amber-800">
+                    {[...(selected.aiAnalysis.issues ?? []), ...(selected.aiAnalysis.warnings ?? [])].map((message, index) => <li key={`${message}-${index}`}>• {message}</li>)}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+
             {extracted.length ? (
               <div className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
                 <div className="flex items-center gap-2 text-blue-800"><Sparkles className="h-4 w-4" /><span className="text-[11px] font-black uppercase tracking-wide">Dados extraídos pelo copiloto</span></div>
@@ -176,9 +258,31 @@ export function OnboardingDocumentWorkbench({
                   {extracted.map(([key, value]) => {
                     const confidence = confidenceTone(selected.fieldConfidences?.[key]);
                     const confirmed = selected.confirmedExtractedFields?.includes(key) ?? false;
+                    const corrected = selected.correctedExtractedFields?.includes(key) ?? false;
                     const rawConfidence = selected.fieldConfidences?.[key];
                     const lowConfidence = typeof rawConfidence === "number" && (rawConfidence <= 1 ? rawConfidence < .9 : rawConfidence < 90);
-                    return <div key={key} className={`rounded-lg border bg-white p-2.5 ${lowConfidence && !confirmed ? "border-amber-300" : "border-blue-100"}`}><span className="block truncate text-[9px] font-black uppercase tracking-wide text-stone-400">{key.replaceAll("_", " ")}</span><span className="mt-1 flex items-start gap-2"><span className="min-w-0 flex-1 break-words font-mono text-[11px] font-bold text-slate-800">{valueText(value)}</span><span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black ${confidence.className}`}>{confidence.label}</span></span>{lowConfidence ? confirmed ? <span className="mt-1.5 inline-flex items-center gap-1 text-[9.5px] font-black text-emerald-700"><CheckCircle2 className="h-3 w-3" />Valor confirmado pelo RH</span> : <button type="button" disabled={!canReview || disabled || Boolean(busyAction)} onClick={() => void onConfirmField(selected.id, key)} className="mt-2 h-7 w-full rounded-lg border border-amber-300 bg-amber-50 text-[9.5px] font-black uppercase tracking-wide text-amber-700 disabled:opacity-50">Confirmar valor</button> : null}</div>;
+                    const editable = value === null || ["string", "number", "boolean"].includes(typeof value);
+                    const editing = editingFieldKey === key;
+                    return (
+                      <div key={key} className={`rounded-lg border bg-white p-2.5 ${lowConfidence && !confirmed ? "border-amber-300" : "border-blue-100"}`}>
+                        <div className="flex items-center gap-2"><span className="min-w-0 flex-1 truncate text-[9px] font-black uppercase tracking-wide text-stone-400">{fieldLabel(key)}</span><span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black ${confidence.className}`}>{confidence.label}</span></div>
+                        {editing ? (
+                          <div className="mt-2 space-y-2">
+                            {typeof value === "boolean" ? (
+                              <select value={fieldDraft} onChange={event => setFieldDraft(event.target.value)} className="h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-xs font-bold text-slate-800"><option value="true">Sim</option><option value="false">Não</option></select>
+                            ) : (
+                              <input autoFocus value={fieldDraft} onChange={event => setFieldDraft(event.target.value)} className="h-9 w-full rounded-lg border border-blue-200 bg-white px-2 text-xs font-bold text-slate-800" />
+                            )}
+                            <div className="flex gap-2"><button type="button" onClick={() => { setEditingFieldKey(null); setFieldDraft(""); }} className="h-7 flex-1 rounded-lg border border-stone-200 text-[9.5px] font-black text-stone-600">Cancelar</button><button type="button" disabled={!fieldDraft.trim() || Boolean(busyAction)} onClick={() => void saveFieldCorrection()} className="h-7 flex-1 rounded-lg bg-blue-600 text-[9.5px] font-black text-white disabled:opacity-50">Salvar correção</button></div>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="mt-1 flex items-start gap-2"><span className="min-w-0 flex-1 break-words font-mono text-[11px] font-bold text-slate-800">{valueText(value)}</span>{editable && canReview && !disabled ? <button type="button" disabled={Boolean(busyAction)} onClick={() => { setEditingFieldKey(key); setFieldDraft(String(value)); }} className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-blue-100 px-1.5 text-[9px] font-black text-blue-700 disabled:opacity-50"><Pencil className="h-2.5 w-2.5" />Corrigir</button> : null}</span>
+                            {corrected ? <span className="mt-1.5 inline-flex items-center gap-1 text-[9.5px] font-black text-blue-700"><Pencil className="h-3 w-3" />Corrigido pelo RH</span> : lowConfidence ? confirmed ? <span className="mt-1.5 inline-flex items-center gap-1 text-[9.5px] font-black text-emerald-700"><CheckCircle2 className="h-3 w-3" />Valor confirmado pelo RH</span> : <button type="button" disabled={!canReview || disabled || Boolean(busyAction)} onClick={() => void onConfirmField(selected.id, key)} className="mt-2 h-7 w-full rounded-lg border border-amber-300 bg-amber-50 text-[9.5px] font-black uppercase tracking-wide text-amber-700 disabled:opacity-50">Confirmar valor</button> : null}
+                          </>
+                        )}
+                      </div>
+                    );
                   })}
                 </div>
               </div>

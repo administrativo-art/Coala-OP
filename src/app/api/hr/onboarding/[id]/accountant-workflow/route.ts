@@ -4,6 +4,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStorage } from 'firebase-admin/storage';
 
 import { accountantAdmissionEmailContent, renderAccountantAdmissionEmail } from '@/features/hr/accountant/emails';
+import {
+  prepareAccountantRegistryUpload,
+  registryUploadAlreadyExists,
+  storeAccountantRegistryUpload,
+} from '@/features/hr/accountant/registry-upload.server';
+import { accountantRhRegistryUploadPreflight } from '@/features/hr/accountant/registry-upload';
 import { accountantAttachmentName, accountantTokenExpiresAt, candidateDocumentsForAccountant, createAccountantToken, missingAccountantPrerequisites, selectableCandidateDocumentsForAccountant } from '@/features/hr/accountant/workflow';
 import { assertFormalizationAccess } from '@/features/hr/lib/server-access';
 import { sendEmail, EMAIL_SENDERS } from '@/lib/email/resend';
@@ -53,6 +59,18 @@ function nextStatus(stage: OnboardingStageId): OnboardingProcess['status'] {
   if (stage === 'integration' || stage === 'probation') return 'active';
   if (stage === 'done') return 'completed';
   return stage === 'accountant' ? 'accountant_pending' : 'reviewing_documents';
+}
+
+function completionAfterAccountant(process: Record<string, unknown>) {
+  const stages = applyOnboardingSignatureMode(
+    normalizeOnboardingStages(process.stages),
+    process.generateSignatureDocuments === true,
+  );
+  const accountantIndex = stages.findIndex((stage) => stage.id === 'accountant');
+  const next = accountantIndex >= 0
+    ? stages[accountantIndex + 1] ?? stages.find((stage) => stage.id === 'done')
+    : null;
+  return next ? { stages, next } : null;
 }
 
 async function addEvent(processId: string, type: string, access: Awaited<ReturnType<typeof assertFormalizationAccess>>, data: Record<string, unknown> = {}) {
@@ -114,6 +132,73 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   }
   const events = await snapshot.ref.collection('accountantEvents').orderBy('at', 'desc').limit(50).get();
   return NextResponse.json({ workflow, events: events.docs.map((document) => ({ id: document.id, ...document.data() })) });
+}
+
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const access = await assertFormalizationAccess(request, 'accountant.manage').catch(() => null);
+  if (!access) return NextResponse.json({ error: 'Sem permissão.' }, { status: 403 });
+
+  const { id } = await context.params;
+  const processRef = hrDbAdmin.collection('onboardingProcesses').doc(id);
+  const snapshot = await processRef.get();
+  if (!snapshot.exists) return NextResponse.json({ error: 'Integração não encontrada.' }, { status: 404 });
+
+  const process = snapshot.data() ?? {};
+  const workflow = record(process.accountantWorkflow);
+  const currentRegistry = record(workflow.registryDocument);
+  const preflight = accountantRhRegistryUploadPreflight(process);
+  if (!preflight.ok) return NextResponse.json({ error: preflight.error }, { status: preflight.status });
+  if (preflight.unchanged) {
+    return NextResponse.json({ ok: true, unchanged: true, completed: true, nextStage: text(process.currentStage, 80) });
+  }
+
+  const form = await request.formData();
+  const validation = await prepareAccountantRegistryUpload(form.get('file'));
+  if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: validation.status });
+  if (text(currentRegistry.hashSha256, 80) === validation.upload.hashSha256
+    || await registryUploadAlreadyExists(id, validation.upload.hashSha256)) {
+    return NextResponse.json({ error: 'Este mesmo arquivo já foi anexado anteriormente.' }, { status: 409 });
+  }
+
+  const completion = completionAfterAccountant(process);
+  if (!completion) return NextResponse.json({ error: 'Não foi possível identificar a próxima etapa da integração.' }, { status: 409 });
+
+  const now = new Date().toISOString();
+  const registryDocument = await storeAccountantRegistryUpload({
+    processId: id,
+    candidateName: text(process.candidateName, 180),
+    upload: validation.upload,
+    uploadedAt: now,
+    uploader: 'rh',
+    actorId: access.decoded.uid,
+    actorEmail: access.decoded.email ?? null,
+    approveImmediately: true,
+  });
+
+  await Promise.all([
+    processRef.set({
+      stages: completion.stages,
+      currentStage: completion.next.id,
+      currentStageStartedAt: now,
+      status: nextStatus(completion.next.id),
+      accountantWorkflow: {
+        ...workflow,
+        status: 'completed',
+        registryDocument,
+        updatedAt: now,
+      },
+      updatedAt: now,
+    }, { merge: true }),
+    addEvent(id, 'ACCOUNTANT_REGISTRY_UPLOADED_BY_HR', access, {
+      versionId: registryDocument.versionId,
+      hashSha256: registryDocument.hashSha256,
+      size: registryDocument.size,
+      approvedImmediately: true,
+      nextStage: completion.next.id,
+    }),
+  ]);
+
+  return NextResponse.json({ ok: true, completed: true, nextStage: completion.next.id });
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -333,11 +418,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (decision === 'rejected' && reason.length < 3) return NextResponse.json({ error: 'Informe o motivo da rejeição.' }, { status: 400 });
     const reviewedRegistry = { ...registry, status: decision, reviewedAt: now, reviewedBy: access.decoded.uid, rejectionReason: decision === 'rejected' ? reason : null };
     if (decision === 'approved') {
-      const stages = applyOnboardingSignatureMode(normalizeOnboardingStages(process.stages), process.generateSignatureDocuments === true);
-      const accountantIndex = stages.findIndex((stage) => stage.id === 'accountant'); const next = stages[accountantIndex + 1] ?? stages.find((stage) => stage.id === 'done')!;
+      const completion = completionAfterAccountant(process);
+      if (!completion) return NextResponse.json({ error: 'Não foi possível identificar a próxima etapa da integração.' }, { status: 409 });
       await Promise.all([
-        processRef.set({ stages, currentStage: next.id, currentStageStartedAt: now, status: nextStatus(next.id), accountantWorkflow: { ...workflow, status: 'completed', registryDocument: reviewedRegistry, updatedAt: now }, updatedAt: now }, { merge: true }),
-        addEvent(id, 'ACCOUNTANT_REGISTRY_APPROVED', access, { versionId: text(registry.versionId), nextStage: next.id }),
+        processRef.set({ stages: completion.stages, currentStage: completion.next.id, currentStageStartedAt: now, status: nextStatus(completion.next.id), accountantWorkflow: { ...workflow, status: 'completed', registryDocument: reviewedRegistry, updatedAt: now }, updatedAt: now }, { merge: true }),
+        addEvent(id, 'ACCOUNTANT_REGISTRY_APPROVED', access, { versionId: text(registry.versionId), nextStage: completion.next.id }),
       ]);
     } else {
       await Promise.all([

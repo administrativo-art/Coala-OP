@@ -135,7 +135,7 @@ type AdmissionGroup = {
 function admissionGroups(processes: OnboardingProcess[], now: Date): AdmissionGroup[] {
   const currentWeek = startOfWeek(now);
   const definitions = [
-    { id: "past", label: "Já admitidos", meta: "Data prevista já alcançada", badgeClass: "bg-rose-50 text-rose-700" },
+    { id: "past", label: "Já admitidos", meta: "Data de admissão já alcançada", badgeClass: "bg-rose-50 text-rose-700" },
     { id: "current", label: "Esta semana", meta: "Admissões desta semana", badgeClass: "bg-pink-50 text-pink-700" },
     { id: "next", label: "Próxima semana", meta: "Admissões da próxima semana", badgeClass: "bg-violet-50 text-violet-700" },
     { id: "two", label: "Em duas semanas", meta: "Admissões em duas semanas", badgeClass: "bg-blue-50 text-blue-700" },

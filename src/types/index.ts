@@ -1228,6 +1228,32 @@ export type OnboardingDocument = OnboardingDocumentTemplate & {
   confirmedExtractedFields?: string[];
   extractedFieldsConfirmedAt?: string | null;
   extractedFieldsConfirmedBy?: string | null;
+  correctedExtractedFields?: string[];
+  extractedFieldsCorrectedAt?: string | null;
+  extractedFieldsCorrectedBy?: string | null;
+  aiAnalysis?: {
+    status: 'completed' | 'fallback' | 'skipped';
+    provider: 'openai' | 'local_fallback' | 'not_applicable';
+    model: string;
+    sourceFileHashSha256: string;
+    expectedDocumentTypeCode?: string | null;
+    detectedDocumentTypeCode?: string | null;
+    documentTypeConfidence?: number | null;
+    employeeMatchStatus?: 'MATCH' | 'POSSIBLE_MATCH' | 'MISMATCH' | 'UNKNOWN' | null;
+    identifiedEmployeeName?: string | null;
+    legibility?: 'GOOD' | 'PARTIAL' | 'POOR' | null;
+    multipleDocumentsDetected?: boolean;
+    pageCount?: number | null;
+    issues?: string[];
+    warnings?: string[];
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    estimatedCostUsd?: number | null;
+    promptVersion?: string | null;
+    schemaVersion?: string | null;
+    analyzedAt: string;
+    durationMs?: number | null;
+  };
   promotedDocumentId?: string | null;
   promotedAt?: string | null;
   promotedBy?: string | null;
@@ -1670,6 +1696,7 @@ export type OnboardingProcess = {
       mimeType?: string | null;
       size?: number | null;
       uploadedAt?: string | null;
+      uploadSource?: 'accountant_public_link' | 'rh' | null;
       status?: 'received' | 'approved' | 'rejected' | null;
       reviewedAt?: string | null;
       reviewedBy?: string | null;
@@ -1725,6 +1752,7 @@ export type OnboardingProcess = {
   probationV2?: import('@/features/hr/integration/probation-process').ProbationProcessState;
   pjWorkflow?: PjOnboardingWorkflow | null;
   trainingItems?: OnboardingTrainingItem[];
+  formalizationCompletedAt?: string | null;
   approvedAt?: string | null;
   approvedBy?: string | null;
   createdAt: string;
