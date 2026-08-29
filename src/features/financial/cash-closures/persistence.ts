@@ -417,6 +417,8 @@ export function mergeBuiltClosureForPersistence(input: {
     finalizedOperatorCount: existingClosure?.finalizedOperatorCount ?? (status === "approved" ? new Set(nextLines.map((line) => line.operatorId)).size : 0),
     source: built.source,
     sourceHash,
+    cashDepositPolicy: existingClosure?.cashDepositPolicy ?? "standard",
+    cashDepositPolicyReason: existingClosure?.cashDepositPolicyReason ?? null,
     cashDeposit: existingClosure?.cashDeposit ?? {
       eligibleCents: 0,
       batchId: null,

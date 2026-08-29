@@ -147,6 +147,21 @@ export type CashClosureDepositState = {
   pendingSince: string | null;
 };
 
+export type CashClosureDepositPolicy = "standard" | "dre_only";
+
+export type CashDepositPeriodPolicy = {
+  id: string;
+  workspaceId: string;
+  year: number;
+  month: number;
+  policy: CashClosureDepositPolicy;
+  reason: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
 export type CashClosure = {
   id: string;
   workspaceId: string;
@@ -185,6 +200,9 @@ export type CashClosure = {
   matchedLineCount: number;
   source: CashClosureSource;
   sourceHash: string;
+  /** Permite preservar a conferência na DRE sem encaminhar o numerário ao fluxo de depósitos. */
+  cashDepositPolicy?: CashClosureDepositPolicy;
+  cashDepositPolicyReason?: string | null;
   cashDeposit: CashClosureDepositState;
   approvedWithDivergence: boolean;
   pdvChangedAfterApproval: boolean;
@@ -285,6 +303,7 @@ export type CashClosureAuditAction =
   | "deposit_issued"
   | "deposit_paid"
   | "deposit_cancelled"
+  | "deposit_excluded"
   | "operator_states_migrated";
 
 export type CashClosureAuditLog = {
