@@ -187,14 +187,6 @@ export function CashCountingSessionNewPage() {
           </div> : <p className="rounded-xl border border-dashed border-stone-300 px-4 py-3 text-sm text-zinc-500">Selecione pelo menos um mês no calendário acima.</p>}
         </div>
 
-        <div className={cn(
-          "rounded-xl border px-4 py-3 text-sm",
-          scopeCount > CASH_COUNTING_MAX_SCOPES ? "border-rose-200 bg-rose-50 text-rose-800" : "border-stone-200 bg-white text-zinc-600",
-        )}>
-          {selectedUnits.length === 0
-            ? `Selecione as unidades para calcular o total de combinações. O limite da sessão é ${CASH_COUNTING_MAX_SCOPES}.`
-            : <><strong>{selectedUnits.length} {selectedUnits.length === 1 ? "unidade" : "unidades"} × {selectedPeriods.length} {selectedPeriods.length === 1 ? "competência" : "competências"} = {scopeCount} combinações.</strong> Limite: {CASH_COUNTING_MAX_SCOPES}.</>}
-        </div>
       </CardContent>
     </Card>
 

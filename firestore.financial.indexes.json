@@ -18,6 +18,14 @@
       ]
     },
     {
+      "collectionGroup": "operators",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "finalizedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "cashClosureOperators",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

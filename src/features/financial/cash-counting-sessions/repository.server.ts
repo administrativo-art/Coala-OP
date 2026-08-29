@@ -219,6 +219,13 @@ export async function getCashCountingSession(
   options: { operatorLimit?: number; operatorCursor?: CashCountingSessionOperatorCursor | null } = {},
 ) {
   const sessionRef = financialDbAdmin.collection(SESSIONS).doc(sessionId);
+  const sessionSnapshot = await sessionRef.get();
+  if (!sessionSnapshot.exists) return null;
+  const session = normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot));
+  if (session.finalizedOperatorCount === 0) {
+    return { session, operators: [], nextOperatorCursor: null };
+  }
+
   const operatorLimit = Math.min(Math.max(options.operatorLimit ?? 100, 1), 100);
   let operatorQuery: FirebaseFirestore.Query = sessionRef.collection(SESSION_OPERATORS)
     .orderBy("finalizedAt", "desc")
@@ -227,15 +234,11 @@ export async function getCashCountingSession(
   if (options.operatorCursor) {
     operatorQuery = operatorQuery.startAfter(options.operatorCursor.finalizedAt, options.operatorCursor.id);
   }
-  const [sessionSnapshot, operatorSnapshot] = await Promise.all([
-    sessionRef.get(),
-    operatorQuery.get(),
-  ]);
-  if (!sessionSnapshot.exists) return null;
+  const operatorSnapshot = await operatorQuery.get();
   const documents = operatorSnapshot.docs.slice(0, operatorLimit);
   const lastDocument = documents.at(-1);
   return {
-    session: normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot)),
+    session,
     operators: documents.map((document) => snapshotValue<CashCountingSessionOperator>(document)),
     nextOperatorCursor: operatorSnapshot.size > operatorLimit && lastDocument
       ? {
