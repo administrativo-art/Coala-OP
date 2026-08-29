@@ -28,7 +28,7 @@ function hasJava(javaHome) {
 
 const credentialKey = FIREBASE_TEST_CREDENTIAL_ENV_KEYS.find((key) => Boolean(process.env[key]));
 if (credentialKey) {
-  console.error(`[test:integration] ${credentialKey} deve estar ausente; o teste usa somente o emulador.`);
+  process.stderr.write(`[test:integration] ${credentialKey} deve estar ausente; o teste usa somente o emulador.\n`);
   process.exit(1);
 }
 
@@ -49,11 +49,11 @@ const firebaseExecutable = join(
 );
 
 if (!javaHome) {
-  console.error("[test:integration] Java 11+ nao encontrado.");
+  process.stderr.write("[test:integration] Java 11+ nao encontrado.\n");
   process.exit(1);
 }
 if (!existsSync(firebaseExecutable)) {
-  console.error("[test:integration] Firebase CLI local nao encontrada. Execute npm ci.");
+  process.stderr.write("[test:integration] Firebase CLI local nao encontrada. Execute npm ci.\n");
   process.exit(1);
 }
 
@@ -84,13 +84,13 @@ const child = spawn(
 );
 
 child.on("error", (error) => {
-  console.error("[test:integration] Falha ao iniciar a Firebase CLI local:", error.message);
+  process.stderr.write(`[test:integration] Falha ao iniciar a Firebase CLI local: ${error.message}\n`);
   process.exit(1);
 });
 
 child.on("exit", (code, signal) => {
   if (signal) {
-    console.error(`[test:integration] Finalizado por sinal ${signal}.`);
+    process.stderr.write(`[test:integration] Finalizado por sinal ${signal}.\n`);
     process.exit(1);
   }
   process.exit(code ?? 1);
