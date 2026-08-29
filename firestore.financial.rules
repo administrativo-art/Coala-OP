@@ -469,6 +469,13 @@ service cloud.firestore {
         // do Caixa, do Financeiro e do ajuste auditado do esperado.
         allow create, update, delete: if false;
       }
+
+      match /cashClosureOperators/{operatorId} {
+        allow read: if canViewCashClosures()
+          && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId);
+        // A finalização por operador e sua alocação no depósito são atômicas no servidor.
+        allow create, update, delete: if false;
+      }
     }
 
     match /cashClosureUnitSummaries/{summaryId} {

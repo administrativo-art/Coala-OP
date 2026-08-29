@@ -6,7 +6,8 @@ import {
   assertCashClosureDivergenceApproval,
   cashClosureActor,
 } from "@/features/financial/cash-closures/access.server";
-import { finalizeCashClosure, getCashClosure } from "@/features/financial/cash-closures/repository.server";
+import { finalizeCashClosureOperator, getCashClosure } from "@/features/financial/cash-closures/repository.server";
+import { finalizeCashClosureOperatorSchema } from "@/features/financial/cash-closures/schemas";
 import {
   finalizeCashDepositAdjustmentForClosure,
   processCashDepositQueue,
@@ -20,6 +21,14 @@ function throwFinalizationError(cause: unknown): never {
   const message = cause instanceof Error ? cause.message : "";
   if (message.includes("não encontrado")) {
     throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND", cause });
+  }
+  if (message.includes("já foi finalizada")) {
+    throw new AppError({
+      code: "CASH_CLOSURE_OPERATOR_ALREADY_FINALIZED",
+      kind: "CONFLICT",
+      safeMessage: "A contagem deste operador já foi finalizada.",
+      cause,
+    });
   }
   if (message.includes("Preencha as contagens")) {
     throw new AppError({
@@ -52,6 +61,15 @@ export const POST = withApiErrorHandling<RouteContext>({
     throw new AppError({ code: "CASH_CLOSURE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
   });
   const { closureId } = await routeContext.params;
+  const parsed = finalizeCashClosureOperatorSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    throw new AppError({
+      code: "CASH_CLOSURE_OPERATOR_INVALID",
+      kind: "VALIDATION",
+      safeMessage: "Selecione um operador válido para finalizar.",
+      cause: parsed.error,
+    });
+  }
   const current = await getCashClosure(closureId);
   if (!current) throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND" });
   try {
@@ -60,7 +78,11 @@ export const POST = withApiErrorHandling<RouteContext>({
     throw new AppError({ code: "CASH_CLOSURE_FINALIZE_FORBIDDEN", kind: "AUTHORIZATION", cause });
   }
   try {
-    assertCashClosureDivergenceApproval(context, current.closure.kioskId, current.lines);
+    assertCashClosureDivergenceApproval(
+      context,
+      current.closure.kioskId,
+      current.lines.filter((line) => line.operatorId === parsed.data.operatorId),
+    );
   } catch (cause) {
     throw new AppError({
       code: "CASH_CLOSURE_SENIOR_FINALIZATION_REQUIRED",
@@ -70,7 +92,8 @@ export const POST = withApiErrorHandling<RouteContext>({
     });
   }
   const actor = cashClosureActor(context);
-  const closure = await finalizeCashClosure(closureId, actor).catch(throwFinalizationError);
+  const finalized = await finalizeCashClosureOperator(closureId, parsed.data.operatorId, actor).catch(throwFinalizationError);
+  const closure = finalized.closure;
   let allocationError: string | null = null;
   try {
     await finalizeCashDepositAdjustmentForClosure(closureId);

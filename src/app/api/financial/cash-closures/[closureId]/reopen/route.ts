@@ -5,23 +5,51 @@ import { assertCashClosureAccess, cashClosureActor } from "@/features/financial/
 import { getCashClosure } from "@/features/financial/cash-closures/repository.server";
 import { cashClosureReasonSchema } from "@/features/financial/cash-closures/schemas";
 import { reopenCashClosureWithDepositHandling } from "@/features/financial/cash-deposits/repository.server";
+import { AppError, withApiErrorHandling } from "@/lib/observability";
 
-export async function POST(request: NextRequest, routeContext: { params: Promise<{ closureId: string }> }) {
-  try {
-    const context = await requireUser(request);
+type RouteContext = { params: Promise<{ closureId: string }> };
+
+export const POST = withApiErrorHandling<RouteContext>({
+  source: "api-financial",
+  operation: "reopen-cash-closure-operator",
+  routeOrJob: "/api/financial/cash-closures/[closureId]/reopen",
+}, async (request: NextRequest, routeContext) => {
+    const context = await requireUser(request).catch((cause) => {
+      throw new AppError({ code: "CASH_CLOSURE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
+    });
     const { closureId } = await routeContext.params;
     const current = await getCashClosure(closureId);
-    if (!current) throw new Error("Fechamento não encontrado.");
-    assertCashClosureAccess(context, "reopen", current.closure.kioskId);
-    const { reason } = cashClosureReasonSchema.parse(await request.json());
-    return NextResponse.json(await reopenCashClosureWithDepositHandling({
+    if (!current) throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND" });
+    try {
+      assertCashClosureAccess(context, "reopen", current.closure.kioskId);
+    } catch (cause) {
+      throw new AppError({ code: "CASH_CLOSURE_REOPEN_FORBIDDEN", kind: "AUTHORIZATION", cause });
+    }
+    const parsed = cashClosureReasonSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      throw new AppError({
+        code: "CASH_CLOSURE_REOPEN_INVALID",
+        kind: "VALIDATION",
+        safeMessage: "Informe um motivo válido para reabrir a contagem.",
+        cause: parsed.error,
+      });
+    }
+    const { reason, operatorId } = parsed.data;
+    const reopened = await reopenCashClosureWithDepositHandling({
       workspaceId: context.workspace_id,
       closureId,
+      operatorId,
       reason,
       actor: cashClosureActor(context),
-    }));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao reabrir fechamento.";
-    return NextResponse.json({ error: message }, { status: message.includes("permissão") ? 403 : 400 });
-  }
-}
+    }).catch((cause) => {
+      const message = cause instanceof Error ? cause.message : "";
+      if (message.includes("não encontrado")) {
+        throw new AppError({ code: "CASH_CLOSURE_OPERATOR_NOT_FOUND", kind: "NOT_FOUND", cause });
+      }
+      if (message.includes("não pode avançar")) {
+        throw new AppError({ code: "CASH_CLOSURE_REOPEN_STATE_CONFLICT", kind: "CONFLICT", cause });
+      }
+      throw cause;
+    });
+    return NextResponse.json(reopened);
+});

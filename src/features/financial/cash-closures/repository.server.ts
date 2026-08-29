@@ -18,6 +18,10 @@ import {
   withPdvAutomaticClosureTotals,
 } from "./persistence";
 import { assertCashClosureTransition, canEditCashClosure } from "./state-machine";
+import {
+  buildCashClosureOperators,
+  withCashClosureOperatorAggregate,
+} from "./operators";
 import { refreshCashClosureSummaries } from "./summaries.server";
 import type {
   BuiltCashClosure,
@@ -28,6 +32,7 @@ import type {
   CashClosureDraftLineInput,
   CashClosureExpectedAdjustmentInput,
   CashClosureLine,
+  CashClosureOperator,
   CashClosureSource,
   CashClosureStatus,
   CashClosureWithLines,
@@ -35,6 +40,7 @@ import type {
 
 const CLOSURES = "cashClosures";
 const AUDIT_LOGS = "cashClosureAuditLogs";
+const OPERATORS = "cashClosureOperators";
 
 function closureRef(id: string) {
   return financialDbAdmin.collection(CLOSURES).doc(id);
@@ -56,6 +62,7 @@ function auditPayload(input: {
   actor: CashClosureActor;
   createdAt: string;
   lineId?: string;
+  operatorId?: string;
   previousValue?: unknown;
   newValue?: unknown;
   reason?: string | null;
@@ -69,6 +76,7 @@ function auditPayload(input: {
     userName: input.actor.userName,
     createdAt: input.createdAt,
     ...(input.lineId ? { lineId: input.lineId } : {}),
+    ...(input.operatorId ? { operatorId: input.operatorId } : {}),
     ...(input.previousValue !== undefined ? { previousValue: input.previousValue } : {}),
     ...(input.newValue !== undefined ? { newValue: input.newValue } : {}),
     ...(input.reason !== undefined ? { reason: input.reason } : {}),
@@ -85,12 +93,13 @@ function writeAudit(
 
 export async function getCashClosure(id: string): Promise<CashClosureWithLines | null> {
   const ref = closureRef(id);
-  const [closureSnapshot, lineSnapshot] = await Promise.all([
+  const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
     ref.get(),
     ref.collection("lines").get(),
+    ref.collection(OPERATORS).limit(100).get(),
   ]);
   if (!closureSnapshot.exists) return null;
-  return normalizeCashClosureWithLines(
+  const normalized = normalizeCashClosureWithLines(
     snapshotValue<CashClosure>(closureSnapshot),
     lineSnapshot.docs
       .map((document) => snapshotValue<CashClosureLine>(document))
@@ -99,6 +108,17 @@ export async function getCashClosure(id: string): Promise<CashClosureWithLines |
           left.operatorName.localeCompare(right.operatorName, "pt-BR") || left.channel.localeCompare(right.channel),
       ),
   );
+  const operators = buildCashClosureOperators({
+    closure: normalized.closure,
+    lines: normalized.lines,
+    existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
+    now: normalized.closure.updatedAt,
+  }).operators;
+  return {
+    closure: withCashClosureOperatorAggregate(normalized.closure, operators),
+    lines: normalized.lines,
+    operators,
+  };
 }
 
 export async function getCashClosureByDate(kioskId: string, date: string) {
@@ -141,9 +161,10 @@ export async function upsertClosureFromPdv(built: BuiltCashClosure, actor: CashC
   const ref = closureRef(id);
 
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const [closureSnapshot, lineSnapshot] = await Promise.all([
+    const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
       transaction.get(ref.collection("lines")),
+      transaction.get(ref.collection(OPERATORS).limit(100)),
     ]);
     const existingClosure = closureSnapshot.exists
       ? snapshotValue<CashClosure>(closureSnapshot)
@@ -157,12 +178,25 @@ export async function upsertClosureFromPdv(built: BuiltCashClosure, actor: CashC
       now,
     });
 
+    const operatorResult = buildCashClosureOperators({
+      closure: merged.closure,
+      lines: merged.lines,
+      existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
+      now,
+    });
+    merged.closure = withCashClosureOperatorAggregate(merged.closure, operatorResult.operators, now);
     transaction.set(ref, merged.closure);
     for (const line of merged.lines) {
       transaction.set(ref.collection("lines").doc(line.id), line);
     }
     for (const deletedLineId of merged.deletedLineIds) {
       transaction.delete(ref.collection("lines").doc(deletedLineId));
+    }
+    for (const operator of operatorResult.operators) {
+      transaction.set(ref.collection(OPERATORS).doc(operator.id), operator);
+    }
+    for (const deletedOperatorId of operatorResult.deletedOperatorIds) {
+      transaction.delete(ref.collection(OPERATORS).doc(deletedOperatorId));
     }
 
     writeAudit(transaction, {
@@ -184,7 +218,7 @@ export async function upsertClosureFromPdv(built: BuiltCashClosure, actor: CashC
       },
     });
 
-    return { ...merged, created: !existingClosure };
+    return { ...merged, operators: operatorResult.operators, created: !existingClosure };
   });
   await refreshCashClosureSummaries(result.closure);
   return result;
@@ -255,6 +289,9 @@ export async function recordCashClosureSyncError(input: {
       expectedCashCents: 0,
       reportedCashCents: 0,
       countedCashCents: 0,
+      finalizedCountedTotalCents: 0,
+      finalizedDifferenceTotalCents: 0,
+      finalizedCountedCashCents: 0,
       cashDepositEligibleCents: 0,
       expectedByChannelCents: { ...channelTotals },
       reportedByChannelCents: { ...channelTotals },
@@ -262,6 +299,7 @@ export async function recordCashClosureSyncError(input: {
       reportedDifferenceByChannelCents: { ...channelTotals },
       differenceByChannelCents: { ...channelTotals },
       operatorCount: 0,
+      finalizedOperatorCount: 0,
       unreportedLineCount: 0,
       pendingLineCount: 0,
       reportedDivergentLineCount: 0,
@@ -308,9 +346,10 @@ export async function saveCashClosureDraft(
 ) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const [closureSnapshot, lineSnapshot] = await Promise.all([
+    const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
       transaction.get(ref.collection("lines")),
+      transaction.get(ref.collection(OPERATORS).limit(100)),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
     const rawClosure = snapshotValue<CashClosure>(closureSnapshot);
@@ -327,12 +366,35 @@ export async function saveCashClosureDraft(
     if (updateById.size !== updates.length) throw new Error("Há linhas duplicadas no payload.");
     const now = new Date().toISOString();
     const normalizedById = new Map(normalized.lines.map((line) => [line.id, line]));
+    const currentOperators = buildCashClosureOperators({
+      closure,
+      lines: normalized.lines,
+      existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
+      now: closure.updatedAt,
+    }).operators;
+    const finalizedOperatorIds = new Set(
+      currentOperators.filter((operator) => operator.status === "approved").map((operator) => operator.operatorId),
+    );
     const nextLines = lineSnapshot.docs.map((document) => {
       const current = normalizedById.get(document.id)!;
       const update = updateById.get(current.id);
       if (!update) return current;
       updateById.delete(current.id);
       const automatic = isPdvAutoCountedChannel(current.channel);
+      if (finalizedOperatorIds.has(current.operatorId)) {
+        const reportedChanged = permissions.editReported && (
+          (update.reportedCents !== undefined && update.reportedCents !== current.reportedCents)
+          || (update.reportedNote !== undefined && (update.reportedNote?.trim() || null) !== current.reportedNote)
+        );
+        const countedChanged = permissions.editCounted && (
+          (update.countedCents !== undefined && update.countedCents !== current.countedCents)
+          || (update.note !== undefined && (update.note?.trim() || null) !== current.note)
+        );
+        if (reportedChanged || countedChanged) {
+          throw new Error(`O operador ${current.operatorName} já foi finalizado e precisa ser reaberto antes de editar.`);
+        }
+        return current;
+      }
       let next = current;
       if (automatic || permissions.editReported) {
         const reportedCents = automatic
@@ -429,9 +491,22 @@ export async function saveCashClosureDraft(
       return next;
     });
     if (updateById.size > 0) throw new Error("Uma ou mais linhas não pertencem a este fechamento.");
-    const nextClosure = recomputeCashClosureFromLines(closure, nextLines, now);
+    const operatorResult = buildCashClosureOperators({
+      closure,
+      lines: nextLines,
+      existingOperators: currentOperators,
+      now,
+    });
+    const nextClosure = withCashClosureOperatorAggregate(
+      recomputeCashClosureFromLines(closure, nextLines, now),
+      operatorResult.operators,
+      now,
+    );
     transaction.set(ref, nextClosure);
-    return { closure: nextClosure, lines: nextLines };
+    for (const operator of operatorResult.operators) {
+      transaction.set(ref.collection(OPERATORS).doc(operator.id), operator);
+    }
+    return { closure: nextClosure, lines: nextLines, operators: operatorResult.operators };
   });
   await refreshCashClosureSummaries(result.closure);
   return result;
@@ -444,9 +519,10 @@ export async function adjustCashClosureExpected(
 ) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const [closureSnapshot, linesSnapshot] = await Promise.all([
+    const [closureSnapshot, linesSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
       transaction.get(ref.collection("lines")),
+      transaction.get(ref.collection(OPERATORS).limit(100)),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
     const closure = snapshotValue<CashClosure>(closureSnapshot);
@@ -464,6 +540,15 @@ export async function adjustCashClosureExpected(
     );
     const current = normalized.lines.find((line) => line.id === input.lineId);
     if (!current) throw new Error("Linha do fechamento não encontrada.");
+    const currentOperators = buildCashClosureOperators({
+      closure: normalized.closure,
+      lines: normalized.lines,
+      existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
+      now: closure.updatedAt,
+    }).operators;
+    if (currentOperators.find((operator) => operator.operatorId === current.operatorId)?.status === "approved") {
+      throw new Error("O operador já foi finalizado e precisa ser reaberto antes de corrigir o esperado.");
+    }
     if (current.expectedCents === input.correctedExpectedCents) {
       throw new Error("O novo valor deve ser diferente do esperado atual.");
     }
@@ -476,9 +561,15 @@ export async function adjustCashClosureExpected(
       now,
     );
     const lines = normalized.lines.map((line) => line.id === input.lineId ? nextLine : line);
-    const nextClosure = recomputeCashClosureFromLines(closure, lines, now);
+    const operatorResult = buildCashClosureOperators({ closure, lines, existingOperators: currentOperators, now });
+    const nextClosure = withCashClosureOperatorAggregate(
+      recomputeCashClosureFromLines(closure, lines, now),
+      operatorResult.operators,
+      now,
+    );
     transaction.set(ref.collection("lines").doc(input.lineId), nextLine);
     transaction.set(ref, nextClosure);
+    for (const operator of operatorResult.operators) transaction.set(ref.collection(OPERATORS).doc(operator.id), operator);
     writeAudit(transaction, {
       workspaceId: closure.workspaceId,
       closureId: id,
@@ -498,7 +589,7 @@ export async function adjustCashClosureExpected(
       },
       reason,
     });
-    return { closure: nextClosure, lines };
+    return { closure: nextClosure, lines, operators: operatorResult.operators };
   });
   await refreshCashClosureSummaries(result.closure);
   return result;
@@ -511,9 +602,10 @@ export async function restoreCashClosureExpected(
 ) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const [closureSnapshot, linesSnapshot] = await Promise.all([
+    const [closureSnapshot, linesSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
       transaction.get(ref.collection("lines")),
+      transaction.get(ref.collection(OPERATORS).limit(100)),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
     const closure = snapshotValue<CashClosure>(closureSnapshot);
@@ -526,15 +618,30 @@ export async function restoreCashClosureExpected(
     );
     const current = normalized.lines.find((line) => line.id === input.lineId);
     if (!current) throw new Error("Linha do fechamento não encontrada.");
+    const currentOperators = buildCashClosureOperators({
+      closure: normalized.closure,
+      lines: normalized.lines,
+      existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
+      now: closure.updatedAt,
+    }).operators;
+    if (currentOperators.find((operator) => operator.operatorId === current.operatorId)?.status === "approved") {
+      throw new Error("O operador já foi finalizado e precisa ser reaberto antes de restaurar o esperado.");
+    }
     if (current.expectedAdjustedAt === null) throw new Error("Esta linha não possui ajuste manual.");
     const reason = input.reason.trim();
     if (reason.length < 3) throw new Error("Informe o motivo da restauração.");
     const now = new Date().toISOString();
     const nextLine = restoreCalculatedExpectedLine(current, now);
     const lines = normalized.lines.map((line) => line.id === input.lineId ? nextLine : line);
-    const nextClosure = recomputeCashClosureFromLines(closure, lines, now);
+    const operatorResult = buildCashClosureOperators({ closure, lines, existingOperators: currentOperators, now });
+    const nextClosure = withCashClosureOperatorAggregate(
+      recomputeCashClosureFromLines(closure, lines, now),
+      operatorResult.operators,
+      now,
+    );
     transaction.set(ref.collection("lines").doc(input.lineId), nextLine);
     transaction.set(ref, nextClosure);
+    for (const operator of operatorResult.operators) transaction.set(ref.collection(OPERATORS).doc(operator.id), operator);
     writeAudit(transaction, {
       workspaceId: closure.workspaceId,
       closureId: id,
@@ -554,16 +661,20 @@ export async function restoreCashClosureExpected(
       },
       reason,
     });
-    return { closure: nextClosure, lines };
+    return { closure: nextClosure, lines, operators: operatorResult.operators };
   });
   await refreshCashClosureSummaries(result.closure);
   return result;
 }
 
-function cashDepositAfterFinalization(closure: CashClosure, eligibleCents: number, now: string) {
-  if (closure.cashDeposit.adjustmentId) {
+function cashDepositAfterFinalization(
+  cashDeposit: CashClosure["cashDeposit"],
+  eligibleCents: number,
+  now: string,
+) {
+  if (cashDeposit.adjustmentId) {
     return {
-      ...closure.cashDeposit,
+      ...cashDeposit,
       eligibleCents,
       status: "adjusted" as const,
       manualSplitRequired: false,
@@ -594,11 +705,50 @@ function cashDepositAfterFinalization(closure: CashClosure, eligibleCents: numbe
 }
 
 export async function finalizeCashClosure(id: string, actor: CashClosureActor) {
+  const current = await getCashClosure(id);
+  if (!current) throw new Error("Fechamento não encontrado.");
+  if (current.operators.length === 0) {
+    const now = new Date().toISOString();
+    const ref = closureRef(id);
+    const result = await financialDbAdmin.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) throw new Error("Fechamento não encontrado.");
+      const closure = snapshotValue<CashClosure>(snapshot);
+      assertCashClosureTransition(closure.status, "approved");
+      const next = {
+        ...closure,
+        status: "approved" as const,
+        finalizedOperatorCount: 0,
+        submittedAt: now,
+        submittedBy: actor.userId,
+        approvedAt: now,
+        approvedBy: actor.userId,
+        approvalReason: "Dia sem movimento finalizado",
+        updatedAt: now,
+      };
+      transaction.set(ref, next);
+      return next;
+    });
+    await refreshCashClosureSummaries(result);
+    return result;
+  }
+  if (current.operators.every((operator) => operator.status === "approved")) {
+    assertCashClosureTransition(current.closure.status, "approved");
+  }
+  let closure = current.closure;
+  for (const operator of current.operators.filter((item) => item.status !== "approved")) {
+    closure = (await finalizeCashClosureOperator(id, operator.operatorId, actor)).closure;
+  }
+  return closure;
+}
+
+export async function finalizeCashClosureOperator(id: string, operatorId: string, actor: CashClosureActor) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const [closureSnapshot, lineSnapshot] = await Promise.all([
+    const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
       transaction.get(ref.collection("lines")),
+      transaction.get(ref.collection(OPERATORS).limit(100)),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
     const rawClosure = snapshotValue<CashClosure>(closureSnapshot);
@@ -607,52 +757,75 @@ export async function finalizeCashClosure(id: string, actor: CashClosureActor) {
       lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
     );
     const closure = normalized.closure;
-    assertCashClosureTransition(closure.status, "approved");
     const now = new Date().toISOString();
-    if (normalized.lines.some((line) => line.reportedCents === null || line.countedCents === null)) {
-      throw new Error("Preencha as contagens do Caixa e do Financeiro antes de finalizar.");
+    assertCashClosureTransition(closure.status, "approved");
+    const currentOperators = buildCashClosureOperators({
+      closure,
+      lines: normalized.lines,
+      existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
+      now: closure.updatedAt,
+    }).operators;
+    const currentOperator = currentOperators.find((operator) => operator.operatorId === operatorId);
+    if (!currentOperator) throw new Error("Operador do fechamento não encontrado.");
+    if (currentOperator.status === "approved") {
+      throw new Error(`A contagem de ${currentOperator.operatorName} já foi finalizada.`);
     }
-    if (normalized.lines.some((line) => {
+    const operatorLines = normalized.lines.filter((line) => line.operatorId === operatorId);
+    if (operatorLines.some((line) => line.reportedCents === null || line.countedCents === null)) {
+      throw new Error(`Preencha as contagens do Caixa e do Financeiro de ${currentOperator.operatorName} antes de finalizar.`);
+    }
+    if (operatorLines.some((line) => {
       const cashierDifference = (line.reportedDifferenceCents ?? 0) < 0 && !line.reportedNote?.trim();
       const financeDifference = (line.differenceCents ?? 0) < 0 && !line.note?.trim();
       return cashierDifference || financeDifference;
     })) {
       throw new Error("Toda falta apurada pelo Caixa ou pelo Financeiro precisa de justificativa antes da finalização.");
     }
-    const lines = normalized.lines;
-    const recalculated = recomputeCashClosureFromLines(closure, lines, now);
-    const eligibleCents = recalculated.countedCashCents;
-    const next: CashClosure = {
-      ...recalculated,
+    const eligibleCents = currentOperator.countedCashCents;
+    const finalizedOperator: CashClosureOperator = {
+      ...currentOperator,
       status: "approved",
-      submittedAt: now,
-      submittedBy: actor.userId,
+      cashDeposit: cashDepositAfterFinalization(currentOperator.cashDeposit, eligibleCents, now),
+      approvedWithDivergence:
+        currentOperator.divergentLineCount > 0 || currentOperator.reportedDivergentLineCount > 0,
       approvedAt: now,
       approvedBy: actor.userId,
-      approvalReason: "Contagem finalizada",
-      approvedWithDivergence:
-        recalculated.divergentLineCount > 0 || recalculated.reportedDivergentLineCount > 0,
-      cashDepositEligibleCents: eligibleCents,
-      cashDeposit: cashDepositAfterFinalization(closure, eligibleCents, now),
+      reopenedAt: null,
+      reopenedBy: null,
+      reopenedReason: null,
+      updatedAt: now,
     };
+    const operators = currentOperators.map((operator) => operator.operatorId === operatorId ? finalizedOperator : operator);
+    const next = withCashClosureOperatorAggregate(
+      {
+        ...recomputeCashClosureFromLines(closure, normalized.lines, now),
+        submittedAt: closure.submittedAt ?? now,
+        submittedBy: closure.submittedBy ?? actor.userId,
+      },
+      operators,
+      now,
+    );
     transaction.set(ref, next);
+    transaction.set(ref.collection(OPERATORS).doc(finalizedOperator.id), finalizedOperator);
     writeAudit(transaction, {
       workspaceId: closure.workspaceId,
       closureId: id,
+      operatorId,
       action: "approved",
       actor,
       createdAt: now,
-      previousValue: closure.status,
+      previousValue: currentOperator.status,
       newValue: {
-        status: next.status,
-        approvedWithDivergence: next.approvedWithDivergence,
+        status: finalizedOperator.status,
+        operatorName: finalizedOperator.operatorName,
+        approvedWithDivergence: finalizedOperator.approvedWithDivergence,
         cashDepositEligibleCents: eligibleCents,
       },
-      reason: next.approvalReason,
+      reason: "Contagem do operador finalizada",
     });
-    return next;
+    return { closure: next, operator: finalizedOperator, operators };
   });
-  await refreshCashClosureSummaries(result);
+  await refreshCashClosureSummaries(result.closure);
   return result;
 }
 

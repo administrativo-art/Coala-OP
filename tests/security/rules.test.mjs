@@ -755,6 +755,11 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
           status: "pending",
           differenceCents: null,
         }),
+        setDoc(doc(db, "cashClosures/tirirical_2026-07-07/cashClosureOperators/10"), {
+          kioskId: "tirirical",
+          operatorId: "10",
+          status: "draft",
+        }),
         setDoc(doc(db, "cashClosures/tirirical_2026-07-06"), {
           kioskId: "tirirical",
           status: "approved",
@@ -788,6 +793,10 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
       expectedCents: 1,
     }));
     await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07"), {
+      status: "approved",
+    }));
+    await assertSucceeds(getDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/cashClosureOperators/10")));
+    await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/cashClosureOperators/10"), {
       status: "approved",
     }));
     await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-06/lines/10_cash"), {

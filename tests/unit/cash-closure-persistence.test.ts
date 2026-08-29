@@ -182,6 +182,15 @@ test("mudança de fonte após aprovação é sinalizada", () => {
   });
   assert.equal(second.closure.status, "approved");
   assert.equal(second.closure.pdvChangedAfterApproval, true);
+
+  const partial = mergeBuiltClosureForPersistence({
+    built: build(102),
+    existingClosure: { ...first.closure, status: "pending_review", finalizedOperatorCount: 1 },
+    existingLines: first.lines,
+    now: "2026-07-08T12:00:00.000Z",
+  });
+  assert.equal(partial.closure.status, "pending_review");
+  assert.equal(partial.closure.pdvChangedAfterApproval, true);
 });
 
 test("ressincronização replica o esperado do Pix no valor conferido", () => {

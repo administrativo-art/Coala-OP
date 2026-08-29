@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       closure: result.closure,
       lines: result.lines,
+      operators: result.operators,
       created: result.created,
       sourceChanged: result.sourceChanged,
     });

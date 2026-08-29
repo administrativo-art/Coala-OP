@@ -23,7 +23,7 @@ function statusInfo(closure: CashClosure | undefined) {
   if (closure.status === "sync_error") return { label: "Erro de sincronização", className: "border-rose-200 bg-rose-50 text-rose-800", icon: CircleAlert };
   if (["draft", "reopened"].includes(closure.status)) return { label: "Rascunho", className: "border-stone-200 bg-stone-50 text-zinc-500", icon: CircleAlert };
   const icon = closure.status === "approved" ? CheckCircle2 : Clock3;
-  if (closure.status === "pending_review") return { label: "Contagem pendente", className: "border-amber-200 bg-amber-50 text-amber-900", icon };
+  if (closure.status === "pending_review") return { label: `${closure.finalizedOperatorCount}/${closure.operatorCount} operadores finalizados`, className: "border-amber-200 bg-amber-50 text-amber-900", icon };
   if (closure.differenceTotalCents !== 0) return { label: closure.differenceTotalCents < 0 ? `Falta ${formatBRL(Math.abs(closure.differenceTotalCents))}` : `Sobra ${formatBRL(closure.differenceTotalCents)}`, className: "border-rose-200 bg-rose-50 text-rose-800", icon };
   return { label: "Bateu", className: "border-emerald-200 bg-emerald-50 text-emerald-800", icon };
 }
@@ -66,26 +66,25 @@ export function CashClosureCalendarPage({ kioskId, year, month }: { kioskId: str
     const offset = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
     return [...Array(offset).fill(null), ...Array.from({ length: count }, (_, index) => index + 1)];
   }, [month, year]);
-  const finalizedClosures = useMemo(
-    () => closures.filter((closure) => closure.status === "approved"),
-    [closures],
-  );
   const totals = useMemo(() => ({
     expected: closures.reduce((sum, item) => sum + item.expectedTotalCents, 0),
-    counted: finalizedClosures.reduce((sum, item) => sum + item.countedTotalCents, 0),
-    difference: finalizedClosures.reduce((sum, item) => sum + item.differenceTotalCents, 0),
-    cash: finalizedClosures.reduce((sum, item) => sum + item.countedCashCents, 0),
-    allocated: closures.filter((item) => ["allocated", "issued", "paid", "adjusted"].includes(item.cashDeposit.status)).reduce((sum, item) => sum + item.cashDeposit.eligibleCents, 0),
-    issued: closures.filter((item) => ["issued", "paid"].includes(item.cashDeposit.status)).reduce((sum, item) => sum + item.cashDeposit.eligibleCents, 0),
-    paid: closures.filter((item) => item.cashDeposit.status === "paid").reduce((sum, item) => sum + item.cashDeposit.eligibleCents, 0),
-  }), [closures, finalizedClosures]);
+    counted: closures.reduce((sum, item) => sum + item.finalizedCountedTotalCents, 0),
+    difference: closures.reduce((sum, item) => sum + item.finalizedDifferenceTotalCents, 0),
+    cash: closures.reduce((sum, item) => sum + item.finalizedCountedCashCents, 0),
+    allocated: closures.reduce((sum, item) => sum + (item.cashDeposit.allocatedCents
+      ?? (["allocated", "issued", "paid", "adjusted"].includes(item.cashDeposit.status) ? item.cashDeposit.eligibleCents : 0)), 0),
+    issued: closures.reduce((sum, item) => sum + (item.cashDeposit.issuedCents
+      ?? (["issued", "paid"].includes(item.cashDeposit.status) ? item.cashDeposit.eligibleCents : 0)), 0),
+    paid: closures.reduce((sum, item) => sum + (item.cashDeposit.paidCents
+      ?? (item.cashDeposit.status === "paid" ? item.cashDeposit.eligibleCents : 0)), 0),
+  }), [closures]);
   const today = todayInClosureTimezone();
   const monthLabel = formatClosureMonthLabel(year, month);
   const kiosk = kiosks.find((item) => item.id === kioskId);
   const kioskName = kiosk?.name
     ?? closures[0]?.kioskName
     ?? kioskId;
-  const hasFinalizedClosure = finalizedClosures.length > 0;
+  const hasFinalizedClosure = closures.some((closure) => closure.status === "approved" || closure.finalizedOperatorCount > 0);
   if (!permissions.financial?.cashClosures?.view) return null;
   return <PageContainer variant="wide" className="space-y-4 pb-10">
     <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel }]} />
