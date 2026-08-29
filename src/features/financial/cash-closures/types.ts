@@ -11,6 +11,7 @@ export type CashClosureStatus =
   | "sync_error";
 
 export type CashClosureLineStatus = "pending" | "matched" | "divergent" | "ignored";
+export type CashClosureOperatorStatus = "draft" | "approved" | "reopened";
 
 export const CASH_CLOSURE_CHANNELS = [
   "cash",
@@ -132,6 +133,10 @@ export type CashClosureDepositStatus =
 
 export type CashClosureDepositState = {
   eligibleCents: number;
+  /** Totais de progresso permitem representar dias parcialmente processados por operador. */
+  allocatedCents?: number;
+  issuedCents?: number;
+  paidCents?: number;
   batchId: string | null;
   batchItemId: string | null;
   status: CashClosureDepositStatus;
@@ -161,6 +166,9 @@ export type CashClosure = {
   expectedCashCents: number;
   reportedCashCents: number;
   countedCashCents: number;
+  finalizedCountedTotalCents: number;
+  finalizedDifferenceTotalCents: number;
+  finalizedCountedCashCents: number;
   cashDepositEligibleCents: number;
   expectedByChannelCents: CashClosureChannelTotals;
   reportedByChannelCents: CashClosureChannelTotals;
@@ -168,6 +176,7 @@ export type CashClosure = {
   reportedDifferenceByChannelCents: CashClosureChannelTotals;
   differenceByChannelCents: CashClosureChannelTotals;
   operatorCount: number;
+  finalizedOperatorCount: number;
   unreportedLineCount: number;
   pendingLineCount: number;
   reportedDivergentLineCount: number;
@@ -186,6 +195,37 @@ export type CashClosure = {
   approvedAt: string | null;
   approvedBy: string | null;
   approvalReason: string | null;
+  reopenedAt: string | null;
+  reopenedBy: string | null;
+  reopenedReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CashClosureOperator = {
+  id: string;
+  closureId: string;
+  workspaceId: string;
+  kioskId: string;
+  kioskName: string;
+  date: string;
+  operatorId: string;
+  operatorName: string;
+  status: CashClosureOperatorStatus;
+  expectedTotalCents: number;
+  reportedTotalCents: number;
+  countedTotalCents: number;
+  reportedDifferenceTotalCents: number;
+  differenceTotalCents: number;
+  countedCashCents: number;
+  unreportedLineCount: number;
+  pendingLineCount: number;
+  reportedDivergentLineCount: number;
+  divergentLineCount: number;
+  cashDeposit: CashClosureDepositState;
+  approvedWithDivergence: boolean;
+  approvedAt: string | null;
+  approvedBy: string | null;
   reopenedAt: string | null;
   reopenedBy: string | null;
   reopenedReason: string | null;
@@ -244,13 +284,15 @@ export type CashClosureAuditAction =
   | "deposit_adjustment_allocated"
   | "deposit_issued"
   | "deposit_paid"
-  | "deposit_cancelled";
+  | "deposit_cancelled"
+  | "operator_states_migrated";
 
 export type CashClosureAuditLog = {
   id: string;
   workspaceId: string;
   closureId: string;
   lineId?: string;
+  operatorId?: string;
   action: CashClosureAuditAction;
   previousValue?: unknown;
   newValue?: unknown;
@@ -282,6 +324,7 @@ export type CashClosureExpectedAdjustmentInput = {
 export type CashClosureWithLines = {
   closure: CashClosure;
   lines: CashClosureLine[];
+  operators: CashClosureOperator[];
 };
 
 export type CashClosureMonthlySummary = {

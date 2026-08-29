@@ -24,6 +24,24 @@ function maxString(values: Array<string | null | undefined>) {
   return values.filter((value): value is string => !!value).sort().at(-1) ?? null;
 }
 
+function depositProgressCents(
+  closure: CashClosure,
+  field: "allocatedCents" | "issuedCents" | "paidCents",
+) {
+  const stored = closure.cashDeposit[field];
+  if (stored !== undefined) return stored;
+  if (field === "allocatedCents" && ["allocated", "issued", "paid", "adjusted"].includes(closure.cashDeposit.status)) {
+    return closure.cashDeposit.eligibleCents;
+  }
+  if (field === "issuedCents" && ["issued", "paid"].includes(closure.cashDeposit.status)) {
+    return closure.cashDeposit.eligibleCents;
+  }
+  if (field === "paidCents" && closure.cashDeposit.status === "paid") {
+    return closure.cashDeposit.eligibleCents;
+  }
+  return 0;
+}
+
 function summaryFromClosures(input: {
   id: string;
   closures: CashClosure[];
@@ -47,22 +65,16 @@ function summaryFromClosures(input: {
     month: input.month,
     closureCount: closures.length,
     pendingCount: closures.filter((closure) => ["draft", "pending_review", "reopened"].includes(closure.status)).length,
-    divergentCount: approvedClosures.filter((closure) => closure.divergentLineCount > 0).length,
+    divergentCount: closures.filter((closure) => closure.finalizedOperatorCount > 0 && closure.approvedWithDivergence).length,
     approvedCount: approvedClosures.length,
     syncErrorCount: closures.filter((closure) => closure.status === "sync_error" || !!closure.syncError).length,
     expectedTotalCents: closures.reduce((total, closure) => total + closure.expectedTotalCents, 0),
-    countedTotalCents: approvedClosures.reduce((total, closure) => total + closure.countedTotalCents, 0),
-    differenceTotalCents: approvedClosures.reduce((total, closure) => total + closure.differenceTotalCents, 0),
-    countedCashCents: approvedClosures.reduce((total, closure) => total + closure.countedCashCents, 0),
-    allocatedCashCents: closures
-      .filter((closure) => ["allocated", "issued", "paid", "adjusted"].includes(closure.cashDeposit.status))
-      .reduce((total, closure) => total + closure.cashDeposit.eligibleCents, 0),
-    issuedCashCents: closures
-      .filter((closure) => ["issued", "paid"].includes(closure.cashDeposit.status))
-      .reduce((total, closure) => total + closure.cashDeposit.eligibleCents, 0),
-    paidCashCents: closures
-      .filter((closure) => closure.cashDeposit.status === "paid")
-      .reduce((total, closure) => total + closure.cashDeposit.eligibleCents, 0),
+    countedTotalCents: closures.reduce((total, closure) => total + closure.finalizedCountedTotalCents, 0),
+    differenceTotalCents: closures.reduce((total, closure) => total + closure.finalizedDifferenceTotalCents, 0),
+    countedCashCents: closures.reduce((total, closure) => total + closure.finalizedCountedCashCents, 0),
+    allocatedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "allocatedCents"), 0),
+    issuedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "issuedCents"), 0),
+    paidCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "paidCents"), 0),
     lastSyncedAt: maxString(closures.map((closure) => closure.syncedAt)),
     lastApprovedDate: maxString(
       closures.filter((closure) => closure.status === "approved").map((closure) => closure.date),

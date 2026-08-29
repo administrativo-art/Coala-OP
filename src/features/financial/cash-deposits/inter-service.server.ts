@@ -21,7 +21,8 @@ import {
   interCobrancaReadiness,
 } from "@/lib/integrations/inter/config.server";
 import { refreshCashClosureSummaries } from "../cash-closures/summaries.server";
-import type { CashClosure, CashClosureActor } from "../cash-closures/types";
+import { withCashClosureOperatorAggregate } from "../cash-closures/operators";
+import type { CashClosure, CashClosureActor, CashClosureOperator } from "../cash-closures/types";
 import {
   buildInterCobrancaIssueInput,
   detailFields,
@@ -35,6 +36,7 @@ import { resolveConfiguredInterCobrancaPayer } from "./payer.server";
 const BATCHES = "cashDepositBatches";
 const COBRANCAS = "interCobrancas";
 const EVENTS = "interCobrancaEvents";
+const CLOSURE_OPERATORS = "cashClosureOperators";
 
 function snapshotValue<T extends { id: string }>(snapshot: FirebaseFirestore.DocumentSnapshot) {
   return { id: snapshot.id, ...snapshot.data() } as T;
@@ -486,14 +488,29 @@ async function applyInterDetail(cobrancaId: string, detail: InterCobrancaDetail)
     for (const closureId of batch.closureIds) {
       closureSnapshots.push(await transaction.get(financialDbAdmin.collection("cashClosures").doc(closureId)));
     }
+    const operatorSnapshots = new Map<string, FirebaseFirestore.QuerySnapshot>();
+    for (const snapshot of closureSnapshots) {
+      if (!snapshot.exists) continue;
+      operatorSnapshots.set(snapshot.id, await transaction.get(snapshot.ref.collection(CLOSURE_OPERATORS).limit(100)));
+    }
 
     const mapping = mapInterSituation(detail.cobranca.situacao);
     const nextBatchStatus = mapping.batchStatus ?? batch.status;
     const closureStates = new Map<string, Map<string, CashDepositBatch["status"]>>();
+    const operatorStates = new Map<string, Map<string, CashDepositBatch["status"]>>();
     for (const snapshot of closureSnapshots) {
       if (!snapshot.exists) continue;
       const closure = snapshotValue<CashClosure>(snapshot);
       closureStates.set(closure.id, await relatedBatchStates(transaction, closure, batch, nextBatchStatus));
+      for (const document of operatorSnapshots.get(closure.id)?.docs ?? []) {
+        const operator = snapshotValue<CashClosureOperator>(document);
+        operatorStates.set(`${closure.id}:${operator.operatorId}`, await relatedBatchStates(
+          transaction,
+          { ...closure, cashDeposit: operator.cashDeposit },
+          batch,
+          nextBatchStatus,
+        ));
+      }
     }
 
     const now = new Date().toISOString();
@@ -538,11 +555,31 @@ async function applyInterDetail(cobrancaId: string, detail: InterCobrancaDetail)
         const terminal = states.length === 0 || states.every((value) => ["cancelled", "failed", "open", "locked"].includes(value));
         if (terminal) status = "allocated";
       }
-      const nextClosure: CashClosure = {
+      const nextOperators = (operatorSnapshots.get(closure.id)?.docs ?? []).map((document) => {
+        const operator = snapshotValue<CashClosureOperator>(document);
+        const operatorBatchIds = operator.cashDeposit.manualSplitBatchIds?.length
+          ? operator.cashDeposit.manualSplitBatchIds
+          : operator.cashDeposit.batchId ? [operator.cashDeposit.batchId] : [];
+        if (!operatorBatchIds.includes(batch.id)) return operator;
+        const operatorBatchStates = [...(operatorStates.get(`${closure.id}:${operator.operatorId}`)?.values() ?? [])];
+        let operatorStatus = operator.cashDeposit.status;
+        if (mapping.closureDepositStatus === "paid") {
+          operatorStatus = operatorBatchStates.length > 0 && operatorBatchStates.every((value) => value === "paid") ? "paid" : "issued";
+        } else if (mapping.closureDepositStatus === "issued") operatorStatus = "issued";
+        else if (mapping.closureDepositStatus === "allocated") operatorStatus = "allocated";
+        const nextOperator: CashClosureOperator = {
+          ...operator,
+          cashDeposit: { ...operator.cashDeposit, status: operatorStatus },
+          updatedAt: now,
+        };
+        transaction.set(document.ref, nextOperator);
+        return nextOperator;
+      });
+      const nextClosure = withCashClosureOperatorAggregate({
         ...closure,
         cashDeposit: { ...closure.cashDeposit, status },
         updatedAt: now,
-      };
+      }, nextOperators, now);
       transaction.set(snapshot.ref, nextClosure);
       if (status !== closure.cashDeposit.status) {
         const auditId = randomUUID();

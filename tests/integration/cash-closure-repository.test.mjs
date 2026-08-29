@@ -12,6 +12,7 @@ assert.equal(process.env.GOOGLE_CLOUD_PROJECT, PROJECT_ID);
 
 const {
   finalizeCashClosure,
+  finalizeCashClosureOperator,
   getCashClosure,
   listCashClosureAuditLogs,
   listCashClosures,
@@ -210,6 +211,95 @@ test("repository persiste fechamento, linhas, totais, transições e auditoria a
   }), actor);
   const workspaceAClosures = await listCashClosures({ workspaceId, limit: 10 });
   assert.deepEqual(workspaceAClosures.map((closure) => closure.id), [closureId]);
+});
+
+test("finaliza e aloca cada operador sem aguardar o restante do dia", async () => {
+  const workspaceId = "workspace-integration-operators";
+  const kioskId = "kiosk-integration-operators";
+  const date = "2035-07-10";
+  const closureId = cashClosureId(kioskId, date);
+  const built = builtClosure({ workspaceId, kioskId, date });
+  built.lines.push(
+    {
+      ...built.lines[0],
+      operatorId: "operator-2",
+      operatorName: "Operadora 2",
+      expectedAmountCents: 7_000,
+      calculatedExpectedAmountCents: 7_000,
+    },
+    {
+      ...built.lines[1],
+      operatorId: "operator-2",
+      operatorName: "Operadora 2",
+      expectedAmountCents: 3_000,
+      calculatedExpectedAmountCents: 3_000,
+      reportedAmountCents: 3_000,
+      countedAmountCents: 3_000,
+    },
+  );
+  built.expectedTotalCents = 25_000;
+  built.expectedByChannelCents = { cash: 17_000, pix: 8_000 };
+  built.operatorCount = 2;
+
+  await upsertClosureFromPdv(built, actor);
+  const initial = await getCashClosure(closureId);
+  assert.ok(initial);
+  assert.equal(initial.operators.length, 2);
+  const firstCash = initial.lines.find((line) => line.operatorId === "operator-1" && line.channel === "cash");
+  const secondCash = initial.lines.find((line) => line.operatorId === "operator-2" && line.channel === "cash");
+  assert.ok(firstCash);
+  assert.ok(secondCash);
+  await saveCashClosureDraft(closureId, [
+    { id: firstCash.id, reportedCents: 10_000, countedCents: 10_000 },
+    { id: secondCash.id, reportedCents: 7_000, countedCents: 7_000 },
+  ], actor, { editReported: true, editCounted: true });
+
+  const firstFinalized = await finalizeCashClosureOperator(closureId, "operator-1", actor);
+  assert.equal(firstFinalized.closure.status, "pending_review");
+  assert.equal(firstFinalized.closure.finalizedOperatorCount, 1);
+  assert.equal(firstFinalized.closure.cashDepositEligibleCents, 10_000);
+  await processCashDepositQueue(workspaceId, kioskId, actor);
+  const partial = await getCashClosure(closureId);
+  assert.ok(partial);
+  assert.equal(partial.operators.find((operator) => operator.operatorId === "operator-1")?.cashDeposit.status, "allocated");
+  assert.equal(partial.operators.find((operator) => operator.operatorId === "operator-2")?.status, "draft");
+  assert.equal(partial.closure.cashDeposit.allocatedCents, 10_000);
+  const reopenedOperator = await reopenCashClosureWithDepositHandling({
+    workspaceId,
+    closureId,
+    operatorId: "operator-1",
+    reason: "Recontagem da primeira operadora",
+    actor,
+  });
+  assert.equal(reopenedOperator.closure.status, "reopened");
+  const afterOperatorReopen = await getCashClosure(closureId);
+  assert.equal(afterOperatorReopen?.operators.find((operator) => operator.operatorId === "operator-1")?.status, "reopened");
+  await finalizeCashClosureOperator(closureId, "operator-1", actor);
+  await processCashDepositQueue(workspaceId, kioskId, actor);
+  await assert.rejects(
+    () => saveCashClosureDraft(
+      closureId,
+      [{ id: firstCash.id, countedCents: 9_999 }],
+      actor,
+      { editReported: false, editCounted: true },
+    ),
+    /já foi finalizado/,
+  );
+
+  await finalizeCashClosureOperator(closureId, "operator-2", actor);
+  await processCashDepositQueue(workspaceId, kioskId, actor);
+  const completed = await getCashClosure(closureId);
+  assert.ok(completed);
+  assert.equal(completed.closure.status, "approved");
+  assert.equal(completed.closure.finalizedOperatorCount, 2);
+  assert.equal(completed.closure.cashDepositEligibleCents, 17_000);
+  assert.equal(completed.closure.cashDeposit.allocatedCents, 17_000);
+  const batchId = completed.operators.find((operator) => operator.operatorId === "operator-1")?.cashDeposit.batchId;
+  assert.ok(batchId);
+  const batch = await getCashDepositBatch(batchId);
+  assert.ok(batch);
+  assert.equal(batch.items.filter((item) => item.closureId === closureId).length, 2);
+  assert.equal(batch.items.filter((item) => item.closureId === closureId).reduce((sum, item) => sum + item.amountCents, 0), 17_000);
 });
 
 test("finaliza revisão legada usando a contagem do Financeiro já preenchida", async () => {

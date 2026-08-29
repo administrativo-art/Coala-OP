@@ -66,6 +66,10 @@ export function withPdvAutomaticClosureTotals(closure: CashClosure): CashClosure
 
   return {
     ...closure,
+    finalizedOperatorCount: closure.finalizedOperatorCount ?? (closure.status === "approved" ? closure.operatorCount : 0),
+    finalizedCountedTotalCents: closure.finalizedCountedTotalCents ?? (closure.status === "approved" ? closure.countedTotalCents : 0),
+    finalizedDifferenceTotalCents: closure.finalizedDifferenceTotalCents ?? (closure.status === "approved" ? closure.differenceTotalCents : 0),
+    finalizedCountedCashCents: closure.finalizedCountedCashCents ?? (closure.status === "approved" ? closure.countedCashCents : 0),
     expectedByChannelCents,
     reportedByChannelCents,
     countedByChannelCents,
@@ -406,7 +410,11 @@ export function mergeBuiltClosureForPersistence(input: {
     status,
     ...aggregates,
     cashDepositEligibleCents: existingClosure?.cashDepositEligibleCents ?? 0,
+    finalizedCountedTotalCents: existingClosure?.finalizedCountedTotalCents ?? (status === "approved" ? aggregates.countedTotalCents : 0),
+    finalizedDifferenceTotalCents: existingClosure?.finalizedDifferenceTotalCents ?? (status === "approved" ? aggregates.differenceTotalCents : 0),
+    finalizedCountedCashCents: existingClosure?.finalizedCountedCashCents ?? (status === "approved" ? aggregates.countedCashCents : 0),
     operatorCount: new Set(nextLines.map((line) => line.operatorId)).size,
+    finalizedOperatorCount: existingClosure?.finalizedOperatorCount ?? (status === "approved" ? new Set(nextLines.map((line) => line.operatorId)).size : 0),
     source: built.source,
     sourceHash,
     cashDeposit: existingClosure?.cashDeposit ?? {
@@ -421,7 +429,7 @@ export function mergeBuiltClosureForPersistence(input: {
     approvedWithDivergence: existingClosure?.approvedWithDivergence ?? false,
     pdvChangedAfterApproval:
       existingClosure?.pdvChangedAfterApproval === true ||
-      (existingClosure?.status === "approved" && sourceChanged),
+      ((existingClosure?.status === "approved" || (existingClosure?.finalizedOperatorCount ?? 0) > 0) && sourceChanged),
     syncedAt: now,
     syncError: null,
     submittedAt: existingClosure?.submittedAt ?? null,
@@ -444,6 +452,7 @@ export function recomputeCashClosureFromLines(closure: CashClosure, lines: CashC
     ...closure,
     ...aggregateLines(lines),
     operatorCount: new Set(lines.map((line) => line.operatorId)).size,
+    finalizedOperatorCount: closure.finalizedOperatorCount ?? (closure.status === "approved" ? new Set(lines.map((line) => line.operatorId)).size : 0),
     updatedAt: now,
   };
 }

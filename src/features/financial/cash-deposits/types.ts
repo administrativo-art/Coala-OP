@@ -65,6 +65,8 @@ export type CashDepositBatchItem = {
   workspaceId: string;
   batchId: string;
   closureId: string;
+  operatorId?: string | null;
+  operatorName?: string | null;
   closureDate: string;
   kioskId: string;
   amountCents: number;
