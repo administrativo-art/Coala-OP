@@ -1,6 +1,14 @@
 # Rollout das contagens abertas de estoque
 
-Status: preparado localmente, sem publicação.
+Status: publicado em produção em 29/08/2026 no build `build-2026-08-29-003`.
+
+## Resultado do rollout de 29/08/2026
+
+- Os quatro índices de `stockAuditSessions` no banco `coala` foram publicados e chegaram ao estado pronto antes da aplicação.
+- As regras foram publicadas com escrita direta negada e leitura comum restrita às próprias sessões.
+- A aplicação foi publicada a partir do commit `20e6f33b2bfa423f8aca8cce6850d50be608abf7`.
+- `npm run check`, `npm run check:rules` e `npm run verify` permaneceram verdes.
+- A validação funcional autenticada dos itens 4 a 6 abaixo deve ser feita com uma contagem controlada, sem reutilizar uma sessão operacional real.
 
 ## Contratos protegidos
 

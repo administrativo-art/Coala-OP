@@ -1,6 +1,22 @@
 # Rollout da sessão de contagem e dos malotes de depósito
 
-Status: implementação preparada localmente, sem rollout.
+Status: publicado em produção em 29/08/2026. O smoke técnico foi concluído; o smoke operacional autenticado ainda precisa de uma unidade e competência de teste definidas.
+
+## Resultado do rollout de 29/08/2026
+
+- Código integrado sobre a `main` `ac6df139` e publicado a partir do commit `20e6f33b2bfa423f8aca8cce6850d50be608abf7`.
+- App Hosting publicado no build/rollout `build-2026-08-29-003`; revisão anterior para rollback: `studio-build-2026-08-29-002`.
+- Regras e índices do Firestore publicados. Os quatro índices de estoque, o índice da DRE em `salesReports` e o índice financeiro de `cashClosures` chegaram ao estado pronto antes da aplicação.
+- Functions `cashClosureSummaryWritten` e `cashClosureSummaryReinforcement` atualizadas e confirmadas como `ACTIVE`.
+- Gatilho legado `cashClosureLineWritten` removido após a ativação das substitutas, evitando processamento duplicado.
+- Dry-run de permissões: 7 perfis examinados e nenhuma alteração necessária.
+- Dry-run de campos Inter dos depósitos: nenhum depósito legado encontrado e nenhuma alteração necessária.
+- Política `coala_2026_08 = dre_only` já estava aplicada com a justificativa esperada; a execução permaneceu idempotente e sem escrita.
+- Preflight do PDV em 28/08/2026: Tirirical com 115 cupons e R$ 1.382,50; João Paulo com 66 cupons e R$ 661,00; sem cancelamentos ou estornos.
+- Smoke HTTP: login respondeu `200`; APIs de fechamentos e depósitos responderam `401` sem autenticação, confirmando a proteção das rotas.
+- Nenhuma cobrança bancária foi emitida durante o rollout.
+
+Verificações executadas e verdes: `npm run verify`, `npm run check`, `npm run check:rules`, `npm run test:integration`, build das Functions e `npm run validate:cash-closure -- all 2026-08-28`.
 
 ## Contratos protegidos
 
@@ -143,5 +159,7 @@ Confirmar os documentos e quantidades apresentados antes de repetir com `--execu
 9. Cadastrar o webhook definitivo por último.
 10. Fazer smoke test sem emitir cobrança bancária real, salvo autorização específica.
 11. Validar logs, resumos, locks, reconciliação e custo entre 7 e 30 dias.
+
+As etapas 1 a 8 e o smoke técnico da etapa 10 foram concluídos em 29/08/2026. O cadastro/conferência autenticada do webhook, o smoke operacional com uma sessão controlada e a observação pós-release das etapas 9 a 11 permanecem como validação operacional. A reconciliação periódica continua disponível como fallback enquanto o webhook não for conferido.
 
 Rollback do App Hosting e das Functions deve usar as revisões anteriores registradas no preflight. As migrações são aditivas; a política de competência pode voltar a `standard` pelo mesmo comando, com nova auditoria. Nenhuma cobrança já emitida deve ser apagada ou reescrita durante rollback.
