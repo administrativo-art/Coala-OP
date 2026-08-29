@@ -25,7 +25,7 @@
     "validate:document-canary": "node --import tsx scripts/document-conversion-canary.mts",
     "validate:probation-contract": "node --import tsx scripts/validate-probation-contract-pilot.mts",
     "validate:hours-bank": "node --import tsx scripts/validate-hours-bank-pilot.mts",
-    "validate:cash-closure": "node --import tsx scripts/validate-cash-closure.mts",
+    "validate:cash-closure": "node --conditions=react-server --import tsx scripts/validate-cash-closure.mts",
     "documents:build-base": "node --import tsx scripts/build-ct-document-base.mts",
     "documents:build-uniform-previews": "node --import tsx scripts/build-uniform-template-previews.mts",
     "documents:prepare-contract-v3": "node --import tsx scripts/prepare-probation-contract-v3.mts",

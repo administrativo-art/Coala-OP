@@ -104,6 +104,8 @@ Sessões, operadores, locks, políticas e auditorias negam leitura e escrita dir
 
 ## Preflight de dados
 
+As duas migrações varrem por páginas de 200 documentos e interrompem acima de 5.000 documentos por coleção por padrão. A leitura de detecção pode chegar a 5.001 documentos por coleção; um volume maior exige revisão explícita de `--max-docs=N` (teto absoluto de 20.000). A migração de permissões também divide as escritas em lotes de 400.
+
 Executar primeiro sem `--execute`:
 
 ```bash
