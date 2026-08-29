@@ -3,6 +3,7 @@ import "server-only";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { CASH_CLOSURE_TIMEZONE } from "./date";
 import { withPdvAutomaticClosureTotals } from "./persistence";
+import { cashClosureDreRevenueCents, cashClosureSummaryCounts } from "./summary-counts";
 import type { CashClosure, CashClosureMonthlySummary, CashClosureUnitSummary } from "./types";
 
 const MONTHLY = "cashClosureMonthlySummaries";
@@ -54,7 +55,7 @@ function summaryFromClosures(input: {
   now: string;
 }): CashClosureMonthlySummary {
   const closures = input.closures.map(withPdvAutomaticClosureTotals);
-  const approvedClosures = closures.filter((closure) => closure.status === "approved");
+  const counts = cashClosureSummaryCounts(closures);
   return {
     id: input.id,
     workspaceId: input.workspaceId,
@@ -63,14 +64,11 @@ function summaryFromClosures(input: {
     pdvFilialId: input.pdvFilialId,
     year: input.year,
     month: input.month,
-    closureCount: closures.length,
-    pendingCount: closures.filter((closure) => ["draft", "pending_review", "reopened"].includes(closure.status)).length,
-    divergentCount: closures.filter((closure) => closure.finalizedOperatorCount > 0 && closure.approvedWithDivergence).length,
-    approvedCount: approvedClosures.length,
-    syncErrorCount: closures.filter((closure) => closure.status === "sync_error" || !!closure.syncError).length,
+    ...counts,
     expectedTotalCents: closures.reduce((total, closure) => total + closure.expectedTotalCents, 0),
     countedTotalCents: closures.reduce((total, closure) => total + closure.finalizedCountedTotalCents, 0),
     differenceTotalCents: closures.reduce((total, closure) => total + closure.finalizedDifferenceTotalCents, 0),
+    dreRevenueTotalCents: cashClosureDreRevenueCents(closures),
     countedCashCents: closures.reduce((total, closure) => total + closure.finalizedCountedCashCents, 0),
     allocatedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "allocatedCents"), 0),
     issuedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "issuedCents"), 0),
@@ -141,17 +139,13 @@ export async function refreshCashClosureSummaries(closure: CashClosure) {
   return monthly;
 }
 
-export async function listCashClosureUnitSummaries(workspaceId: string) {
-  const snapshot = await financialDbAdmin.collection(UNITS).where("workspaceId", "==", workspaceId).get();
-  return snapshot.docs.map((document) => ({ id: document.id, ...document.data() } as CashClosureUnitSummary));
-}
-
 export async function listCashClosureMonthlySummaries(workspaceId: string, kioskId: string) {
   const snapshot = await financialDbAdmin.collection(MONTHLY)
     .where("workspaceId", "==", workspaceId)
     .where("kioskId", "==", kioskId)
     .orderBy("year", "desc")
     .orderBy("month", "desc")
+    .limit(120)
     .get();
   return snapshot.docs.map((document) => ({ id: document.id, ...document.data() } as CashClosureMonthlySummary));
 }

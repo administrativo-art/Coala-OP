@@ -30,7 +30,8 @@ export const cashClosureReasonSchema = z.object({
 
 export const finalizeCashClosureOperatorSchema = z.object({
   operatorId: z.string().trim().min(1).max(300),
-});
+  countingSessionId: z.string().uuid(),
+}).strict();
 
 export const cashClosureExpectedAdjustmentSchema = z.object({
   lineId: z.string().trim().min(1).max(300),

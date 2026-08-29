@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
-import { assertCashDepositAccess } from "@/features/financial/cash-closures/access.server";
+import { assertCashDepositBatchAccess } from "@/features/financial/cash-closures/access.server";
 import { getCashDepositBatch } from "@/features/financial/cash-deposits/repository.server";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 
@@ -21,7 +21,7 @@ export const GET = withApiErrorHandling<RouteContext>({
       throw new AppError({ code: "CASH_DEPOSIT_NOT_FOUND", kind: "NOT_FOUND" });
     }
     try {
-      assertCashDepositAccess(context, "view", result.batch.kioskId);
+      assertCashDepositBatchAccess(context, "view", result.batch);
     } catch (cause) {
       throw new AppError({ code: "CASH_DEPOSIT_VIEW_FORBIDDEN", kind: "AUTHORIZATION", cause });
     }

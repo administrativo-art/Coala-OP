@@ -8,11 +8,7 @@ import {
 } from "@/features/financial/cash-closures/access.server";
 import { finalizeCashClosureOperator, getCashClosure } from "@/features/financial/cash-closures/repository.server";
 import { finalizeCashClosureOperatorSchema } from "@/features/financial/cash-closures/schemas";
-import {
-  finalizeCashDepositAdjustmentForClosure,
-  processCashDepositQueue,
-} from "@/features/financial/cash-deposits/repository.server";
-import { AppError, reportSystemError, withApiErrorHandling } from "@/lib/observability";
+import { AppError, withApiErrorHandling } from "@/lib/observability";
 
 type RouteContext = { params: Promise<{ closureId: string }> };
 const ROUTE = "/api/financial/cash-closures/[closureId]/finalize";
@@ -27,6 +23,14 @@ function throwFinalizationError(cause: unknown): never {
       code: "CASH_CLOSURE_OPERATOR_ALREADY_FINALIZED",
       kind: "CONFLICT",
       safeMessage: "A contagem deste operador já foi finalizada.",
+      cause,
+    });
+  }
+  if (message.includes("sessão") || message.includes("Sessão")) {
+    throw new AppError({
+      code: "CASH_COUNTING_SESSION_CONFLICT",
+      kind: "CONFLICT",
+      safeMessage: message,
       cause,
     });
   }
@@ -56,7 +60,7 @@ export const POST = withApiErrorHandling<RouteContext>({
   source: "api",
   operation: "finalize-cash-closure-count",
   routeOrJob: ROUTE,
-}, async (request: NextRequest, routeContext, observation) => {
+}, async (request: NextRequest, routeContext) => {
   const context = await requireUser(request).catch((cause) => {
     throw new AppError({ code: "CASH_CLOSURE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
   });
@@ -92,23 +96,15 @@ export const POST = withApiErrorHandling<RouteContext>({
     });
   }
   const actor = cashClosureActor(context);
-  const finalized = await finalizeCashClosureOperator(closureId, parsed.data.operatorId, actor).catch(throwFinalizationError);
+  const finalized = await finalizeCashClosureOperator(
+    closureId,
+    parsed.data.operatorId,
+    actor,
+    {
+      countingSessionId: parsed.data.countingSessionId,
+      canManageSessionOfOthers: context.isDefaultAdmin || context.permissions.financial?.cashClosures?.reopen === true,
+    },
+  ).catch(throwFinalizationError);
   const closure = finalized.closure;
-  let allocationError: string | null = null;
-  try {
-    await finalizeCashDepositAdjustmentForClosure(closureId);
-    await processCashDepositQueue(context.workspace_id, closure.kioskId, actor);
-  } catch (error) {
-    reportSystemError({
-      error,
-      source: "api",
-      operation: "allocate-finalized-cash-closure",
-      routeOrJob: ROUTE,
-      requestId: observation.requestId,
-      correlationId: observation.correlationId,
-      metadata: { closureId, kioskId: closure.kioskId },
-    });
-    allocationError = "A alocação não foi concluída. O fechamento permanece finalizado para nova tentativa.";
-  }
-  return NextResponse.json({ closure, allocationError });
+  return NextResponse.json({ closure, countingSessionId: parsed.data.countingSessionId });
 });

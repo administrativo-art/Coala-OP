@@ -143,7 +143,7 @@ export type CashClosureDepositState = {
   manualSplitRequired: boolean;
   manualSplitBatchIds?: string[];
   adjustmentId?: string | null;
-  allocationReason: "amount_exceeds_limit" | "pending_allocator" | null;
+  allocationReason: "amount_exceeds_limit" | "pending_allocator" | "awaiting_counting_session" | null;
   pendingSince: string | null;
 };
 
@@ -241,6 +241,8 @@ export type CashClosureOperator = {
   reportedDivergentLineCount: number;
   divergentLineCount: number;
   cashDeposit: CashClosureDepositState;
+  countingSessionId?: string | null;
+  countingSessionFinalizedAt?: string | null;
   approvedWithDivergence: boolean;
   approvedAt: string | null;
   approvedBy: string | null;
@@ -356,12 +358,15 @@ export type CashClosureMonthlySummary = {
   month: number;
   closureCount: number;
   pendingCount: number;
+  partialCount?: number;
   divergentCount: number;
   approvedCount: number;
   syncErrorCount: number;
   expectedTotalCents: number;
   countedTotalCents: number;
   differenceTotalCents: number;
+  /** Receita da DRE: PDV nos operadores em aberto e valor conferido nos finalizados. */
+  dreRevenueTotalCents: number;
   countedCashCents: number;
   allocatedCashCents: number;
   issuedCashCents: number;

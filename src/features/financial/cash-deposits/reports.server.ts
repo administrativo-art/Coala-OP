@@ -34,9 +34,11 @@ export async function buildCashDepositReport(
       .limit(10_000)
       .get(),
   ]);
-  const batches = allBatches.filter((batch) => canAccessKiosk(batch.kioskId));
+  const batches = allBatches.filter((batch) => (batch.kioskIds?.length ? batch.kioskIds : [batch.kioskId])
+    .every(canAccessKiosk));
+  const visibleBatchIds = new Set(batches.map((batch) => batch.id));
   const adjustments = allAdjustments.filter((adjustment) => canAccessKiosk(adjustment.kioskId));
-  const cobrancas = allCobrancas.filter((cobranca) => canAccessKiosk(cobranca.kioskId));
+  const cobrancas = allCobrancas.filter((cobranca) => visibleBatchIds.has(cobranca.batchId));
   const closures = closuresSnapshot.docs
     .map((document) => snapshotValue<CashClosure>(document))
     .filter((closure) => canAccessKiosk(closure.kioskId));

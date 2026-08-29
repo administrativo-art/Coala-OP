@@ -109,6 +109,8 @@ export function buildCashClosureOperators(input: {
       status,
       ...aggregates,
       cashDeposit,
+      countingSessionId: existing?.countingSessionId ?? null,
+      countingSessionFinalizedAt: existing?.countingSessionFinalizedAt ?? null,
       approvedWithDivergence: approved
         ? aggregates.divergentLineCount > 0 || aggregates.reportedDivergentLineCount > 0
         : existing?.approvedWithDivergence ?? false,
@@ -172,7 +174,9 @@ function aggregateDeposit(operators: CashClosureOperator[]): CashClosureDepositS
       ? "amount_exceeds_limit"
       : states.some((state) => state.allocationReason === "pending_allocator")
         ? "pending_allocator"
-        : null,
+        : states.some((state) => state.allocationReason === "awaiting_counting_session")
+          ? "awaiting_counting_session"
+          : null,
     pendingSince: states.map((state) => state.pendingSince).filter((value): value is string => !!value).sort()[0] ?? null,
   };
 }

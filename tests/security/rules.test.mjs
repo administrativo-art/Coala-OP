@@ -742,6 +742,15 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
           assignedKioskIds: [],
           unitAccessUnitIds: [],
         }),
+        setDoc(doc(db, "users/all-session-units"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: financialPermissions,
+          unitAccessScope: "linked",
+          unitIds: ["tirirical", "joao-paulo"],
+          assignedKioskIds: [],
+          unitAccessUnitIds: [],
+        }),
         setDoc(doc(db, "cashClosures/tirirical_2026-07-07"), {
           kioskId: "tirirical",
           status: "draft",
@@ -778,11 +787,22 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
           status: "open",
           totalCents: 10000,
         }),
+        setDoc(doc(db, "cashDepositBatches/session-batch"), {
+          kioskId: "tirirical",
+          kioskIds: ["tirirical", "joao-paulo"],
+          status: "locked",
+          totalCents: 20000,
+        }),
+        setDoc(doc(db, "cashCountingSessions/session-1"), {
+          kioskIds: ["tirirical", "joao-paulo"],
+          status: "open",
+        }),
       ]);
     });
 
     const operator = env.authenticatedContext("cash-operator");
     const outsider = env.authenticatedContext("other-unit");
+    const allSessionUnits = env.authenticatedContext("all-session-units");
     await assertSucceeds(getDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07")));
     await assertFails(getDoc(doc(outsider.firestore(), "cashClosures/tirirical_2026-07-07")));
     await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/lines/10_cash"), {
@@ -803,6 +823,9 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
       countedCents: 1,
     }));
     await assertSucceeds(getDoc(doc(operator.firestore(), "cashDepositBatches/batch-1")));
+    await assertFails(getDoc(doc(operator.firestore(), "cashDepositBatches/session-batch")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashDepositBatches/session-batch")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessions/session-1")));
     await assertFails(updateDoc(doc(operator.firestore(), "cashDepositBatches/batch-1"), {
       status: "paid",
     }));

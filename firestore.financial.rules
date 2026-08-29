@@ -139,6 +139,13 @@ service cloud.firestore {
         ));
     }
 
+    function canAccessDepositBatch(batch) {
+      // Malotes de sessão podem reunir várias unidades e são lidos somente
+      // pela API, que valida acesso a todas elas. O cliente lê diretamente
+      // apenas os lotes legados de uma única unidade.
+      return !batch.keys().hasAny(['kioskIds']) && canAccessKiosk(batch.kioskId);
+    }
+
     function canViewSettings() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.settings.view == true)
         || (hasFinancialClaims() && financialClaims().settings.view == true);
@@ -493,12 +500,12 @@ service cloud.firestore {
     }
 
     match /cashDepositBatches/{batchId} {
-      allow read: if canViewCashDeposits() && canAccessKiosk(resource.data.kioskId);
+      allow read: if canViewCashDeposits() && canAccessDepositBatch(resource.data);
       allow write: if false;
 
       match /items/{itemId} {
         allow read: if canViewCashDeposits()
-          && canAccessKiosk(get(/databases/$(database)/documents/cashDepositBatches/$(batchId)).data.kioskId);
+          && canAccessDepositBatch(get(/databases/$(database)/documents/cashDepositBatches/$(batchId)).data);
         allow write: if false;
       }
     }

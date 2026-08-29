@@ -36,7 +36,8 @@ export const GET = withApiErrorHandling({
       configuredInterCobrancaReadiness(),
       listCashCoinBalances(context.workspace_id),
     ]);
-    const visibleBatches = batches.filter((batch) => canAccessUnit(context.userDoc, batch.kioskId, { isDefaultAdmin: context.isDefaultAdmin }));
+    const visibleBatches = batches.filter((batch) => (batch.kioskIds?.length ? batch.kioskIds : [batch.kioskId])
+      .every((unitId) => canAccessUnit(context.userDoc, unitId, { isDefaultAdmin: context.isDefaultAdmin })));
     const visibleBatchIds = new Set(visibleBatches.map((batch) => batch.id));
     return NextResponse.json({
       batches: visibleBatches,
