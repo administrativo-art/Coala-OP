@@ -12,6 +12,7 @@ import {
 } from '@/features/stock-count/lib/finalize';
 import { type StockAuditSession } from '@/types';
 import { normalizeMeasurementUnit } from '@/lib/conversion';
+import { canAccessUnit } from '@/lib/unit-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -179,7 +180,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
   if (id) {
     const doc = await dbAdmin.collection(collectionName).doc(id).get();
     if (!doc.exists) return jsonError('Documento não encontrado.', 404);
+    if (resource === 'stock-audit' && !canAccessUnit(
+      userContext.userDoc,
+      String(doc.get('kioskId') ?? ''),
+      { isDefaultAdmin: userContext.isDefaultAdmin },
+    )) {
+      return permissionError();
+    }
     return NextResponse.json({ id: doc.id, ...doc.data() });
+  }
+
+  if (resource === 'stock-audit') {
+    return jsonError('Use a listagem paginada de contagens.', 400);
   }
 
   const snapshot = await dbAdmin.collection(collectionName).get();
@@ -232,6 +244,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     : body;
   if (resource === 'stock-audit' && (!stockAuditPayload.kioskId || !stockAuditPayload.kioskName || stockAuditPayload.items.length === 0)) {
     return jsonError('Unidade e itens da contagem são obrigatórios.');
+  }
+  if (resource === 'stock-audit' && !canAccessUnit(
+    userContext.userDoc,
+    stockAuditPayload.kioskId,
+    { isDefaultAdmin: userContext.isDefaultAdmin },
+  )) {
+    return permissionError();
   }
 
   const ref = await dbAdmin.collection(collectionName).add({

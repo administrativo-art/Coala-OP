@@ -66,6 +66,10 @@ export function withPdvAutomaticClosureTotals(closure: CashClosure): CashClosure
 
   return {
     ...closure,
+    finalizedOperatorCount: closure.finalizedOperatorCount ?? (closure.status === "approved" ? closure.operatorCount : 0),
+    finalizedCountedTotalCents: closure.finalizedCountedTotalCents ?? (closure.status === "approved" ? closure.countedTotalCents : 0),
+    finalizedDifferenceTotalCents: closure.finalizedDifferenceTotalCents ?? (closure.status === "approved" ? closure.differenceTotalCents : 0),
+    finalizedCountedCashCents: closure.finalizedCountedCashCents ?? (closure.status === "approved" ? closure.countedCashCents : 0),
     expectedByChannelCents,
     reportedByChannelCents,
     countedByChannelCents,
@@ -94,6 +98,8 @@ function lineStatus(countedCents: number | null, differenceCents: number | null)
 function normalizeExistingLine(line: CashClosureLine, closureStatus: CashClosure["status"]): CashClosureLine {
   const automatic = isPdvAutoCountedChannel(line.channel);
   const legacy = line.reportedCents === undefined;
+  const calculatedExpectedCents = line.calculatedExpectedCents ?? line.expectedCents;
+  const expectedAdjustmentCents = line.expectedAdjustmentCents ?? line.expectedCents - calculatedExpectedCents;
   const reportedCents = automatic ? line.expectedCents : legacy ? line.countedCents : line.reportedCents;
   const countedCents = automatic
     ? line.expectedCents
@@ -104,6 +110,12 @@ function normalizeExistingLine(line: CashClosureLine, closureStatus: CashClosure
   const differenceCents = countedCents === null ? null : countedCents - line.expectedCents;
   return {
     ...line,
+    calculatedExpectedCents,
+    expectedAdjustmentCents,
+    expectedAdjustmentReason: line.expectedAdjustmentReason ?? null,
+    expectedAdjustedBy: line.expectedAdjustedBy ?? null,
+    expectedAdjustedAt: line.expectedAdjustedAt ?? null,
+    expectedAdjustmentNeedsReview: line.expectedAdjustmentNeedsReview ?? false,
     reportedCents,
     reportedDifferenceCents,
     countedCents,
@@ -128,12 +140,15 @@ function normalizedSourceHash(built: BuiltCashClosure) {
       .map((line) => ({
         id: cashClosureLineId(line.operatorId, line.channel),
         operatorName: line.operatorName,
-        expectedCents: line.expectedAmountCents,
+        calculatedExpectedCents: line.calculatedExpectedAmountCents ?? line.expectedAmountCents,
         rawPaymentNames: [...line.rawPaymentNames].sort(),
         metadata: {
           grossCashCents: line.metadata.grossCashCents,
           changeCents: line.metadata.changeCents,
           paymentRowCount: line.metadata.paymentRowCount,
+          supplyCents: line.metadata.supplyCents,
+          withdrawalCents: line.metadata.withdrawalCents,
+          cashMovements: line.metadata.cashMovements,
         },
       }))
       .sort((left, right) => left.id.localeCompare(right.id)),
@@ -154,14 +169,18 @@ function builtLineToPersistent(
 ): CashClosureLine {
   const id = cashClosureLineId(line.operatorId, line.channel);
   const automaticallyCounted = isPdvAutoCountedChannel(line.channel);
+  const calculatedExpectedCents = line.calculatedExpectedAmountCents ?? line.expectedAmountCents;
+  const hasExpectedAdjustment = existing?.expectedAdjustedAt != null;
+  const expectedCents = hasExpectedAdjustment ? existing.expectedCents : calculatedExpectedCents;
+  const expectedAdjustmentCents = expectedCents - calculatedExpectedCents;
   const reportedCents = automaticallyCounted
-    ? line.expectedAmountCents
+    ? expectedCents
     : existing?.reportedCents ?? line.reportedAmountCents;
   const countedCents = automaticallyCounted
-    ? line.expectedAmountCents
+    ? expectedCents
     : existing?.countedCents ?? line.countedAmountCents;
-  const reportedDifferenceCents = reportedCents === null ? null : reportedCents - line.expectedAmountCents;
-  const differenceCents = countedCents === null ? null : countedCents - line.expectedAmountCents;
+  const reportedDifferenceCents = reportedCents === null ? null : reportedCents - expectedCents;
+  const differenceCents = countedCents === null ? null : countedCents - expectedCents;
   const automaticCountIsCurrent =
     automaticallyCounted &&
     existing?.countedCents === countedCents &&
@@ -169,7 +188,15 @@ function builtLineToPersistent(
   const comparable = {
     operatorName: line.operatorName,
     channelLabel: line.channelLabel,
-    expectedCents: line.expectedAmountCents,
+    calculatedExpectedCents,
+    expectedCents,
+    expectedAdjustmentCents,
+    expectedAdjustmentReason: hasExpectedAdjustment ? existing.expectedAdjustmentReason : null,
+    expectedAdjustedBy: hasExpectedAdjustment ? existing.expectedAdjustedBy : null,
+    expectedAdjustedAt: hasExpectedAdjustment ? existing.expectedAdjustedAt : null,
+    expectedAdjustmentNeedsReview: hasExpectedAdjustment && (
+      existing.expectedAdjustmentNeedsReview || existing.calculatedExpectedCents !== calculatedExpectedCents
+    ),
     reportedCents,
     reportedDifferenceCents,
     countedCents,
@@ -196,7 +223,13 @@ function builtLineToPersistent(
     ? {
         operatorName: existing.operatorName,
         channelLabel: existing.channelLabel,
+        calculatedExpectedCents: existing.calculatedExpectedCents,
         expectedCents: existing.expectedCents,
+        expectedAdjustmentCents: existing.expectedAdjustmentCents,
+        expectedAdjustmentReason: existing.expectedAdjustmentReason,
+        expectedAdjustedBy: existing.expectedAdjustedBy,
+        expectedAdjustedAt: existing.expectedAdjustedAt,
+        expectedAdjustmentNeedsReview: existing.expectedAdjustmentNeedsReview,
         reportedCents: existing.reportedCents,
         reportedDifferenceCents: existing.reportedDifferenceCents,
         countedCents: existing.countedCents,
@@ -228,11 +261,16 @@ function builtLineToPersistent(
 }
 
 function staleCountedLine(existing: CashClosureLine, now: string): CashClosureLine {
-  const reportedDifferenceCents = existing.reportedCents === null ? null : existing.reportedCents;
-  const differenceCents = existing.countedCents === null ? null : existing.countedCents;
+  const hasExpectedAdjustment = existing.expectedAdjustedAt !== null;
+  const expectedCents = hasExpectedAdjustment ? existing.expectedCents : 0;
+  const reportedDifferenceCents = existing.reportedCents === null ? null : existing.reportedCents - expectedCents;
+  const differenceCents = existing.countedCents === null ? null : existing.countedCents - expectedCents;
   return {
     ...existing,
-    expectedCents: 0,
+    calculatedExpectedCents: 0,
+    expectedCents,
+    expectedAdjustmentCents: expectedCents,
+    expectedAdjustmentNeedsReview: hasExpectedAdjustment,
     reportedDifferenceCents,
     conferenceDifferenceCents:
       existing.countedCents === null || existing.reportedCents === null
@@ -241,7 +279,7 @@ function staleCountedLine(existing: CashClosureLine, now: string): CashClosureLi
     differenceCents,
     status: lineStatus(existing.countedCents, differenceCents),
     updatedAt:
-      existing.expectedCents === 0 && existing.differenceCents === differenceCents
+      existing.calculatedExpectedCents === 0 && existing.differenceCents === differenceCents
         ? existing.updatedAt
         : now,
   };
@@ -372,9 +410,15 @@ export function mergeBuiltClosureForPersistence(input: {
     status,
     ...aggregates,
     cashDepositEligibleCents: existingClosure?.cashDepositEligibleCents ?? 0,
+    finalizedCountedTotalCents: existingClosure?.finalizedCountedTotalCents ?? (status === "approved" ? aggregates.countedTotalCents : 0),
+    finalizedDifferenceTotalCents: existingClosure?.finalizedDifferenceTotalCents ?? (status === "approved" ? aggregates.differenceTotalCents : 0),
+    finalizedCountedCashCents: existingClosure?.finalizedCountedCashCents ?? (status === "approved" ? aggregates.countedCashCents : 0),
     operatorCount: new Set(nextLines.map((line) => line.operatorId)).size,
+    finalizedOperatorCount: existingClosure?.finalizedOperatorCount ?? (status === "approved" ? new Set(nextLines.map((line) => line.operatorId)).size : 0),
     source: built.source,
     sourceHash,
+    cashDepositPolicy: existingClosure?.cashDepositPolicy ?? "standard",
+    cashDepositPolicyReason: existingClosure?.cashDepositPolicyReason ?? null,
     cashDeposit: existingClosure?.cashDeposit ?? {
       eligibleCents: 0,
       batchId: null,
@@ -387,7 +431,7 @@ export function mergeBuiltClosureForPersistence(input: {
     approvedWithDivergence: existingClosure?.approvedWithDivergence ?? false,
     pdvChangedAfterApproval:
       existingClosure?.pdvChangedAfterApproval === true ||
-      (existingClosure?.status === "approved" && sourceChanged),
+      ((existingClosure?.status === "approved" || (existingClosure?.finalizedOperatorCount ?? 0) > 0) && sourceChanged),
     syncedAt: now,
     syncError: null,
     submittedAt: existingClosure?.submittedAt ?? null,
@@ -410,6 +454,7 @@ export function recomputeCashClosureFromLines(closure: CashClosure, lines: CashC
     ...closure,
     ...aggregateLines(lines),
     operatorCount: new Set(lines.map((line) => line.operatorId)).size,
+    finalizedOperatorCount: closure.finalizedOperatorCount ?? (closure.status === "approved" ? new Set(lines.map((line) => line.operatorId)).size : 0),
     updatedAt: now,
   };
 }
@@ -464,6 +509,70 @@ export function recalculateCountedLine(
     note: note?.trim() || null,
     countedBy: countedCents === null ? null : actorId,
     countedAt: countedCents === null ? null : now,
+    updatedAt: now,
+  };
+}
+
+export function recalculateExpectedLine(
+  line: CashClosureLine,
+  correctedExpectedCents: number,
+  reason: string,
+  actorId: string,
+  now: string,
+): CashClosureLine {
+  const automatic = isPdvAutoCountedChannel(line.channel);
+  const reportedCents = automatic ? correctedExpectedCents : line.reportedCents;
+  const countedCents = automatic ? correctedExpectedCents : line.countedCents;
+  const reportedDifferenceCents = reportedCents === null
+    ? null
+    : reportedCents - correctedExpectedCents;
+  const differenceCents = countedCents === null
+    ? null
+    : countedCents - correctedExpectedCents;
+  return {
+    ...line,
+    expectedCents: correctedExpectedCents,
+    expectedAdjustmentCents: correctedExpectedCents - line.calculatedExpectedCents,
+    expectedAdjustmentReason: reason.trim(),
+    expectedAdjustedBy: actorId,
+    expectedAdjustedAt: now,
+    expectedAdjustmentNeedsReview: false,
+    reportedCents,
+    countedCents,
+    reportedDifferenceCents,
+    conferenceDifferenceCents:
+      reportedCents === null || countedCents === null ? null : countedCents - reportedCents,
+    differenceCents,
+    status: lineStatus(countedCents, differenceCents),
+    updatedAt: now,
+  };
+}
+
+export function restoreCalculatedExpectedLine(
+  line: CashClosureLine,
+  now: string,
+): CashClosureLine {
+  const expectedCents = line.calculatedExpectedCents;
+  const automatic = isPdvAutoCountedChannel(line.channel);
+  const reportedCents = automatic ? expectedCents : line.reportedCents;
+  const countedCents = automatic ? expectedCents : line.countedCents;
+  const reportedDifferenceCents = reportedCents === null ? null : reportedCents - expectedCents;
+  const differenceCents = countedCents === null ? null : countedCents - expectedCents;
+  return {
+    ...line,
+    expectedCents,
+    expectedAdjustmentCents: 0,
+    expectedAdjustmentReason: null,
+    expectedAdjustedBy: null,
+    expectedAdjustedAt: null,
+    expectedAdjustmentNeedsReview: false,
+    reportedCents,
+    countedCents,
+    reportedDifferenceCents,
+    conferenceDifferenceCents:
+      reportedCents === null || countedCents === null ? null : countedCents - reportedCents,
+    differenceCents,
+    status: lineStatus(countedCents, differenceCents),
     updatedAt: now,
   };
 }

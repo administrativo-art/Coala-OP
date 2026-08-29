@@ -5,26 +5,38 @@ import { randomUUID } from "node:crypto";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { refreshCashClosureSummaries } from "@/features/financial/cash-closures/summaries.server";
 import { assertCashClosureTransition } from "@/features/financial/cash-closures/state-machine";
+import { todayInClosureTimezone } from "@/features/financial/cash-closures/date";
 import type {
   CashClosure,
   CashClosureActor,
   CashClosureAuditLog,
   CashClosureLine,
+  CashClosureOperator,
 } from "@/features/financial/cash-closures/types";
 import {
+  emptyCashClosureDepositState,
+  withCashClosureOperatorAggregate,
+} from "@/features/financial/cash-closures/operators";
+import { prepareCashCountingSessionOperatorDetachment } from "@/features/financial/cash-counting-sessions/repository.server";
+import {
   allocateNegativeAdjustmentWithoutGoingBelowZero,
-  appendClosureAllocationIdempotently,
   decideCashDepositAllocation,
 } from "./allocation";
 import {
   CASH_DEPOSIT_MAX_CENTS,
+  normalizeCashDepositBatch,
   type CashDepositBatch,
   type CashDepositBatchItem,
   type CashDepositAdjustment,
+  type CashCoinBalance,
+  type CashCoinEvent,
 } from "./types";
 
 const BATCHES = "cashDepositBatches";
 const QUEUES = "cashDepositQueues";
+const COIN_BALANCES = "cashCoinBalances";
+const COIN_EVENTS = "cashCoinEvents";
+const CLOSURE_OPERATORS = "cashClosureOperators";
 
 function queueId(workspaceId: string, kioskId: string) {
   return `${workspaceId}_${kioskId}`;
@@ -55,7 +67,11 @@ function newBatch(input: {
     sequence: input.sequence,
     status: "open",
     maxCents: CASH_DEPOSIT_MAX_CENTS,
+    grossTotalCents: 0,
     totalCents: 0,
+    coinHoldCents: 0,
+    coinPreparedAt: null,
+    coinPreparedBy: null,
     remainingCapacityCents: CASH_DEPOSIT_MAX_CENTS,
     periodStartDate: input.date,
     periodEndDate: input.date,
@@ -85,6 +101,7 @@ function newBatch(input: {
 function auditLog(input: {
   workspaceId: string;
   closureId: string;
+  operatorId?: string;
   actor: CashClosureActor;
   batchId: string;
   amountCents: number;
@@ -95,6 +112,7 @@ function auditLog(input: {
     id,
     workspaceId: input.workspaceId,
     closureId: input.closureId,
+    ...(input.operatorId ? { operatorId: input.operatorId } : {}),
     action: "deposit_allocated",
     newValue: { batchId: input.batchId, amountCents: input.amountCents },
     userId: input.actor.userId,
@@ -105,7 +123,7 @@ function auditLog(input: {
 
 async function allocateNextPendingClosure(workspaceId: string, kioskId: string, actor: CashClosureActor) {
   return financialDbAdmin.runTransaction(async (transaction) => {
-    const pendingQuery = financialDbAdmin.collection("cashClosures")
+    const pendingQuery = financialDbAdmin.collectionGroup(CLOSURE_OPERATORS)
       .where("workspaceId", "==", workspaceId)
       .where("kioskId", "==", kioskId)
       .where("status", "==", "approved")
@@ -115,21 +133,31 @@ async function allocateNextPendingClosure(workspaceId: string, kioskId: string, 
       .limit(1);
     const pendingSnapshot = await transaction.get(pendingQuery);
     if (pendingSnapshot.empty) return null;
-    const closureDocument = pendingSnapshot.docs[0];
-    const closure = snapshotValue<CashClosure>(closureDocument);
-    const amountCents = closure.cashDeposit.eligibleCents;
+    const operatorDocument = pendingSnapshot.docs[0];
+    const operator = snapshotValue<CashClosureOperator>(operatorDocument);
+    const closureRef = operatorDocument.ref.parent.parent;
+    if (!closureRef) throw new Error("Fechamento do operador não encontrado.");
+    const [closureSnapshot, siblingSnapshot] = await Promise.all([
+      transaction.get(closureRef),
+      transaction.get(closureRef.collection(CLOSURE_OPERATORS).limit(100)),
+    ]);
+    if (!closureSnapshot.exists) throw new Error("Fechamento do operador não encontrado.");
+    const closure = snapshotValue<CashClosure>(closureSnapshot);
+    const siblingOperators = siblingSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document));
+    const amountCents = operator.cashDeposit.eligibleCents;
     const existingItemSnapshot = await transaction.get(
       financialDbAdmin.collectionGroup("items")
         .where("workspaceId", "==", workspaceId)
         .where("closureId", "==", closure.id)
+        .where("operatorId", "==", operator.operatorId)
         .limit(1),
     );
-    if (!existingItemSnapshot.empty) {
-      const existingItemDocument = existingItemSnapshot.docs[0];
+    const existingItemDocument = existingItemSnapshot.docs[0];
+    if (existingItemDocument) {
       const existingItem = snapshotValue<CashDepositBatchItem>(existingItemDocument);
       const now = new Date().toISOString();
       const cashDeposit = {
-        ...closure.cashDeposit,
+        ...operator.cashDeposit,
         batchId: existingItem.batchId,
         batchItemId: existingItem.id,
         status: "allocated" as const,
@@ -137,8 +165,11 @@ async function allocateNextPendingClosure(workspaceId: string, kioskId: string, 
         allocationReason: null,
         pendingSince: null,
       };
-      const nextClosure: CashClosure = { ...closure, cashDeposit, updatedAt: now };
-      transaction.set(closureDocument.ref, nextClosure);
+      const nextOperator = { ...operator, cashDeposit, updatedAt: now };
+      const operators = siblingOperators.map((item) => item.operatorId === operator.operatorId ? nextOperator : item);
+      const nextClosure = withCashClosureOperatorAggregate(closure, operators, now);
+      transaction.set(operatorDocument.ref, nextOperator);
+      transaction.set(closureRef, nextClosure);
       return { closure: nextClosure, allocated: true, repairedIdempotency: true };
     }
     const queueRef = financialDbAdmin.collection(QUEUES).doc(queueId(workspaceId, kioskId));
@@ -148,12 +179,14 @@ async function allocateNextPendingClosure(workspaceId: string, kioskId: string, 
     const openBatchRef = openBatchId ? financialDbAdmin.collection(BATCHES).doc(openBatchId) : null;
     const openBatchSnapshot = openBatchRef ? await transaction.get(openBatchRef) : null;
     const currentBatch = openBatchSnapshot?.exists
-      ? snapshotValue<CashDepositBatch>(openBatchSnapshot)
+      ? normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(openBatchSnapshot))
       : null;
     const cashLinesSnapshot = await transaction.get(
-      closureDocument.ref.collection("lines").where("channel", "==", "cash"),
+      closureRef.collection("lines").where("operatorId", "==", operator.operatorId).limit(20),
     );
-    const cashLines = cashLinesSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document));
+    const cashLines = cashLinesSnapshot.docs
+      .map((document) => snapshotValue<CashClosureLine>(document))
+      .filter((line) => line.channel === "cash");
     const now = new Date().toISOString();
     const decision = decideCashDepositAllocation({
       currentBatchCents: currentBatch?.status === "open" ? currentBatch.totalCents : null,
@@ -161,26 +194,30 @@ async function allocateNextPendingClosure(workspaceId: string, kioskId: string, 
     });
 
     if (decision === "not_eligible") {
-      transaction.set(closureDocument.ref, {
-        cashDeposit: {
-          ...closure.cashDeposit,
-          status: "not_eligible",
-          allocationReason: null,
-          pendingSince: null,
-        },
+      const nextOperator: CashClosureOperator = {
+        ...operator,
+        cashDeposit: { ...operator.cashDeposit, status: "not_eligible", allocationReason: null, pendingSince: null },
         updatedAt: now,
-      }, { merge: true });
-      return { closure: { ...closure, cashDeposit: { ...closure.cashDeposit, status: "not_eligible" as const } }, allocated: false };
+      };
+      const operators = siblingOperators.map((item) => item.operatorId === operator.operatorId ? nextOperator : item);
+      const nextClosure = withCashClosureOperatorAggregate(closure, operators, now);
+      transaction.set(operatorDocument.ref, nextOperator);
+      transaction.set(closureRef, nextClosure);
+      return { closure: nextClosure, allocated: false };
     }
 
     if (decision === "manual_split_required") {
       const cashDeposit = {
-        ...closure.cashDeposit,
+        ...operator.cashDeposit,
         manualSplitRequired: true,
         allocationReason: "amount_exceeds_limit" as const,
       };
-      transaction.set(closureDocument.ref, { cashDeposit, updatedAt: now }, { merge: true });
-      return { closure: { ...closure, cashDeposit }, allocated: false };
+      const nextOperator = { ...operator, cashDeposit, updatedAt: now };
+      const operators = siblingOperators.map((item) => item.operatorId === operator.operatorId ? nextOperator : item);
+      const nextClosure = withCashClosureOperatorAggregate(closure, operators, now);
+      transaction.set(operatorDocument.ref, nextOperator);
+      transaction.set(closureRef, nextClosure);
+      return { closure: nextClosure, allocated: false };
     }
 
     let targetBatch = currentBatch?.status === "open" ? currentBatch : null;
@@ -214,12 +251,14 @@ async function allocateNextPendingClosure(workspaceId: string, kioskId: string, 
     }
 
     const targetRef = financialDbAdmin.collection(BATCHES).doc(targetBatch.id);
-    const itemId = `${closure.id}_cash`;
+    const itemId = `${closure.id}_${operator.id}_cash`;
     const item: CashDepositBatchItem = {
       id: itemId,
       workspaceId,
       batchId: targetBatch.id,
       closureId: closure.id,
+      operatorId: operator.operatorId,
+      operatorName: operator.operatorName,
       closureDate: closure.date,
       kioskId,
       amountCents,
@@ -231,27 +270,21 @@ async function allocateNextPendingClosure(workspaceId: string, kioskId: string, 
       })),
       createdAt: now,
     };
-    const appended = appendClosureAllocationIdempotently({
-      closureIds: targetBatch.closureIds,
-      itemCount: targetBatch.itemCount,
-      totalCents: targetBatch.totalCents,
-      closureId: closure.id,
-      amountCents,
-    });
-    const totalCents = appended.totalCents;
+    const totalCents = targetBatch.totalCents + amountCents;
     const updatedBatch: CashDepositBatch = {
       ...targetBatch,
+      grossTotalCents: targetBatch.grossTotalCents + amountCents,
       totalCents,
       remainingCapacityCents: targetBatch.maxCents - totalCents,
       periodStartDate: targetBatch.itemCount === 0 ? closure.date : [targetBatch.periodStartDate, closure.date].sort()[0],
       periodEndDate: targetBatch.itemCount === 0 ? closure.date : [targetBatch.periodEndDate, closure.date].sort().at(-1)!,
-      closureIds: appended.closureIds,
+      closureIds: targetBatch.closureIds.includes(closure.id) ? targetBatch.closureIds : [...targetBatch.closureIds, closure.id],
       dates: targetBatch.dates.includes(closure.date) ? targetBatch.dates : [...targetBatch.dates, closure.date],
-      itemCount: appended.itemCount,
+      itemCount: targetBatch.itemCount + 1,
       updatedAt: now,
     };
     const cashDeposit = {
-      ...closure.cashDeposit,
+      ...operator.cashDeposit,
       batchId: targetBatch.id,
       batchItemId: itemId,
       status: "allocated" as const,
@@ -259,12 +292,23 @@ async function allocateNextPendingClosure(workspaceId: string, kioskId: string, 
       allocationReason: null,
       pendingSince: null,
     };
-    const nextClosure: CashClosure = { ...closure, cashDeposit, updatedAt: now };
-    const log = auditLog({ workspaceId, closureId: closure.id, actor, batchId: targetBatch.id, amountCents, now });
+    const nextOperator = { ...operator, cashDeposit, updatedAt: now };
+    const operators = siblingOperators.map((item) => item.operatorId === operator.operatorId ? nextOperator : item);
+    const nextClosure = withCashClosureOperatorAggregate(closure, operators, now);
+    const log = auditLog({
+      workspaceId,
+      closureId: closure.id,
+      operatorId: operator.operatorId,
+      actor,
+      batchId: targetBatch.id,
+      amountCents,
+      now,
+    });
 
     transaction.set(targetRef, updatedBatch);
     transaction.set(targetRef.collection("items").doc(itemId), item);
-    transaction.set(closureDocument.ref, nextClosure);
+    transaction.set(operatorDocument.ref, nextOperator);
+    transaction.set(closureRef, nextClosure);
     transaction.set(financialDbAdmin.collection("cashClosureAuditLogs").doc(log.id), log);
     transaction.set(queueRef, {
       workspaceId,
@@ -297,6 +341,7 @@ export async function allocatePendingCashClosures(
 export async function splitOversizedCashClosure(input: {
   workspaceId: string;
   closureId: string;
+  operatorId: string;
   partsCents: number[];
   actor: CashClosureActor;
 }) {
@@ -305,16 +350,21 @@ export async function splitOversizedCashClosure(input: {
   }
   const closureRef = financialDbAdmin.collection("cashClosures").doc(input.closureId);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const closureSnapshot = await transaction.get(closureRef);
+    const [closureSnapshot, operatorSnapshot] = await Promise.all([
+      transaction.get(closureRef),
+      transaction.get(closureRef.collection(CLOSURE_OPERATORS).limit(100)),
+    ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
     const closure = snapshotValue<CashClosure>(closureSnapshot);
+    const operators = operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document));
+    const operator = operators.find((item) => item.operatorId === input.operatorId);
     if (closure.workspaceId !== input.workspaceId) throw new Error("Fechamento não encontrado.");
-    if (closure.status !== "approved" || !closure.cashDeposit.manualSplitRequired) {
-      throw new Error("Este fechamento não está aguardando divisão manual.");
+    if (operator?.status !== "approved" || !operator.cashDeposit.manualSplitRequired) {
+      throw new Error("Este operador não está aguardando divisão manual.");
     }
     const sum = input.partsCents.reduce((total, part) => total + part, 0);
-    if (sum !== closure.cashDeposit.eligibleCents) {
-      throw new Error("A soma das partes precisa ser igual ao dinheiro elegível do fechamento.");
+    if (sum !== operator.cashDeposit.eligibleCents) {
+      throw new Error("A soma das partes precisa ser igual ao dinheiro elegível do operador.");
     }
 
     const queueRef = financialDbAdmin.collection(QUEUES).doc(queueId(input.workspaceId, closure.kioskId));
@@ -323,10 +373,16 @@ export async function splitOversizedCashClosure(input: {
     const currentId = typeof queue.openBatchId === "string" ? queue.openBatchId : null;
     const currentRef = currentId ? financialDbAdmin.collection(BATCHES).doc(currentId) : null;
     const currentSnapshot = currentRef ? await transaction.get(currentRef) : null;
-    let current = currentSnapshot?.exists ? snapshotValue<CashDepositBatch>(currentSnapshot) : null;
+    let current = currentSnapshot?.exists
+      ? normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(currentSnapshot))
+      : null;
     if (current?.status !== "open") current = null;
-    const cashLinesSnapshot = await transaction.get(closureRef.collection("lines").where("channel", "==", "cash"));
-    const cashLines = cashLinesSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document));
+    const cashLinesSnapshot = await transaction.get(
+      closureRef.collection("lines").where("operatorId", "==", operator.operatorId).limit(20),
+    );
+    const cashLines = cashLinesSnapshot.docs
+      .map((document) => snapshotValue<CashClosureLine>(document))
+      .filter((line) => line.channel === "cash");
     const now = new Date().toISOString();
     let nextSequence = Number.isSafeInteger(queue.nextSequence) && queue.nextSequence > 0
       ? Number(queue.nextSequence)
@@ -359,12 +415,14 @@ export async function splitOversizedCashClosure(input: {
         });
         nextSequence++;
       }
-      const itemId = `${closure.id}_cash_split_${index + 1}`;
+      const itemId = `${closure.id}_${operator.id}_cash_split_${index + 1}`;
       const item: CashDepositBatchItem = {
         id: itemId,
         workspaceId: input.workspaceId,
         batchId: current.id,
         closureId: closure.id,
+        operatorId: operator.operatorId,
+        operatorName: operator.operatorName,
         closureDate: closure.date,
         kioskId: closure.kioskId,
         amountCents: partCents,
@@ -379,6 +437,7 @@ export async function splitOversizedCashClosure(input: {
       const totalCents = current.totalCents + partCents;
       current = {
         ...current,
+        grossTotalCents: current.grossTotalCents + partCents,
         totalCents,
         remainingCapacityCents: current.maxCents - totalCents,
         periodStartDate: current.itemCount === 0 ? closure.date : [current.periodStartDate, closure.date].sort()[0],
@@ -396,7 +455,7 @@ export async function splitOversizedCashClosure(input: {
 
     const uniqueBatchIds = Array.from(new Set(batchIds));
     const cashDeposit = {
-      ...closure.cashDeposit,
+      ...operator.cashDeposit,
       batchId: uniqueBatchIds[0] ?? null,
       batchItemId: itemIds[0] ?? null,
       manualSplitBatchIds: uniqueBatchIds,
@@ -405,18 +464,22 @@ export async function splitOversizedCashClosure(input: {
       allocationReason: null,
       pendingSince: null,
     };
-    const nextClosure: CashClosure = { ...closure, cashDeposit, updatedAt: now };
+    const nextOperator: CashClosureOperator = { ...operator, cashDeposit, updatedAt: now };
+    const nextOperators = operators.map((item) => item.operatorId === operator.operatorId ? nextOperator : item);
+    const nextClosure = withCashClosureOperatorAggregate(closure, nextOperators, now);
     const log = auditLog({
       workspaceId: input.workspaceId,
       closureId: closure.id,
       actor: input.actor,
       batchId: uniqueBatchIds.join(","),
-      amountCents: closure.cashDeposit.eligibleCents,
+      amountCents: operator.cashDeposit.eligibleCents,
       now,
     });
     transaction.set(closureRef, nextClosure);
+    transaction.set(closureRef.collection(CLOSURE_OPERATORS).doc(nextOperator.id), nextOperator);
     transaction.set(financialDbAdmin.collection("cashClosureAuditLogs").doc(log.id), {
       ...log,
+      operatorId: operator.operatorId,
       newValue: { batchIds: uniqueBatchIds, partsCents: input.partsCents },
     });
     transaction.set(queueRef, {
@@ -443,22 +506,270 @@ export async function listCashDepositBatches(input: {
   if (input.kioskId) query = query.where("kioskId", "==", input.kioskId);
   query = query.orderBy("createdAt", "desc").limit(Math.min(Math.max(input.limit ?? 200, 1), 500));
   const snapshot = await query.get();
-  return snapshot.docs.map((document) => snapshotValue<CashDepositBatch>(document));
+  return snapshot.docs.map((document) => normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(document)));
 }
 
 export async function getCashDepositBatch(id: string) {
   const ref = financialDbAdmin.collection(BATCHES).doc(id);
-  const [batchSnapshot, itemSnapshot] = await Promise.all([ref.get(), ref.collection("items").get()]);
+  const maximumItemCount = 500;
+  const [batchSnapshot, itemSnapshot] = await Promise.all([
+    ref.get(),
+    ref.collection("items").limit(maximumItemCount + 1).get(),
+  ]);
   if (!batchSnapshot.exists) return null;
+  if (itemSnapshot.size > maximumItemCount) {
+    throw new Error("O bloco ultrapassa o limite operacional de itens de depósito.");
+  }
   return {
-    batch: snapshotValue<CashDepositBatch>(batchSnapshot),
+    batch: normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot)),
     items: itemSnapshot.docs.map((document) => snapshotValue<CashDepositBatchItem>(document)),
   };
+}
+
+export async function listCashCoinBalances(workspaceId: string, limit = 100) {
+  const snapshot = await financialDbAdmin.collection(COIN_BALANCES)
+    .where("workspaceId", "==", workspaceId)
+    .limit(Math.min(Math.max(limit, 1), 200))
+    .get();
+  return snapshot.docs
+    .map((document) => snapshotValue<CashCoinBalance>(document))
+    .sort((left, right) => left.kioskName.localeCompare(right.kioskName, "pt-BR"));
+}
+
+export async function prepareCashDepositCoinHold(input: {
+  workspaceId: string;
+  batchId: string;
+  coinCents: number;
+  actor: CashClosureActor;
+}) {
+  if (!Number.isSafeInteger(input.coinCents) || input.coinCents < 0) {
+    throw new Error("Valor em moedas inválido.");
+  }
+  const batchRef = financialDbAdmin.collection(BATCHES).doc(input.batchId);
+  const itemRef = batchRef.collection("items").doc(`${input.batchId}_coin_hold`);
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const batchSnapshot = await transaction.get(batchRef);
+    if (!batchSnapshot.exists) throw new Error("Bloco de depósito não encontrado.");
+    const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
+    if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco de depósito não encontrado.");
+    if (!["open", "locked", "failed", "cancelled"].includes(batch.status)) {
+      throw new Error("As moedas só podem ser separadas antes da emissão do boleto.");
+    }
+    if (input.coinCents > batch.grossTotalCents) {
+      throw new Error("O valor em moedas não pode ultrapassar o total físico do bloco.");
+    }
+    const balanceRef = financialDbAdmin.collection(COIN_BALANCES).doc(queueId(input.workspaceId, batch.kioskId));
+    const balanceSnapshot = await transaction.get(balanceRef);
+    const currentBalance = balanceSnapshot.exists
+      ? snapshotValue<CashCoinBalance>(balanceSnapshot)
+      : {
+          id: balanceRef.id,
+          workspaceId: input.workspaceId,
+          kioskId: batch.kioskId,
+          kioskName: batch.kioskName,
+          pendingExchangeCents: 0,
+          exchangedCents: 0,
+          updatedAt: batch.updatedAt,
+        };
+    const holdDeltaCents = input.coinCents - batch.coinHoldCents;
+    const pendingExchangeCents = currentBalance.pendingExchangeCents + holdDeltaCents;
+    if (pendingExchangeCents < 0) {
+      throw new Error("Parte das moedas deste bloco já foi trocada e não pode ser removida da separação.");
+    }
+    const now = new Date().toISOString();
+    const totalCents = batch.grossTotalCents - input.coinCents;
+    const nextBatch: CashDepositBatch = {
+      ...batch,
+      status: batch.status === "open" ? "locked" : batch.status,
+      lockReason: batch.lockReason ?? "manual_issue_requested",
+      totalCents,
+      remainingCapacityCents: batch.maxCents - totalCents,
+      coinHoldCents: input.coinCents,
+      coinPreparedAt: now,
+      coinPreparedBy: input.actor.userId,
+      itemCount: batch.itemCount + (batch.coinHoldCents === 0 && input.coinCents > 0 ? 1 : batch.coinHoldCents > 0 && input.coinCents === 0 ? -1 : 0),
+      updatedAt: now,
+    };
+    const nextBalance: CashCoinBalance = {
+      ...currentBalance,
+      kioskName: batch.kioskName,
+      pendingExchangeCents,
+      updatedAt: now,
+    };
+    const eventRef = financialDbAdmin.collection(COIN_EVENTS).doc(randomUUID());
+    const event: CashCoinEvent = {
+      id: eventRef.id,
+      workspaceId: input.workspaceId,
+      kioskId: batch.kioskId,
+      batchId: batch.id,
+      type: batch.coinPreparedAt ? "hold_adjusted" : "held_for_exchange",
+      amountCents: holdDeltaCents,
+      previousBalanceCents: currentBalance.pendingExchangeCents,
+      newBalanceCents: pendingExchangeCents,
+      actorId: input.actor.userId,
+      actorName: input.actor.userName,
+      createdAt: now,
+    };
+    transaction.set(batchRef, nextBatch);
+    if (input.coinCents > 0) {
+      const item: CashDepositBatchItem = {
+        id: itemRef.id,
+        workspaceId: input.workspaceId,
+        batchId: batch.id,
+        closureId: `coin-hold:${batch.id}`,
+        closureDate: batch.periodEndDate,
+        kioskId: batch.kioskId,
+        amountCents: -input.coinCents,
+        source: "coin_hold",
+        operatorBreakdown: [],
+        createdAt: batch.coinPreparedAt ?? now,
+      };
+      transaction.set(itemRef, item);
+    } else {
+      transaction.delete(itemRef);
+    }
+    transaction.set(balanceRef, nextBalance);
+    transaction.set(eventRef, event);
+    return { batch: nextBatch, balance: nextBalance, event };
+  });
+}
+
+export async function registerCashCoinExchange(input: {
+  workspaceId: string;
+  kioskId: string;
+  amountCents: number;
+  operationId: string;
+  actor: CashClosureActor;
+}) {
+  if (!Number.isSafeInteger(input.amountCents) || input.amountCents <= 0 || input.amountCents > CASH_DEPOSIT_MAX_CENTS) {
+    throw new Error("Valor da troca inválido.");
+  }
+  const balanceRef = financialDbAdmin.collection(COIN_BALANCES).doc(queueId(input.workspaceId, input.kioskId));
+  const eventRef = financialDbAdmin.collection(COIN_EVENTS).doc(input.operationId);
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const existingEvent = await transaction.get(eventRef);
+    if (existingEvent.exists) {
+      const event = snapshotValue<CashCoinEvent>(existingEvent);
+      if (
+        event.workspaceId !== input.workspaceId
+        || event.kioskId !== input.kioskId
+        || event.type !== "exchanged_to_notes"
+        || event.amountCents !== input.amountCents
+      ) {
+        throw new Error("A chave idempotente já foi usada em outra troca de moedas.");
+      }
+      return { event, idempotent: true };
+    }
+    const balanceSnapshot = await transaction.get(balanceRef);
+    if (!balanceSnapshot.exists) throw new Error("Saldo de moedas não encontrado.");
+    const balance = snapshotValue<CashCoinBalance>(balanceSnapshot);
+    if (balance.workspaceId !== input.workspaceId || balance.kioskId !== input.kioskId) {
+      throw new Error("Saldo de moedas não encontrado.");
+    }
+    if (input.amountCents > balance.pendingExchangeCents) {
+      throw new Error("O valor da troca ultrapassa o saldo de moedas pendente.");
+    }
+    const queueRef = financialDbAdmin.collection(QUEUES).doc(queueId(input.workspaceId, input.kioskId));
+    const queueSnapshot = await transaction.get(queueRef);
+    const queue = queueSnapshot.data() ?? {};
+    const openBatchId = typeof queue.openBatchId === "string" ? queue.openBatchId : null;
+    const openBatchRef = openBatchId ? financialDbAdmin.collection(BATCHES).doc(openBatchId) : null;
+    const openBatchSnapshot = openBatchRef ? await transaction.get(openBatchRef) : null;
+    let targetBatch = openBatchSnapshot?.exists
+      ? normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(openBatchSnapshot))
+      : null;
+    if (targetBatch?.status !== "open") targetBatch = null;
+    const now = new Date().toISOString();
+    const date = todayInClosureTimezone();
+    let nextSequence = Number.isSafeInteger(queue.nextSequence) && queue.nextSequence > 0
+      ? Number(queue.nextSequence)
+      : (targetBatch?.sequence ?? 0) + 1;
+    if (targetBatch && targetBatch.totalCents + input.amountCents > targetBatch.maxCents) {
+      transaction.set(financialDbAdmin.collection(BATCHES).doc(targetBatch.id), {
+        status: "locked",
+        lockReason: "next_item_would_exceed_limit",
+        nextRejectedClosureId: `coin-exchange:${input.operationId}`,
+        nextRejectedCents: input.amountCents,
+        updatedAt: now,
+      }, { merge: true });
+      targetBatch = null;
+    }
+    if (!targetBatch) {
+      const id = batchId(input.workspaceId, input.kioskId, nextSequence);
+      targetBatch = newBatch({
+        id,
+        workspaceId: input.workspaceId,
+        kioskId: input.kioskId,
+        kioskName: balance.kioskName,
+        sequence: nextSequence,
+        date,
+        now,
+      });
+      nextSequence++;
+    }
+    const targetRef = financialDbAdmin.collection(BATCHES).doc(targetBatch.id);
+    const item: CashDepositBatchItem = {
+      id: `${input.operationId}_coin_exchange`,
+      workspaceId: input.workspaceId,
+      batchId: targetBatch.id,
+      closureId: `coin-exchange:${input.operationId}`,
+      closureDate: date,
+      kioskId: input.kioskId,
+      amountCents: input.amountCents,
+      source: "coin_exchange",
+      operatorBreakdown: [],
+      createdAt: now,
+    };
+    const totalCents = targetBatch.totalCents + input.amountCents;
+    const nextBatch: CashDepositBatch = {
+      ...targetBatch,
+      grossTotalCents: targetBatch.grossTotalCents + input.amountCents,
+      totalCents,
+      remainingCapacityCents: targetBatch.maxCents - totalCents,
+      periodStartDate: targetBatch.itemCount === 0 ? date : [targetBatch.periodStartDate, date].sort()[0],
+      periodEndDate: targetBatch.itemCount === 0 ? date : [targetBatch.periodEndDate, date].sort().at(-1)!,
+      dates: targetBatch.dates.includes(date) ? targetBatch.dates : [...targetBatch.dates, date],
+      itemCount: targetBatch.itemCount + 1,
+      updatedAt: now,
+    };
+    const nextBalance: CashCoinBalance = {
+      ...balance,
+      pendingExchangeCents: balance.pendingExchangeCents - input.amountCents,
+      exchangedCents: balance.exchangedCents + input.amountCents,
+      updatedAt: now,
+    };
+    const event: CashCoinEvent = {
+      id: eventRef.id,
+      workspaceId: input.workspaceId,
+      kioskId: input.kioskId,
+      batchId: targetBatch.id,
+      type: "exchanged_to_notes",
+      amountCents: input.amountCents,
+      previousBalanceCents: balance.pendingExchangeCents,
+      newBalanceCents: nextBalance.pendingExchangeCents,
+      actorId: input.actor.userId,
+      actorName: input.actor.userName,
+      createdAt: now,
+    };
+    transaction.set(targetRef, nextBatch);
+    transaction.set(targetRef.collection("items").doc(item.id), item);
+    transaction.set(balanceRef, nextBalance);
+    transaction.create(eventRef, event);
+    transaction.set(queueRef, {
+      workspaceId: input.workspaceId,
+      kioskId: input.kioskId,
+      openBatchId: targetBatch.id,
+      nextSequence,
+      updatedAt: now,
+    }, { merge: true });
+    return { batch: nextBatch, balance: nextBalance, event, idempotent: false };
+  });
 }
 
 export async function reopenCashClosureWithDepositHandling(input: {
   workspaceId: string;
   closureId: string;
+  operatorId?: string;
   reason: string;
   actor: CashClosureActor;
 }) {
@@ -466,40 +777,73 @@ export async function reopenCashClosureWithDepositHandling(input: {
   if (!reason) throw new Error("Informe o motivo da reabertura.");
   const closureRef = financialDbAdmin.collection("cashClosures").doc(input.closureId);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const closureSnapshot = await transaction.get(closureRef);
+    const [closureSnapshot, operatorSnapshot] = await Promise.all([
+      transaction.get(closureRef),
+      transaction.get(closureRef.collection(CLOSURE_OPERATORS).limit(100)),
+    ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
     const closure = snapshotValue<CashClosure>(closureSnapshot);
+    const operators = operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document));
     if (closure.workspaceId !== input.workspaceId) throw new Error("Fechamento não encontrado.");
     assertCashClosureTransition(closure.status, "reopened");
+    const targetOperators = operators.filter((operator) =>
+      operator.status === "approved" && (!input.operatorId || operator.operatorId === input.operatorId)
+    );
+    if (targetOperators.length === 0) throw new Error("Operador finalizado não encontrado.");
+    const targetOperatorIds = new Set(targetOperators.map((operator) => operator.operatorId));
+    const now = new Date().toISOString();
+    const sessionDetachments = await Promise.all(targetOperators
+      .filter((operator) => !!operator.countingSessionId)
+      .map((operator) => prepareCashCountingSessionOperatorDetachment(transaction, {
+        sessionId: operator.countingSessionId!,
+        closureId: closure.id,
+        operatorId: operator.operatorId,
+        workspaceId: input.workspaceId,
+        actor: input.actor,
+        now,
+      })));
 
     const batchIds = Array.from(new Set(
-      closure.cashDeposit.manualSplitBatchIds?.length
-        ? closure.cashDeposit.manualSplitBatchIds
-        : closure.cashDeposit.batchId
-          ? [closure.cashDeposit.batchId]
-          : [],
+      targetOperators.flatMap((operator) => operator.cashDeposit.manualSplitBatchIds?.length
+        ? operator.cashDeposit.manualSplitBatchIds
+        : operator.cashDeposit.batchId
+          ? [operator.cashDeposit.batchId]
+          : []),
     ));
     const batchData: Array<{
       ref: FirebaseFirestore.DocumentReference;
       batch: CashDepositBatch;
       items: CashDepositBatchItem[];
       itemRefs: FirebaseFirestore.DocumentReference[];
+      remainingClosureItemCount: number;
+      remainingDateItemCount: number;
     }> = [];
     for (const id of batchIds) {
       const ref = financialDbAdmin.collection(BATCHES).doc(id);
       const snapshot = await transaction.get(ref);
       if (!snapshot.exists) continue;
-      const itemSnapshot = await transaction.get(ref.collection("items").where("closureId", "==", closure.id));
+      const itemSnapshot = await transaction.get(
+        ref.collection("items").where("closureId", "==", closure.id).limit(500),
+      );
+      const selectedDocuments = itemSnapshot.docs.filter((document) => {
+        const item = snapshotValue<CashDepositBatchItem>(document);
+        return item.operatorId ? targetOperatorIds.has(item.operatorId) : !input.operatorId;
+      });
       batchData.push({
         ref,
-        batch: snapshotValue<CashDepositBatch>(snapshot),
-        items: itemSnapshot.docs.map((document) => snapshotValue<CashDepositBatchItem>(document)),
-        itemRefs: itemSnapshot.docs.map((document) => document.ref),
+        batch: normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(snapshot)),
+        items: selectedDocuments.map((document) => snapshotValue<CashDepositBatchItem>(document)),
+        itemRefs: selectedDocuments.map((document) => document.ref),
+        remainingClosureItemCount: itemSnapshot.size - selectedDocuments.length,
+        remainingDateItemCount: itemSnapshot.docs.filter(
+          (document) => document.data().closureDate === closure.date && !selectedDocuments.includes(document),
+        ).length,
       });
     }
 
-    const now = new Date().toISOString();
-    const hasIssuedHistory = batchData.some(({ batch }) => ["issuing", "issued", "paid"].includes(batch.status));
+    const hasIssuedHistory = batchData.some(({ batch }) =>
+      ["issuing", "issued", "paid"].includes(batch.status) || batch.coinPreparedAt !== null
+    );
     let cashDeposit = closure.cashDeposit;
     let adjustment: CashDepositAdjustment | null = null;
 
@@ -537,10 +881,15 @@ export async function reopenCashClosureWithDepositHandling(input: {
         const totalCents = Math.max(0, data.batch.totalCents - removedCents);
         transaction.set(data.ref, {
           ...data.batch,
+          grossTotalCents: Math.max(0, data.batch.grossTotalCents - removedCents),
           totalCents,
           remainingCapacityCents: data.batch.maxCents - totalCents,
-          closureIds: data.batch.closureIds.filter((id) => id !== closure.id),
-          dates: data.batch.dates.filter((date) => date !== closure.date),
+          closureIds: input.operatorId || data.remainingClosureItemCount > 0
+            ? data.batch.closureIds
+            : data.batch.closureIds.filter((id) => id !== closure.id),
+          dates: input.operatorId || data.remainingDateItemCount > 0
+            ? data.batch.dates
+            : data.batch.dates.filter((date) => date !== closure.date),
           itemCount: Math.max(0, data.batch.itemCount - data.items.length),
           updatedAt: now,
         });
@@ -557,7 +906,25 @@ export async function reopenCashClosureWithDepositHandling(input: {
       };
     }
 
-    const nextClosure: CashClosure = {
+    const reopenedOperators = operators.map((operator): CashClosureOperator => targetOperatorIds.has(operator.operatorId)
+      ? {
+          ...operator,
+          status: "reopened",
+          cashDeposit: hasIssuedHistory
+            ? { ...operator.cashDeposit, status: "adjusted", adjustmentId: adjustment?.id ?? null, pendingSince: now }
+            : {
+                ...emptyCashClosureDepositState(),
+                eligibleCents: operator.cashDeposit.eligibleCents,
+              },
+          countingSessionId: null,
+          countingSessionFinalizedAt: null,
+          reopenedAt: now,
+          reopenedBy: input.actor.userId,
+          reopenedReason: reason,
+          updatedAt: now,
+        }
+      : operator);
+    const nextClosure = withCashClosureOperatorAggregate({
       ...closure,
       status: "reopened",
       cashDeposit,
@@ -565,16 +932,29 @@ export async function reopenCashClosureWithDepositHandling(input: {
       reopenedBy: input.actor.userId,
       reopenedReason: reason,
       updatedAt: now,
-    };
+    }, reopenedOperators, now);
     transaction.set(closureRef, nextClosure);
+    for (const operator of reopenedOperators) {
+      transaction.set(closureRef.collection(CLOSURE_OPERATORS).doc(operator.id), operator);
+    }
+    for (const detachment of sessionDetachments) {
+      transaction.delete(detachment.operatorRef);
+      if (detachment.sessionUpdate) transaction.set(detachment.sessionRef, detachment.sessionUpdate, { merge: true });
+      for (const lock of detachment.locks) transaction.set(lock.ref, lock.value);
+      transaction.set(
+        financialDbAdmin.collection("cashCountingSessionAuditLogs").doc(detachment.audit.id),
+        detachment.audit,
+      );
+    }
     const reopenLogId = randomUUID();
     transaction.set(financialDbAdmin.collection("cashClosureAuditLogs").doc(reopenLogId), {
       id: reopenLogId,
       workspaceId: input.workspaceId,
       closureId: closure.id,
+      ...(input.operatorId ? { operatorId: input.operatorId } : {}),
       action: "reopened",
       previousValue: closure.status,
-      newValue: "reopened",
+      newValue: { status: "reopened", operatorIds: [...targetOperatorIds] },
       reason,
       userId: input.actor.userId,
       userName: input.actor.userName,
@@ -674,7 +1054,7 @@ async function allocateNextPendingCashDepositAdjustment(
     const openBatchRef = openBatchId ? financialDbAdmin.collection(BATCHES).doc(openBatchId) : null;
     const openBatchSnapshot = openBatchRef ? await transaction.get(openBatchRef) : null;
     let targetBatch = openBatchSnapshot?.exists
-      ? snapshotValue<CashDepositBatch>(openBatchSnapshot)
+      ? normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(openBatchSnapshot))
       : null;
     if (targetBatch?.status !== "open") targetBatch = null;
 
@@ -741,6 +1121,7 @@ async function allocateNextPendingCashDepositAdjustment(
     }
     const updatedBatch: CashDepositBatch = {
       ...targetBatch,
+      grossTotalCents: targetBatch.grossTotalCents + allocatedDeltaCents,
       totalCents,
       remainingCapacityCents: targetBatch.maxCents - totalCents,
       periodStartDate: targetBatch.itemCount === 0
@@ -840,10 +1221,15 @@ export async function processCashDepositQueue(
 }
 
 export async function listPendingCashDepositAdjustments(workspaceId: string) {
+  const maximumAdjustmentCount = 500;
   const snapshot = await financialDbAdmin.collection("cashDepositAdjustments")
     .where("workspaceId", "==", workspaceId)
     .where("status", "==", "pending_allocation")
     .orderBy("createdAt", "asc")
+    .limit(maximumAdjustmentCount + 1)
     .get();
+  if (snapshot.size > maximumAdjustmentCount) {
+    throw new Error("A fila ultrapassa o limite operacional de ajustes de depósito pendentes.");
+  }
   return snapshot.docs.map((document) => snapshotValue<CashDepositAdjustment>(document));
 }

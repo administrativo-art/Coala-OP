@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
-import { dbAdmin } from "@/lib/firebase-admin";
 import {
   assertCashClosureAccess,
   canUseCashClosure,
   cashClosureActor,
   cashClosureSeniorDivergenceCents,
 } from "@/features/financial/cash-closures/access.server";
-import { resolveOperatorAvatarUrls } from "@/features/financial/cash-closures/operator-avatars";
+import { loadCashClosureOperatorAvatarUrls } from "@/features/financial/cash-closures/operator-avatars.server";
 import {
   getCashClosure,
-  saveCashClosureConference,
   saveCashClosureDraft,
 } from "@/features/financial/cash-closures/repository.server";
 import { saveCashClosureDraftSchema } from "@/features/financial/cash-closures/schemas";
+import { AppError, withApiErrorHandling } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,59 +21,77 @@ export const dynamic = "force-dynamic";
 type RouteContext = { params: Promise<{ closureId: string }> };
 
 async function loadAuthorized(request: NextRequest, routeContext: RouteContext, permission: "view" | "edit") {
-  const context = await requireUser(request);
+  const context = await requireUser(request).catch((cause) => {
+    throw new AppError({ code: "CASH_CLOSURE_AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
+  });
   const { closureId } = await routeContext.params;
   const result = await getCashClosure(closureId);
-  if (!result) throw new Error("Fechamento não encontrado.");
-  assertCashClosureAccess(context, permission, result.closure.kioskId);
+  if (!result) throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND" });
+  try {
+    assertCashClosureAccess(context, permission, result.closure.kioskId);
+  } catch (cause) {
+    throw new AppError({ code: "CASH_CLOSURE_VIEW_FORBIDDEN", kind: "AUTHORIZATION", cause });
+  }
   return { context, closureId, result };
 }
 
-export async function GET(request: NextRequest, routeContext: RouteContext) {
-  try {
+export const GET = withApiErrorHandling<RouteContext>({
+  source: "api-financial",
+  operation: "get-cash-closure",
+  routeOrJob: "/api/financial/cash-closures/[closureId]",
+}, async (request: NextRequest, routeContext) => {
     const { result } = await loadAuthorized(request, routeContext, "view");
-    const usersSnapshot = await dbAdmin.collection("users")
-      .select("username", "avatarUrl", "pdvOperatorIds", "registrationIdPdv")
-      .get();
-    const operatorAvatars = resolveOperatorAvatarUrls({
+    const operatorAvatars = await loadCashClosureOperatorAvatarUrls({
       kioskId: result.closure.kioskId,
       operators: Array.from(new Map(
         result.lines.map((line) => [line.operatorId, { id: line.operatorId, name: line.operatorName }]),
       ).values()),
-      users: usersSnapshot.docs.map((document) => document.data()),
     });
     return NextResponse.json({
       ...result,
       operatorAvatars,
       settings: { seniorDivergenceCents: cashClosureSeniorDivergenceCents() },
     }, { headers: { "Cache-Control": "private, no-store" } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao carregar fechamento.";
-    return NextResponse.json({ error: message }, { status: message.includes("permissão") ? 403 : message.includes("não encontrado") ? 404 : 400 });
+});
+
+function mapDraftError(cause: unknown): never {
+  const message = cause instanceof Error ? cause.message : "";
+  if (message.includes("não encontrado") || message.includes("não pertencem")) {
+    throw new AppError({ code: "CASH_CLOSURE_LINE_NOT_FOUND", kind: "NOT_FOUND", cause });
   }
+  if (message.includes("não finalizados")) {
+    throw new AppError({ code: "CASH_CLOSURE_DRAFT_STATE_CONFLICT", kind: "CONFLICT", cause });
+  }
+  if (message.includes("sem autorização")) {
+    throw new AppError({ code: "CASH_CLOSURE_DRAFT_FORBIDDEN", kind: "AUTHORIZATION", cause });
+  }
+  throw cause;
 }
 
-export async function PATCH(request: NextRequest, routeContext: RouteContext) {
-  try {
+export const PATCH = withApiErrorHandling<RouteContext>({
+  source: "api-financial",
+  operation: "save-cash-closure-draft",
+  routeOrJob: "/api/financial/cash-closures/[closureId]",
+}, async (request: NextRequest, routeContext) => {
     const { context, closureId, result } = await loadAuthorized(request, routeContext, "view");
-    const input = saveCashClosureDraftSchema.parse(await request.json());
-    if (result.closure.status === "pending_review") {
-      assertCashClosureAccess(context, "approve", result.closure.kioskId);
-      return NextResponse.json(await saveCashClosureConference(closureId, input.lines, cashClosureActor(context)));
+    const parsed = saveCashClosureDraftSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      throw new AppError({
+        code: "CASH_CLOSURE_DRAFT_INVALID",
+        kind: "VALIDATION",
+        safeMessage: "Os valores informados para o fechamento são inválidos.",
+        cause: parsed.error,
+      });
     }
     const editReported = canUseCashClosure(context, "edit", result.closure.kioskId);
     const editCounted = canUseCashClosure(context, "approve", result.closure.kioskId);
     if (!editReported && !editCounted) {
-      throw new Error("Sem permissão para editar este fechamento de caixa.");
+      throw new AppError({ code: "CASH_CLOSURE_DRAFT_FORBIDDEN", kind: "AUTHORIZATION" });
     }
     return NextResponse.json(await saveCashClosureDraft(
       closureId,
-      input.lines,
+      parsed.data.lines,
       cashClosureActor(context),
       { editReported, editCounted },
-    ));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao salvar fechamento.";
-    return NextResponse.json({ error: message }, { status: message.includes("permissão") ? 403 : message.includes("não encontrado") ? 404 : 400 });
-  }
-}
+    ).catch(mapDraftError));
+});

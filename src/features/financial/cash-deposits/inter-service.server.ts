@@ -4,6 +4,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { reportSystemError } from "@/lib/observability";
 import {
   cancelCobranca,
   createCobranca,
@@ -21,7 +22,8 @@ import {
   interCobrancaReadiness,
 } from "@/lib/integrations/inter/config.server";
 import { refreshCashClosureSummaries } from "../cash-closures/summaries.server";
-import type { CashClosure, CashClosureActor } from "../cash-closures/types";
+import { withCashClosureOperatorAggregate } from "../cash-closures/operators";
+import type { CashClosure, CashClosureActor, CashClosureOperator } from "../cash-closures/types";
 import {
   buildInterCobrancaIssueInput,
   detailFields,
@@ -29,12 +31,13 @@ import {
   type InterCobrancaDocument,
   type InterCobrancaEvent,
 } from "./inter-cobranca";
-import type { CashDepositBatch } from "./types";
+import { normalizeCashDepositBatch, type CashDepositBatch } from "./types";
 import { resolveConfiguredInterCobrancaPayer } from "./payer.server";
 
 const BATCHES = "cashDepositBatches";
 const COBRANCAS = "interCobrancas";
 const EVENTS = "interCobrancaEvents";
+const CLOSURE_OPERATORS = "cashClosureOperators";
 
 function snapshotValue<T extends { id: string }>(snapshot: FirebaseFirestore.DocumentSnapshot) {
   return { id: snapshot.id, ...snapshot.data() } as T;
@@ -123,7 +126,7 @@ async function prepareIssue(input: {
   return financialDbAdmin.runTransaction(async (transaction) => {
     const batchSnapshot = await transaction.get(batchRef);
     if (!batchSnapshot.exists) throw new Error("Bloco de depósito não encontrado.");
-    const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+    const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
     if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco de depósito não encontrado.");
     if (batch.status === "paid") throw new Error("Este bloco já foi liquidado.");
 
@@ -139,6 +142,9 @@ async function prepareIssue(input: {
     }
     if (!["open", "locked", "failed", "cancelled"].includes(batch.status)) {
       throw new Error("Este bloco não está disponível para emissão.");
+    }
+    if (!batch.coinPreparedAt) {
+      throw new Error("Separe as moedas do bloco antes de emitir o boleto.");
     }
 
     const attempt = ids.length + 1;
@@ -183,7 +189,7 @@ async function prepareIssue(input: {
 async function markIssueFailure(cobranca: InterCobrancaDocument, error: unknown) {
   const now = new Date().toISOString();
   const errorCode = error instanceof InterCobrancaApiError && error.status ? String(error.status) : "INTERNAL";
-  const errorMessage = error instanceof Error ? error.message : "Falha desconhecida na emissão.";
+  const errorMessage = "Falha ao emitir a cobrança no Banco Inter.";
   const firestoreBatch = financialDbAdmin.batch();
   firestoreBatch.set(financialDbAdmin.collection(COBRANCAS).doc(cobranca.id), {
     status: "failed",
@@ -220,9 +226,7 @@ async function markIssueResultUnknown(cobranca: InterCobrancaDocument, error: un
   const errorCode = error instanceof InterCobrancaApiError && error.status
     ? String(error.status)
     : "UNKNOWN_RESULT";
-  const errorMessage = error instanceof Error
-    ? error.message
-    : "O resultado da emissão não pôde ser confirmado.";
+  const errorMessage = "O resultado da emissão não pôde ser confirmado.";
   const firestoreBatch = financialDbAdmin.batch();
   firestoreBatch.set(financialDbAdmin.collection(COBRANCAS).doc(cobranca.id), {
     status: "requested",
@@ -340,8 +344,12 @@ async function ensureCashDepositLedgerEntry(input: {
       accountName: typeof account.name === "string" && account.name.trim() ? account.name.trim() : "Banco Inter",
       ...(ledger.bankPaymentMethodId ? { paymentMethodId: ledger.bankPaymentMethodId } : {}),
       paymentMethodLabel: `Cobrança Inter · ${input.detail.cobranca.origemRecebimento ?? "depósito em dinheiro"}`,
-      toAccountId: `cash_on_hand_${input.batch.kioskId}`,
-      toAccountName: `Caixa físico — ${input.batch.kioskName}`,
+      toAccountId: input.batch.countingSessionId
+        ? `cash_on_hand_session_${input.batch.countingSessionId}`
+        : `cash_on_hand_${input.batch.kioskId}`,
+      toAccountName: input.batch.countingSessionId
+        ? `Numerário da sessão ${input.batch.countingSessionId.slice(0, 8)}`
+        : `Caixa físico — ${input.batch.kioskName}`,
       amount: input.batch.totalCents / 100,
       amountCents: input.batch.totalCents,
       date: Timestamp.fromDate(paidAt),
@@ -464,7 +472,7 @@ async function relatedBatchStates(
       continue;
     }
     const snapshot = await transaction.get(financialDbAdmin.collection(BATCHES).doc(id));
-    if (snapshot.exists) states.set(id, snapshotValue<CashDepositBatch>(snapshot).status);
+    if (snapshot.exists) states.set(id, normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(snapshot)).status);
   }
   return states;
 }
@@ -478,19 +486,38 @@ async function applyInterDetail(cobrancaId: string, detail: InterCobrancaDetail)
     const batchRef = financialDbAdmin.collection(BATCHES).doc(cobranca.batchId);
     const batchSnapshot = await transaction.get(batchRef);
     if (!batchSnapshot.exists) throw new Error("Bloco vinculado à cobrança não encontrado.");
-    const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+    const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
+    const countingSessionRef = batch.countingSessionId
+      ? financialDbAdmin.collection("cashCountingSessions").doc(batch.countingSessionId)
+      : null;
+    const countingSessionSnapshot = countingSessionRef ? await transaction.get(countingSessionRef) : null;
     const closureSnapshots = [];
     for (const closureId of batch.closureIds) {
       closureSnapshots.push(await transaction.get(financialDbAdmin.collection("cashClosures").doc(closureId)));
+    }
+    const operatorSnapshots = new Map<string, FirebaseFirestore.QuerySnapshot>();
+    for (const snapshot of closureSnapshots) {
+      if (!snapshot.exists) continue;
+      operatorSnapshots.set(snapshot.id, await transaction.get(snapshot.ref.collection(CLOSURE_OPERATORS).limit(100)));
     }
 
     const mapping = mapInterSituation(detail.cobranca.situacao);
     const nextBatchStatus = mapping.batchStatus ?? batch.status;
     const closureStates = new Map<string, Map<string, CashDepositBatch["status"]>>();
+    const operatorStates = new Map<string, Map<string, CashDepositBatch["status"]>>();
     for (const snapshot of closureSnapshots) {
       if (!snapshot.exists) continue;
       const closure = snapshotValue<CashClosure>(snapshot);
       closureStates.set(closure.id, await relatedBatchStates(transaction, closure, batch, nextBatchStatus));
+      for (const document of operatorSnapshots.get(closure.id)?.docs ?? []) {
+        const operator = snapshotValue<CashClosureOperator>(document);
+        operatorStates.set(`${closure.id}:${operator.operatorId}`, await relatedBatchStates(
+          transaction,
+          { ...closure, cashDeposit: operator.cashDeposit },
+          batch,
+          nextBatchStatus,
+        ));
+      }
     }
 
     const now = new Date().toISOString();
@@ -520,6 +547,18 @@ async function applyInterDetail(cobrancaId: string, detail: InterCobrancaDetail)
       ...(nextBatchStatus === "paid" && !batch.paidAt ? { paidAt: now } : {}),
       ...(nextBatchStatus === "cancelled" && !batch.cancelledAt ? { cancelledAt: now } : {}),
     }, { merge: true });
+    if (countingSessionRef && countingSessionSnapshot?.exists && nextBatchStatus === "paid") {
+      const sessionData = countingSessionSnapshot.data() ?? {};
+      const newlyPaid = batch.status !== "paid";
+      const paidBatchCount = Number(sessionData.paidBatchCount ?? 0) + (newlyPaid ? 1 : 0);
+      const batchCount = Array.isArray(sessionData.batchIds) ? sessionData.batchIds.length : 0;
+      const completed = paidBatchCount >= batchCount && Number(sessionData.coinPendingExchangeCents ?? 0) === 0;
+      transaction.set(countingSessionRef, {
+        paidBatchCount,
+        ...(completed ? { status: "completed", completedAt: now } : {}),
+        updatedAt: now,
+      }, { merge: true });
+    }
 
     const updatedClosures: CashClosure[] = [];
     for (const snapshot of closureSnapshots) {
@@ -535,11 +574,31 @@ async function applyInterDetail(cobrancaId: string, detail: InterCobrancaDetail)
         const terminal = states.length === 0 || states.every((value) => ["cancelled", "failed", "open", "locked"].includes(value));
         if (terminal) status = "allocated";
       }
-      const nextClosure: CashClosure = {
+      const nextOperators = (operatorSnapshots.get(closure.id)?.docs ?? []).map((document) => {
+        const operator = snapshotValue<CashClosureOperator>(document);
+        const operatorBatchIds = operator.cashDeposit.manualSplitBatchIds?.length
+          ? operator.cashDeposit.manualSplitBatchIds
+          : operator.cashDeposit.batchId ? [operator.cashDeposit.batchId] : [];
+        if (!operatorBatchIds.includes(batch.id)) return operator;
+        const operatorBatchStates = [...(operatorStates.get(`${closure.id}:${operator.operatorId}`)?.values() ?? [])];
+        let operatorStatus = operator.cashDeposit.status;
+        if (mapping.closureDepositStatus === "paid") {
+          operatorStatus = operatorBatchStates.length > 0 && operatorBatchStates.every((value) => value === "paid") ? "paid" : "issued";
+        } else if (mapping.closureDepositStatus === "issued") operatorStatus = "issued";
+        else if (mapping.closureDepositStatus === "allocated") operatorStatus = "allocated";
+        const nextOperator: CashClosureOperator = {
+          ...operator,
+          cashDeposit: { ...operator.cashDeposit, status: operatorStatus },
+          updatedAt: now,
+        };
+        transaction.set(document.ref, nextOperator);
+        return nextOperator;
+      });
+      const nextClosure = withCashClosureOperatorAggregate({
         ...closure,
         cashDeposit: { ...closure.cashDeposit, status },
         updatedAt: now,
-      };
+      }, nextOperators, now);
       transaction.set(snapshot.ref, nextClosure);
       if (status !== closure.cashDeposit.status) {
         const auditId = randomUUID();
@@ -654,7 +713,7 @@ export async function cancelInterCobrancaForBatch(input: {
   if (reason.length > 50) throw new Error("O motivo do cancelamento deve ter no máximo 50 caracteres.");
   const batchSnapshot = await financialDbAdmin.collection(BATCHES).doc(input.batchId).get();
   if (!batchSnapshot.exists) throw new Error("Bloco não encontrado.");
-  const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+  const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
   if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco não encontrado.");
   if (!batch.interCobrancaId) throw new Error("O bloco não possui cobrança Inter.");
   const cobrancaSnapshot = await financialDbAdmin.collection(COBRANCAS).doc(batch.interCobrancaId).get();
@@ -687,7 +746,7 @@ export async function getInterCobrancaPdfForBatch(input: {
 }) {
   const batchSnapshot = await financialDbAdmin.collection(BATCHES).doc(input.batchId).get();
   if (!batchSnapshot.exists) throw new Error("Bloco não encontrado.");
-  const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+  const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
   if (batch.workspaceId !== input.workspaceId) throw new Error("Bloco não encontrado.");
   if (!batch.interCobrancaId) throw new Error("O bloco não possui cobrança Inter.");
   const cobrancaSnapshot = await financialDbAdmin.collection(COBRANCAS).doc(batch.interCobrancaId).get();
@@ -700,7 +759,7 @@ export async function getInterCobrancaPdfForBatch(input: {
 export async function getInterCobrancaForBatch(batchId: string) {
   const batchSnapshot = await financialDbAdmin.collection(BATCHES).doc(batchId).get();
   if (!batchSnapshot.exists) return null;
-  const batch = snapshotValue<CashDepositBatch>(batchSnapshot);
+  const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
   if (!batch.interCobrancaId) return { batch, cobranca: null };
   const cobrancaSnapshot = await financialDbAdmin.collection(COBRANCAS).doc(batch.interCobrancaId).get();
   return {
@@ -724,7 +783,13 @@ export async function reconcileInterCobrancas(input: { workspaceId: string; limi
     .where("status", "in", ["issuing", "requested", "issued", "marked_received"])
     .limit(Math.min(Math.max(input.limit ?? 100, 1), 500))
     .get();
-  const results: Array<{ id: string; ok: boolean; status?: string; error?: string }> = [];
+  const results: Array<{
+    id: string;
+    ok: boolean;
+    status?: string;
+    error?: string;
+    eventId?: string;
+  }> = [];
   for (const document of snapshot.docs) {
     try {
       const cobranca = snapshotValue<InterCobrancaDocument>(document);
@@ -737,7 +802,21 @@ export async function reconcileInterCobrancas(input: { workspaceId: string; limi
       }
       results.push({ id: document.id, ok: true, status: refreshed.cobranca.status });
     } catch (error) {
-      results.push({ id: document.id, ok: false, error: error instanceof Error ? error.message : "Falha desconhecida." });
+      const reference = reportSystemError({
+        error,
+        source: "job",
+        operation: "reconcile-inter-cobranca-item",
+        routeOrJob: "jobs/inter/cobrancas/reconcile",
+        code: "INTER_COBRANCA_ITEM_RECONCILIATION_FAILED",
+        kind: "TRANSIENT_EXTERNAL",
+        metadata: { cobrancaId: document.id },
+      });
+      results.push({
+        id: document.id,
+        ok: false,
+        error: "Falha ao reconciliar esta cobrança.",
+        eventId: reference.eventId,
+      });
     }
   }
   return results;

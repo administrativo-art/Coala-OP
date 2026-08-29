@@ -23,6 +23,9 @@ type OperatorChannelAccumulator = {
   expectedAmountCents: number;
   grossCashCents: number;
   changeCents: number;
+  supplyCents: number;
+  withdrawalCents: number;
+  cashMovements: NonNullable<BuiltCashClosureLine["metadata"]["cashMovements"]>;
   paymentRowCount: number;
   rawPaymentNames: Set<string>;
 };
@@ -81,6 +84,11 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
     rawPaymentNames: [],
     unknownPaymentNames: [],
     integrityWarnings,
+    movementEndpoints: ["sangriasuprimento/getSangria", "sangriasuprimento/getSuprimento"],
+    movementCount: 0,
+    ignoredCancelledMovementCount: 0,
+    ignoredNonCashMovementCount: 0,
+    unassignedMovementCount: 0,
   };
 
   let expectedTotalCents = 0;
@@ -146,6 +154,9 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
           expectedAmountCents: 0,
           grossCashCents: 0,
           changeCents: 0,
+          supplyCents: 0,
+          withdrawalCents: 0,
+          cashMovements: [],
           paymentRowCount: 0,
           rawPaymentNames: new Set(),
         };
@@ -176,6 +187,70 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
     }
   }
 
+  const knownOperatorIds = new Set([
+    ...Object.keys(ctx.operatorNameById ?? {}),
+    ...Array.from(accumulators.values(), (accumulator) => accumulator.operatorId),
+  ]);
+  for (const movement of ctx.cashMovements ?? []) {
+    if (movement.date !== ctx.date) continue;
+    if (movement.cancelled) {
+      source.ignoredCancelledMovementCount = (source.ignoredCancelledMovementCount ?? 0) + 1;
+      continue;
+    }
+    // O PDV usa codformapgto=0 em suprimentos físicos; por contrato, todo
+    // suprimento ativo entra no caixa. Somente sangrias precisam estar
+    // classificadas como dinheiro no catálogo.
+    if (movement.kind === "withdrawal" && !movement.isCash) {
+      source.ignoredNonCashMovementCount = (source.ignoredNonCashMovementCount ?? 0) + 1;
+      continue;
+    }
+    if (!movement.operatorId || !knownOperatorIds.has(movement.operatorId)) {
+      source.unassignedMovementCount = (source.unassignedMovementCount ?? 0) + 1;
+      pushCapped(
+        integrityWarnings,
+        `${movement.kind === "supply" ? "Suprimento" : "Sangria"} ${movement.id}: operador não reconhecido; movimento não atribuído.`,
+      );
+      continue;
+    }
+
+    const key = accumulatorKey(movement.operatorId, "cash");
+    let acc = accumulators.get(key);
+    if (!acc) {
+      acc = {
+        operatorId: movement.operatorId,
+        operatorName: ctx.operatorNameById?.[movement.operatorId] ?? movement.operatorId,
+        channel: "cash",
+        channelLabel: "Dinheiro",
+        expectedAmountCents: 0,
+        grossCashCents: 0,
+        changeCents: 0,
+        supplyCents: 0,
+        withdrawalCents: 0,
+        cashMovements: [],
+        paymentRowCount: 0,
+        rawPaymentNames: new Set(),
+      };
+      accumulators.set(key, acc);
+    }
+    source.movementCount = (source.movementCount ?? 0) + 1;
+    acc.cashMovements.push(movement);
+    if (movement.kind === "supply") {
+      acc.supplyCents += movement.amountCents;
+      acc.expectedAmountCents += movement.amountCents;
+    } else {
+      acc.withdrawalCents += movement.amountCents;
+      acc.expectedAmountCents -= movement.amountCents;
+    }
+    expectedByChannelCents.cash = sumCents(
+      expectedByChannelCents.cash ?? 0,
+      movement.kind === "supply" ? movement.amountCents : -movement.amountCents,
+    );
+    expectedTotalCents = sumCents(
+      expectedTotalCents,
+      movement.kind === "supply" ? movement.amountCents : -movement.amountCents,
+    );
+  }
+
   source.rawPaymentNames = Array.from(rawPaymentNames);
   source.unknownPaymentNames = Array.from(unknownPaymentNames);
 
@@ -193,6 +268,7 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
         channel: acc.channel,
         channelLabel: acc.channelLabel,
         expectedAmountCents: acc.expectedAmountCents,
+        calculatedExpectedAmountCents: acc.expectedAmountCents,
         reportedAmountCents: automaticallyCounted ? acc.expectedAmountCents : null,
         reportedDifferenceAmountCents: automaticallyCounted ? 0 : null,
         countedAmountCents: automaticallyCounted ? acc.expectedAmountCents : null,
@@ -201,7 +277,13 @@ export function buildCashClosureFromPdv(rawCoupons: unknown, ctx: CashClosureBui
         rawPaymentNames: Array.from(acc.rawPaymentNames),
         metadata: {
           ...(acc.channel === "cash"
-            ? { grossCashCents: acc.grossCashCents, changeCents: acc.changeCents }
+            ? {
+                grossCashCents: acc.grossCashCents,
+                changeCents: acc.changeCents,
+                supplyCents: acc.supplyCents,
+                withdrawalCents: acc.withdrawalCents,
+                cashMovements: acc.cashMovements,
+              }
             : {}),
           paymentRowCount: acc.paymentRowCount,
           ...(interval ?? {}),

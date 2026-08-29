@@ -3,8 +3,9 @@ import "server-only";
 import type { ServerUserContext } from "@/lib/auth-server";
 import { canAccessUnit } from "@/lib/unit-access";
 import type { CashClosureLine } from "./types";
+import type { CashDepositBatch } from "../cash-deposits/types";
 
-export type CashClosurePermission = "view" | "edit" | "approve" | "reopen" | "resync";
+export type CashClosurePermission = "view" | "edit" | "approve" | "adjustExpected" | "reopen" | "resync";
 
 export function canUseCashClosure(
   context: ServerUserContext,
@@ -39,7 +40,12 @@ export function assertCashClosureDivergenceApproval(
 ) {
   const thresholdCents = cashClosureSeniorDivergenceCents();
   const maximumDifferenceCents = lines.reduce(
-    (maximum, line) => Math.max(maximum, Math.abs(line.differenceCents ?? 0)),
+    (maximum, line) => Math.max(
+      maximum,
+      Math.abs(line.differenceCents ?? 0),
+      Math.abs(line.reportedDifferenceCents ?? 0),
+      Math.abs(line.conferenceDifferenceCents ?? 0),
+    ),
     0,
   );
   if (
@@ -75,4 +81,13 @@ export function assertCashDepositAccess(
     (!kioskId || canAccessUnit(context.userDoc, kioskId, { isDefaultAdmin: context.isDefaultAdmin }))
   );
   if (!allowed) throw new Error("Sem permissão para esta ação de depósito em dinheiro.");
+}
+
+export function assertCashDepositBatchAccess(
+  context: ServerUserContext,
+  permission: CashDepositPermission,
+  batch: Pick<CashDepositBatch, "kioskId" | "kioskIds">,
+) {
+  const kioskIds = batch.kioskIds?.length ? batch.kioskIds : [batch.kioskId];
+  for (const kioskId of kioskIds) assertCashDepositAccess(context, permission, kioskId);
 }

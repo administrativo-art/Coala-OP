@@ -8,7 +8,9 @@ import {
   mergeBuiltClosureForPersistence,
   normalizeCashClosureWithLines,
   recalculateCountedLine,
+  recalculateExpectedLine,
   recalculateReportedLine,
+  restoreCalculatedExpectedLine,
   withPdvAutomaticClosureTotals,
 } from "../../src/features/financial/cash-closures/persistence";
 
@@ -75,7 +77,7 @@ test("ressincronização atualiza esperado e preserva contado e observação", (
   assert.equal(second.lines[0].status, "divergent");
 });
 
-test("mantém separados o informado pelo Caixa e a conferência do Financeiro", () => {
+test("preserva os campos da conferência legada sem misturá-los durante a normalização", () => {
   const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
   const reported = recalculateReportedLine(
     first.lines[0],
@@ -99,7 +101,7 @@ test("mantém separados o informado pelo Caixa e a conferência do Financeiro", 
   assert.equal(counted.note, "Financeiro contou R$ 2,00 a mais que o Caixa");
 });
 
-test("registro legado usa o valor antigo como Caixa e exige nova conferência antes da aprovação", () => {
+test("registro legado recupera o valor antigo como contagem editável", () => {
   const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
   const legacyLine = recalculateCountedLine(
     first.lines[0],
@@ -180,6 +182,15 @@ test("mudança de fonte após aprovação é sinalizada", () => {
   });
   assert.equal(second.closure.status, "approved");
   assert.equal(second.closure.pdvChangedAfterApproval, true);
+
+  const partial = mergeBuiltClosureForPersistence({
+    built: build(102),
+    existingClosure: { ...first.closure, status: "pending_review", finalizedOperatorCount: 1 },
+    existingLines: first.lines,
+    now: "2026-07-08T12:00:00.000Z",
+  });
+  assert.equal(partial.closure.status, "pending_review");
+  assert.equal(partial.closure.pdvChangedAfterApproval, true);
 });
 
 test("ressincronização replica o esperado do Pix no valor conferido", () => {
@@ -220,4 +231,36 @@ test("resumo legado projeta Pix e cartões como conferidos sem contar dinheiro p
   assert.equal(projected.countedByChannelCents.pix, 10_000);
   assert.equal(projected.differenceByChannelCents.pix, 0);
   assert.equal(projected.countedCashCents, 0);
+});
+
+test("ajuste manual preserva a composição e é marcado para revisão quando o PDV muda", () => {
+  const first = mergeBuiltClosureForPersistence({ built: build(100), now: "2026-07-08T10:00:00.000Z" });
+  const adjusted = recalculateExpectedLine(
+    first.lines[0],
+    9_700,
+    "Base do PDV divergente",
+    "finance-1",
+    "2026-07-08T11:00:00.000Z",
+  );
+  assert.equal(adjusted.calculatedExpectedCents, 10_000);
+  assert.equal(adjusted.expectedCents, 9_700);
+  assert.equal(adjusted.expectedAdjustmentCents, -300);
+
+  const resynced = mergeBuiltClosureForPersistence({
+    built: build(101),
+    existingClosure: first.closure,
+    existingLines: [adjusted],
+    now: "2026-07-08T12:00:00.000Z",
+  });
+  assert.equal(resynced.lines[0].calculatedExpectedCents, 10_100);
+  assert.equal(resynced.lines[0].expectedCents, 9_700);
+  assert.equal(resynced.lines[0].expectedAdjustmentCents, -400);
+  assert.equal(resynced.lines[0].expectedAdjustmentNeedsReview, true);
+  assert.equal(resynced.lines[0].expectedAdjustmentReason, "Base do PDV divergente");
+
+  const restored = restoreCalculatedExpectedLine(resynced.lines[0], "2026-07-08T13:00:00.000Z");
+  assert.equal(restored.expectedCents, 10_100);
+  assert.equal(restored.expectedAdjustmentCents, 0);
+  assert.equal(restored.expectedAdjustedAt, null);
+  assert.equal(restored.expectedAdjustmentNeedsReview, false);
 });

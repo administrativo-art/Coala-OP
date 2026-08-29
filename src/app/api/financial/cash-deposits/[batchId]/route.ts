@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
-import { assertCashDepositAccess } from "@/features/financial/cash-closures/access.server";
+import { assertCashDepositBatchAccess } from "@/features/financial/cash-closures/access.server";
 import { getCashDepositBatch } from "@/features/financial/cash-deposits/repository.server";
+import { AppError, withApiErrorHandling } from "@/lib/observability";
 
-export async function GET(request: NextRequest, routeContext: { params: Promise<{ batchId: string }> }) {
-  try {
-    const context = await requireUser(request);
-    const { batchId } = await routeContext.params;
-    const result = await getCashDepositBatch(batchId);
-    if (!result) throw new Error("Bloco não encontrado.");
-    assertCashDepositAccess(context, "view", result.batch.kioskId);
-    return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao carregar bloco.";
-    return NextResponse.json({ error: message }, { status: message.includes("permissão") ? 403 : 400 });
+type RouteContext = { params: Promise<{ batchId: string }> };
+
+export const GET = withApiErrorHandling<RouteContext>({
+  source: "api-financial",
+  operation: "get-cash-deposit",
+  routeOrJob: "/api/financial/cash-deposits/[batchId]",
+}, async (request, routeContext) => {
+  const context = await requireUser(request).catch((cause) => {
+    throw new AppError({ code: "AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
+  });
+  const { batchId } = await routeContext.params;
+  const result = await getCashDepositBatch(batchId);
+  if (!result) {
+    throw new AppError({ code: "CASH_DEPOSIT_NOT_FOUND", kind: "NOT_FOUND" });
   }
-}
+  try {
+    assertCashDepositBatchAccess(context, "view", result.batch);
+  } catch (cause) {
+    throw new AppError({ code: "CASH_DEPOSIT_VIEW_FORBIDDEN", kind: "AUTHORIZATION", cause });
+  }
+  return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
+});

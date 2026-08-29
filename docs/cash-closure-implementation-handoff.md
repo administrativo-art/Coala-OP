@@ -25,6 +25,9 @@ Escopo implementado: Fases 1 a 8 do plano operacional, sem rollout.
 
 O rollout ficou intencionalmente fora deste trabalho. Antes de publicar:
 
+O procedimento atualizado, incluindo custo, permissões, política de competência,
+rollback e smoke test, está em `docs/cash-counting-deposit-rollout.md`.
+
 1. Confirmar o pagador institucional de produção referenciado por
    `INTER_COBRANCA_PAYER_CNPJ`; os demais dados são resolvidos pelo cadastro de
    Entidades.
@@ -37,6 +40,7 @@ O rollout ficou intencionalmente fora deste trabalho. Antes de publicar:
 4. Rodar primeiro em modo leitura:
    - `npm run migrate:cash-closure-permissions`;
    - `npm run migrate:cash-deposit-inter`.
+   - `npm run cash-deposit:period-policy -- --workspace coala --period 2026-08 --policy dre_only --reason "Competência histórica usada somente na DRE" --actor-id IDENTIFICADOR --actor-name "NOME"`.
 5. No rollout autorizado, repetir ambas com `-- --execute`, publicar regras,
    índices, Functions e App Hosting, e então cadastrar o webhook definitivo.
 

@@ -1,11 +1,12 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DateRange } from 'react-day-picker';
-import { format, parseISO, isValid, differenceInDays } from 'date-fns';
-import { useStockAudit } from '@/hooks/use-stock-audit';
+import { format, parseISO, differenceInDays, startOfDay, subDays } from 'date-fns';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
+import type { StockAuditSession } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,27 +20,76 @@ import { CalendarIcon, AlertTriangle, Inbox, Percent, Target, FileSearch, PieCha
 import { cn } from '@/lib/utils';
 
 export function AuditDashboard() {
-  const { auditSessions, loading: loadingAudits } = useStockAudit();
+  const api = useAuthenticatedApi();
   const { kiosks, loading: loadingKiosks } = useKiosks();
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [auditSessions, setAuditSessions] = useState<StockAuditSession[]>([]);
+  const [loadingAudits, setLoadingAudits] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<{ startedAt: string; id: string } | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => ({
+    from: startOfDay(subDays(new Date(), 29)),
+    to: startOfDay(new Date()),
+  }));
   const [kioskId, setKioskId] = useState<string>('all');
   const [status, setStatus] = useState<'all' | 'pending_review' | 'completed'>('all');
 
+  const fromDate = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : '';
+  const toDate = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : fromDate;
+
+  const loadHistory = useCallback(async (
+    append: boolean,
+    signal?: AbortSignal,
+    cursor?: { startedAt: string; id: string } | null,
+  ) => {
+    if (!fromDate || !toDate) {
+      setAuditSessions([]);
+      setNextCursor(null);
+      setLoadingAudits(false);
+      return;
+    }
+    append ? setLoadingMore(true) : setLoadingAudits(true);
+    setHistoryError(null);
+    try {
+      const params = new URLSearchParams({
+        view: 'history',
+        from: fromDate,
+        to: toDate,
+        status,
+        pageSize: '100',
+      });
+      if (kioskId !== 'all') params.set('kioskId', kioskId);
+      if (append && cursor) {
+        params.set('cursorStartedAt', cursor.startedAt);
+        params.set('cursorId', cursor.id);
+      }
+      const payload = await api<{
+        sessions: StockAuditSession[];
+        nextCursor: { startedAt: string; id: string } | null;
+      }>(`/api/stock/count-sessions?${params.toString()}`, { signal });
+      setAuditSessions((current) => append ? [...current, ...payload.sessions] : payload.sessions);
+      setNextCursor(payload.nextCursor);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setHistoryError('Não foi possível carregar o histórico de contagens.');
+      if (!append) {
+        setAuditSessions([]);
+        setNextCursor(null);
+      }
+    } finally {
+      append ? setLoadingMore(false) : setLoadingAudits(false);
+    }
+  }, [api, fromDate, kioskId, status, toDate]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadHistory(false, controller.signal);
+    return () => controller.abort();
+  }, [loadHistory]);
+
   const loading = loadingAudits || loadingKiosks;
 
-  const filteredData = useMemo(() => {
-    return auditSessions.filter(session => {
-      if (kioskId !== 'all' && session.kioskId !== kioskId) return false;
-      if (status !== 'all' && session.status !== status) return false;
-      if (dateRange?.from && parseISO(session.startedAt) < dateRange.from) return false;
-      if (dateRange?.to) {
-        const toDate = new Date(dateRange.to);
-        toDate.setHours(23, 59, 59, 999);
-        if (parseISO(session.startedAt) > toDate) return false;
-      }
-      return true;
-    });
-  }, [auditSessions, kioskId, status, dateRange]);
+  const filteredData = auditSessions;
 
   const kpis = useMemo(() => {
     if (filteredData.length === 0) {
@@ -147,6 +197,12 @@ export function AuditDashboard() {
         </Select>
       </div>
 
+      {historyError && (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          {historyError}
+        </p>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Lotes contados</CardTitle><FileSearch className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.totalItems}</div></CardContent></Card>
           <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Acurácia geral</CardTitle><Percent className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">{kpis.accuracy.toFixed(1)}%</div></CardContent></Card>
@@ -213,6 +269,17 @@ export function AuditDashboard() {
                      )}
                 </TableBody>
             </Table>
+            {nextCursor && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  disabled={loadingMore}
+                  onClick={() => void loadHistory(true, undefined, nextCursor)}
+                >
+                  {loadingMore ? 'Carregando…' : 'Carregar mais contagens'}
+                </Button>
+              </div>
+            )}
         </CardContent>
       </Card>
     </div>

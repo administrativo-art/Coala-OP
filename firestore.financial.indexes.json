@@ -4,6 +4,35 @@
       "collectionGroup": "cashClosures",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "year", "order": "ASCENDING" },
+        { "fieldPath": "month", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cashCountingSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cashClosureOperators",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "kioskId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "cashDeposit.status", "order": "ASCENDING" },
+        { "fieldPath": "cashDeposit.allocationReason", "order": "ASCENDING" },
+        { "fieldPath": "approvedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cashClosures",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "workspaceId", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "DESCENDING" }
       ]
@@ -231,7 +260,8 @@
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "workspaceId", "order": "ASCENDING" },
-        { "fieldPath": "closureId", "order": "ASCENDING" }
+        { "fieldPath": "closureId", "order": "ASCENDING" },
+        { "fieldPath": "operatorId", "order": "ASCENDING" }
       ]
     }
   ],

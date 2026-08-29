@@ -13,7 +13,11 @@ const baseBatch = {
   sequence: 1,
   status: "issued",
   maxCents: 500_000,
+  grossTotalCents: 10_000,
   totalCents: 10_000,
+  coinHoldCents: 0,
+  coinPreparedAt: "2026-08-01T12:00:00.000Z",
+  coinPreparedBy: "user-1",
   remainingCapacityCents: 490_000,
   periodStartDate: "2026-08-01",
   periodEndDate: "2026-08-01",
@@ -62,6 +66,33 @@ test("reconciliador aceita bloco cuja soma dos itens confere", () => {
     } as CashClosure],
   });
   assert.equal(result.itemTotalCents, 10_000);
+  assert.deepEqual(result.issues, []);
+});
+
+test("reconciliador inclui a retenção de moedas no total do bloco sem atribuí-la ao fechamento", () => {
+  const coinHold = {
+    ...baseItem,
+    id: "batch-1_coin_hold",
+    closureId: "coin-hold:batch-1",
+    amountCents: -150,
+    source: "coin_hold" as const,
+  };
+  const result = reconcileCashDepositBatch({
+    batch: {
+      ...baseBatch,
+      grossTotalCents: 10_000,
+      totalCents: 9_850,
+      coinHoldCents: 150,
+      itemCount: 2,
+      remainingCapacityCents: 490_150,
+    },
+    items: [baseItem, coinHold],
+    closures: [{
+      id: "closure-1",
+      cashDeposit: { eligibleCents: 10_000, manualSplitRequired: false },
+    } as CashClosure],
+  });
+  assert.equal(result.itemTotalCents, 9_850);
   assert.deepEqual(result.issues, []);
 });
 

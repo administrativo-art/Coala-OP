@@ -2,7 +2,7 @@ import type { InterCobrancaDetail } from "@/lib/integrations/inter/cobrancas";
 import type { InterCobrancaPayer } from "@/lib/integrations/inter/config.server";
 import { todayInClosureTimezone } from "../cash-closures/date";
 import type { CashDepositBatch } from "./types";
-import { cashDepositKioskCode } from "./references";
+import { cashDepositKioskCode, cashDepositSessionCode } from "./references";
 
 export const MIN_BOLETO_CENTS = 250;
 
@@ -78,10 +78,14 @@ export function deterministicSeuNumero(input: {
   periodEndDate: string;
   batchSequence: number;
   attempt: number;
+  countingSessionId?: string | null;
 }) {
   const date = input.periodEndDate.replace(/-/g, "").slice(2);
   const sequence = Math.max(0, input.batchSequence % 1000) * 10 + Math.min(Math.max(input.attempt, 0), 9);
-  return `CX${cashDepositKioskCode(input.kioskId)}${date}${String(sequence).padStart(4, "0")}`;
+  const code = input.countingSessionId
+    ? cashDepositSessionCode(input.countingSessionId)
+    : cashDepositKioskCode(input.kioskId);
+  return `CX${code}${date}${String(sequence).padStart(4, "0")}`;
 }
 
 export function parseInterMoneyToCents(value: unknown) {
@@ -182,6 +186,7 @@ export function buildInterCobrancaIssueInput(input: {
       periodEndDate: input.batch.periodEndDate,
       batchSequence: input.batch.sequence,
       attempt: input.attempt,
+      countingSessionId: input.batch.countingSessionId,
     }),
     valorNominal: input.batch.totalCents / 100,
     dataVencimento,

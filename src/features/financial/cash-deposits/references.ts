@@ -33,8 +33,19 @@ export function cashDepositKioskCode(kioskId: string) {
   return KNOWN_KIOSK_CODES[normalizedId] ?? fallbackKioskCode(normalizedId);
 }
 
-export function cashDepositBatchReference(input: Pick<CashDepositBatch, "kioskId" | "sequence">) {
-  return `DEP-${cashDepositKioskCode(input.kioskId)}-${String(input.sequence).padStart(6, "0")}`;
+export function cashDepositSessionCode(sessionId: string) {
+  let hash = 0;
+  for (const char of sessionId) hash = (hash * 31 + char.charCodeAt(0)) % 46_656;
+  return hash.toString(36).toUpperCase().padStart(3, "0").slice(-3);
+}
+
+export function cashDepositBatchReference(
+  input: Pick<CashDepositBatch, "kioskId" | "sequence"> & Partial<Pick<CashDepositBatch, "countingSessionId">>,
+) {
+  const code = input.countingSessionId
+    ? `S${cashDepositSessionCode(input.countingSessionId)}`
+    : cashDepositKioskCode(input.kioskId);
+  return `DEP-${code}-${String(input.sequence).padStart(6, "0")}`;
 }
 
 export function cashDepositBatchReferenceFromId(kioskId: string, batchId: string) {
@@ -47,6 +58,9 @@ export const CASH_DEPOSIT_SOURCE_LABEL: Record<CashDepositBatchItemSource, strin
   cash_counted: "Fechamento aprovado",
   cash_adjustment: "Ajuste de fechamento",
   manual_split: "Divisão manual",
+  coin_hold: "Moedas separadas para troca",
+  coin_exchange: "Moedas trocadas por cédulas",
+  counting_session: "Contagem física da sessão",
 };
 
 export type CashDepositDayComposition = {
