@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
 import {
-  assertCashDepositAccess,
+  assertCashDepositBatchAccess,
   cashClosureActor,
 } from "@/features/financial/cash-closures/access.server";
 import { getCashDepositBatch } from "@/features/financial/cash-deposits/repository.server";
@@ -62,7 +62,7 @@ export const POST = withApiErrorHandling<RouteContext>({
       throw new AppError({ code: "CASH_DEPOSIT_NOT_FOUND", kind: "NOT_FOUND" });
     }
     try {
-      assertCashDepositAccess(context, "issue", current.batch.kioskId);
+      assertCashDepositBatchAccess(context, "issue", current.batch);
     } catch (cause) {
       throw new AppError({ code: "CASH_DEPOSIT_ISSUE_FORBIDDEN", kind: "AUTHORIZATION", cause });
     }

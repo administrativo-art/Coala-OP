@@ -20,6 +20,17 @@ export type CashDepositBatch = {
   workspaceId: string;
   kioskId: string;
   kioskName: string;
+  kioskIds?: string[];
+  kioskNames?: string[];
+  sourceScope?: "unit" | "counting_session";
+  countingSessionId?: string | null;
+  countingSessionBagId?: string | null;
+  denominations?: Array<{
+    valueCents: number;
+    kind: "note" | "coin";
+    quantity: number;
+    totalCents: number;
+  }>;
   sequence: number;
   status: CashDepositBatchStatus;
   maxCents: number;
@@ -58,7 +69,8 @@ export type CashDepositBatchItemSource =
   | "cash_adjustment"
   | "manual_split"
   | "coin_hold"
-  | "coin_exchange";
+  | "coin_exchange"
+  | "counting_session";
 
 export type CashDepositBatchItem = {
   id: string;
@@ -132,6 +144,9 @@ export function normalizeCashDepositBatch(batch: CashDepositBatch): CashDepositB
   const coinHoldCents = batch.coinHoldCents ?? 0;
   return {
     ...batch,
+    kioskIds: batch.kioskIds?.length ? batch.kioskIds : [batch.kioskId],
+    kioskNames: batch.kioskNames?.length ? batch.kioskNames : [batch.kioskName],
+    sourceScope: batch.sourceScope ?? "unit",
     grossTotalCents: batch.grossTotalCents ?? batch.totalCents + coinHoldCents,
     coinHoldCents,
     coinPreparedAt: batch.coinPreparedAt ?? null,

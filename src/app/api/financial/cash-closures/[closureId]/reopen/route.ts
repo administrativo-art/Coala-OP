@@ -49,6 +49,9 @@ export const POST = withApiErrorHandling<RouteContext>({
       if (message.includes("não pode avançar")) {
         throw new AppError({ code: "CASH_CLOSURE_REOPEN_STATE_CONFLICT", kind: "CONFLICT", cause });
       }
+      if (message.includes("sessão") || message.includes("Sessão") || message.includes("composição física")) {
+        throw new AppError({ code: "CASH_COUNTING_SESSION_REOPEN_CONFLICT", kind: "CONFLICT", safeMessage: message, cause });
+      }
       throw cause;
     });
     return NextResponse.json(reopened);

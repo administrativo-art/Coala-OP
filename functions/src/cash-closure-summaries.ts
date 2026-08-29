@@ -17,6 +17,22 @@ function number(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+function finalizedNumber(item: Record<string, unknown>, finalizedField: string, legacyField: string) {
+  const finalized = item[finalizedField];
+  if (typeof finalized === 'number' && Number.isFinite(finalized)) return finalized;
+  return item.status === 'approved' ? number(item[legacyField]) : 0;
+}
+
+function hasFinalizedDivergence(item: Record<string, unknown>) {
+  const finalizedOperatorCount = typeof item.finalizedOperatorCount === 'number'
+    ? item.finalizedOperatorCount
+    : item.status === 'approved' ? number(item.operatorCount) : 0;
+  const approvedWithDivergence = typeof item.approvedWithDivergence === 'boolean'
+    ? item.approvedWithDivergence
+    : item.status === 'approved' && number(item.divergentLineCount) > 0;
+  return finalizedOperatorCount > 0 && approvedWithDivergence;
+}
+
 function currentPeriod() {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Belem', year: 'numeric', month: 'numeric',
@@ -113,14 +129,18 @@ async function recomputeSummary(workspaceId: string, kioskId: string, year: numb
     kioskName: text(first.kioskName) || kioskId,
     pdvFilialId: text(first.pdvFilialId), year, month,
     closureCount: closures.length,
-    pendingCount: closures.filter((item) => ['draft', 'pending_review', 'reopened'].includes(text(item.status))).length,
-    divergentCount: closures.filter((item) => number(item.divergentLineCount) > 0).length,
+    pendingCount: closures.filter((item) => ['draft', 'reopened'].includes(text(item.status))).length,
+    partialCount: closures.filter((item) => item.status === 'pending_review').length,
+    divergentCount: closures.filter(hasFinalizedDivergence).length,
     approvedCount: closures.filter((item) => item.status === 'approved').length,
     syncErrorCount: closures.filter((item) => item.status === 'sync_error' || !!item.syncError).length,
     expectedTotalCents: closures.reduce((sum, item) => sum + number(item.expectedTotalCents), 0),
-    countedTotalCents: closures.reduce((sum, item) => sum + number(item.countedTotalCents), 0),
-    differenceTotalCents: closures.reduce((sum, item) => sum + number(item.differenceTotalCents), 0),
-    countedCashCents: closures.reduce((sum, item) => sum + number(item.countedCashCents), 0),
+    countedTotalCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedCountedTotalCents', 'countedTotalCents'), 0),
+    differenceTotalCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedDifferenceTotalCents', 'differenceTotalCents'), 0),
+    dreRevenueTotalCents: closures.reduce((sum, item) => sum
+      + number(item.expectedTotalCents)
+      + finalizedNumber(item, 'finalizedDifferenceTotalCents', 'differenceTotalCents'), 0),
+    countedCashCents: closures.reduce((sum, item) => sum + finalizedNumber(item, 'finalizedCountedCashCents', 'countedCashCents'), 0),
     allocatedCashCents: closures.filter((item) => ['allocated', 'issued', 'paid', 'adjusted'].includes(text(item.cashDeposit?.status))).reduce((sum, item) => sum + number(item.cashDeposit?.eligibleCents), 0),
     issuedCashCents: closures.filter((item) => ['issued', 'paid'].includes(text(item.cashDeposit?.status))).reduce((sum, item) => sum + number(item.cashDeposit?.eligibleCents), 0),
     paidCashCents: closures.filter((item) => item.cashDeposit?.status === 'paid').reduce((sum, item) => sum + number(item.cashDeposit?.eligibleCents), 0),

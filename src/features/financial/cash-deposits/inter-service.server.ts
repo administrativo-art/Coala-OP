@@ -345,8 +345,12 @@ async function ensureCashDepositLedgerEntry(input: {
       accountName: typeof account.name === "string" && account.name.trim() ? account.name.trim() : "Banco Inter",
       ...(ledger.bankPaymentMethodId ? { paymentMethodId: ledger.bankPaymentMethodId } : {}),
       paymentMethodLabel: `Cobrança Inter · ${input.detail.cobranca.origemRecebimento ?? "depósito em dinheiro"}`,
-      toAccountId: `cash_on_hand_${input.batch.kioskId}`,
-      toAccountName: `Caixa físico — ${input.batch.kioskName}`,
+      toAccountId: input.batch.countingSessionId
+        ? `cash_on_hand_session_${input.batch.countingSessionId}`
+        : `cash_on_hand_${input.batch.kioskId}`,
+      toAccountName: input.batch.countingSessionId
+        ? `Numerário da sessão ${input.batch.countingSessionId.slice(0, 8)}`
+        : `Caixa físico — ${input.batch.kioskName}`,
       amount: input.batch.totalCents / 100,
       amountCents: input.batch.totalCents,
       date: Timestamp.fromDate(paidAt),
@@ -484,6 +488,10 @@ async function applyInterDetail(cobrancaId: string, detail: InterCobrancaDetail)
     const batchSnapshot = await transaction.get(batchRef);
     if (!batchSnapshot.exists) throw new Error("Bloco vinculado à cobrança não encontrado.");
     const batch = normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot));
+    const countingSessionRef = batch.countingSessionId
+      ? financialDbAdmin.collection("cashCountingSessions").doc(batch.countingSessionId)
+      : null;
+    const countingSessionSnapshot = countingSessionRef ? await transaction.get(countingSessionRef) : null;
     const closureSnapshots = [];
     for (const closureId of batch.closureIds) {
       closureSnapshots.push(await transaction.get(financialDbAdmin.collection("cashClosures").doc(closureId)));
@@ -540,6 +548,18 @@ async function applyInterDetail(cobrancaId: string, detail: InterCobrancaDetail)
       ...(nextBatchStatus === "paid" && !batch.paidAt ? { paidAt: now } : {}),
       ...(nextBatchStatus === "cancelled" && !batch.cancelledAt ? { cancelledAt: now } : {}),
     }, { merge: true });
+    if (countingSessionRef && countingSessionSnapshot?.exists && nextBatchStatus === "paid") {
+      const sessionData = countingSessionSnapshot.data() ?? {};
+      const newlyPaid = batch.status !== "paid";
+      const paidBatchCount = Number(sessionData.paidBatchCount ?? 0) + (newlyPaid ? 1 : 0);
+      const batchCount = Array.isArray(sessionData.batchIds) ? sessionData.batchIds.length : 0;
+      const completed = paidBatchCount >= batchCount && Number(sessionData.coinPendingExchangeCents ?? 0) === 0;
+      transaction.set(countingSessionRef, {
+        paidBatchCount,
+        ...(completed ? { status: "completed", completedAt: now } : {}),
+        updatedAt: now,
+      }, { merge: true });
+    }
 
     const updatedClosures: CashClosure[] = [];
     for (const snapshot of closureSnapshots) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
-import { assertCashDepositAccess } from "@/features/financial/cash-closures/access.server";
+import { assertCashDepositBatchAccess } from "@/features/financial/cash-closures/access.server";
 import { getCashDepositBatch } from "@/features/financial/cash-deposits/repository.server";
 import { getInterCobrancaPdfForBatch } from "@/features/financial/cash-deposits/inter-service.server";
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, routeContext: { params: Promise<
     const { batchId } = await routeContext.params;
     const current = await getCashDepositBatch(batchId);
     if (!current) throw new Error("Bloco não encontrado.");
-    assertCashDepositAccess(context, "view", current.batch.kioskId);
+    assertCashDepositBatchAccess(context, "view", current.batch);
     const pdf = await getInterCobrancaPdfForBatch({ workspaceId: context.workspace_id, batchId });
     return new NextResponse(new Uint8Array(pdf), {
       headers: {

@@ -28,6 +28,13 @@ const {
   registerCashCoinExchange,
   reopenCashClosureWithDepositHandling,
 } = await import("../../src/features/financial/cash-deposits/repository.server.ts");
+const {
+  cancelCashCountingSession,
+  confirmCashCountingSessionDenominations,
+  createCashCountingSession,
+  finishCashCountingSession,
+  getCashCountingSession,
+} = await import("../../src/features/financial/cash-counting-sessions/repository.server.ts");
 const { cashClosureId, recalculateCountedLine } = await import("../../src/features/financial/cash-closures/persistence.ts");
 const { financialDbAdmin } = await import("../../src/lib/firebase-financial-admin.ts");
 
@@ -43,6 +50,9 @@ const collections = [
   "cashDepositQueues",
   "cashCoinBalances",
   "cashCoinEvents",
+  "cashCountingSessions",
+  "cashCountingSessionLocks",
+  "cashCountingSessionAuditLogs",
 ];
 
 function builtClosure({ workspaceId, kioskId, date }) {
@@ -256,7 +266,7 @@ test("finaliza e aloca cada operador sem aguardar o restante do dia", async () =
     { id: secondCash.id, reportedCents: 7_000, countedCents: 7_000 },
   ], actor, { editReported: true, editCounted: true });
 
-  const firstFinalized = await finalizeCashClosureOperator(closureId, "operator-1", actor);
+  const firstFinalized = await finalizeCashClosureOperator(closureId, "operator-1", actor, { legacyImmediateAllocation: true });
   assert.equal(firstFinalized.closure.status, "pending_review");
   assert.equal(firstFinalized.closure.finalizedOperatorCount, 1);
   assert.equal(firstFinalized.closure.cashDepositEligibleCents, 10_000);
@@ -276,7 +286,7 @@ test("finaliza e aloca cada operador sem aguardar o restante do dia", async () =
   assert.equal(reopenedOperator.closure.status, "reopened");
   const afterOperatorReopen = await getCashClosure(closureId);
   assert.equal(afterOperatorReopen?.operators.find((operator) => operator.operatorId === "operator-1")?.status, "reopened");
-  await finalizeCashClosureOperator(closureId, "operator-1", actor);
+  await finalizeCashClosureOperator(closureId, "operator-1", actor, { legacyImmediateAllocation: true });
   await processCashDepositQueue(workspaceId, kioskId, actor);
   await assert.rejects(
     () => saveCashClosureDraft(
@@ -288,7 +298,7 @@ test("finaliza e aloca cada operador sem aguardar o restante do dia", async () =
     /já foi finalizado/,
   );
 
-  await finalizeCashClosureOperator(closureId, "operator-2", actor);
+  await finalizeCashClosureOperator(closureId, "operator-2", actor, { legacyImmediateAllocation: true });
   await processCashDepositQueue(workspaceId, kioskId, actor);
   const completed = await getCashClosure(closureId);
   assert.ok(completed);
@@ -335,12 +345,102 @@ test("preserva a contagem na DRE sem criar depósito quando o fechamento é some
     { editReported: true, editCounted: true },
   );
 
-  const finalized = await finalizeCashClosureOperator(closureId, "operator-1", actor);
+  const finalized = await finalizeCashClosureOperator(closureId, "operator-1", actor, { legacyImmediateAllocation: true });
   assert.equal(finalized.closure.finalizedCountedCashCents, 9_900);
   assert.equal(finalized.closure.cashDepositEligibleCents, 0);
   assert.equal(finalized.operator.cashDeposit.status, "not_eligible");
   await processCashDepositQueue(workspaceId, kioskId, actor);
   assert.deepEqual(await listCashDepositBatches({ workspaceId, limit: 10 }), []);
+});
+
+test("sessão bloqueia escopo, recebe operador sem depósito precoce e cria malote após conferir denominações", async () => {
+  const workspaceId = "workspace-integration-counting-session";
+  const kioskId = "kiosk-integration-counting-session";
+  const date = "2035-09-12";
+  const closureId = cashClosureId(kioskId, date);
+  const units = [{ id: kioskId, name: "Quiosque sessão" }];
+  const periods = [{ year: 2035, month: 9 }];
+  const session = await createCashCountingSession({ workspaceId, units, periods, actor });
+
+  await assert.rejects(
+    () => createCashCountingSession({ workspaceId, units, periods, actor }),
+    /Já existe uma sessão aberta/,
+  );
+  const parallel = await createCashCountingSession({
+    workspaceId,
+    units,
+    periods: [{ year: 2035, month: 10 }],
+    actor,
+  });
+  await cancelCashCountingSession({
+    workspaceId,
+    sessionId: parallel.id,
+    reason: "Sessão criada apenas para validar escopos independentes",
+    actor,
+  });
+
+  await upsertClosureFromPdv(builtClosure({ workspaceId, kioskId, date }), actor);
+  const initial = await getCashClosure(closureId);
+  const cashLine = initial?.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+  await saveCashClosureDraft(
+    closureId,
+    [{ id: cashLine.id, reportedCents: 10_000, countedCents: 10_000 }],
+    actor,
+    { editReported: true, editCounted: true },
+  );
+  await finalizeCashClosureOperator(closureId, "operator-1", actor, { countingSessionId: session.id });
+  assert.deepEqual(await listCashDepositBatches({ workspaceId, limit: 10 }), []);
+  assert.equal((await getCashCountingSession(session.id))?.operators.length, 1);
+
+  await reopenCashClosureWithDepositHandling({
+    workspaceId,
+    closureId,
+    operatorId: "operator-1",
+    reason: "Validar retirada atômica da sessão aberta",
+    actor,
+  });
+  assert.equal((await getCashCountingSession(session.id))?.operators.length, 0);
+  await finalizeCashClosureOperator(closureId, "operator-1", actor, { countingSessionId: session.id });
+
+  const firstCounted = await finishCashCountingSession({ workspaceId, sessionId: session.id, actor });
+  assert.equal(firstCounted.status, "counted");
+  await reopenCashClosureWithDepositHandling({
+    workspaceId,
+    closureId,
+    operatorId: "operator-1",
+    reason: "Recontagem antes da composição física",
+    actor,
+  });
+  assert.equal((await getCashCountingSession(session.id))?.session.status, "open");
+  await finalizeCashClosureOperator(closureId, "operator-1", actor, { countingSessionId: session.id });
+  const counted = await finishCashCountingSession({ workspaceId, sessionId: session.id, actor });
+  assert.equal(counted.status, "counted");
+  assert.equal(counted.depositEligibleCents, 10_000);
+  await assert.rejects(
+    () => confirmCashCountingSessionDenominations({
+      workspaceId,
+      sessionId: session.id,
+      entries: [{ valueCents: 5_000, quantity: 1 }],
+      actor,
+    }),
+    /total físico informado não confere/,
+  );
+  const prepared = await confirmCashCountingSessionDenominations({
+    workspaceId,
+    sessionId: session.id,
+    entries: [{ valueCents: 5_000, quantity: 2 }],
+    actor,
+  });
+  assert.equal(prepared.session.status, "deposit_ready");
+  assert.equal(prepared.session.coinPendingExchangeCents, 0);
+  assert.equal(prepared.batches.length, 1);
+  assert.equal(prepared.batches[0].countingSessionId, session.id);
+  assert.equal(prepared.batches[0].totalCents, 10_000);
+  assert.equal(prepared.batches[0].denominations?.find((entry) => entry.valueCents === 5_000)?.quantity, 2);
+
+  const nextSession = await createCashCountingSession({ workspaceId, units, periods, actor });
+  assert.equal(nextSession.status, "open");
 });
 
 test("finaliza revisão legada usando a contagem do Financeiro já preenchida", async () => {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
-import { assertCashDepositAccess } from "@/features/financial/cash-closures/access.server";
+import { assertCashDepositBatchAccess } from "@/features/financial/cash-closures/access.server";
 import { getCashDepositBatch } from "@/features/financial/cash-deposits/repository.server";
 import { cancelInterCobrancaForBatch } from "@/features/financial/cash-deposits/inter-service.server";
 
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, routeContext: { params: Promise
     const { batchId } = await routeContext.params;
     const current = await getCashDepositBatch(batchId);
     if (!current) throw new Error("Bloco não encontrado.");
-    assertCashDepositAccess(context, "cancel", current.batch.kioskId);
+    assertCashDepositBatchAccess(context, "cancel", current.batch);
     const payload = await request.json().catch(() => ({}));
     const reason = typeof payload.reason === "string" ? payload.reason : "";
     const result = await cancelInterCobrancaForBatch({

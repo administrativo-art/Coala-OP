@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
-import { assertCashDepositAccess } from "@/features/financial/cash-closures/access.server";
+import { assertCashDepositBatchAccess } from "@/features/financial/cash-closures/access.server";
 import { getInterCobrancaForBatch, refreshInterCobranca } from "@/features/financial/cash-deposits/inter-service.server";
 
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest, routeContext: { params: Promise
     const { batchId } = await routeContext.params;
     const current = await getInterCobrancaForBatch(batchId);
     if (!current) throw new Error("Bloco não encontrado.");
-    assertCashDepositAccess(context, "view", current.batch.kioskId);
+    assertCashDepositBatchAccess(context, "view", current.batch);
     if (!current.cobranca) throw new Error("Este bloco ainda não possui cobrança Inter.");
     const result = await refreshInterCobranca(current.cobranca.id);
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });

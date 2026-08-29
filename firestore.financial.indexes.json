@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "cashCountingSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "cashClosureOperators",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

@@ -28,6 +28,7 @@ import {
   withCashClosureOperatorAggregate,
 } from "./operators";
 import { refreshCashClosureSummaries } from "./summaries.server";
+import { prepareCashCountingSessionOperatorAttachment } from "@/features/financial/cash-counting-sessions/repository.server";
 import type {
   BuiltCashClosure,
   CashClosure,
@@ -693,6 +694,7 @@ function cashDepositAfterFinalization(
   eligibleCents: number,
   now: string,
   policy: CashClosure["cashDepositPolicy"],
+  allocationMode: "counting_session" | "legacy_immediate",
 ) {
   if (policy === "dre_only") {
     return {
@@ -725,7 +727,9 @@ function cashDepositAfterFinalization(
       batchItemId: null,
       status: "not_allocated" as const,
       manualSplitRequired: false,
-      allocationReason: "pending_allocator" as const,
+      allocationReason: allocationMode === "counting_session"
+        ? "awaiting_counting_session" as const
+        : "pending_allocator" as const,
       pendingSince: now,
     };
   }
@@ -773,12 +777,19 @@ export async function finalizeCashClosure(id: string, actor: CashClosureActor) {
   }
   let closure = current.closure;
   for (const operator of current.operators.filter((item) => item.status !== "approved")) {
-    closure = (await finalizeCashClosureOperator(id, operator.operatorId, actor)).closure;
+    closure = (await finalizeCashClosureOperator(id, operator.operatorId, actor, { legacyImmediateAllocation: true })).closure;
   }
   return closure;
 }
 
-export async function finalizeCashClosureOperator(id: string, operatorId: string, actor: CashClosureActor) {
+export async function finalizeCashClosureOperator(
+  id: string,
+  operatorId: string,
+  actor: CashClosureActor,
+  allocation:
+    | { countingSessionId: string; canManageSessionOfOthers?: boolean }
+    | { legacyImmediateAllocation: true },
+) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
     const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
@@ -827,6 +838,16 @@ export async function finalizeCashClosureOperator(id: string, operatorId: string
       throw new Error("Toda falta apurada pelo Caixa ou pelo Financeiro precisa de justificativa antes da finalização.");
     }
     const eligibleCents = currentOperator.countedCashCents;
+    const sessionAttachment = "countingSessionId" in allocation
+      ? await prepareCashCountingSessionOperatorAttachment(transaction, {
+        sessionId: allocation.countingSessionId,
+        closure: { ...closure, cashDepositPolicy },
+        operator: currentOperator,
+        actor,
+        canManageOthers: allocation.canManageSessionOfOthers,
+        now,
+      })
+      : null;
     const finalizedOperator: CashClosureOperator = {
       ...currentOperator,
       status: "approved",
@@ -835,7 +856,10 @@ export async function finalizeCashClosureOperator(id: string, operatorId: string
         eligibleCents,
         now,
         cashDepositPolicy,
+        sessionAttachment ? "counting_session" : "legacy_immediate",
       ),
+      countingSessionId: sessionAttachment?.session.id ?? currentOperator.countingSessionId ?? null,
+      countingSessionFinalizedAt: sessionAttachment ? now : currentOperator.countingSessionFinalizedAt ?? null,
       approvedWithDivergence:
         currentOperator.divergentLineCount > 0 || currentOperator.reportedDivergentLineCount > 0,
       approvedAt: now,
@@ -861,6 +885,10 @@ export async function finalizeCashClosureOperator(id: string, operatorId: string
     );
     transaction.set(ref, next);
     transaction.set(ref.collection(OPERATORS).doc(finalizedOperator.id), finalizedOperator);
+    if (sessionAttachment) {
+      transaction.set(sessionAttachment.operatorRef, sessionAttachment.sessionOperator);
+      transaction.set(financialDbAdmin.collection("cashCountingSessionAuditLogs").doc(sessionAttachment.audit.id), sessionAttachment.audit);
+    }
     writeAudit(transaction, {
       workspaceId: closure.workspaceId,
       closureId: id,

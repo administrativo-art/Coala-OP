@@ -17,6 +17,7 @@ import {
   emptyCashClosureDepositState,
   withCashClosureOperatorAggregate,
 } from "@/features/financial/cash-closures/operators";
+import { prepareCashCountingSessionOperatorDetachment } from "@/features/financial/cash-counting-sessions/repository.server";
 import {
   allocateNegativeAdjustmentWithoutGoingBelowZero,
   decideCashDepositAllocation,
@@ -783,6 +784,17 @@ export async function reopenCashClosureWithDepositHandling(input: {
     );
     if (targetOperators.length === 0) throw new Error("Operador finalizado não encontrado.");
     const targetOperatorIds = new Set(targetOperators.map((operator) => operator.operatorId));
+    const now = new Date().toISOString();
+    const sessionDetachments = await Promise.all(targetOperators
+      .filter((operator) => !!operator.countingSessionId)
+      .map((operator) => prepareCashCountingSessionOperatorDetachment(transaction, {
+        sessionId: operator.countingSessionId!,
+        closureId: closure.id,
+        operatorId: operator.operatorId,
+        workspaceId: input.workspaceId,
+        actor: input.actor,
+        now,
+      })));
 
     const batchIds = Array.from(new Set(
       targetOperators.flatMap((operator) => operator.cashDeposit.manualSplitBatchIds?.length
@@ -822,7 +834,6 @@ export async function reopenCashClosureWithDepositHandling(input: {
       });
     }
 
-    const now = new Date().toISOString();
     const hasIssuedHistory = batchData.some(({ batch }) =>
       ["issuing", "issued", "paid"].includes(batch.status) || batch.coinPreparedAt !== null
     );
@@ -898,6 +909,8 @@ export async function reopenCashClosureWithDepositHandling(input: {
                 ...emptyCashClosureDepositState(),
                 eligibleCents: operator.cashDeposit.eligibleCents,
               },
+          countingSessionId: null,
+          countingSessionFinalizedAt: null,
           reopenedAt: now,
           reopenedBy: input.actor.userId,
           reopenedReason: reason,
@@ -916,6 +929,15 @@ export async function reopenCashClosureWithDepositHandling(input: {
     transaction.set(closureRef, nextClosure);
     for (const operator of reopenedOperators) {
       transaction.set(closureRef.collection(CLOSURE_OPERATORS).doc(operator.id), operator);
+    }
+    for (const detachment of sessionDetachments) {
+      transaction.delete(detachment.operatorRef);
+      if (detachment.sessionUpdate) transaction.set(detachment.sessionRef, detachment.sessionUpdate, { merge: true });
+      for (const lock of detachment.locks) transaction.set(lock.ref, lock.value);
+      transaction.set(
+        financialDbAdmin.collection("cashCountingSessionAuditLogs").doc(detachment.audit.id),
+        detachment.audit,
+      );
     }
     const reopenLogId = randomUUID();
     transaction.set(financialDbAdmin.collection("cashClosureAuditLogs").doc(reopenLogId), {
