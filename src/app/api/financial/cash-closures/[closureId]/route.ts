@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
-import { dbAdmin } from "@/lib/firebase-admin";
 import {
   assertCashClosureAccess,
   canUseCashClosure,
   cashClosureActor,
   cashClosureSeniorDivergenceCents,
 } from "@/features/financial/cash-closures/access.server";
-import { resolveOperatorAvatarUrls } from "@/features/financial/cash-closures/operator-avatars";
+import { loadCashClosureOperatorAvatarUrls } from "@/features/financial/cash-closures/operator-avatars.server";
 import {
   getCashClosure,
   saveCashClosureDraft,
@@ -42,15 +41,11 @@ export const GET = withApiErrorHandling<RouteContext>({
   routeOrJob: "/api/financial/cash-closures/[closureId]",
 }, async (request: NextRequest, routeContext) => {
     const { result } = await loadAuthorized(request, routeContext, "view");
-    const usersSnapshot = await dbAdmin.collection("users")
-      .select("username", "avatarUrl", "pdvOperatorIds", "registrationIdPdv")
-      .get();
-    const operatorAvatars = resolveOperatorAvatarUrls({
+    const operatorAvatars = await loadCashClosureOperatorAvatarUrls({
       kioskId: result.closure.kioskId,
       operators: Array.from(new Map(
         result.lines.map((line) => [line.operatorId, { id: line.operatorId, name: line.operatorName }]),
       ).values()),
-      users: usersSnapshot.docs.map((document) => document.data()),
     });
     return NextResponse.json({
       ...result,

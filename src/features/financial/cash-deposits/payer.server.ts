@@ -41,11 +41,11 @@ export async function configuredInterCobrancaReadiness() {
         },
       },
     };
-  } catch (error) {
+  } catch {
     return {
       ...readiness,
       ready: false,
-      reason: error instanceof Error ? error.message : "Pagador institucional da Cobrança Inter inválido.",
+      reason: "O pagador institucional da Cobrança Inter está inválido ou incompleto.",
     };
   }
 }

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth-server";
-import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { canAccessUnit } from "@/lib/unit-access";
-import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
+import { getDreSourceData } from "@/features/financial/dre/source-data.server";
+import { DreSourceLimitError } from "@/features/financial/dre/source-data";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 
 const querySchema = z.object({
@@ -17,35 +17,47 @@ const querySchema = z.object({
 
 export const GET = withApiErrorHandling({
   source: "api-financial",
-  operation: "get-dre-cash-closure-revenue",
-  routeOrJob: "/api/financial/cash-closures/dre-revenue",
+  operation: "get-dre-source-data",
+  routeOrJob: "/api/financial/dre/source-data",
 }, async (request: NextRequest) => {
   const context = await requireUser(request).catch((cause) => {
     throw new AppError({ code: "AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
   });
   if (!context.isDefaultAdmin && (!context.permissions.financial?.view || context.permissions.financial?.dre !== true)) {
-    throw new AppError({ code: "DRE_REVENUE_FORBIDDEN", kind: "AUTHORIZATION" });
+    throw new AppError({ code: "DRE_SOURCE_FORBIDDEN", kind: "AUTHORIZATION" });
   }
   const parsed = querySchema.safeParse({
     kioskIds: request.nextUrl.searchParams.getAll("kioskId"),
     periods: request.nextUrl.searchParams.getAll("period"),
   });
   if (!parsed.success) {
-    throw new AppError({ code: "DRE_REVENUE_QUERY_INVALID", kind: "VALIDATION", safeMessage: "Informe unidades e competências válidas.", cause: parsed.error });
+    throw new AppError({
+      code: "DRE_SOURCE_QUERY_INVALID",
+      kind: "VALIDATION",
+      safeMessage: "Informe unidades e competências válidas.",
+      cause: parsed.error,
+    });
   }
   for (const kioskId of parsed.data.kioskIds) {
     if (!canAccessUnit(context.userDoc, kioskId, { isDefaultAdmin: context.isDefaultAdmin })) {
-      throw new AppError({ code: "DRE_REVENUE_UNIT_FORBIDDEN", kind: "AUTHORIZATION" });
+      throw new AppError({ code: "DRE_SOURCE_UNIT_FORBIDDEN", kind: "AUTHORIZATION" });
     }
   }
-  const refs = parsed.data.kioskIds.flatMap((kioskId) => parsed.data.periods.map((period) => {
-    const [year, month] = period.split("-").map(Number);
-    const id = `${context.workspace_id}_${kioskId}_${year}_${String(month).padStart(2, "0")}`;
-    return financialDbAdmin.collection("cashClosureMonthlySummaries").doc(id);
-  }));
-  const snapshots = await financialDbAdmin.getAll(...refs);
-  const summaries = snapshots
-    .filter((snapshot) => snapshot.exists)
-    .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CashClosureMonthlySummary));
-  return NextResponse.json({ summaries }, { headers: { "Cache-Control": "private, no-store" } });
+  const payload = await getDreSourceData({
+    workspaceId: context.workspace_id,
+    kioskIds: parsed.data.kioskIds,
+    periods: parsed.data.periods,
+  }).catch((cause) => {
+    if (cause instanceof DreSourceLimitError) {
+      throw new AppError({
+        code: "DRE_SOURCE_LIMIT_EXCEEDED",
+        kind: "CONFLICT",
+        safeMessage: "O volume solicitado ultrapassa o limite operacional da DRE.",
+        cause,
+        metadata: { limitReason: cause.reason },
+      });
+    }
+    throw cause;
+  });
+  return NextResponse.json(payload, { headers: { "Cache-Control": "private, no-store" } });
 });

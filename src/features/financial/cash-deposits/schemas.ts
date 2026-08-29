@@ -19,3 +19,7 @@ export const issueCashDepositSchema = z.object({
   (value) => value.dueBusinessDays === undefined || value.dueDate === undefined,
   "Informe o prazo ou a data de vencimento, não ambos.",
 );
+
+export const cancelCashDepositSchema = z.object({
+  reason: z.string().trim().min(1).max(50),
+}).strict();

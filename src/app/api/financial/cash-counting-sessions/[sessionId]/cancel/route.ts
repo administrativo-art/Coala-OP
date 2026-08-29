@@ -39,9 +39,12 @@ export const POST = withApiErrorHandling<RouteContext>({
     actor: cashClosureActor(context),
     canManageOthers: canManageCashCountingSessionsOfOthers(context),
   }).catch((cause) => {
-    const message = cause instanceof Error ? cause.message : "";
-    const safeMessage = message.includes("sessão") || message.includes("Sessão") ? message : "Não foi possível cancelar a sessão.";
-    throw new AppError({ code: "CASH_COUNTING_SESSION_CANCEL_CONFLICT", kind: "CONFLICT", safeMessage, cause });
+    throw new AppError({
+      code: "CASH_COUNTING_SESSION_CANCEL_CONFLICT",
+      kind: "CONFLICT",
+      safeMessage: "Somente uma sessão aberta e sem operadores finalizados pode ser cancelada.",
+      cause,
+    });
   });
   return NextResponse.json({ session });
 });

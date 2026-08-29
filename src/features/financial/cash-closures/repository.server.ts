@@ -24,7 +24,7 @@ import {
 } from "./persistence";
 import { assertCashClosureTransition, canEditCashClosure } from "./state-machine";
 import {
-  buildCashClosureOperators,
+  buildCashClosureOperators as buildUnboundedCashClosureOperators,
   withCashClosureOperatorAggregate,
 } from "./operators";
 import { refreshCashClosureSummaries } from "./summaries.server";
@@ -47,6 +47,8 @@ import type {
 const CLOSURES = "cashClosures";
 const AUDIT_LOGS = "cashClosureAuditLogs";
 const OPERATORS = "cashClosureOperators";
+const MAX_CASH_CLOSURE_LINES = 350;
+const MAX_CASH_CLOSURE_OPERATORS = 50;
 
 function closureRef(id: string) {
   return financialDbAdmin.collection(CLOSURES).doc(id);
@@ -58,6 +60,28 @@ function auditRef() {
 
 function snapshotValue<T extends { id: string }>(snapshot: FirebaseFirestore.DocumentSnapshot) {
   return { id: snapshot.id, ...snapshot.data() } as T;
+}
+
+function assertCashClosureCollectionLimits(
+  lineSnapshot: FirebaseFirestore.QuerySnapshot,
+  operatorSnapshot: FirebaseFirestore.QuerySnapshot,
+) {
+  if (lineSnapshot.size > MAX_CASH_CLOSURE_LINES) {
+    throw new Error("O fechamento ultrapassa o limite operacional de linhas.");
+  }
+  if (operatorSnapshot.size > MAX_CASH_CLOSURE_OPERATORS) {
+    throw new Error("O fechamento ultrapassa o limite operacional de operadores.");
+  }
+}
+
+function buildBoundedCashClosureOperators(
+  input: Parameters<typeof buildUnboundedCashClosureOperators>[0],
+) {
+  const result = buildUnboundedCashClosureOperators(input);
+  if (input.lines.length > MAX_CASH_CLOSURE_LINES || result.operators.length > MAX_CASH_CLOSURE_OPERATORS) {
+    throw new Error("O fechamento ultrapassa o limite operacional de linhas ou operadores.");
+  }
+  return result;
 }
 
 function auditPayload(input: {
@@ -101,10 +125,11 @@ export async function getCashClosure(id: string): Promise<CashClosureWithLines |
   const ref = closureRef(id);
   const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
     ref.get(),
-    ref.collection("lines").get(),
-    ref.collection(OPERATORS).limit(100).get(),
+    ref.collection("lines").limit(MAX_CASH_CLOSURE_LINES + 1).get(),
+    ref.collection(OPERATORS).limit(MAX_CASH_CLOSURE_OPERATORS + 1).get(),
   ]);
   if (!closureSnapshot.exists) return null;
+  assertCashClosureCollectionLimits(lineSnapshot, operatorSnapshot);
   const normalized = normalizeCashClosureWithLines(
     snapshotValue<CashClosure>(closureSnapshot),
     lineSnapshot.docs
@@ -114,7 +139,7 @@ export async function getCashClosure(id: string): Promise<CashClosureWithLines |
           left.operatorName.localeCompare(right.operatorName, "pt-BR") || left.channel.localeCompare(right.channel),
       ),
   );
-  const operators = buildCashClosureOperators({
+  const operators = buildBoundedCashClosureOperators({
     closure: normalized.closure,
     lines: normalized.lines,
     existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
@@ -172,10 +197,11 @@ export async function upsertClosureFromPdv(built: BuiltCashClosure, actor: CashC
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
     const [closureSnapshot, lineSnapshot, operatorSnapshot, periodPolicySnapshot] = await Promise.all([
       transaction.get(ref),
-      transaction.get(ref.collection("lines")),
-      transaction.get(ref.collection(OPERATORS).limit(100)),
+      transaction.get(ref.collection("lines").limit(MAX_CASH_CLOSURE_LINES + 1)),
+      transaction.get(ref.collection(OPERATORS).limit(MAX_CASH_CLOSURE_OPERATORS + 1)),
       transaction.get(periodPolicyRef),
     ]);
+    assertCashClosureCollectionLimits(lineSnapshot, operatorSnapshot);
     const existingClosure = closureSnapshot.exists
       ? snapshotValue<CashClosure>(closureSnapshot)
       : null;
@@ -198,7 +224,7 @@ export async function upsertClosureFromPdv(built: BuiltCashClosure, actor: CashC
         : merged.closure.cashDepositPolicyReason,
     };
 
-    const operatorResult = buildCashClosureOperators({
+    const operatorResult = buildBoundedCashClosureOperators({
       closure: merged.closure,
       lines: merged.lines,
       existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
@@ -370,10 +396,11 @@ export async function saveCashClosureDraft(
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
     const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
-      transaction.get(ref.collection("lines")),
-      transaction.get(ref.collection(OPERATORS).limit(100)),
+      transaction.get(ref.collection("lines").limit(MAX_CASH_CLOSURE_LINES + 1)),
+      transaction.get(ref.collection(OPERATORS).limit(MAX_CASH_CLOSURE_OPERATORS + 1)),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
+    assertCashClosureCollectionLimits(lineSnapshot, operatorSnapshot);
     const rawClosure = snapshotValue<CashClosure>(closureSnapshot);
     const normalized = normalizeCashClosureWithLines(
       rawClosure,
@@ -388,7 +415,7 @@ export async function saveCashClosureDraft(
     if (updateById.size !== updates.length) throw new Error("Há linhas duplicadas no payload.");
     const now = new Date().toISOString();
     const normalizedById = new Map(normalized.lines.map((line) => [line.id, line]));
-    const currentOperators = buildCashClosureOperators({
+    const currentOperators = buildBoundedCashClosureOperators({
       closure,
       lines: normalized.lines,
       existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
@@ -513,7 +540,7 @@ export async function saveCashClosureDraft(
       return next;
     });
     if (updateById.size > 0) throw new Error("Uma ou mais linhas não pertencem a este fechamento.");
-    const operatorResult = buildCashClosureOperators({
+    const operatorResult = buildBoundedCashClosureOperators({
       closure,
       lines: nextLines,
       existingOperators: currentOperators,
@@ -543,10 +570,11 @@ export async function adjustCashClosureExpected(
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
     const [closureSnapshot, linesSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
-      transaction.get(ref.collection("lines")),
-      transaction.get(ref.collection(OPERATORS).limit(100)),
+      transaction.get(ref.collection("lines").limit(MAX_CASH_CLOSURE_LINES + 1)),
+      transaction.get(ref.collection(OPERATORS).limit(MAX_CASH_CLOSURE_OPERATORS + 1)),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
+    assertCashClosureCollectionLimits(linesSnapshot, operatorSnapshot);
     const closure = snapshotValue<CashClosure>(closureSnapshot);
     if (!canEditCashClosure(closure.status)) {
       throw new Error("O esperado só pode ser corrigido em fechamento ainda não finalizado.");
@@ -562,7 +590,7 @@ export async function adjustCashClosureExpected(
     );
     const current = normalized.lines.find((line) => line.id === input.lineId);
     if (!current) throw new Error("Linha do fechamento não encontrada.");
-    const currentOperators = buildCashClosureOperators({
+    const currentOperators = buildBoundedCashClosureOperators({
       closure: normalized.closure,
       lines: normalized.lines,
       existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
@@ -583,7 +611,7 @@ export async function adjustCashClosureExpected(
       now,
     );
     const lines = normalized.lines.map((line) => line.id === input.lineId ? nextLine : line);
-    const operatorResult = buildCashClosureOperators({ closure, lines, existingOperators: currentOperators, now });
+    const operatorResult = buildBoundedCashClosureOperators({ closure, lines, existingOperators: currentOperators, now });
     const nextClosure = withCashClosureOperatorAggregate(
       recomputeCashClosureFromLines(closure, lines, now),
       operatorResult.operators,
@@ -626,10 +654,11 @@ export async function restoreCashClosureExpected(
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
     const [closureSnapshot, linesSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
-      transaction.get(ref.collection("lines")),
-      transaction.get(ref.collection(OPERATORS).limit(100)),
+      transaction.get(ref.collection("lines").limit(MAX_CASH_CLOSURE_LINES + 1)),
+      transaction.get(ref.collection(OPERATORS).limit(MAX_CASH_CLOSURE_OPERATORS + 1)),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
+    assertCashClosureCollectionLimits(linesSnapshot, operatorSnapshot);
     const closure = snapshotValue<CashClosure>(closureSnapshot);
     if (!canEditCashClosure(closure.status)) {
       throw new Error("O cálculo só pode ser restaurado em fechamento ainda não finalizado.");
@@ -640,7 +669,7 @@ export async function restoreCashClosureExpected(
     );
     const current = normalized.lines.find((line) => line.id === input.lineId);
     if (!current) throw new Error("Linha do fechamento não encontrada.");
-    const currentOperators = buildCashClosureOperators({
+    const currentOperators = buildBoundedCashClosureOperators({
       closure: normalized.closure,
       lines: normalized.lines,
       existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
@@ -655,7 +684,7 @@ export async function restoreCashClosureExpected(
     const now = new Date().toISOString();
     const nextLine = restoreCalculatedExpectedLine(current, now);
     const lines = normalized.lines.map((line) => line.id === input.lineId ? nextLine : line);
-    const operatorResult = buildCashClosureOperators({ closure, lines, existingOperators: currentOperators, now });
+    const operatorResult = buildBoundedCashClosureOperators({ closure, lines, existingOperators: currentOperators, now });
     const nextClosure = withCashClosureOperatorAggregate(
       recomputeCashClosureFromLines(closure, lines, now),
       operatorResult.operators,
@@ -794,10 +823,11 @@ export async function finalizeCashClosureOperator(
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
     const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
       transaction.get(ref),
-      transaction.get(ref.collection("lines")),
-      transaction.get(ref.collection(OPERATORS).limit(100)),
+      transaction.get(ref.collection("lines").limit(MAX_CASH_CLOSURE_LINES + 1)),
+      transaction.get(ref.collection(OPERATORS).limit(MAX_CASH_CLOSURE_OPERATORS + 1)),
     ]);
     if (!closureSnapshot.exists) throw new Error("Fechamento não encontrado.");
+    assertCashClosureCollectionLimits(lineSnapshot, operatorSnapshot);
     const rawClosure = snapshotValue<CashClosure>(closureSnapshot);
     const normalized = normalizeCashClosureWithLines(
       rawClosure,
@@ -815,7 +845,7 @@ export async function finalizeCashClosureOperator(
     );
     const now = new Date().toISOString();
     assertCashClosureTransition(closure.status, "approved");
-    const currentOperators = buildCashClosureOperators({
+    const currentOperators = buildBoundedCashClosureOperators({
       closure,
       lines: normalized.lines,
       existingOperators: operatorSnapshot.docs.map((document) => snapshotValue<CashClosureOperator>(document)),
@@ -886,6 +916,7 @@ export async function finalizeCashClosureOperator(
     transaction.set(ref, next);
     transaction.set(ref.collection(OPERATORS).doc(finalizedOperator.id), finalizedOperator);
     if (sessionAttachment) {
+      transaction.set(sessionAttachment.sessionRef, sessionAttachment.sessionUpdate, { merge: true });
       transaction.set(sessionAttachment.operatorRef, sessionAttachment.sessionOperator);
       transaction.set(financialDbAdmin.collection("cashCountingSessionAuditLogs").doc(sessionAttachment.audit.id), sessionAttachment.audit);
     }

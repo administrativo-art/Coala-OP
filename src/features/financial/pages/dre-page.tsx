@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChevronLeft, ChevronRight, Download, LayoutDashboard, Table2, UsersRound } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, LayoutDashboard, Table2, UsersRound } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
@@ -16,9 +15,8 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useKiosks } from "@/hooks/use-kiosks";
-import { db } from "@/lib/firebase";
-import type { SalesReport } from "@/types";
 import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
+import type { DreSalesUnitMonthSummary, DreSourceDataPayload } from "@/features/financial/dre/source-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,66 +66,47 @@ export function DrePage() {
   const { data: accounts } = useFinancialCollection<any>(financialCollection("accounts"));
   const { data: resultCenters, loading: loadingResultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
 
-  const [salesReports, setSalesReports] = useState<SalesReport[]>([]);
-  const [simulationCmvMap, setSimulationCmvMap] = useState<Record<string, number>>({});
-  const [loadingCmv, setLoadingCmv] = useState(true);
+  const [salesSummaries, setSalesSummaries] = useState<DreSalesUnitMonthSummary[]>([]);
   const [closureRevenueSummaries, setClosureRevenueSummaries] = useState<CashClosureMonthlySummary[]>([]);
-  const [loadingRevenue, setLoadingRevenue] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const salesQueries = dreMonthKeysEndingAt(selectedMonth).map((monthKey) => {
-          const [year, month] = monthKey.split("-").map(Number);
-          return getDocs(query(
-            collection(db, "salesReports"),
-            where("year", "==", year),
-            where("month", "==", month),
-            limit(500),
-          ));
-        });
-        const [salesSnapshots, simSnap] = await Promise.all([
-          Promise.all(salesQueries),
-          getDocs(query(collection(db, "productSimulations"), limit(2_000))),
-        ]);
-        if (cancelled) return;
-        setSalesReports(salesSnapshots.flatMap((snapshot) => snapshot.docs.map((document) => ({ id: document.id, ...document.data() } as SalesReport))));
-        const map: Record<string, number> = {};
-        simSnap.docs.forEach((d) => { map[d.id] = (d.data() as any).totalCmv || 0; });
-        setSimulationCmvMap(map);
-      } finally {
-        if (!cancelled) setLoadingCmv(false);
-      }
-    }
-    void load();
-    return () => { cancelled = true; };
-  }, [selectedMonth]);
+  const [missingSimulationIds, setMissingSimulationIds] = useState<string[]>([]);
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const [loadingSource, setLoadingSource] = useState(true);
 
   useEffect(() => {
     if (!firebaseUser || kiosks.length === 0 || !permissions.financial?.dre) {
+      setSalesSummaries([]);
       setClosureRevenueSummaries([]);
-      setLoadingRevenue(false);
+      setMissingSimulationIds([]);
+      setSourceError(null);
+      setLoadingSource(false);
       return;
     }
     let cancelled = false;
-    setLoadingRevenue(true);
+    setLoadingSource(true);
+    setSourceError(null);
     const params = new URLSearchParams();
     kiosks.slice(0, 20).forEach((kiosk) => params.append("kioskId", kiosk.id));
     dreMonthKeysEndingAt(selectedMonth).forEach((period) => params.append("period", period));
-    void api<{ summaries?: CashClosureMonthlySummary[] }>(`/api/financial/cash-closures/dre-revenue?${params}`, {
-      fallbackError: "Falha ao carregar a receita conferida.",
+    void api<DreSourceDataPayload>(`/api/financial/dre/source-data?${params}`, {
+      fallbackError: "Falha ao carregar as fontes da DRE.",
     }).then((payload) => {
-      if (!cancelled) setClosureRevenueSummaries(payload.summaries ?? []);
-    }).catch(() => {
-      if (!cancelled) setClosureRevenueSummaries([]);
+      if (cancelled) return;
+      setSalesSummaries(payload.salesSummaries ?? []);
+      setClosureRevenueSummaries((payload.closureSummaries ?? []) as CashClosureMonthlySummary[]);
+      setMissingSimulationIds(payload.missingSimulationIds ?? []);
+    }).catch((error) => {
+      if (cancelled) return;
+      setSalesSummaries([]);
+      setClosureRevenueSummaries([]);
+      setMissingSimulationIds([]);
+      setSourceError(error instanceof Error ? error.message : "Falha ao carregar as fontes da DRE.");
     }).finally(() => {
-      if (!cancelled) setLoadingRevenue(false);
+      if (!cancelled) setLoadingSource(false);
     });
     return () => { cancelled = true; };
   }, [api, firebaseUser, kiosks, permissions.financial?.dre, selectedMonth]);
 
-  const loading = loadingExp || loadingResultCenters || loadingCmv || loadingRevenue;
+  const loading = loadingExp || loadingResultCenters || loadingSource;
 
   if (!permissions.financial?.dre) {
     return <FinancialAccessGuard title="DRE" description="Seu perfil não possui permissão para acessar o demonstrativo de resultado." />;
@@ -187,33 +166,30 @@ export function DrePage() {
     `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
     (summary.dreRevenueTotalCents ?? summary.expectedTotalCents + summary.differenceTotalCents) / 100,
   ])), [closureRevenueSummaries]);
+  const salesByUnitMonth = useMemo(() => new Map(salesSummaries.map((summary) => [
+    `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
+    summary,
+  ])), [salesSummaries]);
 
   // ── computation helpers ─────────────────────────────────────────────────────
 
   function getRevenue(monthKey: string): number {
     const unitIds = selectedKioskId
       ? [selectedKioskId]
-      : Array.from(new Set([...kiosks.map((kiosk) => kiosk.id), ...salesReports.map((report) => report.kioskId)]));
+      : Array.from(new Set([...kiosks.map((kiosk) => kiosk.id), ...salesSummaries.map((summary) => summary.kioskId)]));
     return unitIds.reduce((total, kioskId) => {
       const countedRevenue = closureRevenueByUnitMonth.get(`${kioskId}:${monthKey}`);
       if (countedRevenue !== undefined) return total + countedRevenue;
-      const [year, month] = monthKey.split("-").map(Number);
-      const pdvRevenue = salesReports
-        .filter((report) => report.kioskId === kioskId && report.year === year && report.month === month)
-        .reduce((sum, report) => sum + report.items.reduce(
-          (itemSum, item) => itemSum + item.quantity * (item.unitPrice ?? 0),
-          0,
-        ), 0);
-      return total + pdvRevenue;
+      return total + (salesByUnitMonth.get(`${kioskId}:${monthKey}`)?.revenue ?? 0);
     }, 0);
   }
 
   function getCmv(monthKey: string): number {
     const [y, m] = monthKey.split("-").map(Number);
-    return salesReports.reduce((sum, r) => {
-      if (r.year !== y || r.month !== m) return sum;
-      if (selectedKioskId && r.kioskId !== selectedKioskId) return sum;
-      return sum + r.items.reduce((s, i) => s + i.quantity * (simulationCmvMap[i.simulationId] || 0), 0);
+    return salesSummaries.reduce((sum, summary) => {
+      if (summary.year !== y || summary.month !== m) return sum;
+      if (selectedKioskId && summary.kioskId !== selectedKioskId) return sum;
+      return sum + summary.cmv;
     }, 0);
   }
 
@@ -287,12 +263,12 @@ export function DrePage() {
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartMonthKeys, closureRevenueByUnitMonth, expenses, kiosks, salesReports, simulationCmvMap, selectedUnitName, selectedKioskId, accountDrePosMap, accountIsDreMap]);
+  }, [chartMonthKeys, closureRevenueByUnitMonth, expenses, kiosks, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, accountDrePosMap, accountIsDreMap]);
 
   const metrics = useMemo(
     () => getDreMetrics(selectedMonth),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedMonth, closureRevenueByUnitMonth, expenses, kiosks, salesReports, simulationCmvMap, selectedUnitName, selectedKioskId, accountDrePosMap, accountIsDreMap]
+    [selectedMonth, closureRevenueByUnitMonth, expenses, kiosks, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, accountDrePosMap, accountIsDreMap]
   );
 
   const accountNameById = useMemo(() => {
@@ -338,14 +314,11 @@ export function DrePage() {
 
   const cmvByUnit = useMemo(() => {
     const [y, m] = selectedMonth.split("-").map(Number);
-    const map: Record<string, number> = {};
-    salesReports.forEach((r) => {
-      if (r.year !== y || r.month !== m) return;
-      const v = r.items.reduce((s, i) => s + i.quantity * (simulationCmvMap[i.simulationId] || 0), 0);
-      map[r.kioskId] = (map[r.kioskId] || 0) + v;
-    });
-    return Object.entries(map).map(([kioskId, cmv]) => ({ kioskId, name: kioskNameById[kioskId] || kioskId, cmv })).filter((r) => r.cmv > 0).sort((a, b) => b.cmv - a.cmv);
-  }, [salesReports, simulationCmvMap, selectedMonth, kioskNameById]);
+    return salesSummaries
+      .filter((summary) => summary.year === y && summary.month === m && summary.cmv > 0)
+      .map((summary) => ({ kioskId: summary.kioskId, name: kioskNameById[summary.kioskId] || summary.kioskId, cmv: summary.cmv }))
+      .sort((left, right) => right.cmv - left.cmv);
+  }, [salesSummaries, selectedMonth, kioskNameById]);
 
   const hasDreCategories = useMemo(
     () => (accounts || []).length > 0,
@@ -486,10 +459,13 @@ export function DrePage() {
           </div>
 
           {(viewMode !== "people" || canExportPersonnelCosts) ? (
-            <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+            <Button variant="outline" onClick={exportCsv} disabled={Boolean(sourceError) || missingSimulationIds.length > 0}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
           ) : null}
         </div>
       </div>
+
+      {sourceError && <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
+      {!sourceError && missingSimulationIds.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> {missingSimulationIds.length} ficha(s) referenciada(s) pelas vendas não foram encontradas. A exportação foi bloqueada; exemplos: {missingSimulationIds.slice(0, 5).join(", ")}.</span></div>}
 
       {/* ── DASHBOARD ───────────────────────────────────────────────────────── */}
       {viewMode === "dashboard" && (

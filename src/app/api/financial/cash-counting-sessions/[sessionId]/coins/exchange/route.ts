@@ -42,11 +42,12 @@ export const POST = withApiErrorHandling<RouteContext>({
     actor: cashClosureActor(context),
     canManageOthers: canManageCashCountingSessionsOfOthers(context),
   }).catch((cause) => {
-    const message = cause instanceof Error ? cause.message : "";
-    const safeMessage = message.includes("moedas") || message.includes("cédulas") || message.includes("saldo") || message.includes("sessão")
-      ? message
-      : "Não foi possível registrar a troca de moedas.";
-    throw new AppError({ code: "CASH_COIN_EXCHANGE_CONFLICT", kind: "CONFLICT", safeMessage, cause });
+    throw new AppError({
+      code: "CASH_COIN_EXCHANGE_CONFLICT",
+      kind: "CONFLICT",
+      safeMessage: "A troca deve conter somente cédulas e não pode ultrapassar o saldo de moedas da sessão.",
+      cause,
+    });
   });
   return NextResponse.json(result);
 });

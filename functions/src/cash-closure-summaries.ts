@@ -1,13 +1,10 @@
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 const financialDb = getFirestore('coala-financeiro');
-const CHANNELS = ['cash', 'pix', 'debit_card', 'credit_card', 'voucher', 'signed_account', 'other'] as const;
-
-function totals() {
-  return Object.fromEntries(CHANNELS.map((channel) => [channel, 0])) as Record<string, number>;
-}
+const REINFORCEMENT_PAGE_SIZE = 500;
+const MAX_OPERATIONAL_KIOSKS = 1_000;
 
 function text(value: unknown) {
   return typeof value === 'string' ? value : '';
@@ -43,83 +40,23 @@ function currentPeriod() {
   };
 }
 
-async function recomputeClosure(closureId: string) {
-  const closureRef = financialDb.collection('cashClosures').doc(closureId);
-  const [closureSnapshot, linesSnapshot] = await Promise.all([
-    closureRef.get(), closureRef.collection('lines').get(),
-  ]);
-  if (!closureSnapshot.exists) return;
-  const expectedByChannelCents = totals();
-  const countedByChannelCents = totals();
-  const differenceByChannelCents = totals();
-  let expectedTotalCents = 0;
-  let countedTotalCents = 0;
-  let differenceTotalCents = 0;
-  let pendingLineCount = 0;
-  let divergentLineCount = 0;
-  let matchedLineCount = 0;
-  const operatorIds = new Set<string>();
-  const batch = financialDb.batch();
-  let lineChanged = false;
-
-  for (const document of linesSnapshot.docs) {
-    const data = document.data();
-    const channel = CHANNELS.includes(data.channel) ? data.channel : 'other';
-    const expectedCents = number(data.expectedCents);
-    const countedCents = typeof data.countedCents === 'number' ? data.countedCents : null;
-    const differenceCents = countedCents === null ? null : countedCents - expectedCents;
-    const status = differenceCents === null ? 'pending' : differenceCents === 0 ? 'matched' : 'divergent';
-    expectedByChannelCents[channel] += expectedCents;
-    expectedTotalCents += expectedCents;
-    if (countedCents === null) pendingLineCount++;
-    else {
-      countedByChannelCents[channel] += countedCents;
-      countedTotalCents += countedCents;
-    }
-    if (differenceCents !== null) {
-      differenceByChannelCents[channel] += differenceCents;
-      differenceTotalCents += differenceCents;
-    }
-    if (status === 'matched') matchedLineCount++;
-    if (status === 'divergent') divergentLineCount++;
-    if (text(data.operatorId)) operatorIds.add(text(data.operatorId));
-    if (data.differenceCents !== differenceCents || data.status !== status) {
-      lineChanged = true;
-      batch.set(document.ref, { differenceCents, status, updatedAt: new Date().toISOString() }, { merge: true });
-    }
-  }
-
-  batch.set(closureRef, {
-    expectedTotalCents,
-    countedTotalCents,
-    differenceTotalCents,
-    expectedByChannelCents,
-    countedByChannelCents,
-    differenceByChannelCents,
-    expectedCashCents: expectedByChannelCents.cash,
-    countedCashCents: countedByChannelCents.cash,
-    operatorCount: operatorIds.size,
-    pendingLineCount,
-    divergentLineCount,
-    matchedLineCount,
-    updatedAt: new Date().toISOString(),
-  }, { merge: true });
-  await batch.commit();
-  if (lineChanged) console.log(`[cashClosureLineWritten] Linhas derivadas corrigidas em ${closureId}.`);
-}
-
 function maxText(values: string[]) {
   const sorted = values.filter(Boolean).sort();
   return sorted.length > 0 ? sorted[sorted.length - 1] : null;
 }
 
 async function recomputeSummary(workspaceId: string, kioskId: string, year: number, month: number) {
+  const maximumClosureCount = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const snapshot = await financialDb.collection('cashClosures')
     .where('workspaceId', '==', workspaceId)
     .where('kioskId', '==', kioskId)
     .where('year', '==', year)
     .where('month', '==', month)
+    .limit(maximumClosureCount + 1)
     .get();
+  if (snapshot.size > maximumClosureCount) {
+    throw new Error('Existe mais de um fechamento diário para a unidade nesta competência.');
+  }
   const closures = snapshot.docs.map((document) => document.data());
   const first = closures[0] ?? {};
   const now = new Date().toISOString();
@@ -160,14 +97,6 @@ async function recomputeSummary(workspaceId: string, kioskId: string, year: numb
   await batch.commit();
 }
 
-export const cashClosureLineWritten = onDocumentWritten({
-  document: 'cashClosures/{closureId}/lines/{lineId}',
-  database: 'coala-financeiro',
-  region: 'southamerica-east1',
-}, async (event) => {
-  await recomputeClosure(event.params.closureId);
-});
-
 export const cashClosureSummaryWritten = onDocumentWritten({
   document: 'cashClosures/{closureId}',
   database: 'coala-financeiro',
@@ -185,12 +114,29 @@ export const cashClosureSummaryReinforcement = onSchedule({
   memory: '256MiB',
 }, async () => {
   const current = currentPeriod();
-  const snapshot = await financialDb.collection('cashClosures')
-    .where('year', '==', current.year)
-    .where('month', '==', current.month)
-    .get();
+  const maximumClosureCount = new Date(Date.UTC(current.year, current.month, 0)).getUTCDate()
+    * MAX_OPERATIONAL_KIOSKS;
+  const documents: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  let cursor: string | null = null;
+  while (documents.length <= maximumClosureCount) {
+    const remaining = maximumClosureCount + 1 - documents.length;
+    let query: FirebaseFirestore.Query = financialDb.collection('cashClosures')
+      .where('year', '==', current.year)
+      .where('month', '==', current.month)
+      .orderBy(FieldPath.documentId())
+      .limit(Math.min(REINFORCEMENT_PAGE_SIZE, remaining));
+    if (cursor) query = query.startAfter(cursor);
+    const snapshot = await query.get();
+    documents.push(...snapshot.docs);
+    if (snapshot.empty || snapshot.size < Math.min(REINFORCEMENT_PAGE_SIZE, remaining)) break;
+    cursor = snapshot.docs[snapshot.docs.length - 1]?.id ?? null;
+    if (!cursor) break;
+  }
+  if (documents.length > maximumClosureCount) {
+    throw new Error('A quantidade de fechamentos do mês ultrapassa o limite operacional do reforço.');
+  }
   const keys = new Map<string, { workspaceId: string; kioskId: string }>();
-  for (const document of snapshot.docs) {
+  for (const document of documents) {
     const data = document.data();
     const workspaceId = text(data.workspaceId);
     const kioskId = text(data.kioskId);

@@ -81,7 +81,7 @@ export const POST = withApiErrorHandling({
       throw new AppError({
         code: "CASH_COUNTING_SESSION_SCOPE_LOCKED",
         kind: "CONFLICT",
-        safeMessage: message,
+        safeMessage: "Já existe uma sessão aberta para uma das unidades e competências selecionadas.",
         cause,
       });
     }

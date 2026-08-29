@@ -64,14 +64,13 @@ export async function syncCashClosure(input: {
     });
     return upsertClosureFromPdv(built, input.actor);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha desconhecida ao sincronizar o PDV.";
     await recordCashClosureSyncError({
       workspaceId: input.workspaceId,
       kioskId: kiosk.id,
       kioskName: kiosk.name,
       pdvFilialId: kiosk.pdvFilialId,
       date: input.date,
-      error: message,
+      error: "Falha ao sincronizar com o PDV Legal.",
     });
     throw error;
   }

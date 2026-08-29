@@ -778,6 +778,25 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
           kioskIds: ["tirirical", "joao-paulo"],
           status: "open",
         }),
+        setDoc(doc(db, "cashCountingSessions/session-1/operators/operator-1"), {
+          kioskId: "tirirical",
+          countedCashCents: 10000,
+        }),
+        setDoc(doc(db, "cashCountingSessionLocks/tirirical_2026-07"), {
+          sessionId: "session-1",
+        }),
+        setDoc(doc(db, "cashCountingSessionAuditLogs/audit-1"), {
+          sessionId: "session-1",
+          action: "created",
+        }),
+        setDoc(doc(db, "cashDepositPeriodPolicies/coala_2026-07"), {
+          workspaceId: "coala",
+          policy: "dre_only",
+        }),
+        setDoc(doc(db, "cashDepositPeriodPolicyAuditLogs/policy-audit-1"), {
+          policyId: "coala_2026-07",
+          action: "created",
+        }),
       ]);
     });
 
@@ -807,6 +826,15 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
     await assertFails(getDoc(doc(operator.firestore(), "cashDepositBatches/session-batch")));
     await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashDepositBatches/session-batch")));
     await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessions/session-1")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessions/session-1/operators/operator-1")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessionLocks/tirirical_2026-07")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessionAuditLogs/audit-1")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashDepositPeriodPolicies/coala_2026-07")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashDepositPeriodPolicyAuditLogs/policy-audit-1")));
+    await assertFails(setDoc(doc(allSessionUnits.firestore(), "cashDepositPeriodPolicies/coala_2026-08"), {
+      workspaceId: "coala",
+      policy: "dre_only",
+    }));
     await assertFails(updateDoc(doc(operator.firestore(), "cashDepositBatches/batch-1"), {
       status: "paid",
     }));

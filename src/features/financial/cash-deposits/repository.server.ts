@@ -511,8 +511,15 @@ export async function listCashDepositBatches(input: {
 
 export async function getCashDepositBatch(id: string) {
   const ref = financialDbAdmin.collection(BATCHES).doc(id);
-  const [batchSnapshot, itemSnapshot] = await Promise.all([ref.get(), ref.collection("items").get()]);
+  const maximumItemCount = 500;
+  const [batchSnapshot, itemSnapshot] = await Promise.all([
+    ref.get(),
+    ref.collection("items").limit(maximumItemCount + 1).get(),
+  ]);
   if (!batchSnapshot.exists) return null;
+  if (itemSnapshot.size > maximumItemCount) {
+    throw new Error("O bloco ultrapassa o limite operacional de itens de depósito.");
+  }
   return {
     batch: normalizeCashDepositBatch(snapshotValue<CashDepositBatch>(batchSnapshot)),
     items: itemSnapshot.docs.map((document) => snapshotValue<CashDepositBatchItem>(document)),
@@ -1214,10 +1221,15 @@ export async function processCashDepositQueue(
 }
 
 export async function listPendingCashDepositAdjustments(workspaceId: string) {
+  const maximumAdjustmentCount = 500;
   const snapshot = await financialDbAdmin.collection("cashDepositAdjustments")
     .where("workspaceId", "==", workspaceId)
     .where("status", "==", "pending_allocation")
     .orderBy("createdAt", "asc")
+    .limit(maximumAdjustmentCount + 1)
     .get();
+  if (snapshot.size > maximumAdjustmentCount) {
+    throw new Error("A fila ultrapassa o limite operacional de ajustes de depósito pendentes.");
+  }
   return snapshot.docs.map((document) => snapshotValue<CashDepositAdjustment>(document));
 }

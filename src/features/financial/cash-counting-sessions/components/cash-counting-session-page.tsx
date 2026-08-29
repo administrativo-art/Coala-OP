@@ -25,7 +25,12 @@ import {
   type CashCountingSessionOperator,
 } from "../types";
 
-type Payload = { session: CashCountingSession; operators: CashCountingSessionOperator[] };
+type OperatorCursor = { finalizedAt: string; id: string };
+type Payload = {
+  session: CashCountingSession;
+  operators: CashCountingSessionOperator[];
+  nextOperatorCursor: OperatorCursor | null;
+};
 const STATUS_LABEL: Record<CashCountingSession["status"], string> = {
   open: "Contagem em andamento",
   counted: "Contagem encerrada",
@@ -60,6 +65,7 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
   const { toast } = useToast();
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [working, setWorking] = useState(false);
   const [quantities, setQuantities] = useState(() => quantityRecord(CASH_COUNTING_DENOMINATION_VALUES_CENTS));
   const [exchangeQuantities, setExchangeQuantities] = useState(() => quantityRecord(CASH_COUNTING_NOTE_VALUES_CENTS));
@@ -77,6 +83,28 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
     }
   }, [api, sessionId, toast]);
   useEffect(() => { void load(); }, [load]);
+
+  async function loadMoreOperators() {
+    if (!data?.nextOperatorCursor) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        limit: "100",
+        afterFinalizedAt: data.nextOperatorCursor.finalizedAt,
+        afterId: data.nextOperatorCursor.id,
+      });
+      const next = await api<Payload>(`/api/financial/cash-counting-sessions/${sessionId}?${params}`);
+      setData((current) => current ? {
+        session: next.session,
+        operators: Array.from(new Map([...current.operators, ...next.operators].map((operator) => [operator.id, operator])).values()),
+        nextOperatorCursor: next.nextOperatorCursor,
+      } : next);
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar mais operadores." });
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const denominationTotal = useMemo(() => CASH_COUNTING_DENOMINATION_VALUES_CENTS.reduce((total, value) => total + value * (quantities[value] ?? 0), 0), [quantities]);
   const exchangeTotal = useMemo(() => CASH_COUNTING_NOTE_VALUES_CENTS.reduce((total, value) => total + value * (exchangeQuantities[value] ?? 0), 0), [exchangeQuantities]);
@@ -98,15 +126,9 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
   if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   if (!data) return null;
   const { session, operators } = data;
-  const liveCountedCashCents = session.status === "open"
-    ? operators.reduce((sum, operator) => sum + operator.countedCashCents, 0)
-    : session.countedCashCents;
-  const liveDepositEligibleCents = session.status === "open"
-    ? operators.reduce((sum, operator) => sum + operator.depositEligibleCents, 0)
-    : session.depositEligibleCents;
-  const liveDreOnlyCashCents = session.status === "open"
-    ? operators.filter((operator) => operator.depositPolicy === "dre_only").reduce((sum, operator) => sum + operator.countedCashCents, 0)
-    : session.dreOnlyCashCents;
+  const liveCountedCashCents = session.countedCashCents;
+  const liveDepositEligibleCents = session.depositEligibleCents;
+  const liveDreOnlyCashCents = session.dreOnlyCashCents;
   return <PageContainer variant="default" className="space-y-5 pb-10">
     <CashControlNavigation active="closures" crumbs={[
       { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" },
@@ -114,11 +136,11 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
     ]} />
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div><div className="flex flex-wrap items-center gap-2"><h1 className="text-3xl font-black tracking-tight">Sessão de contagem</h1><Badge variant="outline" className="rounded-full px-3 py-1">{STATUS_LABEL[session.status]}</Badge></div><p className="mt-1.5 font-mono text-xs text-zinc-400">ID {session.id}</p></div>
-      {session.status === "open" && permissions.financial.cashClosures.approve && <div className="flex gap-2">{operators.length === 0 && <Button variant="outline" className="rounded-xl border-rose-200 text-rose-700" disabled={working} onClick={() => setCancelOpen(true)}><XCircle className="mr-2 h-4 w-4" />Cancelar sessão</Button>}<Button className="rounded-xl bg-emerald-700 font-bold hover:bg-emerald-800" disabled={working || operators.length === 0} onClick={() => void action("/finish", {}, "Contagem da sessão encerrada.")}><CheckCircle2 className="mr-2 h-4 w-4" />Encerrar contagem da sessão</Button></div>}
+      {session.status === "open" && permissions.financial.cashClosures.approve && <div className="flex gap-2">{session.finalizedOperatorCount === 0 && <Button variant="outline" className="rounded-xl border-rose-200 text-rose-700" disabled={working} onClick={() => setCancelOpen(true)}><XCircle className="mr-2 h-4 w-4" />Cancelar sessão</Button>}<Button className="rounded-xl bg-emerald-700 font-bold hover:bg-emerald-800" disabled={working || session.finalizedOperatorCount === 0} onClick={() => void action("/finish", {}, "Contagem da sessão encerrada.")}><CheckCircle2 className="mr-2 h-4 w-4" />Encerrar contagem da sessão</Button></div>}
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
-      ["Operadores finalizados", String(session.status === "open" ? operators.length : session.finalizedOperatorCount)],
+      ["Operadores finalizados", String(session.finalizedOperatorCount)],
       ["Dinheiro contado", formatBRL(liveCountedCashCents)],
       ["Elegível para depósito", formatBRL(liveDepositEligibleCents)],
       ["Somente DRE", formatBRL(liveDreOnlyCashCents)],
@@ -131,7 +153,7 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
       </Link>)}</CardContent>
     </Card>
 
-    {session.status === "open" && <Card className="rounded-2xl border-stone-200"><CardHeader><CardTitle className="text-lg">Contagens vinculadas</CardTitle></CardHeader><CardContent>{operators.length === 0 ? <p className="text-sm text-zinc-500">Abra uma competência acima e finalize os operadores já conferidos.</p> : <div className="divide-y divide-stone-100">{operators.map((operator) => <div key={operator.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><span><strong className="block text-sm">{operator.operatorName}</strong><span className="text-xs text-zinc-400">{operator.kioskName} · {operator.closureDate.split("-").reverse().join("/")}</span></span><strong className="font-mono text-sm">{formatBRL(operator.countedCashCents)}</strong></div>)}</div>}</CardContent></Card>}
+    {session.status === "open" && <Card className="rounded-2xl border-stone-200"><CardHeader><CardTitle className="text-lg">Contagens vinculadas</CardTitle></CardHeader><CardContent>{operators.length === 0 ? <p className="text-sm text-zinc-500">Abra uma competência acima e finalize os operadores já conferidos.</p> : <><div className="divide-y divide-stone-100">{operators.map((operator) => <div key={operator.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><span><strong className="block text-sm">{operator.operatorName}</strong><span className="text-xs text-zinc-400">{operator.kioskName} · {operator.closureDate.split("-").reverse().join("/")}</span></span><strong className="font-mono text-sm">{formatBRL(operator.countedCashCents)}</strong></div>)}</div>{data.nextOperatorCursor && <div className="flex justify-center border-t pt-4"><Button variant="outline" disabled={loadingMore} onClick={() => void loadMoreOperators()}>{loadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Carregar mais operadores</Button></div>}</>}</CardContent></Card>}
 
     {session.status === "counted" && permissions.financial?.cashDeposits?.issue && <Card className="rounded-2xl border-stone-200">
       <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Banknote className="h-5 w-5 text-emerald-600" />Informar cédulas e moedas</CardTitle></CardHeader>

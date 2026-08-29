@@ -50,7 +50,12 @@ export const POST = withApiErrorHandling<RouteContext>({
         throw new AppError({ code: "CASH_CLOSURE_REOPEN_STATE_CONFLICT", kind: "CONFLICT", cause });
       }
       if (message.includes("sessão") || message.includes("Sessão") || message.includes("composição física")) {
-        throw new AppError({ code: "CASH_COUNTING_SESSION_REOPEN_CONFLICT", kind: "CONFLICT", safeMessage: message, cause });
+        throw new AppError({
+          code: "CASH_COUNTING_SESSION_REOPEN_CONFLICT",
+          kind: "CONFLICT",
+          safeMessage: "A composição física da sessão impede esta reabertura; faça um ajuste auditado de depósito.",
+          cause,
+        });
       }
       throw cause;
     });

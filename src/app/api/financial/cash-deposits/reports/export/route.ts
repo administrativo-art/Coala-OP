@@ -4,27 +4,33 @@ import { requireUser } from "@/lib/auth-server";
 import { assertCashDepositAccess } from "@/features/financial/cash-closures/access.server";
 import { buildCashDepositReport, cashDepositReportCsv } from "@/features/financial/cash-deposits/reports.server";
 import { canAccessUnit } from "@/lib/unit-access";
+import { AppError, withApiErrorHandling } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+export const GET = withApiErrorHandling({
+  source: "api-financial",
+  operation: "export-cash-deposit-report",
+  routeOrJob: "/api/financial/cash-deposits/reports/export",
+}, async (request: NextRequest) => {
+  const context = await requireUser(request).catch((cause) => {
+    throw new AppError({ code: "AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
+  });
   try {
-    const context = await requireUser(request);
     assertCashDepositAccess(context, "view");
-    const report = await buildCashDepositReport(
-      context.workspace_id,
-      (kioskId) => canAccessUnit(context.userDoc, kioskId, { isDefaultAdmin: context.isDefaultAdmin }),
-    );
-    return new NextResponse(cashDepositReportCsv(report), {
-      headers: {
-        "Cache-Control": "private, no-store",
-        "Content-Disposition": 'attachment; filename="relatorio-depositos.csv"',
-        "Content-Type": "text/csv; charset=utf-8",
-      },
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao exportar relatório.";
-    return NextResponse.json({ error: message }, { status: message.includes("permissão") ? 403 : 400 });
+  } catch (cause) {
+    throw new AppError({ code: "CASH_DEPOSIT_REPORT_EXPORT_FORBIDDEN", kind: "AUTHORIZATION", cause });
   }
-}
+  const report = await buildCashDepositReport(
+    context.workspace_id,
+    (kioskId) => canAccessUnit(context.userDoc, kioskId, { isDefaultAdmin: context.isDefaultAdmin }),
+  );
+  return new NextResponse(cashDepositReportCsv(report), {
+    headers: {
+      "Cache-Control": "private, no-store",
+      "Content-Disposition": 'attachment; filename="relatorio-depositos.csv"',
+      "Content-Type": "text/csv; charset=utf-8",
+    },
+  });
+});

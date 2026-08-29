@@ -23,7 +23,7 @@ function mapCoinPreparationError(cause: unknown): never {
     throw new AppError({
       code: "CASH_DEPOSIT_COIN_STATE_CONFLICT",
       kind: "CONFLICT",
-      safeMessage: message,
+      safeMessage: "As moedas precisam ser separadas antes da emissão e só podem ser preparadas uma vez.",
       cause,
     });
   }
@@ -31,7 +31,7 @@ function mapCoinPreparationError(cause: unknown): never {
     throw new AppError({
       code: "CASH_DEPOSIT_COIN_VALUE_INVALID",
       kind: "VALIDATION",
-      safeMessage: message,
+      safeMessage: "O valor das moedas deve ser válido e compatível com o total físico.",
       cause,
     });
   }

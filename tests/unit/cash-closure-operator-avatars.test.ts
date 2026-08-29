@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { resolveOperatorAvatarUrls } from "../../src/features/financial/cash-closures/operator-avatars";
@@ -26,4 +27,19 @@ test("usa o nome apenas quando há uma única correspondência", () => {
     operators: [{ id: "99", name: "Maria Silva" }],
     users: duplicateUsers,
   }), {});
+});
+
+test("consulta somente candidatos limitados em vez de carregar todos os usuários", async () => {
+  const serverSource = await readFile(
+    new URL("../../src/features/financial/cash-closures/operator-avatars.server.ts", import.meta.url),
+    "utf8",
+  );
+  const routeSource = await readFile(
+    new URL("../../src/app/api/financial/cash-closures/[closureId]/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(serverSource, /where\(new FieldPath\("pdvOperatorIds", input\.kioskId\), "in", ids\)/);
+  assert.match(serverSource, /limit\(MAX_USERS_PER_QUERY \+ 1\)/);
+  assert.doesNotMatch(routeSource, /collection\("users"\)[\s\S]*\.get\(\)/);
 });

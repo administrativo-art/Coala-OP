@@ -18,7 +18,7 @@ function mapCoinExchangeError(cause: unknown): never {
     throw new AppError({
       code: "CASH_COIN_EXCHANGE_BALANCE_CONFLICT",
       kind: "CONFLICT",
-      safeMessage: message,
+      safeMessage: "A troca ultrapassa o saldo disponível ou já foi registrada.",
       cause,
     });
   }
@@ -26,7 +26,7 @@ function mapCoinExchangeError(cause: unknown): never {
     throw new AppError({
       code: "CASH_COIN_EXCHANGE_VALUE_INVALID",
       kind: "VALIDATION",
-      safeMessage: message,
+      safeMessage: "Informe um valor de troca válido.",
       cause,
     });
   }

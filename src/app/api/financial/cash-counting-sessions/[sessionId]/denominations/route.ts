@@ -46,7 +46,12 @@ export const POST = withApiErrorHandling<RouteContext>({
   }).catch((cause) => {
     const message = cause instanceof Error ? cause.message : "";
     if (message.includes("total físico") || message.includes("sessão") || message.includes("Sessão")) {
-      throw new AppError({ code: "CASH_COUNTING_DENOMINATIONS_CONFLICT", kind: "CONFLICT", safeMessage: message, cause });
+      throw new AppError({
+        code: "CASH_COUNTING_DENOMINATIONS_CONFLICT",
+        kind: "CONFLICT",
+        safeMessage: "O total físico precisa conferir com o valor elegível de uma sessão encerrada.",
+        cause,
+      });
     }
     throw cause;
   });

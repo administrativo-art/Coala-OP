@@ -30,7 +30,7 @@ function throwFinalizationError(cause: unknown): never {
     throw new AppError({
       code: "CASH_COUNTING_SESSION_CONFLICT",
       kind: "CONFLICT",
-      safeMessage: message,
+      safeMessage: "A sessão de contagem não permite finalizar este operador agora.",
       cause,
     });
   }

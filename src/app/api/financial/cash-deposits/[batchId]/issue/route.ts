@@ -24,7 +24,7 @@ function mapIssueError(cause: unknown): never {
     throw new AppError({
       code: "CASH_DEPOSIT_ISSUE_STATE_CONFLICT",
       kind: "CONFLICT",
-      safeMessage: message,
+      safeMessage: "Este depósito não está disponível para emissão ou atingiu o limite de reemissões.",
       cause,
     });
   }
@@ -32,7 +32,7 @@ function mapIssueError(cause: unknown): never {
     throw new AppError({
       code: "CASH_DEPOSIT_ISSUE_INVALID",
       kind: "VALIDATION",
-      safeMessage: message,
+      safeMessage: "Confira o valor mínimo, o saldo de moedas e o vencimento antes de emitir.",
       cause,
     });
   }

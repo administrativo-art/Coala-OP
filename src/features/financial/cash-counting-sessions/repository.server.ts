@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { FieldPath } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import type { CashClosure, CashClosureActor, CashClosureOperator } from "@/features/financial/cash-closures/types";
@@ -189,12 +190,12 @@ export async function createCashCountingSession(input: {
 }
 
 export async function listCashCountingSessions(workspaceId: string, limit = 100) {
-  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  const safeLimit = Math.min(Math.max(limit, 1), 25);
   const [openSnapshot, recentSnapshot] = await Promise.all([
     financialDbAdmin.collection(SESSIONS)
       .where("workspaceId", "==", workspaceId)
       .where("status", "==", "open")
-      .limit(100)
+      .limit(safeLimit)
       .get(),
     financialDbAdmin.collection(SESSIONS)
       .where("workspaceId", "==", workspaceId)
@@ -208,16 +209,40 @@ export async function listCashCountingSessions(workspaceId: string, limit = 100)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
-export async function getCashCountingSession(sessionId: string) {
+export type CashCountingSessionOperatorCursor = {
+  finalizedAt: string;
+  id: string;
+};
+
+export async function getCashCountingSession(
+  sessionId: string,
+  options: { operatorLimit?: number; operatorCursor?: CashCountingSessionOperatorCursor | null } = {},
+) {
   const sessionRef = financialDbAdmin.collection(SESSIONS).doc(sessionId);
+  const operatorLimit = Math.min(Math.max(options.operatorLimit ?? 100, 1), 100);
+  let operatorQuery: FirebaseFirestore.Query = sessionRef.collection(SESSION_OPERATORS)
+    .orderBy("finalizedAt", "desc")
+    .orderBy(FieldPath.documentId())
+    .limit(operatorLimit + 1);
+  if (options.operatorCursor) {
+    operatorQuery = operatorQuery.startAfter(options.operatorCursor.finalizedAt, options.operatorCursor.id);
+  }
   const [sessionSnapshot, operatorSnapshot] = await Promise.all([
     sessionRef.get(),
-    sessionRef.collection(SESSION_OPERATORS).limit(500).get(),
+    operatorQuery.get(),
   ]);
   if (!sessionSnapshot.exists) return null;
+  const documents = operatorSnapshot.docs.slice(0, operatorLimit);
+  const lastDocument = documents.at(-1);
   return {
     session: normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot)),
-    operators: operatorSnapshot.docs.map((document) => snapshotValue<CashCountingSessionOperator>(document)),
+    operators: documents.map((document) => snapshotValue<CashCountingSessionOperator>(document)),
+    nextOperatorCursor: operatorSnapshot.size > operatorLimit && lastDocument
+      ? {
+        finalizedAt: String(lastDocument.data().finalizedAt ?? ""),
+        id: lastDocument.id,
+      }
+      : null,
   };
 }
 
@@ -291,7 +316,18 @@ export async function prepareCashCountingSessionOperatorAttachment(
     },
     now: input.now,
   });
-  return { session, sessionRef, operatorRef, sessionOperator, audit };
+  const sessionUpdate: Pick<
+    CashCountingSession,
+    "finalizedOperatorCount" | "countedCashCents" | "depositEligibleCents" | "dreOnlyCashCents" | "updatedAt"
+  > = {
+    finalizedOperatorCount: session.finalizedOperatorCount + 1,
+    countedCashCents: session.countedCashCents + sessionOperator.countedCashCents,
+    depositEligibleCents: session.depositEligibleCents + sessionOperator.depositEligibleCents,
+    dreOnlyCashCents: session.dreOnlyCashCents
+      + (sessionOperator.depositPolicy === "dre_only" ? sessionOperator.countedCashCents : 0),
+    updatedAt: input.now,
+  };
+  return { session, sessionRef, sessionUpdate, operatorRef, sessionOperator, audit };
 }
 
 export async function prepareCashCountingSessionOperatorDetachment(
@@ -327,6 +363,20 @@ export async function prepareCashCountingSessionOperatorDetachment(
   const operatorRef = sessionRef.collection(SESSION_OPERATORS).doc(`${input.closureId}_${input.operatorId}`);
   const operatorSnapshot = await transaction.get(operatorRef);
   if (!operatorSnapshot.exists) throw new Error("A contagem do operador não está vinculada à sessão informada.");
+  const sessionOperator = snapshotValue<CashCountingSessionOperator>(operatorSnapshot);
+  const nextFinalizedOperatorCount = session.finalizedOperatorCount - 1;
+  const nextCountedCashCents = session.countedCashCents - sessionOperator.countedCashCents;
+  const nextDepositEligibleCents = session.depositEligibleCents - sessionOperator.depositEligibleCents;
+  const nextDreOnlyCashCents = session.dreOnlyCashCents
+    - (sessionOperator.depositPolicy === "dre_only" ? sessionOperator.countedCashCents : 0);
+  if (
+    nextFinalizedOperatorCount < 0
+    || nextCountedCashCents < 0
+    || nextDepositEligibleCents < 0
+    || nextDreOnlyCashCents < 0
+  ) {
+    throw new Error("Os totais da sessão estão inconsistentes com os operadores vinculados.");
+  }
   const audit = sessionAudit({
     workspaceId: input.workspaceId,
     sessionId: session.id,
@@ -335,17 +385,19 @@ export async function prepareCashCountingSessionOperatorDetachment(
     metadata: { closureId: input.closureId, operatorId: input.operatorId },
     now: input.now,
   });
-  const sessionUpdate = canReturnToCounting ? {
-    status: "open" as const,
-    finalizedOperatorCount: 0,
-    countedCashCents: 0,
-    depositEligibleCents: 0,
-    dreOnlyCashCents: 0,
-    countingFinishedAt: null,
-    countingFinishedBy: null,
-    completedAt: null,
+  const sessionUpdate = {
+    status: canReturnToCounting ? "open" as const : session.status,
+    finalizedOperatorCount: nextFinalizedOperatorCount,
+    countedCashCents: nextCountedCashCents,
+    depositEligibleCents: nextDepositEligibleCents,
+    dreOnlyCashCents: nextDreOnlyCashCents,
+    ...(canReturnToCounting ? {
+      countingFinishedAt: null,
+      countingFinishedBy: null,
+      completedAt: null,
+    } : {}),
     updatedAt: input.now,
-  } : null;
+  };
   const locks = canReturnToCounting ? session.scopes.map((scope, index) => ({
     ref: lockRefs[index],
     value: {
@@ -377,29 +429,18 @@ export async function finishCashCountingSession(input: {
     if (session.workspaceId !== input.workspaceId) throw new Error("Sessão de contagem não encontrada.");
     if (session.status !== "open") throw new Error("Somente uma sessão aberta pode encerrar a contagem.");
     assertSessionOwner(session, input.actor, input.canManageOthers);
-    const operatorSnapshot = await transaction.get(sessionRef.collection(SESSION_OPERATORS).limit(500));
     const lockRefs = session.scopeKeys.map((scopeKey) => financialDbAdmin.collection(LOCKS).doc(
       cashCountingSessionLockId(input.workspaceId, scopeKey),
     ));
     const lockSnapshots = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
-    const operators = operatorSnapshot.docs.map((document) => snapshotValue<CashCountingSessionOperator>(document));
-    if (operators.length === 0) throw new Error("Finalize ao menos um operador antes de encerrar a sessão.");
-    const countedCashCents = operators.reduce((total, operator) => total + operator.countedCashCents, 0);
-    const depositEligibleCents = operators.reduce((total, operator) => total + operator.depositEligibleCents, 0);
-    const dreOnlyCashCents = operators
-      .filter((operator) => operator.depositPolicy === "dre_only")
-      .reduce((total, operator) => total + operator.countedCashCents, 0);
+    if (session.finalizedOperatorCount === 0) throw new Error("Finalize ao menos um operador antes de encerrar a sessão.");
     const now = new Date().toISOString();
     const next: CashCountingSession = {
       ...session,
-      status: depositEligibleCents > 0 ? "counted" : "completed",
-      finalizedOperatorCount: operators.length,
-      countedCashCents,
-      depositEligibleCents,
-      dreOnlyCashCents,
+      status: session.depositEligibleCents > 0 ? "counted" : "completed",
       countingFinishedAt: now,
       countingFinishedBy: input.actor.userId,
-      completedAt: depositEligibleCents > 0 ? null : now,
+      completedAt: session.depositEligibleCents > 0 ? null : now,
       updatedAt: now,
     };
     transaction.set(sessionRef, next);
@@ -411,9 +452,14 @@ export async function finishCashCountingSession(input: {
     const audit = sessionAudit({
       workspaceId: input.workspaceId,
       sessionId: session.id,
-      action: depositEligibleCents > 0 ? "counting_finished" : "completed",
+      action: session.depositEligibleCents > 0 ? "counting_finished" : "completed",
       actor: input.actor,
-      metadata: { finalizedOperatorCount: operators.length, countedCashCents, depositEligibleCents, dreOnlyCashCents },
+      metadata: {
+        finalizedOperatorCount: session.finalizedOperatorCount,
+        countedCashCents: session.countedCashCents,
+        depositEligibleCents: session.depositEligibleCents,
+        dreOnlyCashCents: session.dreOnlyCashCents,
+      },
       now,
     });
     transaction.set(financialDbAdmin.collection(SESSION_AUDIT).doc(audit.id), audit);

@@ -20,6 +20,8 @@ export async function buildCashDepositReport(
   workspaceId: string,
   canAccessKiosk: (kioskId: string) => boolean = () => true,
 ) {
+  const maximumClosureCount = 1_000;
+  const maximumLineCount = 10_000;
   const [allBatches, allAdjustments, allCobrancas, closuresSnapshot, linesSnapshot] = await Promise.all([
     listCashDepositBatches({ workspaceId, limit: 500 }),
     listPendingCashDepositAdjustments(workspaceId),
@@ -27,13 +29,16 @@ export async function buildCashDepositReport(
     financialDbAdmin.collection("cashClosures")
       .where("workspaceId", "==", workspaceId)
       .orderBy("date", "desc")
-      .limit(1000)
+      .limit(maximumClosureCount + 1)
       .get(),
     financialDbAdmin.collectionGroup("lines")
       .where("workspaceId", "==", workspaceId)
-      .limit(10_000)
+      .limit(maximumLineCount + 1)
       .get(),
   ]);
+  if (closuresSnapshot.size > maximumClosureCount || linesSnapshot.size > maximumLineCount) {
+    throw new Error("O histórico ultrapassa o limite operacional do relatório de depósitos.");
+  }
   const batches = allBatches.filter((batch) => (batch.kioskIds?.length ? batch.kioskIds : [batch.kioskId])
     .every(canAccessKiosk));
   const visibleBatchIds = new Set(batches.map((batch) => batch.id));

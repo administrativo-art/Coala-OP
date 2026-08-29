@@ -82,13 +82,18 @@ function summaryFromClosures(input: {
 }
 
 async function closuresForMonth(workspaceId: string, kioskId: string, year: number, month: number) {
+  const maximumClosureCount = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const snapshot = await financialDbAdmin
     .collection("cashClosures")
     .where("workspaceId", "==", workspaceId)
     .where("kioskId", "==", kioskId)
     .where("year", "==", year)
     .where("month", "==", month)
+    .limit(maximumClosureCount + 1)
     .get();
+  if (snapshot.size > maximumClosureCount) {
+    throw new Error("Existe mais de um fechamento diário para a unidade nesta competência.");
+  }
   return snapshot.docs.map((document) => ({ id: document.id, ...document.data() } as CashClosure));
 }
 

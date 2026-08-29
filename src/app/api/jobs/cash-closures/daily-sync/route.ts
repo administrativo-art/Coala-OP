@@ -1,16 +1,18 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { resolvePdvFilialId } from "@/lib/kiosk-identifiers";
 import { todayInClosureTimezone } from "@/features/financial/cash-closures/date";
+import { listCashClosureKioskDocuments } from "@/features/financial/cash-closures/kiosks.server";
 import { syncCashClosure } from "@/features/financial/cash-closures/service.server";
+import { AppError, reportSystemError, withApiErrorHandling } from "@/lib/observability";
 import { WORKSPACE_ID } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+const ROUTE = "/api/jobs/cash-closures/daily-sync";
 
 function authorized(actual: string, expected: string) {
   const left = Buffer.from(actual);
@@ -23,11 +25,19 @@ function yesterdayInBelem() {
   return todayInClosureTimezone(instant);
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withApiErrorHandling({
+  source: "job-api",
+  operation: "sync-daily-cash-closures",
+  routeOrJob: ROUTE,
+}, async (request: NextRequest, _context, observation) => {
   const secret = process.env.CASH_CLOSURE_JOB_SECRET?.trim();
   const provided = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   if (!secret || !authorized(provided, secret)) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+    throw new AppError({
+      code: "JOB_AUTHENTICATION_REQUIRED",
+      kind: "AUTHENTICATION",
+      safeMessage: "Não autorizado.",
+    });
   }
 
   const startedAt = new Date().toISOString();
@@ -35,8 +45,8 @@ export async function POST(request: NextRequest) {
   const date = typeof body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
     ? body.date
     : yesterdayInBelem();
-  const snapshot = await dbAdmin.collection("kiosks").get();
-  const units = snapshot.docs.flatMap((document) => {
+  const kioskDocuments = await listCashClosureKioskDocuments();
+  const units = kioskDocuments.flatMap((document) => {
     const data = document.data();
     const pdvFilialId = resolvePdvFilialId({
       id: document.id,
@@ -44,7 +54,12 @@ export async function POST(request: NextRequest) {
     });
     return pdvFilialId ? [{ id: document.id, name: data.name ?? document.id }] : [];
   });
-  const results: Array<{ kioskId: string; status: "success" | "failed"; error?: string }> = [];
+  const results: Array<{
+    kioskId: string;
+    status: "success" | "failed";
+    error?: string;
+    eventId?: string;
+  }> = [];
   const actor = { userId: "system:cash-closure-daily-sync", userName: "Job diário de fechamento" };
 
   for (const unit of units) {
@@ -52,10 +67,22 @@ export async function POST(request: NextRequest) {
       await syncCashClosure({ workspaceId: WORKSPACE_ID, kioskId: unit.id, date, actor });
       results.push({ kioskId: unit.id, status: "success" });
     } catch (error) {
+      const reference = reportSystemError({
+        error,
+        source: "job",
+        operation: "sync-daily-cash-closure-unit",
+        routeOrJob: ROUTE,
+        requestId: observation.requestId,
+        correlationId: observation.correlationId,
+        code: "CASH_CLOSURE_UNIT_SYNC_FAILED",
+        kind: "TRANSIENT_EXTERNAL",
+        metadata: { kioskId: unit.id, date },
+      });
       results.push({
         kioskId: unit.id,
         status: "failed",
-        error: error instanceof Error ? error.message : "Falha desconhecida.",
+        error: "Falha ao sincronizar esta unidade.",
+        eventId: reference.eventId,
       });
     }
   }
@@ -77,4 +104,4 @@ export async function POST(request: NextRequest) {
     completedAt,
   });
   return NextResponse.json({ runId: runRef.id, date, results, failed });
-}
+});

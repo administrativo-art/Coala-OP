@@ -4,6 +4,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { reportSystemError } from "@/lib/observability";
 import {
   cancelCobranca,
   createCobranca,
@@ -188,7 +189,7 @@ async function prepareIssue(input: {
 async function markIssueFailure(cobranca: InterCobrancaDocument, error: unknown) {
   const now = new Date().toISOString();
   const errorCode = error instanceof InterCobrancaApiError && error.status ? String(error.status) : "INTERNAL";
-  const errorMessage = error instanceof Error ? error.message : "Falha desconhecida na emissão.";
+  const errorMessage = "Falha ao emitir a cobrança no Banco Inter.";
   const firestoreBatch = financialDbAdmin.batch();
   firestoreBatch.set(financialDbAdmin.collection(COBRANCAS).doc(cobranca.id), {
     status: "failed",
@@ -225,9 +226,7 @@ async function markIssueResultUnknown(cobranca: InterCobrancaDocument, error: un
   const errorCode = error instanceof InterCobrancaApiError && error.status
     ? String(error.status)
     : "UNKNOWN_RESULT";
-  const errorMessage = error instanceof Error
-    ? error.message
-    : "O resultado da emissão não pôde ser confirmado.";
+  const errorMessage = "O resultado da emissão não pôde ser confirmado.";
   const firestoreBatch = financialDbAdmin.batch();
   firestoreBatch.set(financialDbAdmin.collection(COBRANCAS).doc(cobranca.id), {
     status: "requested",
@@ -784,7 +783,13 @@ export async function reconcileInterCobrancas(input: { workspaceId: string; limi
     .where("status", "in", ["issuing", "requested", "issued", "marked_received"])
     .limit(Math.min(Math.max(input.limit ?? 100, 1), 500))
     .get();
-  const results: Array<{ id: string; ok: boolean; status?: string; error?: string }> = [];
+  const results: Array<{
+    id: string;
+    ok: boolean;
+    status?: string;
+    error?: string;
+    eventId?: string;
+  }> = [];
   for (const document of snapshot.docs) {
     try {
       const cobranca = snapshotValue<InterCobrancaDocument>(document);
@@ -797,7 +802,21 @@ export async function reconcileInterCobrancas(input: { workspaceId: string; limi
       }
       results.push({ id: document.id, ok: true, status: refreshed.cobranca.status });
     } catch (error) {
-      results.push({ id: document.id, ok: false, error: error instanceof Error ? error.message : "Falha desconhecida." });
+      const reference = reportSystemError({
+        error,
+        source: "job",
+        operation: "reconcile-inter-cobranca-item",
+        routeOrJob: "jobs/inter/cobrancas/reconcile",
+        code: "INTER_COBRANCA_ITEM_RECONCILIATION_FAILED",
+        kind: "TRANSIENT_EXTERNAL",
+        metadata: { cobrancaId: document.id },
+      });
+      results.push({
+        id: document.id,
+        ok: false,
+        error: "Falha ao reconciliar esta cobrança.",
+        eventId: reference.eventId,
+      });
     }
   }
   return results;

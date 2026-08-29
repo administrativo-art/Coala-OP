@@ -36,7 +36,7 @@ function mapExpectedAdjustmentError(cause: unknown): never {
     throw new AppError({
       code: "CASH_CLOSURE_EXPECTED_ADJUSTMENT_INVALID",
       kind: "VALIDATION",
-      safeMessage: message,
+      safeMessage: "O ajuste informado não é válido para esta linha.",
       cause,
     });
   }

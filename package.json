@@ -39,6 +39,7 @@
     "migrate:dare-accounts": "node scripts/migrate-dare-account-structure.mjs",
     "migrate:cash-closure-permissions": "node --import tsx scripts/migrate-cash-closure-permissions.mts",
     "migrate:cash-deposit-inter": "node --import tsx scripts/migrate-cash-deposit-inter-fields.mts",
+    "cash-deposit:period-policy": "node --import tsx scripts/set-cash-deposit-period-policy.mts",
     "migrate:central-pdv-links": "node --import tsx scripts/migrate-central-pdv-unit-links.mts",
     "migrate:company-contacts": "node --import tsx scripts/migrate-company-department-contacts.mts",
     "migrate:onboarding-v2": "node scripts/migrate-onboarding-templates-v2.mjs",

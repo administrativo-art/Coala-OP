@@ -40,7 +40,12 @@ export const POST = withApiErrorHandling<RouteContext>({
   }).catch((cause) => {
     const message = cause instanceof Error ? cause.message : "";
     if (message.includes("sessão") || message.includes("Sessão") || message.includes("Finalize ao menos")) {
-      throw new AppError({ code: "CASH_COUNTING_SESSION_FINISH_CONFLICT", kind: "CONFLICT", safeMessage: message, cause });
+      throw new AppError({
+        code: "CASH_COUNTING_SESSION_FINISH_CONFLICT",
+        kind: "CONFLICT",
+        safeMessage: "Finalize ao menos um operador em uma sessão aberta antes de encerrar a contagem.",
+        cause,
+      });
     }
     throw cause;
   });

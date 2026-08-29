@@ -499,6 +499,31 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Sessões, bloqueios e políticas são operados exclusivamente pelas APIs
+    // e comandos administrativos para manter agregados e auditoria atômicos.
+    match /cashCountingSessions/{sessionId} {
+      allow read, write: if false;
+      match /operators/{operatorId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /cashCountingSessionLocks/{lockId} {
+      allow read, write: if false;
+    }
+
+    match /cashCountingSessionAuditLogs/{logId} {
+      allow read, write: if false;
+    }
+
+    match /cashDepositPeriodPolicies/{policyId} {
+      allow read, write: if false;
+    }
+
+    match /cashDepositPeriodPolicyAuditLogs/{logId} {
+      allow read, write: if false;
+    }
+
     match /cashDepositBatches/{batchId} {
       allow read: if canViewCashDeposits() && canAccessDepositBatch(resource.data);
       allow write: if false;
