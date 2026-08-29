@@ -12,6 +12,7 @@
     "lint:report": "eslint src tests scripts",
     "typecheck": "next typegen && tsc --noEmit",
     "test:unit": "node --import tsx --test tests/unit/*.test.ts tests/unit/**/*.test.ts",
+    "test:integration": "node scripts/test-integration.mjs",
     "test:skills": "node --import tsx --test tests/unit/agent-skills/*.test.ts",
     "test:security:rules": "node scripts/test-security-rules.mjs",
     "check:rules": "npm run test:security:rules",
