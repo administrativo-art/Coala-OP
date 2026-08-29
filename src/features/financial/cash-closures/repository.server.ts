@@ -6,6 +6,11 @@ import type { Transaction } from "firebase-admin/firestore";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { isPdvAutoCountedChannel } from "./channel-normalization";
 import {
+  CASH_DEPOSIT_PERIOD_POLICIES,
+  cashDepositPeriodPolicyId,
+  cashDepositPolicyFromDocument,
+} from "./deposit-policy";
+import {
   cashClosureId,
   emptyChannelTotals,
   mergeBuiltClosureForPersistence,
@@ -159,12 +164,16 @@ export async function listCashClosureAuditLogs(workspaceId: string, closureId: s
 export async function upsertClosureFromPdv(built: BuiltCashClosure, actor: CashClosureActor) {
   const id = cashClosureId(built.kioskId, built.date);
   const ref = closureRef(id);
+  const periodPolicyRef = financialDbAdmin.collection(CASH_DEPOSIT_PERIOD_POLICIES).doc(
+    cashDepositPeriodPolicyId(built.workspaceId, built.year, built.month),
+  );
 
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
-    const [closureSnapshot, lineSnapshot, operatorSnapshot] = await Promise.all([
+    const [closureSnapshot, lineSnapshot, operatorSnapshot, periodPolicySnapshot] = await Promise.all([
       transaction.get(ref),
       transaction.get(ref.collection("lines")),
       transaction.get(ref.collection(OPERATORS).limit(100)),
+      transaction.get(periodPolicyRef),
     ]);
     const existingClosure = closureSnapshot.exists
       ? snapshotValue<CashClosure>(closureSnapshot)
@@ -177,6 +186,16 @@ export async function upsertClosureFromPdv(built: BuiltCashClosure, actor: CashC
       existingLines,
       now,
     });
+    merged.closure = {
+      ...merged.closure,
+      cashDepositPolicy: cashDepositPolicyFromDocument(
+        periodPolicySnapshot.data(),
+        merged.closure.cashDepositPolicy,
+      ),
+      cashDepositPolicyReason: periodPolicySnapshot.exists
+        ? String(periodPolicySnapshot.data()?.reason ?? "Competência usada somente na DRE")
+        : merged.closure.cashDepositPolicyReason,
+    };
 
     const operatorResult = buildCashClosureOperators({
       closure: merged.closure,
@@ -308,6 +327,8 @@ export async function recordCashClosureSyncError(input: {
       matchedLineCount: 0,
       source: emptySource(input.error),
       sourceHash: "",
+      cashDepositPolicy: "standard",
+      cashDepositPolicyReason: null,
       cashDeposit: {
         eligibleCents: 0,
         batchId: null,
@@ -671,7 +692,22 @@ function cashDepositAfterFinalization(
   cashDeposit: CashClosure["cashDeposit"],
   eligibleCents: number,
   now: string,
+  policy: CashClosure["cashDepositPolicy"],
 ) {
+  if (policy === "dre_only") {
+    return {
+      eligibleCents: 0,
+      allocatedCents: 0,
+      issuedCents: 0,
+      paidCents: 0,
+      batchId: null,
+      batchItemId: null,
+      status: "not_eligible" as const,
+      manualSplitRequired: false,
+      allocationReason: null,
+      pendingSince: null,
+    };
+  }
   if (cashDeposit.adjustmentId) {
     return {
       ...cashDeposit,
@@ -757,6 +793,15 @@ export async function finalizeCashClosureOperator(id: string, operatorId: string
       lineSnapshot.docs.map((document) => snapshotValue<CashClosureLine>(document)),
     );
     const closure = normalized.closure;
+    const periodPolicySnapshot = await transaction.get(
+      financialDbAdmin.collection(CASH_DEPOSIT_PERIOD_POLICIES).doc(
+        cashDepositPeriodPolicyId(closure.workspaceId, closure.year, closure.month),
+      ),
+    );
+    const cashDepositPolicy = cashDepositPolicyFromDocument(
+      periodPolicySnapshot.data(),
+      closure.cashDepositPolicy,
+    );
     const now = new Date().toISOString();
     assertCashClosureTransition(closure.status, "approved");
     const currentOperators = buildCashClosureOperators({
@@ -785,7 +830,12 @@ export async function finalizeCashClosureOperator(id: string, operatorId: string
     const finalizedOperator: CashClosureOperator = {
       ...currentOperator,
       status: "approved",
-      cashDeposit: cashDepositAfterFinalization(currentOperator.cashDeposit, eligibleCents, now),
+      cashDeposit: cashDepositAfterFinalization(
+        currentOperator.cashDeposit,
+        eligibleCents,
+        now,
+        cashDepositPolicy,
+      ),
       approvedWithDivergence:
         currentOperator.divergentLineCount > 0 || currentOperator.reportedDivergentLineCount > 0,
       approvedAt: now,
@@ -799,6 +849,10 @@ export async function finalizeCashClosureOperator(id: string, operatorId: string
     const next = withCashClosureOperatorAggregate(
       {
         ...recomputeCashClosureFromLines(closure, normalized.lines, now),
+        cashDepositPolicy,
+        cashDepositPolicyReason: periodPolicySnapshot.exists
+          ? String(periodPolicySnapshot.data()?.reason ?? "Competência usada somente na DRE")
+          : closure.cashDepositPolicyReason,
         submittedAt: closure.submittedAt ?? now,
         submittedBy: closure.submittedBy ?? actor.userId,
       },
@@ -819,7 +873,7 @@ export async function finalizeCashClosureOperator(id: string, operatorId: string
         status: finalizedOperator.status,
         operatorName: finalizedOperator.operatorName,
         approvedWithDivergence: finalizedOperator.approvedWithDivergence,
-        cashDepositEligibleCents: eligibleCents,
+        cashDepositEligibleCents: finalizedOperator.cashDeposit.eligibleCents,
       },
       reason: "Contagem do operador finalizada",
     });

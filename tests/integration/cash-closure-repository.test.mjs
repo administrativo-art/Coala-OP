@@ -21,6 +21,7 @@ const {
 } = await import("../../src/features/financial/cash-closures/repository.server.ts");
 const {
   getCashDepositBatch,
+  listCashDepositBatches,
   listCashCoinBalances,
   prepareCashDepositCoinHold,
   processCashDepositQueue,
@@ -36,6 +37,7 @@ const collections = [
   "cashClosureAuditLogs",
   "cashClosureMonthlySummaries",
   "cashClosureUnitSummaries",
+  "cashDepositPeriodPolicies",
   "cashDepositAdjustments",
   "cashDepositBatches",
   "cashDepositQueues",
@@ -300,6 +302,45 @@ test("finaliza e aloca cada operador sem aguardar o restante do dia", async () =
   assert.ok(batch);
   assert.equal(batch.items.filter((item) => item.closureId === closureId).length, 2);
   assert.equal(batch.items.filter((item) => item.closureId === closureId).reduce((sum, item) => sum + item.amountCents, 0), 17_000);
+});
+
+test("preserva a contagem na DRE sem criar depósito quando o fechamento é somente DRE", async () => {
+  const workspaceId = "workspace-integration-dre-only";
+  const kioskId = "kiosk-integration-dre-only";
+  const date = "2035-08-12";
+  const closureId = cashClosureId(kioskId, date);
+
+  await financialDbAdmin.collection("cashDepositPeriodPolicies").doc(`${workspaceId}_2035_08`).set({
+    id: `${workspaceId}_2035_08`,
+    workspaceId,
+    year: 2035,
+    month: 8,
+    policy: "dre_only",
+    reason: "Competência histórica usada somente na DRE",
+    createdAt: new Date().toISOString(),
+    createdBy: actor.userId,
+    updatedAt: new Date().toISOString(),
+    updatedBy: actor.userId,
+  });
+  await upsertClosureFromPdv(builtClosure({ workspaceId, kioskId, date }), actor);
+  const initial = await getCashClosure(closureId);
+  assert.ok(initial);
+  assert.equal(initial.closure.cashDepositPolicy, "dre_only");
+  const cashLine = initial.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+  await saveCashClosureDraft(
+    closureId,
+    [{ id: cashLine.id, reportedCents: 9_900, countedCents: 9_900, reportedNote: "Falta apurada", note: "Falta conferida" }],
+    actor,
+    { editReported: true, editCounted: true },
+  );
+
+  const finalized = await finalizeCashClosureOperator(closureId, "operator-1", actor);
+  assert.equal(finalized.closure.finalizedCountedCashCents, 9_900);
+  assert.equal(finalized.closure.cashDepositEligibleCents, 0);
+  assert.equal(finalized.operator.cashDeposit.status, "not_eligible");
+  await processCashDepositQueue(workspaceId, kioskId, actor);
+  assert.deepEqual(await listCashDepositBatches({ workspaceId, limit: 10 }), []);
 });
 
 test("finaliza revisão legada usando a contagem do Financeiro já preenchida", async () => {
