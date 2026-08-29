@@ -4,12 +4,14 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { type StockAuditSession } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
+import { OWN_OPEN_STOCK_COUNT_SESSION_LIMIT } from '@/features/stock-count/lib/visibility';
 
 export interface StockAuditContextType {
   auditSessions: StockAuditSession[];
   activeSession: StockAuditSession | null;
+  hasMoreOpenSessions: boolean;
   loading: boolean;
   setActiveSession: (session: StockAuditSession | null) => void;
   addAuditSession: (session: Omit<StockAuditSession, 'id'>) => Promise<string | null>;
@@ -22,11 +24,31 @@ export const StockAuditContext = createContext<StockAuditContextType | undefined
 export function StockAuditProvider({ children }: { children: React.ReactNode }) {
   const [auditSessions, setAuditSessions] = useState<StockAuditSession[]>([]);
   const [activeSession, setActiveSession] = useState<StockAuditSession | null>(null);
-  const { firebaseUser } = useAuth();
+  const [hasMoreOpenSessions, setHasMoreOpenSessions] = useState(false);
+  const { firebaseUser, permissions, isDefaultAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
+  const canReadStockAudit = isDefaultAdmin ||
+    permissions.stock.stockCount.view ||
+    permissions.stock.audit.view;
 
   useEffect(() => {
-    const q = query(collection(db, "stockAuditSessions"));
+    if (!firebaseUser || !canReadStockAudit) {
+      setAuditSessions([]);
+      setActiveSession(null);
+      setHasMoreOpenSessions(false);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    // Este provider global atende somente a fila operacional. O filtro por status
+    // evita recarregar todo o histórico concluído em cada sessão autenticada.
+    const q = query(
+      collection(db, "stockAuditSessions"),
+      where("status", "==", "pending_review"),
+      where("auditedBy.userId", "==", firebaseUser.uid),
+      limit(OWN_OPEN_STOCK_COUNT_SESSION_LIMIT + 1),
+    );
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const sessionsData = querySnapshot.docs.map(doc => {
           const data = doc.data();
@@ -40,13 +62,15 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
               }))
           } as StockAuditSession
       });
-      setAuditSessions(sessionsData.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()));
+      const orderedSessions = sessionsData.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      const visibleSessions = orderedSessions.slice(0, OWN_OPEN_STOCK_COUNT_SESSION_LIMIT);
+      setHasMoreOpenSessions(orderedSessions.length > OWN_OPEN_STOCK_COUNT_SESSION_LIMIT);
+      setAuditSessions(visibleSessions);
       
       // Update active session if it exists in the new data
-      if (activeSession) {
-          const updatedActive = sessionsData.find(s => s.id === activeSession.id);
-          setActiveSession(updatedActive || null);
-      }
+      setActiveSession((current) =>
+        current ? visibleSessions.find((session) => session.id === current.id) ?? null : null
+      );
       
       setLoading(false);
     }, (error) => {
@@ -55,7 +79,7 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [canReadStockAudit, firebaseUser]);
 
   const addAuditSession = useCallback(async (session: Omit<StockAuditSession, 'id'>): Promise<string | null> => {
     if (!firebaseUser) throw new Error('Usuário não autenticado.');
@@ -124,12 +148,13 @@ export function StockAuditProvider({ children }: { children: React.ReactNode }) 
   const value: StockAuditContextType = useMemo(() => ({
     auditSessions,
     activeSession,
+    hasMoreOpenSessions,
     loading,
     setActiveSession,
     addAuditSession,
     updateAuditSession,
     deleteAuditSession,
-  }), [auditSessions, activeSession, loading, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession]);
+  }), [auditSessions, activeSession, hasMoreOpenSessions, loading, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession]);
 
   return <StockAuditContext.Provider value={value}>{children}</StockAuditContext.Provider>;
 }

@@ -7,10 +7,15 @@ import {
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
+  collection,
   doc,
   getDoc,
+  getDocs,
+  limit,
+  query,
   setDoc,
   updateDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import {
@@ -51,6 +56,7 @@ const basePermissions = {
       viewHistory: false,
     },
     stockCount: {
+      view: false,
       perform: false,
       approve: false,
     },
@@ -150,12 +156,17 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
           settings: { manageProfiles: true },
         })),
         setDoc(doc(db, "profiles/stock-operator"), legacyStockProfile),
+        setDoc(doc(db, "profiles/stock-viewer"), profile({
+          stock: { stockCount: { view: true } },
+        })),
         setDoc(doc(db, "profiles/asset-viewer"), profile({
           assets: { view: true, viewHistory: true },
         })),
         setDoc(doc(db, "users/basic-user"), compliantUser("basic")),
         setDoc(doc(db, "users/profile-manager"), compliantUser("profile-manager")),
         setDoc(doc(db, "users/stock-operator"), compliantUser("stock-operator")),
+        setDoc(doc(db, "users/count-owner"), compliantUser("stock-viewer")),
+        setDoc(doc(db, "users/count-viewer"), compliantUser("stock-viewer")),
         setDoc(doc(db, "users/asset-viewer"), compliantUser("asset-viewer")),
         setDoc(doc(db, "users/other-user"), compliantUser("basic")),
         setDoc(doc(db, "users/admin-user"), compliantUser("basic")),
@@ -179,6 +190,14 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
           quantity: 5,
           condition: "novo",
         }),
+        setDoc(doc(db, "stockAuditSessions/count-1"), {
+          workspaceId: "coala",
+          kioskId: "kiosk-1",
+          status: "pending_review",
+          auditedBy: { userId: "count-owner", username: "Responsável" },
+          startedAt: "2026-08-29T12:00:00.000Z",
+          items: [],
+        }),
       ]);
 
       const storage = context.storage();
@@ -192,6 +211,8 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
     const basic = env.authenticatedContext("basic-user");
     const manager = env.authenticatedContext("profile-manager");
     const stockOperator = env.authenticatedContext("stock-operator");
+    const countOwner = env.authenticatedContext("count-owner");
+    const countViewer = env.authenticatedContext("count-viewer");
     const assetViewer = env.authenticatedContext("asset-viewer");
     const pending = env.authenticatedContext("pending-user");
     const admin = env.authenticatedContext("admin-user", { isDefaultAdmin: true });
@@ -208,6 +229,25 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
     await assertFails(setDoc(doc(stockOperator.firestore(), "uniformAssignments/forged"), {
       collaboratorUserId: "other-user",
       quantityInPossession: 1,
+    }));
+    await assertSucceeds(getDoc(doc(countOwner.firestore(), "stockAuditSessions/count-1")));
+    await assertSucceeds(getDocs(query(
+      collection(countOwner.firestore(), "stockAuditSessions"),
+      where("status", "==", "pending_review"),
+      where("auditedBy.userId", "==", "count-owner"),
+      limit(26),
+    )));
+    await assertFails(getDoc(doc(countViewer.firestore(), "stockAuditSessions/count-1")));
+    await assertFails(updateDoc(doc(countOwner.firestore(), "stockAuditSessions/count-1"), {
+      status: "completed",
+    }));
+    await assertFails(setDoc(doc(admin.firestore(), "stockAuditSessions/direct-admin-write"), {
+      workspaceId: "coala",
+      kioskId: "kiosk-1",
+      status: "pending_review",
+      auditedBy: { userId: "admin-user", username: "Admin" },
+      startedAt: "2026-08-29T13:00:00.000Z",
+      items: [],
     }));
 
     await assertFails(updateDoc(doc(manager.firestore(), "profiles/profile-manager"), {

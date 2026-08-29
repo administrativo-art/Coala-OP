@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildStockCountTaskPatch } from "../../src/features/stock-count/lib/task-sync";
+import {
+  canViewOpenStockCountSession,
+  filterVisibleOpenStockCountSessions,
+  isStockCountSessionOwnedByUser,
+} from "../../src/features/stock-count/lib/visibility";
 import { canActOnTask, canViewTask } from "../../src/features/tasks/lib/server-access";
 import { defaultGuestPermissions, type StockAuditSession } from "../../src/types";
 import type { ServerUserContext } from "../../src/lib/auth-server";
@@ -111,4 +116,43 @@ test("tarefas antigas também reconhecem o autor, sem liberar aprovadores genér
   assert.equal(canViewTask(context("owner-1"), legacyTask), true);
   assert.equal(canActOnTask(context("owner-1"), legacyTask), true);
   assert.equal(canViewTask(context("approver-2", { approve: true }), legacyTask), false);
+});
+
+test("quem pode visualizar acompanha contagens abertas das unidades acessíveis", () => {
+  const unitViewer = {
+    user: { assignedKioskIds: ["joao-paulo"] },
+    canView: true,
+    isDefaultAdmin: false,
+  };
+
+  assert.equal(canViewOpenStockCountSession(session, unitViewer), true);
+  assert.deepEqual(filterVisibleOpenStockCountSessions([session], unitViewer), [session]);
+  assert.equal(
+    canViewOpenStockCountSession(session, {
+      ...unitViewer,
+      user: { assignedKioskIds: ["outra-unidade"] },
+    }),
+    false,
+  );
+  assert.equal(canViewOpenStockCountSession(session, { ...unitViewer, canView: false }), false);
+  assert.equal(
+    canViewOpenStockCountSession(
+      { ...session, status: "completed" },
+      unitViewer,
+    ),
+    false,
+  );
+});
+
+test("administrador acompanha todas as unidades, mas somente o autor é o dono da sessão", () => {
+  assert.equal(
+    canViewOpenStockCountSession(session, {
+      user: { assignedKioskIds: [] },
+      canView: true,
+      isDefaultAdmin: true,
+    }),
+    true,
+  );
+  assert.equal(isStockCountSessionOwnedByUser(session, "owner-1"), true);
+  assert.equal(isStockCountSessionOwnedByUser(session, "manager-1"), false);
 });
