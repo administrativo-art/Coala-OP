@@ -11,6 +11,14 @@ import PizZip from "pizzip";
 import { SignedUniformMovementTermDocument } from "../../src/components/pdf/UniformTermDocument";
 import { applyCoalaLetterheadToPdf } from "../../src/features/hr/documents/letterhead-pdf.server";
 import {
+  ADMISSION_SIGNATURE_TEMPLATE_ORDER,
+  ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID,
+  ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID,
+  compareAdmissionSignatureOrder,
+  isAdmissionSignatureTemplateApplicable,
+} from "../../src/features/hr/documents/admission-signature-order";
+import {
+  isSelectableAdmissionSignatureTemplate,
   SYSTEM_DOCUMENT_TEMPLATES,
   systemDocumentTemplateById,
 } from "../../src/features/hr/documents/system-template-catalog";
@@ -30,6 +38,11 @@ test("catálogo reúne base institucional, uniformes e kit admissional", () => {
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.renderer === "admission_docx").length,
     10,
   );
+  const admissionTemplates = SYSTEM_DOCUMENT_TEMPLATES.filter((template) =>
+    template.id.startsWith("system-admission-"),
+  );
+  assert.equal(admissionTemplates.length, 9);
+  assert.ok(admissionTemplates.every((template) => template.status === "published"));
 });
 
 test("termo de ponto eletrônico não integra o catálogo operacional", () => {
@@ -37,6 +50,67 @@ test("termo de ponto eletrônico não integra o catálogo operacional", () => {
     systemDocumentTemplateById("system-admission-electronic-time-tracking-awareness"),
     null,
   );
+});
+
+test("seleção admissional oferece oito modelos e mantém o encerramento automático", () => {
+  const selectable = SYSTEM_DOCUMENT_TEMPLATES.filter(isSelectableAdmissionSignatureTemplate);
+  assert.equal(selectable.length, 8);
+  assert.equal(
+    selectable.some((template) => template.id === "system-admission-bundle-closing-term"),
+    false,
+  );
+});
+
+test("ordem da seleção admissional é a mesma ordem canônica do pacote PDF", () => {
+  const selectable = [...SYSTEM_DOCUMENT_TEMPLATES.filter(isSelectableAdmissionSignatureTemplate)]
+    .sort(compareAdmissionSignatureOrder);
+
+  assert.deepEqual(
+    selectable.map((template) => template.id),
+    ADMISSION_SIGNATURE_TEMPLATE_ORDER.filter((id) =>
+      id !== "system-admission-bundle-closing-term"
+    ),
+  );
+
+  const reversedWorkflow = [...selectable].reverse().map((template, order) => ({
+    id: `workflow-${order}`,
+    templateId: template.id,
+    templateName: template.name,
+    order,
+  }));
+  assert.deepEqual(
+    [...reversedWorkflow].sort(compareAdmissionSignatureOrder).map((document) => document.templateId),
+    selectable.map((template) => template.id),
+  );
+});
+
+test("seleção admissional oferece somente a modalidade vigente de vale-transporte", () => {
+  const selectable = SYSTEM_DOCUMENT_TEMPLATES.filter(isSelectableAdmissionSignatureTemplate);
+  const forRequest = selectable.filter((template) =>
+    isAdmissionSignatureTemplateApplicable(template, "yes")
+  );
+  const forWaiver = selectable.filter((template) =>
+    isAdmissionSignatureTemplateApplicable(template, "no")
+  );
+  const withoutDecision = selectable.filter((template) =>
+    isAdmissionSignatureTemplateApplicable(template, null)
+  );
+
+  assert.equal(forRequest.length, 7);
+  assert.equal(forRequest.some((template) =>
+    template.id === ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID
+  ), true);
+  assert.equal(forRequest.some((template) =>
+    template.id === ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID
+  ), false);
+  assert.equal(forWaiver.length, 7);
+  assert.equal(forWaiver.some((template) =>
+    template.id === ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID
+  ), false);
+  assert.equal(forWaiver.some((template) =>
+    template.id === ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID
+  ), true);
+  assert.equal(withoutDecision.length, 6);
 });
 
 test("timbrado é aplicado ao PDF sem alterar a quantidade de páginas", async () => {
@@ -149,7 +223,7 @@ test("contrato de experiência v3 usa somente os campos vigentes", async () => {
     "system-admission-employment-probation-contract",
   );
   assert.equal(template?.version, 3);
-  assert.equal(template?.status, "draft");
+  assert.equal(template?.status, "published");
   assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v3.docx"), true);
   const salaryBinding = template?.fieldMapping?.contract_monthly_salary;
   assert.equal(salaryBinding?.kind, "system");
@@ -202,7 +276,7 @@ test("acordo de banco de horas v2 está parametrizado sem alterar partes opacas"
     "system-admission-hours-bank-agreement",
   );
   assert.equal(template?.version, 2);
-  assert.equal(template?.status, "draft");
+  assert.equal(template?.status, "published");
   assert.equal(template?.sourcePath?.endsWith("02-banco-horas-v2.docx"), true);
   assert.ok(template?.variables.includes("employee.ctps_number"));
   assert.ok(template?.variables.includes("integration.employer_name"));

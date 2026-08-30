@@ -104,6 +104,7 @@ const SYSTEM_RESOLUTION: Record<string, DocumentVariableResolutionStep[]> = {
 };
 
 const EMPLOYEE_FALLBACKS: Record<string, DocumentVariableResolutionStep[]> = {
+  "employee.cpf": [{ source: "onboarding", path: "publicFormAnswers.cpf" }],
   "employee.name": [
     { source: "employee_record", path: "name" },
     { source: "user_record", path: "username" },
