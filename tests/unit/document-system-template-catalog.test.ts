@@ -11,6 +11,7 @@ import PizZip from "pizzip";
 import { SignedUniformMovementTermDocument } from "../../src/components/pdf/UniformTermDocument";
 import { applyCoalaLetterheadToPdf } from "../../src/features/hr/documents/letterhead-pdf.server";
 import {
+  isSelectableAdmissionSignatureTemplate,
   SYSTEM_DOCUMENT_TEMPLATES,
   systemDocumentTemplateById,
 } from "../../src/features/hr/documents/system-template-catalog";
@@ -30,12 +31,26 @@ test("catálogo reúne base institucional, uniformes e kit admissional", () => {
     SYSTEM_DOCUMENT_TEMPLATES.filter((template) => template.renderer === "admission_docx").length,
     10,
   );
+  const admissionTemplates = SYSTEM_DOCUMENT_TEMPLATES.filter((template) =>
+    template.id.startsWith("system-admission-"),
+  );
+  assert.equal(admissionTemplates.length, 9);
+  assert.ok(admissionTemplates.every((template) => template.status === "published"));
 });
 
 test("termo de ponto eletrônico não integra o catálogo operacional", () => {
   assert.equal(
     systemDocumentTemplateById("system-admission-electronic-time-tracking-awareness"),
     null,
+  );
+});
+
+test("seleção admissional oferece oito modelos e mantém o encerramento automático", () => {
+  const selectable = SYSTEM_DOCUMENT_TEMPLATES.filter(isSelectableAdmissionSignatureTemplate);
+  assert.equal(selectable.length, 8);
+  assert.equal(
+    selectable.some((template) => template.id === "system-admission-bundle-closing-term"),
+    false,
   );
 });
 
@@ -149,7 +164,7 @@ test("contrato de experiência v3 usa somente os campos vigentes", async () => {
     "system-admission-employment-probation-contract",
   );
   assert.equal(template?.version, 3);
-  assert.equal(template?.status, "draft");
+  assert.equal(template?.status, "published");
   assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v3.docx"), true);
   const salaryBinding = template?.fieldMapping?.contract_monthly_salary;
   assert.equal(salaryBinding?.kind, "system");
@@ -202,7 +217,7 @@ test("acordo de banco de horas v2 está parametrizado sem alterar partes opacas"
     "system-admission-hours-bank-agreement",
   );
   assert.equal(template?.version, 2);
-  assert.equal(template?.status, "draft");
+  assert.equal(template?.status, "published");
   assert.equal(template?.sourcePath?.endsWith("02-banco-horas-v2.docx"), true);
   assert.ok(template?.variables.includes("employee.ctps_number"));
   assert.ok(template?.variables.includes("integration.employer_name"));
