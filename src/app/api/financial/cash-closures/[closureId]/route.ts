@@ -13,6 +13,7 @@ import {
   saveCashClosureDraft,
 } from "@/features/financial/cash-closures/repository.server";
 import { saveCashClosureDraftSchema } from "@/features/financial/cash-closures/schemas";
+import { getOpenCashCountingSessionForScope } from "@/features/financial/cash-counting-sessions/repository.server";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -41,21 +42,38 @@ export const GET = withApiErrorHandling<RouteContext>({
   routeOrJob: "/api/financial/cash-closures/[closureId]",
 }, async (request: NextRequest, routeContext) => {
     const { result } = await loadAuthorized(request, routeContext, "view");
-    const operatorAvatars = await loadCashClosureOperatorAvatarUrls({
-      kioskId: result.closure.kioskId,
-      operators: Array.from(new Map(
-        result.lines.map((line) => [line.operatorId, { id: line.operatorId, name: line.operatorName }]),
-      ).values()),
-    });
+    const [operatorAvatars, activeCountingSession] = await Promise.all([
+      loadCashClosureOperatorAvatarUrls({
+        kioskId: result.closure.kioskId,
+        operators: Array.from(new Map(
+          result.lines.map((line) => [line.operatorId, { id: line.operatorId, name: line.operatorName }]),
+        ).values()),
+      }),
+      getOpenCashCountingSessionForScope({
+        workspaceId: result.closure.workspaceId,
+        kioskId: result.closure.kioskId,
+        year: result.closure.year,
+        month: result.closure.month,
+      }),
+    ]);
     return NextResponse.json({
       ...result,
       operatorAvatars,
+      activeCountingSessionId: activeCountingSession?.id ?? null,
       settings: { seniorDivergenceCents: cashClosureSeniorDivergenceCents() },
     }, { headers: { "Cache-Control": "private, no-store" } });
 });
 
 function mapDraftError(cause: unknown): never {
   const message = cause instanceof Error ? cause.message : "";
+  if (message.includes("sessão") || message.includes("Sessão")) {
+    throw new AppError({
+      code: "CASH_CLOSURE_COUNTING_SESSION_REQUIRED",
+      kind: "CONFLICT",
+      safeMessage: "Abra esta unidade e competência por uma sessão de contagem para fazer a conferência do Financeiro.",
+      cause,
+    });
+  }
   if (message.includes("não encontrado") || message.includes("não pertencem")) {
     throw new AppError({ code: "CASH_CLOSURE_LINE_NOT_FOUND", kind: "NOT_FOUND", cause });
   }
@@ -92,6 +110,13 @@ export const PATCH = withApiErrorHandling<RouteContext>({
       closureId,
       parsed.data.lines,
       cashClosureActor(context),
-      { editReported, editCounted },
+      {
+        editReported,
+        editCounted,
+        requireCountingSessionForCountedChanges: true,
+        countingSessionId: parsed.data.countingSessionId,
+        canManageCountingSessionOfOthers:
+          context.isDefaultAdmin || context.permissions.financial?.cashClosures?.reopen === true,
+      },
     ).catch(mapDraftError));
 });

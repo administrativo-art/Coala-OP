@@ -14,6 +14,7 @@ export const syncCashClosureSchema = z.object({
 });
 
 export const saveCashClosureDraftSchema = z.object({
+  countingSessionId: z.string().uuid().optional(),
   lines: z.array(z.object({
     id: z.string().trim().min(1).max(300),
     reportedCents: z.number().int().safe().min(0).nullable().optional(),
