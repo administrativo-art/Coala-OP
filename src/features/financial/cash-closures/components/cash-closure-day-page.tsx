@@ -59,6 +59,7 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type CashClosureApiPayload = CashClosureWithLines & {
   created?: boolean;
   operatorAvatars?: Record<string, string>;
+  activeCountingSessionId?: string | null;
   settings?: { seniorDivergenceCents?: number };
   allocationError?: string;
 };
@@ -129,6 +130,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
   const { toast } = useToast();
   const [data, setData] = useState<CashClosureWithLines | null>(null);
   const [operatorAvatars, setOperatorAvatars] = useState<Record<string, string>>({});
+  const [activeCountingSessionId, setActiveCountingSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -145,7 +147,8 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
   const closureId = `${kioskId}_${date}`;
   const [dateYear, dateMonth] = date.split("-").map(Number);
   const monthLabel = formatClosureMonthLabel(dateYear, dateMonth);
-  const sessionQuery = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
+  const countingSessionId = sessionId ?? activeCountingSessionId;
+  const sessionQuery = countingSessionId ? `?sessionId=${encodeURIComponent(countingSessionId)}` : "";
   const monthHref = `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}/${dateYear}/${String(dateMonth).padStart(2, "0")}${sessionQuery}`;
   const nextDate = shiftClosureDate(date, 1);
   const [nextYear, nextMonth, nextDay] = nextDate.split("-");
@@ -170,6 +173,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
       latestData.current = nextData;
       setData(nextData);
       setOperatorAvatars(payload.operatorAvatars ?? {});
+      setActiveCountingSessionId(payload.activeCountingSessionId ?? null);
       setSeniorDivergenceCents(payload.settings?.seniorDivergenceCents ?? 1_000);
       setSaveState("idle");
     } catch (error) {
@@ -186,6 +190,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
     && ["draft", "reopened", "pending_review"].includes(data.closure.status)
     && permissions.financial?.cashClosures?.edit;
   const financeEditable = !!data
+    && !!countingSessionId
     && ["draft", "reopened", "pending_review"].includes(data.closure.status)
     && permissions.financial?.cashClosures?.approve;
   const expectedEditable = !!data
@@ -218,6 +223,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
           persist: (draft) => api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}`, {
             method: "PATCH",
             json: {
+              ...(countingSessionId ? { countingSessionId } : {}),
               lines: draft.lines.map((line) => ({
                 id: line.id,
                 reportedCents: line.reportedCents,
@@ -248,7 +254,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
     } finally {
       if (saveInFlight.current === request) saveInFlight.current = null;
     }
-  }, [api, closureId, toast]);
+  }, [api, closureId, countingSessionId, toast]);
 
   useEffect(() => {
     if (saveState !== "dirty" || !editable) return;
@@ -345,7 +351,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
       if (["dirty", "saving", "error"].includes(saveState)) await save();
       const payload = await api<CashClosureApiPayload>(`/api/financial/cash-closures/${encodeURIComponent(closureId)}/finalize`, {
         method: "POST",
-        json: { operatorId, countingSessionId: sessionId },
+        json: { operatorId, countingSessionId },
       });
       toast({ title: `Contagem de ${operatorName} finalizada na sessão.` });
       if (payload.allocationError) {
@@ -560,7 +566,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
       <LockKeyhole className="h-4 w-4 shrink-0 text-zinc-400" />
       <span><strong className="text-zinc-900">Pix e cartões são conferidos automaticamente pelo PDV</strong> e ficam travados. No <strong className="text-zinc-900">dinheiro</strong>, Caixa e Financeiro informam contagens independentes.</span>
     </div>
-    {!sessionId && data.closure.status !== "approved" && <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-900"><span>Abra este dia por uma sessão de contagem para finalizar operadores e encaminhar o dinheiro ao depósito.</span><Button asChild size="sm" variant="outline" className="shrink-0 border-amber-300 bg-white"><Link href="/dashboard/financial/cash-closures/sessions/new">Abrir sessão</Link></Button></div>}
+    {!countingSessionId && data.closure.status !== "approved" && <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-900"><span>O acesso direto permite informar os valores do Caixa, mas a conferência do Financeiro e a finalização só ficam disponíveis dentro de uma sessão de contagem.</span><Button asChild size="sm" variant="outline" className="shrink-0 border-amber-300 bg-white"><Link href="/dashboard/financial/cash-closures/sessions/new">Abrir sessão</Link></Button></div>}
 
     {data.closure.source.unknownPaymentNames.length > 0 && <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900"><strong>Formas não mapeadas:</strong> {data.closure.source.unknownPaymentNames.join(", ")}</div>}
     {data.closure.finalizedOperatorCount > 0 && <Card className="rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]">
@@ -596,7 +602,7 @@ export function CashClosureDayPage({ kioskId, date, sessionId }: Props) {
             <div className="flex flex-wrap items-center justify-end gap-2">
               <span className="inline-flex h-7 items-center rounded-full bg-stone-100 px-3 font-mono text-[11.5px] font-bold text-zinc-600"><span className="mr-1.5 font-sans font-semibold text-zinc-400">PDV</span>{formatBRL(expected)}</span>
               <span className={cn("inline-flex h-7 items-center rounded-full px-3 text-[11.5px] font-extrabold", operatorFinalized ? "bg-emerald-50 text-emerald-700" : groupResult?.className ?? "text-zinc-500", !operatorFinalized && (!groupResult ? "bg-stone-100" : difference === 0 ? "bg-emerald-50" : difference > 0 ? "bg-blue-50" : "bg-rose-50"))}>{operatorFinalized ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Contagem finalizada</> : !groupResult ? "Aguardando Financeiro" : difference === 0 ? <><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Tudo confere</> : groupResult.label}</span>
-              {groupFinanceEditable && sessionId && <Button size="sm" className="h-8 rounded-lg bg-emerald-700 font-bold hover:bg-emerald-800" data-operator-id={operatorId} data-operator-name={group.name} onClick={handleFinalizeOperator} disabled={!!working}>{working === `finalize:${operatorId}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}Finalizar operador</Button>}
+              {groupFinanceEditable && countingSessionId && <Button size="sm" className="h-8 rounded-lg bg-emerald-700 font-bold hover:bg-emerald-800" data-operator-id={operatorId} data-operator-name={group.name} onClick={handleFinalizeOperator} disabled={!!working}>{working === `finalize:${operatorId}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}Finalizar operador</Button>}
               {operatorFinalized && !legacySharedBatchItemIds.has(group.operator?.cashDeposit.batchItemId ?? "") && permissions.financial.cashClosures.reopen && <Button size="sm" variant="outline" className="h-8 rounded-lg font-bold" onClick={() => setReasonAction({ operatorId, operatorName: group.name })} disabled={!!working}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Reabrir operador</Button>}
               {group.operator?.cashDeposit.manualSplitRequired && permissions.financial?.cashDeposits?.adjust && <Button size="sm" variant="outline" className="h-8 rounded-lg border-amber-300 bg-amber-50 font-bold text-amber-900" onClick={() => void splitOversizedDeposit(group.operator!.operatorId, group.operator!.cashDeposit.eligibleCents)} disabled={!!working}>{working === "split-deposit" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}Dividir depósito</Button>}
             </div>

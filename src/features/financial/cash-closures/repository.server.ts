@@ -28,7 +28,10 @@ import {
   withCashClosureOperatorAggregate,
 } from "./operators";
 import { refreshCashClosureSummaries } from "./summaries.server";
-import { prepareCashCountingSessionOperatorAttachment } from "@/features/financial/cash-counting-sessions/repository.server";
+import {
+  assertOpenCashCountingSessionScope,
+  prepareCashCountingSessionOperatorAttachment,
+} from "@/features/financial/cash-counting-sessions/repository.server";
 import type {
   BuiltCashClosure,
   CashClosure,
@@ -390,7 +393,13 @@ export async function saveCashClosureDraft(
   id: string,
   updates: CashClosureDraftLineInput[],
   actor: CashClosureActor,
-  permissions: { editReported: boolean; editCounted: boolean } = { editReported: true, editCounted: false },
+  permissions: {
+    editReported: boolean;
+    editCounted: boolean;
+    requireCountingSessionForCountedChanges?: boolean;
+    countingSessionId?: string;
+    canManageCountingSessionOfOthers?: boolean;
+  } = { editReported: true, editCounted: false },
 ) {
   const ref = closureRef(id);
   const result = await financialDbAdmin.runTransaction(async (transaction) => {
@@ -424,6 +433,27 @@ export async function saveCashClosureDraft(
     const finalizedOperatorIds = new Set(
       currentOperators.filter((operator) => operator.status === "approved").map((operator) => operator.operatorId),
     );
+    const hasCountedChanges = permissions.editCounted && normalized.lines.some((current) => {
+      if (isPdvAutoCountedChannel(current.channel)) return false;
+      const update = updateById.get(current.id);
+      if (!update) return false;
+      return (update.countedCents !== undefined && update.countedCents !== current.countedCents)
+        || (update.note !== undefined && (update.note?.trim() || null) !== current.note);
+    });
+    if (hasCountedChanges && permissions.requireCountingSessionForCountedChanges) {
+      if (!permissions.countingSessionId) {
+        throw new Error("A conferência do Financeiro exige uma sessão de contagem aberta.");
+      }
+      await assertOpenCashCountingSessionScope(transaction, {
+        sessionId: permissions.countingSessionId,
+        workspaceId: closure.workspaceId,
+        kioskId: closure.kioskId,
+        year: closure.year,
+        month: closure.month,
+        actor,
+        canManageOthers: permissions.canManageCountingSessionOfOthers,
+      });
+    }
     const nextLines = lineSnapshot.docs.map((document) => {
       const current = normalizedById.get(document.id)!;
       const update = updateById.get(current.id);
