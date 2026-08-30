@@ -12,7 +12,10 @@ import { SignedUniformMovementTermDocument } from "../../src/components/pdf/Unif
 import { applyCoalaLetterheadToPdf } from "../../src/features/hr/documents/letterhead-pdf.server";
 import {
   ADMISSION_SIGNATURE_TEMPLATE_ORDER,
+  ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID,
+  ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID,
   compareAdmissionSignatureOrder,
+  isAdmissionSignatureTemplateApplicable,
 } from "../../src/features/hr/documents/admission-signature-order";
 import {
   isSelectableAdmissionSignatureTemplate,
@@ -79,6 +82,35 @@ test("ordem da seleção admissional é a mesma ordem canônica do pacote PDF", 
     [...reversedWorkflow].sort(compareAdmissionSignatureOrder).map((document) => document.templateId),
     selectable.map((template) => template.id),
   );
+});
+
+test("seleção admissional oferece somente a modalidade vigente de vale-transporte", () => {
+  const selectable = SYSTEM_DOCUMENT_TEMPLATES.filter(isSelectableAdmissionSignatureTemplate);
+  const forRequest = selectable.filter((template) =>
+    isAdmissionSignatureTemplateApplicable(template, "yes")
+  );
+  const forWaiver = selectable.filter((template) =>
+    isAdmissionSignatureTemplateApplicable(template, "no")
+  );
+  const withoutDecision = selectable.filter((template) =>
+    isAdmissionSignatureTemplateApplicable(template, null)
+  );
+
+  assert.equal(forRequest.length, 7);
+  assert.equal(forRequest.some((template) =>
+    template.id === ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID
+  ), true);
+  assert.equal(forRequest.some((template) =>
+    template.id === ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID
+  ), false);
+  assert.equal(forWaiver.length, 7);
+  assert.equal(forWaiver.some((template) =>
+    template.id === ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID
+  ), false);
+  assert.equal(forWaiver.some((template) =>
+    template.id === ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID
+  ), true);
+  assert.equal(withoutDecision.length, 6);
 });
 
 test("timbrado é aplicado ao PDF sem alterar a quantidade de páginas", async () => {

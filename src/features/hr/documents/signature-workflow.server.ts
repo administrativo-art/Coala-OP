@@ -6,7 +6,10 @@ import { getStorage } from "firebase-admin/storage";
 import { PDFDocument } from "pdf-lib";
 
 import { admissionClosingComponentsSummary } from "@/features/hr/documents/admission-closing-term";
-import { compareAdmissionSignatureOrder } from "@/features/hr/documents/admission-signature-order";
+import {
+  compareAdmissionSignatureOrder,
+  isAdmissionSignatureTemplateApplicable,
+} from "@/features/hr/documents/admission-signature-order";
 import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company-document-signatory.server";
 import { composeDocumentPackage } from "@/features/hr/documents/document-pdf-composer.server";
 import { generateDocumentFromTemplate } from "@/features/hr/documents/generate-document.server";
@@ -80,6 +83,25 @@ function generatedSignatureEmployeeDocumentId(generatedDocumentId: string) {
 
 function processEmployeeId(process: RecordValue) {
   return text(process.employeeId) ?? text(process.collaboratorUserId);
+}
+
+function transportVoucherAnswer(process: RecordValue) {
+  return record(process.publicFormAnswers).wantsTransportVoucher;
+}
+
+function assertApplicableSignatureTemplates(
+  process: RecordValue,
+  templates: Array<{ templateId: unknown }>,
+) {
+  const answer = transportVoucherAnswer(process);
+  const invalid = templates.find((template) =>
+    !isAdmissionSignatureTemplateApplicable(template, answer)
+  );
+  if (invalid) {
+    throw new Error(
+      "A seleção de vale-transporte não corresponde à decisão registrada no formulário da integração. Revise os modelos antes de continuar.",
+    );
+  }
 }
 
 function nextLegacyStage(process: RecordValue, completedStage: string) {
@@ -383,6 +405,10 @@ export async function selectSignatureTemplates(params: {
     throw new Error("Os modelos só podem ser selecionados na etapa de preparação da assinatura.");
   }
   const uniqueIds = Array.from(new Set(params.templateIds.filter(Boolean))).slice(0, 30);
+  assertApplicableSignatureTemplates(
+    process.data,
+    uniqueIds.map((templateId) => ({ templateId })),
+  );
   const templateDocs = await Promise.all(uniqueIds.map(async (id) => {
     const system = systemDocumentTemplateById(id);
     const systemStatus = system ? await systemTemplateWorkflowStatus(system) : null;
@@ -481,12 +507,18 @@ export async function generateSelectedSignatureDocuments(params: {
     .collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
     .get();
-  const targets = snapshot.docs
-    .filter(
-      (document) =>
-        document.get("selected") === true &&
-        (!params.documentIds?.length || params.documentIds.includes(document.id)) &&
-        !["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(document.get("status")))
+  const selectedDocuments = snapshot.docs.filter(
+    (document) =>
+      document.get("selected") === true
+      && (!params.documentIds?.length || params.documentIds.includes(document.id))
+  );
+  assertApplicableSignatureTemplates(
+    process.data,
+    selectedDocuments.map((document) => ({ templateId: document.get("templateId") })),
+  );
+  const targets = selectedDocuments
+    .filter((document) =>
+      !["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(document.get("status")))
     )
     .sort(compareWorkflowDocuments);
   if (!targets.length) throw new Error("Selecione ao menos um modelo para gerar.");
@@ -627,13 +659,17 @@ export async function sendSignatureDocuments(params: {
     .collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
     .get();
-  const targets = snapshot.docs
-    .filter(
-      (document) =>
-        document.get("selected") === true &&
-        document.get("status") === "ready_to_send" &&
-        (!params.documentIds?.length || params.documentIds.includes(document.id))
-    )
+  const selectedDocuments = snapshot.docs.filter(
+    (document) =>
+      document.get("selected") === true
+      && (!params.documentIds?.length || params.documentIds.includes(document.id))
+  );
+  assertApplicableSignatureTemplates(
+    process.data,
+    selectedDocuments.map((document) => ({ templateId: document.get("templateId") })),
+  );
+  const targets = selectedDocuments
+    .filter((document) => document.get("status") === "ready_to_send")
     .sort(compareWorkflowDocuments);
   if (!targets.length) throw new Error("Aprove ao menos um documento antes de enviar.");
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
