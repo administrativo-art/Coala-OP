@@ -19,6 +19,7 @@ import {
   buildSignatureFileName,
 } from "@/features/hr/documents/signature-document-name";
 import {
+  isSelectableAdmissionSignatureTemplate,
   SYSTEM_DOCUMENT_TEMPLATES,
   systemDocumentTemplateById,
 } from "@/features/hr/documents/system-template-catalog";
@@ -332,12 +333,7 @@ export async function listSignatureWorkflow(onboardingId: string) {
       signatureScope: text(document.get("signatureScope")) ?? "bundle",
     }))
   const systemTemplates = effectiveSystemTemplates
-    .filter((template) =>
-      template.status === "published"
-      && template.sourceFormat === "docx"
-      && ["Admissão", "Contratos"].includes(template.category)
-      && template.id !== "system-admission-bundle-closing-term",
-    )
+    .filter(isSelectableAdmissionSignatureTemplate)
     .map((template) => ({
       id: template.id,
       name: template.name,
