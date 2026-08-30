@@ -209,6 +209,30 @@ export async function listCashCountingSessions(workspaceId: string, limit = 100)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+export async function getOpenCashCountingSessionForScope(input: {
+  workspaceId: string;
+  kioskId: string;
+  year: number;
+  month: number;
+}) {
+  const scopeKey = cashCountingSessionScopeKey(input.kioskId, input.year, input.month);
+  const lockSnapshot = await financialDbAdmin.collection(LOCKS).doc(
+    cashCountingSessionLockId(input.workspaceId, scopeKey),
+  ).get();
+  if (!lockSnapshot.exists) return null;
+  const sessionId = String(lockSnapshot.data()?.sessionId ?? "");
+  if (!sessionId) return null;
+  const sessionSnapshot = await financialDbAdmin.collection(SESSIONS).doc(sessionId).get();
+  if (!sessionSnapshot.exists) return null;
+  const session = normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot));
+  if (
+    session.workspaceId !== input.workspaceId
+    || session.status !== "open"
+    || !session.scopeKeys.includes(scopeKey)
+  ) return null;
+  return session;
+}
+
 export type CashCountingSessionOperatorCursor = {
   finalizedAt: string;
   id: string;
@@ -249,6 +273,41 @@ export async function getCashCountingSession(
   };
 }
 
+export async function assertOpenCashCountingSessionScope(
+  transaction: FirebaseFirestore.Transaction,
+  input: {
+    sessionId: string;
+    workspaceId: string;
+    kioskId: string;
+    year: number;
+    month: number;
+    actor: CashClosureActor;
+    canManageOthers?: boolean;
+  },
+) {
+  const sessionRef = financialDbAdmin.collection(SESSIONS).doc(input.sessionId);
+  const scopeKey = cashCountingSessionScopeKey(input.kioskId, input.year, input.month);
+  const lockRef = financialDbAdmin.collection(LOCKS).doc(
+    cashCountingSessionLockId(input.workspaceId, scopeKey),
+  );
+  const [sessionSnapshot, lockSnapshot] = await Promise.all([
+    transaction.get(sessionRef),
+    transaction.get(lockRef),
+  ]);
+  if (!sessionSnapshot.exists) throw new Error("Sessão de contagem não encontrada.");
+  const session = normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot));
+  if (session.workspaceId !== input.workspaceId) throw new Error("Sessão de contagem não encontrada.");
+  if (session.status !== "open") throw new Error("A sessão de contagem já foi encerrada.");
+  assertSessionOwner(session, input.actor, input.canManageOthers);
+  if (!session.scopeKeys.includes(scopeKey)) {
+    throw new Error("Esta unidade e competência não pertencem à sessão de contagem.");
+  }
+  if (!lockSnapshot.exists || lockSnapshot.data()?.sessionId !== session.id) {
+    throw new Error("O bloqueio da unidade e competência não pertence mais a esta sessão.");
+  }
+  return { session, sessionRef };
+}
+
 export async function prepareCashCountingSessionOperatorAttachment(
   transaction: FirebaseFirestore.Transaction,
   input: {
@@ -260,26 +319,15 @@ export async function prepareCashCountingSessionOperatorAttachment(
     now: string;
   },
 ) {
-  const sessionRef = financialDbAdmin.collection(SESSIONS).doc(input.sessionId);
-  const scopeKey = cashCountingSessionScopeKey(input.closure.kioskId, input.closure.year, input.closure.month);
-  const lockRef = financialDbAdmin.collection(LOCKS).doc(
-    cashCountingSessionLockId(input.closure.workspaceId, scopeKey),
-  );
-  const [sessionSnapshot, lockSnapshot] = await Promise.all([
-    transaction.get(sessionRef),
-    transaction.get(lockRef),
-  ]);
-  if (!sessionSnapshot.exists) throw new Error("Sessão de contagem não encontrada.");
-  const session = normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot));
-  if (session.workspaceId !== input.closure.workspaceId) throw new Error("Sessão de contagem não encontrada.");
-  if (session.status !== "open") throw new Error("A sessão de contagem já foi encerrada.");
-  assertSessionOwner(session, input.actor, input.canManageOthers);
-  if (!session.scopeKeys.includes(scopeKey)) {
-    throw new Error("Este operador não pertence às unidades e competências da sessão.");
-  }
-  if (!lockSnapshot.exists || lockSnapshot.data()?.sessionId !== session.id) {
-    throw new Error("O bloqueio da unidade e competência não pertence mais a esta sessão.");
-  }
+  const { session, sessionRef } = await assertOpenCashCountingSessionScope(transaction, {
+    sessionId: input.sessionId,
+    workspaceId: input.closure.workspaceId,
+    kioskId: input.closure.kioskId,
+    year: input.closure.year,
+    month: input.closure.month,
+    actor: input.actor,
+    canManageOthers: input.canManageOthers,
+  });
 
   const id = `${input.closure.id}_${input.operator.operatorId}`;
   const operatorRef = sessionRef.collection(SESSION_OPERATORS).doc(id);

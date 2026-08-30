@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth-server";
 import { canAccessUnit } from "@/lib/unit-access";
 import { assertCashClosureAccess } from "@/features/financial/cash-closures/access.server";
 import { listCashClosures } from "@/features/financial/cash-closures/repository.server";
+import { getOpenCashCountingSessionForScope } from "@/features/financial/cash-counting-sessions/repository.server";
 import { cashClosureListQuerySchema } from "@/features/financial/cash-closures/schemas";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 
@@ -39,12 +40,25 @@ export const GET = withApiErrorHandling({
       throw new AppError({ code: "CASH_CLOSURE_LIST_UNIT_FORBIDDEN", kind: "AUTHORIZATION", cause });
     }
   }
-  const closures = await listCashClosures({
-    workspaceId: context.workspace_id,
-    ...parsed.data,
-  });
+  const [closures, activeCountingSession] = await Promise.all([
+    listCashClosures({
+      workspaceId: context.workspace_id,
+      ...parsed.data,
+    }),
+    parsed.data.kioskId && parsed.data.year !== undefined && parsed.data.month !== undefined
+      ? getOpenCashCountingSessionForScope({
+        workspaceId: context.workspace_id,
+        kioskId: parsed.data.kioskId,
+        year: parsed.data.year,
+        month: parsed.data.month,
+      })
+      : Promise.resolve(null),
+  ]);
   const visible = closures.filter((closure) =>
     canAccessUnit(context.userDoc, closure.kioskId, { isDefaultAdmin: context.isDefaultAdmin }),
   );
-  return NextResponse.json({ closures: visible }, { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json({
+    closures: visible,
+    activeCountingSessionId: activeCountingSession?.id ?? null,
+  }, { headers: { "Cache-Control": "private, no-store" } });
 });
