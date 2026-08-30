@@ -385,9 +385,37 @@ test("sessão bloqueia escopo, recebe operador sem depósito precoce e cria malo
   assert.ok(cashLine);
   await saveCashClosureDraft(
     closureId,
-    [{ id: cashLine.id, reportedCents: 10_000, countedCents: 10_000 }],
+    [{ id: cashLine.id, reportedCents: 10_000 }],
     actor,
-    { editReported: true, editCounted: true },
+    {
+      editReported: true,
+      editCounted: true,
+      requireCountingSessionForCountedChanges: true,
+    },
+  );
+  await assert.rejects(
+    () => saveCashClosureDraft(
+      closureId,
+      [{ id: cashLine.id, countedCents: 10_000 }],
+      actor,
+      {
+        editReported: false,
+        editCounted: true,
+        requireCountingSessionForCountedChanges: true,
+      },
+    ),
+    /exige uma sessão de contagem aberta/,
+  );
+  await saveCashClosureDraft(
+    closureId,
+    [{ id: cashLine.id, countedCents: 10_000 }],
+    actor,
+    {
+      editReported: false,
+      editCounted: true,
+      requireCountingSessionForCountedChanges: true,
+      countingSessionId: session.id,
+    },
   );
   await finalizeCashClosureOperator(closureId, "operator-1", actor, { countingSessionId: session.id });
   assert.deepEqual(await listCashDepositBatches({ workspaceId, limit: 10 }), []);

@@ -135,7 +135,7 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
       { label: `Sessão ${session.id.slice(0, 8)}` },
     ]} />
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><div className="flex flex-wrap items-center gap-2"><h1 className="text-3xl font-black tracking-tight">Sessão de contagem</h1><Badge variant="outline" className="rounded-full px-3 py-1">{STATUS_LABEL[session.status]}</Badge></div><p className="mt-1.5 font-mono text-xs text-zinc-400">ID {session.id}</p></div>
+      <div className="flex flex-wrap items-center gap-2"><h1 className="text-3xl font-black tracking-tight">Sessão de contagem</h1><Badge variant="outline" className="rounded-full px-3 py-1">{STATUS_LABEL[session.status]}</Badge></div>
       {session.status === "open" && permissions.financial.cashClosures.approve && <div className="flex gap-2">{session.finalizedOperatorCount === 0 && <Button variant="outline" className="rounded-xl border-rose-200 text-rose-700" disabled={working} onClick={() => setCancelOpen(true)}><XCircle className="mr-2 h-4 w-4" />Cancelar sessão</Button>}<Button className="rounded-xl bg-emerald-700 font-bold hover:bg-emerald-800" disabled={working || session.finalizedOperatorCount === 0} onClick={() => void action("/finish", {}, "Contagem da sessão encerrada.")}><CheckCircle2 className="mr-2 h-4 w-4" />Encerrar contagem da sessão</Button></div>}
     </div>
 
@@ -144,7 +144,7 @@ export function CashCountingSessionPage({ sessionId }: { sessionId: string }) {
       ["Dinheiro contado", formatBRL(liveCountedCashCents)],
       ["Elegível para depósito", formatBRL(liveDepositEligibleCents)],
       ["Somente DRE", formatBRL(liveDreOnlyCashCents)],
-    ].map(([label, value]) => <Card key={label} className="rounded-2xl border-stone-200"><CardContent className="p-4"><p className="text-xs font-semibold text-zinc-400">{label}</p><strong className="mt-1 block font-mono text-lg">{value}</strong></CardContent></Card>)}</div>
+    ].map(([label, value]) => <Card key={label} className="rounded-2xl border-stone-200"><div className="flex min-h-24 flex-col justify-center px-5 py-4"><p className="text-xs font-semibold text-zinc-400">{label}</p><strong className="mt-1 block font-mono text-lg">{value}</strong></div></Card>)}</div>
 
     <Card className="rounded-2xl border-stone-200">
       <CardHeader><CardTitle className="text-lg">Unidades e competências</CardTitle></CardHeader>

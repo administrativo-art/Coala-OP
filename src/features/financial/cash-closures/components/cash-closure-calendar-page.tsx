@@ -40,6 +40,7 @@ export function CashClosureCalendarPage({ kioskId, year, month, sessionId }: { k
   const { kiosks } = useKiosks();
   const { toast } = useToast();
   const [closures, setClosures] = useState<CashClosure[]>([]);
+  const [activeCountingSessionId, setActiveCountingSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -54,6 +55,7 @@ export function CashClosureCalendarPage({ kioskId, year, month, sessionId }: { k
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Falha ao carregar calendário.");
       setClosures(payload.closures ?? []);
+      setActiveCountingSessionId(payload.activeCountingSessionId ?? null);
     } catch (error) { toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar." }); }
     finally { setLoading(false); }
   }, [firebaseUser, kioskId, month, toast, year]);
@@ -78,11 +80,12 @@ export function CashClosureCalendarPage({ kioskId, year, month, sessionId }: { k
     ?? closures[0]?.kioskName
     ?? kioskId;
   const hasFinalizedClosure = closures.some((closure) => closure.status === "approved" || closure.finalizedOperatorCount > 0);
-  const sessionQuery = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
+  const countingSessionId = sessionId ?? activeCountingSessionId;
+  const sessionQuery = countingSessionId ? `?sessionId=${encodeURIComponent(countingSessionId)}` : "";
   if (!permissions.financial?.cashClosures?.view) return null;
   return <PageContainer variant="wide" className="space-y-4 pb-10">
     <CashControlNavigation active="closures" crumbs={[{ label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures" }, { label: kioskName, href: `/dashboard/financial/cash-closures/${encodeURIComponent(kioskId)}` }, { label: monthLabel }]} />
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[26px] font-black tracking-tight">{monthLabel}</h1><p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">{kioskName}{sessionId && <span className="ml-2 rounded-full bg-pink-50 px-2 py-1 text-[10px] font-black uppercase text-pink-700">Sessão ativa</span>}</p></div><div className="flex gap-2">{sessionId && <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold"><Link href={`/dashboard/financial/cash-closures/sessions/${sessionId}`}>Voltar à sessão</Link></Button>}<Button variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div></div>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[26px] font-black tracking-tight">{monthLabel}</h1><p className="mt-1.5 text-[13.5px] font-semibold text-zinc-500">{kioskName}{countingSessionId && <span className="ml-2 rounded-full bg-pink-50 px-2 py-1 text-[10px] font-black uppercase text-pink-700">Sessão ativa</span>}</p></div><div className="flex gap-2">{countingSessionId && <Button asChild variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold"><Link href={`/dashboard/financial/cash-closures/sessions/${countingSessionId}`}>Voltar à sessão</Link></Button>}<Button variant="outline" className="h-10 rounded-xl border-stone-200 px-4 font-bold" onClick={() => void load()} disabled={loading}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button></div></div>
     <div className="grid gap-3">
       <Card className="overflow-hidden rounded-2xl border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.04)]">
         <CardContent className="!p-0">
