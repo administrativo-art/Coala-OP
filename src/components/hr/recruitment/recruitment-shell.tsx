@@ -9546,6 +9546,12 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const canActOnSignaturePhase = isCurrentPhase &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+  const signatureTemplates = signatureWorkflow?.templates ?? [];
+  const allSignatureTemplatesSelected = signatureTemplates.length > 0
+    && signatureTemplates.every(template => selectedSignatureTemplateIds.includes(template.id));
+  const someSignatureTemplatesSelected = signatureTemplates.some(template =>
+    selectedSignatureTemplateIds.includes(template.id)
+  );
   const selectedSignatureDocuments = (signatureWorkflow?.documents ?? []).filter(document => document.selected);
   const signatureDocumentsReadyToSend = selectedSignatureDocuments.filter(document => document.status === 'ready_to_send');
   const signatureGenerated = selectedSignatureDocuments.length > 0
@@ -10929,12 +10935,30 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                         <p className="text-xs font-black uppercase tracking-wide text-violet-800">1. Selecione os modelos</p>
                         <p className="mt-1 text-xs font-semibold text-violet-700">Escolha os documentos que serão gerados para este titular.</p>
                       </div>
-                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700">
-                        {selectedSignatureTemplateIds.length} selecionado{selectedSignatureTemplateIds.length === 1 ? '' : 's'}
-                      </span>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <label className={`inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-black text-violet-700 ${
+                          signatureSelectionEditable && !signatureBusy ? 'cursor-pointer hover:bg-violet-50' : 'cursor-not-allowed opacity-60'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={allSignatureTemplatesSelected}
+                            ref={input => {
+                              if (input) input.indeterminate = someSignatureTemplatesSelected && !allSignatureTemplatesSelected;
+                            }}
+                            disabled={!signatureSelectionEditable || !!signatureBusy || signatureTemplates.length === 0}
+                            onChange={event => setSelectedSignatureTemplateIds(
+                              event.target.checked ? signatureTemplates.map(template => template.id) : []
+                            )}
+                          />
+                          Selecionar todos
+                        </label>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700">
+                          {selectedSignatureTemplateIds.length} selecionado{selectedSignatureTemplateIds.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
-                      {(signatureWorkflow?.templates ?? []).map(template => {
+                      {signatureTemplates.map((template, index) => {
                         const checked = selectedSignatureTemplateIds.includes(template.id);
                         return (
                           <label key={template.id} className={`flex items-start gap-2.5 rounded-xl border p-3 ${checked ? 'border-violet-300 bg-white' : 'border-slate-200 bg-white/60'}`}>
@@ -10942,21 +10966,24 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                               type="checkbox"
                               checked={checked}
                               disabled={!signatureSelectionEditable || !!signatureBusy}
-                              onChange={event => setSelectedSignatureTemplateIds(current =>
-                                event.target.checked
-                                  ? Array.from(new Set([...current, template.id]))
-                                  : current.filter(id => id !== template.id)
-                              )}
+                              onChange={event => setSelectedSignatureTemplateIds(current => {
+                                const next = new Set(current);
+                                if (event.target.checked) next.add(template.id);
+                                else next.delete(template.id);
+                                return signatureTemplates
+                                  .filter(option => next.has(option.id))
+                                  .map(option => option.id);
+                              })}
                               className="mt-0.5"
                             />
                             <span className="min-w-0">
-                              <span className="block truncate text-[12.5px] font-black text-slate-900">{template.name}</span>
+                              <span className="block truncate text-[12.5px] font-black text-slate-900">{index + 1}. {template.name}</span>
                               <span className="mt-0.5 block text-[10.5px] font-semibold text-slate-500">{template.category} · versão {template.version}</span>
                             </span>
                           </label>
                         );
                       })}
-                      {(signatureWorkflow?.templates ?? []).length === 0 ? (
+                      {signatureTemplates.length === 0 ? (
                         <p className="col-span-full rounded-xl border border-dashed bg-white p-4 text-xs font-semibold text-slate-500">
                           Nenhum modelo DOCX publicado. Cadastre em Documentos → Modelos.
                         </p>
