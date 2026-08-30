@@ -6867,6 +6867,8 @@ type SignatureWorkflowDocument = {
   status: string;
   reviewStatus?: string;
   generatedDocumentId?: string;
+  generatedStoragePath?: string;
+  generatedPdfStoragePath?: string;
   missingRequired?: string[];
   lastError?: string | null;
   emailStatus?: string;
@@ -9196,6 +9198,33 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     }
   }
 
+  async function viewSignatureDocument(documentId: string) {
+    if (!selectedProcess) return;
+    const previewWindow = window.open('', '_blank');
+    setSignatureBusy(`preview:${documentId}`);
+    setError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        `/api/hr/onboarding/${selectedProcess.id}/signature-documents?documentId=${encodeURIComponent(documentId)}&download=preview`,
+        { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Prévia indisponível.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      if (previewWindow) previewWindow.location.href = url;
+      else window.open(url, '_blank');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (caught) {
+      previewWindow?.close();
+      setError(caught instanceof Error ? caught.message : 'Falha ao visualizar documento.');
+    } finally {
+      setSignatureBusy(null);
+    }
+  }
+
   async function copyLink(copyId: string, link: string) {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(link);
@@ -10974,6 +11003,14 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                         <p className="mt-1 text-xs font-semibold text-violet-700">Escolha os documentos que serão gerados para este titular.</p>
                       </div>
                       <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void loadSignatureWorkflow()}
+                          className="grid h-8 w-8 place-items-center rounded-lg border border-violet-200 bg-white text-violet-600 hover:bg-violet-50"
+                          title="Atualizar documentos"
+                        >
+                          <RotateCw className="h-3.5 w-3.5" />
+                        </button>
                         <label className={`inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-black text-violet-700 ${
                           signatureSelectionEditable && !signatureBusy ? 'cursor-pointer hover:bg-violet-50' : 'cursor-not-allowed opacity-60'
                         }`}>
@@ -10998,27 +11035,77 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
                       {signatureTemplates.map((template, index) => {
                         const checked = selectedSignatureTemplateIds.includes(template.id);
+                        const workflowDocument = checked
+                          ? selectedSignatureDocuments.find(document => document.templateId === template.id)
+                          : undefined;
+                        const failed = workflowDocument
+                          ? ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(workflowDocument.status)
+                          : false;
                         return (
-                          <label key={template.id} className={`flex items-start gap-2.5 rounded-xl border p-3 ${checked ? 'border-violet-300 bg-white' : 'border-slate-200 bg-white/60'}`}>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              disabled={!signatureSelectionEditable || !!signatureBusy}
-                              onChange={event => setSelectedSignatureTemplateIds(current => {
-                                const next = new Set(current);
-                                if (event.target.checked) next.add(template.id);
-                                else next.delete(template.id);
-                                return signatureTemplates
-                                  .filter(option => next.has(option.id))
-                                  .map(option => option.id);
-                              })}
-                              className="mt-0.5"
-                            />
-                            <span className="min-w-0">
-                              <span className="block truncate text-[12.5px] font-black text-slate-900">{index + 1}. {template.name}</span>
-                              <span className="mt-0.5 block text-[10.5px] font-semibold text-slate-500">{template.category} · versão {template.version}</span>
-                            </span>
-                          </label>
+                          <div key={template.id} className={`rounded-xl border p-3 ${checked ? 'border-violet-300 bg-white' : 'border-slate-200 bg-white/60'}`}>
+                            <label className={`flex items-start gap-2.5 ${signatureSelectionEditable && !signatureBusy ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={!signatureSelectionEditable || !!signatureBusy}
+                                onChange={event => setSelectedSignatureTemplateIds(current => {
+                                  const next = new Set(current);
+                                  if (event.target.checked) next.add(template.id);
+                                  else next.delete(template.id);
+                                  return signatureTemplates
+                                    .filter(option => next.has(option.id))
+                                    .map(option => option.id);
+                                })}
+                                className="mt-0.5"
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate text-[12.5px] font-black text-slate-900">{index + 1}. {template.name}</span>
+                                <span className="mt-0.5 block text-[10.5px] font-semibold text-slate-500">{template.category} · versão {template.version}</span>
+                              </span>
+                            </label>
+                            {workflowDocument ? (
+                              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                                <div className="min-w-0">
+                                  <p className={`text-[10.5px] font-black ${failed ? 'text-rose-600' : workflowDocument.status === 'ready_to_send' ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                    {SIGNATURE_WORKFLOW_STATUS_LABELS[workflowDocument.status] ?? workflowDocument.status}
+                                  </p>
+                                  {workflowDocument.lastError ? <p className="mt-1 text-[10px] font-semibold text-rose-600">{workflowDocument.lastError}</p> : null}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {workflowDocument.generatedPdfStoragePath ? (
+                                    <button
+                                      type="button"
+                                      disabled={!!signatureBusy}
+                                      onClick={() => void viewSignatureDocument(workflowDocument.id)}
+                                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 text-[10.5px] font-black text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />Visualizar
+                                    </button>
+                                  ) : null}
+                                  {workflowDocument.generatedStoragePath ? (
+                                    <button
+                                      type="button"
+                                      disabled={!!signatureBusy}
+                                      onClick={() => void downloadSignatureDocument(workflowDocument.id, 'generated')}
+                                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[10.5px] font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />Baixar Word
+                                    </button>
+                                  ) : null}
+                                  {canReviewDocuments && canActOnSignaturePhase && workflowDocument.status === 'review_pending' ? (
+                                    <button
+                                      type="button"
+                                      disabled={!!signatureBusy}
+                                      onClick={() => void signatureAction('approve', { documentId: workflowDocument.id })}
+                                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-[10.5px] font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+                                    >
+                                      <CheckCircle2 className="h-3.5 w-3.5" />Revisado
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
                         );
                       })}
                       {signatureTemplates.length === 0 ? (
@@ -11028,31 +11115,27 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                       ) : null}
                     </div>
                     {canGenerateDocumentsProcess ? (
-                      <button
-                        type="button"
-                        disabled={!signatureSelectionEditable || selectedSignatureTemplateIds.length === 0 || !!signatureBusy}
-                        onClick={() => void generateSelectedSignatureTemplates()}
-                        className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-xs font-black text-white hover:bg-violet-600 disabled:opacity-50"
-                      >
-                        {signatureBusy === 'select' || signatureBusy === 'generate' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                        Gerar documentos selecionados
-                      </button>
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          disabled={!signatureSelectionEditable || selectedSignatureTemplateIds.length === 0 || !!signatureBusy}
+                          onClick={() => void generateSelectedSignatureTemplates()}
+                          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-[11px] font-black text-white hover:bg-violet-600 disabled:opacity-50"
+                        >
+                          {signatureBusy === 'select' || signatureBusy === 'generate' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                          Gerar selecionados
+                        </button>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
 
-                {selectedSignatureDocuments.length > 0 ? (
+                {activePhaseId !== 'signature_preparation' ? selectedSignatureDocuments.length > 0 ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-wide text-slate-600">
-                          {activePhaseId === 'signature_preparation' ? '2. Revisão do RH' : 'Acompanhamento da assinatura'}
-                        </p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">
-                          {activePhaseId === 'signature_preparation'
-                            ? 'Baixe e confira cada Word antes de liberar o envio.'
-                            : 'Os indicadores são atualizados automaticamente pelo Autentique.'}
-                        </p>
+                        <p className="text-xs font-black uppercase tracking-wide text-slate-600">Acompanhamento da assinatura</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">Os indicadores são atualizados automaticamente pelo Autentique.</p>
                       </div>
                       <button type="button" onClick={() => void loadSignatureWorkflow()} className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-500" title="Atualizar">
                         <RotateCw className={`h-3.5 w-3.5 ${signatureBusy === 'refresh' ? 'animate-spin' : ''}`} />
@@ -11076,9 +11159,14 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                               {document.lastError ? <p className="mt-1 text-[10.5px] font-semibold text-rose-600">{document.lastError}</p> : null}
                             </div>
                             <div className="flex flex-wrap gap-1.5">
-                              {generated ? (
+                              {document.generatedPdfStoragePath ? (
+                                <button type="button" disabled={!!signatureBusy} onClick={() => void viewSignatureDocument(document.id)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 text-[10.5px] font-black text-violet-700">
+                                  <Eye className="h-3.5 w-3.5" />Visualizar
+                                </button>
+                              ) : null}
+                              {generated && document.generatedStoragePath ? (
                                 <button type="button" disabled={!!signatureBusy} onClick={() => void downloadSignatureDocument(document.id, 'generated')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[10.5px] font-black text-slate-700">
-                                  <Download className="h-3.5 w-3.5" />Word
+                                  <Download className="h-3.5 w-3.5" />Baixar Word
                                 </button>
                               ) : null}
                               {archived ? (
@@ -11117,7 +11205,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                     <p className="text-sm font-black text-slate-800">Nenhum documento selecionado.</p>
                     <p className="mt-1 text-xs font-semibold text-slate-500">Selecione os modelos na preparação para iniciar a geração.</p>
                   </div>
-                )}
+                ) : null}
 
                 {canSendSignatures && canActOnSignaturePhase && signatureDocumentsReadyToSend.length > 0 ? (
                   <button

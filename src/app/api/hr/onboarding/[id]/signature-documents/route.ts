@@ -44,25 +44,33 @@ export async function GET(
     const documentId = request.nextUrl.searchParams.get("documentId");
     const download = request.nextUrl.searchParams.get("download");
     if (documentId && download) {
+      if (!["generated", "preview", "signed"].includes(download)) {
+        return error("Formato de documento inválido.");
+      }
       const document = await hrDbAdmin.collection("hrSignatureDocuments").doc(documentId).get();
       if (!document.exists || document.get("onboardingId") !== id) return error("Documento não encontrado.", 404);
       const path = download === "signed"
         ? document.get("signedStoragePath")
-        : document.get("generatedStoragePath");
+        : download === "preview"
+          ? document.get("generatedPdfStoragePath")
+          : document.get("generatedStoragePath");
       if (typeof path !== "string" || !path.trim()) return error("Arquivo ainda não disponível.", 404);
       const [buffer] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(path).download();
       const signed = download === "signed";
+      const preview = download === "preview";
       const fileName = String(
         signed
           ? `${document.get("documentName") ?? "Documento assinado"}.pdf`
+          : preview
+            ? `${document.get("documentName") ?? "Documento gerado"}.pdf`
           : document.get("generatedFileName") ?? "documento.docx"
       ).replace(/[\r\n"]/g, "");
       return new NextResponse(new Uint8Array(buffer), {
         headers: {
-          "Content-Type": signed
+          "Content-Type": signed || preview
             ? "application/pdf"
             : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+          "Content-Disposition": `${preview ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(fileName)}`,
           "Cache-Control": "private, no-store",
         },
       });
