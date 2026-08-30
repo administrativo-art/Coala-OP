@@ -85,6 +85,7 @@ import { canUpdateExpectedAdmissionDate } from '@/features/hr/onboarding-lifecyc
 import { formatBrlCurrency, parseBrlCurrency } from '@/features/hr/compensation/brl-currency';
 import { isAutomaticAccountantDocument } from '@/features/hr/accountant/document-selection';
 import { isPreviewableDocumentContentType } from '@/features/hr/documents/preview-content-type';
+import { isAdmissionSignatureTemplateApplicable } from '@/features/hr/documents/admission-signature-order';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import {
   ONBOARDING_HEALTH_META,
@@ -6883,6 +6884,29 @@ type SignatureWorkflowPayload = {
   documents: SignatureWorkflowDocument[];
 };
 
+function applicableSignatureTemplateIds(
+  workflow: SignatureWorkflowPayload,
+  transportVoucherAnswer: unknown,
+) {
+  return new Set(
+    workflow.templates
+      .filter((template) =>
+        isAdmissionSignatureTemplateApplicable(template, transportVoucherAnswer)
+      )
+      .map((template) => template.id),
+  );
+}
+
+function selectedApplicableSignatureTemplateIds(
+  workflow: SignatureWorkflowPayload,
+  transportVoucherAnswer: unknown,
+) {
+  const applicableIds = applicableSignatureTemplateIds(workflow, transportVoucherAnswer);
+  return workflow.documents
+    .filter((document) => document.selected && applicableIds.has(document.templateId))
+    .map((document) => document.templateId);
+}
+
 const SIGNATURE_WORKFLOW_STATUS_LABELS: Record<string, string> = {
   selected: 'Selecionado',
   generation_failed: 'Falha na geração',
@@ -8712,12 +8736,15 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
       ) as SignatureWorkflowPayload;
       setSignatureWorkflow(payload);
       setSelectedSignatureTemplateIds(
-        payload.documents.filter(document => document.selected).map(document => document.templateId)
+        selectedApplicableSignatureTemplateIds(
+          payload,
+          selectedProcess.publicFormAnswers?.wantsTransportVoucher,
+        )
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Falha ao carregar documentos para assinatura.');
     }
-  }, [canViewSignatures, getToken, selectedProcess?.id]);
+  }, [canViewSignatures, getToken, selectedProcess?.id, selectedProcess?.publicFormAnswers?.wantsTransportVoucher]);
 
   const refreshSelectedProcess = useCallback(async () => {
     if (!selectedProcess?.id) return;
@@ -9116,7 +9143,10 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
       ) as SignatureWorkflowPayload;
       setSignatureWorkflow(payload);
       setSelectedSignatureTemplateIds(
-        payload.documents.filter(document => document.selected).map(document => document.templateId)
+        selectedApplicableSignatureTemplateIds(
+          payload,
+          selectedProcess.publicFormAnswers?.wantsTransportVoucher,
+        )
       );
       onRefresh();
       return payload;
@@ -9546,13 +9576,21 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const canActOnSignaturePhase = isCurrentPhase &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
-  const signatureTemplates = signatureWorkflow?.templates ?? [];
+  const signatureTemplates = (signatureWorkflow?.templates ?? []).filter((template) =>
+    isAdmissionSignatureTemplateApplicable(
+      template,
+      selectedProcess.publicFormAnswers?.wantsTransportVoucher,
+    )
+  );
   const allSignatureTemplatesSelected = signatureTemplates.length > 0
     && signatureTemplates.every(template => selectedSignatureTemplateIds.includes(template.id));
   const someSignatureTemplatesSelected = signatureTemplates.some(template =>
     selectedSignatureTemplateIds.includes(template.id)
   );
-  const selectedSignatureDocuments = (signatureWorkflow?.documents ?? []).filter(document => document.selected);
+  const applicableSignatureIds = new Set(signatureTemplates.map((template) => template.id));
+  const selectedSignatureDocuments = (signatureWorkflow?.documents ?? []).filter(
+    (document) => document.selected && applicableSignatureIds.has(document.templateId)
+  );
   const signatureDocumentsReadyToSend = selectedSignatureDocuments.filter(document => document.status === 'ready_to_send');
   const signatureGenerated = selectedSignatureDocuments.length > 0
     && selectedSignatureDocuments.every(document => Boolean(document.generatedDocumentId));
