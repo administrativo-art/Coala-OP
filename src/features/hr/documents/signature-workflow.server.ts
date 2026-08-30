@@ -6,6 +6,7 @@ import { getStorage } from "firebase-admin/storage";
 import { PDFDocument } from "pdf-lib";
 
 import { admissionClosingComponentsSummary } from "@/features/hr/documents/admission-closing-term";
+import { compareAdmissionSignatureOrder } from "@/features/hr/documents/admission-signature-order";
 import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company-document-signatory.server";
 import { composeDocumentPackage } from "@/features/hr/documents/document-pdf-composer.server";
 import { generateDocumentFromTemplate } from "@/features/hr/documents/generate-document.server";
@@ -101,6 +102,26 @@ function maskedDocument(value: unknown) {
   if (digits.length === 11) return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
   if (digits.length === 14) return `${digits.slice(0, 2)}.***.***/****-${digits.slice(-2)}`;
   return "";
+}
+
+function compareWorkflowDocuments(
+  left: FirebaseFirestore.QueryDocumentSnapshot,
+  right: FirebaseFirestore.QueryDocumentSnapshot,
+) {
+  return compareAdmissionSignatureOrder(
+    {
+      id: left.id,
+      templateId: left.get("templateId"),
+      templateName: left.get("templateName"),
+      order: left.get("order"),
+    },
+    {
+      id: right.id,
+      templateId: right.get("templateId"),
+      templateName: right.get("templateName"),
+      order: right.get("order"),
+    },
+  );
 }
 
 async function sendAdmissionBundle(params: {
@@ -344,10 +365,10 @@ export async function listSignatureWorkflow(onboardingId: string) {
       signatureScope: template.signatureScope,
     }));
   templates.push(...systemTemplates);
-  templates.sort((a, b) => `${a.category} ${a.name}`.localeCompare(`${b.category} ${b.name}`, "pt-BR"));
+  templates.sort(compareAdmissionSignatureOrder);
   const documents: Array<{ id: string } & RecordValue> = workflowSnapshot.docs
     .map((document): { id: string } & RecordValue => ({ id: document.id, ...record(document.data()) }))
-    .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+    .sort(compareAdmissionSignatureOrder);
   return { templates, documents };
 }
 
@@ -386,7 +407,9 @@ export async function selectSignatureTemplates(params: {
       signatureScope: text(document.get("signatureScope")) ?? "bundle",
     };
   }));
-  const templates = templateDocs.filter((template): template is NonNullable<typeof template> => Boolean(template));
+  const templates = templateDocs
+    .filter((template): template is NonNullable<typeof template> => Boolean(template))
+    .sort(compareAdmissionSignatureOrder);
   if (templates.length !== uniqueIds.length) {
     throw new Error("Um dos modelos selecionados não está publicado.");
   }
@@ -458,12 +481,14 @@ export async function generateSelectedSignatureDocuments(params: {
     .collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
     .get();
-  const targets = snapshot.docs.filter(
-    (document) =>
-      document.get("selected") === true &&
-      (!params.documentIds?.length || params.documentIds.includes(document.id)) &&
-      !["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(document.get("status")))
-  );
+  const targets = snapshot.docs
+    .filter(
+      (document) =>
+        document.get("selected") === true &&
+        (!params.documentIds?.length || params.documentIds.includes(document.id)) &&
+        !["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(document.get("status")))
+    )
+    .sort(compareWorkflowDocuments);
   if (!targets.length) throw new Error("Selecione ao menos um modelo para gerar.");
 
   for (const target of targets) {
@@ -602,12 +627,14 @@ export async function sendSignatureDocuments(params: {
     .collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
     .get();
-  const targets = snapshot.docs.filter(
-    (document) =>
-      document.get("selected") === true &&
-      document.get("status") === "ready_to_send" &&
-      (!params.documentIds?.length || params.documentIds.includes(document.id))
-  );
+  const targets = snapshot.docs
+    .filter(
+      (document) =>
+        document.get("selected") === true &&
+        document.get("status") === "ready_to_send" &&
+        (!params.documentIds?.length || params.documentIds.includes(document.id))
+    )
+    .sort(compareWorkflowDocuments);
   if (!targets.length) throw new Error("Aprove ao menos um documento antes de enviar.");
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const bundleTargets = targets.filter((target) => target.get("signatureScope") !== "independent");

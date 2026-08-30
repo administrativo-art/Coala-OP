@@ -11,6 +11,10 @@ import PizZip from "pizzip";
 import { SignedUniformMovementTermDocument } from "../../src/components/pdf/UniformTermDocument";
 import { applyCoalaLetterheadToPdf } from "../../src/features/hr/documents/letterhead-pdf.server";
 import {
+  ADMISSION_SIGNATURE_TEMPLATE_ORDER,
+  compareAdmissionSignatureOrder,
+} from "../../src/features/hr/documents/admission-signature-order";
+import {
   isSelectableAdmissionSignatureTemplate,
   SYSTEM_DOCUMENT_TEMPLATES,
   systemDocumentTemplateById,
@@ -51,6 +55,29 @@ test("seleção admissional oferece oito modelos e mantém o encerramento autom�
   assert.equal(
     selectable.some((template) => template.id === "system-admission-bundle-closing-term"),
     false,
+  );
+});
+
+test("ordem da seleção admissional é a mesma ordem canônica do pacote PDF", () => {
+  const selectable = [...SYSTEM_DOCUMENT_TEMPLATES.filter(isSelectableAdmissionSignatureTemplate)]
+    .sort(compareAdmissionSignatureOrder);
+
+  assert.deepEqual(
+    selectable.map((template) => template.id),
+    ADMISSION_SIGNATURE_TEMPLATE_ORDER.filter((id) =>
+      id !== "system-admission-bundle-closing-term"
+    ),
+  );
+
+  const reversedWorkflow = [...selectable].reverse().map((template, order) => ({
+    id: `workflow-${order}`,
+    templateId: template.id,
+    templateName: template.name,
+    order,
+  }));
+  assert.deepEqual(
+    [...reversedWorkflow].sort(compareAdmissionSignatureOrder).map((document) => document.templateId),
+    selectable.map((template) => template.id),
   );
 });
 
