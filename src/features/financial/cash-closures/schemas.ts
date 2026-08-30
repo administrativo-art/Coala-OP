@@ -25,6 +25,23 @@ export const saveCashClosureDraftSchema = z.object({
 
 export const cashClosureReasonSchema = z.object({
   reason: z.string().trim().min(3, "Informe um motivo com pelo menos 3 caracteres.").max(1000),
+  operatorId: z.string().trim().min(1).max(300).optional(),
+});
+
+export const finalizeCashClosureOperatorSchema = z.object({
+  operatorId: z.string().trim().min(1).max(300),
+  countingSessionId: z.string().uuid(),
+}).strict();
+
+export const cashClosureExpectedAdjustmentSchema = z.object({
+  lineId: z.string().trim().min(1).max(300),
+  correctedExpectedCents: z.number().int().safe().min(0).max(100_000_000),
+  reason: z.string().trim().min(3, "Informe o motivo da correção.").max(1000),
+});
+
+export const restoreCashClosureExpectedSchema = z.object({
+  lineId: z.string().trim().min(1).max(300),
+  reason: z.string().trim().min(3, "Informe o motivo da restauração.").max(1000),
 });
 
 export const cashClosureListQuerySchema = z.object({
@@ -34,5 +51,6 @@ export const cashClosureListQuerySchema = z.object({
 });
 
 export const manualCashDepositSplitSchema = z.object({
+  operatorId: z.string().trim().min(1).max(300),
   partsCents: z.array(z.number().int().safe().positive().max(500_000)).min(2).max(100),
 });

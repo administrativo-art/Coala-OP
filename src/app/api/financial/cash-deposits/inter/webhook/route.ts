@@ -7,6 +7,7 @@ import {
   retrieveConfiguredCobrancaWebhook,
 } from "@/lib/integrations/inter/cobrancas";
 import { getInterCobrancaEnvironment } from "@/lib/integrations/inter/config.server";
+import { AppError, withApiErrorHandling } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,34 +27,44 @@ function safeUrl(value: string) {
   return `${url.origin}${url.pathname}`;
 }
 
-export async function GET(request: NextRequest) {
+export const GET = withApiErrorHandling({
+  source: "api-financial",
+  operation: "get-inter-cobranca-webhook",
+  routeOrJob: "/api/financial/cash-deposits/inter/webhook",
+}, async (request: NextRequest) => {
+  const context = await requireUser(request).catch((cause) => {
+    throw new AppError({ code: "AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
+  });
   try {
-    const context = await requireUser(request);
     assertCashDepositAccess(context, "view");
-    const configured = await retrieveConfiguredCobrancaWebhook();
-    return NextResponse.json({
-      environment: getInterCobrancaEnvironment(),
-      webhookUrl: safeUrl(configured.webhookUrl),
-    }, { headers: { "Cache-Control": "private, no-store" } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao consultar webhook Inter.";
-    return NextResponse.json({ error: message }, { status: message.includes("permissão") ? 403 : 400 });
+  } catch (cause) {
+    throw new AppError({ code: "INTER_WEBHOOK_VIEW_FORBIDDEN", kind: "AUTHORIZATION", cause });
   }
-}
+  const configured = await retrieveConfiguredCobrancaWebhook();
+  return NextResponse.json({
+    environment: getInterCobrancaEnvironment(),
+    webhookUrl: safeUrl(configured.webhookUrl),
+  }, { headers: { "Cache-Control": "private, no-store" } });
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withApiErrorHandling({
+  source: "api-financial",
+  operation: "configure-inter-cobranca-webhook",
+  routeOrJob: "/api/financial/cash-deposits/inter/webhook",
+}, async (request: NextRequest) => {
+  const context = await requireUser(request).catch((cause) => {
+    throw new AppError({ code: "AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
+  });
   try {
-    const context = await requireUser(request);
     assertCashDepositAccess(context, "issue");
-    const webhookUrl = targetWebhookUrl();
-    await configureCobrancaWebhook(webhookUrl.toString());
-    return NextResponse.json({
-      ok: true,
-      environment: getInterCobrancaEnvironment(),
-      webhookUrl: safeUrl(webhookUrl.toString()),
-    }, { headers: { "Cache-Control": "private, no-store" } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao configurar webhook Inter.";
-    return NextResponse.json({ error: message }, { status: message.includes("permissão") ? 403 : 400 });
+  } catch (cause) {
+    throw new AppError({ code: "INTER_WEBHOOK_CONFIGURE_FORBIDDEN", kind: "AUTHORIZATION", cause });
   }
-}
+  const webhookUrl = targetWebhookUrl();
+  await configureCobrancaWebhook(webhookUrl.toString());
+  return NextResponse.json({
+    ok: true,
+    environment: getInterCobrancaEnvironment(),
+    webhookUrl: safeUrl(webhookUrl.toString()),
+  }, { headers: { "Cache-Control": "private, no-store" } });
+});

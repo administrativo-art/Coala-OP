@@ -3,6 +3,7 @@ import "server-only";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { CASH_CLOSURE_TIMEZONE } from "./date";
 import { withPdvAutomaticClosureTotals } from "./persistence";
+import { cashClosureDreRevenueCents, cashClosureSummaryCounts } from "./summary-counts";
 import type { CashClosure, CashClosureMonthlySummary, CashClosureUnitSummary } from "./types";
 
 const MONTHLY = "cashClosureMonthlySummaries";
@@ -24,6 +25,24 @@ function maxString(values: Array<string | null | undefined>) {
   return values.filter((value): value is string => !!value).sort().at(-1) ?? null;
 }
 
+function depositProgressCents(
+  closure: CashClosure,
+  field: "allocatedCents" | "issuedCents" | "paidCents",
+) {
+  const stored = closure.cashDeposit[field];
+  if (stored !== undefined) return stored;
+  if (field === "allocatedCents" && ["allocated", "issued", "paid", "adjusted"].includes(closure.cashDeposit.status)) {
+    return closure.cashDeposit.eligibleCents;
+  }
+  if (field === "issuedCents" && ["issued", "paid"].includes(closure.cashDeposit.status)) {
+    return closure.cashDeposit.eligibleCents;
+  }
+  if (field === "paidCents" && closure.cashDeposit.status === "paid") {
+    return closure.cashDeposit.eligibleCents;
+  }
+  return 0;
+}
+
 function summaryFromClosures(input: {
   id: string;
   closures: CashClosure[];
@@ -36,7 +55,7 @@ function summaryFromClosures(input: {
   now: string;
 }): CashClosureMonthlySummary {
   const closures = input.closures.map(withPdvAutomaticClosureTotals);
-  const approvedClosures = closures.filter((closure) => closure.status === "approved");
+  const counts = cashClosureSummaryCounts(closures);
   return {
     id: input.id,
     workspaceId: input.workspaceId,
@@ -45,24 +64,15 @@ function summaryFromClosures(input: {
     pdvFilialId: input.pdvFilialId,
     year: input.year,
     month: input.month,
-    closureCount: closures.length,
-    pendingCount: closures.filter((closure) => ["draft", "pending_review", "reopened"].includes(closure.status)).length,
-    divergentCount: approvedClosures.filter((closure) => closure.divergentLineCount > 0).length,
-    approvedCount: approvedClosures.length,
-    syncErrorCount: closures.filter((closure) => closure.status === "sync_error" || !!closure.syncError).length,
+    ...counts,
     expectedTotalCents: closures.reduce((total, closure) => total + closure.expectedTotalCents, 0),
-    countedTotalCents: approvedClosures.reduce((total, closure) => total + closure.countedTotalCents, 0),
-    differenceTotalCents: approvedClosures.reduce((total, closure) => total + closure.differenceTotalCents, 0),
-    countedCashCents: approvedClosures.reduce((total, closure) => total + closure.countedCashCents, 0),
-    allocatedCashCents: closures
-      .filter((closure) => ["allocated", "issued", "paid", "adjusted"].includes(closure.cashDeposit.status))
-      .reduce((total, closure) => total + closure.cashDeposit.eligibleCents, 0),
-    issuedCashCents: closures
-      .filter((closure) => ["issued", "paid"].includes(closure.cashDeposit.status))
-      .reduce((total, closure) => total + closure.cashDeposit.eligibleCents, 0),
-    paidCashCents: closures
-      .filter((closure) => closure.cashDeposit.status === "paid")
-      .reduce((total, closure) => total + closure.cashDeposit.eligibleCents, 0),
+    countedTotalCents: closures.reduce((total, closure) => total + closure.finalizedCountedTotalCents, 0),
+    differenceTotalCents: closures.reduce((total, closure) => total + closure.finalizedDifferenceTotalCents, 0),
+    dreRevenueTotalCents: cashClosureDreRevenueCents(closures),
+    countedCashCents: closures.reduce((total, closure) => total + closure.finalizedCountedCashCents, 0),
+    allocatedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "allocatedCents"), 0),
+    issuedCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "issuedCents"), 0),
+    paidCashCents: closures.reduce((total, closure) => total + depositProgressCents(closure, "paidCents"), 0),
     lastSyncedAt: maxString(closures.map((closure) => closure.syncedAt)),
     lastApprovedDate: maxString(
       closures.filter((closure) => closure.status === "approved").map((closure) => closure.date),
@@ -72,13 +82,18 @@ function summaryFromClosures(input: {
 }
 
 async function closuresForMonth(workspaceId: string, kioskId: string, year: number, month: number) {
+  const maximumClosureCount = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const snapshot = await financialDbAdmin
     .collection("cashClosures")
     .where("workspaceId", "==", workspaceId)
     .where("kioskId", "==", kioskId)
     .where("year", "==", year)
     .where("month", "==", month)
+    .limit(maximumClosureCount + 1)
     .get();
+  if (snapshot.size > maximumClosureCount) {
+    throw new Error("Existe mais de um fechamento diário para a unidade nesta competência.");
+  }
   return snapshot.docs.map((document) => ({ id: document.id, ...document.data() } as CashClosure));
 }
 
@@ -129,17 +144,13 @@ export async function refreshCashClosureSummaries(closure: CashClosure) {
   return monthly;
 }
 
-export async function listCashClosureUnitSummaries(workspaceId: string) {
-  const snapshot = await financialDbAdmin.collection(UNITS).where("workspaceId", "==", workspaceId).get();
-  return snapshot.docs.map((document) => ({ id: document.id, ...document.data() } as CashClosureUnitSummary));
-}
-
 export async function listCashClosureMonthlySummaries(workspaceId: string, kioskId: string) {
   const snapshot = await financialDbAdmin.collection(MONTHLY)
     .where("workspaceId", "==", workspaceId)
     .where("kioskId", "==", kioskId)
     .orderBy("year", "desc")
     .orderBy("month", "desc")
+    .limit(120)
     .get();
   return snapshot.docs.map((document) => ({ id: document.id, ...document.data() } as CashClosureMonthlySummary));
 }

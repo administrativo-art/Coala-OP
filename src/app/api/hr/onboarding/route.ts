@@ -23,6 +23,7 @@ import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { fetchPdvLegalFiliais, fetchPdvLegalProfiles } from '@/lib/integrations/pdv-legal-admin';
 import { createPjOnboardingWorkflow, sanitizePjServiceItems } from '@/features/hr/onboarding-pj/core';
 import { redactOnboardingProcess } from '@/features/hr/onboarding/process-redaction.server';
+import { missingAdmissionDocumentJobRoleCbo } from '@/features/hr/onboarding/admission-document-prerequisites';
 import {
   resolveConfiguredMonthlySalary,
   salaryBaseFunctionId,
@@ -408,6 +409,15 @@ export async function POST(request: NextRequest) {
     return jsonError('Unidade indisponível para novos processos.', 400);
   }
   if (shiftDefinitionId && !shiftDefinitionDoc?.exists) return jsonError('Turno não encontrado.', 404);
+  if (missingAdmissionDocumentJobRoleCbo({
+    generateSignatureDocuments,
+    jobRoleCbo: roleDoc.get('cbo'),
+  })) {
+    return jsonError(
+      'O cargo selecionado não possui CBO válido. Configure o CBO no cadastro do cargo antes de iniciar uma integração com documentos admissionais.',
+      409,
+    );
+  }
   if (
     unitDoc?.exists &&
     shiftDefinitionDoc?.exists &&

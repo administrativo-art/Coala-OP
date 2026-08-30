@@ -3,8 +3,9 @@
 ## Estado da implementação
 
 Os nove modelos originais recebidos pela operação em 20/07/2026 permanecem
-preservados como versões `v1`. As versões `v2` são matrizes parametrizadas,
-preparadas por scripts determinísticos e validadas por renderização.
+preservados como versões `v1`. As versões operacionais indicadas neste documento
+são matrizes parametrizadas, preparadas por scripts determinísticos e validadas
+por renderização.
 
 - Categoria funcional: **Informações admissionais**
 - Formato editável: **DOCX**
@@ -13,17 +14,17 @@ preparadas por scripts determinísticos e validadas por renderização.
 - Consentimento de imagem e voz: **solicitação independente**
 - Vale-transporte: **dois modelos alternativos e versionados**
 - Estado técnico: **implementado**
-- Estado de publicação: **bloqueado até a homologação do RH**
+- Estado de publicação: **homologado e publicado em 30/08/2026**
 
-Os modelos continuam com estado `draft` no catálogo do sistema. Essa trava é
-intencional: impede o uso oficial antes da aprovação do conteúdo e da assinatura
-única do pacote.
+Os modelos estão com estado `published` no catálogo do sistema e podem ser
+selecionados no fluxo admissional. O termo de encerramento continua automático
+e não aparece como opção manual.
 
 ## Modelos operacionais
 
-| Ordem | Arquivo v2 | SHA-256 | Assinatura |
+| Ordem | Arquivo operacional | SHA-256 | Assinatura |
 |---:|---|---|---|
-| 1 | `01-contrato-experiencia-v2.docx` | `0b0ce20b71e53ad9fd5576a52bcbfb57dfdfc6f678f82a9cb8cc7f646437da52` | Pacote |
+| 1 | `01-contrato-experiencia-v3.docx` | `eaa43b298ba99b6a948216152dd8ca58a0c969aa3416d7d3548f91f20c50f3c6` | Pacote |
 | 2 | `02-banco-horas-v2.docx` | `cff1a19adbca0847db5337182e503340edeb590b8786a238c6249be957fe0b32` | Pacote |
 | 3 | `03-termo-lgpd-v2.docx` | `70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265` | Pacote |
 | 4 | `04-imagem-voz-v2.docx` | `a3d20c516afa510c6aa9d58ae359827490b76289643f7508932fce61d8c42381` | Independente |
@@ -115,9 +116,10 @@ Nenhum modelo é preparado por substituição livre em produção. O construtor 
 IA apenas propõe um plano de mapeamento; a aplicação continua sendo
 determinística, com hash da fonte e contagem exata de ocorrências.
 
-## Validação e publicação
+## Validação de novas versões
 
-Antes de trocar os modelos para `published`:
+A homologação operacional das versões catalogadas foi concluída em 30/08/2026.
+Antes de publicar qualquer nova versão:
 
 1. homologar com o RH os textos, o consentimento separado, as duas modalidades
    de vale-transporte e a assinatura única;

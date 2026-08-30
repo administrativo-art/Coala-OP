@@ -24,6 +24,27 @@ Ela não consulta serviços externos, publica issue, faz commit, push, deploy ou
 
 O fluxo operacional, a sanitização do export e os critérios humanos para transformar um grupo em issue estão em `error-triage-runbook.md`; as consultas read-only ficam em `observability-queries.md`.
 
+## coala-supply-chain-audit
+
+Invocação no Codex:
+
+```text
+$coala-supply-chain-audit
+```
+
+A skill é explicit-only e somente leitura por padrão. Ela inventaria manifests, lockfiles, referências Git/URL, scripts lifecycle, ferramentas executadas por `npx`, comandos de instalação e pacotes duplicados, sem consultar rede ou interpretar CVEs.
+
+Os artefatos são gravados apenas em:
+
+```text
+.ai-work/supply-chain/<timestamp>/
+├── inventory.json
+├── findings.json
+└── report.md
+```
+
+A execução não atualiza dependências, não regenera lockfiles e não faz commit, push, deploy ou publicação. `npm audit`, consulta de CVEs e remediação exigem autorização separada. Referências de dependência capazes de conter credenciais são redigidas no inventário.
+
 ## Validação
 
 ```bash

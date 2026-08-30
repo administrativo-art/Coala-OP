@@ -4,10 +4,12 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import { resolvePdvFilialId } from "@/lib/kiosk-identifiers";
 import {
   fetchAllCouponsForDay,
+  fetchPdvLegalCashMovementSources,
   fetchPdvLegalUsers,
   getAccessToken,
 } from "@/lib/integrations/pdv-legal-admin";
 import { buildCashClosureFromPdv } from "./build-cash-closure";
+import { parsePdvCashMovements } from "./pdv-cash-movements";
 import { recordCashClosureSyncError, upsertClosureFromPdv } from "./repository.server";
 import type { CashClosureActor } from "./types";
 
@@ -40,11 +42,17 @@ export async function syncCashClosure(input: {
   const kiosk = await resolveKiosk(input.kioskId);
   try {
     const token = await getAccessToken();
-    const [coupons, users] = await Promise.all([
+    const [coupons, users, movementSources] = await Promise.all([
       fetchAllCouponsForDay(token, input.date, kiosk.pdvFilialId),
       fetchPdvLegalUsers(),
+      fetchPdvLegalCashMovementSources(token, input.date),
     ]);
     const operatorNameById = Object.fromEntries(users.map((user) => [user.id, user.name]));
+    const cashMovements = parsePdvCashMovements({
+      ...movementSources,
+      date: input.date,
+      filialId: kiosk.pdvFilialId,
+    });
     const built = buildCashClosureFromPdv(coupons, {
       workspaceId: input.workspaceId,
       kioskId: kiosk.id,
@@ -52,17 +60,17 @@ export async function syncCashClosure(input: {
       pdvFilialId: kiosk.pdvFilialId,
       date: input.date,
       operatorNameById,
+      cashMovements,
     });
     return upsertClosureFromPdv(built, input.actor);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha desconhecida ao sincronizar o PDV.";
     await recordCashClosureSyncError({
       workspaceId: input.workspaceId,
       kioskId: kiosk.id,
       kioskName: kiosk.name,
       pdvFilialId: kiosk.pdvFilialId,
       date: input.date,
-      error: message,
+      error: "Falha ao sincronizar com o PDV Legal.",
     });
     throw error;
   }

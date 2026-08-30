@@ -6,6 +6,7 @@
  *
  * Uso:
  *   node --import tsx scripts/migrate-cash-closure-permissions.mts
+ *   node --import tsx scripts/migrate-cash-closure-permissions.mts --max-docs=5000
  *   node --import tsx scripts/migrate-cash-closure-permissions.mts --execute
  */
 import { FieldPath } from "firebase-admin/firestore";
@@ -15,20 +16,50 @@ config({ path: ".env.local" });
 const { dbAdmin } = await import("../src/lib/firebase-admin");
 
 const execute = process.argv.includes("--execute");
-const snapshot = await dbAdmin.collection("profiles").orderBy(FieldPath.documentId()).get();
-const batch = dbAdmin.batch();
-const changes: Array<{ id: string; admin: boolean }> = [];
+const maxDocsArgument = process.argv.find((argument) => argument.startsWith("--max-docs="));
+const maxDocs = Number(maxDocsArgument?.split("=")[1] ?? 5_000);
+if (!Number.isSafeInteger(maxDocs) || maxDocs < 1 || maxDocs > 20_000) {
+  throw new Error("--max-docs deve ser um inteiro entre 1 e 20000.");
+}
+const pageSize = 200;
 
-for (const document of snapshot.docs) {
+async function readProfilesBounded() {
+  const documents: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  let lastId: string | null = null;
+  while (documents.length <= maxDocs) {
+    const requestLimit = Math.min(pageSize, maxDocs + 1 - documents.length);
+    let query = dbAdmin.collection("profiles")
+      .orderBy(FieldPath.documentId())
+      .limit(requestLimit);
+    if (lastId) query = query.startAfter(lastId);
+    const snapshot = await query.get();
+    documents.push(...snapshot.docs);
+    if (snapshot.size < requestLimit) return documents;
+    lastId = snapshot.docs.at(-1)?.id ?? null;
+  }
+  throw new Error(`profiles excedeu o limite de ${maxDocs} documentos. Revise --max-docs antes de continuar.`);
+}
+
+const documents = await readProfilesBounded();
+const changes: Array<{
+  id: string;
+  admin: boolean;
+  ref: FirebaseFirestore.DocumentReference;
+  patch: Record<string, unknown>;
+}> = [];
+
+for (const document of documents) {
   const data = document.data();
   const admin = data.isDefaultAdmin === true;
   const currentFinancial = data.permissions?.financial ?? {};
-  const cashClosures = currentFinancial.cashClosures ?? {
-    view: admin,
-    edit: admin,
-    approve: admin,
-    reopen: admin,
-    resync: admin,
+  const currentCashClosures = currentFinancial.cashClosures ?? {};
+  const cashClosures = {
+    view: currentCashClosures.view ?? admin,
+    edit: currentCashClosures.edit ?? admin,
+    approve: currentCashClosures.approve ?? admin,
+    adjustExpected: currentCashClosures.adjustExpected ?? admin,
+    reopen: currentCashClosures.reopen ?? admin,
+    resync: currentCashClosures.resync ?? admin,
   };
   const cashDeposits = currentFinancial.cashDeposits ?? {
     view: admin,
@@ -36,10 +67,15 @@ for (const document of snapshot.docs) {
     cancel: admin,
     adjust: admin,
   };
-  if (currentFinancial.cashClosures && currentFinancial.cashDeposits) continue;
-  changes.push({ id: document.id, admin });
-  if (execute) {
-    batch.set(document.ref, {
+  if (
+    currentFinancial.cashClosures?.adjustExpected !== undefined
+    && currentFinancial.cashDeposits
+  ) continue;
+  changes.push({
+    id: document.id,
+    admin,
+    ref: document.ref,
+    patch: {
       permissions: {
         financial: {
           ...currentFinancial,
@@ -47,15 +83,24 @@ for (const document of snapshot.docs) {
           cashDeposits,
         },
       },
-    }, { merge: true });
+    },
+  });
+}
+
+if (execute) {
+  for (let index = 0; index < changes.length; index += 400) {
+    const batch = dbAdmin.batch();
+    for (const change of changes.slice(index, index + 400)) {
+      batch.set(change.ref, change.patch, { merge: true });
+    }
+    await batch.commit();
   }
 }
 
-if (execute && changes.length > 0) await batch.commit();
-
 console.log(JSON.stringify({
   mode: execute ? "EXECUTED" : "DRY_RUN",
-  scanned: snapshot.size,
+  scanned: documents.length,
+  readCeiling: maxDocs + 1,
   changed: changes.length,
-  profiles: changes,
+  profiles: changes.map(({ id, admin }) => ({ id, admin })),
 }, null, 2));

@@ -139,6 +139,13 @@ service cloud.firestore {
         ));
     }
 
+    function canAccessDepositBatch(batch) {
+      // Malotes de sessão podem reunir várias unidades e são lidos somente
+      // pela API, que valida acesso a todas elas. O cliente lê diretamente
+      // apenas os lotes legados de uma única unidade.
+      return !batch.keys().hasAny(['kioskIds']) && canAccessKiosk(batch.kioskId);
+    }
+
     function canViewSettings() {
       return (hasUserDoc() && hasFinancialAccess() && userData().permissions.settings.view == true)
         || (hasFinancialClaims() && financialClaims().settings.view == true);
@@ -465,14 +472,16 @@ service cloud.firestore {
       match /lines/{lineId} {
         allow read: if canViewCashClosures()
           && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId);
-        allow update: if canEditCashClosures()
-          && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId)
-          && get(/databases/$(database)/documents/cashClosures/$(closureId)).data.status == 'draft'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['countedCents', 'note'])
-          && (request.resource.data.countedCents == null
-            || (request.resource.data.countedCents is int && request.resource.data.countedCents >= 0))
-          && (request.resource.data.note == null || request.resource.data.note is string);
-        allow create, delete: if false;
+        // Escritas passam exclusivamente pelas APIs, que separam as permissões
+        // do Caixa, do Financeiro e do ajuste auditado do esperado.
+        allow create, update, delete: if false;
+      }
+
+      match /cashClosureOperators/{operatorId} {
+        allow read: if canViewCashClosures()
+          && canAccessKiosk(get(/databases/$(database)/documents/cashClosures/$(closureId)).data.kioskId);
+        // A finalização por operador e sua alocação no depósito são atômicas no servidor.
+        allow create, update, delete: if false;
       }
     }
 
@@ -490,18 +499,53 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Sessões, bloqueios e políticas são operados exclusivamente pelas APIs
+    // e comandos administrativos para manter agregados e auditoria atômicos.
+    match /cashCountingSessions/{sessionId} {
+      allow read, write: if false;
+      match /operators/{operatorId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /cashCountingSessionLocks/{lockId} {
+      allow read, write: if false;
+    }
+
+    match /cashCountingSessionAuditLogs/{logId} {
+      allow read, write: if false;
+    }
+
+    match /cashDepositPeriodPolicies/{policyId} {
+      allow read, write: if false;
+    }
+
+    match /cashDepositPeriodPolicyAuditLogs/{logId} {
+      allow read, write: if false;
+    }
+
     match /cashDepositBatches/{batchId} {
-      allow read: if canViewCashDeposits() && canAccessKiosk(resource.data.kioskId);
+      allow read: if canViewCashDeposits() && canAccessDepositBatch(resource.data);
       allow write: if false;
 
       match /items/{itemId} {
         allow read: if canViewCashDeposits()
-          && canAccessKiosk(get(/databases/$(database)/documents/cashDepositBatches/$(batchId)).data.kioskId);
+          && canAccessDepositBatch(get(/databases/$(database)/documents/cashDepositBatches/$(batchId)).data);
         allow write: if false;
       }
     }
 
     match /cashDepositAdjustments/{adjustmentId} {
+      allow read, write: if false;
+    }
+
+    // O saldo e o histórico de trocas de moedas são mantidos pelas APIs
+    // transacionais; não há escrita direta pelo navegador.
+    match /cashCoinBalances/{balanceId} {
+      allow read, write: if false;
+    }
+
+    match /cashCoinEvents/{eventId} {
       allow read, write: if false;
     }
 

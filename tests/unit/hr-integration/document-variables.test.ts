@@ -46,6 +46,13 @@ describe("catálogo de variáveis documentais", () => {
     });
   });
 
+  test("usa o CPF confirmado no formulário enquanto o colaborador ainda não existe", () => {
+    assert.deepEqual(getDocumentVariable("employee.cpf")?.resolution, [
+      { source: "field_value", path: "employee.cpf" },
+      { source: "onboarding", path: "publicFormAnswers.cpf" },
+    ]);
+  });
+
   test("mantém resumos sistêmicos com fonte computada operacional", () => {
     assert.deepEqual(getDocumentVariable("integration.job_cbo")?.resolution, [{ source: "computed", path: "employment.jobCbo" }]);
     assert.deepEqual(getDocumentVariable("system.uniforms.summary")?.resolution, [{ source: "computed", path: "uniforms.summary" }]);

@@ -383,17 +383,13 @@ service cloud.firestore {
 
     // Sessões de contagem de estoque
     match /stockAuditSessions/{sessionId} {
-      allow read: if isAuth() && (isAdmin() || getPerms().stock.stockCount.view == true);
-      allow create, update: if isAuth() && (
+      allow read: if isAuth() && (
         isAdmin() ||
-        getPerms().stock.stockCount.perform == true ||
-        getPerms().stock.stockCount.approve == true
-      ) && isValidStockCount(request.resource.data);
-      allow delete: if isAuth() && (
-        isAdmin() ||
-        getPerms().stock.stockCount.perform == true ||
-        getPerms().stock.stockCount.approve == true
+        (stockCountPerm('view') && resource.data.auditedBy.userId == request.auth.uid)
       );
+      // Criação, conclusão, cancelamento e ajustes passam pelas APIs do servidor,
+      // que validam unidade, autoria, transação de estoque e sincronização da tarefa.
+      allow create, update, delete: if false;
     }
 
     // Contagens avulsas (stockCounts)

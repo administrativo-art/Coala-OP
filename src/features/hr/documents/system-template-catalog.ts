@@ -53,6 +53,7 @@ export type SystemDocumentTemplate = {
 };
 
 const UPDATED_AT = "2026-07-28T00:00:00.000Z";
+const ADMISSION_PUBLISHED_AT = "2026-08-30T00:00:00.000Z";
 const ADMISSION_BASE = "docs/modelos-documentos/admissionais";
 
 const baseTemplates: SystemDocumentTemplate[] = [
@@ -158,7 +159,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     shortName: "Contrato de experiência",
     slug: "contrato-experiencia",
     category: "Contratos",
-    description: "Versão 3 no padrão documental CT Sorvetes, em teste visual antes da disponibilização.",
+    description: "Versão 3 no padrão documental CT Sorvetes, homologada para uso no fluxo admissional.",
     sourcePath: PROBATION_CONTRACT_V3_SOURCE,
     contentHash: PROBATION_CONTRACT_V3_HASH,
     version: 3,
@@ -169,7 +170,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-hours-bank-agreement",
     name: "Acordo Individual de Banco de Horas",
     category: "Admissão",
-    description: "Modelo parametrizado e validado tecnicamente. Aguarda homologação do RH.",
+    description: "Modelo parametrizado e homologado para uso no fluxo admissional.",
     sourcePath: HOURS_BANK_V2_SOURCE,
     contentHash: HOURS_BANK_V2_HASH,
     version: 2,
@@ -179,7 +180,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-lgpd-awareness-term",
     name: "Termo de Ciência sobre o Tratamento de Dados Pessoais",
     category: "Admissão",
-    description: "Modelo parametrizado tecnicamente; aguarda homologação do RH.",
+    description: "Modelo parametrizado e homologado para uso no fluxo admissional.",
     sourcePath: `${ADMISSION_BASE}/03-termo-lgpd-v2.docx`,
     contentHash: "70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265",
     version: 2,
@@ -221,7 +222,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-goals-awards-policy",
     name: "Regulamento de Metas e Prêmios por Desempenho",
     category: "Admissão",
-    description: "Modelo parametrizado tecnicamente; aguarda homologação do RH.",
+    description: "Modelo parametrizado e homologado para uso no fluxo admissional.",
     sourcePath: `${ADMISSION_BASE}/05-metas-premios-v2.docx`,
     contentHash: "a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745",
     version: 2,
@@ -300,7 +301,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     id: "system-admission-confidentiality-agreement",
     name: "Termo de Confidencialidade e Sigilo",
     category: "Admissão",
-    description: "Modelo parametrizado tecnicamente; aguarda homologação do RH.",
+    description: "Modelo parametrizado e homologado para uso no fluxo admissional.",
     sourcePath: `${ADMISSION_BASE}/07-confidencialidade-v2.docx`,
     contentHash: "56306e646b241ab3b0bb93c804dc3cf549a833efb583bf990c9a18c8ba275f80",
     version: 2,
@@ -343,7 +344,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
   },
 ].map((template): SystemDocumentTemplate => ({
   ...template,
-  status: "draft",
+  status: "published",
   version: template.version ?? 1,
   templateKind: "reference_docx",
   renderer: "admission_docx",
@@ -362,7 +363,7 @@ const admissionTemplates: SystemDocumentTemplate[] = [
   isSystem: true,
   previewUrl: `/api/documents/templates/${template.id}/preview`,
   downloadUrl: `/api/documents/templates/${template.id}/source`,
-  updatedAt: UPDATED_AT,
+  updatedAt: ADMISSION_PUBLISHED_AT,
 }));
 
 export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
@@ -373,4 +374,14 @@ export const SYSTEM_DOCUMENT_TEMPLATES: readonly SystemDocumentTemplate[] = [
 
 export function systemDocumentTemplateById(id: string) {
   return SYSTEM_DOCUMENT_TEMPLATES.find((template) => template.id === id) ?? null;
+}
+
+export function isSelectableAdmissionSignatureTemplate(template: Pick<
+  SystemDocumentTemplate,
+  "id" | "status" | "sourceFormat" | "category"
+>) {
+  return template.status === "published"
+    && template.sourceFormat === "docx"
+    && ["Admissão", "Contratos"].includes(template.category)
+    && template.id !== "system-admission-bundle-closing-term";
 }

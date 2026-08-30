@@ -13,6 +13,7 @@ import {
   Info,
   Loader2,
   Lock,
+  Coins,
   RefreshCw,
   XCircle,
 } from "lucide-react";
@@ -32,7 +33,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { PageContainer } from "@/components/layout/page-container";
 import { formatBRL } from "../cash-closures/money";
+import { CentsInput } from "../cash-closures/components/cents-input";
 import { CashControlNavigation } from "../cash-closures/components/cash-control-navigation";
 import type { InterCobrancaDocument } from "./inter-cobranca";
 import {
@@ -40,7 +43,12 @@ import {
   cashDepositBatchReference,
   groupCashDepositItemsByDay,
 } from "./references";
-import type { CashDepositAdjustment, CashDepositBatch, CashDepositBatchItem } from "./types";
+import type {
+  CashCoinBalance,
+  CashDepositAdjustment,
+  CashDepositBatch,
+  CashDepositBatchItem,
+} from "./types";
 
 const STATUS_LABEL: Record<CashDepositBatch["status"], string> = {
   open: "Aberto",
@@ -94,6 +102,16 @@ function formatShortDate(value: string | undefined) {
   return `${day}/${month}`;
 }
 
+function responseErrorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object" || !("error" in payload)) return fallback;
+  const error = payload.error;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  return fallback;
+}
+
 type DepositReport = {
   indicators: {
     approvedClosureCount: number;
@@ -114,10 +132,14 @@ export function CashDepositsPage() {
   const [batches, setBatches] = useState<CashDepositBatch[]>([]);
   const [cobrancas, setCobrancas] = useState<InterCobrancaDocument[]>([]);
   const [adjustments, setAdjustments] = useState<CashDepositAdjustment[]>([]);
+  const [coinBalances, setCoinBalances] = useState<CashCoinBalance[]>([]);
   const [inter, setInter] = useState<InterReadiness>({ ready: false, environment: "sandbox", reason: "Verificando configuração..." });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState<CashDepositBatch | null>(null);
+  const [coinHoldCents, setCoinHoldCents] = useState<number | null>(0);
+  const [exchangeBalance, setExchangeBalance] = useState<CashCoinBalance | null>(null);
+  const [exchangeCents, setExchangeCents] = useState<number | null>(null);
   const [dueChoice, setDueChoice] = useState<DueChoice>("1");
   const [customDueDate, setCustomDueDate] = useState("");
   const [cancelBatch, setCancelBatch] = useState<CashDepositBatch | null>(null);
@@ -146,9 +168,10 @@ export function CashDepositsPage() {
     try {
       const response = await authorizedFetch("/api/financial/cash-deposits");
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Falha ao carregar depósitos.");
+      if (!response.ok) throw new Error(responseErrorMessage(payload, "Falha ao carregar depósitos."));
       setBatches(payload.batches ?? []);
       setAdjustments(payload.adjustments ?? []);
+      setCoinBalances(payload.coinBalances ?? []);
       setCobrancas(payload.cobrancas ?? []);
       setInter(payload.inter ?? { ready: false, environment: "sandbox", reason: "Integração não configurada." });
     } catch (error) {
@@ -162,7 +185,10 @@ export function CashDepositsPage() {
 
   const groups = useMemo(() => {
     const result = new Map<string, CashDepositBatch[]>();
-    for (const batch of batches) result.set(batch.kioskId, [...(result.get(batch.kioskId) ?? []), batch]);
+    for (const batch of batches) {
+      const key = batch.countingSessionId ? `session:${batch.countingSessionId}` : `unit:${batch.kioskId}`;
+      result.set(key, [...(result.get(key) ?? []), batch]);
+    }
     return [...result.entries()];
   }, [batches]);
 
@@ -172,11 +198,11 @@ export function CashDepositsPage() {
   );
 
   const totals = useMemo(() => ({
-    counted: batches.reduce((sum, batch) => sum + batch.totalCents, 0),
-    allocated: batches.reduce((sum, batch) => sum + batch.totalCents, 0),
+    inBatches: batches.reduce((sum, batch) => sum + batch.totalCents, 0),
+    coins: coinBalances.reduce((sum, balance) => sum + balance.pendingExchangeCents, 0),
     issued: batches.filter((batch) => ["issuing", "issued", "paid"].includes(batch.status)).reduce((sum, batch) => sum + batch.totalCents, 0),
     paid: batches.filter((batch) => batch.status === "paid").reduce((sum, batch) => sum + batch.totalCents, 0),
-  }), [batches]);
+  }), [batches, coinBalances]);
   const selectedComposition = useMemo(
     () => groupCashDepositItemsByDay(selected ? batchItemsById[selected.id] ?? [] : []),
     [batchItemsById, selected],
@@ -191,7 +217,7 @@ export function CashDepositsPage() {
         body: body ? JSON.stringify(body) : undefined,
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "A operação não foi concluída.");
+      if (!response.ok) throw new Error(responseErrorMessage(payload, "A operação não foi concluída."));
       await load();
       return payload;
     } finally {
@@ -205,7 +231,7 @@ export function CashDepositsPage() {
       try {
         const response = await authorizedFetch(`/api/financial/cash-deposits/${encodeURIComponent(batch.id)}`);
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || "Falha ao carregar a composição do depósito.");
+        if (!response.ok) throw new Error(responseErrorMessage(payload, "Falha ao carregar a composição do depósito."));
         setBatchItemsById((current) => ({ ...current, [batch.id]: payload.items ?? [] }));
       } catch (error) {
         toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar composição." });
@@ -240,6 +266,7 @@ export function CashDepositsPage() {
   async function prepareIssue(batch: CashDepositBatch) {
     setDueChoice("1");
     setCustomDueDate("");
+    setCoinHoldCents(batch.coinHoldCents);
     setSelected(batch);
     await ensureBatchComposition(batch);
   }
@@ -251,6 +278,20 @@ export function CashDepositsPage() {
       return;
     }
     try {
+      const prepared = selected.countingSessionId
+        ? { batch: selected }
+        : await postAction(
+          `/api/financial/cash-deposits/${encodeURIComponent(selected.id)}/coins`,
+          { coinCents: coinHoldCents ?? 0 },
+        );
+      if (prepared.batch.totalCents === 0) {
+        toast({
+          title: "Moedas separadas para troca",
+          description: "Não há cédulas neste bloco para emitir boleto agora.",
+        });
+        setSelected(null);
+        return;
+      }
       await postAction(`/api/financial/cash-deposits/${encodeURIComponent(selected.id)}/issue`, dueChoice === "custom"
         ? { dueDate: customDueDate }
         : { dueBusinessDays: Number(dueChoice) });
@@ -258,6 +299,25 @@ export function CashDepositsPage() {
       setSelected(null);
     } catch (error) {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha na emissão." });
+    }
+  }
+
+  async function registerCoinExchange() {
+    if (!exchangeBalance || !exchangeCents) return;
+    try {
+      await postAction("/api/financial/cash-deposits/coins/exchange", {
+        kioskId: exchangeBalance.kioskId,
+        amountCents: exchangeCents,
+        operationId: crypto.randomUUID(),
+      });
+      toast({
+        title: "Troca registrada",
+        description: "As cédulas entraram no próximo bloco de depósito.",
+      });
+      setExchangeBalance(null);
+      setExchangeCents(null);
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao registrar troca." });
     }
   }
 
@@ -349,10 +409,10 @@ export function CashDepositsPage() {
   }
 
   if (!permissions.financial?.cashDeposits?.view) {
-    return <div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso aos depósitos em dinheiro.</div>;
+    return <PageContainer variant="compact"><div className="rounded-xl border p-8 text-sm text-muted-foreground">Seu perfil não possui acesso aos depósitos em dinheiro.</div></PageContainer>;
   }
 
-  return <div className="mx-auto w-full max-w-[1180px] space-y-[18px] pb-10">
+  return <PageContainer variant="compact" className="space-y-[18px] pb-10">
     <CashControlNavigation active="deposits" />
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div>
@@ -369,8 +429,8 @@ export function CashDepositsPage() {
     </div>
 
     <Card className="overflow-hidden rounded-2xl border-0 bg-zinc-900 text-white shadow-[0_2px_10px_rgba(15,23,42,.08)]"><CardContent className="grid min-h-[82px] items-stretch !p-0 sm:grid-cols-2 lg:grid-cols-4">{[
-      ["Dinheiro contado", formatBRL(totals.counted), "text-white"],
-      ["Alocado em blocos", formatBRL(totals.allocated), "text-zinc-300"],
+      ["Cédulas em blocos", formatBRL(totals.inBatches), "text-white"],
+      ["Moedas aguardando troca", formatBRL(totals.coins), "text-amber-300"],
       ["Emitido (boleto)", formatBRL(totals.issued), "text-indigo-300"],
       ["Pago / depositado", formatBRL(totals.paid), "text-emerald-300"],
     ].map(([label, value, valueClass], index) => <div key={label} className={cn("flex min-w-0 flex-col justify-center border-zinc-700/70 px-6 py-4", index > 0 && "sm:border-l")}><p className="text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-500">{label}</p><strong className={cn("mt-1 whitespace-nowrap font-mono text-[18px]", index === 0 && "text-[21px]", valueClass)}>{value}</strong></div>)}</CardContent></Card>
@@ -382,6 +442,16 @@ export function CashDepositsPage() {
         A emissão de boletos ficará disponível após configurar a integração.
       </span>
     </div>}
+
+    {coinBalances.some((balance) => balance.pendingExchangeCents > 0) && <Card className="rounded-[18px] border-amber-200 bg-amber-50/50">
+      <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Coins className="h-5 w-5 text-amber-700" />Moedas aguardando troca por cédulas</CardTitle></CardHeader>
+      <CardContent className="grid gap-2 pb-4">
+        {coinBalances.filter((balance) => balance.pendingExchangeCents > 0).map((balance) => <div key={balance.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-4 py-3">
+          <div><p className="text-sm font-bold">{balance.kioskName}</p><p className="text-xs text-zinc-500">As moedas permanecem pendentes até a troca física por cédulas.</p></div>
+          <div className="flex items-center gap-3"><strong className="font-mono text-base text-amber-900">{formatBRL(balance.pendingExchangeCents)}</strong>{permissions.financial.cashDeposits.adjust && <Button size="sm" variant="outline" onClick={() => { setExchangeBalance(balance); setExchangeCents(balance.pendingExchangeCents); }}>Registrar troca</Button>}</div>
+        </div>)}
+      </CardContent>
+    </Card>}
 
     {adjustments.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-amber-200 bg-amber-50 px-[18px] py-3 text-[13px] text-amber-900">
       <div className="flex items-center gap-3"><AlertTriangle className="h-[18px] w-[18px] shrink-0" /><span><strong>{adjustments.length} ajuste(s) aguardando alocação.</strong>
@@ -406,8 +476,8 @@ export function CashDepositsPage() {
 
     {loading ? <div className="flex h-56 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
       : groups.length === 0 ? <Card className="rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)]"><CardContent className="flex min-h-20 items-center justify-center px-6 !py-6 text-center text-sm text-muted-foreground">Nenhum bloco foi formado. Eles aparecerão após a aprovação de fechamentos com dinheiro contado.</CardContent></Card>
-        : <div className="space-y-6">{groups.map(([kioskId, items]) => <section key={kioskId} className="space-y-3">
-          <div><h2 className="text-base font-black">{items[0].kioskName}</h2><p className="mt-0.5 text-[11.5px] font-semibold text-zinc-400">{kioskId}</p></div>
+        : <div className="space-y-6">{groups.map(([groupKey, items]) => <section key={groupKey} className="space-y-3">
+          <div><h2 className="text-base font-black">{items[0].countingSessionId ? "Sessão de contagem" : items[0].kioskName}</h2><p className="mt-0.5 text-[11.5px] font-semibold text-zinc-400">{items[0].countingSessionId ? <Link className="text-pink-600 hover:underline" href={`/dashboard/financial/cash-closures/sessions/${items[0].countingSessionId}`}>{items[0].kioskNames?.join(" · ")} · sessão {items[0].countingSessionId.slice(0, 8)}</Link> : items[0].kioskId}</p></div>
           <div className="space-y-3.5">{items.map((batch) => {
             const cobranca = batch.interCobrancaId ? cobrancaById.get(batch.interCobrancaId) : null;
             const canIssue = ["open", "locked", "failed", "cancelled"].includes(batch.status);
@@ -416,9 +486,10 @@ export function CashDepositsPage() {
             const compositionLoading = loadingBatchIds.has(batch.id);
             const dayComposition = groupCashDepositItemsByDay(batchItemsById[batch.id] ?? []);
             return <Card key={batch.id} id={`deposit-${batch.id}`} className={cn("relative scroll-mt-24 overflow-hidden rounded-[18px] border-stone-200 shadow-[0_2px_10px_rgba(15,23,42,.05)] target:ring-2 target:ring-emerald-500 target:ring-offset-2", "before:absolute before:inset-y-0 before:left-0 before:w-1.5", batch.status === "open" ? "before:bg-emerald-500" : batch.status === "locked" ? "before:bg-amber-400" : ["issued", "issuing"].includes(batch.status) ? "before:bg-indigo-500" : batch.status === "paid" ? "before:bg-emerald-500" : "before:bg-rose-500") }>
-              <CardHeader className="px-[22px] pb-2 pt-[17px]"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><CardTitle className="text-[16px] font-black">Bloco #{batch.sequence}</CardTitle><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11px] font-extrabold", statusBadgeClass(batch.status))}>{STATUS_LABEL[batch.status]}</Badge><span className="font-mono text-[11px] font-bold text-zinc-400">{reference}</span></div><div className="flex items-center gap-3"><strong className="font-mono text-[17px]">{formatBRL(batch.totalCents)} <span className="text-[13px] font-semibold text-zinc-400">/ {formatBRL(batch.maxCents)}</span></strong>{canIssue && <Button size="sm" variant={batch.status === "open" ? "default" : "outline"} className={cn("h-10 rounded-[10px] font-extrabold", batch.status === "open" && "bg-pink-600 text-white hover:bg-pink-700")} onClick={() => void prepareIssue(batch)} disabled={!permissions.financial.cashDeposits.issue || !inter.ready}><Barcode className="mr-2 h-4 w-4" />{["failed", "cancelled"].includes(batch.status) ? "Reemitir boleto" : "Preparar emissão"}</Button>}</div></div></CardHeader>
+              <CardHeader className="px-[22px] pb-2 pt-[17px]"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><CardTitle className="text-[16px] font-black">{batch.countingSessionId ? "Malote" : "Bloco"} #{batch.sequence}</CardTitle><Badge variant="outline" className={cn("rounded-full px-3 py-1 text-[11px] font-extrabold", statusBadgeClass(batch.status))}>{STATUS_LABEL[batch.status]}</Badge><span className="font-mono text-[11px] font-bold text-zinc-400">{reference}</span></div><div className="flex items-center gap-3"><strong className="font-mono text-[17px]">{formatBRL(batch.totalCents)} <span className="text-[13px] font-semibold text-zinc-400">/ {formatBRL(batch.maxCents)}</span></strong>{canIssue && <Button size="sm" variant={batch.status === "open" ? "default" : "outline"} className={cn("h-10 rounded-[10px] font-extrabold", batch.status === "open" && "bg-pink-600 text-white hover:bg-pink-700")} onClick={() => void prepareIssue(batch)} disabled={!permissions.financial.cashDeposits.issue}><Barcode className="mr-2 h-4 w-4" />{["failed", "cancelled"].includes(batch.status) ? "Reemitir boleto" : "Preparar emissão"}</Button>}</div></div></CardHeader>
               <CardContent className="space-y-3 px-[22px] pb-[17px]">
                 <div><div className="h-2 overflow-hidden rounded-full bg-stone-100"><div className={cn("h-full rounded-full", statusBarClass(batch.status))} style={{ width: `${Math.min(100, (batch.totalCents / batch.maxCents) * 100)}%` }} /></div><p className="mt-2 text-[12.5px] font-semibold text-zinc-500">{batch.status === "paid" ? `Liquidado em ${batch.paidAt ? new Date(batch.paidAt).toLocaleDateString("pt-BR") : "data registrada"}` : `Ainda cabem ${formatBRL(batch.remainingCapacityCents)} antes do limite`}</p></div>
+                {batch.coinPreparedAt && <div className="grid gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs sm:grid-cols-3"><div><span className="block text-zinc-500">Dinheiro físico</span><strong>{formatBRL(batch.grossTotalCents)}</strong></div><div><span className="block text-zinc-500">Moedas para troca</span><strong className="text-amber-800">− {formatBRL(batch.coinHoldCents)}</strong></div><div><span className="block text-zinc-500">Cédulas no boleto</span><strong>{formatBRL(batch.totalCents)}</strong></div></div>}
                 {batch.lockReason === "next_item_would_exceed_limit" && <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-900"><Lock className="h-4 w-4 shrink-0" /><span>Travado porque o próximo fechamento de {formatBRL(batch.nextRejectedCents ?? 0)} ultrapassaria o limite.</span></div>}
                 {cobranca && <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 text-[11.5px]"><div className="flex flex-wrap justify-between gap-3"><span className="text-zinc-500">Inter: <strong className="text-zinc-900">{cobranca.situacao ?? cobranca.status}</strong></span><span className="text-zinc-500">Referência bancária: <strong className="font-mono text-zinc-900">{cobranca.seuNumero}</strong></span><span className="text-zinc-500">Vencimento: <strong className="text-zinc-900">{cobranca.dataVencimento.split("-").reverse().join("/")}</strong></span></div>{cobranca.linhaDigitavel && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-indigo-100 pt-3"><div className="min-w-0 flex-1"><p className="text-[9.5px] font-extrabold uppercase tracking-wide text-zinc-400">Linha digitável</p><p className="truncate font-mono text-[12.5px] font-bold text-zinc-800">{cobranca.linhaDigitavel}</p></div><Button size="sm" variant="outline" className="h-8 bg-white" onClick={() => void navigator.clipboard.writeText(cobranca.linhaDigitavel ?? "")}><Copy className="mr-1.5 h-3.5 w-3.5" />Copiar</Button></div>}{cobranca.codigoSolicitacao && <p className="mt-2 text-muted-foreground">Código da solicitação: <span className="font-mono">{cobranca.codigoSolicitacao}</span></p>}{cobranca.recebidoManual && <p className="mt-2 text-amber-800">Marcado recebido manualmente; não tratado como liquidação bancária.</p>}{batch.ledgerTransactionId && <p className="mt-2 font-semibold text-emerald-700">Entrada bancária registrada no financeiro.</p>}{batch.bankWarning && <p className="mt-2 text-amber-800">{batch.bankWarning}</p>}</div>}
                 <div className="overflow-hidden rounded-xl border border-stone-200">
@@ -429,7 +500,7 @@ export function CashDepositsPage() {
                     onClick={() => void toggleBatchComposition(batch)}
                     disabled={compositionLoading}
                   >
-                    <span>{compositionLoading ? "Carregando composição..." : `Dias e valores (${batch.dates.length})`}</span>
+                    <span>{compositionLoading ? "Carregando composição..." : batch.countingSessionId ? "Composição do malote" : `Dias e valores (${batch.dates.length})`}</span>
                     {compositionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </Button>
                   {expanded && <div className="space-y-2 border-t p-3">
@@ -438,9 +509,10 @@ export function CashDepositsPage() {
                       : dayComposition.map((day) => {
                         const [year, month, dayOfMonth] = day.date.split("-");
                         const closureHref = `/dashboard/financial/cash-closures/${encodeURIComponent(batch.kioskId)}/${year}/${month}/${dayOfMonth}`;
+                        const hasClosure = day.sources.some((source) => ["cash_counted", "cash_adjustment", "manual_split"].includes(source));
                         return <div key={day.date} className="grid gap-2 rounded-[10px] bg-stone-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                           <div>
-                            <Link href={closureHref} className="text-sm font-semibold text-emerald-700 hover:underline">{day.date.split("-").reverse().join("/")}</Link>
+                            {hasClosure ? <Link href={closureHref} className="text-sm font-semibold text-emerald-700 hover:underline">{day.date.split("-").reverse().join("/")}</Link> : <span className="text-sm font-semibold text-zinc-700">{day.date.split("-").reverse().join("/")}</span>}
                             <p className="mt-1 text-xs text-muted-foreground">{day.sources.map((source) => CASH_DEPOSIT_SOURCE_LABEL[source]).join(" + ")}{day.itemCount > 1 ? ` · ${day.itemCount} lançamentos` : ""}</p>
                           </div>
                           <strong className="text-sm tabular-nums sm:text-right">{formatBRL(day.amountCents)}</strong>
@@ -465,14 +537,26 @@ export function CashDepositsPage() {
           <div className="flex items-center gap-3"><span className="grid h-[42px] w-[42px] place-items-center rounded-xl bg-indigo-50"><Barcode className="h-5 w-5 text-indigo-600" /></span><div><DialogTitle className="text-[18px] font-black">{selected && ["failed", "cancelled"].includes(selected.status) ? "Reemitir boleto" : "Emitir boleto"}</DialogTitle><DialogDescription className="mt-0.5 text-[13px]">Bloco #{selected?.sequence} · {selected?.kioskName}</DialogDescription></div></div>
         </DialogHeader>
         <div className="space-y-5 px-[26px] py-[22px]">
-          <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-[15px] py-[13px] text-[13px] leading-5 text-amber-900"><AlertTriangle className="mt-0.5 h-[17px] w-[17px] shrink-0" /><span>Este bloco possui <strong>{formatBRL(selected?.totalCents ?? 0)}</strong> e ainda comporta <strong>{formatBRL(selected?.remainingCapacityCents ?? 0)}</strong> antes do limite. Emitir agora impede que novos dias entrem nele.</span></div>
-          <div className="flex items-center justify-between"><span className="text-[13px] text-zinc-500">Valor do bloco</span><strong className="font-mono text-xl">{formatBRL(selected?.totalCents ?? 0)}</strong></div>
+          {!selected?.countingSessionId && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-[15px] py-[13px] text-[13px] leading-5 text-amber-900"><AlertTriangle className="mt-0.5 h-[17px] w-[17px] shrink-0" /><span>Informe o total de moedas físicas, incluindo <strong>todas as moedas de R$ 1 e de centavos</strong>. O sistema não tenta inferir esse valor pelas denominações de cédulas.</span></div>}
+          {!selected?.countingSessionId ? <div className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 sm:grid-cols-3">
+            <div><span className="text-[11px] text-zinc-500">Dinheiro físico</span><strong className="mt-1 block font-mono">{formatBRL(selected?.grossTotalCents ?? 0)}</strong></div>
+            <div><span className="text-[11px] text-zinc-500">Moedas para troca</span><CentsInput value={coinHoldCents} onChange={setCoinHoldCents} ariaLabel="Valor total de moedas separado para troca" className="mt-1 h-9 bg-white font-mono" /></div>
+            <div><span className="text-[11px] text-zinc-500">Cédulas no boleto</span><strong className={cn("mt-1 block font-mono", (coinHoldCents ?? 0) > (selected?.grossTotalCents ?? 0) && "text-rose-700")}>{formatBRL(Math.max(0, (selected?.grossTotalCents ?? 0) - (coinHoldCents ?? 0)))}</strong></div>
+          </div> : <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><strong>Composição física já confirmada na sessão.</strong><p className="mt-1 text-xs">Este malote contém apenas cédulas; as moedas seguem separadas até a troca.</p></div>}
           <div><p className="mb-1.5 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-400">Pagador</p><div className="rounded-[10px] border border-stone-200 bg-stone-50 px-3 py-2.5 text-[13px] font-semibold text-zinc-700">{inter.payer ? `${inter.payer.name} · ${formatCnpj(inter.payer.cpfCnpj)}` : "Pagador institucional configurado"}</div></div>
           <div><p className="mb-1.5 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-400">Vencimento</p><div className="grid grid-cols-3 gap-2"><Button type="button" variant="outline" className={cn("h-10 rounded-[10px] text-[12px] font-bold", dueChoice === "1" && "border-pink-300 bg-pink-50 text-pink-700 hover:bg-pink-50")} onClick={() => setDueChoice("1")}>D+1 · {formatShortDate(inter.issueSettings?.suggestedDueDates["1"])}</Button><Button type="button" variant="outline" className={cn("h-10 rounded-[10px] text-[12px] font-bold", dueChoice === "2" && "border-pink-300 bg-pink-50 text-pink-700 hover:bg-pink-50")} onClick={() => setDueChoice("2")}>D+2 · {formatShortDate(inter.issueSettings?.suggestedDueDates["2"])}</Button><Button type="button" variant="outline" className={cn("h-10 rounded-[10px] text-[12px] font-bold", dueChoice === "custom" && "border-pink-300 bg-pink-50 text-pink-700 hover:bg-pink-50")} onClick={() => setDueChoice("custom")}>Escolher</Button></div>{dueChoice === "custom" && <input type="date" value={customDueDate} onChange={(event) => setCustomDueDate(event.target.value)} className="mt-2 h-10 w-full rounded-[10px] border border-stone-200 bg-white px-3 text-[13px] outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-100" />}</div>
-          <div className="rounded-xl border border-stone-200 bg-stone-50 p-3.5"><p className="mb-2 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-400">{selected?.dates.length ?? 0} dias neste bloco</p><div className="flex flex-wrap gap-1.5">{loadingBatchIds.has(selected?.id ?? "") ? <Loader2 className="h-4 w-4 animate-spin text-zinc-400" /> : selectedComposition.length > 0 ? selectedComposition.map((day) => <span key={day.date} className="inline-flex h-6 items-center rounded-full border border-stone-200 bg-white px-2.5 text-[11px] font-semibold text-zinc-600">{day.date.slice(5).split("-").reverse().join("/")} · {formatBRL(day.amountCents)}</span>) : selected?.dates.map((date) => <span key={date} className="inline-flex h-6 items-center rounded-full border border-stone-200 bg-white px-2.5 text-[11px] font-semibold text-zinc-600">{date.slice(5).split("-").reverse().join("/")}</span>)}</div></div>
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-3.5"><p className="mb-2 text-[9.5px] font-extrabold uppercase tracking-[.06em] text-zinc-400">{selected?.countingSessionId ? "Cédulas do malote" : `${selected?.dates.length ?? 0} dias neste bloco`}</p><div className="flex flex-wrap gap-1.5">{selected?.countingSessionId ? selected.denominations?.filter((item) => item.quantity > 0).map((item) => <span key={item.valueCents} className="inline-flex h-6 items-center rounded-full border border-stone-200 bg-white px-2.5 text-[11px] font-semibold text-zinc-600">{item.quantity}× {formatBRL(item.valueCents)}</span>) : loadingBatchIds.has(selected?.id ?? "") ? <Loader2 className="h-4 w-4 animate-spin text-zinc-400" /> : selectedComposition.length > 0 ? selectedComposition.map((day) => <span key={day.date} className="inline-flex h-6 items-center rounded-full border border-stone-200 bg-white px-2.5 text-[11px] font-semibold text-zinc-600">{day.date.slice(5).split("-").reverse().join("/")} · {formatBRL(day.amountCents)}</span>) : selected?.dates.map((date) => <span key={date} className="inline-flex h-6 items-center rounded-full border border-stone-200 bg-white px-2.5 text-[11px] font-semibold text-zinc-600">{date.slice(5).split("-").reverse().join("/")}</span>)}</div></div>
           {!inter.ready && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{inter.reason}</div>}
         </div>
-        <DialogFooter className="border-t border-stone-100 px-[26px] py-4"><Button variant="outline" className="rounded-[10px]" onClick={() => setSelected(null)}>Cancelar</Button><Button className="rounded-[10px] bg-pink-600 font-bold text-white hover:bg-pink-700" onClick={() => void issueSelected()} disabled={!inter.ready || submitting || (dueChoice === "custom" && !customDueDate)}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Barcode className="mr-2 h-4 w-4" />}Emitir boleto</Button></DialogFooter>
+        <DialogFooter className="border-t border-stone-100 px-[26px] py-4"><Button variant="outline" className="rounded-[10px]" onClick={() => setSelected(null)}>Cancelar</Button><Button className="rounded-[10px] bg-pink-600 font-bold text-white hover:bg-pink-700" onClick={() => void issueSelected()} disabled={(!selected?.countingSessionId && (selected?.grossTotalCents ?? 0) !== (coinHoldCents ?? 0) && !inter.ready) || (selected?.countingSessionId && !inter.ready) || submitting || (!selected?.countingSessionId && (coinHoldCents ?? 0) > (selected?.grossTotalCents ?? 0)) || (dueChoice === "custom" && !customDueDate)}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : !selected?.countingSessionId && (coinHoldCents ?? 0) === (selected?.grossTotalCents ?? 0) ? <Coins className="mr-2 h-4 w-4" /> : <Barcode className="mr-2 h-4 w-4" />}{!selected?.countingSessionId && (coinHoldCents ?? 0) === (selected?.grossTotalCents ?? 0) ? "Separar moedas" : "Emitir boleto"}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={exchangeBalance !== null} onOpenChange={(open) => { if (!open) { setExchangeBalance(null); setExchangeCents(null); } }}>
+      <DialogContent className="rounded-[20px] sm:max-w-[460px]">
+        <DialogHeader><DialogTitle>Registrar troca por cédulas</DialogTitle><DialogDescription>Registre somente depois da troca física. O valor entrará automaticamente no próximo bloco de depósito.</DialogDescription></DialogHeader>
+        {exchangeBalance && <div className="space-y-4"><div className="flex items-center justify-between rounded-xl bg-amber-50 p-3 text-sm"><span>Moedas pendentes em {exchangeBalance.kioskName}</span><strong>{formatBRL(exchangeBalance.pendingExchangeCents)}</strong></div><div><p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-zinc-500">Valor trocado</p><CentsInput value={exchangeCents} onChange={setExchangeCents} ariaLabel="Valor de moedas trocado por cédulas" /></div></div>}
+        <DialogFooter><Button variant="outline" onClick={() => setExchangeBalance(null)}>Cancelar</Button><Button onClick={() => void registerCoinExchange()} disabled={submitting || !exchangeCents || exchangeCents > (exchangeBalance?.pendingExchangeCents ?? 0)}>{submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar troca física</Button></DialogFooter>
       </DialogContent>
     </Dialog>
 
@@ -484,7 +568,7 @@ export function CashDepositsPage() {
         <DialogFooter><Button variant="outline" onClick={() => setCancelBatch(null)}>Voltar</Button><Button variant="destructive" onClick={() => void cancelSelected()} disabled={!cancelReason.trim() || submitting}>{submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cancelar boleto</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-  </div>;
+  </PageContainer>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

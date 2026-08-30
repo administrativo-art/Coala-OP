@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,6 +9,7 @@ import * as z from 'zod';
 import Image from 'next/image';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
 import { useExpiryProducts } from '@/hooks/use-expiry-products';
 import { useProducts } from '@/hooks/use-products';
@@ -39,6 +40,11 @@ import { useBaseProducts } from '@/hooks/use-base-products';
 import { useItemAddition } from '@/hooks/use-item-addition';
 import { formatStockExpiryDate, getStockExpiryAlert, getStockExpirySummary, type StockExpiryAlertLevel } from '@/lib/stock-expiry-alert';
 import { canAccessUnit } from '@/lib/unit-access';
+import {
+  filterVisibleOpenStockCountSessions,
+  isStockCountSessionOwnedByUser,
+  type StockCountSessionSummary,
+} from '@/features/stock-count/lib/visibility';
 
 
 const DIVERGENCE_REASONS: { value: MovementType, label: string }[] = [
@@ -411,24 +417,80 @@ interface StockSessionManagementProps {
   showExportButton?: boolean;
 }
 
+type OpenSessionsPayload = {
+  sessions: StockCountSessionSummary[];
+  hasMore: boolean;
+};
+
 export function StockSessionManagement({ showExportButton = false }: StockSessionManagementProps) {
   const { user, permissions, isDefaultAdmin } = useAuth();
+  const api = useAuthenticatedApi();
   const { kiosks, loading: kiosksLoading } = useKiosks();
   const { lots, loading: lotsLoading } = useExpiryProducts();
   const { products, getProductFullName, loading: productsLoading } = useProducts();
   const { baseProducts, loading: baseProductsLoading } = useBaseProducts();
-  const { auditSessions, activeSession, setActiveSession, addAuditSession, updateAuditSession, deleteAuditSession, loading: auditLoading } = useStockAudit();
+  const {
+    auditSessions: ownedAuditSessions,
+    activeSession,
+    hasMoreOpenSessions: hasMoreOwnedSessions,
+    setActiveSession,
+    addAuditSession,
+    updateAuditSession,
+    deleteAuditSession,
+    loading: auditLoading,
+  } = useStockAudit();
   const { requests: itemAdditionRequests } = useItemAddition();
   const { toast } = useToast();
 
   const [isKioskSelectionOpen, setIsKioskSelectionOpen] = useState(false);
+  const [openSessions, setOpenSessions] = useState<StockCountSessionSummary[]>([]);
+  const [openSessionsLoading, setOpenSessionsLoading] = useState(true);
+  const [openSessionsError, setOpenSessionsError] = useState<string | null>(null);
+  const [hasMoreVisibleSessions, setHasMoreVisibleSessions] = useState(false);
   const stockDataLoading = kiosksLoading || lotsLoading || productsLoading || baseProductsLoading;
-  const loading = auditLoading || stockDataLoading;
+  const loading = auditLoading || openSessionsLoading || stockDataLoading;
 
-  const pendingAudits = useMemo(() => auditSessions.filter(s =>
-    s.status === 'pending_review' &&
-    Boolean(user) && s.auditedBy?.userId === user!.id && canAccessUnit(user!, s.kioskId, { isDefaultAdmin })
-  ), [auditSessions, isDefaultAdmin, user]);
+  const loadOpenSessions = useCallback(async () => {
+    const canView = isDefaultAdmin || permissions.stock.stockCount.view || permissions.stock.audit.view;
+    if (!user || !canView) {
+      setOpenSessions([]);
+      setHasMoreVisibleSessions(false);
+      setOpenSessionsError(null);
+      setOpenSessionsLoading(false);
+      return;
+    }
+    setOpenSessionsLoading(true);
+    setOpenSessionsError(null);
+    try {
+      const payload = await api<OpenSessionsPayload>("/api/stock/count-sessions?view=open&pageSize=100");
+      setOpenSessions(payload.sessions);
+      setHasMoreVisibleSessions(payload.hasMore);
+    } catch {
+      setOpenSessions(ownedAuditSessions);
+      setHasMoreVisibleSessions(hasMoreOwnedSessions);
+      setOpenSessionsError("Não foi possível carregar as contagens das unidades. Exibindo somente as suas.");
+    } finally {
+      setOpenSessionsLoading(false);
+    }
+  }, [api, hasMoreOwnedSessions, isDefaultAdmin, ownedAuditSessions, permissions.stock.audit.view, permissions.stock.stockCount.view, user]);
+
+  useEffect(() => {
+    void loadOpenSessions();
+  }, [loadOpenSessions]);
+
+  const pendingAudits = useMemo(
+    () => filterVisibleOpenStockCountSessions(openSessions, {
+      user,
+      canView: isDefaultAdmin || permissions.stock.stockCount.view || permissions.stock.audit.view,
+      isDefaultAdmin,
+    }),
+    [isDefaultAdmin, openSessions, permissions.stock.audit.view, permissions.stock.stockCount.view, user],
+  );
+  const myPendingAuditCount = useMemo(
+    () => pendingAudits.filter((session) => isStockCountSessionOwnedByUser(session, user?.id)).length,
+    [pendingAudits, user?.id],
+  );
+  const monitoredPendingAuditCount = pendingAudits.length - myPendingAuditCount;
 
   const countableKiosks = useMemo(
     () => user ? kiosks.filter((kiosk) => canAccessUnit(user, kiosk.id, { isDefaultAdmin })) : [],
@@ -532,6 +594,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
             items, status: 'completed', completedAt: new Date().toISOString(),
         });
         setActiveSession(null);
+        await loadOpenSessions();
         toast({ title: 'Sucesso!', description: 'Contagem finalizada e estoque ajustado.' });
     } catch (error: any) {
         toast({ variant: "destructive", title: "Erro ao finalizar", description: error.message || "Não foi possível salvar a conclusão no servidor." });
@@ -542,6 +605,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     if (!activeSession) return;
     await deleteAuditSession(activeSession.id);
     setActiveSession(null);
+    await loadOpenSessions();
   };
   
    const handleSaveAndExit = async (items: StockAuditItem[]) => {
@@ -549,6 +613,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
     await updateAuditSession(activeSession.id, { items });
     toast({ title: 'Progresso salvo!', description: 'Sua contagem foi salva para continuar depois.' });
     setActiveSession(null);
+    await loadOpenSessions();
   };
 
   const handleExport = () => {
@@ -586,7 +651,7 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
         {/* Metric cards */}
         <div className="grid gap-4 sm:grid-cols-3">
           {[
-            { icon: ClipboardList, value: pendingAudits.length, label: 'Minhas contagens abertas', detail: `${pendingAudits.length} para continuar`, tone: 'text-indigo-600 bg-indigo-50' },
+            { icon: ClipboardList, value: pendingAudits.length, label: 'Contagens em aberto', detail: `${myPendingAuditCount} suas · ${monitoredPendingAuditCount} de outros responsáveis`, tone: 'text-indigo-600 bg-indigo-50' },
             { icon: PackagePlus, value: pendingRequests.length, label: 'Solicitações de insumo', detail: 'Aguardando o administrador', tone: 'text-amber-600 bg-amber-50' },
             { icon: Store, value: countableKiosks.length, label: 'Quiosques ativos', detail: 'Disponíveis para contar', tone: 'text-emerald-600 bg-emerald-50' },
           ].map((m) => (
@@ -607,36 +672,61 @@ export function StockSessionManagement({ showExportButton = false }: StockSessio
 
         {/* Two columns */}
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-          {/* Concluir contagem */}
+          {/* Contagens em aberto */}
           <Card className="p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="flex items-center gap-2 font-semibold"><ListOrdered className="h-4 w-4" /> Concluir contagem</h3>
+              <h3 className="flex items-center gap-2 font-semibold"><ListOrdered className="h-4 w-4" /> Contagens em aberto</h3>
               <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">{pendingAudits.length}</span>
             </div>
             <div className="space-y-2">
+              {openSessionsError && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  {openSessionsError}
+                </p>
+              )}
+              {(hasMoreVisibleSessions || hasMoreOwnedSessions) && (
+                <p className="rounded-lg border p-3 text-xs text-muted-foreground">
+                  Há mais contagens abertas do que o limite desta tela. Reduza o escopo de unidades antes de continuar.
+                </p>
+              )}
               {loading ? (
                 <Skeleton className="h-20 w-full" />
               ) : pendingAudits.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
                   <Inbox className="h-8 w-8" />
-                  <p className="text-sm">Nenhuma sessão em aberto.</p>
+                  <p className="text-sm">Nenhuma contagem em aberto nas suas unidades.</p>
                 </div>
               ) : (
-                pendingAudits.map((s) => (
-                  <div key={s.id} className="flex items-center gap-3 rounded-lg border p-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                      <Store className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-semibold">{s.kioskName}</p>
-                        <Badge variant="outline" className="border-amber-300 text-amber-700">Em aberto</Badge>
+                pendingAudits.map((s) => {
+                  const isOwner = isStockCountSessionOwnedByUser(s, user?.id);
+                  const ownedSession = isOwner
+                    ? ownedAuditSessions.find((session) => session.id === s.id)
+                    : null;
+                  return (
+                    <div key={s.id} className="flex items-center gap-3 rounded-lg border p-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <Store className="h-5 w-5" />
                       </div>
-                      <p className="text-xs text-muted-foreground">{s.auditedBy.username} · {format(parseISO(s.startedAt), 'dd/MM · HH:mm')}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate font-semibold">{s.kioskName}</p>
+                          <Badge variant="outline" className="border-amber-300 text-amber-700">Em aberto</Badge>
+                          {!isOwner && <Badge variant="secondary">Acompanhamento</Badge>}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Responsável: {s.auditedBy.username} · iniciada em {format(parseISO(s.startedAt), 'dd/MM · HH:mm')}
+                        </p>
+                      </div>
+                      {isOwner && ownedSession ? (
+                        <Button size="sm" className="bg-indigo-500 hover:bg-indigo-600" onClick={() => setActiveSession(ownedSession)}>Continuar</Button>
+                      ) : isOwner ? (
+                        <span className="hidden shrink-0 text-xs font-medium text-muted-foreground sm:inline">Atualizando sessão</span>
+                      ) : (
+                        <span className="hidden shrink-0 text-xs font-medium text-muted-foreground sm:inline">Aguardando responsável</span>
+                      )}
                     </div>
-                    <Button size="sm" className="bg-indigo-500 hover:bg-indigo-600" onClick={() => setActiveSession(s)}>Continuar</Button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </Card>

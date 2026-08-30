@@ -7,10 +7,15 @@ import {
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
+  collection,
   doc,
   getDoc,
+  getDocs,
+  limit,
+  query,
   setDoc,
   updateDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import {
@@ -51,6 +56,7 @@ const basePermissions = {
       viewHistory: false,
     },
     stockCount: {
+      view: false,
       perform: false,
       approve: false,
     },
@@ -150,12 +156,17 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
           settings: { manageProfiles: true },
         })),
         setDoc(doc(db, "profiles/stock-operator"), legacyStockProfile),
+        setDoc(doc(db, "profiles/stock-viewer"), profile({
+          stock: { stockCount: { view: true } },
+        })),
         setDoc(doc(db, "profiles/asset-viewer"), profile({
           assets: { view: true, viewHistory: true },
         })),
         setDoc(doc(db, "users/basic-user"), compliantUser("basic")),
         setDoc(doc(db, "users/profile-manager"), compliantUser("profile-manager")),
         setDoc(doc(db, "users/stock-operator"), compliantUser("stock-operator")),
+        setDoc(doc(db, "users/count-owner"), compliantUser("stock-viewer")),
+        setDoc(doc(db, "users/count-viewer"), compliantUser("stock-viewer")),
         setDoc(doc(db, "users/asset-viewer"), compliantUser("asset-viewer")),
         setDoc(doc(db, "users/other-user"), compliantUser("basic")),
         setDoc(doc(db, "users/admin-user"), compliantUser("basic")),
@@ -179,6 +190,14 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
           quantity: 5,
           condition: "novo",
         }),
+        setDoc(doc(db, "stockAuditSessions/count-1"), {
+          workspaceId: "coala",
+          kioskId: "kiosk-1",
+          status: "pending_review",
+          auditedBy: { userId: "count-owner", username: "Responsável" },
+          startedAt: "2026-08-29T12:00:00.000Z",
+          items: [],
+        }),
       ]);
 
       const storage = context.storage();
@@ -192,6 +211,8 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
     const basic = env.authenticatedContext("basic-user");
     const manager = env.authenticatedContext("profile-manager");
     const stockOperator = env.authenticatedContext("stock-operator");
+    const countOwner = env.authenticatedContext("count-owner");
+    const countViewer = env.authenticatedContext("count-viewer");
     const assetViewer = env.authenticatedContext("asset-viewer");
     const pending = env.authenticatedContext("pending-user");
     const admin = env.authenticatedContext("admin-user", { isDefaultAdmin: true });
@@ -208,6 +229,25 @@ test("Firestore principal bloqueia escalação e preserva operações autorizada
     await assertFails(setDoc(doc(stockOperator.firestore(), "uniformAssignments/forged"), {
       collaboratorUserId: "other-user",
       quantityInPossession: 1,
+    }));
+    await assertSucceeds(getDoc(doc(countOwner.firestore(), "stockAuditSessions/count-1")));
+    await assertSucceeds(getDocs(query(
+      collection(countOwner.firestore(), "stockAuditSessions"),
+      where("status", "==", "pending_review"),
+      where("auditedBy.userId", "==", "count-owner"),
+      limit(26),
+    )));
+    await assertFails(getDoc(doc(countViewer.firestore(), "stockAuditSessions/count-1")));
+    await assertFails(updateDoc(doc(countOwner.firestore(), "stockAuditSessions/count-1"), {
+      status: "completed",
+    }));
+    await assertFails(setDoc(doc(admin.firestore(), "stockAuditSessions/direct-admin-write"), {
+      workspaceId: "coala",
+      kioskId: "kiosk-1",
+      status: "pending_review",
+      auditedBy: { userId: "admin-user", username: "Admin" },
+      startedAt: "2026-08-29T13:00:00.000Z",
+      items: [],
     }));
 
     await assertFails(updateDoc(doc(manager.firestore(), "profiles/profile-manager"), {
@@ -701,7 +741,7 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
       const db = context.firestore();
       const financialPermissions = {
         view: true,
-        cashClosures: { view: true, edit: true, approve: false, reopen: false, resync: false },
+        cashClosures: { view: true, edit: true, approve: false, adjustExpected: false, reopen: false, resync: false },
         cashDeposits: { view: true, issue: false, cancel: false, adjust: false },
       };
       await Promise.all([
@@ -723,6 +763,15 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
           assignedKioskIds: [],
           unitAccessUnitIds: [],
         }),
+        setDoc(doc(db, "users/all-session-units"), {
+          active: true,
+          isDefaultAdmin: false,
+          permissions: financialPermissions,
+          unitAccessScope: "linked",
+          unitIds: ["tirirical", "joao-paulo"],
+          assignedKioskIds: [],
+          unitAccessUnitIds: [],
+        }),
         setDoc(doc(db, "cashClosures/tirirical_2026-07-07"), {
           kioskId: "tirirical",
           status: "draft",
@@ -735,6 +784,11 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
           note: null,
           status: "pending",
           differenceCents: null,
+        }),
+        setDoc(doc(db, "cashClosures/tirirical_2026-07-07/cashClosureOperators/10"), {
+          kioskId: "tirirical",
+          operatorId: "10",
+          status: "draft",
         }),
         setDoc(doc(db, "cashClosures/tirirical_2026-07-06"), {
           kioskId: "tirirical",
@@ -754,14 +808,44 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
           status: "open",
           totalCents: 10000,
         }),
+        setDoc(doc(db, "cashDepositBatches/session-batch"), {
+          kioskId: "tirirical",
+          kioskIds: ["tirirical", "joao-paulo"],
+          status: "locked",
+          totalCents: 20000,
+        }),
+        setDoc(doc(db, "cashCountingSessions/session-1"), {
+          kioskIds: ["tirirical", "joao-paulo"],
+          status: "open",
+        }),
+        setDoc(doc(db, "cashCountingSessions/session-1/operators/operator-1"), {
+          kioskId: "tirirical",
+          countedCashCents: 10000,
+        }),
+        setDoc(doc(db, "cashCountingSessionLocks/tirirical_2026-07"), {
+          sessionId: "session-1",
+        }),
+        setDoc(doc(db, "cashCountingSessionAuditLogs/audit-1"), {
+          sessionId: "session-1",
+          action: "created",
+        }),
+        setDoc(doc(db, "cashDepositPeriodPolicies/coala_2026-07"), {
+          workspaceId: "coala",
+          policy: "dre_only",
+        }),
+        setDoc(doc(db, "cashDepositPeriodPolicyAuditLogs/policy-audit-1"), {
+          policyId: "coala_2026-07",
+          action: "created",
+        }),
       ]);
     });
 
     const operator = env.authenticatedContext("cash-operator");
     const outsider = env.authenticatedContext("other-unit");
+    const allSessionUnits = env.authenticatedContext("all-session-units");
     await assertSucceeds(getDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07")));
     await assertFails(getDoc(doc(outsider.firestore(), "cashClosures/tirirical_2026-07-07")));
-    await assertSucceeds(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/lines/10_cash"), {
+    await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/lines/10_cash"), {
       countedCents: 9900,
       note: "Falta conferida",
     }));
@@ -771,10 +855,26 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
     await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07"), {
       status: "approved",
     }));
+    await assertSucceeds(getDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/cashClosureOperators/10")));
+    await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-07/cashClosureOperators/10"), {
+      status: "approved",
+    }));
     await assertFails(updateDoc(doc(operator.firestore(), "cashClosures/tirirical_2026-07-06/lines/10_cash"), {
       countedCents: 1,
     }));
     await assertSucceeds(getDoc(doc(operator.firestore(), "cashDepositBatches/batch-1")));
+    await assertFails(getDoc(doc(operator.firestore(), "cashDepositBatches/session-batch")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashDepositBatches/session-batch")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessions/session-1")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessions/session-1/operators/operator-1")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessionLocks/tirirical_2026-07")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashCountingSessionAuditLogs/audit-1")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashDepositPeriodPolicies/coala_2026-07")));
+    await assertFails(getDoc(doc(allSessionUnits.firestore(), "cashDepositPeriodPolicyAuditLogs/policy-audit-1")));
+    await assertFails(setDoc(doc(allSessionUnits.firestore(), "cashDepositPeriodPolicies/coala_2026-08"), {
+      workspaceId: "coala",
+      policy: "dre_only",
+    }));
     await assertFails(updateDoc(doc(operator.firestore(), "cashDepositBatches/batch-1"), {
       status: "paid",
     }));
@@ -789,6 +889,14 @@ test("Fechamento restringe unidade, esperado, aprovação e depósitos ao backen
     }));
     await assertFails(setDoc(doc(operator.firestore(), "cashDepositReconciliationRuns/forged"), {
       status: "success",
+    }));
+    await assertFails(setDoc(doc(operator.firestore(), "cashCoinBalances/forged"), {
+      kioskId: "tirirical",
+      pendingExchangeCents: 100,
+    }));
+    await assertFails(setDoc(doc(operator.firestore(), "cashCoinEvents/forged"), {
+      kioskId: "tirirical",
+      amountCents: 100,
     }));
   } finally {
     await env.cleanup();

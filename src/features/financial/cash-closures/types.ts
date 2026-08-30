@@ -11,6 +11,7 @@ export type CashClosureStatus =
   | "sync_error";
 
 export type CashClosureLineStatus = "pending" | "matched" | "divergent" | "ignored";
+export type CashClosureOperatorStatus = "draft" | "approved" | "reopened";
 
 export const CASH_CLOSURE_CHANNELS = [
   "cash",
@@ -27,6 +28,7 @@ export type CashClosureChannelTotals = Record<CashClosureChannel, number>;
 export type CashClosureSource = {
   provider: "pdvlegal";
   endpoint: "cupom/get";
+  movementEndpoints?: readonly ["sangriasuprimento/getSangria", "sangriasuprimento/getSuprimento"];
   couponCount: number;
   validCouponCount: number;
   ignoredCancelledCouponCount: number;
@@ -36,11 +38,34 @@ export type CashClosureSource = {
   rawPaymentNames: string[];
   unknownPaymentNames: string[];
   integrityWarnings: string[];
+  movementCount?: number;
+  ignoredCancelledMovementCount?: number;
+  ignoredNonCashMovementCount?: number;
+  unassignedMovementCount?: number;
+};
+
+export type CashClosureCashMovementKind = "supply" | "withdrawal";
+
+export type CashClosureCashMovement = {
+  id: string;
+  kind: CashClosureCashMovementKind;
+  amountCents: number;
+  occurredAt: string;
+  date: string;
+  operatorId: string | null;
+  terminalId: string | null;
+  paymentMethodId: string | null;
+  paymentMethodName: string | null;
+  isCash: boolean;
+  cancelled: boolean;
 };
 
 export type CashClosureLineMetadata = {
   grossCashCents?: number;
   changeCents?: number;
+  supplyCents?: number;
+  withdrawalCents?: number;
+  cashMovements?: CashClosureCashMovement[];
   paymentRowCount?: number;
   firstCouponAt?: string;
   lastCouponAt?: string;
@@ -52,6 +77,7 @@ export type BuiltCashClosureLine = {
   channel: CashClosureChannel;
   channelLabel: string;
   expectedAmountCents: number;
+  calculatedExpectedAmountCents: number;
   reportedAmountCents: number | null;
   reportedDifferenceAmountCents: number | null;
   countedAmountCents: number | null;
@@ -65,7 +91,8 @@ export type BuiltCashClosureLine = {
 /**
  * Saída do motor de fechamento (Fase 1, sem persistência). Cobre apenas o
  * lado "esperado" (PDV). Pix e cartões também nascem informados e conferidos
- * pelo próprio PDV; dinheiro e demais canais aguardam Caixa e Financeiro.
+ * pelo próprio PDV; dinheiro e demais canais aguardam as declarações manuais
+ * e independentes do Caixa e do Financeiro.
  */
 export type BuiltCashClosure = {
   workspaceId: string;
@@ -93,6 +120,7 @@ export type CashClosureBuildContext = {
   date: string;
   /** `usuariorecebimento_id` do PDV → nome legível, de `fetchPdvLegalUsers()`. */
   operatorNameById?: Record<string, string>;
+  cashMovements?: CashClosureCashMovement[];
 };
 
 export type CashClosureDepositStatus =
@@ -105,14 +133,33 @@ export type CashClosureDepositStatus =
 
 export type CashClosureDepositState = {
   eligibleCents: number;
+  /** Totais de progresso permitem representar dias parcialmente processados por operador. */
+  allocatedCents?: number;
+  issuedCents?: number;
+  paidCents?: number;
   batchId: string | null;
   batchItemId: string | null;
   status: CashClosureDepositStatus;
   manualSplitRequired: boolean;
   manualSplitBatchIds?: string[];
   adjustmentId?: string | null;
-  allocationReason: "amount_exceeds_limit" | "pending_allocator" | null;
+  allocationReason: "amount_exceeds_limit" | "pending_allocator" | "awaiting_counting_session" | null;
   pendingSince: string | null;
+};
+
+export type CashClosureDepositPolicy = "standard" | "dre_only";
+
+export type CashDepositPeriodPolicy = {
+  id: string;
+  workspaceId: string;
+  year: number;
+  month: number;
+  policy: CashClosureDepositPolicy;
+  reason: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
 };
 
 export type CashClosure = {
@@ -134,6 +181,9 @@ export type CashClosure = {
   expectedCashCents: number;
   reportedCashCents: number;
   countedCashCents: number;
+  finalizedCountedTotalCents: number;
+  finalizedDifferenceTotalCents: number;
+  finalizedCountedCashCents: number;
   cashDepositEligibleCents: number;
   expectedByChannelCents: CashClosureChannelTotals;
   reportedByChannelCents: CashClosureChannelTotals;
@@ -141,6 +191,7 @@ export type CashClosure = {
   reportedDifferenceByChannelCents: CashClosureChannelTotals;
   differenceByChannelCents: CashClosureChannelTotals;
   operatorCount: number;
+  finalizedOperatorCount: number;
   unreportedLineCount: number;
   pendingLineCount: number;
   reportedDivergentLineCount: number;
@@ -149,6 +200,9 @@ export type CashClosure = {
   matchedLineCount: number;
   source: CashClosureSource;
   sourceHash: string;
+  /** Permite preservar a conferência na DRE sem encaminhar o numerário ao fluxo de depósitos. */
+  cashDepositPolicy?: CashClosureDepositPolicy;
+  cashDepositPolicyReason?: string | null;
   cashDeposit: CashClosureDepositState;
   approvedWithDivergence: boolean;
   pdvChangedAfterApproval: boolean;
@@ -166,6 +220,39 @@ export type CashClosure = {
   updatedAt: string;
 };
 
+export type CashClosureOperator = {
+  id: string;
+  closureId: string;
+  workspaceId: string;
+  kioskId: string;
+  kioskName: string;
+  date: string;
+  operatorId: string;
+  operatorName: string;
+  status: CashClosureOperatorStatus;
+  expectedTotalCents: number;
+  reportedTotalCents: number;
+  countedTotalCents: number;
+  reportedDifferenceTotalCents: number;
+  differenceTotalCents: number;
+  countedCashCents: number;
+  unreportedLineCount: number;
+  pendingLineCount: number;
+  reportedDivergentLineCount: number;
+  divergentLineCount: number;
+  cashDeposit: CashClosureDepositState;
+  countingSessionId?: string | null;
+  countingSessionFinalizedAt?: string | null;
+  approvedWithDivergence: boolean;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  reopenedAt: string | null;
+  reopenedBy: string | null;
+  reopenedReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CashClosureLine = {
   id: string;
   closureId: string;
@@ -176,7 +263,13 @@ export type CashClosureLine = {
   operatorName: string;
   channel: CashClosureChannel;
   channelLabel: string;
+  calculatedExpectedCents: number;
   expectedCents: number;
+  expectedAdjustmentCents: number;
+  expectedAdjustmentReason: string | null;
+  expectedAdjustedBy: string | null;
+  expectedAdjustedAt: string | null;
+  expectedAdjustmentNeedsReview: boolean;
   reportedCents: number | null;
   reportedDifferenceCents: number | null;
   countedCents: number | null;
@@ -199,6 +292,8 @@ export type CashClosureAuditAction =
   | "pdv_resynced"
   | "reported_amount_updated"
   | "reported_note_updated"
+  | "expected_amount_adjusted"
+  | "expected_amount_restored"
   | "counted_amount_updated"
   | "note_updated"
   | "submitted"
@@ -209,13 +304,16 @@ export type CashClosureAuditAction =
   | "deposit_adjustment_allocated"
   | "deposit_issued"
   | "deposit_paid"
-  | "deposit_cancelled";
+  | "deposit_cancelled"
+  | "deposit_excluded"
+  | "operator_states_migrated";
 
 export type CashClosureAuditLog = {
   id: string;
   workspaceId: string;
   closureId: string;
   lineId?: string;
+  operatorId?: string;
   action: CashClosureAuditAction;
   previousValue?: unknown;
   newValue?: unknown;
@@ -238,9 +336,16 @@ export type CashClosureDraftLineInput = {
   note?: string | null;
 };
 
+export type CashClosureExpectedAdjustmentInput = {
+  lineId: string;
+  correctedExpectedCents: number;
+  reason: string;
+};
+
 export type CashClosureWithLines = {
   closure: CashClosure;
   lines: CashClosureLine[];
+  operators: CashClosureOperator[];
 };
 
 export type CashClosureMonthlySummary = {
@@ -253,12 +358,15 @@ export type CashClosureMonthlySummary = {
   month: number;
   closureCount: number;
   pendingCount: number;
+  partialCount?: number;
   divergentCount: number;
   approvedCount: number;
   syncErrorCount: number;
   expectedTotalCents: number;
   countedTotalCents: number;
   differenceTotalCents: number;
+  /** Receita da DRE: PDV nos operadores em aberto e valor conferido nos finalizados. */
+  dreRevenueTotalCents: number;
   countedCashCents: number;
   allocatedCashCents: number;
   issuedCashCents: number;
