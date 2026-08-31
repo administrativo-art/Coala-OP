@@ -2,7 +2,10 @@ import "server-only";
 
 import {
   AUTENTIQUE_GRAPHQL_URL,
+  buildCreateSignatureLinkMutation,
   buildCreateDocumentMutation,
+  buildDeleteSignerMutation,
+  buildResendSignaturesMutation,
   type AutentiqueSignerInput,
 } from "@/lib/autentique-core";
 
@@ -159,6 +162,39 @@ export async function addAutentiqueSigner(params: {
   });
   if (!data.createSigner) throw new Error("O Autentique não confirmou o novo signatário.");
   return data.createSigner;
+}
+
+export async function resendAutentiqueSignatures(publicIds: string[]) {
+  if (!publicIds.length) throw new Error("Informe ao menos uma assinatura para reenviar.");
+  const data = await autentiqueGraphql<{ resendSignatures?: boolean }>(
+    buildResendSignaturesMutation(),
+    { public_ids: publicIds },
+  );
+  if (data.resendSignatures !== true) {
+    throw new Error("O Autentique não confirmou o reenvio da assinatura.");
+  }
+}
+
+export async function createAutentiqueSignatureLink(publicId: string) {
+  const data = await autentiqueGraphql<{
+    createLinkToSignature?: { short_link?: string | null };
+  }>(buildCreateSignatureLinkMutation(), { public_id: publicId });
+  const shortLink = data.createLinkToSignature?.short_link?.trim();
+  if (!shortLink) throw new Error("O Autentique não retornou o link de assinatura.");
+  return shortLink;
+}
+
+export async function deleteAutentiqueSigner(params: {
+  documentId: string;
+  publicId: string;
+}) {
+  const data = await autentiqueGraphql<{ deleteSigner?: boolean }>(
+    buildDeleteSignerMutation(),
+    { public_id: params.publicId, document_id: params.documentId },
+  );
+  if (data.deleteSigner !== true) {
+    throw new Error("O Autentique não confirmou a remoção do signatário anterior.");
+  }
 }
 
 export function autentiqueSandboxEnabled() {
