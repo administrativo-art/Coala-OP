@@ -93,11 +93,11 @@ env:
   - variable: RESEND_ACCESS_FROM
     value: "Zé da Senha | Coala One <acesso@coalashakes.com>"
   - variable: AUTENTIQUE_SANDBOX
-    value: "true"
+    value: "false"
   - variable: AUTENTIQUE_API_TOKEN
     secret: AUTENTIQUE_API_TOKEN
   - variable: AUTENTIQUE_ALLOW_PRODUCTION
-    value: "false"
+    value: "true"
   - variable: DOCX_TO_PDF_URL
     value: "https://coala-gotenberg-qsrxz2aeqa-rj.a.run.app"
   - variable: DOCX_TO_PDF_AUDIENCE
