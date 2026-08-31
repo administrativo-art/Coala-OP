@@ -3,7 +3,10 @@ import test from "node:test";
 
 import { PDFDocument } from "pdf-lib";
 
-import { composeDocumentPackage } from "../../../src/features/hr/documents/document-pdf-composer.server";
+import {
+  composeDocumentPackage,
+  pageNumberReplacementGeometry,
+} from "../../../src/features/hr/documents/document-pdf-composer.server";
 
 async function pdfWithPages(count: number) {
   const document = await PDFDocument.create();
@@ -45,6 +48,7 @@ test("compõe pacote genérico com cadeia de hashes e índice imutável", async 
 
   assert.equal(pdf.getPageCount(), 3);
   assert.equal(result.manifest.packageHash, result.packageHash);
+  assert.equal(result.manifest.composerVersion, "document-composer-v2");
   assert.equal(result.manifest.totalPages, 3);
   assert.deepEqual(
     result.manifest.components.map(
@@ -68,6 +72,15 @@ test("compõe pacote genérico com cadeia de hashes e índice imutável", async 
         artifact.contentHash !== artifact.artifactHash,
     ),
   );
+});
+
+test("cobre integralmente a numeração anterior no cabeçalho direito", () => {
+  const pageWidth = 595.28;
+  const geometry = pageNumberReplacementGeometry(pageWidth, 841.89);
+
+  assert.ok(geometry.x <= pageWidth - 165);
+  assert.equal(geometry.x + geometry.width, pageWidth - 22);
+  assert.equal(geometry.height, 20);
 });
 
 test("usa formato avulso e aceita assinatura standalone", async () => {
