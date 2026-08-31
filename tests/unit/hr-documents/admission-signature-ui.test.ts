@@ -65,6 +65,8 @@ test("acompanha o kit enviado em um único card", () => {
   const trackingSource = componentSource.slice(trackingStart, trackingEnd);
   assert.match(trackingSource, /Kit admissional completo/);
   assert.match(trackingSource, /uma única solicitação/);
+  assert.match(trackingSource, /Documento de teste \(sandbox\)/);
+  assert.match(trackingSource, /não aparece no painel de produção do Autentique/);
   assert.match(trackingSource, /Visualizar pacote/);
   assert.doesNotMatch(trackingSource, /selectedSignatureDocuments\.map\(document/);
   assert.match(componentSource, /signature-documents\?package=\$\{kind\}/);
