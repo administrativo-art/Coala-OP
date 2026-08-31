@@ -19,6 +19,7 @@ import {
   isCompleteAdmissionSignaturePackage,
   isAdmissionSignatureTemplateApplicable,
 } from "../../src/features/hr/documents/admission-signature-order";
+import { admissionBundleSignerPositions } from "../../src/features/hr/documents/admission-signature-positions";
 import {
   isSelectableAdmissionSignatureTemplate,
   SYSTEM_DOCUMENT_TEMPLATES,
@@ -128,6 +129,27 @@ test("kit admissional exige todos os componentes aplicáveis como uma unidade", 
     isCompleteAdmissionSignaturePackage([...forRequest, forRequest[0]], "yes"),
     true,
   );
+});
+
+test("posiciona as duas assinaturas no termo final do pacote", () => {
+  const manifest = {
+    components: [
+      { templateId: "system-admission-employment-probation-contract", endPage: 4 },
+      { templateId: "system-admission-bundle-closing-term", endPage: 23 },
+    ],
+  } as Parameters<typeof admissionBundleSignerPositions>[0];
+  assert.deepEqual(admissionBundleSignerPositions(manifest, "employee"), [{
+    x: "16.0",
+    y: "84.0",
+    z: 23,
+    element: "SIGNATURE",
+  }]);
+  assert.deepEqual(admissionBundleSignerPositions(manifest, "company"), [{
+    x: "62.0",
+    y: "84.0",
+    z: 23,
+    element: "SIGNATURE",
+  }]);
 });
 
 test("timbrado é aplicado ao PDF sem alterar a quantidade de páginas", async () => {

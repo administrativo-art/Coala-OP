@@ -200,9 +200,14 @@ export async function generateDocumentFromTemplate(
   const legalEntitySnapshot = await resolveDocumentLegalEntitySnapshot({
     cnpj: resolved.rawFlat["integration.employer_cnpj"],
     fallbackName: resolved.rawFlat["integration.employer_name"],
+    fallbackTradeName: resolved.rawFlat["integration.employer_name"],
     fallbackAddress: resolved.rawFlat["integration.employer_address"],
   });
-  applyDocumentEmployerLegalName(resolved, legalEntitySnapshot.legalName);
+  applyDocumentEmployerLegalName(
+    resolved,
+    legalEntitySnapshot.legalName,
+    legalEntitySnapshot.tradeName,
+  );
   const mapped = applyFieldMapping({
     data: resolved.data,
     flat: resolved.flat,

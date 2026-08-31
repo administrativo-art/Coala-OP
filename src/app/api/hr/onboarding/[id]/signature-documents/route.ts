@@ -2,6 +2,7 @@ import { getStorage } from "firebase-admin/storage";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  addCompanySignerToAdmissionBundle,
   generateSelectedSignatureDocuments,
   listSignatureWorkflow,
   previewAdmissionBundle,
@@ -44,6 +45,42 @@ export async function GET(
     const { id } = await context.params;
     const documentId = request.nextUrl.searchParams.get("documentId");
     const download = request.nextUrl.searchParams.get("download");
+    const packageFile = request.nextUrl.searchParams.get("package");
+    if (packageFile) {
+      if (!["generated", "signed"].includes(packageFile)) {
+        return error("Formato de pacote inválido.");
+      }
+      const signatureRequest = await hrDbAdmin
+        .collection("hrSignatureRequests")
+        .doc(`signature_bundle_${id}`)
+        .get();
+      if (!signatureRequest.exists || signatureRequest.get("onboardingId") !== id) {
+        return error("Pacote de assinatura não encontrado.", 404);
+      }
+      const signed = packageFile === "signed";
+      const path = signed
+        ? signatureRequest.get("signedStoragePath")
+        : signatureRequest.get("storagePath");
+      if (typeof path !== "string" || !path.trim()) {
+        return error(signed ? "Pacote assinado ainda não disponível." : "Pacote ainda não disponível.", 404);
+      }
+      const [buffer] = await getStorage(adminApp)
+        .bucket(firebaseClientConfig.storageBucket)
+        .file(path)
+        .download();
+      const fileName = String(
+        signed
+          ? `${signatureRequest.get("documentName") ?? "Kit admissional"} assinado.pdf`
+          : `${signatureRequest.get("documentName") ?? "Kit admissional"}.pdf`,
+      ).replace(/[\r\n"]/g, "");
+      return new NextResponse(new Uint8Array(buffer), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+          "Cache-Control": "private, no-store",
+        },
+      });
+    }
     if (documentId && download) {
       if (!["generated", "preview", "signed"].includes(download)) {
         return error("Formato de documento inválido.");
@@ -90,7 +127,7 @@ export async function POST(
     const { id } = await context.params;
     const body = record(await request.json().catch(() => null));
     const action = typeof body.action === "string" ? body.action : "";
-    const requiredAction: FormalizationAction = action === "send"
+    const requiredAction: FormalizationAction = action === "send" || action === "add_company_signer"
       ? "signatures.send"
       : action === "reconcile"
         ? "signatures.view"
@@ -138,6 +175,12 @@ export async function POST(
       });
     } else if (action === "send") {
       result = await sendSignatureDocuments({
+        onboardingId: id,
+        actorId: access.decoded.uid,
+        actorName: access.actorName,
+      });
+    } else if (action === "add_company_signer") {
+      result = await addCompanySignerToAdmissionBundle({
         onboardingId: id,
         actorId: access.decoded.uid,
         actorName: access.actorName,

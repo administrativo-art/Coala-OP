@@ -6879,6 +6879,9 @@ type SignatureWorkflowDocument = {
   archivedAt?: string | null;
   employeeDocumentId?: string | null;
   sandbox?: boolean;
+  signatureRequestId?: string | null;
+  providerSignaturesCount?: number;
+  providerSignedCount?: number;
 };
 
 type SignatureWorkflowPayload = {
@@ -9134,37 +9137,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     await signatureAction('generate');
   }
 
-  async function downloadSignatureDocument(documentId: string, kind: 'generated' | 'signed') {
-    if (!selectedProcess) return;
-    setSignatureBusy(`download:${documentId}:${kind}`);
-    setError(null);
-    try {
-      const token = await getToken();
-      const response = await fetch(
-        `/api/hr/onboarding/${selectedProcess.id}/signature-documents?documentId=${encodeURIComponent(documentId)}&download=${kind}`,
-        { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }
-      );
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Arquivo indisponível.');
-      }
-      const blob = await response.blob();
-      const disposition = response.headers.get('content-disposition') ?? '';
-      const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-      const fileName = encodedName ? decodeURIComponent(encodedName) : kind === 'signed' ? 'documento-assinado.pdf' : 'documento.docx';
-      const url = URL.createObjectURL(blob);
-      const anchor = window.document.createElement('a');
-      anchor.href = url;
-      anchor.download = fileName;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Falha ao baixar documento.');
-    } finally {
-      setSignatureBusy(null);
-    }
-  }
-
   async function viewSignatureDocument(documentId: string) {
     if (!selectedProcess) return;
     const previewWindow = window.open('', '_blank');
@@ -9222,6 +9194,33 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     } catch (caught) {
       previewWindow?.close();
       setError(caught instanceof Error ? caught.message : 'Falha ao visualizar o pacote completo.');
+    } finally {
+      setSignatureBusy(null);
+    }
+  }
+
+  async function viewSentSignaturePackage(kind: 'generated' | 'signed') {
+    if (!selectedProcess) return;
+    const previewWindow = window.open('', '_blank');
+    setSignatureBusy(`preview_package:${kind}`);
+    setError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        `/api/hr/onboarding/${selectedProcess.id}/signature-documents?package=${kind}`,
+        { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Pacote indisponível.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      if (previewWindow) previewWindow.location.href = url;
+      else window.open(url, '_blank');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (caught) {
+      previewWindow?.close();
+      setError(caught instanceof Error ? caught.message : 'Falha ao visualizar o pacote.');
     } finally {
       setSignatureBusy(null);
     }
@@ -9646,6 +9645,34 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     ].includes(document.status));
   const signatureCompleted = selectedSignatureDocuments.length > 0
     && selectedSignatureDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status));
+  const signaturePackageFailedDocument = selectedSignatureDocuments.find(document =>
+    ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(document.status)
+  );
+  const signaturePackageReference = selectedSignatureDocuments.find(document => document.signatureRequestId)
+    ?? selectedSignatureDocuments[0];
+  const signaturePackageViewed = selectedSignatureDocuments.some(document =>
+    ['viewed', 'partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status)
+    || Boolean(document.viewedAt)
+  );
+  const signaturePackageArchived = signaturePackageComplete
+    && selectedSignatureDocuments.every(document =>
+      ['signed_archived_pending_employee', 'archived'].includes(document.status) || Boolean(document.archivedAt)
+    );
+  const signaturePackageSignedCount = signaturePackageReference?.providerSignedCount ?? 0;
+  const signaturePackageSignaturesCount = signaturePackageReference?.providerSignaturesCount ?? 0;
+  const signaturePackageTrackingLabel = signaturePackageFailedDocument
+    ? SIGNATURE_WORKFLOW_STATUS_LABELS[signaturePackageFailedDocument.status] ?? signaturePackageFailedDocument.status
+    : signaturePackageArchived
+      ? 'Assinado e arquivado'
+      : signatureCompleted
+        ? 'Assinado, arquivando'
+        : signaturePackageSignedCount > 0 && signaturePackageSignaturesCount > 0
+          ? `${signaturePackageSignedCount} de ${signaturePackageSignaturesCount} assinaturas concluídas`
+          : signaturePackageViewed
+            ? 'Aberto pelos signatários'
+            : signatureSent
+              ? 'Enviado aos signatários'
+              : 'Aguardando envio';
   const signatureMainSteps = [
     { label: 'Gerar pacote', done: signatureGenerated },
     { label: 'Revisar pacote', done: signatureReviewed },
@@ -11124,59 +11151,51 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <p className="text-xs font-black uppercase tracking-wide text-slate-600">Acompanhamento da assinatura</p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">Os indicadores são atualizados automaticamente pelo Autentique.</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">O kit completo é uma única solicitação no Autentique.</p>
                       </div>
                       <button type="button" onClick={() => void loadSignatureWorkflow()} className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-500" title="Atualizar">
                         <RotateCw className={`h-3.5 w-3.5 ${signatureBusy === 'refresh' ? 'animate-spin' : ''}`} />
                       </button>
                     </div>
-                    {selectedSignatureDocuments.map(document => {
-                      const sent = ['sent', 'viewed', 'partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status);
-                      const viewed = ['viewed', 'partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status) || !!document.viewedAt;
-                      const signed = ['partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status) || !!document.signedAt;
-                      const archived = ['signed_archived_pending_employee', 'archived'].includes(document.status) || !!document.archivedAt;
-                      const failed = ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(document.status);
-                      return (
-                        <div key={document.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-[13.5px] font-black text-slate-900">{document.documentName ?? document.templateName}</p>
-                              <p className={`mt-1 text-[11px] font-bold ${failed ? 'text-rose-600' : archived ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                {SIGNATURE_WORKFLOW_STATUS_LABELS[document.status] ?? document.status}
-                              </p>
-                              {document.lastError ? <p className="mt-1 text-[10.5px] font-semibold text-rose-600">{document.lastError}</p> : null}
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {document.generatedPdfStoragePath ? (
-                                <button type="button" disabled={!!signatureBusy} onClick={() => void viewSignatureDocument(document.id)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 text-[10.5px] font-black text-violet-700">
-                                  <Eye className="h-3.5 w-3.5" />Visualizar
-                                </button>
-                              ) : null}
-                              {archived ? (
-                                <button type="button" disabled={!!signatureBusy} onClick={() => void downloadSignatureDocument(document.id, 'signed')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[10.5px] font-black text-emerald-700">
-                                  <Download className="h-3.5 w-3.5" />PDF assinado
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                          {sent ? (
-                            <div className="mt-3 grid grid-cols-4 gap-1.5">
-                              {[
-                                { label: 'Enviado', done: sent, icon: Send },
-                                { label: 'Aberto', done: viewed, icon: Eye },
-                                { label: 'Assinado', done: signed, icon: CheckCircle2 },
-                                { label: 'Arquivado', done: archived, icon: Archive },
-                              ].map(indicator => (
-                                <div key={indicator.label} className={`rounded-lg border px-2 py-2 text-center ${indicator.done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
-                                  <indicator.icon className="mx-auto h-3.5 w-3.5" />
-                                  <p className="mt-1 text-[9.5px] font-black">{indicator.label}</p>
-                                </div>
-                              ))}
-                            </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[13.5px] font-black text-slate-900">Kit admissional completo</p>
+                          <p className="mt-0.5 text-[10.5px] font-semibold text-slate-500">{selectedSignatureDocuments.length} componentes · uma única solicitação</p>
+                          <p className={`mt-1 text-[11px] font-bold ${signaturePackageFailedDocument ? 'text-rose-600' : signaturePackageArchived ? 'text-emerald-700' : 'text-slate-500'}`}>
+                            {signaturePackageTrackingLabel}
+                          </p>
+                          {signaturePackageFailedDocument?.lastError ? <p className="mt-1 text-[10.5px] font-semibold text-rose-600">{signaturePackageFailedDocument.lastError}</p> : null}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {signatureSent ? (
+                            <button type="button" disabled={!!signatureBusy} onClick={() => void viewSentSignaturePackage('generated')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 text-[10.5px] font-black text-violet-700">
+                              <Eye className="h-3.5 w-3.5" />Visualizar pacote
+                            </button>
+                          ) : null}
+                          {signaturePackageArchived ? (
+                            <button type="button" disabled={!!signatureBusy} onClick={() => void viewSentSignaturePackage('signed')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[10.5px] font-black text-emerald-700">
+                              <Download className="h-3.5 w-3.5" />PDF assinado
+                            </button>
                           ) : null}
                         </div>
-                      );
-                    })}
+                      </div>
+                      {signatureSent ? (
+                        <div className="mt-3 grid grid-cols-4 gap-1.5">
+                          {[
+                            { label: 'Enviado', done: signatureSent, icon: Send },
+                            { label: 'Aberto', done: signaturePackageViewed, icon: Eye },
+                            { label: 'Assinado', done: signatureCompleted, icon: CheckCircle2 },
+                            { label: 'Arquivado', done: signaturePackageArchived, icon: Archive },
+                          ].map(indicator => (
+                            <div key={indicator.label} className={`rounded-lg border px-2 py-2 text-center ${indicator.done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
+                              <indicator.icon className="mx-auto h-3.5 w-3.5" />
+                              <p className="mt-1 text-[9.5px] font-black">{indicator.label}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5">
@@ -11187,7 +11206,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
 
                 {selectedSignatureDocuments.length > 0 && selectedSignatureDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status)) ? (
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
-                    Todos os documentos foram assinados. O sistema arquivou os PDFs e liberou automaticamente a próxima fase.
+                    O kit admissional foi assinado. O sistema arquivou o pacote e liberou automaticamente a próxima fase.
                   </div>
                 ) : null}
               </div>

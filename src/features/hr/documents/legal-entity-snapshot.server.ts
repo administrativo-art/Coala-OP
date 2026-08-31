@@ -33,6 +33,7 @@ function joinedAddress(company: {
 export async function resolveDocumentLegalEntitySnapshot(params: {
   cnpj: unknown;
   fallbackName: unknown;
+  fallbackTradeName?: unknown;
   fallbackAddress: unknown;
 }): Promise<DocumentLegalEntitySnapshot> {
   const cnpj = String(params.cnpj ?? "").replace(/\D/g, "");
@@ -46,15 +47,17 @@ export async function resolveDocumentLegalEntitySnapshot(params: {
   };
   if (cnpj.length !== 14) return fallback;
   const repository = new InternalCompanyRepository(dbAdmin);
-  const entity = await repository.findByCnpj(cnpj);
+  const exactEntity = await repository.findByCnpj(cnpj);
+  const entity = exactEntity ?? await repository.findByCnpjRoot(cnpj);
   if (!entity) return fallback;
   const company = InternalCompanyRepository.normalizedFromEntity(entity);
   return {
     entityId: entity.id,
     legalName: company.razao_social || fallback.legalName,
-    tradeName: company.nome_fantasia,
-    cnpj: company.cnpj || cnpj,
-    address: joinedAddress(company) || fallback.address,
+    tradeName: String(params.fallbackTradeName ?? "").trim()
+      || (exactEntity ? company.nome_fantasia : fallback.legalName || company.nome_fantasia),
+    cnpj: exactEntity ? company.cnpj || cnpj : cnpj,
+    address: exactEntity ? joinedAddress(company) || fallback.address : fallback.address,
     capturedAt: new Date().toISOString(),
   };
 }
