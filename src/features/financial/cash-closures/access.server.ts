@@ -4,6 +4,7 @@ import type { ServerUserContext } from "@/lib/auth-server";
 import { canAccessUnit } from "@/lib/unit-access";
 import type { CashClosureLine } from "./types";
 import type { CashDepositBatch } from "../cash-deposits/types";
+import { canBrowseCashClosureCatalog } from "./catalog-access";
 
 export type CashClosurePermission = "view" | "edit" | "approve" | "adjustExpected" | "reopen" | "resync";
 
@@ -25,6 +26,15 @@ export function assertCashClosureAccess(
 ) {
   if (!canUseCashClosure(context, permission, kioskId)) {
     throw new Error("Sem permissão para esta ação de fechamento de caixa.");
+  }
+}
+
+export function assertCashClosureCatalogAccess(
+  context: ServerUserContext,
+  kioskId?: string | null,
+) {
+  if (!canBrowseCashClosureCatalog(context, kioskId)) {
+    throw new Error("Sem permissão para consultar unidades e competências de fechamento de caixa.");
   }
 }
 

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth-server";
 import { resolvePdvFilialId } from "@/lib/kiosk-identifiers";
 import { filterUnitsByAccess } from "@/lib/unit-access";
-import { assertCashClosureAccess } from "@/features/financial/cash-closures/access.server";
+import { assertCashClosureCatalogAccess } from "@/features/financial/cash-closures/access.server";
 import { listCashClosureKioskDocuments } from "@/features/financial/cash-closures/kiosks.server";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 
@@ -20,7 +20,7 @@ export const GET = withApiErrorHandling({
     throw new AppError({ code: "AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
   });
   try {
-    assertCashClosureAccess(context, "view");
+    assertCashClosureCatalogAccess(context);
   } catch (cause) {
     throw new AppError({ code: "CASH_CLOSURE_OVERVIEW_FORBIDDEN", kind: "AUTHORIZATION", cause });
   }
