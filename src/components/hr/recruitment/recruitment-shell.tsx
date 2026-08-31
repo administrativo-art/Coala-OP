@@ -11137,28 +11137,45 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                         </p>
                       ) : null}
                     </div>
-                    {canGenerateDocumentsProcess ? (
-                      <div className="mt-3 flex flex-wrap justify-end gap-2">
-                        {signatureBundleReady ? (
-                          <button
-                            type="button"
-                            disabled={!!signatureBusy}
-                            onClick={() => void viewSignatureBundle()}
-                            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 text-[11px] font-black text-violet-700 hover:bg-violet-50 disabled:opacity-50"
-                          >
-                            {signatureBusy === 'preview_bundle' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
-                            Ver pacote completo
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          disabled={!signatureSelectionEditable || selectedSignatureTemplateIds.length === 0 || !!signatureBusy}
-                          onClick={() => void generateSelectedSignatureTemplates()}
-                          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-[11px] font-black text-white hover:bg-violet-600 disabled:opacity-50"
-                        >
-                          {signatureBusy === 'select' || signatureBusy === 'generate' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                          {signatureGenerated ? 'Gerar novamente' : 'Gerar selecionados'}
-                        </button>
+                    {canGenerateDocumentsProcess || (canSendSignatures && canActOnSignaturePhase && signatureDocumentsReadyToSend.length > 0) ? (
+                      <div className="mt-3 flex justify-end">
+                        <div className="flex flex-col items-end gap-2">
+                          {canGenerateDocumentsProcess ? (
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {signatureBundleReady ? (
+                                <button
+                                  type="button"
+                                  disabled={!!signatureBusy}
+                                  onClick={() => void viewSignatureBundle()}
+                                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 text-[11px] font-black text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                                >
+                                  {signatureBusy === 'preview_bundle' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                                  Ver pacote completo
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                disabled={!signatureSelectionEditable || selectedSignatureTemplateIds.length === 0 || !!signatureBusy}
+                                onClick={() => void generateSelectedSignatureTemplates()}
+                                className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-[11px] font-black text-white hover:bg-violet-600 disabled:opacity-50"
+                              >
+                                {signatureBusy === 'select' || signatureBusy === 'generate' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                                {signatureGenerated ? 'Gerar novamente' : 'Gerar selecionados'}
+                              </button>
+                            </div>
+                          ) : null}
+                          {canSendSignatures && canActOnSignaturePhase && signatureDocumentsReadyToSend.length > 0 ? (
+                            <button
+                              type="button"
+                              disabled={!!signatureBusy}
+                              onClick={() => void signatureAction('send', { documentIds: signatureDocumentsReadyToSend.map(document => document.id) })}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-pink-600 px-4 text-[11px] font-black text-white shadow-sm shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
+                            >
+                              {signatureBusy === 'send' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                              Enviar {signatureDocumentsReadyToSend.length} documento{signatureDocumentsReadyToSend.length === 1 ? '' : 's'} para assinatura
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     ) : null}
                   </div>
@@ -11233,18 +11250,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                     <p className="text-sm font-black text-slate-800">Nenhum documento selecionado.</p>
                     <p className="mt-1 text-xs font-semibold text-slate-500">Selecione os modelos na preparação para iniciar a geração.</p>
                   </div>
-                ) : null}
-
-                {canSendSignatures && canActOnSignaturePhase && signatureDocumentsReadyToSend.length > 0 ? (
-                  <button
-                    type="button"
-                    disabled={!!signatureBusy}
-                    onClick={() => void signatureAction('send', { documentIds: signatureDocumentsReadyToSend.map(document => document.id) })}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-pink-600 text-[12.5px] font-black text-white shadow-lg shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
-                  >
-                    {signatureBusy === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Enviar {signatureDocumentsReadyToSend.length} documento{signatureDocumentsReadyToSend.length === 1 ? '' : 's'} para assinatura
-                  </button>
                 ) : null}
 
                 {selectedSignatureDocuments.length > 0 && selectedSignatureDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status)) ? (

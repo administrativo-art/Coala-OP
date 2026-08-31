@@ -27,6 +27,9 @@ test("concentra revisão e prévias em PDF no próprio fluxo de preparação", (
   assert.match(selectionSource, /Gerar selecionados/);
   assert.match(selectionSource, /Gerar novamente/);
   assert.match(selectionSource, /Ver pacote completo/);
+  assert.match(selectionSource, /flex flex-col items-end gap-2/);
+  assert.match(selectionSource, /Enviar \{signatureDocumentsReadyToSend\.length\} documento/);
+  assert.doesNotMatch(selectionSource, /h-11 w-full/);
   assert.doesNotMatch(componentSource, /Baixar Word/);
   assert.doesNotMatch(selectionSource, /title="Atualizar documentos"/);
   assert.doesNotMatch(selectionSource, /h-10 w-full/);
