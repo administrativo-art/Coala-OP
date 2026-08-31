@@ -85,7 +85,6 @@ import { canUpdateExpectedAdmissionDate } from '@/features/hr/onboarding-lifecyc
 import { formatBrlCurrency, parseBrlCurrency } from '@/features/hr/compensation/brl-currency';
 import { isAutomaticAccountantDocument } from '@/features/hr/accountant/document-selection';
 import { isPreviewableDocumentContentType } from '@/features/hr/documents/preview-content-type';
-import { isAdmissionSignatureTemplateApplicable } from '@/features/hr/documents/admission-signature-order';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
 import {
   ONBOARDING_HEALTH_META,
@@ -6885,30 +6884,8 @@ type SignatureWorkflowDocument = {
 type SignatureWorkflowPayload = {
   templates: SignatureTemplateOption[];
   documents: SignatureWorkflowDocument[];
+  packageTemplateIds?: string[];
 };
-
-function applicableSignatureTemplateIds(
-  workflow: SignatureWorkflowPayload,
-  transportVoucherAnswer: unknown,
-) {
-  return new Set(
-    workflow.templates
-      .filter((template) =>
-        isAdmissionSignatureTemplateApplicable(template, transportVoucherAnswer)
-      )
-      .map((template) => template.id),
-  );
-}
-
-function selectedApplicableSignatureTemplateIds(
-  workflow: SignatureWorkflowPayload,
-  transportVoucherAnswer: unknown,
-) {
-  const applicableIds = applicableSignatureTemplateIds(workflow, transportVoucherAnswer);
-  return workflow.documents
-    .filter((document) => document.selected && applicableIds.has(document.templateId))
-    .map((document) => document.templateId);
-}
 
 const SIGNATURE_WORKFLOW_STATUS_LABELS: Record<string, string> = {
   selected: 'Selecionado',
@@ -8633,7 +8610,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
   const [linkClock, setLinkClock] = useState(() => Date.now());
   const [finalizationDraft, setFinalizationDraft] = useState<OnboardingFinalizationSettings>(() => getFinalizationDraft(null));
   const [signatureWorkflow, setSignatureWorkflow] = useState<SignatureWorkflowPayload | null>(null);
-  const [selectedSignatureTemplateIds, setSelectedSignatureTemplateIds] = useState<string[]>([]);
   const [signatureBusy, setSignatureBusy] = useState<string | null>(null);
   const [asoGuideBusy, setAsoGuideBusy] = useState(false);
   const [asoActionBusy, setAsoActionBusy] = useState<string | null>(null);
@@ -8738,12 +8714,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
         getToken
       ) as SignatureWorkflowPayload;
       setSignatureWorkflow(payload);
-      setSelectedSignatureTemplateIds(
-        selectedApplicableSignatureTemplateIds(
-          payload,
-          selectedProcess.publicFormAnswers?.wantsTransportVoucher,
-        )
-      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Falha ao carregar documentos para assinatura.');
     }
@@ -9145,12 +9115,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
         { method: 'POST', body: JSON.stringify({ action, ...body }) }
       ) as SignatureWorkflowPayload;
       setSignatureWorkflow(payload);
-      setSelectedSignatureTemplateIds(
-        selectedApplicableSignatureTemplateIds(
-          payload,
-          selectedProcess.publicFormAnswers?.wantsTransportVoucher,
-        )
-      );
       onRefresh();
       return payload;
     } catch (caught) {
@@ -9161,9 +9125,11 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     }
   }
 
-  async function generateSelectedSignatureTemplates() {
-    if (!selectedProcess || selectedSignatureTemplateIds.length === 0) return;
-    const selected = await signatureAction('select', { templateIds: selectedSignatureTemplateIds });
+  async function generateSignaturePackage() {
+    if (!selectedProcess || !signatureWorkflow?.packageTemplateIds?.length) return;
+    const selected = await signatureAction('select', {
+      templateIds: signatureWorkflow.packageTemplateIds,
+    });
     if (!selected) return;
     await signatureAction('generate');
   }
@@ -9641,30 +9607,35 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
   const canActOnSignaturePhase = isCurrentPhase &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+  const packageSignatureIds = new Set(signatureWorkflow?.packageTemplateIds ?? []);
   const signatureTemplates = (signatureWorkflow?.templates ?? []).filter((template) =>
-    isAdmissionSignatureTemplateApplicable(
-      template,
-      selectedProcess.publicFormAnswers?.wantsTransportVoucher,
-    )
+    packageSignatureIds.has(template.id)
   );
-  const allSignatureTemplatesSelected = signatureTemplates.length > 0
-    && signatureTemplates.every(template => selectedSignatureTemplateIds.includes(template.id));
-  const someSignatureTemplatesSelected = signatureTemplates.some(template =>
-    selectedSignatureTemplateIds.includes(template.id)
-  );
-  const applicableSignatureIds = new Set(signatureTemplates.map((template) => template.id));
   const selectedSignatureDocuments = (signatureWorkflow?.documents ?? []).filter(
-    (document) => document.selected && applicableSignatureIds.has(document.templateId)
+    (document) => document.selected && packageSignatureIds.has(document.templateId)
   );
-  const signatureDocumentsReadyToSend = selectedSignatureDocuments.filter(document => document.status === 'ready_to_send');
-  const signatureGenerated = selectedSignatureDocuments.length > 0
+  const signaturePackageComplete = signatureTemplates.length > 0
+    && selectedSignatureDocuments.length === signatureTemplates.length
+    && signatureTemplates.every((template) =>
+      selectedSignatureDocuments.some((document) => document.templateId === template.id)
+    );
+  const signatureGenerated = signaturePackageComplete
     && selectedSignatureDocuments.every(document => Boolean(document.generatedDocumentId));
   const selectedBundleDocuments = selectedSignatureDocuments.filter(
     document => document.signatureScope !== 'independent'
   );
-  const signatureBundleReady = selectedBundleDocuments.length > 0
+  const signatureBundleReady = signaturePackageComplete
+    && selectedBundleDocuments.length === selectedSignatureDocuments.length
     && selectedBundleDocuments.every(document => Boolean(document.generatedPdfStoragePath));
-  const signatureReviewed = selectedSignatureDocuments.length > 0
+  const signaturePackageReviewable = signaturePackageComplete
+    && selectedSignatureDocuments.every(document =>
+      Boolean(document.generatedPdfStoragePath)
+      && !document.missingRequired?.length
+      && ['review_pending', 'ready_to_send'].includes(document.status)
+    );
+  const signaturePackageNeedsReview = signaturePackageReviewable
+    && selectedSignatureDocuments.some(document => document.status === 'review_pending');
+  const signatureReviewed = signaturePackageComplete
     && selectedSignatureDocuments.every(document => [
       'ready_to_send', 'sending', 'sent', 'viewed', 'partially_signed', 'signed',
       'signed_archived_pending_employee', 'archived',
@@ -9676,13 +9647,13 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
   const signatureCompleted = selectedSignatureDocuments.length > 0
     && selectedSignatureDocuments.every(document => ['signed', 'signed_archived_pending_employee', 'archived'].includes(document.status));
   const signatureMainSteps = [
-    { label: 'Selecionar e gerar', done: signatureGenerated },
-    { label: 'Revisar no RH', done: signatureReviewed },
+    { label: 'Gerar pacote', done: signatureGenerated },
+    { label: 'Revisar pacote', done: signatureReviewed },
     { label: 'Enviar', done: signatureSent },
     { label: 'Assinar e arquivar', done: signatureCompleted },
   ];
   const signatureCurrentStepIndex = signatureMainSteps.findIndex(step => !step.done);
-  const signatureSelectionEditable = canGenerateDocumentsProcess && canActOnSignaturePhase && activePhaseId === 'signature_preparation' &&
+  const signaturePackageEditable = canGenerateDocumentsProcess && canActOnSignaturePhase && activePhaseId === 'signature_preparation' &&
     !selectedSignatureDocuments.some(document => ['sent', 'viewed', 'partially_signed', 'signed', 'archived'].includes(document.status));
   let selectedOperationalStatus = resolveOnboardingOperationalStatus(selectedProcess, new Date(linkClock));
   if (selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled' && signatureWorkflow && ['signature_preparation', 'signature'].includes(selectedProcess.currentStage ?? '')) {
@@ -11000,7 +10971,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-black uppercase tracking-wide text-violet-800">Documentação admissional</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">Selecione os modelos, gere e revise os documentos, envie para assinatura e acompanhe o arquivamento.</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Gere e revise o pacote completo, envie-o para assinatura e acompanhe o arquivamento.</p>
                     </div>
                     <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-700">
                       {signatureMainSteps.filter(step => step.done).length} de {signatureMainSteps.length} subetapas
@@ -11040,62 +11011,28 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                   <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-wide text-violet-800">1. Selecione os modelos</p>
-                        <p className="mt-1 text-xs font-semibold text-violet-700">Escolha os documentos que serão gerados para este titular.</p>
+                        <p className="text-xs font-black uppercase tracking-wide text-violet-800">1. Documentos do pacote</p>
+                        <p className="mt-1 text-xs font-semibold text-violet-700">Todos os componentes aplicáveis são gerados, revisados e enviados como uma única unidade.</p>
                       </div>
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        <label className={`inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-black text-violet-700 ${
-                          signatureSelectionEditable && !signatureBusy ? 'cursor-pointer hover:bg-violet-50' : 'cursor-not-allowed opacity-60'
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={allSignatureTemplatesSelected}
-                            ref={input => {
-                              if (input) input.indeterminate = someSignatureTemplatesSelected && !allSignatureTemplatesSelected;
-                            }}
-                            disabled={!signatureSelectionEditable || !!signatureBusy || signatureTemplates.length === 0}
-                            onChange={event => setSelectedSignatureTemplateIds(
-                              event.target.checked ? signatureTemplates.map(template => template.id) : []
-                            )}
-                          />
-                          Selecionar todos
-                        </label>
-                        <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-violet-700">
-                          {selectedSignatureTemplateIds.length} selecionado{selectedSignatureTemplateIds.length === 1 ? '' : 's'}
-                        </span>
-                      </div>
+                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-black text-violet-700">
+                        {signatureTemplates.length} componentes obrigatórios
+                      </span>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
                       {signatureTemplates.map((template, index) => {
-                        const checked = selectedSignatureTemplateIds.includes(template.id);
-                        const workflowDocument = checked
-                          ? selectedSignatureDocuments.find(document => document.templateId === template.id)
-                          : undefined;
+                        const workflowDocument = selectedSignatureDocuments.find(document => document.templateId === template.id);
                         const failed = workflowDocument
                           ? ['generation_failed', 'generation_blocked', 'send_failed', 'delivery_failed', 'rejected'].includes(workflowDocument.status)
                           : false;
                         return (
-                          <div key={template.id} className={`rounded-xl border p-3 ${checked ? 'border-violet-300 bg-white' : 'border-slate-200 bg-white/60'}`}>
-                            <label className={`flex items-start gap-2.5 ${signatureSelectionEditable && !signatureBusy ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                disabled={!signatureSelectionEditable || !!signatureBusy}
-                                onChange={event => setSelectedSignatureTemplateIds(current => {
-                                  const next = new Set(current);
-                                  if (event.target.checked) next.add(template.id);
-                                  else next.delete(template.id);
-                                  return signatureTemplates
-                                    .filter(option => next.has(option.id))
-                                    .map(option => option.id);
-                                })}
-                                className="mt-0.5"
-                              />
+                          <div key={template.id} className="rounded-xl border border-violet-300 bg-white p-3">
+                            <div className="flex items-start gap-2.5">
+                              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-violet-100 text-[9px] font-black text-violet-700">{index + 1}</span>
                               <span className="min-w-0">
-                                <span className="block truncate text-[12.5px] font-black text-slate-900">{index + 1}. {template.name}</span>
+                                <span className="block truncate text-[12.5px] font-black text-slate-900">{template.name}</span>
                                 <span className="mt-0.5 block text-[10.5px] font-semibold text-slate-500">{template.category} · versão {template.version}</span>
                               </span>
-                            </label>
+                            </div>
                             {workflowDocument ? (
                               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                                 <div className="min-w-0">
@@ -11115,16 +11052,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                                       <Eye className="h-3.5 w-3.5" />Visualizar
                                     </button>
                                   ) : null}
-                                  {canReviewDocuments && canActOnSignaturePhase && workflowDocument.status === 'review_pending' ? (
-                                    <button
-                                      type="button"
-                                      disabled={!!signatureBusy}
-                                      onClick={() => void signatureAction('approve', { documentId: workflowDocument.id })}
-                                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-[10.5px] font-black text-white hover:bg-emerald-700 disabled:opacity-50"
-                                    >
-                                      <CheckCircle2 className="h-3.5 w-3.5" />Revisado
-                                    </button>
-                                  ) : null}
                                 </div>
                               </div>
                             ) : null}
@@ -11137,7 +11064,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                         </p>
                       ) : null}
                     </div>
-                    {canGenerateDocumentsProcess || (canSendSignatures && canActOnSignaturePhase && signatureDocumentsReadyToSend.length > 0) ? (
+                    {canGenerateDocumentsProcess || (canReviewDocuments && canActOnSignaturePhase && signaturePackageNeedsReview) || (canSendSignatures && canActOnSignaturePhase && signatureReviewed) ? (
                       <div className="mt-3 flex justify-end">
                         <div className="flex flex-col items-end gap-2">
                           {canGenerateDocumentsProcess ? (
@@ -11155,24 +11082,35 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                               ) : null}
                               <button
                                 type="button"
-                                disabled={!signatureSelectionEditable || selectedSignatureTemplateIds.length === 0 || !!signatureBusy}
-                                onClick={() => void generateSelectedSignatureTemplates()}
+                                disabled={!signaturePackageEditable || !signatureWorkflow?.packageTemplateIds?.length || !!signatureBusy}
+                                onClick={() => void generateSignaturePackage()}
                                 className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-[11px] font-black text-white hover:bg-violet-600 disabled:opacity-50"
                               >
                                 {signatureBusy === 'select' || signatureBusy === 'generate' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                                {signatureGenerated ? 'Gerar novamente' : 'Gerar selecionados'}
+                                {signatureGenerated ? 'Gerar novamente' : 'Gerar pacote'}
                               </button>
                             </div>
                           ) : null}
-                          {canSendSignatures && canActOnSignaturePhase && signatureDocumentsReadyToSend.length > 0 ? (
+                          {canReviewDocuments && canActOnSignaturePhase && signaturePackageNeedsReview ? (
                             <button
                               type="button"
                               disabled={!!signatureBusy}
-                              onClick={() => void signatureAction('send', { documentIds: signatureDocumentsReadyToSend.map(document => document.id) })}
+                              onClick={() => void signatureAction('approve')}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-[11px] font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              {signatureBusy === 'approve' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                              Marcar pacote como revisado
+                            </button>
+                          ) : null}
+                          {canSendSignatures && canActOnSignaturePhase && signatureReviewed ? (
+                            <button
+                              type="button"
+                              disabled={!!signatureBusy}
+                              onClick={() => void signatureAction('send')}
                               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-pink-600 px-4 text-[11px] font-black text-white shadow-sm shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
                             >
                               {signatureBusy === 'send' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                              Enviar {signatureDocumentsReadyToSend.length} documento{signatureDocumentsReadyToSend.length === 1 ? '' : 's'} para assinatura
+                              Enviar pacote para assinatura
                             </button>
                           ) : null}
                         </div>
@@ -11217,11 +11155,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                               {archived ? (
                                 <button type="button" disabled={!!signatureBusy} onClick={() => void downloadSignatureDocument(document.id, 'signed')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-[10.5px] font-black text-emerald-700">
                                   <Download className="h-3.5 w-3.5" />PDF assinado
-                                </button>
-                              ) : null}
-                              {canReviewDocuments && canActOnSignaturePhase && document.status === 'review_pending' ? (
-                                <button type="button" disabled={!!signatureBusy} onClick={() => void signatureAction('approve', { documentId: document.id })} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-[10.5px] font-black text-white">
-                                  <CheckCircle2 className="h-3.5 w-3.5" />Revisado
                                 </button>
                               ) : null}
                             </div>

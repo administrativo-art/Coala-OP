@@ -6,7 +6,7 @@ import {
   listSignatureWorkflow,
   previewAdmissionBundle,
   reconcileSignatureDocuments,
-  reviewSignatureDocument,
+  reviewSignaturePackage,
   selectSignatureTemplates,
   sendSignatureDocuments,
 } from "@/features/hr/documents/signature-workflow.server";
@@ -125,16 +125,13 @@ export async function POST(
     } else if (action === "generate") {
       result = await generateSelectedSignatureDocuments({
         onboardingId: id,
-        documentIds: stringArray(body.documentIds),
         includeSensitive,
         actorId: access.decoded.uid,
         actorName: access.actorName,
       });
     } else if (action === "approve" || action === "request_changes") {
-      if (typeof body.documentId !== "string") return error("Documento não informado.");
-      result = await reviewSignatureDocument({
+      result = await reviewSignaturePackage({
         onboardingId: id,
-        documentId: body.documentId,
         approved: action === "approve",
         actorId: access.decoded.uid,
         actorName: access.actorName,
@@ -142,7 +139,6 @@ export async function POST(
     } else if (action === "send") {
       result = await sendSignatureDocuments({
         onboardingId: id,
-        documentIds: stringArray(body.documentIds),
         actorId: access.decoded.uid,
         actorName: access.actorName,
       });
