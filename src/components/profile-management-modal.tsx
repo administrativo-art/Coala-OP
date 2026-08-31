@@ -745,7 +745,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
 
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
                                   <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Fechamento do caixa</h4>
-                                  {renderPermissionSwitch("permissions.financial.cashClosures.view" as any, "Visualizar fechamentos", "Permite consultar os fechamentos diários e mensais das unidades.", !financialViewWatch)}
+                                  {renderPermissionSwitch("permissions.financial.cashClosures.view" as any, "Abrir calendário e auditoria", "Permite abrir o calendário, consultar fechamentos diários e acessar a auditoria. Unidades e competências permanecem visíveis para perfis com acesso ao Financeiro.", !financialViewWatch)}
                                   <div className="pl-6 space-y-2">
                                     {renderPermissionSwitch("permissions.financial.cashClosures.edit" as any, "Informar contagem do Caixa", "Permite registrar a quantidade física declarada pelo operador do caixa.", !financialCashClosuresViewWatch, true)}
                                     {renderPermissionSwitch("permissions.financial.cashClosures.approve" as any, "Conferir e finalizar", "Permite abrir sessões, informar a conferência independente do Financeiro e finalizar operadores.", !financialCashClosuresViewWatch, true)}

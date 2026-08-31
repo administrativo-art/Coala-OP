@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth-server";
-import { assertCashClosureAccess } from "@/features/financial/cash-closures/access.server";
+import { assertCashClosureCatalogAccess } from "@/features/financial/cash-closures/access.server";
 import { listCashClosureMonthlySummaries } from "@/features/financial/cash-closures/summaries.server";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 
@@ -25,7 +25,7 @@ export const GET = withApiErrorHandling({
     });
   }
   try {
-    assertCashClosureAccess(context, "view", kioskId);
+    assertCashClosureCatalogAccess(context, kioskId);
   } catch (cause) {
     throw new AppError({ code: "CASH_CLOSURE_MONTHS_FORBIDDEN", kind: "AUTHORIZATION", cause });
   }
