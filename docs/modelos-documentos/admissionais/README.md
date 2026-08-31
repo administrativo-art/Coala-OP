@@ -11,7 +11,7 @@ por renderização.
 - Formato editável: **DOCX**
 - Formato oficial: **PDF gerado, timbrado e rastreável**
 - Assinatura contratual: **um PDF consolidado**
-- Consentimento de imagem e voz: **solicitação independente**
+- Consentimento de imagem e voz: **integrado ao pacote, com opção facultativa explícita**
 - Vale-transporte: **dois modelos alternativos e versionados**
 - Estado técnico: **implementado**
 - Estado de publicação: **homologado e publicado em 30/08/2026**
@@ -26,13 +26,13 @@ e não aparece como opção manual.
 |---:|---|---|---|
 | 1 | `01-contrato-experiencia-v4.docx` | `081e850ded830aef5911c34754ca549313074681be63e7f4f9b204888bedd91f` | Pacote |
 | 2 | `02-banco-horas-v2.docx` | `cff1a19adbca0847db5337182e503340edeb590b8786a238c6249be957fe0b32` | Pacote |
-| 3 | `03-termo-lgpd-v2.docx` | `70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265` | Pacote |
-| 4 | `04-imagem-voz-v2.docx` | `a3d20c516afa510c6aa9d58ae359827490b76289643f7508932fce61d8c42381` | Independente |
+| 3 | `03-termo-lgpd-v4.docx` | `c5bc23d9a942b57daeb94d6185187552c4520c82b30cc071f589a9c94d50e1a5` | Pacote |
+| 4 | `04-imagem-voz-v4.docx` | `a266bbf3ffa1e4e3fa06108b57f5755879151a1af4e99497ac099d27856d9a0a` | Pacote; autorização facultativa |
 | 5 | `05-metas-premios-v2.docx` | `a5662e341eb06b40f01a6db049db18411b94d2bd1d0f74595909eb5ff6624745` | Pacote |
 | 6A | `06-vale-transporte-solicitacao-v2.docx` | `cd643a4caf7c088e98af1dc6908cac7d2005163a795f323df1fcd8450fca53bb` | Pacote |
 | 6B | `06-vale-transporte-renuncia-v2.docx` | `3ea7e9e3ddbfa2a4ffefe780efbd03677984131e4fdf3ca8437aa81fc3a1a6de` | Pacote |
 | 7 | `07-confidencialidade-v2.docx` | `56306e646b241ab3b0bb93c804dc3cf549a833efb583bf990c9a18c8ba275f80` | Pacote |
-| 8 | `09-termo-encerramento-v2.docx` | `1b4a98f7a9fba99d61ab07ffde24584b52516fb53bd0379d101216923d05b030` | Alvo final |
+| 8 | `09-termo-encerramento-v4.docx` | `a98b162a2adfda8856a488870f8a462164a78f7e40ee29f63395f5d0f5e0221e` | Alvo final |
 
 O antigo `08-ponto-eletronico-v2.docx` foi retirado do kit operacional em
 30/07/2026. O arquivo permanece somente como registro histórico e não é
@@ -73,10 +73,13 @@ o artefato apresentado com o arquivado pelo sistema.
 
 ### Consentimento de imagem e voz
 
-O consentimento não integra a assinatura única. O sistema registra concessão,
-negação e revogação, versão e hash do termo, canal e evidência da decisão,
-documento assinado e inventário de usos. A revogação bloqueia novos usos, cria
-efeito operacional e preserva a prova histórica.
+O termo integra o PDF único, mas a assinatura do pacote não presume a
+autorização: a decisão específica do onboarding é impressa na caixa facultativa
+do próprio termo. Caixa sem marcação equivale à não autorização. O sistema
+registra concessão, negação e revogação, versão e hash do termo, canal e
+evidência da decisão, documento assinado e inventário de usos. Alterações
+posteriores podem ser assinadas de forma independente. A revogação bloqueia
+novos usos, cria efeito operacional e preserva a prova histórica.
 
 ### Vale-transporte
 
@@ -110,6 +113,7 @@ node --import tsx scripts/prepare-probation-contract-template.mts
 node --import tsx scripts/prepare-hours-bank-template.mts
 node --import tsx scripts/prepare-admission-templates.mts
 node --import tsx scripts/prepare-admission-closing-template.mts
+node --import tsx scripts/prepare-admission-bundle-v4.mts
 ```
 
 Nenhum modelo é preparado por substituição livre em produção. O construtor com

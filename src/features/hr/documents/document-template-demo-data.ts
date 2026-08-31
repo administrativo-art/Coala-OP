@@ -38,7 +38,7 @@ const DEMO_RAW_VALUES: Record<string, unknown> = {
   "integration.union_employers": "Sindicato Patronal de Alimentação",
   "integration.cct_registry": "MA000123/2026",
   "integration.cct_validity": "01/01/2026 a 31/12/2026",
-  "integration.image_voice_authorized_mark": "X",
+  "integration.image_voice_authorized_mark": true,
   "receipt.city": "São Luís",
   "receipt.state": "MA",
   "receipt.direction": "Pagamos",
@@ -94,7 +94,7 @@ function rawDemoValue(entry: DocumentVariableCatalogEntry) {
   if (entry.format === "cnpj") return "14276603000125";
   if (entry.format === "phone_br") return "98988887777";
   if (entry.format === "boolean_br") return true;
-  if (entry.format === "checkbox_mark") return "X";
+  if (entry.format === "checkbox_mark") return true;
   if (entry.format === "number_br") return 1;
   if (entry.format === "repeatable") return [];
   return `Exemplo de ${entry.label.toLocaleLowerCase("pt-BR")}`;

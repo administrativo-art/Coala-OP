@@ -2,7 +2,7 @@
   "kitId": "admission_documents",
   "name": "Documentos admissionais",
   "category": "Informações admissionais",
-  "version": "2.1",
+  "version": "2.2",
   "editableOutput": "docx",
   "signatureOutput": "single_merged_pdf",
   "models": [
@@ -26,7 +26,7 @@
       "id": "lgpd_awareness_term",
       "order": 3,
       "name": "Termo de Ciência sobre o Tratamento de Dados Pessoais",
-      "file": "03-termo-lgpd-v2.docx",
+      "file": "03-termo-lgpd-v4.docx",
       "selectableByHr": true,
       "signatureScope": "bundle"
     },
@@ -34,10 +34,11 @@
       "id": "image_voice_consent",
       "order": 4,
       "name": "Termo de Consentimento para Uso de Imagem e Voz",
-      "file": "04-imagem-voz-v2.docx",
+      "file": "04-imagem-voz-v4.docx",
       "selectableByHr": true,
-      "signatureScope": "independent",
-      "excludedFromBundle": true
+      "signatureScope": "bundle",
+      "postAdmissionSignatureScope": "independent",
+      "authorizationField": "integration.image_voice_authorized_mark"
     },
     {
       "id": "goals_awards_policy",
@@ -77,7 +78,7 @@
       "id": "admission_bundle_closing_term",
       "order": 8,
       "name": "Termo de Encerramento, Ciência e Assinatura",
-      "file": "09-termo-encerramento-v2.docx",
+      "file": "09-termo-encerramento-v4.docx",
       "selectableByHr": false,
       "alwaysAppendLast": true,
       "dynamicComponentIndex": true,
