@@ -3,21 +3,27 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   addCompanySignerToAdmissionBundle,
+  createAdmissionParticipantSignatureLink,
   generateSelectedSignatureDocuments,
   listSignatureWorkflow,
   prepareAdmissionSignaturePlacement,
+  ParticipantActionUserError,
   previewAdmissionBundle,
   reconcileSignatureDocuments,
+  replaceAdmissionParticipantEmail,
+  resendAdmissionParticipantSignature,
   reviewSignaturePackage,
   saveAdmissionSignaturePlacement,
   selectSignatureTemplates,
   sendSignatureDocuments,
 } from "@/features/hr/documents/signature-workflow.server";
+import { admissionSignatureParticipantActionSchema } from "@/features/hr/documents/admission-signature-actions";
 import { assertFormalizationAccess, serializeHrValue } from "@/features/hr/lib/server-access";
 import { hasFormalizationPermission, type FormalizationAction } from "@/lib/hr-formalization-permissions";
 import { adminApp } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { reportSystemError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -130,15 +136,24 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  let participantActionRequested = false;
   try {
     const { id } = await context.params;
     const body = record(await request.json().catch(() => null));
     const action = typeof body.action === "string" ? body.action : "";
+    participantActionRequested = [
+      "resend_participant",
+      "create_signature_link",
+      "replace_participant_email",
+    ].includes(action);
     const requiredAction: FormalizationAction = [
       "prepare_positions",
       "save_positions",
       "send",
       "add_company_signer",
+      "resend_participant",
+      "create_signature_link",
+      "replace_participant_email",
     ].includes(action)
       ? "signatures.send"
       : action === "reconcile"
@@ -163,6 +178,16 @@ export async function POST(
       });
     }
     const includeSensitive = hasFormalizationPermission(access.permissions, "sensitiveData.view", access.isDefaultAdmin);
+    const participantAction = [
+      "resend_participant",
+      "create_signature_link",
+      "replace_participant_email",
+    ].includes(action)
+      ? admissionSignatureParticipantActionSchema.safeParse(body)
+      : null;
+    if (participantAction && !participantAction.success) {
+      return error("Os dados da ação sobre o signatário são inválidos.");
+    }
     let result;
     if (action === "select") {
       result = await selectSignatureTemplates({
@@ -216,11 +241,51 @@ export async function POST(
       });
     } else if (action === "reconcile") {
       result = await reconcileSignatureDocuments({ onboardingId: id, includeSensitive });
+    } else if (participantAction?.success && participantAction.data.action === "resend_participant") {
+      result = await resendAdmissionParticipantSignature({
+        onboardingId: id,
+        providerSignatureId: participantAction.data.providerSignatureId,
+        actionRequestId: participantAction.data.actionRequestId,
+        actorId: access.decoded.uid,
+        actorName: access.actorName,
+        includeSensitive,
+      });
+    } else if (participantAction?.success && participantAction.data.action === "create_signature_link") {
+      result = await createAdmissionParticipantSignatureLink({
+        onboardingId: id,
+        providerSignatureId: participantAction.data.providerSignatureId,
+        actionRequestId: participantAction.data.actionRequestId,
+        actorId: access.decoded.uid,
+        actorName: access.actorName,
+        includeSensitive,
+      });
+    } else if (participantAction?.success && participantAction.data.action === "replace_participant_email") {
+      result = await replaceAdmissionParticipantEmail({
+        onboardingId: id,
+        providerSignatureId: participantAction.data.providerSignatureId,
+        actionRequestId: participantAction.data.actionRequestId,
+        email: participantAction.data.email,
+        actorId: access.decoded.uid,
+        actorName: access.actorName,
+        includeSensitive,
+      });
     } else {
       return error("Ação inválida.");
     }
     return NextResponse.json(serializeHrValue(result));
   } catch (cause) {
+    if (participantActionRequested) {
+      if (cause instanceof ParticipantActionUserError) return error(cause.message, 400);
+      const eventId = reportSystemError({
+        error: cause,
+        source: "api",
+        operation: "admission-signature-participant-action",
+        routeOrJob: "/api/hr/onboarding/[id]/signature-documents",
+        code: "ADMISSION_SIGNATURE_PARTICIPANT_ACTION_FAILED",
+        metadata: { onboardingId: (await context.params).id },
+      }).eventId;
+      return error(`Não foi possível concluir a ação sobre o signatário. Referência: ${eventId}.`, 500);
+    }
     return error(cause instanceof Error ? cause.message : "Falha no fluxo documental.", 400);
   }
 }

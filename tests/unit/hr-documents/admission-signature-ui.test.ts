@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [componentSource, routeSource] = await Promise.all([
+const [componentSource, participantCardSource, routeSource] = await Promise.all([
   readFile(
     new URL("../../../src/components/hr/recruitment/recruitment-shell.tsx", import.meta.url),
+    "utf8",
+  ),
+  readFile(
+    new URL("../../../src/components/hr/recruitment/signature-participant-card.tsx", import.meta.url),
     "utf8",
   ),
   readFile(
@@ -74,10 +78,17 @@ test("acompanha o kit enviado em um único card", () => {
   assert.match(routeSource, /signatureRequest\.get\("storagePath"\)/);
   assert.match(routeSource, /signatureRequest\.get\("signedStoragePath"\)/);
   assert.match(trackingSource, /signatureParticipants\.map\(participant/);
-  assert.match(trackingSource, /Convite enviado/);
-  assert.match(trackingSource, /E-mail entregue/);
-  assert.match(trackingSource, /Documento aberto/);
-  assert.match(trackingSource, /Documento assinado/);
+  assert.match(trackingSource, /SignatureParticipantCard/);
+  assert.match(participantCardSource, /Convite enviado/);
+  assert.match(participantCardSource, /E-mail entregue/);
+  assert.match(participantCardSource, /Documento aberto/);
+  assert.match(participantCardSource, /Documento assinado/);
+  assert.match(participantCardSource, /Reenviar convite/);
+  assert.match(participantCardSource, /Copiar link exclusivo/);
+  assert.match(participantCardSource, /Alterar e-mail e reenviar/);
+  assert.match(participantCardSource, /somente neste kit/);
+  assert.match(componentSource, /crypto\.randomUUID\(\)/);
+  assert.match(routeSource, /signatures\.send/);
 });
 
 test("abre editor isolado para posicionar o PDF congelado antes do envio", async () => {

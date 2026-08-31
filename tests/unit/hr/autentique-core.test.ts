@@ -3,7 +3,10 @@ import { createHmac } from "node:crypto";
 import test from "node:test";
 
 import {
+  buildCreateSignatureLinkMutation,
   buildCreateDocumentMutation,
+  buildDeleteSignerMutation,
+  buildResendSignaturesMutation,
   mergeAutentiqueParticipantStatus,
   mergeAutentiqueStatus,
   parseAutentiqueWebhook,
@@ -20,6 +23,12 @@ test("cria a mutation em sandbox sem depender do ambiente", () => {
 
 test("produção só aparece quando explicitamente solicitada", () => {
   assert.match(buildCreateDocumentMutation(false), /sandbox: false/);
+});
+
+test("usa o public_id do signatário nas ações individuais", () => {
+  assert.match(buildResendSignaturesMutation(), /resendSignatures\(public_ids: \$public_ids\)/);
+  assert.match(buildCreateSignatureLinkMutation(), /createLinkToSignature\(public_id: \$public_id\)/);
+  assert.match(buildDeleteSignerMutation(), /deleteSigner\(public_id: \$public_id, document_id: \$document_id\)/);
 });
 
 test("valida a assinatura HMAC do corpo bruto", () => {

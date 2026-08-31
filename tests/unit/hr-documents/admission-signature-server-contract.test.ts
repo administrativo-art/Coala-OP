@@ -62,3 +62,24 @@ test("permite recuperar pacote já enviado incluindo o signatário corporativo",
   assert.match(source, /status: "completed"/);
   assert.match(source, /provider\.signatures\.some/);
 });
+
+test("ações individuais são idempotentes, autorizadas e preservam o kit indivisível", async () => {
+  const routeSource = await readFile(
+    new URL("../../../src/app/api/hr/onboarding/[id]/signature-documents/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(routeSource, /admissionSignatureParticipantActionSchema\.safeParse\(body\)/);
+  assert.match(routeSource, /"resend_participant"/);
+  assert.match(routeSource, /"create_signature_link"/);
+  assert.match(routeSource, /"replace_participant_email"/);
+  assert.match(routeSource, /\? "signatures\.send"/);
+  assert.match(source, /collection\("participantActions"\)\.doc\(params\.actionRequestId\)/);
+  assert.match(source, /participantActionLease/);
+  assert.match(source, /status: "executing"/);
+  assert.match(source, /resendAutentiqueSignatures\(\[params\.providerSignatureId\]\)/);
+  assert.match(source, /createAutentiqueSignatureLink\(params\.providerSignatureId\)/);
+  assert.match(source, /deleteAutentiqueSigner/);
+  assert.match(source, /autentiquePositionsForParty\(parsedLayout\.data, claim\.participant\.party\)/);
+  assert.match(source, /admissionBundleSignerPositions\(manifest, claim\.participant\.party\)/);
+  assert.doesNotMatch(source, /export async function removeAdmissionParticipant/);
+});

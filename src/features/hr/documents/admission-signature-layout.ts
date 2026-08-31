@@ -90,6 +90,9 @@ export type AdmissionSignatureParticipant = AdmissionSignatureLayoutSigner & {
   viewedAt: string | null;
   signedAt: string | null;
   rejectedAt: string | null;
+  lastResentAt?: string | null;
+  resendCount?: number;
+  signatureLinkGeneratedAt?: string | null;
   lastIp?: string | null;
   lastPort?: number | null;
 };

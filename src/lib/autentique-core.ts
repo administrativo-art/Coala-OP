@@ -53,6 +53,26 @@ export function buildCreateDocumentMutation(sandbox: boolean) {
   }`;
 }
 
+export function buildResendSignaturesMutation() {
+  return `mutation ResendSignatures($public_ids: [UUID!]!) {
+    resendSignatures(public_ids: $public_ids)
+  }`;
+}
+
+export function buildCreateSignatureLinkMutation() {
+  return `mutation CreateSignatureLink($public_id: UUID!) {
+    createLinkToSignature(public_id: $public_id) {
+      short_link
+    }
+  }`;
+}
+
+export function buildDeleteSignerMutation() {
+  return `mutation DeleteSigner($public_id: UUID!, $document_id: UUID!) {
+    deleteSigner(public_id: $public_id, document_id: $document_id)
+  }`;
+}
+
 export function verifyAutentiqueWebhookSignature(params: {
   rawBody: string;
   signature: string | null;
