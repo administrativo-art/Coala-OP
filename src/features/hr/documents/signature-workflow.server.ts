@@ -754,6 +754,7 @@ function admissionSignaturePackageState(
   const parsedLayout = admissionSignatureLayoutSchema.safeParse(request.get("placementLayout"));
   return {
     status: text(request.get("status")) ?? "unknown",
+    sandbox: request.get("sandbox") === true,
     packageHash,
     pageCount: Number(manifest.totalPages ?? 0) || null,
     placementReady: Boolean(text(request.get("placementConfiguredAt"))),
