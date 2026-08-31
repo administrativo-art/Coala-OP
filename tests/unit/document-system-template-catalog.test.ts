@@ -206,6 +206,37 @@ test("vale-transporte fica no pacote inicial e vira avulso em alteração poster
   });
 });
 
+test("consentimento de imagem integra o pacote inicial sem perder a alteração avulsa posterior", () => {
+  const template = systemDocumentTemplateById("system-admission-image-voice-consent");
+  assert.equal(template?.signatureScope, "bundle");
+  assert.equal(template?.postAdmissionSignatureScope, "independent");
+  assert.equal(template?.version, 4);
+  assert.equal(template?.sourcePath?.endsWith("04-imagem-voz-v4.docx"), true);
+  assert.ok(template?.variables.includes("integration.image_voice_authorized_mark"));
+});
+
+test("fontes v4 removem vigência fixa e mantêm índice do encerramento alinhado à esquerda", async () => {
+  const lgpd = systemDocumentTemplateById("system-admission-lgpd-awareness-term");
+  assert.equal(lgpd?.version, 4);
+  assert.equal(lgpd?.fieldMapping?.term_effective_date, undefined);
+  assert.equal(lgpd?.variables.includes("term_effective_date"), false);
+
+  const lgpdSource = await readFile(path.join(process.cwd(), lgpd!.sourcePath!));
+  const lgpdXml = new PizZip(lgpdSource).file("word/document.xml")?.asText() ?? "";
+  assert.equal(lgpdXml.includes("Vigência:"), false);
+  assert.equal(lgpdXml.includes("Versão 1.0"), false);
+
+  const closing = systemDocumentTemplateById("system-admission-bundle-closing-term");
+  assert.equal(closing?.version, 4);
+  const closingSource = await readFile(path.join(process.cwd(), closing!.sourcePath!));
+  const closingXml = new PizZip(closingSource).file("word/document.xml")?.asText() ?? "";
+  const summaryParagraph = (closingXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) ?? [])
+    .find((paragraph) => paragraph.includes("{{bundle_components_summary}}"));
+  assert.ok(summaryParagraph);
+  assert.match(summaryParagraph, /<w:jc w:val="left"\/>/);
+  assert.equal(summaryParagraph.includes('w:val="both"'), false);
+});
+
 test("fontes admissionais preservam os hashes catalogados", async () => {
   const admissionTemplates = SYSTEM_DOCUMENT_TEMPLATES.filter(
     (template) => template.renderer === "admission_docx",

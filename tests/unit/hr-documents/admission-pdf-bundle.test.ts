@@ -45,15 +45,31 @@ test("recusa componente que não seja PDF", async () => {
   );
 });
 
-test("mantém consentimento independente fora do pacote contratual", async () => {
+test("inclui consentimento de imagem quando seu escopo é o pacote admissional", async () => {
+  const logoPng = await readFile(path.join(process.cwd(), "src/features/hr/documents/assets/coala-shakes-letterhead-mark-v1.png"));
+  const result = await buildAdmissionPdfBundle({
+    title: "Kit com consentimento facultativo",
+    logoPng,
+    components: [{
+      id: "image-consent",
+      name: "Consentimento de imagem e voz",
+      buffer: await pdfWithPages(1),
+      signatureScope: "bundle",
+    }],
+  });
+  assert.equal(result.pageCount, 1);
+  assert.equal(result.index[0]?.id, "image-consent");
+});
+
+test("mantém documento independente fora do pacote contratual", async () => {
   const logoPng = await readFile(path.join(process.cwd(), "src/features/hr/documents/assets/coala-shakes-letterhead-mark-v1.png"));
   await assert.rejects(
     buildAdmissionPdfBundle({
       title: "Kit inválido",
       logoPng,
       components: [{
-        id: "image-consent",
-        name: "Consentimento de imagem e voz",
+        id: "standalone-document",
+        name: "Documento independente",
         buffer: await pdfWithPages(1),
         signatureScope: "independent",
       }],
