@@ -53,3 +53,14 @@ test("prévia preenche também campos manuais sem usar cadastro real", () => {
   assert.equal(data.custom_value, "R$ 475,00");
   assert.equal(data.custom_choice, "Opção A");
 });
+
+test("prévia marca autorização facultativa de imagem e voz", () => {
+  const data = buildDocumentTemplateDemoData({
+    variables: ["integration.image_voice_authorized_mark"],
+  });
+
+  assert.equal(
+    (data.integration as Record<string, unknown>).image_voice_authorized_mark,
+    "X",
+  );
+});
