@@ -45,6 +45,23 @@ export class InternalCompanyRepository {
     return null;
   }
 
+  async findByCnpjRoot(rawCnpj: string): Promise<Entity | null> {
+    const clean = CnpjValidator.clean(rawCnpj);
+    if (clean.length !== 14) return null;
+    const root = clean.slice(0, 8);
+    const snap = await this.db.collection('entities')
+      .where('cnpjRoot', '==', root)
+      .limit(10)
+      .get();
+    const candidates = snap.docs.map((document) => ({
+      id: document.id,
+      ...document.data(),
+    })) as Entity[];
+    return candidates.find((entity) => entity.documentSignatoryScope === 'cnpj_root')
+      ?? candidates[0]
+      ?? null;
+  }
+
   async readCache(cnpj: string, ttlHours: number): Promise<CompanyLookupResponse | null> {
     const clean = CnpjValidator.clean(cnpj);
     const snap = await this.db.collection('cnpjLookupCache').doc(clean).get();

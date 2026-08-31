@@ -52,3 +52,22 @@ test("prévia do pacote completo usa POST autenticado e PDF inline", () => {
   assert.match(routeSource, /previewAdmissionBundle/);
   assert.match(routeSource, /Content-Disposition": `inline/);
 });
+
+test("acompanha o kit enviado em um único card", () => {
+  const trackingStart = componentSource.indexOf(
+    "activePhaseId !== 'signature_preparation' ? selectedSignatureDocuments.length > 0",
+  );
+  const trackingEnd = componentSource.indexOf(
+    "selectedSignatureDocuments.length > 0 && selectedSignatureDocuments.every",
+    trackingStart,
+  );
+  const trackingSource = componentSource.slice(trackingStart, trackingEnd);
+  assert.match(trackingSource, /Kit admissional completo/);
+  assert.match(trackingSource, /uma única solicitação/);
+  assert.match(trackingSource, /Visualizar pacote/);
+  assert.doesNotMatch(trackingSource, /selectedSignatureDocuments\.map\(document/);
+  assert.match(componentSource, /signature-documents\?package=\$\{kind\}/);
+  assert.match(routeSource, /signature_bundle_\$\{id\}/);
+  assert.match(routeSource, /signatureRequest\.get\("storagePath"\)/);
+  assert.match(routeSource, /signatureRequest\.get\("signedStoragePath"\)/);
+});
