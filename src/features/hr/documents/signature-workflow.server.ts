@@ -46,15 +46,19 @@ import {
 } from "@/features/hr/documents/document-template-workflow.server";
 import {
   addAutentiqueSigner,
+  createAutentiqueSignatureLink,
   createAutentiqueDocument,
+  deleteAutentiqueSigner,
   getAutentiqueDocumentSignatures,
   getAutentiqueDocumentStatus,
+  resendAutentiqueSignatures,
   type AutentiqueCreatedDocument,
 } from "@/lib/autentique.server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { getDocumentTypeConfig } from "@/lib/hr/employee-document-catalog";
+import { reportSystemError } from "@/lib/observability";
 import { resolveDocumentDestination } from "@/lib/hr/employee-document-distribution";
 import { employeeCodeFrom, hashBuffer, loadExpectedIdentity } from "@/lib/hr/employee-document-identity";
 
@@ -239,6 +243,9 @@ function participantsFromProvider(params: {
       viewedAt: signature.viewed?.created_at ?? text(previous.viewedAt) ?? null,
       signedAt: signature.signed?.created_at ?? text(previous.signedAt) ?? null,
       rejectedAt: signature.rejected?.created_at ?? text(previous.rejectedAt) ?? null,
+      lastResentAt: text(previous.lastResentAt) ?? null,
+      resendCount: typeof previous.resendCount === "number" ? previous.resendCount : 0,
+      signatureLinkGeneratedAt: text(previous.signatureLinkGeneratedAt) ?? null,
       lastIp: networkEvent?.ip ?? text(previous.lastIp) ?? null,
       lastPort: networkEvent?.port
         ?? (typeof previous.lastPort === "number" ? previous.lastPort : null),
@@ -743,6 +750,9 @@ function admissionSignaturePackageState(
       viewedAt: text(participant.viewedAt),
       signedAt: text(participant.signedAt),
       rejectedAt: text(participant.rejectedAt),
+      lastResentAt: text(participant.lastResentAt),
+      resendCount: typeof participant.resendCount === "number" ? participant.resendCount : 0,
+      signatureLinkGeneratedAt: text(participant.signatureLinkGeneratedAt),
       ...(includeSensitive ? {
         lastIp: text(participant.lastIp),
         lastPort: typeof participant.lastPort === "number" ? participant.lastPort : null,
@@ -1395,6 +1405,437 @@ export async function addCompanySignerToAdmissionBundle(params: {
   }, { merge: true }));
   await batch.commit();
   return listSignatureWorkflow(params.onboardingId);
+}
+
+type AdmissionParticipantActionType =
+  | "resend_participant"
+  | "create_signature_link"
+  | "replace_participant_email";
+
+export class ParticipantActionUserError extends Error {}
+
+type AdmissionParticipantActionClaim = {
+  actionRef: FirebaseFirestore.DocumentReference;
+  requestRef: FirebaseFirestore.DocumentReference;
+  request: FirebaseFirestore.DocumentSnapshot;
+  participant: AdmissionSignatureParticipant;
+  providerDocumentId: string;
+  reused: boolean;
+  reusedShortLink: string | null;
+};
+
+async function claimAdmissionParticipantAction(params: {
+  onboardingId: string;
+  action: AdmissionParticipantActionType;
+  actionRequestId: string;
+  providerSignatureId: string;
+  actorId: string;
+  actorName: string;
+  email?: string;
+}): Promise<AdmissionParticipantActionClaim> {
+  const process = await loadProcess(params.onboardingId);
+  if (
+    process.data.currentStage !== "signature"
+    || ["completed", "cancelled"].includes(String(process.data.status))
+  ) {
+    throw new ParticipantActionUserError("As ações de signatário só ficam disponíveis durante a etapa de assinatura.");
+  }
+  const requestRef = hrDbAdmin
+    .collection(REQUEST_COLLECTION)
+    .doc(admissionSignatureRequestId(params.onboardingId));
+  const actionRef = requestRef.collection("participantActions").doc(params.actionRequestId);
+  const now = new Date().toISOString();
+  return hrDbAdmin.runTransaction(async (transaction) => {
+    const [request, existingAction] = await Promise.all([
+      transaction.get(requestRef),
+      transaction.get(actionRef),
+    ]);
+    if (!request.exists || request.get("onboardingId") !== params.onboardingId) {
+      throw new ParticipantActionUserError("Solicitação de assinatura não encontrada.");
+    }
+    const providerDocumentId = text(request.get("providerDocumentId"));
+    if (!providerDocumentId) {
+      throw new ParticipantActionUserError("O kit ainda não foi enviado ao Autentique.");
+    }
+    if (existingAction.exists) {
+      if (
+        existingAction.get("action") !== params.action
+        || existingAction.get("providerSignatureId") !== params.providerSignatureId
+      ) {
+        throw new ParticipantActionUserError("Esta ação não corresponde à solicitação original.");
+      }
+      if (existingAction.get("status") === "completed") {
+        const participants = record(request.get("participants"));
+        const participant = record(participants[params.providerSignatureId]) as AdmissionSignatureParticipant;
+        return {
+          actionRef,
+          requestRef,
+          request,
+          participant,
+          providerDocumentId,
+          reused: true,
+          reusedShortLink: text(existingAction.get("shortLink")),
+        };
+      }
+      const existingStartedAt = text(existingAction.get("startedAt"));
+      if (
+        existingAction.get("status") === "executing"
+        && existingStartedAt
+        && Date.now() - new Date(existingStartedAt).getTime() < 3 * 60_000
+      ) {
+        throw new ParticipantActionUserError("Esta ação já está em andamento. Aguarde alguns instantes.");
+      }
+    }
+    const participants = record(request.get("participants"));
+    const participantValue = record(participants[params.providerSignatureId]);
+    const participantEmail = text(participantValue.email)?.toLowerCase();
+    const participantName = text(participantValue.name);
+    const participantParty = participantValue.party === "employee" || participantValue.party === "company"
+      ? participantValue.party
+      : null;
+    if (!participantEmail || !participantName || !participantParty) {
+      throw new ParticipantActionUserError("Signatário não encontrado neste kit.");
+    }
+    if (["signed", "rejected"].includes(String(participantValue.status))) {
+      throw new ParticipantActionUserError("Este signatário já concluiu sua participação no kit.");
+    }
+    const lease = record(request.get("participantActionLease"));
+    const leaseStartedAt = text(lease.startedAt);
+    if (
+      text(lease.actionRequestId) !== params.actionRequestId
+      && leaseStartedAt
+      && Date.now() - new Date(leaseStartedAt).getTime() < 3 * 60_000
+    ) {
+      throw new ParticipantActionUserError("Outra alteração de signatário está em andamento. Aguarde alguns instantes.");
+    }
+    const participant = {
+      ...participantValue,
+      party: participantParty,
+      name: participantName,
+      email: participantEmail,
+      providerSignatureId: params.providerSignatureId,
+    } as AdmissionSignatureParticipant;
+    transaction.set(actionRef, {
+      action: params.action,
+      status: "executing",
+      onboardingId: params.onboardingId,
+      providerDocumentId,
+      providerSignatureId: params.providerSignatureId,
+      participantParty,
+      participantName,
+      originalEmail: participantEmail,
+      newEmail: params.email ?? null,
+      requestedBy: params.actorId,
+      requestedByName: params.actorName,
+      startedAt: now,
+      attempts: Number(existingAction.get("attempts") ?? 0) + 1,
+      completedAt: null,
+      failedAt: null,
+      failureEventId: null,
+    }, { merge: true });
+    transaction.set(requestRef, {
+      participantActionLease: {
+        actionRequestId: params.actionRequestId,
+        action: params.action,
+        startedAt: now,
+      },
+      updatedAt: now,
+    }, { merge: true });
+    return {
+      actionRef,
+      requestRef,
+      request,
+      participant,
+      providerDocumentId,
+      reused: false,
+      reusedShortLink: null,
+    };
+  });
+}
+
+async function failAdmissionParticipantAction(params: {
+  claim: AdmissionParticipantActionClaim;
+  action: AdmissionParticipantActionType;
+  cause: unknown;
+}) {
+  const failedAt = new Date().toISOString();
+  const rateLimited = params.action === "resend_participant"
+    && params.cause instanceof Error
+    && params.cause.message.includes("too_many_resent_emails");
+  const publicMessage = params.cause instanceof ParticipantActionUserError
+    ? params.cause.message
+    : rateLimited
+      ? "O convite foi reenviado recentemente. Aguarde alguns minutos antes de tentar de novo."
+      : "Não foi possível concluir a ação no Autentique agora.";
+  const eventId = params.cause instanceof ParticipantActionUserError
+    ? null
+    : reportSystemError({
+        error: params.cause,
+        source: "integration",
+        operation: params.action,
+        routeOrJob: "autentique/participant-action",
+        code: "AUTENTIQUE_PARTICIPANT_ACTION_FAILED",
+        kind: "TRANSIENT_EXTERNAL",
+        metadata: {
+          providerDocumentId: params.claim.providerDocumentId,
+          providerSignatureId: params.claim.participant.providerSignatureId,
+        },
+      }).eventId;
+  const batch = hrDbAdmin.batch();
+  batch.set(params.claim.actionRef, {
+    status: "failed",
+    failedAt,
+    failureEventId: eventId,
+  }, { merge: true });
+  batch.set(params.claim.requestRef, {
+    participantActionLease: null,
+    updatedAt: failedAt,
+  }, { merge: true });
+  await batch.commit();
+  throw new ParticipantActionUserError(
+    eventId ? `${publicMessage} Referência: ${eventId}.` : publicMessage,
+  );
+}
+
+function assertPendingProviderSignature(
+  provider: Awaited<ReturnType<typeof getAutentiqueDocumentSignatures>>,
+  providerSignatureId: string,
+) {
+  if (provider.completed || provider.signedUrl) {
+    throw new ParticipantActionUserError("O kit já foi concluído.");
+  }
+  const signature = provider.signatures.find(
+    (candidate) => candidate.public_id === providerSignatureId,
+  );
+  if (!signature) throw new ParticipantActionUserError("O signatário não existe mais no Autentique.");
+  if (signature.signed?.created_at || signature.rejected?.created_at) {
+    throw new ParticipantActionUserError("Este signatário já concluiu sua participação no kit.");
+  }
+  return signature;
+}
+
+export async function resendAdmissionParticipantSignature(params: {
+  onboardingId: string;
+  providerSignatureId: string;
+  actionRequestId: string;
+  actorId: string;
+  actorName: string;
+  includeSensitive?: boolean;
+}) {
+  const claim = await claimAdmissionParticipantAction({ ...params, action: "resend_participant" });
+  if (claim.reused) {
+    return listSignatureWorkflow(params.onboardingId, { includeSensitive: params.includeSensitive });
+  }
+  try {
+    const provider = await getAutentiqueDocumentSignatures(claim.providerDocumentId);
+    assertPendingProviderSignature(provider, params.providerSignatureId);
+    await resendAutentiqueSignatures([params.providerSignatureId]);
+    const completedAt = new Date().toISOString();
+    const participants = participantsFromProvider({
+      signatures: provider.signatures,
+      signers: normalizedStoredSigners(claim.request.get("signers")),
+      invitedAt: text(claim.request.get("sentAt")) ?? completedAt,
+      current: claim.request.get("participants"),
+    });
+    const participant = participants[params.providerSignatureId];
+    if (participant) {
+      participant.lastResentAt = completedAt;
+      participant.resendCount = Number(claim.participant.resendCount ?? 0) + 1;
+      participant.status = participant.status === "delivery_failed" ? "sent" : participant.status;
+    }
+    const batch = hrDbAdmin.batch();
+    batch.set(claim.requestRef, {
+      participants,
+      participantActionLease: null,
+      updatedAt: completedAt,
+    }, { merge: true });
+    batch.set(claim.actionRef, { status: "completed", completedAt }, { merge: true });
+    await batch.commit();
+    return listSignatureWorkflow(params.onboardingId, { includeSensitive: params.includeSensitive });
+  } catch (cause) {
+    return failAdmissionParticipantAction({ claim, action: "resend_participant", cause });
+  }
+}
+
+export async function createAdmissionParticipantSignatureLink(params: {
+  onboardingId: string;
+  providerSignatureId: string;
+  actionRequestId: string;
+  actorId: string;
+  actorName: string;
+  includeSensitive?: boolean;
+}) {
+  const claim = await claimAdmissionParticipantAction({ ...params, action: "create_signature_link" });
+  if (claim.reused) {
+    if (!claim.reusedShortLink) {
+      throw new ParticipantActionUserError("O link exclusivo anterior não está mais disponível.");
+    }
+    return {
+      workflow: await listSignatureWorkflow(params.onboardingId, { includeSensitive: params.includeSensitive }),
+      shortLink: claim.reusedShortLink,
+    };
+  }
+  try {
+    const provider = await getAutentiqueDocumentSignatures(claim.providerDocumentId);
+    assertPendingProviderSignature(provider, params.providerSignatureId);
+    const shortLink = await createAutentiqueSignatureLink(params.providerSignatureId);
+    const completedAt = new Date().toISOString();
+    const participants = record(claim.request.get("participants"));
+    participants[params.providerSignatureId] = {
+      ...record(participants[params.providerSignatureId]),
+      signatureLinkGeneratedAt: completedAt,
+    };
+    const batch = hrDbAdmin.batch();
+    batch.set(claim.requestRef, {
+      participants,
+      participantActionLease: null,
+      updatedAt: completedAt,
+    }, { merge: true });
+    batch.set(claim.actionRef, {
+      status: "completed",
+      shortLink,
+      completedAt,
+    }, { merge: true });
+    await batch.commit();
+    return {
+      workflow: await listSignatureWorkflow(params.onboardingId, { includeSensitive: params.includeSensitive }),
+      shortLink,
+    };
+  } catch (cause) {
+    return failAdmissionParticipantAction({ claim, action: "create_signature_link", cause });
+  }
+}
+
+export async function replaceAdmissionParticipantEmail(params: {
+  onboardingId: string;
+  providerSignatureId: string;
+  actionRequestId: string;
+  email: string;
+  actorId: string;
+  actorName: string;
+  includeSensitive?: boolean;
+}) {
+  const email = params.email.trim().toLowerCase();
+  const claim = await claimAdmissionParticipantAction({
+    ...params,
+    email,
+    action: "replace_participant_email",
+  });
+  if (claim.reused) {
+    return listSignatureWorkflow(params.onboardingId, { includeSensitive: params.includeSensitive });
+  }
+  try {
+    const storedSigners = normalizedStoredSigners(claim.request.get("signers"));
+    if (!storedSigners.some((signer) => signer.party === claim.participant.party)) {
+      throw new ParticipantActionUserError("A identificação deste signatário está incompleta no kit.");
+    }
+    if (storedSigners.some((signer) => signer.party !== claim.participant.party && signer.email === email)) {
+      throw new ParticipantActionUserError("Cada signatário precisa ter um e-mail diferente.");
+    }
+    let provider = await getAutentiqueDocumentSignatures(claim.providerDocumentId);
+    if (provider.completed || provider.signedUrl) {
+      throw new ParticipantActionUserError("O kit já foi concluído.");
+    }
+    const previous = provider.signatures.find(
+      (signature) => signature.public_id === params.providerSignatureId,
+    );
+    if (previous?.signed?.created_at || previous?.rejected?.created_at) {
+      throw new ParticipantActionUserError("Este signatário já concluiu sua participação no kit.");
+    }
+    const duplicate = provider.signatures.find(
+      (signature) => text(signature.email)?.toLowerCase() === email,
+    );
+    if (duplicate && duplicate.public_id !== params.providerSignatureId) {
+      const recoveringReplacement = !previous
+        && duplicate.action?.name === "SIGN";
+      if (!recoveringReplacement) {
+        throw new ParticipantActionUserError("Este e-mail já participa do kit.");
+      }
+    }
+    if (previous && text(previous.email)?.toLowerCase() !== email) {
+      await deleteAutentiqueSigner({
+        documentId: claim.providerDocumentId,
+        publicId: params.providerSignatureId,
+      });
+      provider = await getAutentiqueDocumentSignatures(claim.providerDocumentId);
+    }
+    let replacement = provider.signatures.find(
+      (signature) => text(signature.email)?.toLowerCase() === email,
+    );
+    if (!replacement) {
+      const parsedLayout = admissionSignatureLayoutSchema.safeParse(
+        claim.request.get("placementLayout"),
+      );
+      const manifest = claim.request.get("manifest") as DocumentPackageManifest | undefined;
+      const positions = parsedLayout.success
+        ? autentiquePositionsForParty(parsedLayout.data, claim.participant.party)
+        : manifest
+          ? admissionBundleSignerPositions(manifest, claim.participant.party)
+          : [];
+      if (!positions.length) {
+        throw new ParticipantActionUserError("O posicionamento deste signatário não está disponível.");
+      }
+      await addAutentiqueSigner({
+        documentId: claim.providerDocumentId,
+        signer: {
+          email,
+          name: claim.participant.name,
+          action: "SIGN",
+          positions,
+        },
+      });
+      provider = await getAutentiqueDocumentSignatures(claim.providerDocumentId);
+      replacement = provider.signatures.find(
+        (signature) => text(signature.email)?.toLowerCase() === email,
+      );
+    }
+    if (!replacement) {
+      throw new ParticipantActionUserError("O Autentique não confirmou o novo destinatário.");
+    }
+    const completedAt = new Date().toISOString();
+    const signers = storedSigners.map((signer) => signer.party === claim.participant.party
+      ? { ...signer, email }
+      : signer);
+    const participants = participantsFromProvider({
+      signatures: provider.signatures,
+      signers,
+      invitedAt: completedAt,
+      current: claim.request.get("participants"),
+    });
+    const workflow = await hrDbAdmin
+      .collection(WORKFLOW_COLLECTION)
+      .where("onboardingId", "==", params.onboardingId)
+      .limit(30)
+      .get();
+    const targets = workflow.docs.filter((document) => document.get("selected") === true);
+    const batch = hrDbAdmin.batch();
+    batch.set(claim.requestRef, {
+      signers,
+      participants,
+      providerSignatures: provider.signatures,
+      providerSignaturesCount: provider.signaturesCount,
+      providerSignedCount: provider.signedCount,
+      ...(claim.participant.party === "company" ? { companySignatoryEmail: email } : {}),
+      participantActionLease: null,
+      updatedAt: completedAt,
+    }, { merge: true });
+    batch.set(claim.actionRef, {
+      status: "completed",
+      replacementProviderSignatureId: replacement.public_id,
+      completedAt,
+    }, { merge: true });
+    targets.forEach((target) => batch.set(target.ref, {
+      providerSignatures: provider.signatures,
+      providerSignaturesCount: provider.signaturesCount,
+      providerSignedCount: provider.signedCount,
+      ...(claim.participant.party === "company" ? { companySignatoryEmail: email } : {}),
+      updatedAt: completedAt,
+    }, { merge: true }));
+    await batch.commit();
+    return listSignatureWorkflow(params.onboardingId, { includeSensitive: params.includeSensitive });
+  } catch (cause) {
+    return failAdmissionParticipantAction({ claim, action: "replace_participant_email", cause });
+  }
 }
 
 export async function sendGeneratedDocumentForStandaloneSignature(params: {
