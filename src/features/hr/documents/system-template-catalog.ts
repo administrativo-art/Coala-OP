@@ -1,9 +1,9 @@
 import { UNIFORM_SYSTEM_TEMPLATES } from "@/features/uniforms/template-catalog";
 import {
-  PROBATION_CONTRACT_V3_FIELD_MAPPING,
-  PROBATION_CONTRACT_V3_HASH,
-  PROBATION_CONTRACT_V3_SOURCE,
-  PROBATION_CONTRACT_V3_VARIABLES,
+  PROBATION_CONTRACT_V4_FIELD_MAPPING,
+  PROBATION_CONTRACT_V4_HASH,
+  PROBATION_CONTRACT_V4_SOURCE,
+  PROBATION_CONTRACT_V4_VARIABLES,
 } from "@/features/hr/documents/probation-contract-template";
 import {
   HOURS_BANK_V2_HASH,
@@ -159,12 +159,12 @@ const admissionTemplates: SystemDocumentTemplate[] = [
     shortName: "Contrato de experiência",
     slug: "contrato-experiencia",
     category: "Contratos",
-    description: "Versão 3 no padrão documental CT Sorvetes, homologada para uso no fluxo admissional.",
-    sourcePath: PROBATION_CONTRACT_V3_SOURCE,
-    contentHash: PROBATION_CONTRACT_V3_HASH,
-    version: 3,
-    variables: [...PROBATION_CONTRACT_V3_VARIABLES],
-    fieldMapping: PROBATION_CONTRACT_V3_FIELD_MAPPING,
+    description: "Versão 4 no padrão documental CT Sorvetes, com qualificação destacada e área ampliada para assinatura.",
+    sourcePath: PROBATION_CONTRACT_V4_SOURCE,
+    contentHash: PROBATION_CONTRACT_V4_HASH,
+    version: 4,
+    variables: [...PROBATION_CONTRACT_V4_VARIABLES],
+    fieldMapping: PROBATION_CONTRACT_V4_FIELD_MAPPING,
   },
   {
     id: "system-admission-hours-bank-agreement",
