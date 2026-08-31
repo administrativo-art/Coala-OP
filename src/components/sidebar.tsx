@@ -260,9 +260,9 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
             label: "Controle de caixa",
             href: "__group:cash-control",
             icon: Banknote,
-            show: permissions.financial?.cashClosures?.view || permissions.financial?.cashDeposits?.view,
+            show: permissions.financial?.view || permissions.financial?.cashDeposits?.view,
             children: [
-              { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures", icon: Wallet, show: permissions.financial?.cashClosures?.view },
+              { label: "Fechamento do caixa", href: "/dashboard/financial/cash-closures", icon: Wallet, show: permissions.financial?.view },
               { label: "Depósitos", href: "/dashboard/financial/cash-deposits", icon: Banknote, show: permissions.financial?.cashDeposits?.view },
             ],
           },
