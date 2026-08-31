@@ -25,12 +25,32 @@ export type AutentiqueCreatedDocument = {
     action: { name: string } | null;
     link: { short_link: string } | null;
     user: { id: string; name: string; email: string } | null;
+    email_events?: {
+      sent: string | null;
+      opened: string | null;
+      delivered: string | null;
+      refused: string | null;
+      reason: string | null;
+    } | null;
+    viewed?: AutentiqueSignatureEvent | null;
+    signed?: AutentiqueSignatureEvent | null;
+    rejected?: AutentiqueSignatureEvent | null;
   }>;
+};
+
+export type AutentiqueSignatureEvent = {
+  ip: string | null;
+  port: number | null;
+  reason: string | null;
+  created_at: string | null;
 };
 
 export type AutentiqueDocumentSignatures = {
   id: string;
   signedUrl: string | null;
+  signaturesCount: number;
+  signedCount: number;
+  completed: boolean;
   signatures: AutentiqueCreatedDocument["signatures"];
 };
 
@@ -59,6 +79,8 @@ export async function getAutentiqueDocumentSignatures(documentId: string) {
   const query = `query DocumentSignatures($id: UUID!) {
     document(id: $id) {
       id
+      signatures_count
+      signed_count
       files { signed }
       signatures {
         public_id
@@ -68,20 +90,38 @@ export async function getAutentiqueDocumentSignatures(documentId: string) {
         action { name }
         link { short_link }
         user { id name email }
+        email_events { sent opened delivered refused reason }
+        viewed { ...SignatureEvent }
+        signed { ...SignatureEvent }
+        rejected { ...SignatureEvent }
       }
     }
+  }
+  fragment SignatureEvent on Event {
+    ip
+    port
+    reason
+    created_at
   }`;
   const data = await autentiqueGraphql<{
     document?: {
       id: string;
+      signatures_count?: number;
+      signed_count?: number;
       files?: { signed?: string | null };
       signatures?: AutentiqueCreatedDocument["signatures"];
     };
   }>(query, { id: documentId });
   if (!data.document) throw new Error("Documento não encontrado no Autentique.");
+  const signaturesCount = Number(data.document.signatures_count ?? 0);
+  const signedCount = Number(data.document.signed_count ?? 0);
+  const signedUrl = data.document.files?.signed ?? null;
   return {
     id: data.document.id,
-    signedUrl: data.document.files?.signed ?? null,
+    signedUrl,
+    signaturesCount,
+    signedCount,
+    completed: Boolean(signedUrl) && signedCount >= Math.max(signaturesCount, 1),
     signatures: data.document.signatures ?? [],
   } satisfies AutentiqueDocumentSignatures;
 }

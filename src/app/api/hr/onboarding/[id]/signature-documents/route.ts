@@ -5,9 +5,11 @@ import {
   addCompanySignerToAdmissionBundle,
   generateSelectedSignatureDocuments,
   listSignatureWorkflow,
+  prepareAdmissionSignaturePlacement,
   previewAdmissionBundle,
   reconcileSignatureDocuments,
   reviewSignaturePackage,
+  saveAdmissionSignaturePlacement,
   selectSignatureTemplates,
   sendSignatureDocuments,
 } from "@/features/hr/documents/signature-workflow.server";
@@ -41,13 +43,13 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    await assertFormalizationAccess(request, "signatures.view");
+    const access = await assertFormalizationAccess(request, "signatures.view");
     const { id } = await context.params;
     const documentId = request.nextUrl.searchParams.get("documentId");
     const download = request.nextUrl.searchParams.get("download");
     const packageFile = request.nextUrl.searchParams.get("package");
     if (packageFile) {
-      if (!["generated", "signed"].includes(packageFile)) {
+      if (!["draft", "generated", "signed"].includes(packageFile)) {
         return error("Formato de pacote inválido.");
       }
       const signatureRequest = await hrDbAdmin
@@ -113,7 +115,12 @@ export async function GET(
         },
       });
     }
-    return NextResponse.json(serializeHrValue(await listSignatureWorkflow(id)));
+    const includeSensitive = hasFormalizationPermission(
+      access.permissions,
+      "sensitiveData.view",
+      access.isDefaultAdmin,
+    );
+    return NextResponse.json(serializeHrValue(await listSignatureWorkflow(id, { includeSensitive })));
   } catch (cause) {
     return error(cause instanceof Error ? cause.message : "Falha ao carregar documentos.", 403);
   }
@@ -127,7 +134,12 @@ export async function POST(
     const { id } = await context.params;
     const body = record(await request.json().catch(() => null));
     const action = typeof body.action === "string" ? body.action : "";
-    const requiredAction: FormalizationAction = action === "send" || action === "add_company_signer"
+    const requiredAction: FormalizationAction = [
+      "prepare_positions",
+      "save_positions",
+      "send",
+      "add_company_signer",
+    ].includes(action)
       ? "signatures.send"
       : action === "reconcile"
         ? "signatures.view"
@@ -173,9 +185,26 @@ export async function POST(
         actorId: access.decoded.uid,
         actorName: access.actorName,
       });
+    } else if (action === "prepare_positions") {
+      result = await prepareAdmissionSignaturePlacement({
+        onboardingId: id,
+        actorId: access.decoded.uid,
+        actorName: access.actorName,
+      });
+    } else if (action === "save_positions") {
+      result = await saveAdmissionSignaturePlacement({
+        onboardingId: id,
+        layout: body.layout,
+        actorId: access.decoded.uid,
+        actorName: access.actorName,
+      });
     } else if (action === "send") {
+      if (typeof body.expectedPackageHash !== "string") {
+        return error("A versão do pacote não foi informada corretamente.");
+      }
       result = await sendSignatureDocuments({
         onboardingId: id,
+        expectedPackageHash: body.expectedPackageHash,
         actorId: access.decoded.uid,
         actorName: access.actorName,
       });
@@ -186,7 +215,7 @@ export async function POST(
         actorName: access.actorName,
       });
     } else if (action === "reconcile") {
-      result = await reconcileSignatureDocuments({ onboardingId: id });
+      result = await reconcileSignatureDocuments({ onboardingId: id, includeSensitive });
     } else {
       return error("Ação inválida.");
     }
