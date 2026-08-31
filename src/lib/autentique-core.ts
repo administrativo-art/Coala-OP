@@ -27,6 +27,13 @@ export type AutentiqueWebhookEvent = {
   object: Record<string, unknown>;
 };
 
+export type AutentiqueParticipantStatus =
+  | "sent"
+  | "viewed"
+  | "signed"
+  | "rejected"
+  | "delivery_failed";
+
 export function buildCreateDocumentMutation(sandbox: boolean) {
   return `mutation CreateDocumentMutation($document: DocumentInput!, $signers: [SignerInput!]!, $file: Upload!) {
     createDocument(document: $document, signers: $signers, file: $file, sandbox: ${sandbox ? "true" : "false"}) {
@@ -75,7 +82,10 @@ export function parseAutentiqueWebhook(payload: unknown): AutentiqueWebhookEvent
   const root = record(payload);
   const event = record(root.event);
   const data = record(event.data);
-  const object = record(data.object);
+  const nestedObject = record(data.object);
+  // O formato atual entrega o objeto em data.object; endpoints antigos podem
+  // entregar os mesmos campos diretamente em data.
+  const object = Object.keys(nestedObject).length ? nestedObject : data;
   const id = stringValue(event.id);
   const type = stringValue(event.type);
   if (!id || !type) return null;
@@ -92,6 +102,83 @@ export function parseAutentiqueWebhook(payload: unknown): AutentiqueWebhookEvent
       ? stringValue(object.public_id) ?? stringValue(data.public_id)
       : null,
     object,
+  };
+}
+
+export function participantStatusFromAutentiqueEvent(
+  type: string,
+): AutentiqueParticipantStatus | null {
+  if (type === "signature.accepted") return "signed";
+  if (type === "signature.rejected") return "rejected";
+  if (type === "signature.delivery_failed") return "delivery_failed";
+  if (type === "signature.viewed") return "viewed";
+  if (type === "signature.created" || type === "signature.updated") return "sent";
+  return null;
+}
+
+export function mergeAutentiqueParticipantStatus(
+  current: unknown,
+  eventType: string,
+): AutentiqueParticipantStatus {
+  const currentStatus: AutentiqueParticipantStatus = [
+    "sent", "viewed", "signed", "rejected", "delivery_failed",
+  ].includes(String(current))
+    ? current as AutentiqueParticipantStatus
+    : "sent";
+  if (["signed", "rejected"].includes(currentStatus)) return currentStatus;
+  const next = participantStatusFromAutentiqueEvent(eventType);
+  if (!next) return currentStatus;
+  if (currentStatus === "viewed" && ["sent", "delivery_failed"].includes(next)) {
+    return currentStatus;
+  }
+  if (currentStatus === "delivery_failed" && next === "sent") {
+    return currentStatus;
+  }
+  return next;
+}
+
+function eventDetails(value: unknown) {
+  if (typeof value === "string") return { createdAt: value, ip: null, port: null };
+  const details = record(value);
+  return {
+    createdAt: stringValue(details.created_at),
+    ip: stringValue(details.ip),
+    port: typeof details.port === "number" && Number.isFinite(details.port)
+      ? details.port
+      : null,
+  };
+}
+
+export function participantPatchFromAutentiqueWebhook(event: AutentiqueWebhookEvent) {
+  const user = record(event.object.user);
+  const mail = record(event.object.mail);
+  const eventField = event.type === "signature.accepted"
+    ? event.object.signed
+    : event.type === "signature.rejected"
+      ? event.object.rejected
+      : event.type === "signature.viewed"
+        ? event.object.viewed
+        : null;
+  const details = eventDetails(eventField);
+  return {
+    providerSignatureId: event.providerSignatureId,
+    name: stringValue(event.object.name) ?? stringValue(user.name),
+    email: stringValue(event.object.email) ?? stringValue(user.email),
+    status: participantStatusFromAutentiqueEvent(event.type),
+    emailSentAt: stringValue(mail.sent),
+    emailDeliveredAt: stringValue(mail.delivered),
+    emailOpenedAt: stringValue(mail.opened),
+    viewedAt: event.type === "signature.viewed"
+      ? details.createdAt ?? event.createdAt
+      : null,
+    signedAt: event.type === "signature.accepted"
+      ? details.createdAt ?? event.createdAt
+      : null,
+    rejectedAt: event.type === "signature.rejected"
+      ? details.createdAt ?? event.createdAt
+      : null,
+    lastIp: details.ip,
+    lastPort: details.port,
   };
 }
 

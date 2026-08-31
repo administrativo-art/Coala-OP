@@ -3,7 +3,9 @@ import { after, NextResponse } from "next/server";
 import { archiveAutentiqueSignedDocument } from "@/features/hr/documents/signature-workflow.server";
 import {
   mergeAutentiqueStatus,
+  mergeAutentiqueParticipantStatus,
   parseAutentiqueWebhook,
+  participantPatchFromAutentiqueWebhook,
   verifyAutentiqueWebhookSignature,
 } from "@/lib/autentique-core";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -64,6 +66,35 @@ export async function POST(request: Request) {
       const files = record(object.files);
       const mail = record(object.mail);
       const status = mergeAutentiqueStatus(requestDoc.get("status"), event.type);
+      const participantEvent = participantPatchFromAutentiqueWebhook(event);
+      const participants = record(requestDoc.get("participants"));
+      const currentParticipant = event.providerSignatureId
+        ? record(participants[event.providerSignatureId])
+        : {};
+      const participantPatch = event.providerSignatureId
+        ? {
+            participants: {
+              [event.providerSignatureId]: {
+                ...currentParticipant,
+                ...(participantEvent.name ? { name: participantEvent.name } : {}),
+                ...(participantEvent.email ? { email: participantEvent.email } : {}),
+                status: mergeAutentiqueParticipantStatus(
+                  currentParticipant.status,
+                  event.type,
+                ),
+                ...(participantEvent.emailSentAt ? { emailSentAt: participantEvent.emailSentAt } : {}),
+                ...(participantEvent.emailDeliveredAt ? { emailDeliveredAt: participantEvent.emailDeliveredAt } : {}),
+                ...(participantEvent.emailOpenedAt ? { emailOpenedAt: participantEvent.emailOpenedAt } : {}),
+                ...(participantEvent.viewedAt ? { viewedAt: participantEvent.viewedAt } : {}),
+                ...(participantEvent.signedAt ? { signedAt: participantEvent.signedAt } : {}),
+                ...(participantEvent.rejectedAt ? { rejectedAt: participantEvent.rejectedAt } : {}),
+                ...(participantEvent.lastIp ? { lastIp: participantEvent.lastIp } : {}),
+                ...(participantEvent.lastPort ? { lastPort: participantEvent.lastPort } : {}),
+                updatedAt: event.createdAt ?? new Date().toISOString(),
+              },
+            },
+          }
+        : {};
       const emailDeliveryStatus =
         event.type === "signature.delivery_failed" || typeof mail.refused === "string"
           ? "failed"
@@ -79,6 +110,7 @@ export async function POST(request: Request) {
           providerLastEventId: event.id,
           providerEventAt: event.createdAt,
           providerSignatureId: event.providerSignatureId,
+          ...participantPatch,
           ...(typeof files.signed === "string"
             ? { signedFileUrl: files.signed }
             : {}),

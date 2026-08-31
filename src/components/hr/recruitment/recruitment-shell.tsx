@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
   useDroppable, useDraggable, type DragEndEvent, type DragStartEvent,
@@ -126,6 +127,11 @@ import {
   Info, LockKeyhole, ShieldCheck,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+const SignaturePlacementEditor = dynamic(
+  () => import('@/components/hr/recruitment/signature-placement-editor'),
+  { ssr: false },
+);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -6888,6 +6894,34 @@ type SignatureWorkflowPayload = {
   templates: SignatureTemplateOption[];
   documents: SignatureWorkflowDocument[];
   packageTemplateIds?: string[];
+  signaturePackage?: {
+    status: string;
+    packageHash: string | null;
+    pageCount: number | null;
+    placementReady: boolean;
+    layout: import('@/features/hr/documents/admission-signature-layout').AdmissionSignatureLayout | null;
+    signers: Array<{
+      party: 'employee' | 'company';
+      name: string;
+      email: string;
+    }>;
+    participants: Array<{
+      party: 'employee' | 'company';
+      name: string;
+      email: string;
+      providerSignatureId: string;
+      status: 'sent' | 'viewed' | 'signed' | 'rejected' | 'delivery_failed';
+      invitedAt: string | null;
+      emailSentAt: string | null;
+      emailDeliveredAt: string | null;
+      emailOpenedAt: string | null;
+      viewedAt: string | null;
+      signedAt: string | null;
+      rejectedAt: string | null;
+      lastIp?: string | null;
+      lastPort?: number | null;
+    }>;
+  } | null;
 };
 
 const SIGNATURE_WORKFLOW_STATUS_LABELS: Record<string, string> = {
@@ -8614,6 +8648,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
   const [finalizationDraft, setFinalizationDraft] = useState<OnboardingFinalizationSettings>(() => getFinalizationDraft(null));
   const [signatureWorkflow, setSignatureWorkflow] = useState<SignatureWorkflowPayload | null>(null);
   const [signatureBusy, setSignatureBusy] = useState<string | null>(null);
+  const [signaturePlacementOpen, setSignaturePlacementOpen] = useState(false);
   const [asoGuideBusy, setAsoGuideBusy] = useState(false);
   const [asoActionBusy, setAsoActionBusy] = useState<string | null>(null);
   const [asoStartResult, setAsoStartResult] = useState<AsoProcessStartResult | null>(null);
@@ -8738,23 +8773,35 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
   }, [loadSignatureWorkflow, selectedProcess?.id, view]);
 
   useEffect(() => {
-    const signaturePending = signatureWorkflow?.documents.some(document =>
-      document.selected && ['sent', 'viewed', 'partially_signed', 'signed'].includes(document.status)
-    ) ?? false;
     const accessPending = Boolean(
       selectedProcess?.collaboratorUserId
       && selectedProcess.accessProvisioning?.status !== 'completed'
       && selectedProcess.status !== 'cancelled'
       && selectedProcess.status !== 'completed'
     );
-    if ((!signaturePending && !accessPending) || !selectedProcess?.id || view !== 'detail') return;
+    if (!accessPending || !selectedProcess?.id || view !== 'detail') return;
     const refreshPendingState = () => {
-      if (signaturePending) void loadSignatureWorkflow();
       void refreshSelectedProcess();
     };
     const timer = window.setInterval(refreshPendingState, 10_000);
     return () => window.clearInterval(timer);
-  }, [loadSignatureWorkflow, refreshSelectedProcess, selectedProcess?.accessProvisioning?.status, selectedProcess?.collaboratorUserId, selectedProcess?.id, selectedProcess?.status, signatureWorkflow?.documents, view]);
+  }, [refreshSelectedProcess, selectedProcess?.accessProvisioning?.status, selectedProcess?.collaboratorUserId, selectedProcess?.id, selectedProcess?.status, view]);
+
+  useEffect(() => {
+    const signaturePending = signatureWorkflow?.documents.some(document =>
+      document.selected && ['sent', 'viewed', 'partially_signed', 'signed'].includes(document.status)
+    ) ?? false;
+    if (!signaturePending || !selectedProcess?.id || view !== 'detail') return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void loadSignatureWorkflow();
+    };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [loadSignatureWorkflow, selectedProcess?.id, signatureWorkflow?.documents, view]);
 
   useEffect(() => {
     setFinalizationDraft(getFinalizationDraft(selectedProcess));
@@ -9135,6 +9182,12 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     });
     if (!selected) return;
     await signatureAction('generate');
+  }
+
+  async function openSignaturePlacement() {
+    const prepared = await signatureAction('prepare_positions');
+    if (!prepared?.signaturePackage?.layout) return;
+    setSignaturePlacementOpen(true);
   }
 
   async function viewSignatureDocument(documentId: string) {
@@ -9660,6 +9713,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     );
   const signaturePackageSignedCount = signaturePackageReference?.providerSignedCount ?? 0;
   const signaturePackageSignaturesCount = signaturePackageReference?.providerSignaturesCount ?? 0;
+  const signatureParticipants = signatureWorkflow?.signaturePackage?.participants ?? [];
   const signaturePackageTrackingLabel = signaturePackageFailedDocument
     ? SIGNATURE_WORKFLOW_STATUS_LABELS[signaturePackageFailedDocument.status] ?? signaturePackageFailedDocument.status
     : signaturePackageArchived
@@ -11133,11 +11187,11 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                             <button
                               type="button"
                               disabled={!!signatureBusy}
-                              onClick={() => void signatureAction('send')}
+                              onClick={() => void openSignaturePlacement()}
                               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-pink-600 px-4 text-[11px] font-black text-white shadow-sm shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
                             >
-                              {signatureBusy === 'send' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                              Enviar pacote para assinatura
+                              {signatureBusy === 'prepare_positions' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />}
+                              Configurar e enviar
                             </button>
                           ) : null}
                         </div>
@@ -11153,8 +11207,8 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                         <p className="text-xs font-black uppercase tracking-wide text-slate-600">Acompanhamento da assinatura</p>
                         <p className="mt-1 text-xs font-semibold text-slate-500">O kit completo é uma única solicitação no Autentique.</p>
                       </div>
-                      <button type="button" onClick={() => void loadSignatureWorkflow()} className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-500" title="Atualizar">
-                        <RotateCw className={`h-3.5 w-3.5 ${signatureBusy === 'refresh' ? 'animate-spin' : ''}`} />
+                      <button type="button" disabled={!!signatureBusy} onClick={() => void signatureAction('reconcile')} className="grid h-8 w-8 place-items-center rounded-lg border bg-white text-slate-500 disabled:opacity-50" title="Conferir agora no Autentique">
+                        <RotateCw className={`h-3.5 w-3.5 ${signatureBusy === 'reconcile' ? 'animate-spin' : ''}`} />
                       </button>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -11193,6 +11247,45 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                               <p className="mt-1 text-[9.5px] font-black">{indicator.label}</p>
                             </div>
                           ))}
+                        </div>
+                      ) : null}
+                      {signatureParticipants.length ? (
+                        <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                          {signatureParticipants.map(participant => {
+                            const rejected = participant.status === 'rejected';
+                            const deliveryFailed = participant.status === 'delivery_failed';
+                            const steps = [
+                              { label: 'Convite enviado', at: participant.emailSentAt ?? participant.invitedAt },
+                              { label: 'E-mail entregue', at: participant.emailDeliveredAt },
+                              { label: 'E-mail aberto', at: participant.emailOpenedAt },
+                              { label: 'Documento aberto', at: participant.viewedAt },
+                              { label: rejected ? 'Assinatura recusada' : 'Documento assinado', at: participant.rejectedAt ?? participant.signedAt },
+                            ];
+                            return (
+                              <div key={participant.providerSignatureId} className={`rounded-xl border p-3 ${rejected || deliveryFailed ? 'border-rose-200 bg-rose-50/50' : 'border-slate-200 bg-slate-50/60'}`}>
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-[11.5px] font-black text-slate-900">{participant.party === 'employee' ? 'Colaborador' : 'Empregador'} · {participant.name}</p>
+                                    <p className="mt-0.5 break-all text-[10px] font-semibold text-slate-500">{participant.email}</p>
+                                  </div>
+                                  <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${participant.status === 'signed' ? 'bg-emerald-100 text-emerald-700' : rejected || deliveryFailed ? 'bg-rose-100 text-rose-700' : participant.status === 'viewed' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
+                                    {participant.status === 'signed' ? 'Assinado' : rejected ? 'Recusado' : deliveryFailed ? 'Falha na entrega' : participant.status === 'viewed' ? 'Visualizado' : 'Enviado'}
+                                  </span>
+                                </div>
+                                <div className="mt-3 grid gap-1.5 sm:grid-cols-5">
+                                  {steps.map(step => (
+                                    <div key={step.label} className={`rounded-lg border px-2 py-2 ${step.at ? rejected && step.label === 'Assinatura recusada' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-white text-slate-400'}`}>
+                                      <p className="text-[9px] font-black leading-tight">{step.label}</p>
+                                      <p className="mt-1 text-[8.5px] font-semibold">{step.at ? formatOnboardingDateTime(step.at) : 'Pendente'}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                                {participant.lastIp ? (
+                                  <p className="mt-2 text-[9px] font-semibold text-slate-400">Último evento técnico: IP {participant.lastIp}{participant.lastPort ? `:${participant.lastPort}` : ''}</p>
+                                ) : null}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : null}
                     </div>
@@ -11280,6 +11373,20 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
         </div>
       </section>
 
+      {signaturePlacementOpen && selectedProcess && signatureWorkflow?.signaturePackage?.layout ? (
+        <SignaturePlacementEditor
+          onboardingId={selectedProcess.id}
+          getToken={getToken}
+          workflow={signatureWorkflow}
+          onClose={() => setSignaturePlacementOpen(false)}
+          onWorkflowUpdated={(workflow) => setSignatureWorkflow(workflow as SignatureWorkflowPayload)}
+          onSent={() => {
+            setSignaturePlacementOpen(false);
+            setPhaseId('signature');
+            onRefresh();
+          }}
+        />
+      ) : null}
       {showStartModal && (
         <StartOnboardingModal
           roles={roles}
