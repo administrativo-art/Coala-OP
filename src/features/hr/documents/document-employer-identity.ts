@@ -21,18 +21,24 @@ function setPath(root: Record<string, unknown>, path: string, value: unknown) {
 }
 
 /**
- * Documentos jurídicos devem usar a razão social resolvida pelo CNPJ. O nome
- * operacional da unidade continua no onboarding, mas não qualifica a parte.
+ * Documentos jurídicos qualificam a parte pela razão social resolvida pelo
+ * CNPJ e acrescentam o nome fantasia apenas como identificação operacional.
  */
 export function applyDocumentEmployerLegalName(
   resolved: ResolvedDocumentData,
   legalName: unknown,
+  tradeName?: unknown,
 ) {
   const canonicalName = typeof legalName === "string" ? legalName.trim() : "";
   if (!canonicalName) return resolved;
-  setPath(resolved.data, "integration.employer_name", canonicalName);
-  resolved.flat["integration.employer_name"] = canonicalName;
-  resolved.rawFlat["integration.employer_name"] = canonicalName;
+  const operationalName = typeof tradeName === "string" ? tradeName.trim() : "";
+  const displayName = operationalName
+    && operationalName.localeCompare(canonicalName, "pt-BR", { sensitivity: "base" }) !== 0
+    ? `${canonicalName}, nome fantasia ${operationalName}`
+    : canonicalName;
+  setPath(resolved.data, "integration.employer_name", displayName);
+  resolved.flat["integration.employer_name"] = displayName;
+  resolved.rawFlat["integration.employer_name"] = displayName;
   resolved.missingRequired = resolved.missingRequired.filter(
     (key) => key !== "integration.employer_name",
   );

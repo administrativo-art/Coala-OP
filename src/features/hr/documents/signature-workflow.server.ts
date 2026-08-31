@@ -11,7 +11,9 @@ import {
   compareAdmissionSignatureOrder,
   isCompleteAdmissionSignaturePackage,
 } from "@/features/hr/documents/admission-signature-order";
+import { admissionBundleSignerPositions } from "@/features/hr/documents/admission-signature-positions";
 import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company-document-signatory.server";
+import type { DocumentPackageManifest } from "@/features/hr/documents/document-package-manifest";
 import { composeDocumentPackage } from "@/features/hr/documents/document-pdf-composer.server";
 import { generateDocumentFromTemplate } from "@/features/hr/documents/generate-document.server";
 import {
@@ -32,7 +34,12 @@ import {
   effectiveSystemDocumentTemplates,
   systemTemplateWorkflowStatus,
 } from "@/features/hr/documents/document-template-workflow.server";
-import { createAutentiqueDocument, getAutentiqueDocumentStatus } from "@/lib/autentique.server";
+import {
+  addAutentiqueSigner,
+  createAutentiqueDocument,
+  getAutentiqueDocumentSignatures,
+  getAutentiqueDocumentStatus,
+} from "@/lib/autentique.server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
@@ -175,20 +182,12 @@ async function sendAdmissionBundle(params: {
     entityId: legalEntity.entityId,
     cnpj: legalEntity.cnpj,
   });
-  const signers = [
-    {
-      email: params.recipient,
-      name: text(params.process.candidateName) ?? "Colaborador",
-      action: "SIGN" as const,
-    },
-    ...(companySignatory && companySignatory.email !== params.recipient
-      ? [{
-          email: companySignatory.email,
-          name: companySignatory.name,
-          action: "SIGN" as const,
-        }]
-      : []),
-  ];
+  if (!companySignatory) {
+    throw new Error(`Defina o signatário documental da empresa ${text(legalEntity.legalName) ?? "empregadora"} antes do envio.`);
+  }
+  if (companySignatory.email === params.recipient) {
+    throw new Error("O signatário da empresa precisa ser diferente do titular do kit.");
+  }
   const protocol = await allocateIdempotentDocumentProtocol({
     entity: legalEntity.legalName ?? legalEntity.cnpj ?? "CS",
     type: "ADM",
@@ -199,6 +198,20 @@ async function sendAdmissionBundle(params: {
     ...prepared.composition,
     protocol,
   });
+  const signers = [
+    {
+      email: params.recipient,
+      name: text(params.process.candidateName) ?? "Colaborador",
+      action: "SIGN" as const,
+      positions: admissionBundleSignerPositions(composed.manifest, "employee"),
+    },
+    {
+      email: companySignatory.email,
+      name: companySignatory.name,
+      action: "SIGN" as const,
+      positions: admissionBundleSignerPositions(composed.manifest, "company"),
+    },
+  ];
   const packagePath = `signature-packages/${params.onboardingId}/${packageId}/pre-signature.pdf`;
   const manifestPath = `signature-packages/${params.onboardingId}/${packageId}/manifest.json`;
   await Promise.all([
@@ -868,6 +881,137 @@ export async function sendSignatureDocuments(params: {
   return listSignatureWorkflow(params.onboardingId);
 }
 
+export async function addCompanySignerToAdmissionBundle(params: {
+  onboardingId: string;
+  actorId: string;
+  actorName: string;
+}) {
+  const process = await loadProcess(params.onboardingId);
+  const requestRef = hrDbAdmin
+    .collection(REQUEST_COLLECTION)
+    .doc(`signature_bundle_${params.onboardingId}`);
+  const [request, workflow] = await Promise.all([
+    requestRef.get(),
+    hrDbAdmin
+      .collection(WORKFLOW_COLLECTION)
+      .where("onboardingId", "==", params.onboardingId)
+      .limit(30)
+      .get(),
+  ]);
+  if (!request.exists || !text(request.get("providerDocumentId"))) {
+    throw new Error("O kit ainda não foi enviado ao Autentique.");
+  }
+  const targets = workflow.docs.filter((document) => document.get("selected") === true);
+  assertCompleteAdmissionPackage(
+    process.data,
+    targets.map((document) => ({ templateId: document.get("templateId") })),
+  );
+  const generatedDocumentId = text(targets[0]?.get("generatedDocumentId"));
+  const generated = generatedDocumentId
+    ? await dbAdmin.collection("generatedDocuments").doc(generatedDocumentId).get()
+    : null;
+  const legalEntity = record(generated?.get("legalEntitySnapshot"));
+  const companySignatory = await resolveCompanyDocumentSignatory({
+    entityId: legalEntity.entityId,
+    cnpj: legalEntity.cnpj ?? process.data.employerCnpj,
+  });
+  if (!companySignatory) {
+    throw new Error("Defina o signatário documental da empresa antes de incluí-lo no kit.");
+  }
+  const recipient = text(process.data.candidateEmail)?.toLowerCase();
+  if (recipient === companySignatory.email) {
+    throw new Error("O signatário da empresa precisa ser diferente do titular do kit.");
+  }
+  const providerDocumentId = text(request.get("providerDocumentId"))!;
+  let provider = await getAutentiqueDocumentSignatures(providerDocumentId);
+  if (provider.signedUrl) {
+    throw new Error("O kit já foi concluído e não aceita outro signatário.");
+  }
+  const email = companySignatory.email.toLowerCase();
+  const alreadyPresent = provider.signatures.some((signature) =>
+    text(signature.email)?.toLowerCase() === email && signature.action?.name === "SIGN"
+  );
+  const manifest = request.get("manifest") as DocumentPackageManifest | undefined;
+  const signer = {
+    email,
+    name: companySignatory.name,
+    action: "SIGN" as const,
+    ...(manifest ? { positions: admissionBundleSignerPositions(manifest, "company") } : {}),
+  };
+  const startedAt = new Date().toISOString();
+  if (!alreadyPresent) {
+    await requestRef.set({
+      signatoryAddition: {
+        status: "adding",
+        email,
+        name: companySignatory.name,
+        requestedAt: startedAt,
+        requestedBy: params.actorId,
+        requestedByName: params.actorName,
+      },
+      updatedAt: startedAt,
+    }, { merge: true });
+    try {
+      await addAutentiqueSigner({ documentId: providerDocumentId, signer });
+      provider = await getAutentiqueDocumentSignatures(providerDocumentId);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Falha ao incluir o signatário da empresa.";
+      await requestRef.set({
+        signatoryAddition: {
+          status: "failed",
+          email,
+          name: companySignatory.name,
+          requestedAt: startedAt,
+          failedAt: new Date().toISOString(),
+          requestedBy: params.actorId,
+          requestedByName: params.actorName,
+          error: message,
+        },
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      throw cause;
+    }
+  }
+  const confirmed = provider.signatures.some((signature) =>
+    text(signature.email)?.toLowerCase() === email && signature.action?.name === "SIGN"
+  );
+  if (!confirmed) throw new Error("O Autentique não confirmou o signatário da empresa.");
+  const currentSigners = Array.isArray(request.get("signers"))
+    ? request.get("signers") as Array<Record<string, unknown>>
+    : [];
+  const signers = [
+    ...currentSigners.filter((current) => text(current.email)?.toLowerCase() !== email),
+    signer,
+  ];
+  const completedAt = new Date().toISOString();
+  const batch = hrDbAdmin.batch();
+  batch.set(requestRef, {
+    signers,
+    providerSignatures: provider.signatures,
+    companySignatoryUserId: companySignatory.userId,
+    companySignatoryName: companySignatory.name,
+    companySignatoryEmail: email,
+    signatoryAddition: {
+      status: "completed",
+      email,
+      name: companySignatory.name,
+      requestedAt: startedAt,
+      completedAt,
+      requestedBy: params.actorId,
+      requestedByName: params.actorName,
+    },
+    updatedAt: completedAt,
+  }, { merge: true });
+  targets.forEach((target) => batch.set(target.ref, {
+    providerSignatures: provider.signatures,
+    companySignatoryName: companySignatory.name,
+    companySignatoryEmail: email,
+    updatedAt: completedAt,
+  }, { merge: true }));
+  await batch.commit();
+  return listSignatureWorkflow(params.onboardingId);
+}
+
 export async function sendGeneratedDocumentForStandaloneSignature(params: {
   generatedDocumentId: string;
   actorId: string;
@@ -1147,26 +1291,36 @@ export async function reconcileSignatureDocuments(params: {
   const snapshot = await hrDbAdmin
     .collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
+    .limit(30)
     .get();
-  const targets = snapshot.docs
-    .filter((document) => {
-      const status = String(document.get("status") ?? "");
-      return Boolean(text(document.get("providerDocumentId")))
-        && !["archived", "signed_archived_pending_employee", "rejected", "expired", "cancelled"].includes(status);
-    })
-    .slice(0, 30);
-  const errors: Array<{ documentId: string; message: string }> = [];
-
+  const targets = snapshot.docs.filter((document) => {
+    const status = String(document.get("status") ?? "");
+    return Boolean(text(document.get("providerDocumentId")))
+      && !["archived", "signed_archived_pending_employee", "rejected", "expired", "cancelled"].includes(status);
+  });
+  const requests = new Map<string, {
+    providerDocumentId: string;
+    signatureRequestId: string;
+    targets: FirebaseFirestore.QueryDocumentSnapshot[];
+  }>();
   for (const target of targets) {
     const providerDocumentId = text(target.get("providerDocumentId"));
     const signatureRequestId = text(target.get("signatureRequestId"));
     if (!providerDocumentId || !signatureRequestId) continue;
+    const key = `${signatureRequestId}:${providerDocumentId}`;
+    const current = requests.get(key);
+    if (current) current.targets.push(target);
+    else requests.set(key, { providerDocumentId, signatureRequestId, targets: [target] });
+  }
+  const errors: Array<{ documentId: string; message: string }> = [];
+
+  for (const request of requests.values()) {
     try {
-      const provider = await getAutentiqueDocumentStatus(providerDocumentId);
+      const provider = await getAutentiqueDocumentStatus(request.providerDocumentId);
       const now = new Date().toISOString();
       if (provider.completed && provider.signedUrl) {
         await archiveAutentiqueSignedDocument({
-          signatureRequestId,
+          signatureRequestId: request.signatureRequestId,
           signedUrl: provider.signedUrl,
           signedAt: now,
           confirmedByEventId: `polling:${now}`,
@@ -1181,13 +1335,17 @@ export async function reconcileSignatureDocuments(params: {
         reconciledAt: now,
         updatedAt: now,
       };
-      await Promise.all([
-        target.ref.set(providerState, { merge: true }),
-        hrDbAdmin.collection(REQUEST_COLLECTION).doc(signatureRequestId).set(providerState, { merge: true }),
-      ]);
+      const batch = hrDbAdmin.batch();
+      request.targets.forEach((target) => batch.set(target.ref, providerState, { merge: true }));
+      batch.set(
+        hrDbAdmin.collection(REQUEST_COLLECTION).doc(request.signatureRequestId),
+        providerState,
+        { merge: true },
+      );
+      await batch.commit();
     } catch (cause) {
       errors.push({
-        documentId: target.id,
+        documentId: request.targets[0]?.id ?? request.signatureRequestId,
         message: cause instanceof Error ? cause.message : "Falha ao reconciliar assinatura.",
       });
     }
@@ -1196,7 +1354,7 @@ export async function reconcileSignatureDocuments(params: {
   return {
     ...(await listSignatureWorkflow(params.onboardingId)),
     reconciliation: {
-      checked: targets.length,
+      checked: requests.size,
       failed: errors.length,
       errors,
     },
@@ -1305,6 +1463,7 @@ export async function advanceOnboardingAfterSignatures(onboardingId: string) {
   const process = await loadProcess(onboardingId);
   const documents = await hrDbAdmin.collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", onboardingId)
+    .limit(30)
     .get();
   const selected = documents.docs.filter((document) => document.get("selected") === true);
   if (!selected.length || !selected.every((document) => SIGNED_COMPLETE_STATUSES.has(String(document.get("status"))))) {
@@ -1543,6 +1702,7 @@ export async function promoteSignedOnboardingDocuments(params: {
   const process = await loadProcess(params.onboardingId);
   const snapshot = await hrDbAdmin.collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
+    .limit(30)
     .get();
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const promoted: string[] = [];
