@@ -50,10 +50,7 @@ function paragraph(runs: string, options: { align?: "both" | "left" } = {}) {
 function paragraphText(paragraphXml: string) {
   return [...paragraphXml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
     .map((match) => match[1])
-    .join("")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">");
+    .join("");
 }
 
 function replaceParagraphs(
