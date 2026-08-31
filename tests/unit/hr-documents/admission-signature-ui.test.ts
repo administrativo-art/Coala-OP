@@ -13,8 +13,8 @@ const [componentSource, routeSource] = await Promise.all([
   ),
 ]);
 
-test("concentra revisão e prévias em PDF no próprio fluxo de preparação", () => {
-  const selectionStart = componentSource.indexOf("1. Selecione os modelos");
+test("trata o kit como unidade com revisão única e prévia completa", () => {
+  const selectionStart = componentSource.indexOf("1. Documentos do pacote");
   const trackingStart = componentSource.indexOf(
     "activePhaseId !== 'signature_preparation' ? selectedSignatureDocuments.length > 0",
   );
@@ -23,17 +23,20 @@ test("concentra revisão e prévias em PDF no próprio fluxo de preparação", (
   const selectionSource = componentSource.slice(selectionStart, trackingStart);
   assert.match(selectionSource, /selectedSignatureDocuments\.find\(document => document\.templateId === template\.id\)/);
   assert.match(selectionSource, /Visualizar/);
-  assert.match(selectionSource, /Revisado/);
-  assert.match(selectionSource, /Gerar selecionados/);
+  assert.match(selectionSource, /Marcar pacote como revisado/);
+  assert.match(selectionSource, /Gerar pacote/);
   assert.match(selectionSource, /Gerar novamente/);
   assert.match(selectionSource, /Ver pacote completo/);
   assert.match(selectionSource, /flex flex-col items-end gap-2/);
-  assert.match(selectionSource, /Enviar \{signatureDocumentsReadyToSend\.length\} documento/);
+  assert.match(selectionSource, /Enviar pacote para assinatura/);
+  assert.doesNotMatch(selectionSource, /type="checkbox"/);
+  assert.doesNotMatch(selectionSource, /documentId: workflowDocument\.id/);
   assert.doesNotMatch(selectionSource, /h-11 w-full/);
   assert.doesNotMatch(componentSource, /Baixar Word/);
   assert.doesNotMatch(selectionSource, /title="Atualizar documentos"/);
   assert.doesNotMatch(selectionSource, /h-10 w-full/);
   assert.doesNotMatch(componentSource, /2\. Revisão do RH/);
+  assert.doesNotMatch(routeSource, /Documento não informado/);
 });
 
 test("prévia autenticada entrega o PDF gerado inline", () => {

@@ -7,14 +7,13 @@ const source = await readFile(
   "utf8",
 );
 
-test("servidor valida a modalidade de vale-transporte ao selecionar, gerar, visualizar e enviar", () => {
-  const validations = source.match(/assertApplicableSignatureTemplates\(/g) ?? [];
-  assert.equal(validations.length, 5);
-  assert.match(source, /uniqueIds\.map\(\(templateId\) => \(\{ templateId \}\)\)/);
-  assert.equal(
-    source.match(/selectedDocuments\.map\(\(document\) => \(\{ templateId: document\.get\("templateId"\) \}\)\)/g)?.length,
-    3,
-  );
+test("servidor trata seleção, geração, prévia, revisão e envio como pacote indivisível", () => {
+  const validations = source.match(/assertCompleteAdmissionPackage\(/g) ?? [];
+  assert.equal(validations.length, 6);
+  assert.match(source, /export async function reviewSignaturePackage/);
+  assert.match(source, /const batch = hrDbAdmin\.batch\(\)/);
+  assert.match(source, /Revise o pacote completo antes de enviar para assinatura/);
+  assert.doesNotMatch(source, /companyDocumentTemplates/);
 });
 
 test("prévia completa reutiliza o compositor do envio e exclui aceite independente", () => {

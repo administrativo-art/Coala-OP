@@ -14,6 +14,8 @@ export const ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID =
   "system-admission-transportation-voucher-request";
 export const ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID =
   "system-admission-transportation-voucher-waiver";
+export const ADMISSION_BUNDLE_CLOSING_TEMPLATE_ID =
+  "system-admission-bundle-closing-term";
 
 type AdmissionSignatureOrderItem = {
   id?: unknown;
@@ -63,6 +65,31 @@ export function isAdmissionSignatureTemplateApplicable(
     return true;
   }
   return id === admissionTransportVoucherTemplateId(transportVoucherAnswer);
+}
+
+export function admissionSignaturePackageTemplateIds(
+  transportVoucherAnswer: unknown,
+) {
+  return ADMISSION_SIGNATURE_TEMPLATE_ORDER.filter(
+    (id) =>
+      id !== ADMISSION_BUNDLE_CLOSING_TEMPLATE_ID
+      && isAdmissionSignatureTemplateApplicable(
+        { id },
+        transportVoucherAnswer,
+      ),
+  );
+}
+
+export function isCompleteAdmissionSignaturePackage(
+  templateIds: readonly string[],
+  transportVoucherAnswer: unknown,
+) {
+  const expected = admissionSignaturePackageTemplateIds(
+    transportVoucherAnswer,
+  );
+  const received = new Set(templateIds);
+  return received.size === expected.length
+    && expected.every((id) => received.has(id));
 }
 
 /**
