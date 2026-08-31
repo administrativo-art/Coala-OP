@@ -165,3 +165,14 @@ export const PROBATION_CONTRACT_V3_FIELD_MAPPING: TemplateFieldMapping = {
     formatter: "date_long_br",
   },
 };
+
+export const PROBATION_CONTRACT_V4_SOURCE =
+  "docs/modelos-documentos/admissionais/01-contrato-experiencia-v4.docx";
+
+export const PROBATION_CONTRACT_V4_HASH =
+  "081e850ded830aef5911c34754ca549313074681be63e7f4f9b204888bedd91f";
+
+export const PROBATION_CONTRACT_V4_VARIABLES = PROBATION_CONTRACT_V3_VARIABLES;
+
+export const PROBATION_CONTRACT_V4_FIELD_MAPPING =
+  PROBATION_CONTRACT_V3_FIELD_MAPPING;

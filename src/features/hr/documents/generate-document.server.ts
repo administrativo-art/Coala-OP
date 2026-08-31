@@ -6,6 +6,7 @@ import { extractDocxVariables, generateDocx } from "@/features/hr/documents/docx
 import { applyFieldMapping, normalizeFieldMapping } from "@/features/hr/documents/field-mapping";
 import { convertDocxToPdf } from "@/features/hr/documents/pdf-converter.server";
 import { resolveDocumentData } from "@/features/hr/documents/document-resolver.server";
+import { applyDocumentEmployerLegalName } from "@/features/hr/documents/document-employer-identity";
 import {
   isDocumentFormSchema,
   resolveDocumentFormSchema,
@@ -196,6 +197,12 @@ export async function generateDocumentFromTemplate(
     onboardingId: params.onboardingId,
     includeSensitive: params.includeSensitive,
   });
+  const legalEntitySnapshot = await resolveDocumentLegalEntitySnapshot({
+    cnpj: resolved.rawFlat["integration.employer_cnpj"],
+    fallbackName: resolved.rawFlat["integration.employer_name"],
+    fallbackAddress: resolved.rawFlat["integration.employer_address"],
+  });
+  applyDocumentEmployerLegalName(resolved, legalEntitySnapshot.legalName);
   const mapped = applyFieldMapping({
     data: resolved.data,
     flat: resolved.flat,
@@ -256,12 +263,6 @@ export async function generateDocumentFromTemplate(
       `A geração foi bloqueada. Complete estes dados na fonte oficial: ${missingSystemDataMessage(missingRequired)}.`,
     );
   }
-  const legalEntitySnapshot = await resolveDocumentLegalEntitySnapshot({
-    cnpj: resolved.rawFlat["integration.employer_cnpj"],
-    fallbackName: resolved.rawFlat["integration.employer_name"],
-    fallbackAddress: resolved.rawFlat["integration.employer_address"],
-  });
-
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const generationKey = buildDocumentGenerationKey({
     templateId: params.templateId,

@@ -13,7 +13,7 @@ const [componentSource, routeSource] = await Promise.all([
   ),
 ]);
 
-test("concentra geração e revisão no próprio card durante a preparação", () => {
+test("concentra revisão e prévias em PDF no próprio fluxo de preparação", () => {
   const selectionStart = componentSource.indexOf("1. Selecione os modelos");
   const trackingStart = componentSource.indexOf(
     "activePhaseId !== 'signature_preparation' ? selectedSignatureDocuments.length > 0",
@@ -23,9 +23,12 @@ test("concentra geração e revisão no próprio card durante a preparação", (
   const selectionSource = componentSource.slice(selectionStart, trackingStart);
   assert.match(selectionSource, /selectedSignatureDocuments\.find\(document => document\.templateId === template\.id\)/);
   assert.match(selectionSource, /Visualizar/);
-  assert.match(selectionSource, /Baixar Word/);
   assert.match(selectionSource, /Revisado/);
   assert.match(selectionSource, /Gerar selecionados/);
+  assert.match(selectionSource, /Gerar novamente/);
+  assert.match(selectionSource, /Ver pacote completo/);
+  assert.doesNotMatch(componentSource, /Baixar Word/);
+  assert.doesNotMatch(selectionSource, /title="Atualizar documentos"/);
   assert.doesNotMatch(selectionSource, /h-10 w-full/);
   assert.doesNotMatch(componentSource, /2\. Revisão do RH/);
 });
@@ -35,4 +38,11 @@ test("prévia autenticada entrega o PDF gerado inline", () => {
   assert.match(routeSource, /document\.get\("generatedPdfStoragePath"\)/);
   assert.match(routeSource, /preview \? "inline" : "attachment"/);
   assert.match(routeSource, /signed \|\| preview/);
+});
+
+test("prévia do pacote completo usa POST autenticado e PDF inline", () => {
+  assert.match(componentSource, /body: JSON\.stringify\(\{ action: 'preview_bundle' \}\)/);
+  assert.match(componentSource, /signatureScope !== 'independent'/);
+  assert.match(routeSource, /previewAdmissionBundle/);
+  assert.match(routeSource, /Content-Disposition": `inline/);
 });

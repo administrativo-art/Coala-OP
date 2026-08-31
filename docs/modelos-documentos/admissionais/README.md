@@ -24,7 +24,7 @@ e não aparece como opção manual.
 
 | Ordem | Arquivo operacional | SHA-256 | Assinatura |
 |---:|---|---|---|
-| 1 | `01-contrato-experiencia-v3.docx` | `eaa43b298ba99b6a948216152dd8ca58a0c969aa3416d7d3548f91f20c50f3c6` | Pacote |
+| 1 | `01-contrato-experiencia-v4.docx` | `081e850ded830aef5911c34754ca549313074681be63e7f4f9b204888bedd91f` | Pacote |
 | 2 | `02-banco-horas-v2.docx` | `cff1a19adbca0847db5337182e503340edeb590b8786a238c6249be957fe0b32` | Pacote |
 | 3 | `03-termo-lgpd-v2.docx` | `70b4a960bccbe858daaad9e91659b301fde77516cba2c05a1e0997ef38f44265` | Pacote |
 | 4 | `04-imagem-voz-v2.docx` | `a3d20c516afa510c6aa9d58ae359827490b76289643f7508932fce61d8c42381` | Independente |

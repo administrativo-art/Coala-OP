@@ -2,7 +2,7 @@
   "kitId": "admission_documents",
   "name": "Documentos admissionais",
   "category": "Informações admissionais",
-  "version": "2.0",
+  "version": "2.1",
   "editableOutput": "docx",
   "signatureOutput": "single_merged_pdf",
   "models": [
@@ -10,7 +10,7 @@
       "id": "employment_probation_contract",
       "order": 1,
       "name": "Contrato de Trabalho a Título de Experiência",
-      "file": "01-contrato-experiencia-v2.docx",
+      "file": "01-contrato-experiencia-v4.docx",
       "selectableByHr": true,
       "signatureScope": "bundle"
     },
