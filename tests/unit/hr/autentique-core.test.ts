@@ -4,8 +4,10 @@ import test from "node:test";
 
 import {
   buildCreateDocumentMutation,
+  mergeAutentiqueParticipantStatus,
   mergeAutentiqueStatus,
   parseAutentiqueWebhook,
+  participantPatchFromAutentiqueWebhook,
   statusFromAutentiqueEvent,
   verifyAutentiqueWebhookSignature,
 } from "../../../src/lib/autentique-core";
@@ -68,4 +70,44 @@ test("evento atrasado não regride um documento já assinado", () => {
   assert.equal(mergeAutentiqueStatus("signed", "signature.viewed"), "signed");
   assert.equal(mergeAutentiqueStatus("signed", "signature.accepted"), "signed");
   assert.equal(mergeAutentiqueStatus("sent", "signature.viewed"), "viewed");
+});
+
+test("normaliza o formato oficial sem data.object e extrai o evento do signatário", () => {
+  const event = parseAutentiqueWebhook({
+    event: {
+      id: "evt-flat",
+      type: "signature.viewed",
+      created_at: "2026-08-31T12:00:00Z",
+      data: {
+        public_id: "signature-flat",
+        document: "document-flat",
+        email: "pessoa@example.com",
+        name: "Pessoa Teste",
+        viewed: { created_at: "2026-08-31T11:59:00Z", ip: "192.0.2.10", port: 443 },
+      },
+    },
+  });
+  assert.ok(event);
+  assert.equal(event.providerDocumentId, "document-flat");
+  assert.deepEqual(participantPatchFromAutentiqueWebhook(event), {
+    providerSignatureId: "signature-flat",
+    name: "Pessoa Teste",
+    email: "pessoa@example.com",
+    status: "viewed",
+    emailSentAt: null,
+    emailDeliveredAt: null,
+    emailOpenedAt: null,
+    viewedAt: "2026-08-31T11:59:00Z",
+    signedAt: null,
+    rejectedAt: null,
+    lastIp: "192.0.2.10",
+    lastPort: 443,
+  });
+});
+
+test("evento atrasado também não regride o estado individual do signatário", () => {
+  assert.equal(mergeAutentiqueParticipantStatus("signed", "signature.viewed"), "signed");
+  assert.equal(mergeAutentiqueParticipantStatus("viewed", "signature.created"), "viewed");
+  assert.equal(mergeAutentiqueParticipantStatus("delivery_failed", "signature.created"), "delivery_failed");
+  assert.equal(mergeAutentiqueParticipantStatus("sent", "signature.accepted"), "signed");
 });

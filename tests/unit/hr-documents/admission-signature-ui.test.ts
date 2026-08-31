@@ -28,7 +28,8 @@ test("trata o kit como unidade com revisão única e prévia completa", () => {
   assert.match(selectionSource, /Gerar novamente/);
   assert.match(selectionSource, /Ver pacote completo/);
   assert.match(selectionSource, /flex flex-col items-end gap-2/);
-  assert.match(selectionSource, /Enviar pacote para assinatura/);
+  assert.match(selectionSource, /Configurar e enviar/);
+  assert.match(componentSource, /prepare_positions/);
   assert.doesNotMatch(selectionSource, /type="checkbox"/);
   assert.doesNotMatch(selectionSource, /documentId: workflowDocument\.id/);
   assert.doesNotMatch(selectionSource, /h-11 w-full/);
@@ -70,4 +71,25 @@ test("acompanha o kit enviado em um único card", () => {
   assert.match(routeSource, /signature_bundle_\$\{id\}/);
   assert.match(routeSource, /signatureRequest\.get\("storagePath"\)/);
   assert.match(routeSource, /signatureRequest\.get\("signedStoragePath"\)/);
+  assert.match(trackingSource, /signatureParticipants\.map\(participant/);
+  assert.match(trackingSource, /Convite enviado/);
+  assert.match(trackingSource, /E-mail entregue/);
+  assert.match(trackingSource, /Documento aberto/);
+  assert.match(trackingSource, /Documento assinado/);
+});
+
+test("abre editor isolado para posicionar o PDF congelado antes do envio", async () => {
+  const editorSource = await readFile(
+    new URL("../../../src/components/hr/recruitment/signature-placement-editor.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(componentSource, /dynamic\(/);
+  assert.match(componentSource, /signature-placement-editor/);
+  assert.match(editorSource, /package=draft/);
+  assert.match(editorSource, /DndContext/);
+  assert.match(editorSource, /Aplicar esta rubrica em todas as páginas/);
+  assert.match(editorSource, /save_positions/);
+  assert.match(editorSource, /expectedPackageHash/);
+  assert.match(routeSource, /prepareAdmissionSignaturePlacement/);
+  assert.match(routeSource, /saveAdmissionSignaturePlacement/);
 });

@@ -11,6 +11,16 @@ import {
   compareAdmissionSignatureOrder,
   isCompleteAdmissionSignaturePackage,
 } from "@/features/hr/documents/admission-signature-order";
+import {
+  admissionSignatureLayoutSchema,
+  autentiquePositionsForParty,
+  defaultAdmissionSignatureLayout,
+  normalizeAdmissionSignatureLayout,
+  type AdmissionSignatureLayout,
+  type AdmissionSignatureLayoutSigner,
+  type AdmissionSignatureParticipant,
+  type AdmissionSignatureParty,
+} from "@/features/hr/documents/admission-signature-layout";
 import { admissionBundleSignerPositions } from "@/features/hr/documents/admission-signature-positions";
 import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company-document-signatory.server";
 import type { DocumentPackageManifest } from "@/features/hr/documents/document-package-manifest";
@@ -39,6 +49,7 @@ import {
   createAutentiqueDocument,
   getAutentiqueDocumentSignatures,
   getAutentiqueDocumentStatus,
+  type AutentiqueCreatedDocument,
 } from "@/lib/autentique.server";
 import { adminApp, dbAdmin } from "@/lib/firebase-admin";
 import { firebaseClientConfig } from "@/lib/firebase-client-config";
@@ -156,112 +167,209 @@ function compareWorkflowDocuments(
   );
 }
 
+function admissionSignatureRequestId(onboardingId: string) {
+  return `signature_bundle_${onboardingId}`;
+}
+
+function admissionSourceFingerprint(
+  targets: FirebaseFirestore.QueryDocumentSnapshot[],
+) {
+  return createHash("sha256")
+    .update(JSON.stringify(targets.map((target) => ({
+      id: target.id,
+      generatedDocumentId: text(target.get("generatedDocumentId")),
+      generatedPdfStoragePath: text(target.get("generatedPdfStoragePath")),
+      templateVersion: Number(target.get("templateVersion") ?? 1),
+    }))))
+    .digest("hex");
+}
+
+function normalizedStoredSigners(value: unknown): AdmissionSignatureLayoutSigner[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    const signer = record(item);
+    const party = signer.party === "employee" || signer.party === "company"
+      ? signer.party
+      : index === 0
+        ? "employee"
+        : index === 1
+          ? "company"
+          : null;
+    const name = text(signer.name);
+    const email = text(signer.email)?.toLowerCase();
+    return party && name && email ? [{ party, name, email }] : [];
+  });
+}
+
+function providerParticipantStatus(
+  signature: AutentiqueCreatedDocument["signatures"][number],
+): AdmissionSignatureParticipant["status"] {
+  if (signature.signed?.created_at) return "signed";
+  if (signature.rejected?.created_at) return "rejected";
+  if (signature.viewed?.created_at) return "viewed";
+  if (signature.email_events?.refused) return "delivery_failed";
+  return "sent";
+}
+
+function participantsFromProvider(params: {
+  signatures: AutentiqueCreatedDocument["signatures"];
+  signers: AdmissionSignatureLayoutSigner[];
+  invitedAt: string;
+  current?: unknown;
+}) {
+  const current = record(params.current);
+  const participants: Record<string, AdmissionSignatureParticipant> = {};
+  for (const signature of params.signatures) {
+    const providerSignatureId = text(signature.public_id);
+    const email = text(signature.email ?? signature.user?.email)?.toLowerCase();
+    const signer = params.signers.find((candidate) => candidate.email === email);
+    if (!providerSignatureId || !signer) continue;
+    const previous = record(current[providerSignatureId]);
+    const networkEvent = signature.signed ?? signature.rejected ?? signature.viewed;
+    participants[providerSignatureId] = {
+      party: signer.party,
+      name: text(signature.name ?? signature.user?.name) ?? signer.name,
+      email: email ?? signer.email,
+      providerSignatureId,
+      status: providerParticipantStatus(signature),
+      invitedAt: text(previous.invitedAt) ?? params.invitedAt,
+      emailSentAt: signature.email_events?.sent ?? text(previous.emailSentAt) ?? null,
+      emailDeliveredAt: signature.email_events?.delivered ?? text(previous.emailDeliveredAt) ?? null,
+      emailOpenedAt: signature.email_events?.opened ?? text(previous.emailOpenedAt) ?? null,
+      viewedAt: signature.viewed?.created_at ?? text(previous.viewedAt) ?? null,
+      signedAt: signature.signed?.created_at ?? text(previous.signedAt) ?? null,
+      rejectedAt: signature.rejected?.created_at ?? text(previous.rejectedAt) ?? null,
+      lastIp: networkEvent?.ip ?? text(previous.lastIp) ?? null,
+      lastPort: networkEvent?.port
+        ?? (typeof previous.lastPort === "number" ? previous.lastPort : null),
+    };
+  }
+  return participants;
+}
+
 async function sendAdmissionBundle(params: {
   onboardingId: string;
   process: RecordValue;
   targets: FirebaseFirestore.QueryDocumentSnapshot[];
-  recipient: string;
+  expectedPackageHash: string;
   actorId: string;
   actorName: string;
   bucket: ReturnType<ReturnType<typeof getStorage>["bucket"]>;
 }) {
-  const requestRef = hrDbAdmin.collection(REQUEST_COLLECTION).doc(`signature_bundle_${params.onboardingId}`);
+  const requestRef = hrDbAdmin
+    .collection(REQUEST_COLLECTION)
+    .doc(admissionSignatureRequestId(params.onboardingId));
   const existing = await requestRef.get();
-  if (existing.get("providerDocumentId")) return;
-
-  const prepared = await prepareAdmissionBundle({
-    onboardingId: params.onboardingId,
-    process: params.process,
-    targets: params.targets,
-    actorId: params.actorId,
-    actorName: params.actorName,
-    bucket: params.bucket,
-  });
-  const { packageId, legalEntity } = prepared;
-  const companySignatory = await resolveCompanyDocumentSignatory({
-    entityId: legalEntity.entityId,
-    cnpj: legalEntity.cnpj,
-  });
-  if (!companySignatory) {
-    throw new Error(`Defina o signatário documental da empresa ${text(legalEntity.legalName) ?? "empregadora"} antes do envio.`);
+  const existingProviderDocumentId = text(existing.get("providerDocumentId"));
+  if (existingProviderDocumentId) {
+    const recoveredAt = new Date().toISOString();
+    const batch = hrDbAdmin.batch();
+    params.targets.forEach((target) => batch.set(target.ref, {
+      status: text(existing.get("status")) ?? "sent",
+      signatureRequestId: requestRef.id,
+      packageId: existing.get("packageId") ?? null,
+      packageProtocol: existing.get("protocol") ?? null,
+      providerDocumentId: existingProviderDocumentId,
+      providerSignatures: existing.get("providerSignatures") ?? [],
+      emailStatus: "sent",
+      sentAt: existing.get("sentAt") ?? existing.get("updatedAt") ?? recoveredAt,
+      sandbox: existing.get("sandbox") ?? true,
+      updatedAt: recoveredAt,
+    }, { merge: true }));
+    await batch.commit();
+    return;
   }
-  if (companySignatory.email === params.recipient) {
-    throw new Error("O signatário da empresa precisa ser diferente do titular do kit.");
+  if (!existing.exists) {
+    throw new Error("Configure as assinaturas e rubricas antes de enviar o pacote.");
   }
-  const protocol = await allocateIdempotentDocumentProtocol({
-    entity: legalEntity.legalName ?? legalEntity.cnpj ?? "CS",
-    type: "ADM",
-    actorId: params.actorId,
-    reservationKey: packageId,
-  });
-  const composed = await composeDocumentPackage({
-    ...prepared.composition,
-    protocol,
-  });
-  const signers = [
-    {
-      email: params.recipient,
-      name: text(params.process.candidateName) ?? "Colaborador",
-      action: "SIGN" as const,
-      positions: admissionBundleSignerPositions(composed.manifest, "employee"),
-    },
-    {
-      email: companySignatory.email,
-      name: companySignatory.name,
-      action: "SIGN" as const,
-      positions: admissionBundleSignerPositions(composed.manifest, "company"),
-    },
-  ];
-  const packagePath = `signature-packages/${params.onboardingId}/${packageId}/pre-signature.pdf`;
-  const manifestPath = `signature-packages/${params.onboardingId}/${packageId}/manifest.json`;
-  await Promise.all([
-    params.bucket.file(packagePath).save(composed.buffer, {
-      resumable: false,
-      metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
-    }),
-    params.bucket.file(manifestPath).save(Buffer.from(JSON.stringify(composed.manifest, null, 2)), {
-      resumable: false,
-      metadata: { contentType: "application/json", cacheControl: "private, no-store" },
-    }),
-  ]);
+  const packageHash = text(existing.get("packageHash"));
+  const storagePath = text(existing.get("storagePath"));
+  const protocol = text(existing.get("protocol"));
+  const packageId = text(existing.get("packageId"));
+  if (!packageHash || !storagePath || !protocol || !packageId) {
+    throw new Error("A preparação congelada do pacote está incompleta. Prepare o posicionamento novamente.");
+  }
+  if (!/^[a-f0-9]{64}$/i.test(params.expectedPackageHash)) {
+    throw new Error("A versão do pacote não foi informada corretamente.");
+  }
+  if (params.expectedPackageHash !== packageHash) {
+    throw new Error("O pacote mudou desde que o editor foi aberto. Reabra o posicionamento antes de enviar.");
+  }
+  if (text(existing.get("sourceFingerprint")) !== admissionSourceFingerprint(params.targets)) {
+    throw new Error("Os documentos do pacote mudaram. Prepare o posicionamento novamente.");
+  }
+  if (!text(existing.get("placementConfiguredAt"))) {
+    throw new Error("Confirme o posicionamento das assinaturas e rubricas antes do envio.");
+  }
+  const layout = normalizeAdmissionSignatureLayout(existing.get("placementLayout"));
+  if (layout.packageHash !== packageHash) {
+    throw new Error("O posicionamento não pertence ao PDF congelado para este envio.");
+  }
+  const storedSigners = normalizedStoredSigners(existing.get("signers"));
+  if (storedSigners.length !== 2) {
+    throw new Error("Os dois signatários do pacote precisam estar definidos antes do envio.");
+  }
+  const [buffer] = await params.bucket.file(storagePath).download();
+  if (hashBuffer(buffer) !== packageHash) {
+    throw new Error("O PDF congelado foi alterado depois do posicionamento. Prepare o pacote novamente.");
+  }
+  const signers = storedSigners.map((signer) => ({
+    email: signer.email,
+    name: signer.name,
+    action: "SIGN" as const,
+    positions: autentiquePositionsForParty(layout, signer.party),
+  }));
   const now = new Date().toISOString();
-  await requestRef.set({
-    type: "onboarding_document_package_signature",
-    status: "sending",
-    provider: "autentique",
-    onboardingId: params.onboardingId,
-    employeeId: processEmployeeId(params.process),
-    workflowDocumentIds: params.targets.map((target) => target.id),
-    packageId,
-    protocol,
-    storagePath: packagePath,
-    manifestPath,
-    manifest: composed.manifest,
-    manifestHash: composed.manifestHash,
-    preSignatureHash: composed.packageHash,
-    packageHash: composed.packageHash,
-    documentName: `Kit admissional ${protocol}`,
-    signers,
-    requestedAt: now,
-    requestedBy: params.actorId,
-    requestedByName: params.actorName,
-    updatedAt: now,
+  const sendAttemptId = createHash("sha256")
+    .update(`${params.onboardingId}:${params.actorId}:${now}`)
+    .digest("hex")
+    .slice(0, 32);
+  const claimed = await hrDbAdmin.runTransaction(async (transaction) => {
+    const current = await transaction.get(requestRef);
+    if (current.get("providerDocumentId")) return false;
+    const sendingStartedAt = text(current.get("sendingStartedAt"));
+    const activeSend = current.get("status") === "sending"
+      && sendingStartedAt
+      && Date.now() - new Date(sendingStartedAt).getTime() < 5 * 60_000;
+    if (activeSend) {
+      throw new Error("Este pacote já está sendo enviado. Aguarde a conclusão antes de tentar novamente.");
+    }
+    transaction.set(requestRef, {
+      status: "sending",
+      sendAttemptId,
+      sendingStartedAt: now,
+      error: null,
+      updatedAt: now,
+    }, { merge: true });
+    return true;
   });
+  if (!claimed) return;
   try {
     const created = await createAutentiqueDocument({
-      buffer: composed.buffer,
+      buffer,
       fileName: `kit-admissional-${protocol}.pdf`,
       documentName: `Kit admissional ${protocol}`,
       message: "Confira o kit admissional completo e realize a assinatura eletrônica.",
       signers,
     });
     const sentAt = new Date().toISOString();
+    const participants = participantsFromProvider({
+      signatures: created.document.signatures,
+      signers: storedSigners,
+      invitedAt: sentAt,
+    });
     await requestRef.set({
       status: "sent",
       sandbox: created.sandbox,
       providerDocumentId: created.document.id,
       providerCreatedAt: created.document.created_at,
       providerSignatures: created.document.signatures,
+      participants,
+      providerSignaturesCount: created.document.signatures.length,
+      providerSignedCount: 0,
+      sentAt,
+      sentBy: params.actorId,
+      sentByName: params.actorName,
       updatedAt: sentAt,
     }, { merge: true });
     const batch = hrDbAdmin.batch();
@@ -282,7 +390,15 @@ async function sendAdmissionBundle(params: {
     await batch.commit();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao enviar pacote ao Autentique.";
-    await requestRef.set({ status: "failed", error: message, updatedAt: new Date().toISOString() }, { merge: true });
+    const failedAt = new Date().toISOString();
+    const batch = hrDbAdmin.batch();
+    batch.set(requestRef, { status: "failed", error: message, updatedAt: failedAt }, { merge: true });
+    params.targets.forEach((target) => batch.set(target.ref, {
+      status: "send_failed",
+      lastError: message,
+      updatedAt: failedAt,
+    }, { merge: true }));
+    await batch.commit();
     throw error;
   }
 }
@@ -400,15 +516,269 @@ async function prepareAdmissionBundle(params: {
   };
 }
 
-export async function listSignatureWorkflow(onboardingId: string) {
+async function admissionSignatureTargets(onboardingId: string, process: RecordValue) {
+  const snapshot = await hrDbAdmin
+    .collection(WORKFLOW_COLLECTION)
+    .where("onboardingId", "==", onboardingId)
+    .limit(30)
+    .get();
+  const selectedDocuments = snapshot.docs.filter(
+    (document) => document.get("selected") === true,
+  );
+  assertCompleteAdmissionPackage(
+    process,
+    selectedDocuments.map((document) => ({ templateId: document.get("templateId") })),
+  );
+  const targets = selectedDocuments
+    .filter((document) => document.get("signatureScope") !== "independent")
+    .sort(compareWorkflowDocuments);
+  if (!targets.length || targets.length !== selectedDocuments.length) {
+    throw new Error("O kit admissional precisa formar um único pacote para assinatura.");
+  }
+  if (targets.some((document) => document.get("status") !== "ready_to_send")) {
+    throw new Error("Revise o pacote completo antes de configurar as assinaturas.");
+  }
+  return targets;
+}
+
+export async function prepareAdmissionSignaturePlacement(params: {
+  onboardingId: string;
+  actorId: string;
+  actorName: string;
+}) {
+  const process = await loadProcess(params.onboardingId);
+  if (process.data.currentStage !== "signature_preparation") {
+    throw new Error("O posicionamento só pode ser preparado antes do envio do kit.");
+  }
+  const recipient = text(process.data.candidateEmail)?.toLowerCase();
+  if (!recipient || !/^\S+@\S+\.\S+$/.test(recipient)) {
+    throw new Error("O titular não possui um e-mail válido.");
+  }
+  const targets = await admissionSignatureTargets(params.onboardingId, process.data);
+  const sourceFingerprint = admissionSourceFingerprint(targets);
+  const requestRef = hrDbAdmin
+    .collection(REQUEST_COLLECTION)
+    .doc(admissionSignatureRequestId(params.onboardingId));
+  const existing = await requestRef.get();
+  if (existing.get("providerDocumentId")) {
+    throw new Error("O kit já foi enviado e não aceita um novo posicionamento.");
+  }
+  if (
+    existing.exists
+    && text(existing.get("sourceFingerprint")) === sourceFingerprint
+    && text(existing.get("storagePath"))
+    && text(existing.get("packageHash"))
+    && existing.get("placementLayout")
+  ) {
+    return listSignatureWorkflow(params.onboardingId);
+  }
+
+  const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
+  const prepared = await prepareAdmissionBundle({
+    onboardingId: params.onboardingId,
+    process: process.data,
+    targets,
+    actorId: params.actorId,
+    actorName: params.actorName,
+    bucket,
+  });
+  const companySignatory = await resolveCompanyDocumentSignatory({
+    entityId: prepared.legalEntity.entityId,
+    cnpj: prepared.legalEntity.cnpj,
+  });
+  if (!companySignatory) {
+    throw new Error(
+      `Defina o signatário documental da empresa ${text(prepared.legalEntity.legalName) ?? "empregadora"} antes do envio.`,
+    );
+  }
+  if (companySignatory.email.toLowerCase() === recipient) {
+    throw new Error("O signatário da empresa precisa ser diferente do titular do kit.");
+  }
+  const protocol = await allocateIdempotentDocumentProtocol({
+    entity: prepared.legalEntity.legalName ?? prepared.legalEntity.cnpj ?? "CS",
+    type: "ADM",
+    actorId: params.actorId,
+    reservationKey: `admission:${params.onboardingId}:${sourceFingerprint}`,
+  });
+  const composed = await composeDocumentPackage({
+    ...prepared.composition,
+    protocol,
+  });
+  const packagePath = `signature-packages/${params.onboardingId}/${prepared.packageId}/pre-signature.pdf`;
+  const manifestPath = `signature-packages/${params.onboardingId}/${prepared.packageId}/manifest.json`;
+  await Promise.all([
+    bucket.file(packagePath).save(composed.buffer, {
+      resumable: false,
+      metadata: { contentType: "application/pdf", cacheControl: "private, no-store" },
+    }),
+    bucket.file(manifestPath).save(Buffer.from(JSON.stringify(composed.manifest, null, 2)), {
+      resumable: false,
+      metadata: { contentType: "application/json", cacheControl: "private, no-store" },
+    }),
+  ]);
+  const signers: AdmissionSignatureLayoutSigner[] = [
+    {
+      party: "employee",
+      name: text(process.data.candidateName) ?? "Colaborador",
+      email: recipient,
+    },
+    {
+      party: "company",
+      name: companySignatory.name,
+      email: companySignatory.email.toLowerCase(),
+    },
+  ];
+  const now = new Date().toISOString();
+  await requestRef.set({
+    type: "onboarding_document_package_signature",
+    status: "placement_pending",
+    provider: "autentique",
+    onboardingId: params.onboardingId,
+    employeeId: processEmployeeId(process.data),
+    workflowDocumentIds: targets.map((target) => target.id),
+    sourceFingerprint,
+    packageId: prepared.packageId,
+    protocol,
+    storagePath: packagePath,
+    manifestPath,
+    manifest: composed.manifest,
+    manifestHash: composed.manifestHash,
+    preSignatureHash: composed.packageHash,
+    packageHash: composed.packageHash,
+    documentName: `Kit admissional ${protocol}`,
+    signers,
+    placementLayout: defaultAdmissionSignatureLayout({
+      packageHash: composed.packageHash,
+      pageCount: composed.pageCount,
+    }),
+    preparedAt: now,
+    preparedBy: params.actorId,
+    preparedByName: params.actorName,
+    updatedAt: now,
+  });
+  return listSignatureWorkflow(params.onboardingId);
+}
+
+export async function saveAdmissionSignaturePlacement(params: {
+  onboardingId: string;
+  layout: unknown;
+  actorId: string;
+  actorName: string;
+}) {
+  const layout = normalizeAdmissionSignatureLayout(params.layout);
+  const requestRef = hrDbAdmin
+    .collection(REQUEST_COLLECTION)
+    .doc(admissionSignatureRequestId(params.onboardingId));
+  await hrDbAdmin.runTransaction(async (transaction) => {
+    const request = await transaction.get(requestRef);
+    if (!request.exists || request.get("onboardingId") !== params.onboardingId) {
+      throw new Error("Prepare o pacote antes de salvar o posicionamento.");
+    }
+    if (request.get("providerDocumentId")) {
+      throw new Error("O pacote já foi enviado e não aceita alteração de posições.");
+    }
+    const packageHash = text(request.get("packageHash"));
+    const manifest = record(request.get("manifest"));
+    if (
+      !packageHash
+      || layout.packageHash !== packageHash
+      || layout.pageCount !== Number(manifest.totalPages ?? 0)
+    ) {
+      throw new Error("O posicionamento não corresponde ao PDF congelado para este envio.");
+    }
+    const now = new Date().toISOString();
+    transaction.set(requestRef, {
+      status: "placement_ready",
+      placementLayout: layout,
+      placementConfiguredAt: now,
+      placementConfiguredBy: params.actorId,
+      placementConfiguredByName: params.actorName,
+      updatedAt: now,
+    }, { merge: true });
+  });
+  return listSignatureWorkflow(params.onboardingId);
+}
+
+function admissionSignaturePackageState(
+  request: FirebaseFirestore.DocumentSnapshot | null,
+  includeSensitive: boolean,
+) {
+  if (!request?.exists) return null;
+  const packageHash = text(request.get("packageHash"));
+  const manifest = record(request.get("manifest"));
+  const signers = normalizedStoredSigners(request.get("signers"));
+  const storedParticipants = record(request.get("participants"));
+  const providerSignatures = Array.isArray(request.get("providerSignatures"))
+    ? request.get("providerSignatures") as AutentiqueCreatedDocument["signatures"]
+    : [];
+  const participantsById = Object.keys(storedParticipants).length
+    ? storedParticipants
+    : participantsFromProvider({
+        signatures: providerSignatures,
+        signers,
+        invitedAt: text(request.get("sentAt")) ?? text(request.get("requestedAt")) ?? "",
+      });
+  const participants = Object.values(participantsById).flatMap((value) => {
+    const participant = record(value);
+    const providerSignatureId = text(participant.providerSignatureId);
+    const email = text(participant.email)?.toLowerCase();
+    const signer = signers.find((candidate) => candidate.email === email);
+    const party: AdmissionSignatureParty | null = participant.party === "employee" || participant.party === "company"
+      ? participant.party
+      : signer?.party ?? null;
+    const name = text(participant.name) ?? signer?.name;
+    if (!providerSignatureId || !email || !party || !name) return [];
+    return [{
+      party,
+      name,
+      email,
+      providerSignatureId,
+      status: ["sent", "viewed", "signed", "rejected", "delivery_failed"].includes(String(participant.status))
+        ? participant.status as AdmissionSignatureParticipant["status"]
+        : "sent",
+      invitedAt: text(participant.invitedAt),
+      emailSentAt: text(participant.emailSentAt),
+      emailDeliveredAt: text(participant.emailDeliveredAt),
+      emailOpenedAt: text(participant.emailOpenedAt),
+      viewedAt: text(participant.viewedAt),
+      signedAt: text(participant.signedAt),
+      rejectedAt: text(participant.rejectedAt),
+      ...(includeSensitive ? {
+        lastIp: text(participant.lastIp),
+        lastPort: typeof participant.lastPort === "number" ? participant.lastPort : null,
+      } : {}),
+    }];
+  }).sort((left, right) => (
+    left.party === right.party ? 0 : left.party === "employee" ? -1 : 1
+  ));
+  const parsedLayout = admissionSignatureLayoutSchema.safeParse(request.get("placementLayout"));
+  return {
+    status: text(request.get("status")) ?? "unknown",
+    packageHash,
+    pageCount: Number(manifest.totalPages ?? 0) || null,
+    placementReady: Boolean(text(request.get("placementConfiguredAt"))),
+    layout: parsedLayout.success ? parsedLayout.data : null,
+    signers,
+    participants,
+  };
+}
+
+export async function listSignatureWorkflow(
+  onboardingId: string,
+  options: { includeSensitive?: boolean } = {},
+) {
   const process = await loadProcess(onboardingId);
-  const [workflowSnapshot, effectiveSystemTemplates] = await Promise.all([
+  const [workflowSnapshot, effectiveSystemTemplates, signatureRequest] = await Promise.all([
     hrDbAdmin
       .collection(WORKFLOW_COLLECTION)
       .where("onboardingId", "==", onboardingId)
       .limit(30)
       .get(),
     effectiveSystemDocumentTemplates(SYSTEM_DOCUMENT_TEMPLATES),
+    hrDbAdmin
+      .collection(REQUEST_COLLECTION)
+      .doc(admissionSignatureRequestId(onboardingId))
+      .get(),
   ]);
   const packageTemplateIds = new Set<string>(
     admissionSignaturePackageTemplateIds(transportVoucherAnswer(process.data)),
@@ -433,6 +803,10 @@ export async function listSignatureWorkflow(onboardingId: string) {
     templates: systemTemplates,
     documents,
     packageTemplateIds: systemTemplates.map((template) => template.id),
+    signaturePackage: admissionSignaturePackageState(
+      signatureRequest,
+      options.includeSensitive === true,
+    ),
   };
 }
 
@@ -755,6 +1129,7 @@ export async function reviewSignaturePackage(params: {
 
 export async function sendSignatureDocuments(params: {
   onboardingId: string;
+  expectedPackageHash: string;
   actorId: string;
   actorName: string;
 }) {
@@ -792,7 +1167,7 @@ export async function sendSignatureDocuments(params: {
       onboardingId: params.onboardingId,
       process: process.data,
       targets: bundleTargets,
-      recipient,
+      expectedPackageHash: params.expectedPackageHash,
       actorId: params.actorId,
       actorName: params.actorName,
       bucket,
@@ -981,13 +1356,22 @@ export async function addCompanySignerToAdmissionBundle(params: {
     : [];
   const signers = [
     ...currentSigners.filter((current) => text(current.email)?.toLowerCase() !== email),
-    signer,
+    { ...signer, party: "company" as const },
   ];
   const completedAt = new Date().toISOString();
+  const participants = participantsFromProvider({
+    signatures: provider.signatures,
+    signers: normalizedStoredSigners(signers),
+    invitedAt: text(request.get("sentAt"))
+      ?? text(request.get("requestedAt"))
+      ?? completedAt,
+    current: request.get("participants"),
+  });
   const batch = hrDbAdmin.batch();
   batch.set(requestRef, {
     signers,
     providerSignatures: provider.signatures,
+    participants,
     companySignatoryUserId: companySignatory.userId,
     companySignatoryName: companySignatory.name,
     companySignatoryEmail: email,
@@ -1286,6 +1670,7 @@ export async function reconcileGeneratedDocumentStandaloneSignature(
 
 export async function reconcileSignatureDocuments(params: {
   onboardingId: string;
+  includeSensitive?: boolean;
 }) {
   await loadProcess(params.onboardingId);
   const snapshot = await hrDbAdmin
@@ -1316,14 +1701,36 @@ export async function reconcileSignatureDocuments(params: {
 
   for (const request of requests.values()) {
     try {
-      const provider = await getAutentiqueDocumentStatus(request.providerDocumentId);
+      const requestRef = hrDbAdmin
+        .collection(REQUEST_COLLECTION)
+        .doc(request.signatureRequestId);
+      const [provider, requestSnapshot] = await Promise.all([
+        getAutentiqueDocumentSignatures(request.providerDocumentId),
+        requestRef.get(),
+      ]);
       const now = new Date().toISOString();
+      const participants = participantsFromProvider({
+        signatures: provider.signatures,
+        signers: normalizedStoredSigners(requestSnapshot.get("signers")),
+        invitedAt: text(requestSnapshot.get("sentAt"))
+          ?? text(requestSnapshot.get("requestedAt"))
+          ?? now,
+        current: requestSnapshot.get("participants"),
+      });
       if (provider.completed && provider.signedUrl) {
+        await requestRef.set({
+          providerSignatures: provider.signatures,
+          providerSignaturesCount: provider.signaturesCount,
+          providerSignedCount: provider.signedCount,
+          participants,
+          reconciledAt: now,
+          updatedAt: now,
+        }, { merge: true });
         await archiveAutentiqueSignedDocument({
           signatureRequestId: request.signatureRequestId,
           signedUrl: provider.signedUrl,
           signedAt: now,
-          confirmedByEventId: `polling:${now}`,
+          confirmedByEventId: `reconcile:${now}`,
         });
         continue;
       }
@@ -1332,16 +1739,21 @@ export async function reconcileSignatureDocuments(params: {
         status,
         providerSignaturesCount: provider.signaturesCount,
         providerSignedCount: provider.signedCount,
+        providerSignatures: provider.signatures,
+        participants,
         reconciledAt: now,
         updatedAt: now,
       };
       const batch = hrDbAdmin.batch();
-      request.targets.forEach((target) => batch.set(target.ref, providerState, { merge: true }));
-      batch.set(
-        hrDbAdmin.collection(REQUEST_COLLECTION).doc(request.signatureRequestId),
-        providerState,
-        { merge: true },
-      );
+      request.targets.forEach((target) => batch.set(target.ref, {
+        status,
+        providerSignaturesCount: provider.signaturesCount,
+        providerSignedCount: provider.signedCount,
+        providerSignatures: provider.signatures,
+        reconciledAt: now,
+        updatedAt: now,
+      }, { merge: true }));
+      batch.set(requestRef, providerState, { merge: true });
       await batch.commit();
     } catch (cause) {
       errors.push({
@@ -1352,7 +1764,9 @@ export async function reconcileSignatureDocuments(params: {
   }
 
   return {
-    ...(await listSignatureWorkflow(params.onboardingId)),
+    ...(await listSignatureWorkflow(params.onboardingId, {
+      includeSensitive: params.includeSensitive,
+    })),
     reconciliation: {
       checked: requests.size,
       failed: errors.length,
