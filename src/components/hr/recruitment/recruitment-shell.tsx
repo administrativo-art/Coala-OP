@@ -127,6 +127,7 @@ import {
   Info, LockKeyhole, ShieldCheck,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { SignatureParticipantCard } from '@/components/hr/recruitment/signature-participant-card';
 
 const SignaturePlacementEditor = dynamic(
   () => import('@/components/hr/recruitment/signature-placement-editor'),
@@ -6919,6 +6920,9 @@ type SignatureWorkflowPayload = {
       viewedAt: string | null;
       signedAt: string | null;
       rejectedAt: string | null;
+      lastResentAt?: string | null;
+      resendCount?: number;
+      signatureLinkGeneratedAt?: string | null;
       lastIp?: string | null;
       lastPort?: number | null;
     }>;
@@ -9176,6 +9180,44 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     }
   }
 
+  async function participantSignatureAction(
+    action: 'resend_participant' | 'create_signature_link' | 'replace_participant_email',
+    participant: NonNullable<SignatureWorkflowPayload['signaturePackage']>['participants'][number],
+    body: Record<string, unknown> = {},
+  ) {
+    if (!selectedProcess) return null;
+    const busyKey = `participant:${participant.providerSignatureId}:${action}`;
+    setSignatureBusy(busyKey);
+    setError(null);
+    try {
+      const response = await apiFetch(
+        `/api/hr/onboarding/${selectedProcess.id}/signature-documents`,
+        getToken,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            action,
+            actionRequestId: crypto.randomUUID(),
+            providerSignatureId: participant.providerSignatureId,
+            ...body,
+          }),
+        },
+      ) as SignatureWorkflowPayload | { workflow: SignatureWorkflowPayload; shortLink: string };
+      const workflow = 'workflow' in response ? response.workflow : response;
+      setSignatureWorkflow(workflow);
+      onRefresh();
+      return {
+        workflow,
+        shortLink: 'workflow' in response ? response.shortLink : null,
+      };
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Falha na ação sobre o signatário.');
+      return null;
+    } finally {
+      setSignatureBusy(null);
+    }
+  }
+
   async function generateSignaturePackage() {
     if (!selectedProcess || !signatureWorkflow?.packageTemplateIds?.length) return;
     const selected = await signatureAction('select', {
@@ -11257,41 +11299,23 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                       ) : null}
                       {signatureParticipants.length ? (
                         <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                          {signatureParticipants.map(participant => {
-                            const rejected = participant.status === 'rejected';
-                            const deliveryFailed = participant.status === 'delivery_failed';
-                            const steps = [
-                              { label: 'Convite enviado', at: participant.emailSentAt ?? participant.invitedAt },
-                              { label: 'E-mail entregue', at: participant.emailDeliveredAt },
-                              { label: 'E-mail aberto', at: participant.emailOpenedAt },
-                              { label: 'Documento aberto', at: participant.viewedAt },
-                              { label: rejected ? 'Assinatura recusada' : 'Documento assinado', at: participant.rejectedAt ?? participant.signedAt },
-                            ];
-                            return (
-                              <div key={participant.providerSignatureId} className={`rounded-xl border p-3 ${rejected || deliveryFailed ? 'border-rose-200 bg-rose-50/50' : 'border-slate-200 bg-slate-50/60'}`}>
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="text-[11.5px] font-black text-slate-900">{participant.party === 'employee' ? 'Colaborador' : 'Empregador'} · {participant.name}</p>
-                                    <p className="mt-0.5 break-all text-[10px] font-semibold text-slate-500">{participant.email}</p>
-                                  </div>
-                                  <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${participant.status === 'signed' ? 'bg-emerald-100 text-emerald-700' : rejected || deliveryFailed ? 'bg-rose-100 text-rose-700' : participant.status === 'viewed' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
-                                    {participant.status === 'signed' ? 'Assinado' : rejected ? 'Recusado' : deliveryFailed ? 'Falha na entrega' : participant.status === 'viewed' ? 'Visualizado' : 'Enviado'}
-                                  </span>
-                                </div>
-                                <div className="mt-3 grid gap-1.5 sm:grid-cols-5">
-                                  {steps.map(step => (
-                                    <div key={step.label} className={`rounded-lg border px-2 py-2 ${step.at ? rejected && step.label === 'Assinatura recusada' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-white text-slate-400'}`}>
-                                      <p className="text-[9px] font-black leading-tight">{step.label}</p>
-                                      <p className="mt-1 text-[8.5px] font-semibold">{step.at ? formatOnboardingDateTime(step.at) : 'Pendente'}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                                {participant.lastIp ? (
-                                  <p className="mt-2 text-[9px] font-semibold text-slate-400">Último evento técnico: IP {participant.lastIp}{participant.lastPort ? `:${participant.lastPort}` : ''}</p>
-                                ) : null}
-                              </div>
-                            );
-                          })}
+                          {signatureParticipants.map(participant => (
+                            <SignatureParticipantCard
+                              key={participant.providerSignatureId}
+                              participant={participant}
+                              canManage={canSendSignatures && canActOnSignaturePhase}
+                              busyAction={signatureBusy}
+                              onResend={async (target) => Boolean(await participantSignatureAction('resend_participant', target))}
+                              onCreateLink={async (target) => (
+                                await participantSignatureAction('create_signature_link', target)
+                              )?.shortLink ?? null}
+                              onReplaceEmail={async (target, email) => Boolean(await participantSignatureAction(
+                                'replace_participant_email',
+                                target,
+                                { email },
+                              ))}
+                            />
+                          ))}
                         </div>
                       ) : null}
                     </div>
