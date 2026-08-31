@@ -218,13 +218,13 @@ test("fontes admissionais preservam os hashes catalogados", async () => {
   }
 });
 
-test("contrato de experiência v3 usa somente os campos vigentes", async () => {
+test("contrato de experiência v4 usa razão social e layout de assinatura vigentes", async () => {
   const template = systemDocumentTemplateById(
     "system-admission-employment-probation-contract",
   );
-  assert.equal(template?.version, 3);
+  assert.equal(template?.version, 4);
   assert.equal(template?.status, "published");
-  assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v3.docx"), true);
+  assert.equal(template?.sourcePath?.endsWith("01-contrato-experiencia-v4.docx"), true);
   const salaryBinding = template?.fieldMapping?.contract_monthly_salary;
   assert.equal(salaryBinding?.kind, "system");
   if (salaryBinding?.kind === "system") {
@@ -250,7 +250,7 @@ test("contrato de experiência v3 usa somente os campos vigentes", async () => {
   assert.equal(template?.variables.length, 16);
 
   const prepared = await readFile(
-    path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v3.docx"),
+    path.join(process.cwd(), "docs/modelos-documentos/admissionais/01-contrato-experiencia-v4.docx"),
   );
   const preparedZip = new PizZip(prepared);
   const documentXml = preparedZip.file("word/document.xml")?.asText() ?? "";
@@ -269,6 +269,21 @@ test("contrato de experiência v3 usa somente os campos vigentes", async () => {
   assert.ok(documentXml.includes("Termo de Confidencialidade que"));
   assert.ok(documentXml.includes("artigos 88 a 93 da Lei nº 9.279/1996"));
   assert.ok(documentXml.includes('<w:jc w:val="right"/>'));
+  assert.equal((documentXml.match(/<w:spacing w:before="1000"\/>/g) ?? []).length, 2);
+  for (const token of [
+    "{{integration.employer_name}}",
+    "{{contract_employer_cnpj}}",
+    "{{integration.employer_address}}",
+    "{{employee.name}}",
+    "{{contract_employee_cpf}}",
+    "{{employee.address}}",
+  ]) {
+    assert.ok(
+      documentXml.includes(
+        `<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t xml:space="preserve">${token}</w:t></w:r>`,
+      ),
+    );
+  }
 });
 
 test("acordo de banco de horas v2 está parametrizado sem alterar partes opacas", async () => {

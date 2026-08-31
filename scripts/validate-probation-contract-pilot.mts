@@ -4,30 +4,30 @@ import path from "node:path";
 import { generateDocx, extractDocxVariables } from "../src/features/hr/documents/docx-generator";
 import { applyFieldMapping } from "../src/features/hr/documents/field-mapping";
 import {
-  PROBATION_CONTRACT_V3_FIELD_MAPPING,
-  PROBATION_CONTRACT_V3_SOURCE,
+  PROBATION_CONTRACT_V4_FIELD_MAPPING,
+  PROBATION_CONTRACT_V4_SOURCE,
 } from "../src/features/hr/documents/probation-contract-template";
 
-const source = await readFile(path.resolve(PROBATION_CONTRACT_V3_SOURCE));
+const source = await readFile(path.resolve(PROBATION_CONTRACT_V4_SOURCE));
 const data: Record<string, unknown> = {
   employee: {
-    name: "MARIA DE FÁTIMA SOUSA",
-    cpf: "52998224725",
+    name: "THAISE CORREIA MARINHO",
+    cpf: "05813688358",
     address:
       "Rua das Acácias, nº 45, Jardim Renascença, São Luís/MA, CEP 65075-020",
   },
   integration: {
-    employer_name: "COALA SHAKES COMÉRCIO DE ALIMENTOS LTDA",
-    employer_cnpj: "12.345.678/0001-90",
+    employer_name: "CT SORVETES LTDA",
+    employer_cnpj: "14.276.603/0001-25",
     employer_address:
-      "Avenida dos Holandeses, nº 1000, Calhau, São Luís/MA, CEP 65071-380",
-    job_function: "ATENDENTE DE LOJA",
+      "Avenida Guajajaras, Quadra 65, nº 3505, São Bernardo, São Luís/MA, CEP 65056-045",
+    job_function: "ATENDENTE DE QUIOSQUE",
   },
 };
 const flat: Record<string, unknown> = {
-  "employee.cpf": "529.982.247-25",
-  "integration.employer_cnpj": "12.345.678/0001-90",
-  "integration.job_cbo": "513415",
+  "employee.cpf": "058.136.883-58",
+  "integration.employer_cnpj": "14.276.603/0001-25",
+  "integration.job_cbo": "5134-35",
   "integration.monthly_salary": "R$ 1.787,30",
   "integration.expected_admission_date": "01/08/2026",
   "integration.probation_first_period_days": "30",
@@ -37,9 +37,9 @@ const flat: Record<string, unknown> = {
 };
 const rawFlat: Record<string, unknown> = {
   ...flat,
-  "employee.cpf": "52998224725",
-  "integration.employer_cnpj": "12345678000190",
-  "integration.job_cbo": "513415",
+  "employee.cpf": "05813688358",
+  "integration.employer_cnpj": "14276603000125",
+  "integration.job_cbo": "513435",
   "integration.monthly_salary": 1787.3,
   "integration.expected_admission_date": "2026-08-01",
   "integration.probation_first_period_days": 30,
@@ -51,7 +51,7 @@ applyFieldMapping({
   data,
   flat,
   rawFlat,
-  mapping: PROBATION_CONTRACT_V3_FIELD_MAPPING,
+  mapping: PROBATION_CONTRACT_V4_FIELD_MAPPING,
 });
 
 const generated = generateDocx(source, data);
@@ -61,7 +61,7 @@ if (unresolved.length) {
 }
 
 const outputDirectory = path.resolve("output/docx");
-const outputPath = path.join(outputDirectory, "contrato-experiencia-v3-piloto.docx");
+const outputPath = path.join(outputDirectory, "contrato-experiencia-v4-piloto.docx");
 await mkdir(outputDirectory, { recursive: true });
 await writeFile(outputPath, generated);
 process.stdout.write(`${outputPath}\n`);

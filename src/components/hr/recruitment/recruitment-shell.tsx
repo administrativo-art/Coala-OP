@@ -6869,6 +6869,7 @@ type SignatureWorkflowDocument = {
   generatedDocumentId?: string;
   generatedStoragePath?: string;
   generatedPdfStoragePath?: string;
+  signatureScope?: string;
   missingRequired?: string[];
   lastError?: string | null;
   emailStatus?: string;
@@ -9225,6 +9226,41 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     }
   }
 
+  async function viewSignatureBundle() {
+    if (!selectedProcess) return;
+    const previewWindow = window.open('', '_blank');
+    setSignatureBusy('preview_bundle');
+    setError(null);
+    try {
+      const token = await getToken();
+      const response = await fetch(
+        `/api/hr/onboarding/${selectedProcess.id}/signature-documents`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'preview_bundle' }),
+          cache: 'no-store',
+        }
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Pacote completo indisponível.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      if (previewWindow) previewWindow.location.href = url;
+      else window.open(url, '_blank');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (caught) {
+      previewWindow?.close();
+      setError(caught instanceof Error ? caught.message : 'Falha ao visualizar o pacote completo.');
+    } finally {
+      setSignatureBusy(null);
+    }
+  }
+
   async function copyLink(copyId: string, link: string) {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(link);
@@ -9623,6 +9659,11 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
   const signatureDocumentsReadyToSend = selectedSignatureDocuments.filter(document => document.status === 'ready_to_send');
   const signatureGenerated = selectedSignatureDocuments.length > 0
     && selectedSignatureDocuments.every(document => Boolean(document.generatedDocumentId));
+  const selectedBundleDocuments = selectedSignatureDocuments.filter(
+    document => document.signatureScope !== 'independent'
+  );
+  const signatureBundleReady = selectedBundleDocuments.length > 0
+    && selectedBundleDocuments.every(document => Boolean(document.generatedPdfStoragePath));
   const signatureReviewed = selectedSignatureDocuments.length > 0
     && selectedSignatureDocuments.every(document => [
       'ready_to_send', 'sending', 'sent', 'viewed', 'partially_signed', 'signed',
@@ -11003,14 +11044,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                         <p className="mt-1 text-xs font-semibold text-violet-700">Escolha os documentos que serão gerados para este titular.</p>
                       </div>
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void loadSignatureWorkflow()}
-                          className="grid h-8 w-8 place-items-center rounded-lg border border-violet-200 bg-white text-violet-600 hover:bg-violet-50"
-                          title="Atualizar documentos"
-                        >
-                          <RotateCw className="h-3.5 w-3.5" />
-                        </button>
                         <label className={`inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-black text-violet-700 ${
                           signatureSelectionEditable && !signatureBusy ? 'cursor-pointer hover:bg-violet-50' : 'cursor-not-allowed opacity-60'
                         }`}>
@@ -11082,16 +11115,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                                       <Eye className="h-3.5 w-3.5" />Visualizar
                                     </button>
                                   ) : null}
-                                  {workflowDocument.generatedStoragePath ? (
-                                    <button
-                                      type="button"
-                                      disabled={!!signatureBusy}
-                                      onClick={() => void downloadSignatureDocument(workflowDocument.id, 'generated')}
-                                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[10.5px] font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                                    >
-                                      <Download className="h-3.5 w-3.5" />Baixar Word
-                                    </button>
-                                  ) : null}
                                   {canReviewDocuments && canActOnSignaturePhase && workflowDocument.status === 'review_pending' ? (
                                     <button
                                       type="button"
@@ -11115,7 +11138,18 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                       ) : null}
                     </div>
                     {canGenerateDocumentsProcess ? (
-                      <div className="mt-3 flex justify-end">
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        {signatureBundleReady ? (
+                          <button
+                            type="button"
+                            disabled={!!signatureBusy}
+                            onClick={() => void viewSignatureBundle()}
+                            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-white px-4 text-[11px] font-black text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                          >
+                            {signatureBusy === 'preview_bundle' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                            Ver pacote completo
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           disabled={!signatureSelectionEditable || selectedSignatureTemplateIds.length === 0 || !!signatureBusy}
@@ -11123,7 +11157,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                           className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-[11px] font-black text-white hover:bg-violet-600 disabled:opacity-50"
                         >
                           {signatureBusy === 'select' || signatureBusy === 'generate' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                          Gerar selecionados
+                          {signatureGenerated ? 'Gerar novamente' : 'Gerar selecionados'}
                         </button>
                       </div>
                     ) : null}
@@ -11142,7 +11176,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                       </button>
                     </div>
                     {selectedSignatureDocuments.map(document => {
-                      const generated = !!document.generatedDocumentId;
                       const sent = ['sent', 'viewed', 'partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status);
                       const viewed = ['viewed', 'partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status) || !!document.viewedAt;
                       const signed = ['partially_signed', 'signed', 'signed_archived_pending_employee', 'archived'].includes(document.status) || !!document.signedAt;
@@ -11162,11 +11195,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                               {document.generatedPdfStoragePath ? (
                                 <button type="button" disabled={!!signatureBusy} onClick={() => void viewSignatureDocument(document.id)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 text-[10.5px] font-black text-violet-700">
                                   <Eye className="h-3.5 w-3.5" />Visualizar
-                                </button>
-                              ) : null}
-                              {generated && document.generatedStoragePath ? (
-                                <button type="button" disabled={!!signatureBusy} onClick={() => void downloadSignatureDocument(document.id, 'generated')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[10.5px] font-black text-slate-700">
-                                  <Download className="h-3.5 w-3.5" />Baixar Word
                                 </button>
                               ) : null}
                               {archived ? (
