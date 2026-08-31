@@ -20,58 +20,91 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Checkout production promotion
+        if: github.event_name == 'pull_request' && github.base_ref == 'production'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
       - name: Setup Node.js
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
       - name: Install dependencies
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm ci
       - name: Enforce vulnerability ratchet
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run check:vulnerabilities
       - name: Verify application
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run verify
+      - name: Verify production promotion
+        if: github.event_name == 'pull_request' && github.base_ref == 'production'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin main
+          git show origin/main:scripts/verify-production-promotion.mjs > "$RUNNER_TEMP/verify-production-promotion.mjs"
+          node "$RUNNER_TEMP/verify-production-promotion.mjs" --base "$BASE_SHA" --head "$HEAD_SHA" --main origin/main
 
   firestore-rules:
     name: firestore-rules
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Reuse main verification for production
+        if: github.event_name == 'pull_request' && github.base_ref == 'production'
+        run: echo "Regras já verificadas no commit protegido de main."
       - name: Checkout
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Setup Node.js
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
       - name: Setup Java
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: 21
       - name: Install dependencies
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm ci
       - name: Verify Firebase rules
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run check:rules
 
   functions:
     name: functions
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: functions
     steps:
+      - name: Reuse main verification for production
+        if: github.event_name == 'pull_request' && github.base_ref == 'production'
+        run: echo "Functions já verificadas no commit protegido de main."
       - name: Checkout
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Setup Node.js
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: functions/package-lock.json
       - name: Install dependencies
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm ci
+        working-directory: functions
       - name: Build functions
+        if: github.event_name != 'pull_request' || github.base_ref != 'production'
         run: npm run build
+        working-directory: functions

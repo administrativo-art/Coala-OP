@@ -18,7 +18,7 @@ test("todas as GitHub Actions estão pinadas por SHA integral com versão humana
   }
 });
 
-test("CodeQL cobre somente JavaScript/TypeScript em PR, main e agenda semanal", () => {
+test("CodeQL cobre JavaScript/TypeScript antes da promoção para production", () => {
   const workflow = readFileSync(join(workflowRoot, "codeql.yml"), "utf8");
   assert.match(workflow, /^\s*pull_request:\s*$/m);
   assert.match(workflow, /^\s*push:\s*$/m);
@@ -27,12 +27,39 @@ test("CodeQL cobre somente JavaScript/TypeScript em PR, main e agenda semanal", 
   assert.match(workflow, /cron: "17 9 \* \* 1"/);
   assert.match(workflow, /languages: javascript-typescript/);
   assert.match(workflow, /security-events: write/);
+  assert.match(
+    workflow,
+    /if: github\.event_name != 'pull_request' \|\| github\.base_ref != 'production'/,
+  );
   assert.doesNotMatch(workflow, /pull_request_target|continue-on-error/);
 });
 
 test("quality executa o ratchet sem mutar o baseline", () => {
   const workflow = readFileSync(join(workflowRoot, "verify.yml"), "utf8");
   const script = readFileSync(join(repositoryRoot, "scripts", "check-vulnerability-ratchet.mjs"), "utf8");
-  assert.match(workflow, /name: Enforce vulnerability ratchet\n\s+run: npm run check:vulnerabilities/);
+  assert.match(
+    workflow,
+    /name: Enforce vulnerability ratchet\n\s+if: github\.event_name != 'pull_request' \|\| github\.base_ref != 'production'\n\s+run: npm run check:vulnerabilities/,
+  );
   assert.doesNotMatch(script, /writeFile|appendFile|renameSync|rmSync/);
+});
+
+test("rollout para production reaproveita o conteúdo já verificado em main", () => {
+  const workflow = readFileSync(join(workflowRoot, "verify.yml"), "utf8");
+  assert.match(
+    workflow,
+    /name: Verify application\n\s+if: github\.event_name != 'pull_request' \|\| github\.base_ref != 'production'\n\s+run: npm run verify/,
+  );
+  assert.match(
+    workflow,
+    /name: Verify production promotion\n\s+if: github\.event_name == 'pull_request' && github\.base_ref == 'production'/,
+  );
+  assert.match(
+    workflow,
+    /git show origin\/main:scripts\/verify-production-promotion\.mjs/,
+  );
+  assert.equal(
+    [...workflow.matchAll(/name: Reuse main verification for production/g)].length,
+    2,
+  );
 });
