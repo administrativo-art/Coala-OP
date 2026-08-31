@@ -7,8 +7,9 @@ import { PDFDocument } from "pdf-lib";
 
 import { admissionClosingComponentsSummary } from "@/features/hr/documents/admission-closing-term";
 import {
+  admissionSignaturePackageTemplateIds,
   compareAdmissionSignatureOrder,
-  isAdmissionSignatureTemplateApplicable,
+  isCompleteAdmissionSignaturePackage,
 } from "@/features/hr/documents/admission-signature-order";
 import { resolveCompanyDocumentSignatory } from "@/features/hr/documents/company-document-signatory.server";
 import { composeDocumentPackage } from "@/features/hr/documents/document-pdf-composer.server";
@@ -89,17 +90,19 @@ function transportVoucherAnswer(process: RecordValue) {
   return record(process.publicFormAnswers).wantsTransportVoucher;
 }
 
-function assertApplicableSignatureTemplates(
+function assertCompleteAdmissionPackage(
   process: RecordValue,
   templates: Array<{ templateId: unknown }>,
 ) {
-  const answer = transportVoucherAnswer(process);
-  const invalid = templates.find((template) =>
-    !isAdmissionSignatureTemplateApplicable(template, answer)
-  );
-  if (invalid) {
+  const templateIds = templates
+    .map((template) => text(template.templateId))
+    .filter((templateId): templateId is string => Boolean(templateId));
+  if (!isCompleteAdmissionSignaturePackage(
+    templateIds,
+    transportVoucherAnswer(process),
+  )) {
     throw new Error(
-      "A seleção de vale-transporte não corresponde à decisão registrada no formulário da integração. Revise os modelos antes de continuar.",
+      "O kit admissional é indivisível. Gere, revise e envie todos os documentos aplicáveis em uma única operação.",
     );
   }
 }
@@ -385,24 +388,21 @@ async function prepareAdmissionBundle(params: {
 }
 
 export async function listSignatureWorkflow(onboardingId: string) {
-  const [templatesSnapshot, workflowSnapshot, effectiveSystemTemplates] = await Promise.all([
-    dbAdmin.collection("companyDocumentTemplates").get(),
-    hrDbAdmin.collection(WORKFLOW_COLLECTION).where("onboardingId", "==", onboardingId).get(),
+  const process = await loadProcess(onboardingId);
+  const [workflowSnapshot, effectiveSystemTemplates] = await Promise.all([
+    hrDbAdmin
+      .collection(WORKFLOW_COLLECTION)
+      .where("onboardingId", "==", onboardingId)
+      .limit(30)
+      .get(),
     effectiveSystemDocumentTemplates(SYSTEM_DOCUMENT_TEMPLATES),
   ]);
-  const templates = templatesSnapshot.docs
-    .filter((document) => document.get("status") === "published" && !document.get("deletedAt"))
-    .map((document) => ({
-      id: document.id,
-      name: text(document.get("name")) ?? "Modelo sem nome",
-      category: text(document.get("category")) ?? "Outros",
-      version: Number(document.get("version") ?? 1),
-      documentTypeCode: text(document.get("documentTypeCode")) ?? "UNKNOWN_DOCUMENT",
-      variables: Array.isArray(document.get("variables")) ? document.get("variables") : [],
-      signatureScope: text(document.get("signatureScope")) ?? "bundle",
-    }))
+  const packageTemplateIds = new Set<string>(
+    admissionSignaturePackageTemplateIds(transportVoucherAnswer(process.data)),
+  );
   const systemTemplates = effectiveSystemTemplates
     .filter(isSelectableAdmissionSignatureTemplate)
+    .filter((template) => packageTemplateIds.has(template.id))
     .map((template) => ({
       id: template.id,
       name: template.name,
@@ -412,12 +412,15 @@ export async function listSignatureWorkflow(onboardingId: string) {
       variables: template.variables,
       signatureScope: template.signatureScope,
     }));
-  templates.push(...systemTemplates);
-  templates.sort(compareAdmissionSignatureOrder);
+  systemTemplates.sort(compareAdmissionSignatureOrder);
   const documents: Array<{ id: string } & RecordValue> = workflowSnapshot.docs
     .map((document): { id: string } & RecordValue => ({ id: document.id, ...record(document.data()) }))
     .sort(compareAdmissionSignatureOrder);
-  return { templates, documents };
+  return {
+    templates: systemTemplates,
+    documents,
+    packageTemplateIds: systemTemplates.map((template) => template.id),
+  };
 }
 
 export async function selectSignatureTemplates(params: {
@@ -430,8 +433,8 @@ export async function selectSignatureTemplates(params: {
   if (process.data.currentStage !== "signature_preparation") {
     throw new Error("Os modelos só podem ser selecionados na etapa de preparação da assinatura.");
   }
-  const uniqueIds = Array.from(new Set(params.templateIds.filter(Boolean))).slice(0, 30);
-  assertApplicableSignatureTemplates(
+  const uniqueIds = Array.from(new Set(params.templateIds.filter(Boolean)));
+  assertCompleteAdmissionPackage(
     process.data,
     uniqueIds.map((templateId) => ({ templateId })),
   );
@@ -448,16 +451,7 @@ export async function selectSignatureTemplates(params: {
         signatureScope: system.signatureScope,
       };
     }
-    const document = await dbAdmin.collection("companyDocumentTemplates").doc(id).get();
-    if (!document.exists || document.get("status") !== "published" || document.get("deletedAt")) return null;
-    return {
-      id,
-      version: Number(document.get("version") ?? 1),
-      name: text(document.get("name")) ?? "Documento",
-      category: text(document.get("category")) ?? "Outros",
-      documentTypeCode: text(document.get("documentTypeCode")) ?? "UNKNOWN_DOCUMENT",
-      signatureScope: text(document.get("signatureScope")) ?? "bundle",
-    };
+    return null;
   }));
   const templates = templateDocs
     .filter((template): template is NonNullable<typeof template> => Boolean(template))
@@ -469,6 +463,7 @@ export async function selectSignatureTemplates(params: {
   const existing = await hrDbAdmin
     .collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
+    .limit(30)
     .get();
   const selected = new Set(uniqueIds);
   const existingByTemplate = new Map(
@@ -535,7 +530,7 @@ export async function previewAdmissionBundle(params: {
   const selectedDocuments = snapshot.docs.filter(
     (document) => document.get("selected") === true,
   );
-  assertApplicableSignatureTemplates(
+  assertCompleteAdmissionPackage(
     process.data,
     selectedDocuments.map((document) => ({ templateId: document.get("templateId") })),
   );
@@ -573,7 +568,6 @@ export async function previewAdmissionBundle(params: {
 
 export async function generateSelectedSignatureDocuments(params: {
   onboardingId: string;
-  documentIds?: string[];
   includeSensitive: boolean;
   actorId: string;
   actorName: string;
@@ -585,13 +579,12 @@ export async function generateSelectedSignatureDocuments(params: {
   const snapshot = await hrDbAdmin
     .collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
+    .limit(30)
     .get();
   const selectedDocuments = snapshot.docs.filter(
-    (document) =>
-      document.get("selected") === true
-      && (!params.documentIds?.length || params.documentIds.includes(document.id))
+    (document) => document.get("selected") === true,
   );
-  assertApplicableSignatureTemplates(
+  assertCompleteAdmissionPackage(
     process.data,
     selectedDocuments.map((document) => ({ templateId: document.get("templateId") })),
   );
@@ -600,7 +593,7 @@ export async function generateSelectedSignatureDocuments(params: {
       !["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(document.get("status")))
     )
     .sort(compareWorkflowDocuments);
-  if (!targets.length) throw new Error("Selecione ao menos um modelo para gerar.");
+  if (!targets.length) throw new Error("O pacote admissional não possui documentos disponíveis para geração.");
 
   for (const target of targets) {
     try {
@@ -654,9 +647,8 @@ export async function generateSelectedSignatureDocuments(params: {
   return listSignatureWorkflow(params.onboardingId);
 }
 
-export async function reviewSignatureDocument(params: {
+export async function reviewSignaturePackage(params: {
   onboardingId: string;
-  documentId: string;
   approved: boolean;
   actorId: string;
   actorName: string;
@@ -665,24 +657,53 @@ export async function reviewSignatureDocument(params: {
   if (process.data.currentStage !== "signature_preparation") {
     throw new Error("A revisão só pode ser feita na etapa de preparação da assinatura.");
   }
-  const reference = hrDbAdmin.collection(WORKFLOW_COLLECTION).doc(params.documentId);
-  const snapshot = await reference.get();
-  if (!snapshot.exists || snapshot.get("onboardingId") !== params.onboardingId) {
-    throw new Error("Documento de assinatura não encontrado.");
+  const snapshot = await hrDbAdmin
+    .collection(WORKFLOW_COLLECTION)
+    .where("onboardingId", "==", params.onboardingId)
+    .limit(30)
+    .get();
+  const targets = snapshot.docs
+    .filter((document) => document.get("selected") === true)
+    .sort(compareWorkflowDocuments);
+  assertCompleteAdmissionPackage(
+    process.data,
+    targets.map((document) => ({ templateId: document.get("templateId") })),
+  );
+  const alreadySent = targets.find((document) =>
+    [
+      "sent",
+      "viewed",
+      "partially_signed",
+      "signed",
+      "signed_archived_pending_employee",
+      "archived",
+    ].includes(String(document.get("status")))
+  );
+  if (alreadySent) {
+    throw new Error("O pacote já foi enviado e não pode voltar para revisão.");
   }
-  if (!snapshot.get("generatedDocumentId")) throw new Error("Gere o documento antes da revisão.");
-  const missing = Array.isArray(snapshot.get("missingRequired")) ? snapshot.get("missingRequired") : [];
-  if (params.approved && missing.length) throw new Error("O documento possui variáveis obrigatórias ausentes.");
-  if (params.approved && !snapshot.get("generatedPdfStoragePath")) {
-    throw new Error("O PDF oficial não foi gerado. Regere o documento depois de restabelecer o conversor.");
+  const notGenerated = targets.find((document) => !document.get("generatedDocumentId"));
+  if (notGenerated) {
+    throw new Error("Gere o pacote completo antes da revisão.");
   }
-  if (["sent", "viewed", "partially_signed", "signed", "archived"].includes(String(snapshot.get("status")))) {
-    throw new Error("O documento já foi enviado e não pode voltar para revisão.");
+  if (params.approved) {
+    const incomplete = targets.find((document) => {
+      const missing = Array.isArray(document.get("missingRequired"))
+        ? document.get("missingRequired")
+        : [];
+      return missing.length > 0 || !document.get("generatedPdfStoragePath");
+    });
+    if (incomplete) {
+      throw new Error(
+        `O componente ${incomplete.get("templateName") ?? "do pacote"} ainda possui dados ou PDF pendentes.`,
+      );
+    }
   }
   const now = new Date().toISOString();
   if (params.approved) {
-    const generatedDocumentId = text(snapshot.get("generatedDocumentId"));
-    if (generatedDocumentId) {
+    for (const target of targets) {
+      const generatedDocumentId = text(target.get("generatedDocumentId"));
+      if (!generatedDocumentId) continue;
       const generatedRef = dbAdmin.collection("generatedDocuments").doc(generatedDocumentId);
       const generated = await generatedRef.get();
       if (generated.exists && generated.get("status") !== "final") {
@@ -706,23 +727,21 @@ export async function reviewSignatureDocument(params: {
       }
     }
   }
-  await reference.set(
-    {
+  const batch = hrDbAdmin.batch();
+  targets.forEach((target) => batch.set(target.ref, {
       status: params.approved ? "ready_to_send" : "review_pending",
       reviewStatus: params.approved ? "approved" : "changes_requested",
       reviewedAt: now,
       reviewedBy: params.actorId,
       reviewedByName: params.actorName,
       updatedAt: now,
-    },
-    { merge: true }
-  );
+    }, { merge: true }));
+  await batch.commit();
   return listSignatureWorkflow(params.onboardingId);
 }
 
 export async function sendSignatureDocuments(params: {
   onboardingId: string;
-  documentIds?: string[];
   actorId: string;
   actorName: string;
 }) {
@@ -737,20 +756,21 @@ export async function sendSignatureDocuments(params: {
   const snapshot = await hrDbAdmin
     .collection(WORKFLOW_COLLECTION)
     .where("onboardingId", "==", params.onboardingId)
+    .limit(30)
     .get();
   const selectedDocuments = snapshot.docs.filter(
-    (document) =>
-      document.get("selected") === true
-      && (!params.documentIds?.length || params.documentIds.includes(document.id))
+    (document) => document.get("selected") === true,
   );
-  assertApplicableSignatureTemplates(
+  assertCompleteAdmissionPackage(
     process.data,
     selectedDocuments.map((document) => ({ templateId: document.get("templateId") })),
   );
   const targets = selectedDocuments
     .filter((document) => document.get("status") === "ready_to_send")
     .sort(compareWorkflowDocuments);
-  if (!targets.length) throw new Error("Aprove ao menos um documento antes de enviar.");
+  if (targets.length !== selectedDocuments.length) {
+    throw new Error("Revise o pacote completo antes de enviar para assinatura.");
+  }
   const bucket = getStorage(adminApp).bucket(firebaseClientConfig.storageBucket);
   const bundleTargets = targets.filter((target) => target.get("signatureScope") !== "independent");
   const standaloneTargets = targets.filter((target) => target.get("signatureScope") === "independent");

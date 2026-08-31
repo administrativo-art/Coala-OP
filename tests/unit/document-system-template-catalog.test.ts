@@ -14,7 +14,9 @@ import {
   ADMISSION_SIGNATURE_TEMPLATE_ORDER,
   ADMISSION_TRANSPORT_VOUCHER_REQUEST_TEMPLATE_ID,
   ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID,
+  admissionSignaturePackageTemplateIds,
   compareAdmissionSignatureOrder,
+  isCompleteAdmissionSignaturePackage,
   isAdmissionSignatureTemplateApplicable,
 } from "../../src/features/hr/documents/admission-signature-order";
 import {
@@ -111,6 +113,21 @@ test("seleção admissional oferece somente a modalidade vigente de vale-transpo
     template.id === ADMISSION_TRANSPORT_VOUCHER_WAIVER_TEMPLATE_ID
   ), true);
   assert.equal(withoutDecision.length, 6);
+});
+
+test("kit admissional exige todos os componentes aplicáveis como uma unidade", () => {
+  const forRequest = admissionSignaturePackageTemplateIds("yes");
+  const forWaiver = admissionSignaturePackageTemplateIds("no");
+
+  assert.equal(forRequest.length, 7);
+  assert.equal(forWaiver.length, 7);
+  assert.equal(isCompleteAdmissionSignaturePackage(forRequest, "yes"), true);
+  assert.equal(isCompleteAdmissionSignaturePackage(forRequest.slice(1), "yes"), false);
+  assert.equal(isCompleteAdmissionSignaturePackage(forRequest, "no"), false);
+  assert.equal(
+    isCompleteAdmissionSignaturePackage([...forRequest, forRequest[0]], "yes"),
+    true,
+  );
 });
 
 test("timbrado é aplicado ao PDF sem alterar a quantidade de páginas", async () => {
