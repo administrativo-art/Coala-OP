@@ -58,10 +58,7 @@ function emphasizedPreamble() {
 function paragraphText(paragraph: string) {
   return [...paragraph.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
     .map((match) => match[1])
-    .join("")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">");
+    .join("");
 }
 
 function prepareContract(input: Buffer) {
