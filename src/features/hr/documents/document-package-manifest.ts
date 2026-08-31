@@ -1,4 +1,4 @@
-export const DOCUMENT_COMPOSER_VERSION = "document-composer-v1";
+export const DOCUMENT_COMPOSER_VERSION = "document-composer-v2";
 
 export type DocumentPackageType =
   | "admission"

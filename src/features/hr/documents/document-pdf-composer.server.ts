@@ -30,6 +30,15 @@ export const DOCUMENT_TRACEABILITY_BANDS = {
   },
 } as const;
 
+// PDFs individuais podem trazer numeração própria alinhada à direita. A faixa
+// precisa cobrir o campo inteiro antes de aplicar a numeração global do pacote.
+export const DOCUMENT_PAGE_NUMBER_REPLACEMENT_BAND = {
+  widthPoints: 220,
+  rightInsetPoints: 22,
+  topInsetPoints: 49,
+  heightPoints: 20,
+} as const;
+
 export type DocumentPdfComponent = {
   componentId: string;
   title: string;
@@ -96,6 +105,29 @@ function trackingLabel(params: {
   );
 }
 
+export function pageNumberReplacementGeometry(
+  pageWidth: number,
+  pageHeight: number,
+) {
+  const bandWidth = Math.min(
+    DOCUMENT_PAGE_NUMBER_REPLACEMENT_BAND.widthPoints,
+    pageWidth,
+  );
+  const rightInset = Math.min(
+    DOCUMENT_PAGE_NUMBER_REPLACEMENT_BAND.rightInsetPoints,
+    pageWidth,
+  );
+  return {
+    x: pageWidth - bandWidth,
+    y: Math.max(
+      0,
+      pageHeight - DOCUMENT_PAGE_NUMBER_REPLACEMENT_BAND.topInsetPoints,
+    ),
+    width: Math.max(0, bandWidth - rightInset),
+    height: DOCUMENT_PAGE_NUMBER_REPLACEMENT_BAND.heightPoints,
+  };
+}
+
 function replacePageNumber(
   page: PDFPage,
   font: PDFFont,
@@ -107,10 +139,7 @@ function replacePageNumber(
   const label = `Página ${pageNumber} de ${totalPages}`;
   const labelWidth = font.widthOfTextAtSize(label, size);
   page.drawRectangle({
-    x: width - 130,
-    y: height - 49,
-    width: 108,
-    height: 20,
+    ...pageNumberReplacementGeometry(width, height),
     color: rgb(1, 1, 1),
   });
   page.drawText(label, {
