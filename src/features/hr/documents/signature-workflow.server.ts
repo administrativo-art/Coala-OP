@@ -159,57 +159,15 @@ async function sendAdmissionBundle(params: {
   const existing = await requestRef.get();
   if (existing.get("providerDocumentId")) return;
 
-  const loaded = [];
-  for (const target of params.targets) {
-    const storagePath = text(target.get("generatedPdfStoragePath"));
-    if (!storagePath) throw new Error(`O PDF oficial de ${target.get("templateName")} não foi gerado.`);
-    const [buffer] = await params.bucket.file(storagePath).download();
-    const pdf = await PDFDocument.load(buffer);
-    const generatedId = text(target.get("generatedDocumentId"));
-    const generated = generatedId
-      ? await dbAdmin.collection("generatedDocuments").doc(generatedId).get()
-      : null;
-    loaded.push({
-      target,
-      buffer,
-      pageCount: pdf.getPageCount(),
-      sourceDocxHash: generated?.get("docxContentHash") ?? null,
-      legalEntitySnapshot: generated?.get("legalEntitySnapshot") ?? null,
-    });
-  }
-  let cursor = 1;
-  const summary = admissionClosingComponentsSummary(loaded.map((item) => {
-    const startPage = cursor;
-    const endPage = startPage + item.pageCount - 1;
-    cursor = endPage + 1;
-    return {
-      title: text(item.target.get("templateName")) ?? "Documento",
-      startPage,
-      endPage,
-    };
-  }));
-  const closing = await generateDocumentFromTemplate({
-    templateId: "system-admission-bundle-closing-term",
-    employeeId: processEmployeeId(params.process),
+  const prepared = await prepareAdmissionBundle({
     onboardingId: params.onboardingId,
-    includeSensitive: true,
-    manualValues: { bundle_components_summary: summary },
-    lifecycle: "final",
+    process: params.process,
+    targets: params.targets,
     actorId: params.actorId,
     actorName: params.actorName,
+    bucket: params.bucket,
   });
-  if (!closing.pdfStoragePath) {
-    throw new Error("O PDF do termo de encerramento não foi gerado.");
-  }
-  const [closingPdf] = await params.bucket.file(closing.pdfStoragePath).download();
-  const packageId = createHash("sha256")
-    .update(JSON.stringify([
-      params.onboardingId,
-      ...loaded.map((item) => [item.target.id, item.target.get("generatedDocumentId")]),
-      closing.id,
-    ]))
-    .digest("hex");
-  const legalEntity = record(loaded[0]?.legalEntitySnapshot);
+  const { packageId, legalEntity } = prepared;
   const companySignatory = await resolveCompanyDocumentSignatory({
     entityId: legalEntity.entityId,
     cnpj: legalEntity.cnpj,
@@ -229,59 +187,14 @@ async function sendAdmissionBundle(params: {
       : []),
   ];
   const protocol = await allocateIdempotentDocumentProtocol({
-    entity: legalEntity.tradeName ?? legalEntity.legalName ?? legalEntity.cnpj ?? "CS",
+    entity: legalEntity.legalName ?? legalEntity.cnpj ?? "CS",
     type: "ADM",
     actorId: params.actorId,
     reservationKey: packageId,
   });
-  const components = [
-    ...loaded.map((item) => ({
-      componentId: item.target.id,
-      title: text(item.target.get("templateName")) ?? "Documento",
-      buffer: item.buffer,
-      templateId: text(item.target.get("templateId")),
-      templateVersion: Number(item.target.get("templateVersion") ?? 1),
-      sourceDocxHash: text(item.sourceDocxHash),
-      signatureScope: "bundle" as const,
-    })),
-    {
-      componentId: `closing_${closing.id}`,
-      title: "Termo de Encerramento, Ciência e Assinatura",
-      buffer: closingPdf,
-      templateId: "system-admission-bundle-closing-term",
-      templateVersion: Number(closing.templateVersion ?? 2),
-      sourceDocxHash: createHash("sha256").update(closing.buffer).digest("hex"),
-      signatureScope: "bundle" as const,
-    },
-  ];
-  const employeeCpf = record(params.process.publicFormAnswers).cpf;
   const composed = await composeDocumentPackage({
-    packageId,
-    packageType: "admission",
+    ...prepared.composition,
     protocol,
-    title: `Kit admissional - ${text(params.process.candidateName) ?? "Colaborador"}`,
-    parties: [
-      {
-        partyType: "employee",
-        role: "contracted",
-        ref: processEmployeeId(params.process),
-        snapshot: {
-          name: text(params.process.candidateName) ?? "Colaborador",
-          documentMasked: maskedDocument(employeeCpf),
-        },
-      },
-      {
-        partyType: "company",
-        role: "contractor",
-        ref: text(legalEntity.entityId),
-        snapshot: {
-          name: text(legalEntity.tradeName) ?? text(legalEntity.legalName) ?? "Empresa",
-          documentMasked: maskedDocument(legalEntity.cnpj),
-        },
-      },
-    ],
-    components,
-    letterheadVersion: "coala-letterhead-v2",
   });
   const packagePath = `signature-packages/${params.onboardingId}/${packageId}/pre-signature.pdf`;
   const manifestPath = `signature-packages/${params.onboardingId}/${packageId}/manifest.json`;
@@ -356,6 +269,119 @@ async function sendAdmissionBundle(params: {
     await requestRef.set({ status: "failed", error: message, updatedAt: new Date().toISOString() }, { merge: true });
     throw error;
   }
+}
+
+async function prepareAdmissionBundle(params: {
+  onboardingId: string;
+  process: RecordValue;
+  targets: FirebaseFirestore.QueryDocumentSnapshot[];
+  actorId: string;
+  actorName: string;
+  bucket: ReturnType<ReturnType<typeof getStorage>["bucket"]>;
+}) {
+  const loaded = [];
+  for (const target of params.targets) {
+    const storagePath = text(target.get("generatedPdfStoragePath"));
+    if (!storagePath) throw new Error(`O PDF oficial de ${target.get("templateName")} não foi gerado.`);
+    const [buffer] = await params.bucket.file(storagePath).download();
+    const pdf = await PDFDocument.load(buffer);
+    const generatedId = text(target.get("generatedDocumentId"));
+    const generated = generatedId
+      ? await dbAdmin.collection("generatedDocuments").doc(generatedId).get()
+      : null;
+    loaded.push({
+      target,
+      buffer,
+      pageCount: pdf.getPageCount(),
+      sourceDocxHash: generated?.get("docxContentHash") ?? null,
+      legalEntitySnapshot: generated?.get("legalEntitySnapshot") ?? null,
+    });
+  }
+  let cursor = 1;
+  const summary = admissionClosingComponentsSummary(loaded.map((item) => {
+    const startPage = cursor;
+    const endPage = startPage + item.pageCount - 1;
+    cursor = endPage + 1;
+    return {
+      title: text(item.target.get("templateName")) ?? "Documento",
+      startPage,
+      endPage,
+    };
+  }));
+  const closing = await generateDocumentFromTemplate({
+    templateId: "system-admission-bundle-closing-term",
+    employeeId: processEmployeeId(params.process),
+    onboardingId: params.onboardingId,
+    includeSensitive: true,
+    manualValues: { bundle_components_summary: summary },
+    lifecycle: "final",
+    actorId: params.actorId,
+    actorName: params.actorName,
+  });
+  if (!closing.pdfStoragePath) {
+    throw new Error("O PDF do termo de encerramento não foi gerado.");
+  }
+  const [closingPdf] = await params.bucket.file(closing.pdfStoragePath).download();
+  const packageId = createHash("sha256")
+    .update(JSON.stringify([
+      params.onboardingId,
+      ...loaded.map((item) => [item.target.id, item.target.get("generatedDocumentId")]),
+      closing.id,
+    ]))
+    .digest("hex");
+  const legalEntity = record(loaded[0]?.legalEntitySnapshot);
+  const components = [
+    ...loaded.map((item) => ({
+      componentId: item.target.id,
+      title: text(item.target.get("templateName")) ?? "Documento",
+      buffer: item.buffer,
+      templateId: text(item.target.get("templateId")),
+      templateVersion: Number(item.target.get("templateVersion") ?? 1),
+      sourceDocxHash: text(item.sourceDocxHash),
+      signatureScope: "bundle" as const,
+    })),
+    {
+      componentId: `closing_${closing.id}`,
+      title: "Termo de Encerramento, Ciência e Assinatura",
+      buffer: closingPdf,
+      templateId: "system-admission-bundle-closing-term",
+      templateVersion: Number(closing.templateVersion ?? 2),
+      sourceDocxHash: createHash("sha256").update(closing.buffer).digest("hex"),
+      signatureScope: "bundle" as const,
+    },
+  ];
+  const employeeCpf = record(params.process.publicFormAnswers).cpf;
+  return {
+    packageId,
+    legalEntity,
+    composition: {
+      packageId,
+      packageType: "admission" as const,
+      title: `Kit admissional - ${text(params.process.candidateName) ?? "Colaborador"}`,
+      parties: [
+        {
+          partyType: "employee" as const,
+          role: "contracted" as const,
+          ref: processEmployeeId(params.process),
+          snapshot: {
+            name: text(params.process.candidateName) ?? "Colaborador",
+            documentMasked: maskedDocument(employeeCpf),
+          },
+        },
+        {
+          partyType: "company" as const,
+          role: "contractor" as const,
+          ref: text(legalEntity.entityId),
+          snapshot: {
+            name: text(legalEntity.legalName) ?? "Empresa",
+            documentMasked: maskedDocument(legalEntity.cnpj),
+          },
+        },
+      ],
+      components,
+      letterheadVersion: "coala-letterhead-v2",
+    },
+  };
 }
 
 export async function listSignatureWorkflow(onboardingId: string) {
@@ -490,6 +516,59 @@ async function loadProcess(onboardingId: string) {
   const snapshot = await hrDbAdmin.collection("onboardingProcesses").doc(onboardingId).get();
   if (!snapshot.exists) throw new Error("Integração não encontrada.");
   return { ref: snapshot.ref, data: record(snapshot.data()) };
+}
+
+export async function previewAdmissionBundle(params: {
+  onboardingId: string;
+  actorId: string;
+  actorName: string;
+}) {
+  const process = await loadProcess(params.onboardingId);
+  if (process.data.currentStage !== "signature_preparation") {
+    throw new Error("O pacote completo só pode ser visualizado durante a preparação da assinatura.");
+  }
+  const snapshot = await hrDbAdmin
+    .collection(WORKFLOW_COLLECTION)
+    .where("onboardingId", "==", params.onboardingId)
+    .limit(30)
+    .get();
+  const selectedDocuments = snapshot.docs.filter(
+    (document) => document.get("selected") === true,
+  );
+  assertApplicableSignatureTemplates(
+    process.data,
+    selectedDocuments.map((document) => ({ templateId: document.get("templateId") })),
+  );
+  const targets = selectedDocuments
+    .filter((document) => document.get("signatureScope") !== "independent")
+    .sort(compareWorkflowDocuments);
+  if (!targets.length) {
+    throw new Error("Selecione e gere ao menos um documento do pacote admissional.");
+  }
+  const unavailable = targets.find(
+    (document) => !text(document.get("generatedPdfStoragePath")),
+  );
+  if (unavailable) {
+    throw new Error(`Gere ${unavailable.get("templateName") ?? "todos os documentos"} antes de visualizar o pacote completo.`);
+  }
+  const prepared = await prepareAdmissionBundle({
+    onboardingId: params.onboardingId,
+    process: process.data,
+    targets,
+    actorId: params.actorId,
+    actorName: params.actorName,
+    bucket: getStorage(adminApp).bucket(firebaseClientConfig.storageBucket),
+  });
+  const composed = await composeDocumentPackage({
+    ...prepared.composition,
+    protocol: "ADM-PRÉVIA",
+  });
+  return {
+    buffer: composed.buffer,
+    fileName: `kit-admissional-${text(process.data.candidateName) ?? "colaborador"}.pdf`,
+    pageCount: composed.pageCount,
+    componentCount: composed.manifest.components.length,
+  };
 }
 
 export async function generateSelectedSignatureDocuments(params: {

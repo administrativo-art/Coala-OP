@@ -8,7 +8,7 @@ import { extractDocumentTemplateTextBlocks } from "../../../src/features/hr/docu
 test("extrai o contrato completo com seções, numeração e tokens", async () => {
   const source = await readFile(path.join(
     process.cwd(),
-    "docs/modelos-documentos/admissionais/01-contrato-experiencia-v3.docx",
+    "docs/modelos-documentos/admissionais/01-contrato-experiencia-v4.docx",
   ));
   const blocks = extractDocumentTemplateTextBlocks(source);
   assert.ok(blocks.length > 20);

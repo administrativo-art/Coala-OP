@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   generateSelectedSignatureDocuments,
   listSignatureWorkflow,
+  previewAdmissionBundle,
   reconcileSignatureDocuments,
   reviewSignatureDocument,
   selectSignatureTemplates,
@@ -97,6 +98,21 @@ export async function POST(
         ? "documents.review"
         : "documents.generate";
     const access = await assertFormalizationAccess(request, requiredAction);
+    if (action === "preview_bundle") {
+      const preview = await previewAdmissionBundle({
+        onboardingId: id,
+        actorId: access.decoded.uid,
+        actorName: access.actorName,
+      });
+      const fileName = preview.fileName.replace(/[\r\n"]/g, "");
+      return new NextResponse(new Uint8Array(preview.buffer), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+          "Cache-Control": "private, no-store",
+        },
+      });
+    }
     const includeSensitive = hasFormalizationPermission(access.permissions, "sensitiveData.view", access.isDefaultAdmin);
     let result;
     if (action === "select") {

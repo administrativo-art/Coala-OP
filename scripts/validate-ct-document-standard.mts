@@ -7,7 +7,7 @@ const inputs = process.argv.slice(2);
 if (!inputs.length) {
   inputs.push(
     "docs/modelos-documentos/base-ct-sorvetes.dotx",
-    "docs/modelos-documentos/admissionais/01-contrato-experiencia-v3.docx",
+    "docs/modelos-documentos/admissionais/01-contrato-experiencia-v4.docx",
   );
 }
 
