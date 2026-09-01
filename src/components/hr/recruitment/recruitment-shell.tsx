@@ -9233,6 +9233,20 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
     setSignaturePlacementOpen(true);
   }
 
+  function closeSignaturePlacement() {
+    setSignaturePlacementOpen(false);
+    setPhaseId('signature_preparation');
+  }
+
+  async function sendPreparedSignaturePackage() {
+    const packageHash = signatureWorkflow?.signaturePackage?.packageHash;
+    if (!packageHash || !signatureWorkflow?.signaturePackage?.placementReady) return;
+    const sent = await signatureAction('send', { expectedPackageHash: packageHash });
+    if (!sent) return;
+    setSignaturePlacementOpen(false);
+    setPhaseId('signature');
+  }
+
   async function viewSignatureDocument(documentId: string) {
     if (!selectedProcess) return;
     const previewWindow = window.open('', '_blank');
@@ -11227,15 +11241,28 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                             </button>
                           ) : null}
                           {canSendSignatures && canActOnSignaturePhase && signatureReviewed ? (
-                            <button
-                              type="button"
-                              disabled={!!signatureBusy}
-                              onClick={() => void openSignaturePlacement()}
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-pink-600 px-4 text-[11px] font-black text-white shadow-sm shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
-                            >
-                              {signatureBusy === 'prepare_positions' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />}
-                              Configurar e enviar
-                            </button>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={!!signatureBusy}
+                                onClick={() => void openSignaturePlacement()}
+                                className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl px-4 text-[11px] font-black disabled:opacity-50 ${signatureWorkflow?.signaturePackage?.placementReady ? 'border border-pink-200 bg-white text-pink-700 hover:bg-pink-50' : 'bg-pink-600 text-white shadow-sm shadow-pink-600/20 hover:bg-pink-700'}`}
+                              >
+                                {signatureBusy === 'prepare_positions' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="h-3.5 w-3.5" />}
+                                {signatureWorkflow?.signaturePackage?.placementReady ? 'Ajustar posições' : 'Posicionar assinaturas'}
+                              </button>
+                              {signatureWorkflow?.signaturePackage?.placementReady ? (
+                                <button
+                                  type="button"
+                                  disabled={!!signatureBusy}
+                                  onClick={() => void sendPreparedSignaturePackage()}
+                                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-pink-600 px-4 text-[11px] font-black text-white shadow-sm shadow-pink-600/20 hover:bg-pink-700 disabled:opacity-50"
+                                >
+                                  {signatureBusy === 'send' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                                  Enviar para assinatura
+                                </button>
+                              ) : null}
+                            </div>
                           ) : null}
                         </div>
                       </div>
@@ -11408,13 +11435,8 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
           onboardingId={selectedProcess.id}
           getToken={getToken}
           workflow={signatureWorkflow}
-          onClose={() => setSignaturePlacementOpen(false)}
+          onClose={closeSignaturePlacement}
           onWorkflowUpdated={(workflow) => setSignatureWorkflow(workflow as SignatureWorkflowPayload)}
-          onSent={() => {
-            setSignaturePlacementOpen(false);
-            setPhaseId('signature');
-            onRefresh();
-          }}
         />
       ) : null}
       {showStartModal && (

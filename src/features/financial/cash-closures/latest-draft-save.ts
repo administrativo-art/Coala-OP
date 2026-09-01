@@ -36,3 +36,10 @@ export async function persistLatestDraft<TDraft, TResult>({
 export function isCurrentDraftRevision(requestRevision: number, currentRevision: number) {
   return requestRevision === currentRevision;
 }
+
+export function isCurrentDraftLoad(
+  request: { id: number; targetKey: string },
+  current: { id: number; targetKey: string },
+) {
+  return request.id === current.id && request.targetKey === current.targetKey;
+}

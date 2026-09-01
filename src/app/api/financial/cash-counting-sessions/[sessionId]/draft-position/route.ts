@@ -6,52 +6,69 @@ import {
   assertCashCountingSessionClosureAccess,
   canManageCashCountingSessionsOfOthers,
 } from "@/features/financial/cash-counting-sessions/access.server";
-import { cancelCashCountingSession, getCashCountingSession } from "@/features/financial/cash-counting-sessions/repository.server";
-import { cancelCashCountingSessionSchema } from "@/features/financial/cash-counting-sessions/schemas";
+import {
+  getCashCountingSession,
+  saveCashCountingSessionDraftPosition,
+} from "@/features/financial/cash-counting-sessions/repository.server";
+import { saveCashCountingSessionDraftPositionSchema } from "@/features/financial/cash-counting-sessions/schemas";
 import { AppError, withApiErrorHandling } from "@/lib/observability";
 
 type RouteContext = { params: Promise<{ sessionId: string }> };
 
-export const POST = withApiErrorHandling<RouteContext>({
+export const PATCH = withApiErrorHandling<RouteContext>({
   source: "api-financial",
-  operation: "cancel-cash-counting-session",
-  routeOrJob: "/api/financial/cash-counting-sessions/[sessionId]/cancel",
+  operation: "save-cash-counting-session-draft-position",
+  routeOrJob: "/api/financial/cash-counting-sessions/[sessionId]/draft-position",
 }, async (request: NextRequest, routeContext) => {
   const context = await requireUser(request).catch((cause) => {
     throw new AppError({ code: "AUTHENTICATION_REQUIRED", kind: "AUTHENTICATION", cause });
   });
-  const parsed = cancelCashCountingSessionSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) throw new AppError({ code: "CASH_COUNTING_SESSION_CANCEL_INVALID", kind: "VALIDATION", safeMessage: "Informe o motivo do cancelamento.", cause: parsed.error });
+  const parsed = saveCashCountingSessionDraftPositionSchema.safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!parsed.success) {
+    throw new AppError({
+      code: "CASH_COUNTING_SESSION_DRAFT_POSITION_INVALID",
+      kind: "VALIDATION",
+      safeMessage: parsed.error.issues[0]?.message ?? "Informe uma unidade e uma data válidas.",
+      cause: parsed.error,
+    });
+  }
   const { sessionId } = await routeContext.params;
-  const current = await getCashCountingSession(sessionId);
+  const current = await getCashCountingSession(sessionId, { operatorLimit: 1 });
   if (!current || current.session.workspaceId !== context.workspace_id) {
     throw new AppError({ code: "CASH_COUNTING_SESSION_NOT_FOUND", kind: "NOT_FOUND" });
   }
   try {
     assertCashCountingSessionClosureAccess(context, "approve", current.session);
   } catch (cause) {
-    throw new AppError({ code: "CASH_COUNTING_SESSION_CANCEL_FORBIDDEN", kind: "AUTHORIZATION", cause });
+    throw new AppError({
+      code: "CASH_COUNTING_SESSION_DRAFT_POSITION_FORBIDDEN",
+      kind: "AUTHORIZATION",
+      cause,
+    });
   }
-  const session = await cancelCashCountingSession({
+  const session = await saveCashCountingSessionDraftPosition({
     workspaceId: context.workspace_id,
     sessionId,
-    reason: parsed.data.reason,
+    kioskId: parsed.data.kioskId,
+    date: parsed.data.date,
     actor: cashClosureActor(context),
     canManageOthers: canManageCashCountingSessionsOfOthers(context),
   }).catch((cause) => {
     const message = cause instanceof Error ? cause.message : "";
     if (message.includes("em uso por")) {
       throw new AppError({
-        code: "CASH_COUNTING_SESSION_CANCEL_FORBIDDEN",
+        code: "CASH_COUNTING_SESSION_DRAFT_POSITION_FORBIDDEN",
         kind: "AUTHORIZATION",
         safeMessage: "Esta sessão está sob responsabilidade de outra pessoa.",
         cause,
       });
     }
     throw new AppError({
-      code: "CASH_COUNTING_SESSION_CANCEL_CONFLICT",
+      code: "CASH_COUNTING_SESSION_DRAFT_POSITION_CONFLICT",
       kind: "CONFLICT",
-      safeMessage: "Somente uma sessão aberta e sem operadores finalizados pode ser cancelada.",
+      safeMessage: "A unidade não está disponível nesta sessão de contagem.",
       cause,
     });
   });

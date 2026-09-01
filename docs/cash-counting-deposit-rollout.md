@@ -1,6 +1,6 @@
 # Rollout da sessão de contagem e dos malotes de depósito
 
-Status: publicado em produção em 29/08/2026. O smoke técnico foi concluído; o smoke operacional autenticado ainda precisa de uma unidade e competência de teste definidas.
+Status: o fluxo original foi publicado em 29/08/2026. A evolução de 31/08/2026 — lock global por unidade, data escolhida dentro da sessão, autosave do modal e moedas devolvidas ao caixa — integra esta promoção. Em 01/09/2026, o novo preflight somente leitura concluiu sem bloqueios, truncamento, sessões abertas ou locks pendentes.
 
 ## Resultado do rollout de 29/08/2026
 
@@ -18,17 +18,19 @@ Status: publicado em produção em 29/08/2026. O smoke técnico foi concluído; 
 
 Verificações executadas e verdes: `npm run verify`, `npm run check`, `npm run check:rules`, `npm run test:integration`, build das Functions e `npm run validate:cash-closure -- all 2026-08-28`.
 
-## Contratos protegidos
+## Contratos protegidos na evolução de 31/08/2026
 
-- A sessão agrega operadores de uma ou mais combinações de unidade e competência.
-- Uma combinação de unidade e competência pertence a no máximo uma sessão aberta.
+- A sessão nasce somente com as unidades; data e competência entram quando um operador é finalizado.
+- Uma unidade pertence a no máximo uma sessão aberta, independentemente da data ou competência.
 - Inclusão e retirada de operador atualizam, na mesma transação, quantidade e totais de dinheiro contado, elegível e `dre_only`.
+- Contadores por unidade/competência e por data removem escopos obsoletos quando um operador é reaberto. Sessões legadas sem essa versão permanecem identificadas pelo preflight.
 - Encerrar a sessão usa os agregados transacionais, não uma listagem limitada de operadores.
 - A lista visual de operadores é paginada em até 100 itens por página.
 - Competência `dre_only` permanece na DRE e não gera malote.
 - O físico precisa conferir exatamente com o valor elegível antes da formação dos malotes.
-- Somente cédulas formam malotes de até R$ 5.000; R$ 1 e centavos permanecem como moedas até a troca física.
-- Uma sessão só conclui quando todos os malotes estão pagos e não existe saldo de moedas aguardando troca.
+- Somente cédulas formam malotes de até R$ 5.000; R$ 1 e centavos são registrados como retorno ao caixa/fundo de troco.
+- Uma sessão composta somente por moedas conclui sem criar malote bancário. O endpoint de troca permanece apenas para dados legados.
+- O modal salva somente linhas sujas após 800 ms, serializa versões e invalida respostas pertencentes a outra unidade/data.
 - Após a confirmação física, correções preservam o histórico e geram ajuste de depósito.
 
 ## Preflight de custo do Firestore
@@ -72,6 +74,21 @@ A visão geral executa duas consultas limitadas: sessões abertas e sessões rec
 ```text
 50 × 0,5 × 3 × 8 × 30 = 18.000 leituras/mês
 ```
+
+### Abertura, autosave e composição da sessão
+
+- Abertura: até 12 unidades no banco principal, 101 sessões abertas, 12 locks globais e até 12 sessões referenciadas por locks. Teto conservador: 137 leituras por ação; sem locks antigos referenciados, até 125.
+- GET de fechamento dentro da sessão: acrescenta dois lookups limitados de lock (global e legado), além da leitura limitada do fechamento.
+- Autosave: uma transação após 800 ms sem digitação, sem polling. No teto operacional, lê 1 fechamento + 351 linhas + 51 operadores + sessão/locks quando o contado muda, chegando a aproximadamente 406 leituras. Alterações de valor ainda podem atualizar os resumos síncrono e de reforço, até aproximadamente 64 leituras adicionais. Alterações somente de observação não atualizam os resumos; o cliente envia somente linhas sujas e o repositório não regrava operadores inalterados.
+- Painel de depósitos: a fila física lê no máximo 51 sessões por carregamento e devolve as 50 mais antigas. A 51ª apenas sinaliza `hasMore`; não derruba a página. Quando o redirecionamento informa `sessionId`, há no máximo uma leitura pontual adicional para garantir a presença daquela sessão na composição, mesmo com fila maior. A consulta só ocorre para quem possui `cashDeposits.view` e `cashDeposits.issue`, e usuários sem `cashClosures.reopen` consultam apenas sessões próprias.
+
+Fórmula para substituir o teto por volume medido:
+
+```text
+leituras mensais de autosave ≈ saves por sessão × sessões por mês × leituras reais por save
+```
+
+Medir separadamente saves que mudam valores e saves que mudam apenas justificativas antes de ajustar a frequência ou o repositório.
 
 ### Detalhe da sessão
 
@@ -118,7 +135,17 @@ As páginas continuam protegidas por navegação e as APIs validam novamente tod
 
 Sessões, operadores, locks, políticas e auditorias negam leitura e escrita direta nas regras do Firestore. O script de permissões mantém as novas autoridades como `false` nos perfis restritos; o rollout exige definição explícita dos perfis e unidades autorizados.
 
+A composição física exige simultaneamente `cashDeposits.view` e `cashDeposits.issue`. A pessoa que abriu a sessão é a responsável; somente administrador padrão ou perfil com `cashClosures.reopen` pode assumir uma sessão alheia.
+
 ## Preflight de dados
+
+Antes da evolução de 31/08, executar o diagnóstico somente leitura com o workspace explícito:
+
+```bash
+npm run preflight:cash-counting-sessions -- --workspace=coala
+```
+
+O comando pagina sessões abertas e locks, possui teto padrão de 5.000 documentos por conjunto e não escreve. Ele bloqueia o rollout ao encontrar: mais de uma sessão aberta para a mesma unidade, lock global ausente, lock global pertencente a outra sessão ou leitura truncada. Locks obsoletos e sessões sem os novos contadores aparecem separadamente para decisão explícita. Nenhuma correção ou migração é executada pelo preflight.
 
 As duas migrações varrem por páginas de 200 documentos e interrompem acima de 5.000 documentos por coleção por padrão. A leitura de detecção pode chegar a 5.001 documentos por coleção; um volume maior exige revisão explícita de `--max-docs=N` (teto absoluto de 20.000). A migração de permissões também divide as escritas em lotes de 400.
 
@@ -151,7 +178,7 @@ Confirmar os documentos e quantidades apresentados antes de repetir com `--execu
 1. Reintegrar a mudança sobre a `main` atual e revisar o diff por equivalência de patch.
 2. Manter verdes `npm run verify`, `npm run check:rules`, `npm run test:integration`, o build das Functions e `npm run validate:cash-closure` quando houver credenciais de preflight.
 3. Reautenticar Firebase e Google Cloud e registrar metadados do estado atual.
-4. Executar os três dry-runs e revisar permissões.
+4. Executar o preflight de sessões/locks, os dry-runs existentes e revisar permissões.
 5. Publicar índices e regras.
 6. Executar as migrações e a política de competência autorizadas.
 7. Publicar App Hosting.
@@ -160,6 +187,6 @@ Confirmar os documentos e quantidades apresentados antes de repetir com `--execu
 10. Fazer smoke test sem emitir cobrança bancária real, salvo autorização específica.
 11. Validar logs, resumos, locks, reconciliação e custo entre 7 e 30 dias.
 
-As etapas 1 a 8 e o smoke técnico da etapa 10 foram concluídos em 29/08/2026. O cadastro/conferência autenticada do webhook, o smoke operacional com uma sessão controlada e a observação pós-release das etapas 9 a 11 permanecem como validação operacional. A reconciliação periódica continua disponível como fallback enquanto o webhook não for conferido.
+As etapas registradas como concluídas em 29/08/2026 se referem ao rollout original. Para a evolução de 31/08/2026, o preflight encontrou zero inconsistências; os dry-runs examinaram 7 perfis e zero depósitos legados, sem alteração necessária, e a política `coala_2026_08 = dre_only` já estava idempotente. A reconciliação periódica continua disponível como fallback enquanto o webhook não for conferido.
 
 Rollback do App Hosting e das Functions deve usar as revisões anteriores registradas no preflight. As migrações são aditivas; a política de competência pode voltar a `standard` pelo mesmo comando, com nova auditoria. Nenhuma cobrança já emitida deve ser apagada ou reescrita durante rollback.

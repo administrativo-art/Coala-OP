@@ -15,6 +15,14 @@ const ROUTE = "/api/financial/cash-closures/[closureId]/finalize";
 
 function throwFinalizationError(cause: unknown): never {
   const message = cause instanceof Error ? cause.message : "";
+  if (message.includes("em uso por")) {
+    throw new AppError({
+      code: "CASH_COUNTING_SESSION_FORBIDDEN",
+      kind: "AUTHORIZATION",
+      safeMessage: "Esta sessão está sob responsabilidade de outra pessoa.",
+      cause,
+    });
+  }
   if (message.includes("não encontrado")) {
     throw new AppError({ code: "CASH_CLOSURE_NOT_FOUND", kind: "NOT_FOUND", cause });
   }

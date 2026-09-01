@@ -34,6 +34,8 @@ const {
   createCashCountingSession,
   finishCashCountingSession,
   getCashCountingSession,
+  getOpenCashCountingSessionForScope,
+  saveCashCountingSessionDraftPosition,
 } = await import("../../src/features/financial/cash-counting-sessions/repository.server.ts");
 const { cashClosureId, recalculateCountedLine } = await import("../../src/features/financial/cash-closures/persistence.ts");
 const { financialDbAdmin } = await import("../../src/lib/firebase-financial-admin.ts");
@@ -122,6 +124,44 @@ async function clearTestDatabase() {
   for (const collectionName of collections) {
     await financialDbAdmin.recursiveDelete(financialDbAdmin.collection(collectionName));
   }
+}
+
+async function finalizeSingleOperatorInSession({
+  workspaceId,
+  kioskId,
+  date,
+  countedCents = 10_000,
+}) {
+  const session = await createCashCountingSession({
+    workspaceId,
+    units: [{ id: kioskId, name: `Quiosque ${kioskId}` }],
+    actor,
+  });
+  const closureId = cashClosureId(kioskId, date);
+  await upsertClosureFromPdv(builtClosure({ workspaceId, kioskId, date }), actor);
+  const closure = await getCashClosure(closureId);
+  const cashLine = closure?.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+  await saveCashClosureDraft(
+    closureId,
+    [{
+      id: cashLine.id,
+      reportedCents: countedCents,
+      countedCents,
+      ...(countedCents < cashLine.expectedCents
+        ? { reportedNote: "Falta informada no teste", note: "Falta confirmada no teste" }
+        : {}),
+    }],
+    actor,
+    {
+      editReported: true,
+      editCounted: true,
+      requireCountingSessionForCountedChanges: true,
+      countingSessionId: session.id,
+    },
+  );
+  await finalizeCashClosureOperator(closureId, "operator-1", actor, { countingSessionId: session.id });
+  return { session, closureId };
 }
 
 test.before(clearTestDatabase);
@@ -353,31 +393,29 @@ test("preserva a contagem na DRE sem criar depósito quando o fechamento é some
   assert.deepEqual(await listCashDepositBatches({ workspaceId, limit: 10 }), []);
 });
 
-test("sessão bloqueia escopo, recebe operador sem depósito precoce e cria malote após conferir denominações", async () => {
+test("sessão bloqueia a unidade, recebe operador sem depósito precoce e cria malote só com cédulas", async () => {
   const workspaceId = "workspace-integration-counting-session";
   const kioskId = "kiosk-integration-counting-session";
   const date = "2035-09-12";
   const closureId = cashClosureId(kioskId, date);
   const units = [{ id: kioskId, name: "Quiosque sessão" }];
-  const periods = [{ year: 2035, month: 9 }];
-  const session = await createCashCountingSession({ workspaceId, units, periods, actor });
+  const session = await createCashCountingSession({ workspaceId, units, actor });
+
+  await saveCashCountingSessionDraftPosition({
+    workspaceId,
+    sessionId: session.id,
+    kioskId,
+    date,
+    actor,
+  });
+  const resumedDraft = await getCashCountingSession(session.id);
+  assert.equal(resumedDraft?.session.lastDraftKioskId, kioskId);
+  assert.equal(resumedDraft?.session.lastDraftDate, date);
 
   await assert.rejects(
-    () => createCashCountingSession({ workspaceId, units, periods, actor }),
+    () => createCashCountingSession({ workspaceId, units, actor }),
     /Já existe uma sessão aberta/,
   );
-  const parallel = await createCashCountingSession({
-    workspaceId,
-    units,
-    periods: [{ year: 2035, month: 10 }],
-    actor,
-  });
-  await cancelCashCountingSession({
-    workspaceId,
-    sessionId: parallel.id,
-    reason: "Sessão criada apenas para validar escopos independentes",
-    actor,
-  });
 
   await upsertClosureFromPdv(builtClosure({ workspaceId, kioskId, date }), actor);
   const initial = await getCashClosure(closureId);
@@ -424,6 +462,7 @@ test("sessão bloqueia escopo, recebe operador sem depósito precoce e cria malo
   assert.equal(firstAttachment?.session.finalizedOperatorCount, 1);
   assert.equal(firstAttachment?.session.countedCashCents, 10_000);
   assert.equal(firstAttachment?.session.depositEligibleCents, 10_000);
+  assert.deepEqual(firstAttachment?.session.periodKeys, ["2035-09"]);
 
   await reopenCashClosureWithDepositHandling({
     workspaceId,
@@ -437,10 +476,15 @@ test("sessão bloqueia escopo, recebe operador sem depósito precoce e cria malo
   assert.equal(detached?.session.finalizedOperatorCount, 0);
   assert.equal(detached?.session.countedCashCents, 0);
   assert.equal(detached?.session.depositEligibleCents, 0);
+  assert.deepEqual(detached?.session.scopeKeys, []);
+  assert.deepEqual(detached?.session.periodKeys, []);
+  assert.deepEqual(detached?.session.finalizedOperatorCountsByScope, {});
+  assert.deepEqual(detached?.session.finalizedOperatorCountsByDate, {});
   await finalizeCashClosureOperator(closureId, "operator-1", actor, { countingSessionId: session.id });
 
   const firstCounted = await finishCashCountingSession({ workspaceId, sessionId: session.id, actor });
   assert.equal(firstCounted.status, "counted");
+  assert.equal((await financialDbAdmin.collection("cashCountingSessionLocks").doc(`${workspaceId}:unit:${kioskId}`).get()).exists, false);
   await reopenCashClosureWithDepositHandling({
     workspaceId,
     closureId,
@@ -465,18 +509,187 @@ test("sessão bloqueia escopo, recebe operador sem depósito precoce e cria malo
   const prepared = await confirmCashCountingSessionDenominations({
     workspaceId,
     sessionId: session.id,
-    entries: [{ valueCents: 5_000, quantity: 2 }],
+    entries: [
+      { valueCents: 5_000, quantity: 1 },
+      { valueCents: 100, quantity: 50 },
+    ],
     actor,
   });
   assert.equal(prepared.session.status, "deposit_ready");
   assert.equal(prepared.session.coinPendingExchangeCents, 0);
+  assert.equal(prepared.session.coinReturnedToTillCents, 5_000);
+  assert.equal(prepared.session.noteTotalCents, 5_000);
   assert.equal(prepared.batches.length, 1);
   assert.equal(prepared.batches[0].countingSessionId, session.id);
-  assert.equal(prepared.batches[0].totalCents, 10_000);
-  assert.equal(prepared.batches[0].denominations?.find((entry) => entry.valueCents === 5_000)?.quantity, 2);
+  assert.equal(prepared.batches[0].totalCents, 5_000);
+  assert.equal(prepared.batches[0].denominations?.find((entry) => entry.valueCents === 5_000)?.quantity, 1);
+  assert.equal(prepared.batches[0].denominations?.some((entry) => entry.kind === "coin"), false);
 
-  const nextSession = await createCashCountingSession({ workspaceId, units, periods, actor });
+  const nextSession = await createCashCountingSession({ workspaceId, units, actor });
   assert.equal(nextSession.status, "open");
+});
+
+test("locks globais resolvem concorrência por unidade e permitem unidades diferentes", async () => {
+  const workspaceId = "workspace-integration-lock-concurrency";
+  const sameUnit = [{ id: "kiosk-concurrent", name: "Quiosque concorrente" }];
+  const sameUnitResults = await Promise.allSettled([
+    createCashCountingSession({ workspaceId, units: sameUnit, actor }),
+    createCashCountingSession({ workspaceId, units: sameUnit, actor }),
+  ]);
+  assert.equal(sameUnitResults.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(sameUnitResults.filter((result) => result.status === "rejected").length, 1);
+  const winner = sameUnitResults.find((result) => result.status === "fulfilled").value;
+  await cancelCashCountingSession({
+    workspaceId,
+    sessionId: winner.id,
+    reason: "Liberar unidade após teste concorrente",
+    actor,
+  });
+  assert.equal((await financialDbAdmin.collection("cashCountingSessionLocks").doc(`${workspaceId}:unit:kiosk-concurrent`).get()).exists, false);
+
+  const differentUnitResults = await Promise.allSettled([
+    createCashCountingSession({ workspaceId, units: [{ id: "kiosk-parallel-a", name: "Paralela A" }], actor }),
+    createCashCountingSession({ workspaceId, units: [{ id: "kiosk-parallel-b", name: "Paralela B" }], actor }),
+  ]);
+  assert.equal(differentUnitResults.every((result) => result.status === "fulfilled"), true);
+});
+
+test("sessão legada aberta bloqueia a mesma unidade independentemente da competência", async () => {
+  const workspaceId = "workspace-integration-legacy-unit-lock";
+  const kioskId = "kiosk-legacy-unit-lock";
+  const legacySessionId = "legacy-open-session";
+  await financialDbAdmin.collection("cashCountingSessions").doc(legacySessionId).set({
+    id: legacySessionId,
+    workspaceId,
+    status: "open",
+    scopes: [{ key: `${kioskId}:2035-01`, kioskId, kioskName: "Legada", year: 2035, month: 1 }],
+    scopeKeys: [`${kioskId}:2035-01`],
+    kioskIds: [kioskId],
+    kioskNames: ["Legada"],
+    periodKeys: ["2035-01"],
+    openedBy: actor.userId,
+    openedByName: actor.userName,
+    openedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  await financialDbAdmin.collection("cashCountingSessionLocks").doc(`${workspaceId}:${kioskId}:2035-01`).set({
+    id: `${workspaceId}:${kioskId}:2035-01`,
+    workspaceId,
+    lockKind: "legacy_scope",
+    scopeKey: `${kioskId}:2035-01`,
+    sessionId: legacySessionId,
+    kioskId,
+    year: 2035,
+    month: 1,
+    lockedAt: new Date().toISOString(),
+    lockedBy: actor.userId,
+  });
+
+  await assert.rejects(
+    () => createCashCountingSession({ workspaceId, units: [{ id: kioskId, name: "Legada" }], actor }),
+    /Já existe uma sessão aberta/,
+  );
+  await financialDbAdmin.collection("cashCountingSessions").doc("stale-closed-session").set({
+    id: "stale-closed-session",
+    workspaceId,
+    status: "completed",
+    kioskIds: [kioskId],
+  });
+  await financialDbAdmin.collection("cashCountingSessionLocks").doc(`${workspaceId}:unit:${kioskId}`).set({
+    id: `${workspaceId}:unit:${kioskId}`,
+    workspaceId,
+    lockKind: "unit",
+    scopeKey: null,
+    sessionId: "stale-closed-session",
+    kioskId,
+    year: null,
+    month: null,
+    lockedAt: new Date().toISOString(),
+    lockedBy: actor.userId,
+  });
+  assert.equal((await getOpenCashCountingSessionForScope({ workspaceId, kioskId, year: 2035, month: 1 }))?.id, legacySessionId);
+});
+
+test("rascunho não altera agregados da sessão e cancelamento libera o lock", async () => {
+  const workspaceId = "workspace-integration-draft-aggregates";
+  const kioskId = "kiosk-draft-aggregates";
+  const date = "2035-10-03";
+  const session = await createCashCountingSession({ workspaceId, units: [{ id: kioskId, name: "Rascunho" }], actor });
+  const closureId = cashClosureId(kioskId, date);
+  await upsertClosureFromPdv(builtClosure({ workspaceId, kioskId, date }), actor);
+  const closure = await getCashClosure(closureId);
+  const cashLine = closure?.lines.find((line) => line.channel === "cash");
+  assert.ok(cashLine);
+  await saveCashClosureDraft(
+    closureId,
+    [{ id: cashLine.id, reportedCents: 10_000, countedCents: 10_000 }],
+    actor,
+    { editReported: true, editCounted: true, requireCountingSessionForCountedChanges: true, countingSessionId: session.id },
+  );
+  const draftSession = await getCashCountingSession(session.id);
+  assert.equal(draftSession?.session.finalizedOperatorCount, 0);
+  assert.equal(draftSession?.session.countedCashCents, 0);
+  assert.equal(draftSession?.session.depositEligibleCents, 0);
+  await cancelCashCountingSession({ workspaceId, sessionId: session.id, reason: "Cancelar sessão ainda sem operadores finalizados", actor });
+  assert.equal((await financialDbAdmin.collection("cashCountingSessionLocks").doc(`${workspaceId}:unit:${kioskId}`).get()).exists, false);
+});
+
+test("reabertura falha atomicamente quando outra sessão assumiu a unidade", async () => {
+  const workspaceId = "workspace-integration-reopen-conflict";
+  const kioskId = "kiosk-reopen-conflict";
+  const { session, closureId } = await finalizeSingleOperatorInSession({
+    workspaceId,
+    kioskId,
+    date: "2035-10-04",
+  });
+  await finishCashCountingSession({ workspaceId, sessionId: session.id, actor });
+  const occupyingSession = await createCashCountingSession({
+    workspaceId,
+    units: [{ id: kioskId, name: "Sessão ocupante" }],
+    actor,
+  });
+  await assert.rejects(
+    () => reopenCashClosureWithDepositHandling({
+      workspaceId,
+      closureId,
+      operatorId: "operator-1",
+      reason: "Tentar reabrir após nova ocupação",
+      actor,
+    }),
+    /Outra sessão já usa uma das unidades/,
+  );
+  assert.equal((await getCashCountingSession(session.id))?.session.status, "counted");
+  assert.equal((await getCashCountingSession(session.id))?.session.finalizedOperatorCount, 1);
+  await cancelCashCountingSession({
+    workspaceId,
+    sessionId: occupyingSession.id,
+    reason: "Liberar unidade ocupante após teste",
+    actor,
+  });
+});
+
+test("sessão composta somente por moedas conclui sem criar malote bancário", async () => {
+  const workspaceId = "workspace-integration-coins-only";
+  const kioskId = "kiosk-coins-only";
+  const { session } = await finalizeSingleOperatorInSession({
+    workspaceId,
+    kioskId,
+    date: "2035-10-05",
+    countedCents: 100,
+  });
+  await finishCashCountingSession({ workspaceId, sessionId: session.id, actor });
+  const result = await confirmCashCountingSessionDenominations({
+    workspaceId,
+    sessionId: session.id,
+    entries: [{ valueCents: 100, quantity: 1 }],
+    actor,
+  });
+  assert.equal(result.session.status, "completed");
+  assert.equal(result.session.noteTotalCents, 0);
+  assert.equal(result.session.coinReturnedToTillCents, 100);
+  assert.deepEqual(result.batches, []);
+  assert.deepEqual(await listCashDepositBatches({ workspaceId, limit: 10 }), []);
 });
 
 test("encerra sessão com mais de 500 operadores usando agregados transacionais", async () => {
@@ -485,7 +698,6 @@ test("encerra sessão com mais de 500 operadores usando agregados transacionais"
   const session = await createCashCountingSession({
     workspaceId,
     units: [{ id: kioskId, name: "Quiosque sessão extensa" }],
-    periods: [{ year: 2035, month: 11 }],
     actor,
   });
   const operatorCount = 501;

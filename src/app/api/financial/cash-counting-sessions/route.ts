@@ -48,7 +48,7 @@ export const POST = withApiErrorHandling({
     throw new AppError({
       code: "CASH_COUNTING_SESSION_INVALID",
       kind: "VALIDATION",
-      safeMessage: parsed.error.issues[0]?.message ?? "Selecione unidades e competências válidas.",
+      safeMessage: parsed.error.issues[0]?.message ?? "Selecione unidades válidas.",
       cause: parsed.error,
     });
   }
@@ -73,7 +73,6 @@ export const POST = withApiErrorHandling({
   const session = await createCashCountingSession({
     workspaceId: context.workspace_id,
     units,
-    periods: parsed.data.periods,
     actor: cashClosureActor(context),
   }).catch((cause) => {
     const message = cause instanceof Error ? cause.message : "";
@@ -81,7 +80,7 @@ export const POST = withApiErrorHandling({
       throw new AppError({
         code: "CASH_COUNTING_SESSION_SCOPE_LOCKED",
         kind: "CONFLICT",
-        safeMessage: "Já existe uma sessão aberta para uma das unidades e competências selecionadas.",
+        safeMessage: "Já existe uma sessão de contagem aberta para uma das unidades selecionadas.",
         cause,
       });
     }

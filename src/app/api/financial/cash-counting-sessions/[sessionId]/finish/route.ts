@@ -39,6 +39,14 @@ export const POST = withApiErrorHandling<RouteContext>({
     canManageOthers: canManageCashCountingSessionsOfOthers(context),
   }).catch((cause) => {
     const message = cause instanceof Error ? cause.message : "";
+    if (message.includes("em uso por")) {
+      throw new AppError({
+        code: "CASH_COUNTING_SESSION_FINISH_FORBIDDEN",
+        kind: "AUTHORIZATION",
+        safeMessage: "Esta sessão está sob responsabilidade de outra pessoa.",
+        cause,
+      });
+    }
     if (message.includes("sessão") || message.includes("Sessão") || message.includes("Finalize ao menos")) {
       throw new AppError({
         code: "CASH_COUNTING_SESSION_FINISH_CONFLICT",
