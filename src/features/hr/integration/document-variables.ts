@@ -2,7 +2,7 @@ import { DEFAULT_COMPLEMENTARY_FIELDS } from "@/features/rh/lib/default-field-ma
 import type { FieldMapEntry, FieldType, FieldVisibility } from "@/types/rh";
 
 export const DOCUMENT_VARIABLE_SCHEMA_VERSION = "coala-documents-v2" as const;
-export const DOCUMENT_VARIABLE_COUNT = 112 as const;
+export const DOCUMENT_VARIABLE_COUNT = 113 as const;
 
 export type DocumentVariableSource =
   | "field_value"
@@ -121,6 +121,21 @@ const EMPLOYEE_FALLBACKS: Record<string, DocumentVariableResolutionStep[]> = {
 };
 
 const ONBOARDING_VARIABLES: DocumentVariableCatalogEntry[] = [
+  {
+    key: "integration.employer_legal_name",
+    placeholder: "{{integration.employer_legal_name}}",
+    label: "Razão social da empregadora",
+    section: "Integração - contratação",
+    fieldType: "text",
+    format: "text",
+    required: true,
+    visibility: "restricted_partial",
+    sensitive: false,
+    writable: false,
+    conditionals: [],
+    repeatable: null,
+    resolution: [{ source: "onboarding", path: "employerUnitName" }],
+  },
   {
     key: "integration.employer_name",
     placeholder: "{{integration.employer_name}}",

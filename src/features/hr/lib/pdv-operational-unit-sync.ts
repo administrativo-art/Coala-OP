@@ -14,6 +14,13 @@ function cleanText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function normalizeExternalUserId(value: unknown) {
+  const normalized = typeof value === "number" && Number.isSafeInteger(value)
+    ? String(value)
+    : cleanText(value);
+  return normalized && /^\d+$/.test(normalized) ? normalized : null;
+}
+
 function stringArray(value: unknown) {
   return Array.isArray(value)
     ? Array.from(new Set(value.flatMap((entry) => {
@@ -38,7 +45,7 @@ function storedPdvAccesses(user: RecordLike): UserPdvAccess[] {
   const stored = Array.isArray(user.pdvAccesses) ? user.pdvAccesses.flatMap((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
     const row = value as RecordLike;
-    const externalUserId = cleanText(row.externalUserId);
+    const externalUserId = normalizeExternalUserId(row.externalUserId);
     if (!externalUserId) return [];
     const status = row.status === "inactive" || row.status === "error" ? row.status : "active";
     return [{
@@ -55,7 +62,36 @@ function storedPdvAccesses(user: RecordLike): UserPdvAccess[] {
   }) : [];
   if (stored.length > 0) return stored;
 
-  const legacyExternalUserId = cleanText(user.registrationIdPdv);
+  const operationalUnits = operationalUnitIds(user);
+  const assignedKioskIds = stringArray(user.assignedKioskIds);
+  const legacyOperatorIds = user.pdvOperatorIds && typeof user.pdvOperatorIds === "object" && !Array.isArray(user.pdvOperatorIds)
+    ? Object.entries(user.pdvOperatorIds as Record<string, unknown>).flatMap(([kioskId, value]) => {
+        const id = normalizeExternalUserId(value);
+        if (!id) return [];
+        const assignedIndex = assignedKioskIds.indexOf(kioskId);
+        const unitId = operationalUnits.includes(kioskId)
+          ? kioskId
+          : operationalUnits.length === 1 && assignedKioskIds.length === 1
+            ? operationalUnits[0]
+            : assignedKioskIds.length === operationalUnits.length && assignedIndex >= 0
+              ? operationalUnits[assignedIndex] ?? null
+              : null;
+        return [{
+          externalUserId: id,
+          unitId,
+          unitName: null,
+          filialId: "",
+          filialName: null,
+          profileId: "",
+          profileName: null,
+          status: "active" as const,
+          updatedAt: null,
+        } satisfies UserPdvAccess];
+      })
+    : [];
+  if (legacyOperatorIds.length > 0) return legacyOperatorIds;
+
+  const legacyExternalUserId = normalizeExternalUserId(user.registrationIdPdv);
   if (!legacyExternalUserId) return [];
   return [{
     externalUserId: legacyExternalUserId,
@@ -110,7 +146,7 @@ export function planPdvOperationalUnitSyncs(
   if (removed.length === 0 && added.length === 0) return [];
 
   const accesses = storedPdvAccesses(currentUser).filter((access) => access.status === "active");
-  const legacyExternalUserId = cleanText(currentUser.registrationIdPdv);
+  const legacyExternalUserId = normalizeExternalUserId(currentUser.registrationIdPdv);
   const hasPdvAccess = accesses.length > 0 || Boolean(legacyExternalUserId);
   if (!hasPdvAccess) return [];
 
@@ -199,13 +235,18 @@ export function pdvOperationalUnitPatch(params: {
   const pdvAccesses = previous
     ? currentAccesses.map((access) => access.externalUserId === previousExternalUserId ? updatedAccess : access)
     : [...currentAccesses, updatedAccess];
-  const legacyId = cleanText(params.currentUser.registrationIdPdv);
+  const legacyId = normalizeExternalUserId(params.currentUser.registrationIdPdv);
+  const establishesPrimaryAccess = !legacyId
+    && params.plan.kind === "add"
+    && currentAccesses.length === 1
+    && currentAccesses[0]?.externalUserId === params.plan.sourceExternalUserId;
   const updatesPrimaryAccess = params.plan.kind === "move" && (
     !legacyId || legacyId === params.plan.sourceExternalUserId || pdvAccesses.length === 1
   );
 
   return {
     pdvAccesses,
+    ...(establishesPrimaryAccess ? { registrationIdPdv: params.plan.sourceExternalUserId } : {}),
     ...(updatesPrimaryAccess ? {
       registrationIdPdv: params.externalUserId,
       pdvAccessFilialId: params.targetFilialId,

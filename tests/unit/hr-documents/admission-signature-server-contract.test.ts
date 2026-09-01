@@ -52,6 +52,10 @@ test("reconcilia uma vez por solicitação do pacote", () => {
   assert.match(source, /checked: requests\.size/);
   assert.doesNotMatch(source, /checked: targets\.length/);
   assert.match(source, /participantsFromProvider/);
+  assert.match(source, /avatarUrl: signer\.avatarUrl/);
+  assert.match(source, /companySignatoryAvatarUrl: companySignatory\.avatarUrl/);
+  assert.match(source, /providerDeliveryFailureReason/);
+  assert.match(source, /signature\.email_events\.reason/);
   assert.match(source, /getAutentiqueDocumentSignatures\(request\.providerDocumentId\)/);
 });
 

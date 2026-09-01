@@ -288,7 +288,7 @@ test("fontes admissionais preservam os hashes catalogados", async () => {
   }
 });
 
-test("contrato de experiência v4 usa razão social e layout de assinatura vigentes", async () => {
+test("contrato de experiência v4 usa somente a razão social e preserva o layout", async () => {
   const template = systemDocumentTemplateById(
     "system-admission-employment-probation-contract",
   );
@@ -300,7 +300,8 @@ test("contrato de experiência v4 usa razão social e layout de assinatura vigen
   if (salaryBinding?.kind === "system") {
     assert.equal(salaryBinding.formatter, "currency_br_with_words");
   }
-  assert.ok(template?.variables.includes("integration.employer_name"));
+  assert.ok(template?.variables.includes("integration.employer_legal_name"));
+  assert.equal(template?.variables.includes("integration.employer_name"), false);
   assert.ok(template?.variables.includes("contract_final_end_long"));
   assert.ok(template?.variables.includes("contract_first_period_days"));
   assert.ok(template?.variables.includes("contract_second_period_days"));
@@ -341,7 +342,7 @@ test("contrato de experiência v4 usa razão social e layout de assinatura vigen
   assert.ok(documentXml.includes('<w:jc w:val="right"/>'));
   assert.equal((documentXml.match(/<w:spacing w:before="1000"\/>/g) ?? []).length, 2);
   for (const token of [
-    "{{integration.employer_name}}",
+    "{{integration.employer_legal_name}}",
     "{{contract_employer_cnpj}}",
     "{{integration.employer_address}}",
     "{{employee.name}}",

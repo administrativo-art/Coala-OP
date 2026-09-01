@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { differenceInDays, format } from 'date-fns';
@@ -32,6 +32,7 @@ import { JUST_CAUSE_TYPES, requiresTerminationSubtype } from '@/lib/hr/terminati
 import {
   EMPLOYMENT_RELATIONSHIP_TYPES,
   employmentRelationshipLabel,
+  resolveEmploymentRelationshipType,
   terminationCopyForRelationship,
   terminationReasonsForRelationship,
   type EmploymentTerminationReason,
@@ -285,6 +286,13 @@ const userSchema = z.object({
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
+
+function firstUserFormError(errors: FieldErrors<UserFormValues>) {
+  for (const error of Object.values(errors)) {
+    if (error && typeof error.message === 'string') return error.message;
+  }
+  return 'Revise os campos obrigatórios destacados antes de salvar.';
+}
 
 const USER_AUDIT_FIELDS = [
   'username',
@@ -685,7 +693,10 @@ export function UserManagement({
       registrationIdPdv: user.registrationIdPdv ?? '',
       jobRoleId: user.jobRoleId ?? '',
       jobFunctionIds: user.jobFunctionIds ?? [],
-      employmentRelationshipType: user.employmentRelationshipType,
+      employmentRelationshipType: resolveEmploymentRelationshipType(
+        user.employmentRelationshipType,
+        user.personRecordType,
+      ),
       responsibleUnitIds: user.responsibleUnitIds ?? [],
       unitAccessScope: user.unitAccessScope ?? 'linked',
       unitAccessUnitIds: (user.unitAccessUnitIds ?? []).filter((id) => units.some((unit) => unit.id === id)),
@@ -875,7 +886,7 @@ export function UserManagement({
     }
   };
 
-  const onSubmit = async (values: UserFormValues) => {
+  const saveUser = async (values: UserFormValues) => {
     values = { ...values, username: formatPersonName(values.username) };
     const avatarUrl = values.avatarUrl || '';
     const admissionDate = values.admissionDate
@@ -982,7 +993,31 @@ export function UserManagement({
       });
       return;
     }
+    toast({ title: 'Alterações salvas.' });
     closeForm();
+  };
+
+  const onSubmit = async (values: UserFormValues) => {
+    try {
+      await saveUser(values);
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: editingUser ? 'Não foi possível salvar as alterações.' : 'Não foi possível criar o usuário.',
+        description: error instanceof Error ? error.message : 'Tente novamente.',
+      });
+    }
+  };
+
+  const onInvalidSubmit = (errors: FieldErrors<UserFormValues>) => {
+    const field = Object.keys(errors)[0] as keyof UserFormValues | undefined;
+    if (field) form.setFocus(field);
+    toast({
+      variant: 'destructive',
+      title: 'Existem campos obrigatórios pendentes.',
+      description: firstUserFormError(errors),
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
   const handlePhotoUpdate = async (dataUrl: string) => {
@@ -1118,7 +1153,7 @@ export function UserManagement({
     <>
       {showForm ? (
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} autoComplete={createOnly ? 'off' : 'on'} className={createOnly ? "personal-create-user-form space-y-2" : "space-y-5"}>
+          <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)} autoComplete={createOnly ? 'off' : 'on'} className={createOnly ? "personal-create-user-form space-y-2" : "space-y-5"}>
             {/* ── Back nav ── */}
             {!createOnly ? (
               <div className="flex items-center gap-3 mb-2">
