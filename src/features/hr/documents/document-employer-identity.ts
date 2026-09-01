@@ -21,8 +21,8 @@ function setPath(root: Record<string, unknown>, path: string, value: unknown) {
 }
 
 /**
- * Documentos jurídicos qualificam a parte pela razão social resolvida pelo
- * CNPJ e acrescentam o nome fantasia apenas como identificação operacional.
+ * Mantém separadas a razão social usada na qualificação contratual e a
+ * identificação operacional, que também pode exibir o nome fantasia.
  */
 export function applyDocumentEmployerLegalName(
   resolved: ResolvedDocumentData,
@@ -36,11 +36,14 @@ export function applyDocumentEmployerLegalName(
     && operationalName.localeCompare(canonicalName, "pt-BR", { sensitivity: "base" }) !== 0
     ? `${canonicalName}, nome fantasia ${operationalName}`
     : canonicalName;
+  setPath(resolved.data, "integration.employer_legal_name", canonicalName);
   setPath(resolved.data, "integration.employer_name", displayName);
+  resolved.flat["integration.employer_legal_name"] = canonicalName;
   resolved.flat["integration.employer_name"] = displayName;
+  resolved.rawFlat["integration.employer_legal_name"] = canonicalName;
   resolved.rawFlat["integration.employer_name"] = displayName;
   resolved.missingRequired = resolved.missingRequired.filter(
-    (key) => key !== "integration.employer_name",
+    (key) => key !== "integration.employer_legal_name" && key !== "integration.employer_name",
   );
   return resolved;
 }

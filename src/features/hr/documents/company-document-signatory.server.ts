@@ -7,6 +7,7 @@ export type CompanyDocumentSignatory = {
   userId: string | null;
   name: string;
   email: string;
+  avatarUrl: string | null;
   scope: "entity" | "cnpj_root";
 };
 
@@ -51,6 +52,7 @@ async function signatoryFromEntity(
     userId,
     name,
     email,
+    avatarUrl: text(user?.get("avatarUrl")) || null,
     scope: entity.get("documentSignatoryScope") === "cnpj_root"
       ? "cnpj_root"
       : "entity",

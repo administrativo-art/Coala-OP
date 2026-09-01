@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import type { AdmissionSignatureParticipant } from "@/features/hr/documents/admission-signature-layout";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 function formatDateTime(value?: string | null) {
   if (!value) return null;
@@ -43,6 +44,16 @@ async function copyText(value: string) {
   input.select();
   document.execCommand("copy");
   input.remove();
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "CO";
 }
 
 export function SignatureParticipantCard({
@@ -119,16 +130,24 @@ export function SignatureParticipantCard({
 
   return (
     <>
-      <article className={`rounded-xl border bg-white p-3.5 ${
+      <article className={`h-full rounded-xl border bg-white p-3.5 ${
         rejected || deliveryFailed ? "border-rose-200" : "border-slate-200"
       }`}>
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-wide text-violet-700">
-              {participant.party === "employee" ? "Colaborador" : "Empregador"}
-            </p>
-            <p className="mt-0.5 truncate text-[13px] font-black text-slate-900">{participant.name}</p>
-            <p className="mt-0.5 break-all text-[10.5px] font-semibold text-slate-500">{participant.email}</p>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Avatar className="h-10 w-10 border border-violet-100 bg-violet-50">
+              <AvatarImage src={participant.avatarUrl || undefined} alt={`Foto de ${participant.name}`} className="object-cover" />
+              <AvatarFallback className="bg-violet-100 text-[11px] font-black text-violet-700">
+                {initials(participant.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-wide text-violet-700">
+                {participant.party === "employee" ? "Colaborador" : "Empregador"}
+              </p>
+              <p className="mt-0.5 truncate text-[13px] font-black text-slate-900">{participant.name}</p>
+              <p className="mt-0.5 break-all text-[10.5px] font-semibold text-slate-500">{participant.email}</p>
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <span className={`rounded-full px-2 py-1 text-[8.5px] font-black uppercase ${
@@ -202,6 +221,16 @@ export function SignatureParticipantCard({
             );
           })}
         </div>
+
+        {deliveryFailed ? (
+          <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2">
+            <p className="text-[9.5px] font-black uppercase tracking-wide text-rose-700">E-mail não entregue</p>
+            <p className="mt-0.5 text-[9.5px] font-semibold leading-relaxed text-rose-700">
+              {participant.deliveryFailureReason
+                ?? "O Autentique informou que o servidor de destino recusou a mensagem, mas não enviou um motivo detalhado."}
+            </p>
+          </div>
+        ) : null}
 
         {participant.lastResentAt ? (
           <p className="mt-2 text-[9px] font-semibold text-slate-400">

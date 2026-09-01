@@ -34,6 +34,17 @@ export function isEmploymentRelationshipType(value: unknown): value is Employmen
   return EMPLOYMENT_RELATIONSHIP_TYPES.some((item) => item.value === value);
 }
 
+export function resolveEmploymentRelationshipType(
+  value: unknown,
+  personRecordType: unknown,
+): EmploymentRelationshipType | undefined {
+  if (isEmploymentRelationshipType(value)) return value;
+  if (personRecordType === "employee") return "clt";
+  if (personRecordType === "pj") return "pj";
+  if (personRecordType === "internship") return "internship";
+  return undefined;
+}
+
 export function employmentRelationshipLabel(value: unknown) {
   return EMPLOYMENT_RELATIONSHIP_TYPES.find((item) => item.value === value)?.label ?? "Vínculo não definido";
 }
