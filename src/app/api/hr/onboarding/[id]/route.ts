@@ -15,7 +15,11 @@ import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { findBizneoUser } from '@/lib/integrations/bizneo-admin';
 import { findPdvLegalUser } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
-import { requiredOnboardingIntegrationsResolved } from '@/lib/hr/onboarding-integrations';
+import {
+  pendingPdvOnboardingAlert,
+  requiredOnboardingIntegrationsResolved,
+  resolvedPdvOnboardingAlert,
+} from '@/lib/hr/onboarding-integrations';
 import { promoteApprovedOnboardingDocuments } from '@/lib/hr/promote-onboarding-documents';
 import { syncApprovedOnboardingPhotoToAvatar } from '@/lib/hr/profile-photo-avatar.server';
 import { listSignatureWorkflow, promoteSignedOnboardingDocuments } from '@/features/hr/documents/signature-workflow.server';
@@ -149,9 +153,19 @@ async function verifyAccessIntegrations(params: {
           pdvAccesses,
           updatedAt: params.now,
         }, { merge: true });
-        pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'resolved', message: `Cadastro localizado na filial vinculada (ID ${pdvUser.id}).`, checkedAt: params.now, externalId: pdvUser.id, source: 'pdv_api' };
+        pdvAlert = resolvedPdvOnboardingAlert({
+          externalId: pdvUser.id,
+          filialName: pdvAccess.filialName,
+          checkedAt: params.now,
+          source: 'pdv_api',
+          action: 'located',
+        });
       } else {
-        pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: 'Colaborador não localizado no PDV Legal para a filial desta unidade.', checkedAt: params.now, source: 'pdv_api' };
+        pdvAlert = pendingPdvOnboardingAlert({
+          pdvAccessStatus: asString(pdvAccess.status),
+          filialName: pdvAccess.filialName,
+          checkedAt: params.now,
+        });
       }
     } catch (cause) {
       pdvAlert = { id: 'pdv_id', label: 'PDV Legal', status: 'pending', message: cause instanceof Error ? `Não foi possível consultar o PDV Legal: ${cause.message}` : 'Não foi possível consultar o PDV Legal.', checkedAt: params.now, source: 'pdv_api' };

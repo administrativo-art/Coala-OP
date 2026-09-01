@@ -83,10 +83,12 @@ import { formatPersonName } from '@/lib/person-name';
 import { essentialPublicFormDataReady } from '@/features/hr/onboarding/public-form-revision';
 import { maritalStatusIsInformed, ONBOARDING_MARITAL_STATUSES } from '@/features/hr/onboarding/marital-status';
 import { canUpdateExpectedAdmissionDate } from '@/features/hr/onboarding-lifecycle';
+import { resolveTransportVoucherServiceStatus } from '@/features/hr/onboarding/benefit-service-status';
 import { formatBrlCurrency, parseBrlCurrency } from '@/features/hr/compensation/brl-currency';
 import { isAutomaticAccountantDocument } from '@/features/hr/accountant/document-selection';
 import { isPreviewableDocumentContentType } from '@/features/hr/documents/preview-content-type';
 import { hasFormalizationPermission } from '@/lib/hr-formalization-permissions';
+import { pdvPendingPasswordMessage } from '@/lib/hr/onboarding-integrations';
 import {
   ONBOARDING_HEALTH_META,
   onboardingProgress,
@@ -9658,6 +9660,13 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
   const integrationAlerts = selectedProcess.integrationAlerts ?? [];
   const bizneoAlert = integrationAlerts.find(alert => alert.id === 'bizneo_id');
   const pdvAlert = integrationAlerts.find(alert => alert.id === 'pdv_id');
+  const pdvFilialName = selectedProcess.pdvAccess?.filialName?.trim() || null;
+  const pdvAwaitingPassword = selectedProcess.pdvAccess?.required === true
+    && selectedProcess.pdvAccess?.status === 'pending_password'
+    && selectedProcess.firstAccess?.status !== 'used';
+  const pdvDisplayAlert = pdvAlert && pdvAwaitingPassword
+    ? { ...pdvAlert, message: pdvPendingPasswordMessage(pdvFilialName) }
+    : pdvAlert;
   const integrationsResolved = bizneoAlert?.status === 'resolved' && pdvAlert?.status === 'resolved';
   const finalizationSaved = !!selectedProcess.finalizationSettings;
   const userCreated = !!selectedProcess.collaboratorUserId;
@@ -9678,6 +9687,11 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
   const formalizationAccessCompleted = selectedProcess.accessProvisioning?.status === 'completed';
   const canComplete = canManage && userCreated && formalizationAccessCompleted && integrationsResolved &&
     selectedProcess.status !== 'completed' && selectedProcess.status !== 'cancelled';
+  const transportVoucherServiceStatus = resolveTransportVoucherServiceStatus({
+    needsTransportVoucher: selectedProcess.finalizationSettings?.needsTransportVoucher,
+    publicAnswer: selectedProcess.publicFormAnswers?.wantsTransportVoucher,
+    recordedCompleted: selectedProcess.accessProvisioning?.operationalChecks?.transportVoucherSystem?.completed === true,
+  });
   const accessIndicators = [
     {
       label: 'Cadastro criado',
@@ -10975,7 +10989,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                 </div>
                 <div className="space-y-3 p-4">
                 <div className={`rounded-2xl border px-4 py-3.5 ${okAlert ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-                  {!okAlert ? ([bizneoAlert, pdvAlert].filter(Boolean) as NonNullable<typeof bizneoAlert>[]).map(alert => (
+                  {!okAlert ? ([bizneoAlert, pdvDisplayAlert].filter(Boolean) as NonNullable<typeof bizneoAlert>[]).map(alert => (
                     <div key={alert.id} className="[&:not(:first-child)]:mt-2">
                       <p className={`text-[13px] font-black ${alert.status === 'resolved' ? 'text-emerald-800' : 'text-amber-800'}`}>{alert.label}</p>
                       <p className={`mt-1 text-[11.5px] font-semibold ${alert.status === 'resolved' ? 'text-emerald-700' : 'text-amber-700'}`}>{alert.message ?? 'Verificação pendente.'}</p>
@@ -10996,7 +11010,15 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                 <div className="grid gap-2.5 sm:grid-cols-2">
                   {[
                     { name: 'Bizneo HR', desc: 'Sincroniza dados cadastrais e ponto.', alert: bizneoAlert },
-                    { name: 'PDV Legal', desc: 'Habilita operação no ponto de venda.', alert: pdvAlert },
+                    {
+                      name: 'PDV Legal',
+                      desc: pdvAwaitingPassword
+                        ? `Aguardando senha para cadastro em ${pdvFilialName ?? 'filial vinculada'}.`
+                        : pdvFilialName
+                          ? `Cadastro vinculado à filial ${pdvFilialName}.`
+                          : 'Habilita operação no ponto de venda.',
+                      alert: pdvDisplayAlert,
+                    },
                   ].map(({ name, desc, alert }) => {
                     const resolved = alert?.status === 'resolved';
                     return (
@@ -11021,12 +11043,12 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                         label: 'Plano de saúde Odontoprev',
                         description: 'Inclusão confirmada no plano.',
                         completed: selectedProcess.accessProvisioning?.operationalChecks?.odontoprev?.completed === true,
+                        notApplicable: false,
                       },
                       {
                         id: 'transportVoucherSystem' as const,
                         label: 'Sistema de vale-transporte',
-                        description: 'Cadastro confirmado no sistema de VT.',
-                        completed: selectedProcess.accessProvisioning?.operationalChecks?.transportVoucherSystem?.completed === true,
+                        ...transportVoucherServiceStatus,
                       },
                     ].map(check => (
                       <label
@@ -11035,12 +11057,12 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                           check.completed
                             ? 'border-emerald-200 bg-emerald-50'
                             : 'border-slate-200 bg-slate-50'
-                        } ${canManage && canActOnCurrentPhase && userCreated ? 'cursor-pointer hover:border-pink-200' : 'cursor-not-allowed opacity-70'}`}
+                        } ${canManage && canActOnCurrentPhase && userCreated && !check.notApplicable ? 'cursor-pointer hover:border-pink-200' : 'cursor-not-allowed opacity-70'}`}
                       >
                         <input
                           type="checkbox"
                           checked={check.completed}
-                          disabled={!canManage || !canActOnCurrentPhase || !userCreated || updating === `${selectedProcess.id}:set_access_operational_check`}
+                          disabled={check.notApplicable || !canManage || !canActOnCurrentPhase || !userCreated || updating === `${selectedProcess.id}:set_access_operational_check`}
                           onChange={event => void patchProcess(selectedProcess.id, {
                             action: 'set_access_operational_check',
                             checkId: check.id,
@@ -11053,7 +11075,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                           <span className={`mt-0.5 block text-[11.5px] font-semibold ${
                             check.completed ? 'text-emerald-700' : 'text-slate-500'
                           }`}>
-                            {check.completed ? 'Concluído' : check.description}
+                            {check.notApplicable ? check.description : check.completed ? 'Concluído' : check.description}
                           </span>
                         </span>
                       </label>

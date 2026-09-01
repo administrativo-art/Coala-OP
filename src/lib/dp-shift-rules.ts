@@ -10,6 +10,16 @@ export function isWorkShift(shift: DPShift) {
   return shift.type !== 'day_off';
 }
 
+export function compareWorkShiftsByTime(left: DPShift, right: DPShift) {
+  const byStart = left.startTime.localeCompare(right.startTime);
+  if (byStart !== 0) return byStart;
+  const byEnd = left.endTime.localeCompare(right.endTime);
+  if (byEnd !== 0) return byEnd;
+  const byName = (left.userName ?? '').localeCompare(right.userName ?? '', 'pt-BR');
+  if (byName !== 0) return byName;
+  return left.id.localeCompare(right.id);
+}
+
 export function nextISODate(date: string) {
   return format(addDays(parse(date, 'yyyy-MM-dd', new Date()), 1), 'yyyy-MM-dd');
 }
