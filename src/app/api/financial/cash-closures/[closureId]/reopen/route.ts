@@ -49,6 +49,14 @@ export const POST = withApiErrorHandling<RouteContext>({
       if (message.includes("não pode avançar")) {
         throw new AppError({ code: "CASH_CLOSURE_REOPEN_STATE_CONFLICT", kind: "CONFLICT", cause });
       }
+      if (message.includes("individualmente")) {
+        throw new AppError({
+          code: "CASH_CLOSURE_OPERATOR_REQUIRED",
+          kind: "VALIDATION",
+          safeMessage: "Reabra um operador por vez quando o fechamento estiver vinculado a uma sessão de contagem.",
+          cause,
+        });
+      }
       if (message.includes("sessão") || message.includes("Sessão") || message.includes("composição física")) {
         throw new AppError({
           code: "CASH_COUNTING_SESSION_REOPEN_CONFLICT",

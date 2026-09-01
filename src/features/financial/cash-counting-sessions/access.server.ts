@@ -24,7 +24,10 @@ export function assertCashCountingSessionDepositAccess(
   context: ServerUserContext,
   session: Pick<CashCountingSession, "kioskIds">,
 ) {
-  for (const kioskId of session.kioskIds) assertCashDepositAccess(context, "issue", kioskId);
+  for (const kioskId of session.kioskIds) {
+    assertCashDepositAccess(context, "view", kioskId);
+    assertCashDepositAccess(context, "issue", kioskId);
+  }
 }
 
 export function canManageCashCountingSessionsOfOthers(context: ServerUserContext) {

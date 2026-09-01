@@ -790,6 +790,10 @@ export async function reopenCashClosureWithDepositHandling(input: {
       operator.status === "approved" && (!input.operatorId || operator.operatorId === input.operatorId)
     );
     if (targetOperators.length === 0) throw new Error("Operador finalizado não encontrado.");
+    const sessionBoundTargetCount = targetOperators.filter((operator) => !!operator.countingSessionId).length;
+    if (sessionBoundTargetCount > 1) {
+      throw new Error("Operadores vinculados a uma sessão de contagem precisam ser reabertos individualmente.");
+    }
     const targetOperatorIds = new Set(targetOperators.map((operator) => operator.operatorId));
     const now = new Date().toISOString();
     const sessionDetachments = await Promise.all(targetOperators

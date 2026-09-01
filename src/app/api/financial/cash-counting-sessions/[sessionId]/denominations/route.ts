@@ -45,6 +45,14 @@ export const POST = withApiErrorHandling<RouteContext>({
     canManageOthers: canManageCashCountingSessionsOfOthers(context),
   }).catch((cause) => {
     const message = cause instanceof Error ? cause.message : "";
+    if (message.includes("em uso por")) {
+      throw new AppError({
+        code: "CASH_COUNTING_DENOMINATIONS_FORBIDDEN",
+        kind: "AUTHORIZATION",
+        safeMessage: "Esta sessão está sob responsabilidade de outra pessoa.",
+        cause,
+      });
+    }
     if (message.includes("total físico") || message.includes("sessão") || message.includes("Sessão")) {
       throw new AppError({
         code: "CASH_COUNTING_DENOMINATIONS_CONFLICT",

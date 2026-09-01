@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isCurrentDraftLoad,
   isCurrentDraftRevision,
   persistLatestDraft,
   type RevisionedDraft,
@@ -49,4 +50,12 @@ test("persistLatestDraft does not commit when the editor is no longer available"
 test("isCurrentDraftRevision rejects remote snapshots started before a local edit", () => {
   assert.equal(isCurrentDraftRevision(4, 4), true);
   assert.equal(isCurrentDraftRevision(4, 5), false);
+});
+
+test("isCurrentDraftLoad rejeita resposta de outra data ou requisição anterior", () => {
+  const current = { id: 8, targetKey: "unit-1:2035-09-12" };
+  assert.equal(isCurrentDraftLoad({ id: 8, targetKey: "unit-1:2035-09-12" }, current), true);
+  assert.equal(isCurrentDraftLoad({ id: 7, targetKey: "unit-1:2035-09-12" }, current), false);
+  assert.equal(isCurrentDraftLoad({ id: 8, targetKey: "unit-1:2035-09-11" }, current), false);
+  assert.equal(isCurrentDraftLoad({ id: 8, targetKey: "unit-2:2035-09-12" }, current), false);
 });

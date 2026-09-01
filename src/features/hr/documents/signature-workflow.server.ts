@@ -761,14 +761,19 @@ function admissionSignaturePackageState(
   }).sort((left, right) => (
     left.party === right.party ? 0 : left.party === "employee" ? -1 : 1
   ));
-  const parsedLayout = admissionSignatureLayoutSchema.safeParse(request.get("placementLayout"));
+  let layout: AdmissionSignatureLayout | null = null;
+  try {
+    layout = normalizeAdmissionSignatureLayout(request.get("placementLayout"));
+  } catch {
+    // Layouts inválidos permanecem indisponíveis até uma nova preparação explícita.
+  }
   return {
     status: text(request.get("status")) ?? "unknown",
     sandbox: request.get("sandbox") === true,
     packageHash,
     pageCount: Number(manifest.totalPages ?? 0) || null,
     placementReady: Boolean(text(request.get("placementConfiguredAt"))),
-    layout: parsedLayout.success ? parsedLayout.data : null,
+    layout,
     signers,
     participants,
   };

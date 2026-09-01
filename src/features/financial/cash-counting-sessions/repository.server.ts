@@ -40,6 +40,10 @@ export function cashCountingSessionLockId(workspaceId: string, scopeKey: string)
   return `${workspaceId}:${scopeKey}`;
 }
 
+export function cashCountingSessionUnitLockId(workspaceId: string, kioskId: string) {
+  return `${workspaceId}:unit:${kioskId}`;
+}
+
 function normalizeSession(session: CashCountingSession): CashCountingSession {
   return {
     ...session,
@@ -52,10 +56,18 @@ function normalizeSession(session: CashCountingSession): CashCountingSession {
     coinTotalCents: session.coinTotalCents ?? 0,
     coinPendingExchangeCents: session.coinPendingExchangeCents ?? 0,
     coinExchangedCents: session.coinExchangedCents ?? 0,
+    coinReturnedToTillCents: session.coinReturnedToTillCents ?? 0,
+    scopeAggregationVersion: session.scopeAggregationVersion ?? null,
+    finalizedOperatorCountsByScope: session.finalizedOperatorCountsByScope ?? {},
+    finalizedOperatorCountsByDate: session.finalizedOperatorCountsByDate ?? {},
     denominations: session.denominations ?? [],
     bags: session.bags ?? [],
     batchIds: session.batchIds ?? [],
     paidBatchCount: session.paidBatchCount ?? 0,
+    lastDraftKioskId: session.lastDraftKioskId ?? null,
+    lastDraftDate: session.lastDraftDate ?? null,
+    lastDraftUpdatedAt: session.lastDraftUpdatedAt ?? null,
+    lastDraftUpdatedBy: session.lastDraftUpdatedBy ?? null,
   };
 }
 
@@ -85,21 +97,26 @@ function assertSessionOwner(session: CashCountingSession, actor: CashClosureActo
   }
 }
 
+function sessionLockRefs(session: Pick<CashCountingSession, "workspaceId" | "kioskIds" | "scopeKeys">) {
+  const references = [
+    ...session.kioskIds.map((kioskId) => financialDbAdmin.collection(LOCKS).doc(
+      cashCountingSessionUnitLockId(session.workspaceId, kioskId),
+    )),
+    ...session.scopeKeys.map((scopeKey) => financialDbAdmin.collection(LOCKS).doc(
+      cashCountingSessionLockId(session.workspaceId, scopeKey),
+    )),
+  ];
+  return Array.from(new Map(references.map((reference) => [reference.path, reference])).values());
+}
+
 export async function createCashCountingSession(input: {
   workspaceId: string;
   units: Array<{ id: string; name: string }>;
-  periods: Array<{ year: number; month: number }>;
   actor: CashClosureActor;
 }) {
   const id = randomUUID();
   const now = new Date().toISOString();
-  const scopes: CashCountingSessionScope[] = input.units.flatMap((unit) => input.periods.map((period) => ({
-    key: cashCountingSessionScopeKey(unit.id, period.year, period.month),
-    kioskId: unit.id,
-    kioskName: unit.name,
-    year: period.year,
-    month: period.month,
-  }))).sort((left, right) => left.key.localeCompare(right.key));
+  const scopes: CashCountingSessionScope[] = [];
   const session: CashCountingSession = {
     id,
     workspaceId: input.workspaceId,
@@ -108,7 +125,10 @@ export async function createCashCountingSession(input: {
     scopeKeys: scopes.map((scope) => scope.key),
     kioskIds: input.units.map((unit) => unit.id),
     kioskNames: input.units.map((unit) => unit.name),
-    periodKeys: input.periods.map((period) => periodKey(period.year, period.month)).sort(),
+    periodKeys: [],
+    scopeAggregationVersion: 1,
+    finalizedOperatorCountsByScope: {},
+    finalizedOperatorCountsByDate: {},
     finalizedOperatorCount: 0,
     countedCashCents: 0,
     depositEligibleCents: 0,
@@ -118,6 +138,7 @@ export async function createCashCountingSession(input: {
     coinTotalCents: 0,
     coinPendingExchangeCents: 0,
     coinExchangedCents: 0,
+    coinReturnedToTillCents: 0,
     denominations: [],
     bags: [],
     batchIds: [],
@@ -125,6 +146,10 @@ export async function createCashCountingSession(input: {
     openedAt: now,
     openedBy: input.actor.userId,
     openedByName: input.actor.userName,
+    lastDraftKioskId: null,
+    lastDraftDate: null,
+    lastDraftUpdatedAt: null,
+    lastDraftUpdatedBy: null,
     countingFinishedAt: null,
     countingFinishedBy: null,
     denominationsConfirmedAt: null,
@@ -138,8 +163,26 @@ export async function createCashCountingSession(input: {
   };
 
   await financialDbAdmin.runTransaction(async (transaction) => {
-    const lockRefs = scopes.map((scope) => financialDbAdmin.collection(LOCKS).doc(
-      cashCountingSessionLockId(input.workspaceId, scope.key),
+    const activeSessionQuery = financialDbAdmin.collection(SESSIONS)
+      .where("workspaceId", "==", input.workspaceId)
+      .where("status", "==", "open")
+      .limit(101);
+    const activeSessionSnapshot = await transaction.get(activeSessionQuery);
+    if (activeSessionSnapshot.size > 100) {
+      throw new Error("Há sessões abertas demais para validar o bloqueio de unidades com segurança.");
+    }
+    const selectedUnitIds = new Set(input.units.map((unit) => unit.id));
+    const conflictingSession = activeSessionSnapshot.docs
+      .map((snapshot) => normalizeSession(snapshotValue<CashCountingSession>(snapshot)))
+      .find((active) => active.kioskIds.some((kioskId) => selectedUnitIds.has(kioskId)));
+    if (conflictingSession) {
+      const kioskId = conflictingSession.kioskIds.find((item) => selectedUnitIds.has(item));
+      const unit = input.units.find((item) => item.id === kioskId);
+      throw new Error(`Já existe uma sessão aberta para ${unit?.name ?? "esta unidade"}.`);
+    }
+
+    const lockRefs = input.units.map((unit) => financialDbAdmin.collection(LOCKS).doc(
+      cashCountingSessionUnitLockId(input.workspaceId, unit.id),
     ));
     const lockSnapshots = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
     const existingSessionRefs = Array.from(new Set(lockSnapshots
@@ -156,21 +199,22 @@ export async function createCashCountingSession(input: {
       if (!lockSnapshot.exists) continue;
       const active = activeById.get(String(lockSnapshot.data()?.sessionId ?? ""));
       if (active?.status === "open") {
-        const scope = scopes.find((item) => item.key === lockSnapshot.data()?.scopeKey);
-        throw new Error(`Já existe uma sessão aberta para ${scope?.kioskName ?? "esta unidade"} em ${scope ? periodKey(scope.year, scope.month) : "esta competência"}.`);
+        const unit = input.units.find((item) => item.id === lockSnapshot.data()?.kioskId);
+        throw new Error(`Já existe uma sessão aberta para ${unit?.name ?? "esta unidade"}.`);
       }
     }
 
     transaction.create(financialDbAdmin.collection(SESSIONS).doc(id), session);
-    scopes.forEach((scope, index) => {
+    input.units.forEach((unit, index) => {
       const lock: CashCountingSessionLock = {
         id: lockRefs[index].id,
         workspaceId: input.workspaceId,
-        scopeKey: scope.key,
+        lockKind: "unit",
+        scopeKey: null,
         sessionId: id,
-        kioskId: scope.kioskId,
-        year: scope.year,
-        month: scope.month,
+        kioskId: unit.id,
+        year: null,
+        month: null,
         lockedAt: now,
         lockedBy: input.actor.userId,
       };
@@ -181,7 +225,7 @@ export async function createCashCountingSession(input: {
       sessionId: id,
       action: "created",
       actor: input.actor,
-      metadata: { scopeKeys: session.scopeKeys },
+      metadata: { kioskIds: session.kioskIds },
       now,
     });
     transaction.set(financialDbAdmin.collection(SESSION_AUDIT).doc(audit.id), audit);
@@ -209,6 +253,27 @@ export async function listCashCountingSessions(workspaceId: string, limit = 100)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+export async function listCashCountingSessionsAwaitingPhysicalComposition(
+  workspaceId: string,
+  options: { limit?: number; openedBy?: string } = {},
+) {
+  const limit = options.limit ?? 50;
+  const safeLimit = Math.min(Math.max(limit, 1), 50);
+  let query: FirebaseFirestore.Query = financialDbAdmin.collection(SESSIONS)
+    .where("workspaceId", "==", workspaceId)
+    .where("status", "==", "counted")
+    .orderBy("updatedAt", "asc");
+  if (options.openedBy) query = query.where("openedBy", "==", options.openedBy);
+  const snapshot = await query
+    .limit(safeLimit + 1)
+    .get();
+  return {
+    sessions: snapshot.docs.slice(0, safeLimit)
+      .map((document) => normalizeSession(snapshotValue<CashCountingSession>(document))),
+    hasMore: snapshot.size > safeLimit,
+  };
+}
+
 export async function getOpenCashCountingSessionForScope(input: {
   workspaceId: string;
   kioskId: string;
@@ -216,21 +281,34 @@ export async function getOpenCashCountingSessionForScope(input: {
   month: number;
 }) {
   const scopeKey = cashCountingSessionScopeKey(input.kioskId, input.year, input.month);
-  const lockSnapshot = await financialDbAdmin.collection(LOCKS).doc(
-    cashCountingSessionLockId(input.workspaceId, scopeKey),
-  ).get();
-  if (!lockSnapshot.exists) return null;
-  const sessionId = String(lockSnapshot.data()?.sessionId ?? "");
-  if (!sessionId) return null;
-  const sessionSnapshot = await financialDbAdmin.collection(SESSIONS).doc(sessionId).get();
-  if (!sessionSnapshot.exists) return null;
-  const session = normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot));
-  if (
-    session.workspaceId !== input.workspaceId
-    || session.status !== "open"
-    || !session.scopeKeys.includes(scopeKey)
-  ) return null;
-  return session;
+  const [unitLockSnapshot, legacyLockSnapshot] = await Promise.all([
+    financialDbAdmin.collection(LOCKS).doc(
+      cashCountingSessionUnitLockId(input.workspaceId, input.kioskId),
+    ).get(),
+    financialDbAdmin.collection(LOCKS).doc(
+      cashCountingSessionLockId(input.workspaceId, scopeKey),
+    ).get(),
+  ]);
+  const lockSnapshots = [unitLockSnapshot, legacyLockSnapshot].filter((snapshot) => snapshot.exists);
+  const sessionIds = Array.from(new Set(lockSnapshots
+    .map((snapshot) => String(snapshot.data()?.sessionId ?? ""))
+    .filter(Boolean)));
+  if (sessionIds.length === 0) return null;
+  const sessionSnapshots = await financialDbAdmin.getAll(...sessionIds.map((sessionId) => (
+    financialDbAdmin.collection(SESSIONS).doc(sessionId)
+  )));
+  const sessionsById = new Map(sessionSnapshots
+    .filter((snapshot) => snapshot.exists)
+    .map((snapshot) => [snapshot.id, normalizeSession(snapshotValue<CashCountingSession>(snapshot))]));
+  for (const lockSnapshot of lockSnapshots) {
+    const session = sessionsById.get(String(lockSnapshot.data()?.sessionId ?? ""));
+    if (
+      session?.workspaceId === input.workspaceId
+      && session.status === "open"
+      && session.kioskIds.includes(input.kioskId)
+    ) return session;
+  }
+  return null;
 }
 
 export type CashCountingSessionOperatorCursor = {
@@ -273,6 +351,13 @@ export async function getCashCountingSession(
   };
 }
 
+export async function getCashCountingSessionSummary(sessionId: string) {
+  const snapshot = await financialDbAdmin.collection(SESSIONS).doc(sessionId).get();
+  return snapshot.exists
+    ? normalizeSession(snapshotValue<CashCountingSession>(snapshot))
+    : null;
+}
+
 export async function assertOpenCashCountingSessionScope(
   transaction: FirebaseFirestore.Transaction,
   input: {
@@ -287,25 +372,72 @@ export async function assertOpenCashCountingSessionScope(
 ) {
   const sessionRef = financialDbAdmin.collection(SESSIONS).doc(input.sessionId);
   const scopeKey = cashCountingSessionScopeKey(input.kioskId, input.year, input.month);
-  const lockRef = financialDbAdmin.collection(LOCKS).doc(
+  const unitLockRef = financialDbAdmin.collection(LOCKS).doc(
+    cashCountingSessionUnitLockId(input.workspaceId, input.kioskId),
+  );
+  const legacyLockRef = financialDbAdmin.collection(LOCKS).doc(
     cashCountingSessionLockId(input.workspaceId, scopeKey),
   );
-  const [sessionSnapshot, lockSnapshot] = await Promise.all([
+  const [sessionSnapshot, unitLockSnapshot, legacyLockSnapshot] = await Promise.all([
     transaction.get(sessionRef),
-    transaction.get(lockRef),
+    transaction.get(unitLockRef),
+    transaction.get(legacyLockRef),
   ]);
   if (!sessionSnapshot.exists) throw new Error("Sessão de contagem não encontrada.");
   const session = normalizeSession(snapshotValue<CashCountingSession>(sessionSnapshot));
   if (session.workspaceId !== input.workspaceId) throw new Error("Sessão de contagem não encontrada.");
   if (session.status !== "open") throw new Error("A sessão de contagem já foi encerrada.");
   assertSessionOwner(session, input.actor, input.canManageOthers);
-  if (!session.scopeKeys.includes(scopeKey)) {
-    throw new Error("Esta unidade e competência não pertencem à sessão de contagem.");
+  if (!session.kioskIds.includes(input.kioskId)) {
+    throw new Error("Esta unidade não pertence à sessão de contagem.");
   }
-  if (!lockSnapshot.exists || lockSnapshot.data()?.sessionId !== session.id) {
-    throw new Error("O bloqueio da unidade e competência não pertence mais a esta sessão.");
+  const ownsUnitLock = unitLockSnapshot.exists && unitLockSnapshot.data()?.sessionId === session.id;
+  const ownsLegacyLock = legacyLockSnapshot.exists && legacyLockSnapshot.data()?.sessionId === session.id;
+  const ownsEffectiveLock = unitLockSnapshot.exists ? ownsUnitLock : ownsLegacyLock;
+  if (!ownsEffectiveLock) {
+    throw new Error("O bloqueio da unidade não pertence mais a esta sessão.");
   }
   return { session, sessionRef };
+}
+
+export async function saveCashCountingSessionDraftPosition(input: {
+  workspaceId: string;
+  sessionId: string;
+  kioskId: string;
+  date: string;
+  actor: CashClosureActor;
+  canManageOthers?: boolean;
+}) {
+  const [year, month] = input.date.split("-").map(Number);
+  const sessionRef = financialDbAdmin.collection(SESSIONS).doc(input.sessionId);
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const { session } = await assertOpenCashCountingSessionScope(transaction, {
+      sessionId: input.sessionId,
+      workspaceId: input.workspaceId,
+      kioskId: input.kioskId,
+      year,
+      month,
+      actor: input.actor,
+      canManageOthers: input.canManageOthers,
+    });
+    const now = new Date().toISOString();
+    const next: CashCountingSession = {
+      ...session,
+      lastDraftKioskId: input.kioskId,
+      lastDraftDate: input.date,
+      lastDraftUpdatedAt: now,
+      lastDraftUpdatedBy: input.actor.userId,
+      updatedAt: now,
+    };
+    transaction.set(sessionRef, {
+      lastDraftKioskId: next.lastDraftKioskId,
+      lastDraftDate: next.lastDraftDate,
+      lastDraftUpdatedAt: next.lastDraftUpdatedAt,
+      lastDraftUpdatedBy: next.lastDraftUpdatedBy,
+      updatedAt: next.updatedAt,
+    }, { merge: true });
+    return next;
+  });
 }
 
 export async function prepareCashCountingSessionOperatorAttachment(
@@ -367,10 +499,43 @@ export async function prepareCashCountingSessionOperatorAttachment(
     },
     now: input.now,
   });
+  const scopeKey = cashCountingSessionScopeKey(input.closure.kioskId, input.closure.year, input.closure.month);
+  const nextScopeCounts = session.scopeAggregationVersion === 1
+    ? {
+      ...session.finalizedOperatorCountsByScope,
+      [scopeKey]: (session.finalizedOperatorCountsByScope[scopeKey] ?? 0) + 1,
+    }
+    : session.finalizedOperatorCountsByScope;
+  const nextDateCounts = session.scopeAggregationVersion === 1
+    ? {
+      ...session.finalizedOperatorCountsByDate,
+      [input.closure.date]: (session.finalizedOperatorCountsByDate[input.closure.date] ?? 0) + 1,
+    }
+    : session.finalizedOperatorCountsByDate;
   const sessionUpdate: Pick<
     CashCountingSession,
-    "finalizedOperatorCount" | "countedCashCents" | "depositEligibleCents" | "dreOnlyCashCents" | "updatedAt"
+    "scopes" | "scopeKeys" | "periodKeys" | "scopeAggregationVersion" | "finalizedOperatorCountsByScope" | "finalizedOperatorCountsByDate" | "finalizedOperatorCount" | "countedCashCents" | "depositEligibleCents" | "dreOnlyCashCents" | "updatedAt"
   > = {
+    scopes: session.scopeKeys.includes(scopeKey)
+      ? session.scopes
+      : [...session.scopes, {
+        key: scopeKey,
+        kioskId: input.closure.kioskId,
+        kioskName: input.closure.kioskName,
+        year: input.closure.year,
+        month: input.closure.month,
+      }].sort((left, right) => left.key.localeCompare(right.key)),
+    scopeKeys: Array.from(new Set([
+      ...session.scopeKeys,
+      scopeKey,
+    ])).sort(),
+    scopeAggregationVersion: session.scopeAggregationVersion,
+    finalizedOperatorCountsByScope: nextScopeCounts,
+    finalizedOperatorCountsByDate: nextDateCounts,
+    periodKeys: Array.from(new Set([
+      ...session.periodKeys,
+      periodKey(input.closure.year, input.closure.month),
+    ])).sort(),
     finalizedOperatorCount: session.finalizedOperatorCount + 1,
     countedCashCents: session.countedCashCents + sessionOperator.countedCashCents,
     depositEligibleCents: session.depositEligibleCents + sessionOperator.depositEligibleCents,
@@ -403,10 +568,26 @@ export async function prepareCashCountingSessionOperatorDetachment(
     throw new Error("A composição física da sessão já foi confirmada; a correção exige um ajuste auditado de depósito.");
   }
   const lockRefs = canReturnToCounting
-    ? session.scopes.map((scope) => financialDbAdmin.collection(LOCKS).doc(
-      cashCountingSessionLockId(input.workspaceId, scope.key),
+    ? session.kioskIds.map((kioskId) => financialDbAdmin.collection(LOCKS).doc(
+      cashCountingSessionUnitLockId(input.workspaceId, kioskId),
     ))
     : [];
+  const activeSessionSnapshot = canReturnToCounting
+    ? await transaction.get(financialDbAdmin.collection(SESSIONS)
+      .where("workspaceId", "==", input.workspaceId)
+      .where("status", "==", "open")
+      .limit(101))
+    : null;
+  if (activeSessionSnapshot && activeSessionSnapshot.size > 100) {
+    throw new Error("Há sessões abertas demais para revalidar o bloqueio das unidades com segurança.");
+  }
+  const selectedKioskIds = new Set(session.kioskIds);
+  const conflictingActiveSession = activeSessionSnapshot?.docs
+    .map((snapshot) => normalizeSession(snapshotValue<CashCountingSession>(snapshot)))
+    .find((active) => active.id !== session.id && active.kioskIds.some((kioskId) => selectedKioskIds.has(kioskId)));
+  if (conflictingActiveSession) {
+    throw new Error("Outra sessão já usa uma das unidades; não é possível reabrir esta contagem.");
+  }
   const lockSnapshots = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
   if (lockSnapshots.some((snapshot) => snapshot.exists && snapshot.data()?.sessionId !== session.id)) {
     throw new Error("Outra sessão já usa uma das unidades e competências; não é possível reabrir esta contagem.");
@@ -415,6 +596,11 @@ export async function prepareCashCountingSessionOperatorDetachment(
   const operatorSnapshot = await transaction.get(operatorRef);
   if (!operatorSnapshot.exists) throw new Error("A contagem do operador não está vinculada à sessão informada.");
   const sessionOperator = snapshotValue<CashCountingSessionOperator>(operatorSnapshot);
+  const detachedScopeKey = cashCountingSessionScopeKey(
+    sessionOperator.kioskId,
+    sessionOperator.year,
+    sessionOperator.month,
+  );
   const nextFinalizedOperatorCount = session.finalizedOperatorCount - 1;
   const nextCountedCashCents = session.countedCashCents - sessionOperator.countedCashCents;
   const nextDepositEligibleCents = session.depositEligibleCents - sessionOperator.depositEligibleCents;
@@ -436,8 +622,32 @@ export async function prepareCashCountingSessionOperatorDetachment(
     metadata: { closureId: input.closureId, operatorId: input.operatorId },
     now: input.now,
   });
+  const nextScopeCounts = { ...session.finalizedOperatorCountsByScope };
+  const nextDateCounts = { ...session.finalizedOperatorCountsByDate };
+  if (session.scopeAggregationVersion === 1) {
+    const scopeCount = (nextScopeCounts[detachedScopeKey] ?? 0) - 1;
+    const dateCount = (nextDateCounts[sessionOperator.closureDate] ?? 0) - 1;
+    if (scopeCount < 0 || dateCount < 0) {
+      throw new Error("Os índices de competência da sessão estão inconsistentes com os operadores vinculados.");
+    }
+    if (scopeCount === 0) delete nextScopeCounts[detachedScopeKey];
+    else nextScopeCounts[detachedScopeKey] = scopeCount;
+    if (dateCount === 0) delete nextDateCounts[sessionOperator.closureDate];
+    else nextDateCounts[sessionOperator.closureDate] = dateCount;
+  }
+  const nextScopes = session.scopeAggregationVersion === 1
+    ? session.scopes.filter((scope) => (nextScopeCounts[scope.key] ?? 0) > 0)
+    : session.scopes;
+  const nextScopeKeys = nextScopes.map((scope) => scope.key).sort();
+  const nextPeriodKeys = Array.from(new Set(nextScopes.map((scope) => periodKey(scope.year, scope.month)))).sort();
   const sessionUpdate = {
     status: canReturnToCounting ? "open" as const : session.status,
+    scopes: nextScopes,
+    scopeKeys: nextScopeKeys,
+    periodKeys: nextPeriodKeys,
+    scopeAggregationVersion: session.scopeAggregationVersion,
+    finalizedOperatorCountsByScope: nextScopeCounts,
+    finalizedOperatorCountsByDate: nextDateCounts,
     finalizedOperatorCount: nextFinalizedOperatorCount,
     countedCashCents: nextCountedCashCents,
     depositEligibleCents: nextDepositEligibleCents,
@@ -449,16 +659,17 @@ export async function prepareCashCountingSessionOperatorDetachment(
     } : {}),
     updatedAt: input.now,
   };
-  const locks = canReturnToCounting ? session.scopes.map((scope, index) => ({
+  const locks = canReturnToCounting ? session.kioskIds.map((kioskId, index) => ({
     ref: lockRefs[index],
     value: {
       id: lockRefs[index].id,
       workspaceId: input.workspaceId,
-      scopeKey: scope.key,
+      lockKind: "unit" as const,
+      scopeKey: null,
       sessionId: session.id,
-      kioskId: scope.kioskId,
-      year: scope.year,
-      month: scope.month,
+      kioskId,
+      year: null,
+      month: null,
       lockedAt: input.now,
       lockedBy: input.actor.userId,
     } satisfies CashCountingSessionLock,
@@ -480,9 +691,7 @@ export async function finishCashCountingSession(input: {
     if (session.workspaceId !== input.workspaceId) throw new Error("Sessão de contagem não encontrada.");
     if (session.status !== "open") throw new Error("Somente uma sessão aberta pode encerrar a contagem.");
     assertSessionOwner(session, input.actor, input.canManageOthers);
-    const lockRefs = session.scopeKeys.map((scopeKey) => financialDbAdmin.collection(LOCKS).doc(
-      cashCountingSessionLockId(input.workspaceId, scopeKey),
-    ));
+    const lockRefs = sessionLockRefs(session);
     const lockSnapshots = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
     if (session.finalizedOperatorCount === 0) throw new Error("Finalize ao menos um operador antes de encerrar a sessão.");
     const now = new Date().toISOString();
@@ -524,7 +733,13 @@ function sessionDepositBatch(input: {
   now: string;
 }): { batch: CashDepositBatch; item: CashDepositBatchItem } {
   const batchId = `${input.session.id}_deposit_${String(input.bag.sequence).padStart(3, "0")}`;
-  const dates = input.session.scopes.flatMap((scope) => {
+  const exactDates = input.session.scopeAggregationVersion === 1
+    ? Object.entries(input.session.finalizedOperatorCountsByDate)
+      .filter(([, count]) => count > 0)
+      .map(([date]) => date)
+      .sort()
+    : [];
+  const dates = exactDates.length > 0 ? exactDates : input.session.scopes.flatMap((scope) => {
     const lastDay = new Date(Date.UTC(scope.year, scope.month, 0)).getUTCDate();
     return [`${scope.year}-${String(scope.month).padStart(2, "0")}-01`, `${scope.year}-${String(scope.month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`];
   }).sort();
@@ -625,14 +840,16 @@ export async function confirmCashCountingSessionDenominations(input: {
     const nextBags = bags.map((bag, index) => ({ ...bag, batchId: batches[index].batch.id }));
     const next: CashCountingSession = {
       ...preparedSession,
-      status: "deposit_ready",
+      status: batches.length > 0 ? "deposit_ready" : "completed",
       denominationTotalCents: physical.totalCents,
       noteTotalCents: physical.noteTotalCents,
       coinTotalCents: physical.coinTotalCents,
-      coinPendingExchangeCents: physical.coinTotalCents,
+      coinPendingExchangeCents: 0,
+      coinReturnedToTillCents: physical.coinTotalCents,
       denominations: physical.denominations,
       bags: nextBags,
       batchIds: batches.map(({ batch }) => batch.id),
+      completedAt: batches.length > 0 ? null : now,
       updatedAt: now,
     };
     transaction.set(sessionRef, next);
@@ -650,6 +867,7 @@ export async function confirmCashCountingSessionDenominations(input: {
         denominationTotalCents: physical.totalCents,
         noteTotalCents: physical.noteTotalCents,
         coinTotalCents: physical.coinTotalCents,
+        coinReturnedToTillCents: physical.coinTotalCents,
         batchIds: next.batchIds,
       },
       now,
@@ -742,9 +960,7 @@ export async function cancelCashCountingSession(input: {
     assertSessionOwner(session, input.actor, input.canManageOthers);
     const operatorSnapshot = await transaction.get(sessionRef.collection(SESSION_OPERATORS).limit(1));
     if (!operatorSnapshot.empty) throw new Error("Encerre a sessão com as contagens já finalizadas em vez de cancelá-la.");
-    const lockRefs = session.scopeKeys.map((scopeKey) => financialDbAdmin.collection(LOCKS).doc(
-      cashCountingSessionLockId(input.workspaceId, scopeKey),
-    ));
+    const lockRefs = sessionLockRefs(session);
     const lockSnapshots = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
     const now = new Date().toISOString();
     const next: CashCountingSession = {

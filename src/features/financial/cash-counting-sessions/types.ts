@@ -48,6 +48,9 @@ export type CashCountingSession = {
   kioskIds: string[];
   kioskNames: string[];
   periodKeys: string[];
+  scopeAggregationVersion: 1 | null;
+  finalizedOperatorCountsByScope: Record<string, number>;
+  finalizedOperatorCountsByDate: Record<string, number>;
   finalizedOperatorCount: number;
   countedCashCents: number;
   depositEligibleCents: number;
@@ -57,6 +60,7 @@ export type CashCountingSession = {
   coinTotalCents: number;
   coinPendingExchangeCents: number;
   coinExchangedCents: number;
+  coinReturnedToTillCents: number;
   denominations: CashCountingDenomination[];
   bags: CashCountingSessionBag[];
   batchIds: string[];
@@ -64,6 +68,10 @@ export type CashCountingSession = {
   openedAt: string;
   openedBy: string;
   openedByName: string;
+  lastDraftKioskId: string | null;
+  lastDraftDate: string | null;
+  lastDraftUpdatedAt: string | null;
+  lastDraftUpdatedBy: string | null;
   countingFinishedAt: string | null;
   countingFinishedBy: string | null;
   denominationsConfirmedAt: string | null;
@@ -98,11 +106,12 @@ export type CashCountingSessionOperator = {
 export type CashCountingSessionLock = {
   id: string;
   workspaceId: string;
-  scopeKey: string;
+  lockKind: "unit" | "legacy_scope";
+  scopeKey: string | null;
   sessionId: string;
   kioskId: string;
-  year: number;
-  month: number;
+  year: number | null;
+  month: number | null;
   lockedAt: string;
   lockedBy: string;
 };
