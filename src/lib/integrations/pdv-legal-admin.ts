@@ -201,14 +201,59 @@ export async function createPdvLegalUser(params: {
   return found;
 }
 
+export async function clonePdvLegalUserAccessToFilial(params: {
+  sourceUserId: string;
+  filialId: string;
+  profileId?: string | null;
+}): Promise<PdvLegalUser> {
+  const cleanSourceId = params.sourceUserId.trim();
+  if (!/^\d+$/.test(cleanSourceId) || !/^\d+$/.test(params.filialId)) {
+    throw new PdvApiError('Usuário ou filial do PDV inválido.', 'USER_ACCESS_INVALID');
+  }
+
+  const raw = await pdvGet(`/usuariopdv/get/${encodeURIComponent(cleanSourceId)}`);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new PdvApiError('Cadastro-base do PDV não localizado para criar o novo acesso.', 'USER_NOT_FOUND');
+  }
+  const current = raw as Record<string, unknown>;
+  const name = typeof current.nome === 'string' ? current.nome.trim() : '';
+  const password = current.senha;
+  const currentProfileId = String(current.codperfil ?? current.codPerfil ?? current.codigoPerfil ?? '').trim();
+  const targetProfileId = params.profileId?.trim() || currentProfileId;
+  if (!name || (typeof password !== 'number' && typeof password !== 'string')) {
+    throw new PdvApiError('O PDV não retornou os dados necessários para replicar o acesso.', 'USER_CLONE_DATA_MISSING');
+  }
+  if (!/^\d+$/.test(targetProfileId)) {
+    throw new PdvApiError('O PDV não retornou o perfil necessário para replicar o acesso.', 'USER_PROFILE_MISSING');
+  }
+
+  const existing = await findPdvLegalUser({ name, filialId: params.filialId });
+  if (existing) {
+    if (existing.profileId === targetProfileId && existing.active !== false) return existing;
+    return updatePdvLegalUserAccess({
+      userId: existing.id,
+      filialId: params.filialId,
+      profileId: targetProfileId,
+    });
+  }
+
+  return createPdvLegalUser({
+    name,
+    filialId: params.filialId,
+    profileId: targetProfileId,
+    password: String(password),
+  });
+}
+
 export async function updatePdvLegalUserAccess(params: {
   userId: string;
   filialId: string;
-  profileId: string;
+  profileId?: string | null;
 }): Promise<PdvLegalUser> {
   const cleanId = params.userId.trim();
   if (!/^\d+$/.test(cleanId)) throw new PdvApiError('Código de usuário do PDV inválido.', 'USER_ID_INVALID');
-  if (!/^\d+$/.test(params.filialId) || !/^\d+$/.test(params.profileId)) {
+  const requestedProfileId = params.profileId?.trim() || null;
+  if (!/^\d+$/.test(params.filialId) || (requestedProfileId !== null && !/^\d+$/.test(requestedProfileId))) {
     throw new PdvApiError('Filial ou perfil do PDV inválido.', 'USER_ACCESS_INVALID');
   }
 
@@ -219,8 +264,13 @@ export async function updatePdvLegalUserAccess(params: {
   const current = raw as Record<string, unknown>;
   const name = typeof current.nome === 'string' ? current.nome.trim() : '';
   const password = current.senha;
+  const currentProfileId = String(current.codperfil ?? current.codPerfil ?? current.codigoPerfil ?? '').trim();
+  const targetProfileId = requestedProfileId ?? currentProfileId;
   if (!name || (typeof password !== 'number' && typeof password !== 'string')) {
     throw new PdvApiError('O PDV não retornou os dados necessários para preservar usuário e senha.', 'USER_UPDATE_DATA_MISSING');
+  }
+  if (!/^\d+$/.test(targetProfileId)) {
+    throw new PdvApiError('O PDV não retornou o perfil atual necessário para preservar o acesso.', 'USER_PROFILE_MISSING');
   }
 
   const { COD_EMPRESA, API_TOKEN } = getEnv();
@@ -238,7 +288,7 @@ export async function updatePdvLegalUserAccess(params: {
       codigo: Number(cleanId),
       nome: name,
       codFilial: Number(params.filialId),
-      codperfil: Number(params.profileId),
+      codperfil: Number(targetProfileId),
       senha: Number(password),
       isEntregador: current.isEntregador === true,
       codRefExterna: typeof current.codRefExterna === 'number' ? current.codRefExterna : 0,
@@ -252,7 +302,7 @@ export async function updatePdvLegalUserAccess(params: {
     throw new PdvApiError(`Falha ao atualizar acesso no PDV Legal (HTTP ${response.status}).`, 'USER_UPDATE_FAILED', detail.slice(0, 300));
   }
   const updated = await findPdvLegalUser({ name, filialId: params.filialId, id: cleanId });
-  if (!updated || updated.filialId !== params.filialId || updated.profileId !== params.profileId) {
+  if (!updated || updated.filialId !== params.filialId || updated.profileId !== targetProfileId) {
     throw new PdvApiError('O PDV Legal não confirmou a nova filial e o novo perfil.', 'USER_UPDATE_NOT_CONFIRMED');
   }
   return updated;

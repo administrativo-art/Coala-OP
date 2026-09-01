@@ -576,19 +576,33 @@ export async function saveCashClosureDraft(
       existingOperators: currentOperators,
       now,
     });
+    const currentOperatorById = new Map(currentOperators.map((operator) => [operator.id, operator]));
+    const operators = operatorResult.operators.map((operator) => {
+      const current = currentOperatorById.get(operator.id);
+      if (!current) return operator;
+      return JSON.stringify({ ...operator, updatedAt: current.updatedAt }) === JSON.stringify(current)
+        ? current
+        : operator;
+    });
     const nextClosure = withCashClosureOperatorAggregate(
       recomputeCashClosureFromLines(closure, nextLines, now),
-      operatorResult.operators,
+      operators,
       now,
     );
     transaction.set(ref, nextClosure);
-    for (const operator of operatorResult.operators) {
-      transaction.set(ref.collection(OPERATORS).doc(operator.id), operator);
+    for (const operator of operators) {
+      if (operator !== currentOperatorById.get(operator.id)) {
+        transaction.set(ref.collection(OPERATORS).doc(operator.id), operator);
+      }
     }
-    return { closure: nextClosure, lines: nextLines, operators: operatorResult.operators };
+    const summaryChanged = nextLines.some((line) => {
+      const current = normalizedById.get(line.id);
+      return current?.reportedCents !== line.reportedCents || current?.countedCents !== line.countedCents;
+    });
+    return { closure: nextClosure, lines: nextLines, operators, summaryChanged };
   });
-  await refreshCashClosureSummaries(result.closure);
-  return result;
+  if (result.summaryChanged) await refreshCashClosureSummaries(result.closure);
+  return { closure: result.closure, lines: result.lines, operators: result.operators };
 }
 
 export async function adjustCashClosureExpected(
