@@ -4,6 +4,10 @@ import { FieldValue } from "firebase-admin/firestore";
 import { authAdmin, dbAdmin } from "@/lib/firebase-admin";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { maybeAdvanceAfterFirstAccess } from "@/lib/hr/onboarding-access-provisioning";
+import {
+  replaceOnboardingIntegrationAlert,
+  resolvedPdvOnboardingAlert,
+} from "@/lib/hr/onboarding-integrations";
 import { createPdvLegalUser } from "@/lib/integrations/pdv-legal-admin";
 
 const FIRST_ACCESS_COLLECTION = "firstAccessLinks";
@@ -211,6 +215,13 @@ export async function provisionPdvFirstAccess(token: string, password: string) {
       }, { merge: true }),
       onboardingRef.set({
         pdvAccess: { ...pdv, status: "completed", userId: created.id, provisionedAt, lastError: null },
+        integrationAlerts: replaceOnboardingIntegrationAlert(onboarding.integrationAlerts, resolvedPdvOnboardingAlert({
+          externalId: created.id,
+          filialName: pdv.filialName,
+          checkedAt: provisionedAt,
+          source: "onboarding_first_access",
+          action: "created",
+        })),
         updatedAt: provisionedAt,
       }, { merge: true }),
     ]);

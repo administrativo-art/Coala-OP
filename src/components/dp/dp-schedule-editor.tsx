@@ -70,7 +70,7 @@ import {
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
-import { buildShiftStreakState, isDayOffShift, isWorkShift } from '@/lib/dp-shift-rules';
+import { buildShiftStreakState, compareWorkShiftsByTime, isDayOffShift, isWorkShift } from '@/lib/dp-shift-rules';
 import { DPBulkShiftEditDialog } from '@/components/dp/dp-bulk-shift-edit-dialog';
 import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
 
@@ -857,6 +857,11 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       if (!idx[s.date][s.userId]) idx[s.date][s.userId] = [];
       idx[s.date][s.userId].push({ shift: s, unitName, consecutiveDayCount });
     }
+    Object.values(idx).forEach((byUser) => {
+      Object.values(byUser).forEach((items) => {
+        items.sort((left, right) => compareWorkShiftsByTime(left.shift, right.shift));
+      });
+    });
     return idx;
   }, [isPerUnit, schedule.unitId, siblingWorkShifts, operationalUsers, units, kiosks, consecutiveCountMap]);
 
@@ -977,6 +982,9 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       if (!idx[shift.date][shift.unitId]) idx[shift.date][shift.unitId] = [];
       idx[shift.date][shift.unitId].push(shift);
     }
+    Object.values(idx).forEach((byUnit) => {
+      Object.values(byUnit).forEach((items) => items.sort(compareWorkShiftsByTime));
+    });
     return idx;
   }, [shiftsWithConsecutive, defFilter, userFilter, onlyAlerts]);
 
@@ -1484,6 +1492,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                       const ghosts = isPerUnit
                         ? Object.values(ghostIndex[date] ?? {}).flat()
                         : [];
+                      const displayWorkEntries = [
+                        ...cellShifts.map(shift => ({ kind: 'own' as const, shift })),
+                        ...ghosts.map(ghost => ({ kind: 'ghost' as const, ...ghost })),
+                      ].sort((left, right) => compareWorkShiftsByTime(left.shift, right.shift));
 
                       return (
                         <td
@@ -1491,13 +1503,26 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                           className="border-r px-2 py-2 align-top last:border-r-0 min-w-[200px]"
                         >
                           <div className="flex flex-col gap-1">
-                            {cellShifts.map(shift => {
+                            {displayWorkEntries.map((entry) => {
+                              const { shift } = entry;
                               const user = effectiveUserMap.get(shift.userId);
+                              if (entry.kind === 'ghost') {
+                                if (!user) return null;
+                                return (
+                                  <GhostShiftBadge
+                                    key={`ghost-${shift.id}`}
+                                    shift={shift}
+                                    unitName={entry.unitName}
+                                    consecutiveDayCount={entry.consecutiveDayCount}
+                                    user={user}
+                                  />
+                                );
+                              }
                               const def = shift.shiftDefinitionId ? defMap.get(shift.shiftDefinitionId) : undefined;
                               const hasCrossConflict = crossConflictShiftIds.has(shift.id);
                               return (
                                 <ShiftCard
-                                  key={shift.id}
+                                  key={`own-${shift.id}`}
                                   shift={{ ...shift, hasConflict: shift.hasConflict || hasCrossConflict }}
                                   userName={user?.username ?? 'Desconhecido'}
                                   userAvatar={user?.avatarUrl}
@@ -1512,29 +1537,9 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                 />
                               );
                             })}
-                            {ghosts.length > 0 && (
-                              <>
-                                {cellShifts.length > 0 && (
-                                  <div className="border-t border-dashed border-muted-foreground/20 my-0.5" />
-                                )}
-                                {ghosts.map(({ shift, unitName, consecutiveDayCount }) => {
-                                  const user = effectiveUserMap.get(shift.userId);
-                                  if (!user) return null;
-                                  return (
-                                    <GhostShiftBadge
-                                      key={shift.id}
-                                      shift={shift}
-                                      unitName={unitName}
-                                      consecutiveDayCount={consecutiveDayCount}
-                                      user={user}
-                                    />
-                                  );
-                                })}
-                              </>
-                            )}
                             {dayOffEntries.length > 0 && (
                               <>
-                                {(cellShifts.length > 0 || ghosts.length > 0) && (
+                                {displayWorkEntries.length > 0 && (
                                   <div className="border-t border-dashed border-muted-foreground/20 my-0.5" />
                                 )}
                                 {dayOffEntries.map(({ userId, explicit }) => {
