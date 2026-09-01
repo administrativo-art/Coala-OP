@@ -82,7 +82,7 @@ function phaseAgeLabel(days: number) {
 function statusLabelForCard(status?: string | null) {
   if (status === "paid") return "pago";
   if (status === "not_applicable") return "não aplicável";
-  if (["awaiting_financial_authorization", "ready_to_submit", "submitting", "awaiting_bank_approval", "processing"].includes(status ?? "")) return "em andamento";
+  if (["awaiting_financial_authorization", "ready_to_submit", "submitting", "awaiting_bank_approval", "scheduled", "processing"].includes(status ?? "")) return "em andamento";
   if (["failed", "rejected", "configuration_required"].includes(status ?? "")) return "atenção";
   return "aguardando etapa 5";
 }

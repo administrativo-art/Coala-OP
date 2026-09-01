@@ -5,7 +5,7 @@ export type BankPaymentRequestStatus =
   | "awaiting_bank_approval" | "scheduled" | "processing" | "awaiting_statement" | "paid" | "rejected"
   | "approval_expired" | "failed" | "cancelled";
 
-export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination" | "purchase_order" | "financial_inbox";
+export type BankPaymentSourceType = "aso" | "generated_receipt" | "termination" | "vacation" | "purchase_order" | "financial_inbox";
 export type LegacyBankPaymentSourceType = Exclude<BankPaymentSourceType, "financial_inbox">;
 export type BankPaymentRail = "pix" | "barcode";
 
@@ -31,6 +31,7 @@ type BankPaymentRequestBase = {
   legalEntitySnapshot?: PaymentLegalEntitySnapshot;
   amount: number;
   description: string;
+  scheduledFor?: string | null;
   status: BankPaymentRequestStatus;
   idempotencyKey: string;
   interRequestId?: string;
@@ -56,7 +57,7 @@ export type PixBankPaymentRequest = BankPaymentRequestBase & {
   beneficiaryReference: PaymentBeneficiaryReference;
   beneficiarySnapshot: BeneficiarySnapshot;
   barcodeSnapshot?: never;
-  status: Exclude<BankPaymentRequestStatus, "scheduled" | "awaiting_statement">;
+  status: Exclude<BankPaymentRequestStatus, "awaiting_statement">;
 };
 
 export type BarcodeBankPaymentRequest = BankPaymentRequestBase & {

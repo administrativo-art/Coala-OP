@@ -10,6 +10,9 @@ import {
 } from "@/lib/autentique-core";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
 import { markTerminationDocumentSigned, markTerminationIdentitySigned } from "@/features/hr/termination/server";
+import { syncVacationNoticeSignatureRequest } from "@/features/hr/vacations/server";
+import { syncVacationReceiptSignatureRequest } from "@/features/hr/vacations/payment-completion.server";
+import { reportSystemError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 
@@ -88,6 +91,9 @@ export async function POST(request: Request) {
                 ...(participantEvent.viewedAt ? { viewedAt: participantEvent.viewedAt } : {}),
                 ...(participantEvent.signedAt ? { signedAt: participantEvent.signedAt } : {}),
                 ...(participantEvent.rejectedAt ? { rejectedAt: participantEvent.rejectedAt } : {}),
+                ...(typeof mail.reason === "string"
+                  ? { deliveryFailureReason: mail.reason.slice(0, 500) }
+                  : {}),
                 ...(participantEvent.lastIp ? { lastIp: participantEvent.lastIp } : {}),
                 ...(participantEvent.lastPort ? { lastPort: participantEvent.lastPort } : {}),
                 updatedAt: event.createdAt ?? new Date().toISOString(),
@@ -141,6 +147,7 @@ export async function POST(request: Request) {
       }
       const terminationId = requestDoc.get("terminationId");
       const purpose = requestDoc.get("purpose");
+      const vacationId = requestDoc.get("vacationId");
       if (workflowDocumentIds.length) {
         const workflowStatus = event.type === "document.finished" ? "signed" : status;
         const batch = hrDbAdmin.batch();
@@ -174,6 +181,10 @@ export async function POST(request: Request) {
               await markTerminationIdentitySigned({ terminationId, signedUrl: files.signed as string, signedAt: event.createdAt ?? new Date().toISOString() });
             } else if (typeof terminationId === "string" && purpose === "termination_final_document" && typeof requestDoc.get("terminationDocumentId") === "string") {
               await markTerminationDocumentSigned({ terminationId, documentId: requestDoc.get("terminationDocumentId"), signedUrl: files.signed as string, signedAt: event.createdAt ?? new Date().toISOString() });
+            } else if (typeof vacationId === "string" && purpose === "vacation_notice") {
+              await syncVacationNoticeSignatureRequest({ vacationId, signatureRequestId: requestDoc.id });
+            } else if (typeof vacationId === "string" && purpose === "vacation_receipt") {
+              await syncVacationReceiptSignatureRequest({ vacationId, signatureRequestId: requestDoc.id });
             } else {
               await archiveAutentiqueSignedDocument({
                 signatureRequestId: requestDoc.id,
@@ -183,12 +194,44 @@ export async function POST(request: Request) {
               });
             }
           } catch (error) {
-            console.error("[autentique-webhook] Falha ao arquivar documento assinado.", error);
+            const reference = reportSystemError({
+              error,
+              source: "api",
+              operation: "archive-autentique-signed-document",
+              routeOrJob: "/api/webhooks/autentique",
+              metadata: { vacationId, signatureRequestId: requestDoc.id, purpose },
+            });
             await requestDoc.ref.set({
               archiveStatus: "failed",
-              archiveError: error instanceof Error ? error.message : "Falha ao arquivar.",
+              archiveError: "Não foi possível arquivar o documento assinado.",
+              archiveEventId: reference.eventId,
               updatedAt: new Date().toISOString(),
             }, { merge: true });
+          }
+        });
+      } else if (typeof vacationId === "string" && (purpose === "vacation_notice" || purpose === "vacation_receipt")) {
+        after(async () => {
+          try {
+            if (purpose === "vacation_notice") {
+              await syncVacationNoticeSignatureRequest({ vacationId, signatureRequestId: requestDoc.id });
+            } else {
+              await syncVacationReceiptSignatureRequest({ vacationId, signatureRequestId: requestDoc.id });
+            }
+          } catch (error) {
+            const reference = reportSystemError({
+              error,
+              source: "api",
+              operation: purpose === "vacation_notice"
+                ? "project-vacation-notice-signature"
+                : "project-vacation-receipt-signature",
+              routeOrJob: "/api/webhooks/autentique",
+              metadata: { vacationId, signatureRequestId: requestDoc.id },
+            });
+            await requestDoc.ref.set({
+              vacationProjectionStatus: "failed",
+              vacationProjectionEventId: reference.eventId,
+              updatedAt: new Date().toISOString(),
+            }, { merge: true }).catch(() => undefined);
           }
         });
       }

@@ -64,6 +64,8 @@ import {
 } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
+import { DPVacationWorkflowPanel } from '@/components/dp/dp-vacation-workflow';
 
 import {
   calculateVacationHealth,
@@ -121,9 +123,8 @@ const vacationSchema = z.object({
   recordType: z.enum(['gozo', 'venda']),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  days: z.coerce.number().min(1).max(60),
+  days: z.coerce.number().min(1).max(30),
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'PLANNED']),
-  paymentDate: z.string().optional(),
   returnDate: z.string().optional(),
 }).refine(d => {
   if (d.startDate && d.endDate) return d.endDate >= d.startDate;
@@ -156,7 +157,6 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
       endDate: vacation?.endDate ?? '',
       days: vacation?.days ?? 30,
       status: vacation?.status ?? 'PLANNED',
-      paymentDate: vacation?.paymentDate ?? '',
       returnDate: vacation?.returnDate ?? '',
     },
   });
@@ -170,7 +170,6 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
         endDate: vacation?.endDate ?? '',
         days: vacation?.days ?? 30,
         status: vacation?.status ?? 'PLANNED',
-        paymentDate: vacation?.paymentDate ?? '',
         returnDate: vacation?.returnDate ?? '',
       });
     }
@@ -194,7 +193,6 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
         userId,
         startDate: values.startDate || undefined,
         endDate: values.endDate || undefined,
-        paymentDate: values.paymentDate || undefined,
         returnDate: values.returnDate || undefined,
         warnings: vacation?.warnings ?? [],
       };
@@ -265,48 +263,26 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="days" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Dias</FormLabel>
-                  <FormControl><Input type="number" min={1} max={60} {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="status" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
+            <FormField control={form.control} name="days" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Dias</FormLabel>
+                <FormControl><Input type="number" min={1} max={30} {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
 
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="paymentDate" render={({ field }) => (
+            {recordType === 'gozo' && (
+              <FormField control={form.control} name="returnDate" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Pagamento</FormLabel>
+                  <FormLabel>Retorno</FormLabel>
                   <FormControl><Input type="date" {...field} /></FormControl>
+                  <p className="text-[11px] text-muted-foreground">
+                    O prazo de pagamento será calculado pela trilha e só será confirmado após o recibo do contador.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )} />
-              {recordType === 'gozo' && (
-                <FormField control={form.control} name="returnDate" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Retorno</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              )}
-            </div>
+            )}
 
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
@@ -495,6 +471,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const { updateVacation, deleteVacation } = useDP();
   const { vacations, vacationsLoading, vacationsError } = useDPBootstrap();
   const { toast } = useToast();
+  const api = useAuthenticatedApi();
 
   const canEdit    = permissions.dp?.vacation?.request ?? false;
   const canApprove = permissions.dp?.vacation?.approve ?? false;
@@ -503,6 +480,9 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const [editVacation, setEditVacation] = useState<DPVacationRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPVacationRecord | null>(null);
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>();
+  const [selectedWorkflowVacationId, setSelectedWorkflowVacationId] = useState<string | null>(null);
+  const [noticeBusy, setNoticeBusy] = useState<'generate' | 'validate' | 'open' | 'send' | 'sync' | null>(null);
+  const [workflowBusy, setWorkflowBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const user = users.find(u => u.id === userId);
@@ -522,6 +502,33 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     [admDate, userVacations]
   );
 
+  const workflowVacations = useMemo(() => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    return userVacations
+      .filter(vacation => vacation.recordType === 'gozo')
+      .sort((left, right) => {
+        const leftRejected = left.status === 'REJECTED' ? 1 : 0;
+        const rightRejected = right.status === 'REJECTED' ? 1 : 0;
+        if (leftRejected !== rightRejected) return leftRejected - rightRejected;
+        const leftUpcoming = (left.endDate ?? '') >= today ? 0 : 1;
+        const rightUpcoming = (right.endDate ?? '') >= today ? 0 : 1;
+        if (leftUpcoming !== rightUpcoming) return leftUpcoming - rightUpcoming;
+        return leftUpcoming === 0
+          ? (left.startDate ?? '').localeCompare(right.startDate ?? '')
+          : (right.startDate ?? '').localeCompare(left.startDate ?? '');
+      });
+  }, [userVacations]);
+
+  React.useEffect(() => {
+    if (!workflowVacations.length) {
+      setSelectedWorkflowVacationId(null);
+      return;
+    }
+    if (!workflowVacations.some(vacation => vacation.id === selectedWorkflowVacationId)) {
+      setSelectedWorkflowVacationId(workflowVacations[0].id);
+    }
+  }, [selectedWorkflowVacationId, workflowVacations]);
+
   async function handleApprove(v: DPVacationRecord) {
     try { await updateVacation({ ...v, status: 'APPROVED' }); toast({ title: 'Aprovado.' }); }
     catch { toast({ title: 'Erro.', variant: 'destructive' }); }
@@ -530,6 +537,186 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   async function handleReject(v: DPVacationRecord) {
     try { await updateVacation({ ...v, status: 'REJECTED' }); toast({ title: 'Rejeitado.' }); }
     catch { toast({ title: 'Erro.', variant: 'destructive' }); }
+  }
+
+  async function handleGenerateNotice(vacation: DPVacationRecord) {
+    setNoticeBusy('generate');
+    try {
+      await api(`/api/dp/vacations/${encodeURIComponent(vacation.id)}`, {
+        method: 'PATCH',
+        json: { action: 'generate_notice' },
+        fallbackError: 'Não foi possível gerar o aviso de férias.',
+      });
+      toast({
+        title: 'Aviso gerado.',
+        description: 'Abra o PDF e confira o conteúdo antes de validar.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Não foi possível gerar o aviso.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setNoticeBusy(null);
+    }
+  }
+
+  async function handleOpenNotice(vacation: DPVacationRecord) {
+    const preview = window.open('', '_blank');
+    setNoticeBusy('open');
+    try {
+      const blob = await api<Blob>(`/api/dp/vacations/${encodeURIComponent(vacation.id)}/notice`, {
+        method: 'GET',
+        responseType: 'blob',
+        fallbackError: 'Não foi possível abrir o aviso de férias.',
+      });
+      const url = URL.createObjectURL(blob);
+      if (preview) preview.location.href = url;
+      else window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      preview?.close();
+      toast({
+        title: 'Não foi possível abrir o aviso.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setNoticeBusy(null);
+    }
+  }
+
+  async function handleValidateNotice(vacation: DPVacationRecord) {
+    setNoticeBusy('validate');
+    try {
+      await api(`/api/dp/vacations/${encodeURIComponent(vacation.id)}`, {
+        method: 'PATCH',
+        json: { action: 'validate_notice' },
+        fallbackError: 'Não foi possível validar o aviso de férias.',
+      });
+      toast({
+        title: 'Aviso validado.',
+        description: 'O documento foi liberado para a futura etapa de envio e assinatura.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Não foi possível validar o aviso.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setNoticeBusy(null);
+    }
+  }
+
+  async function handleSendNotice(vacation: DPVacationRecord) {
+    setNoticeBusy('send');
+    try {
+      await api(`/api/dp/vacations/${encodeURIComponent(vacation.id)}`, {
+        method: 'PATCH',
+        json: { action: 'send_notice' },
+        fallbackError: 'Não foi possível enviar o aviso para assinatura.',
+      });
+      toast({
+        title: 'Aviso enviado.',
+        description: 'A empregadora e a colaboradora receberam solicitações individuais de assinatura.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Não foi possível enviar o aviso.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setNoticeBusy(null);
+    }
+  }
+
+  async function handleSyncNotice(vacation: DPVacationRecord) {
+    setNoticeBusy('sync');
+    try {
+      await api(`/api/dp/vacations/${encodeURIComponent(vacation.id)}`, {
+        method: 'PATCH',
+        json: { action: 'sync_notice' },
+        fallbackError: 'Não foi possível atualizar o acompanhamento.',
+      });
+      toast({ title: 'Acompanhamento atualizado.' });
+    } catch (error) {
+      toast({
+        title: 'Não foi possível atualizar o acompanhamento.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setNoticeBusy(null);
+    }
+  }
+
+  async function handleWorkflowAction(
+    vacation: DPVacationRecord,
+    busy: string,
+    payload: Record<string, unknown>,
+    successTitle: string,
+  ) {
+    setWorkflowBusy(busy);
+    try {
+      const response = await api<{ vacation?: { paymentPrepared?: boolean } }>(
+        `/api/dp/vacations/${encodeURIComponent(vacation.id)}`,
+        {
+          method: 'PATCH',
+          json: payload,
+          fallbackError: 'Não foi possível avançar a trilha de férias.',
+        },
+      );
+      toast({
+        title: successTitle,
+        description: payload.action === 'review_receipt'
+          && payload.decision === 'approved'
+          && response.vacation?.paymentPrepared === false
+          ? 'O recibo foi aprovado, mas o pagamento exige ajuste no vínculo, CPF ou chave Pix da colaboradora.'
+          : undefined,
+      });
+    } catch (error) {
+      toast({
+        title: 'Não foi possível avançar a trilha.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setWorkflowBusy(null);
+    }
+  }
+
+  async function handleOpenWorkflowAsset(
+    vacation: DPVacationRecord,
+    kind: 'receipt-original' | 'receipt-signed',
+  ) {
+    const preview = window.open('', '_blank');
+    setWorkflowBusy(`open-${kind}`);
+    try {
+      const blob = await api<Blob>(
+        `/api/dp/vacations/${encodeURIComponent(vacation.id)}/assets/${kind}`,
+        {
+          method: 'GET',
+          responseType: 'blob',
+          fallbackError: 'Não foi possível abrir o documento.',
+        },
+      );
+      const url = URL.createObjectURL(blob);
+      if (preview) preview.location.href = url;
+      else window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      preview?.close();
+      toast({
+        title: 'Não foi possível abrir o documento.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setWorkflowBusy(null);
+    }
   }
 
   async function confirmDelete() {
@@ -598,6 +785,36 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
           </Button>
         )}
       </div>
+
+      <DPVacationWorkflowPanel
+        records={workflowVacations}
+        selectedId={selectedWorkflowVacationId}
+        canEdit={canEdit}
+        canApprove={canApprove}
+        onSelect={setSelectedWorkflowVacationId}
+        onEdit={setEditVacation}
+        onApprove={handleApprove}
+        onGenerateNotice={handleGenerateNotice}
+        onValidateNotice={handleValidateNotice}
+        onOpenNotice={handleOpenNotice}
+        onSendNotice={handleSendNotice}
+        onSyncNotice={handleSyncNotice}
+        noticeBusy={noticeBusy}
+        workflowBusy={workflowBusy}
+        onSendAccountant={(vacation) => handleWorkflowAction(vacation, 'accountant', { action: 'send_accountant' }, 'Solicitação enviada à contabilidade.')}
+        onReviewReceipt={(vacation, review) => handleWorkflowAction(
+          vacation,
+          review.decision === 'approved' ? 'approve-receipt' : 'correct-receipt',
+          { action: 'review_receipt', ...review },
+          review.decision === 'approved' ? 'Recibo aprovado.' : 'Correção solicitada à contabilidade.',
+        )}
+        onPreparePayment={(vacation) => handleWorkflowAction(vacation, 'prepare-payment', { action: 'prepare_payment' }, 'Pagamento preparado para o Financeiro.')}
+        onSyncPayment={(vacation) => handleWorkflowAction(vacation, 'sync-payment', { action: 'sync_payment' }, 'Situação do pagamento atualizada.')}
+        onRetryReceiptSignature={(vacation) => handleWorkflowAction(vacation, 'retry-receipt-signature', { action: 'retry_receipt_signature' }, 'Recibo enviado para assinatura.')}
+        onSyncReceiptSignature={(vacation) => handleWorkflowAction(vacation, 'sync-receipt-signature', { action: 'sync_receipt_signature' }, 'Assinatura do recibo atualizada.')}
+        onFinalizeWorkflow={(vacation) => handleWorkflowAction(vacation, 'finalize', { action: 'finalize_workflow' }, 'Trilha de férias finalizada.')}
+        onOpenWorkflowAsset={handleOpenWorkflowAsset}
+      />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
 

@@ -2249,7 +2249,7 @@ export async function syncTerminationPayment(params: { context: ServerUserContex
   if (!requestId) throw new Error("A solicitação de pagamento ainda não foi criada.");
   let payment = await getPaymentRequest(requestId);
   if (payment.sourceType !== "termination") throw new Error("A solicitação bancária não pertence a esta rescisão.");
-  if (["awaiting_bank_approval", "processing", "rejected", "approval_expired", "failed"].includes(payment.status) && payment.interRequestId) {
+  if (["awaiting_bank_approval", "scheduled", "processing", "rejected", "approval_expired", "failed"].includes(payment.status) && payment.interRequestId) {
     payment = await refreshPaymentRequest(requestId, { uid: params.context.userDoc.id, email: params.context.userDoc.email, name: getUserDisplayName(params.context.userDoc, params.context.userDoc.id) });
     if (payment.sourceType !== "termination") throw new Error("A solicitação bancária não pertence a esta rescisão.");
   }

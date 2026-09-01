@@ -54,7 +54,7 @@ const entitySchema = z.object({
       id: z.string().min(1),
       department: z.string().trim().min(1, 'Informe o setor.'),
       email: z.string().trim().email('E-mail setorial inválido.'),
-      purposes: z.array(z.enum(['onboarding', 'termination', 'aso'])).optional(),
+      purposes: z.array(z.enum(['onboarding', 'termination', 'aso', 'vacation'])).optional(),
     })).optional(),
   }),
   responsible: z.string().optional(),
@@ -487,7 +487,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
         form.setValue('contact.emails', departmentEmails.filter((entry) => entry.id !== id), { shouldDirty: true });
     };
 
-    const toggleDepartmentEmailPurpose = (index: number, purpose: 'onboarding' | 'termination' | 'aso', checked: boolean) => {
+    const toggleDepartmentEmailPurpose = (index: number, purpose: 'onboarding' | 'termination' | 'aso' | 'vacation', checked: boolean) => {
         const current = departmentEmails[index];
         if (!current) return;
         const purposes = new Set(current.purposes ?? []);
@@ -1032,6 +1032,7 @@ function AddEditEntityModal({ open, onOpenChange, entityToEdit }: { open: boolea
                                                                         ['onboarding', 'Integração'],
                                                                         ['termination', 'Desligamento'],
                                                                         ['aso', 'ASO'],
+                                                                        ['vacation', 'Férias'],
                                                                     ] as const).map(([purpose, label]) => (
                                                                         <label key={purpose} className="flex items-center gap-1.5">
                                                                             <input type="checkbox" checked={(entry.purposes ?? []).includes(purpose)} onChange={(event) => toggleDepartmentEmailPurpose(index, purpose, event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-pink-600" />

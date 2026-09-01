@@ -20,6 +20,12 @@ test("maps approval, rejection and expiration without inventing paid", () => {
   assert.notEqual(mapInterPixStatus(undefined), "paid");
 });
 
+test("mantém Pix futuro como agendado até a confirmação bancária", () => {
+  assert.equal(mapInterPixStatus("AGENDADO", "2099-09-03"), "scheduled");
+  assert.equal(mapInterPixStatus("EM_PROCESSAMENTO", "2099-09-03"), "scheduled");
+  assert.equal(mapInterPixStatus("PAGO", "2099-09-03"), "paid");
+});
+
 test("separa boleto agendado, aprovação bancária e pagamento efetivado", () => {
   assert.equal(mapInterBarcodeStatus("AGENDADO", "2026-08-25"), "scheduled");
   assert.equal(mapInterBarcodeStatus("AGUARDANDO_APROVACAO", "2026-08-25"), "awaiting_bank_approval");

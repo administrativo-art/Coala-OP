@@ -728,17 +728,8 @@ service cloud.firestore {
     // Férias
     match /dp_vacations/{id} {
       allow read: if isAuth() && (isAdmin() || getPerms().dp.vacation.viewAll == true);
-      allow create: if isAuth() && (isAdmin() || getPerms().dp.vacation.request == true)
-        && request.resource.data.keys().hasAll(['userId', 'cycleId', 'recordType', 'days', 'status'])
-        && request.resource.data.userId is string
-        && request.resource.data.days is int
-        && request.resource.data.days > 0;
-      allow update: if isAuth() && (
-        isAdmin() ||
-        getPerms().dp.vacation.approve == true ||
-        getPerms().dp.vacation.request == true
-      ) && request.resource.data.userId is string;
-      allow delete: if isAuth() && (isAdmin() || getPerms().dp.vacation.approve == true);
+      // Transições, análise legal e auditoria são gravadas atomicamente pela API.
+      allow create, update, delete: if false;
     }
 
     // Calendários de feriados
