@@ -4,6 +4,11 @@ import { dbAdmin } from '@/lib/firebase-admin';
 import { type SalesReport, type SalesReportItem, type ConsumptionReport, type ConsumptionAnalysisItem, type ProductSimulation, type ProductSimulationItem, type BaseProduct } from '@/types';
 import { convertValue } from '@/lib/conversion';
 import { isPdvCouponFullyCancelled, isPdvItemCancelled, pdvCouponItems } from '@/lib/integrations/pdv-coupon-ingestion';
+import {
+  isPdvLegalUserRemovalConfirmed,
+  movePdvLegalUserWithCloneFallback,
+  PdvLegalUserMoveCleanupError,
+} from '@/lib/integrations/pdv-legal-user-move';
 
 function requireEnv(name: string): string {
   const val = process.env[name];
@@ -201,11 +206,11 @@ export async function createPdvLegalUser(params: {
   return found;
 }
 
-export async function clonePdvLegalUserAccessToFilial(params: {
+async function clonePdvLegalUserAccessToFilialWithDisposition(params: {
   sourceUserId: string;
   filialId: string;
   profileId?: string | null;
-}): Promise<PdvLegalUser> {
+}): Promise<{ user: PdvLegalUser; created: boolean }> {
   const cleanSourceId = params.sourceUserId.trim();
   if (!/^\d+$/.test(cleanSourceId) || !/^\d+$/.test(params.filialId)) {
     throw new PdvApiError('Usuário ou filial do PDV inválido.', 'USER_ACCESS_INVALID');
@@ -229,20 +234,31 @@ export async function clonePdvLegalUserAccessToFilial(params: {
 
   const existing = await findPdvLegalUser({ name, filialId: params.filialId });
   if (existing) {
-    if (existing.profileId === targetProfileId && existing.active !== false) return existing;
-    return updatePdvLegalUserAccess({
+    if (existing.profileId === targetProfileId && existing.active !== false) {
+      return { user: existing, created: false };
+    }
+    return { user: await updatePdvLegalUserAccess({
       userId: existing.id,
       filialId: params.filialId,
       profileId: targetProfileId,
-    });
+    }), created: false };
   }
 
-  return createPdvLegalUser({
+  return { user: await createPdvLegalUser({
     name,
     filialId: params.filialId,
     profileId: targetProfileId,
     password: String(password),
-  });
+  }), created: true };
+}
+
+export async function clonePdvLegalUserAccessToFilial(params: {
+  sourceUserId: string;
+  filialId: string;
+  profileId?: string | null;
+}): Promise<PdvLegalUser> {
+  const result = await clonePdvLegalUserAccessToFilialWithDisposition(params);
+  return result.user;
 }
 
 export async function updatePdvLegalUserAccess(params: {
@@ -328,8 +344,38 @@ export async function deletePdvLegalUser(userId: string): Promise<void> {
     throw new PdvApiError(`Falha ao remover acesso no PDV Legal (HTTP ${response.status}).`, 'USER_DELETE_FAILED', detail.slice(0, 300));
   }
   const remaining = await findPdvLegalUser({ name: '', id: cleanId });
-  if (remaining?.active !== false) {
+  if (!isPdvLegalUserRemovalConfirmed(remaining)) {
     throw new PdvApiError('O PDV Legal ainda retorna o usuário após a solicitação de remoção.', 'USER_DELETE_NOT_CONFIRMED');
+  }
+}
+
+export async function movePdvLegalUserAccessToFilial(params: {
+  userId: string;
+  filialId: string;
+  profileId?: string | null;
+}): Promise<PdvLegalUser> {
+  try {
+    const result = await movePdvLegalUserWithCloneFallback({
+      sourceUserId: params.userId,
+      update: () => updatePdvLegalUserAccess(params),
+      clone: () => clonePdvLegalUserAccessToFilialWithDisposition({
+        sourceUserId: params.userId,
+        filialId: params.filialId,
+        profileId: params.profileId,
+      }),
+      remove: deletePdvLegalUser,
+      isUnconfirmedUpdate: (error) =>
+        error instanceof PdvApiError && error.code === 'USER_UPDATE_NOT_CONFIRMED',
+    });
+    return result.user;
+  } catch (error) {
+    if (error instanceof PdvLegalUserMoveCleanupError) {
+      throw new PdvApiError(
+        error.message,
+        error.compensationFailed ? 'USER_MOVE_COMPENSATION_FAILED' : 'USER_MOVE_CLEANUP_FAILED',
+      );
+    }
+    throw error;
   }
 }
 
