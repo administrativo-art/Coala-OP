@@ -19,6 +19,7 @@ const DEMO_RAW_VALUES: Record<string, unknown> = {
   "employee.ctps_number": "1234567",
   "employee.ctps_series": "0001/MA",
   "integration.employer_name": "Coala Shakes Alimentos LTDA",
+  "integration.employer_legal_name": "C T SORVETES LTDA",
   "integration.employer_cnpj": "14276603000125",
   "integration.employer_address": "Avenida dos Holandeses, 1000, São Luís/MA, CEP 65071-380",
   "integration.job_function": "Atendente de balcão",

@@ -170,9 +170,26 @@ export const PROBATION_CONTRACT_V4_SOURCE =
   "docs/modelos-documentos/admissionais/01-contrato-experiencia-v4.docx";
 
 export const PROBATION_CONTRACT_V4_HASH =
-  "081e850ded830aef5911c34754ca549313074681be63e7f4f9b204888bedd91f";
+  "02fe5039827ecc9fdb233d7ef35107da7f0c7988d7e32e16ff988dbd3aa07607";
 
-export const PROBATION_CONTRACT_V4_VARIABLES = PROBATION_CONTRACT_V3_VARIABLES;
+export const PROBATION_CONTRACT_V4_VARIABLES = [
+  "contract_employee_cpf",
+  "contract_employer_cnpj",
+  "contract_final_end_long",
+  "contract_first_end_long",
+  "contract_first_period_days",
+  "contract_job_cbo",
+  "contract_monthly_salary",
+  "contract_signature_date_long",
+  "contract_signature_place",
+  "contract_second_period_days",
+  "contract_start_long",
+  "employee.address",
+  "employee.name",
+  "integration.employer_address",
+  "integration.employer_legal_name",
+  "integration.job_function",
+] as const;
 
 export const PROBATION_CONTRACT_V4_FIELD_MAPPING =
   PROBATION_CONTRACT_V3_FIELD_MAPPING;

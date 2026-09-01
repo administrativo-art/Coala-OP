@@ -17,6 +17,11 @@ export function buildSignatureDocumentName(params: {
   return `COALA SHAKES - ${documentType} - ${holderName}`.slice(0, 240);
 }
 
+export function buildAdmissionSignatureDocumentName(holderName: unknown) {
+  return `Coala Shakes - RH | Admissão - ${cleanPart(holderName, "Titular não identificado")}`
+    .slice(0, 240);
+}
+
 export function buildSignatureFileName(documentName: string, extension = "docx") {
   const safeName = documentName
     .replace(/[\\/:*?"<>|]/g, "-")

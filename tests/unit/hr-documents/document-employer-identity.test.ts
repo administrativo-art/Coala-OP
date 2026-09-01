@@ -26,6 +26,10 @@ test("exibe razão social e nome fantasia resolvidos pelo CNPJ", () => {
     "C T SORVETES LTDA, nome fantasia Quiosque Tirirical",
   );
   assert.equal(
+    canonical.flat["integration.employer_legal_name"],
+    "C T SORVETES LTDA",
+  );
+  assert.equal(
     canonical.rawFlat["integration.employer_name"],
     "C T SORVETES LTDA, nome fantasia Quiosque Tirirical",
   );

@@ -17,7 +17,8 @@ const data: Record<string, unknown> = {
       "Rua das Acácias, nº 45, Jardim Renascença, São Luís/MA, CEP 65075-020",
   },
   integration: {
-    employer_name: "CT SORVETES LTDA",
+    employer_name: "C T SORVETES LTDA, nome fantasia Quiosque Tirirical",
+    employer_legal_name: "C T SORVETES LTDA",
     employer_cnpj: "14.276.603/0001-25",
     employer_address:
       "Avenida Guajajaras, Quadra 65, nº 3505, São Bernardo, São Luís/MA, CEP 65056-045",

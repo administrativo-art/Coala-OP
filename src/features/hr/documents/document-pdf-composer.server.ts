@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import {
   PDFDocument,
-  PDFFont,
   PDFPage,
+  PDFFont,
   rgb,
 } from "pdf-lib";
 
@@ -17,18 +17,6 @@ import {
   type DocumentSignatureScope,
 } from "@/features/hr/documents/document-package-manifest";
 import { embedCaladeaFont } from "@/features/hr/documents/document-pdf-fonts.server";
-
-export const DOCUMENT_TRACEABILITY_BANDS = {
-  brand: {
-    bottomPoints: 0,
-    heightPoints: 45,
-  },
-  traceability: {
-    bottomPoints: 45,
-    heightPoints: 18,
-    textBaselinePoints: 50,
-  },
-} as const;
 
 // PDFs individuais podem trazer numeração própria alinhada à direita. A faixa
 // precisa cobrir o campo inteiro antes de aplicar a numeração global do pacote.
@@ -66,43 +54,6 @@ function assertPdf(buffer: Buffer, title: string) {
   if (buffer.byteLength < 5 || buffer.subarray(0, 4).toString() !== "%PDF") {
     throw new Error(`O documento ${title} não possui uma versão PDF válida.`);
   }
-}
-
-function fitText(
-  font: PDFFont,
-  text: string,
-  maximumWidth: number,
-  preferredSize = 7,
-) {
-  let size = preferredSize;
-  while (size > 5 && font.widthOfTextAtSize(text, size) > maximumWidth) {
-    size -= 0.25;
-  }
-  if (font.widthOfTextAtSize(text, size) > maximumWidth) {
-    throw new Error("O rodapé de rastreabilidade excedeu a largura reservada.");
-  }
-  return size;
-}
-
-function trackingLabel(params: {
-  mode: "package" | "standalone";
-  protocol: string;
-  componentIndex: number;
-  componentCount: number;
-  startPage: number;
-  endPage: number;
-  totalPages: number;
-  contentHash: string;
-}) {
-  const hashPrefix = params.contentHash.slice(0, 8).toUpperCase();
-  if (params.mode === "standalone") {
-    return `Documento ${params.protocol} | Conteúdo ${hashPrefix}`;
-  }
-  return (
-    `Pacote ${params.protocol} | Componente ${params.componentIndex}/${params.componentCount}` +
-    ` | Págs. ${params.startPage}-${params.endPage}/${params.totalPages}` +
-    ` | Conteúdo ${hashPrefix}`
-  );
 }
 
 export function pageNumberReplacementGeometry(
@@ -148,26 +99,6 @@ function replacePageNumber(
     size,
     font,
     color: rgb(0.42, 0.47, 0.52),
-  });
-}
-
-function drawTrackingFooter(page: PDFPage, font: PDFFont, label: string) {
-  const { width } = page.getSize();
-  const horizontalMargin = 30;
-  const size = fitText(font, label, width - horizontalMargin * 2);
-  page.drawRectangle({
-    x: 0,
-    y: DOCUMENT_TRACEABILITY_BANDS.traceability.bottomPoints,
-    width,
-    height: DOCUMENT_TRACEABILITY_BANDS.traceability.heightPoints,
-    color: rgb(1, 1, 1),
-  });
-  page.drawText(label, {
-    x: horizontalMargin,
-    y: DOCUMENT_TRACEABILITY_BANDS.traceability.textBaselinePoints,
-    size,
-    font,
-    color: rgb(0.38, 0.42, 0.47),
   });
 }
 
@@ -223,19 +154,8 @@ export async function composeDocumentPackage(params: {
       ignoreEncryption: false,
     });
     const font = await embedCaladeaFont(document);
-    const label = trackingLabel({
-      mode,
-      protocol: params.protocol,
-      componentIndex: index + 1,
-      componentCount: loaded.length,
-      startPage,
-      endPage,
-      totalPages,
-      contentHash: item.contentHash,
-    });
     document.getPages().forEach((page, localIndex) => {
       replacePageNumber(page, font, startPage + localIndex, totalPages);
-      drawTrackingFooter(page, font, label);
     });
     const artifactBuffer = Buffer.from(
       await document.save({ useObjectStreams: false }),

@@ -32,6 +32,7 @@ import {
 } from "@/features/hr/documents/document-protocol.server";
 import { documentProtocolEntityFromSnapshot } from "@/features/hr/documents/document-protocol";
 import {
+  buildAdmissionSignatureDocumentName,
   buildSignatureDocumentName,
   buildSignatureFileName,
 } from "@/features/hr/documents/signature-document-name";
@@ -201,8 +202,25 @@ function normalizedStoredSigners(value: unknown): AdmissionSignatureLayoutSigner
           : null;
     const name = text(signer.name);
     const email = text(signer.email)?.toLowerCase();
-    return party && name && email ? [{ party, name, email }] : [];
+    return party && name && email ? [{
+      party,
+      name,
+      email,
+      avatarUrl: text(signer.avatarUrl) ?? null,
+    }] : [];
   });
+}
+
+function onboardingProfilePhotoUrl(process: RecordValue) {
+  const documents = Array.isArray(process.documents) ? process.documents : [];
+  const photo = documents
+    .map(record)
+    .find((document) => (
+      document.status === "approved"
+      && (document.id === "profile_photo" || document.documentTypeCode === "PROFILE_PHOTO")
+      && Boolean(text(document.fileUrl))
+    ));
+  return text(photo?.fileUrl) ?? null;
 }
 
 function providerParticipantStatus(
@@ -213,6 +231,13 @@ function providerParticipantStatus(
   if (signature.viewed?.created_at) return "viewed";
   if (signature.email_events?.refused) return "delivery_failed";
   return "sent";
+}
+
+function providerDeliveryFailureReason(value: unknown) {
+  const reason = text(value);
+  return reason
+    ? reason.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").slice(0, 300)
+    : null;
 }
 
 function participantsFromProvider(params: {
@@ -234,11 +259,17 @@ function participantsFromProvider(params: {
       party: signer.party,
       name: text(signature.name ?? signature.user?.name) ?? signer.name,
       email: email ?? signer.email,
+      avatarUrl: signer.avatarUrl ?? text(previous.avatarUrl) ?? null,
       providerSignatureId,
       status: providerParticipantStatus(signature),
       invitedAt: text(previous.invitedAt) ?? params.invitedAt,
       emailSentAt: signature.email_events?.sent ?? text(previous.emailSentAt) ?? null,
       emailDeliveredAt: signature.email_events?.delivered ?? text(previous.emailDeliveredAt) ?? null,
+      deliveryFailureReason: signature.email_events?.refused
+        ? providerDeliveryFailureReason(signature.email_events.reason)
+          ?? text(previous.deliveryFailureReason)
+          ?? null
+        : null,
       emailOpenedAt: signature.email_events?.opened ?? text(previous.emailOpenedAt) ?? null,
       viewedAt: signature.viewed?.created_at ?? text(previous.viewedAt) ?? null,
       signedAt: signature.signed?.created_at ?? text(previous.signedAt) ?? null,
@@ -352,10 +383,11 @@ async function sendAdmissionBundle(params: {
   });
   if (!claimed) return;
   try {
+    const documentName = buildAdmissionSignatureDocumentName(params.process.candidateName);
     const created = await createAutentiqueDocument({
       buffer,
-      fileName: `kit-admissional-${protocol}.pdf`,
-      documentName: `Kit admissional ${protocol}`,
+      fileName: buildSignatureFileName(documentName, "pdf"),
+      documentName,
       message: "Confira o kit admissional completo e realize a assinatura eletrônica.",
       signers,
     });
@@ -628,11 +660,13 @@ export async function prepareAdmissionSignaturePlacement(params: {
       party: "employee",
       name: text(process.data.candidateName) ?? "Colaborador",
       email: recipient,
+      avatarUrl: onboardingProfilePhotoUrl(process.data),
     },
     {
       party: "company",
       name: companySignatory.name,
       email: companySignatory.email.toLowerCase(),
+      avatarUrl: companySignatory.avatarUrl,
     },
   ];
   const now = new Date().toISOString();
@@ -652,8 +686,12 @@ export async function prepareAdmissionSignaturePlacement(params: {
     manifestHash: composed.manifestHash,
     preSignatureHash: composed.packageHash,
     packageHash: composed.packageHash,
-    documentName: `Kit admissional ${protocol}`,
+    documentName: buildAdmissionSignatureDocumentName(process.data.candidateName),
     signers,
+    companySignatoryUserId: companySignatory.userId,
+    companySignatoryName: companySignatory.name,
+    companySignatoryEmail: companySignatory.email.toLowerCase(),
+    companySignatoryAvatarUrl: companySignatory.avatarUrl,
     placementLayout: defaultAdmissionSignatureLayout({
       packageHash: composed.packageHash,
       pageCount: composed.pageCount,
@@ -739,6 +777,7 @@ function admissionSignaturePackageState(
       party,
       name,
       email,
+      avatarUrl: text(participant.avatarUrl) ?? signer?.avatarUrl ?? null,
       providerSignatureId,
       status: ["sent", "viewed", "signed", "rejected", "delivery_failed"].includes(String(participant.status))
         ? participant.status as AdmissionSignatureParticipant["status"]
@@ -746,6 +785,7 @@ function admissionSignaturePackageState(
       invitedAt: text(participant.invitedAt),
       emailSentAt: text(participant.emailSentAt),
       emailDeliveredAt: text(participant.emailDeliveredAt),
+      deliveryFailureReason: text(participant.deliveryFailureReason),
       emailOpenedAt: text(participant.emailOpenedAt),
       viewedAt: text(participant.viewedAt),
       signedAt: text(participant.signedAt),
@@ -1326,6 +1366,7 @@ export async function addCompanySignerToAdmissionBundle(params: {
   const signer = {
     email,
     name: companySignatory.name,
+    avatarUrl: companySignatory.avatarUrl,
     action: "SIGN" as const,
     ...(manifest ? { positions: admissionBundleSignerPositions(manifest, "company") } : {}),
   };
@@ -1391,6 +1432,7 @@ export async function addCompanySignerToAdmissionBundle(params: {
     companySignatoryUserId: companySignatory.userId,
     companySignatoryName: companySignatory.name,
     companySignatoryEmail: email,
+    companySignatoryAvatarUrl: companySignatory.avatarUrl,
     signatoryAddition: {
       status: "completed",
       email,

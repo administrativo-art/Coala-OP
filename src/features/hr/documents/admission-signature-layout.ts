@@ -92,6 +92,7 @@ export type AdmissionSignatureLayoutSigner = {
   party: AdmissionSignatureParty;
   name: string;
   email: string;
+  avatarUrl?: string | null;
 };
 
 export type AdmissionSignatureParticipant = AdmissionSignatureLayoutSigner & {
@@ -100,6 +101,7 @@ export type AdmissionSignatureParticipant = AdmissionSignatureLayoutSigner & {
   invitedAt: string | null;
   emailSentAt: string | null;
   emailDeliveredAt: string | null;
+  deliveryFailureReason?: string | null;
   emailOpenedAt: string | null;
   viewedAt: string | null;
   signedAt: string | null;

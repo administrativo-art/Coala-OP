@@ -15,7 +15,7 @@ const OUTPUT = path.resolve(
 const EXPECTED_SOURCE_HASH =
   "eaa43b298ba99b6a948216152dd8ca58a0c969aa3416d7d3548f91f20c50f3c6";
 const EXPECTED_OUTPUT_HASH =
-  "081e850ded830aef5911c34754ca549313074681be63e7f4f9b204888bedd91f";
+  "02fe5039827ecc9fdb233d7ef35107da7f0c7988d7e32e16ff988dbd3aa07607";
 
 function sha256(buffer: Buffer) {
   return createHash("sha256").update(buffer).digest("hex");
@@ -39,7 +39,7 @@ function emphasizedPreamble() {
   return (
     '<w:p><w:pPr><w:pStyle w:val="CTPreambulo"/></w:pPr>'
     + run("Contrato celebrado entre a pessoa jurídica de direito privado ")
-    + run("{{integration.employer_name}}", true)
+    + run("{{integration.employer_legal_name}}", true)
     + run(", inscrita sob ")
     + run("{{contract_employer_cnpj}}", true)
     + run(", com sede em ")
@@ -89,6 +89,10 @@ function prepareContract(input: Buffer) {
       `Preâmbulo alterado ${preambleReplacements} vez(es); esperado: 1.`,
     );
   }
+  documentXml = documentXml.replaceAll(
+    "{{integration.employer_name}}",
+    "{{integration.employer_legal_name}}",
+  );
 
   const signatureStyle = '<w:pPr><w:pStyle w:val="CTAssinaturaLinha"/></w:pPr>';
   const signatureStyleWithSpace =
@@ -139,7 +143,7 @@ const expectedVariables = [
   "employee.address",
   "employee.name",
   "integration.employer_address",
-  "integration.employer_name",
+  "integration.employer_legal_name",
   "integration.job_function",
 ].sort();
 if (JSON.stringify(variables) !== JSON.stringify(expectedVariables)) {

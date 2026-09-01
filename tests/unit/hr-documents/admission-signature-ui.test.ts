@@ -80,6 +80,7 @@ test("acompanha o kit enviado em um único card", () => {
   assert.match(routeSource, /signatureRequest\.get\("signedStoragePath"\)/);
   assert.match(trackingSource, /signatureParticipants\.map\(participant/);
   assert.match(trackingSource, /SignatureParticipantCard/);
+  assert.match(trackingSource, /md:grid-cols-2/);
   assert.doesNotMatch(trackingSource, /\{ label: 'Enviado', done: signatureSent/);
   assert.doesNotMatch(trackingSource, /grid-cols-4/);
   assert.match(participantCardSource, /Convite enviado/);
@@ -90,6 +91,10 @@ test("acompanha o kit enviado em um único card", () => {
   assert.match(participantCardSource, /Copiar link exclusivo/);
   assert.match(participantCardSource, /Alterar e-mail e reenviar/);
   assert.match(participantCardSource, /somente neste kit/);
+  assert.match(participantCardSource, /AvatarImage/);
+  assert.match(participantCardSource, /participant\.avatarUrl/);
+  assert.match(participantCardSource, /E-mail não entregue/);
+  assert.match(participantCardSource, /participant\.deliveryFailureReason/);
   assert.match(componentSource, /crypto\.randomUUID\(\)/);
   assert.match(routeSource, /signatures\.send/);
 });

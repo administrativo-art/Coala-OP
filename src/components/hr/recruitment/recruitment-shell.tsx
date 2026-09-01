@@ -6911,11 +6911,13 @@ type SignatureWorkflowPayload = {
       party: 'employee' | 'company';
       name: string;
       email: string;
+      avatarUrl?: string | null;
       providerSignatureId: string;
       status: 'sent' | 'viewed' | 'signed' | 'rejected' | 'delivery_failed';
       invitedAt: string | null;
       emailSentAt: string | null;
       emailDeliveredAt: string | null;
+      deliveryFailureReason?: string | null;
       emailOpenedAt: string | null;
       viewedAt: string | null;
       signedAt: string | null;
@@ -11310,7 +11312,7 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                         </div>
                       </div>
                       {signatureParticipants.length ? (
-                        <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                        <div className="mt-3 grid gap-2 border-t border-slate-100 pt-3 md:grid-cols-2">
                           {signatureParticipants.map(participant => (
                             <SignatureParticipantCard
                               key={participant.providerSignatureId}

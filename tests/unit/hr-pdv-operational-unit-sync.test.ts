@@ -72,6 +72,61 @@ test("planeja um novo acesso ao incluir uma segunda unidade operacional", () => 
   }]);
 });
 
+test("migra o ID legado por quiosque ao incluir outra unidade operacional", () => {
+  const current = {
+    unitIds: ["unidade-tirirical"],
+    assignedKioskIds: ["tirirical"],
+    pdvOperatorIds: { tirirical: 436145 },
+  };
+
+  const [plan] = planPdvOperationalUnitSyncs(current, {
+    ...current,
+    unitIds: ["unidade-tirirical", "unidade-shopping"],
+    assignedKioskIds: ["tirirical", "shopping"],
+  });
+  assert.deepEqual(plan, {
+    kind: "add",
+    sourceExternalUserId: "436145",
+    sourceUnitId: null,
+    targetUnitId: "unidade-shopping",
+    profileId: null,
+  });
+  assert.ok(plan);
+
+  const patch = pdvOperationalUnitPatch({
+    currentUser: current,
+    plan,
+    externalUserId: "987654",
+    targetUnitName: "Shopping",
+    targetFilialId: "40",
+    targetFilialName: "Shopping",
+    confirmedProfileId: "12",
+    updatedAt: "2026-09-01T11:00:00.000Z",
+  });
+  assert.deepEqual(patch.pdvAccesses.map((access) => access.externalUserId), ["436145", "987654"]);
+  assert.equal(patch.registrationIdPdv, "436145");
+});
+
+test("migra o ID legado por quiosque ao trocar diretamente de unidade", () => {
+  const current = {
+    unitIds: ["unidade-tirirical"],
+    assignedKioskIds: ["tirirical"],
+    pdvOperatorIds: { tirirical: 436145 },
+  };
+
+  assert.deepEqual(planPdvOperationalUnitSyncs(current, {
+    ...current,
+    unitIds: ["unidade-shopping"],
+    assignedKioskIds: ["shopping"],
+  }), [{
+    kind: "move",
+    sourceExternalUserId: "436145",
+    sourceUnitId: "unidade-tirirical",
+    targetUnitId: "unidade-shopping",
+    profileId: null,
+  }]);
+});
+
 test("bloqueia uma troca ambígua quando existem vários acessos sem vínculo com a unidade removida", () => {
   const current = {
     unitIds: ["tirirical"],

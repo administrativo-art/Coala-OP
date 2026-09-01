@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildAdmissionSignatureDocumentName,
   buildSignatureDocumentName,
   buildSignatureFileName,
 } from "../../../src/features/hr/documents/signature-document-name";
@@ -13,6 +14,13 @@ test("aplica o padrão corporativo aos documentos de assinatura", () => {
       holderName: "Sara Ferreira Coelho",
     }),
     "COALA SHAKES - Contrato de trabalho a título de experiência - Sara Ferreira Coelho"
+  );
+});
+
+test("nomeia o kit admissional pelo padrão do RH e pelo titular", () => {
+  assert.equal(
+    buildAdmissionSignatureDocumentName("  Thaise Correia\nMarinho "),
+    "Coala Shakes - RH | Admissão - Thaise Correia Marinho",
   );
 });
 
