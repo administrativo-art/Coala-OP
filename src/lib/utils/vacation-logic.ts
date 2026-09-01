@@ -6,7 +6,7 @@ import type { DPVacationRecord, DPVacationStatus } from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CycleStatus = 'PENDENTE' | 'AGENDADO' | 'GOZADO' | 'VENCIDO' | 'PARCIAL' | 'AQUISITIVO';
+export type CycleStatus = 'PENDENTE' | 'AGUARDANDO_APROVACAO' | 'AGENDADO' | 'GOZADO' | 'VENCIDO' | 'PARCIAL' | 'AQUISITIVO';
 export type VacationRisk = 'VENCIDA' | 'CRITICA' | 'ATENCAO' | 'EM_DIA';
 
 export interface VacationCycle {
@@ -30,8 +30,9 @@ export type VacationHealthStatus =
 export function getVacationCycleHistory(
   admissionDate: Date,
   allVacationRecords: DPVacationRecord[],
+  referenceDate: Date = new Date(),
 ): VacationCycle[] {
-  const today = startOfDay(new Date());
+  const today = startOfDay(referenceDate);
   const cycles: VacationCycle[] = [];
 
   if (!admissionDate || isNaN(admissionDate.getTime())) return [];
@@ -47,16 +48,22 @@ export function getVacationCycleHistory(
     const concessiveEnd   = subDays(addYears(concessiveStart, 1), 1);
     const cycleId = `${acquisitiveStart.getFullYear()}-${concessiveStart.getFullYear()}`;
 
-    const recordsInCycle = allVacationRecords.filter(v => v.cycleId === cycleId);
+    const recordsInCycle = allVacationRecords.filter(v => v.cycleId === cycleId && v.status !== 'REJECTED');
     const takenDays = recordsInCycle.reduce((t, v) => t + v.days, 0);
     const allEnjoymentRecords = recordsInCycle.filter(r => r.recordType === 'gozo' && r.endDate);
-    const allEnjoyed = allEnjoymentRecords.length > 0
+    const hasPendingApproval = recordsInCycle.some(r => r.status !== 'APPROVED');
+    const hasPeriodOutsideDeadline = allEnjoymentRecords.some(r => isAfter(parseISO(r.endDate!), concessiveEnd));
+    const allEnjoyed = recordsInCycle.length > 0
+      && !hasPendingApproval
+      && allEnjoymentRecords.length > 0
       && allEnjoymentRecords.every(r => isBefore(parseISO(r.endDate!), today));
 
     let status: CycleStatus;
     if (isAfter(today, acquisitiveEnd)) {
-      if (takenDays >= 30)       status = allEnjoyed ? 'GOZADO' : 'AGENDADO';
-      else if (isAfter(today, concessiveEnd)) status = 'VENCIDO';
+      if (takenDays >= 30 && allEnjoyed && !hasPeriodOutsideDeadline) status = 'GOZADO';
+      else if (isAfter(today, concessiveEnd) || hasPeriodOutsideDeadline) status = 'VENCIDO';
+      else if (takenDays >= 30 && hasPendingApproval) status = 'AGUARDANDO_APROVACAO';
+      else if (takenDays >= 30) status = 'AGENDADO';
       else if (takenDays > 0)    status = 'PARCIAL';
       else                       status = 'PENDENTE';
     } else {
@@ -85,14 +92,15 @@ export function getVacationCycleHistory(
 export function calculateVacationHealth(
   admissionDate: Date | undefined,
   allVacations: DPVacationRecord[],
+  referenceDate: Date = new Date(),
 ): VacationHealthStatus {
-  const today = startOfDay(new Date());
+  const today = startOfDay(referenceDate);
 
   if (!admissionDate || isNaN(admissionDate.getTime()) || isAfter(admissionDate, today)) {
     return { status: 'INVALIDO', details: {} };
   }
 
-  const history = getVacationCycleHistory(admissionDate, allVacations);
+  const history = getVacationCycleHistory(admissionDate, allVacations, today);
   const openConcessiveCycle = history.find(c => c.status !== 'GOZADO' && c.status !== 'AQUISITIVO');
 
   if (openConcessiveCycle) {
@@ -104,7 +112,8 @@ export function calculateVacationHealth(
 
     let risk: VacationRisk = 'EM_DIA';
     const monthsLeft = differenceInMonths(deadline, today);
-    if (status === 'VENCIDO' || isAfter(today, deadline)) risk = 'VENCIDA';
+    if (status === 'AGENDADO') risk = 'EM_DIA';
+    else if (status === 'VENCIDO' || isAfter(today, deadline)) risk = 'VENCIDA';
     else if (monthsLeft <= 2) risk = 'CRITICA';
     else if (monthsLeft <= 5) risk = 'ATENCAO';
 
@@ -138,6 +147,7 @@ export const RISK_PROGRESS_CLASS: Record<VacationRisk, string> = {
 
 export const CYCLE_STATUS_CONFIG: Record<CycleStatus, { label: string; bg: string; text: string }> = {
   PENDENTE:   { label: 'Pendente de gozo',     bg: 'bg-blue-100 dark:bg-blue-900/30',     text: 'text-blue-700 dark:text-blue-300'   },
+  AGUARDANDO_APROVACAO: { label: 'Aguardando aprovação', bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-300' },
   AGENDADO:   { label: 'Gozo agendado',        bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300' },
   GOZADO:     { label: 'Concluído',            bg: 'bg-green-100 dark:bg-green-900/30',  text: 'text-green-700 dark:text-green-300'  },
   VENCIDO:    { label: 'Vencido',              bg: 'bg-red-100 dark:bg-red-900/30',      text: 'text-red-700 dark:text-red-300'      },
@@ -146,7 +156,7 @@ export const CYCLE_STATUS_CONFIG: Record<CycleStatus, { label: string; bg: strin
 };
 
 export const CONCESSIVO_SORT_PRIORITY: Record<CycleStatus, number> = {
-  VENCIDO: 0, PENDENTE: 1, PARCIAL: 2, AGENDADO: 3, GOZADO: 6, AQUISITIVO: 9,
+  VENCIDO: 0, PENDENTE: 1, PARCIAL: 2, AGUARDANDO_APROVACAO: 3, AGENDADO: 4, GOZADO: 6, AQUISITIVO: 9,
 };
 
 // ─── Raw color tokens (for conic rings / timeline bars that need real values) ──
@@ -169,6 +179,7 @@ export const VACATION_STATUS_HEX: Record<DPVacationStatus, { fg: string; bg: str
 
 /** Risk classification for a single cycle (not just the worst open one). */
 export function getCycleRisk(cycle: VacationCycle, today: Date = startOfDay(new Date())): VacationRisk {
+  if (cycle.status === 'AGENDADO' || cycle.status === 'GOZADO') return 'EM_DIA';
   if (cycle.status === 'VENCIDO' || isAfter(today, cycle.concessivePeriod.end)) return 'VENCIDA';
   const monthsLeft = differenceInMonths(cycle.concessivePeriod.end, today);
   if (monthsLeft <= 2) return 'CRITICA';
