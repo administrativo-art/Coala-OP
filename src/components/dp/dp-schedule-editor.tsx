@@ -11,9 +11,10 @@ import { useDP } from '@/components/dp-context';
 import { useDPShifts } from '@/hooks/use-dp-shifts';
 import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
+import { useDPScheduleVacations } from '@/hooks/use-dp-schedule-vacations';
 import { useAuth } from '@/hooks/use-auth';
 import { useKiosks } from '@/hooks/use-kiosks';
-import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, Kiosk, User } from '@/types';
+import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, Kiosk, User } from '@/types';
 import { cn } from '@/lib/utils';
 import {
   activeOperationalUnits,
@@ -71,6 +72,12 @@ import {
 } from '@/lib/dp-shift-definitions';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
 import { buildShiftStreakState, compareWorkShiftsByTime, isDayOffShift, isWorkShift } from '@/lib/dp-shift-rules';
+import {
+  buildApprovedVacationIndex,
+  findApprovedVacationForDate,
+  findApprovedVacationInIndex,
+  formatVacationPeriod,
+} from '@/lib/dp-vacation-schedule-rules';
 import { DPBulkShiftEditDialog } from '@/components/dp/dp-bulk-shift-edit-dialog';
 import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
 
@@ -87,6 +94,10 @@ const MONTHS = [
 
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
+}
+
+function shiftVacationKey(shift: Pick<DPShift, 'scheduleId' | 'id'>) {
+  return `${shift.scheduleId}:${shift.id}`;
 }
 
 function userMatchesDPUnit(user: Pick<User, 'unitIds' | 'assignedKioskIds'>, unitId: string | undefined, units: DPUnit[], kiosks: Kiosk[]) {
@@ -129,10 +140,11 @@ interface ShiftDialogProps {
   onOpenChange: (v: boolean) => void;
   /** userId → Set<date> of dates already occupied in sibling units */
   siblingOccupied?: Map<string, Set<string>>;
+  vacations: DPVacationRecord[];
 }
 
 function ShiftDialog({
-  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied,
+  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, vacations,
 }: ShiftDialogProps) {
   const { activeUsers } = useAuth();
   const { kiosks } = useKiosks();
@@ -179,6 +191,13 @@ function ShiftDialog({
     }
   }, [open, shift, defaultDate, defaultUnitId]);
 
+  const selectedUserId = form.watch('userId');
+  const selectedDate = form.watch('date');
+  const vacationConflict = useMemo(
+    () => findApprovedVacationForDate(vacations, selectedUserId, selectedDate),
+    [selectedDate, selectedUserId, vacations],
+  );
+
   function handleDefinitionChange(defId: string) {
     form.setValue('shiftDefinitionId', defId);
     const def = shiftDefinitions.find(d => d.id === defId);
@@ -196,6 +215,16 @@ function ShiftDialog({
   }
 
   async function onSubmit(values: ShiftFormValues) {
+    const approvedVacation = findApprovedVacationForDate(vacations, values.userId, values.date);
+    if (approvedVacation) {
+      toast({
+        title: 'Colaborador(a) em férias nesta data.',
+        description: `Período aprovado: ${formatVacationPeriod(approvedVacation)}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const hasCrossConflict = !!siblingOccupied?.get(values.userId)?.has(values.date);
     const userName = operationalUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
     try {
@@ -315,9 +344,19 @@ function ShiftDialog({
               )} />
             </div>
 
+            {vacationConflict && (
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <div>
+                  <p className="font-semibold">Colaborador(a) em férias nesta data.</p>
+                  <p>Período aprovado: {formatVacationPeriod(vacationConflict)}.</p>
+                </div>
+              </div>
+            )}
+
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
+              <Button type="submit" disabled={form.formState.isSubmitting || !!vacationConflict}>
                 {form.formState.isSubmitting ? 'Salvando...' : 'Salvar'}
               </Button>
             </DialogFooter>
@@ -332,6 +371,7 @@ function ShiftDialog({
 
 interface ShiftCardProps {
   shift: DPShift;
+  vacationConflict?: DPVacationRecord | null;
   userName: string;
   userAvatar?: string;
   userColor?: string;
@@ -346,6 +386,7 @@ interface ShiftCardProps {
 
 function ShiftCard({
   shift,
+  vacationConflict,
   userName,
   userAvatar,
   userColor,
@@ -358,6 +399,8 @@ function ShiftCard({
   onDelete,
 }: ShiftCardProps) {
   const accentColor = getUserColor(shift.userId, userColor);
+  const hasVisibleConflict = shift.hasConflict || !!vacationConflict;
+  const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
   return (
     <div
       role={selectionMode ? 'button' : undefined}
@@ -371,13 +414,14 @@ function ShiftCard({
       } : undefined}
       className={cn(
         'group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors border border-l-[3px]',
-        shift.hasConflict
+        hasVisibleConflict
           ? 'bg-destructive/10 border-destructive/20'
           : 'bg-card border-border hover:bg-muted/30',
         selectionMode && 'cursor-pointer',
         selected && 'ring-2 ring-primary bg-primary/5 border-primary/30'
       )}
-      style={shift.hasConflict ? undefined : { borderLeftColor: accentColor }}
+      style={hasVisibleConflict ? undefined : { borderLeftColor: accentColor }}
+      title={vacationPeriod ? `Conflito: férias aprovadas de ${vacationPeriod}` : undefined}
     >
       <Avatar className="h-7 w-7 shrink-0">
         <AvatarImage src={userAvatar} />
@@ -404,7 +448,12 @@ function ShiftCard({
             {selected ? 'Selecionado' : 'Selecionar'}
           </span>
         )}
-        {shift.hasConflict && (
+        {vacationConflict && (
+          <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
+            Férias
+          </span>
+        )}
+        {hasVisibleConflict && (
           <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
         )}
         {shift.consecutiveDayCount && shift.consecutiveDayCount >= 1 && (
@@ -436,18 +485,27 @@ function ShiftCard({
 
 // ─── Ghost Shift Badge ────────────────────────────────────────────────────────
 
-function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user }: {
+function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user, vacationConflict }: {
   shift: DPShift;
   unitName: string;
   consecutiveDayCount: number;
   user: { username: string; avatarUrl?: string; color?: string };
+  vacationConflict?: DPVacationRecord | null;
 }) {
   const color = user.color ?? getUserColor(user.username);
   const countColor = consecutiveDayCount >= 7 ? 'text-destructive' : consecutiveDayCount >= 5 ? 'text-orange-500' : 'text-muted-foreground/60';
+  const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
   return (
     <div
-      className="rounded border border-dashed border-muted-foreground/25 bg-muted/20 px-1.5 py-1 flex items-center gap-1.5 min-w-0"
-      title={`${user.username} — ${shift.startTime}–${shift.endTime} (${unitName}) · ${consecutiveDayCount} dias consecutivos`}
+      className={cn(
+        'rounded border border-dashed px-1.5 py-1 flex items-center gap-1.5 min-w-0',
+        vacationConflict
+          ? 'border-destructive/30 bg-destructive/10'
+          : 'border-muted-foreground/25 bg-muted/20',
+      )}
+      title={vacationPeriod
+        ? `${user.username} — conflito com férias aprovadas de ${vacationPeriod}`
+        : `${user.username} — ${shift.startTime}–${shift.endTime} (${unitName}) · ${consecutiveDayCount} dias consecutivos`}
     >
       <Avatar className="w-4 h-4 shrink-0">
         <AvatarImage src={user.avatarUrl} />
@@ -457,6 +515,9 @@ function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user }: {
       </Avatar>
       <span className="text-[10px] font-medium text-muted-foreground truncate">{user.username}</span>
       <span className="text-[10px] text-muted-foreground/60 shrink-0">{shift.startTime}–{shift.endTime}</span>
+      {vacationConflict && (
+        <span className="rounded bg-destructive/15 px-1 py-0.5 text-[9px] font-bold text-destructive">Férias</span>
+      )}
       <span className={`text-[10px] font-bold shrink-0 ${countColor}`}>{consecutiveDayCount}</span>
       <span className="text-[9px] bg-muted rounded px-1 shrink-0 text-muted-foreground/70 ml-auto">{unitName}</span>
     </div>
@@ -525,6 +586,11 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     deleteShift: doDelete,
     deleteShiftsBatch,
   } = useDPShifts(schedule.id);
+  const {
+    vacations,
+    loading: vacationsLoading,
+    error: vacationsError,
+  } = useDPScheduleVacations(schedule.id);
   const { toast } = useToast();
   const bootstrapLoading =
     (unitsLoading && units.length === 0) ||
@@ -622,7 +688,8 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const scheduleUnit = schedule.unitId ? units.find((unit) => unit.id === schedule.unitId) : undefined;
   const isArchivedUnitSchedule = scheduleUnit?.isArchived === true;
   const canManageSchedule = (permissions.dp?.schedules?.edit ?? false) && !isArchivedUnitSchedule;
-  const canEdit = canManageSchedule && !schedule.locked;
+  const vacationDataReady = !vacationsLoading && !vacationsError;
+  const canEdit = canManageSchedule && !schedule.locked && vacationDataReady;
 
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [editShift, setEditShift] = useState<DPShift | null>(null);
@@ -821,6 +888,23 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const prevSiblingWorkShifts = useMemo(() => prevSiblingShifts.filter(isWorkShift), [prevSiblingShifts]);
   const siblingWorkShifts = useMemo(() => siblingShifts.filter(isWorkShift), [siblingShifts]);
   const siblingDayOffShifts = useMemo(() => siblingShifts.filter(isDayOffShift), [siblingShifts]);
+  const approvedVacationIndex = useMemo(
+    () => buildApprovedVacationIndex(vacations),
+    [vacations],
+  );
+
+  const vacationConflictByShiftId = useMemo(() => {
+    const conflicts = new Map<string, DPVacationRecord>();
+    [...prevWorkShifts, ...workShifts, ...siblingWorkShifts].forEach((shift) => {
+      const vacation = findApprovedVacationInIndex(approvedVacationIndex, shift.userId, shift.date);
+      if (vacation) conflicts.set(shiftVacationKey(shift), vacation);
+    });
+    return conflicts;
+  }, [approvedVacationIndex, prevWorkShifts, siblingWorkShifts, workShifts]);
+
+  const vacationConflictForShift = (shift: DPShift) => (
+    vacationConflictByShiftId.get(shiftVacationKey(shift)) ?? null
+  );
 
   const currentMonthDateSet = useMemo(
     () => new Set(days.map((day) => day.date)),
@@ -977,7 +1061,8 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     for (const shift of shiftsWithConsecutive) {
       if (defFilter !== '__all__' && shift.shiftDefinitionId !== defFilter) continue;
       if (userFilter !== '__all__' && shift.userId !== userFilter) continue;
-      if (onlyAlerts && !shift.hasConflict && !(shift.consecutiveDayCount && shift.consecutiveDayCount >= 7)) continue;
+      const hasVacationConflict = vacationConflictByShiftId.has(shiftVacationKey(shift));
+      if (onlyAlerts && !shift.hasConflict && !hasVacationConflict && !(shift.consecutiveDayCount && shift.consecutiveDayCount >= 7)) continue;
       if (!idx[shift.date]) idx[shift.date] = {};
       if (!idx[shift.date][shift.unitId]) idx[shift.date][shift.unitId] = [];
       idx[shift.date][shift.unitId].push(shift);
@@ -986,10 +1071,13 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       Object.values(byUnit).forEach((items) => items.sort(compareWorkShiftsByTime));
     });
     return idx;
-  }, [shiftsWithConsecutive, defFilter, userFilter, onlyAlerts]);
+  }, [shiftsWithConsecutive, defFilter, userFilter, onlyAlerts, vacationConflictByShiftId]);
 
   // Stats
-  const conflictCount = useMemo(() => workShifts.filter(s => s.hasConflict).length, [workShifts]);
+  const conflictCount = useMemo(
+    () => workShifts.filter((shift) => shift.hasConflict || vacationConflictByShiftId.has(shiftVacationKey(shift))).length,
+    [vacationConflictByShiftId, workShifts],
+  );
   const uniqueCollaborators = useMemo(() => new Set(workShifts.map(s => s.userId)).size, [workShifts]);
 
   // Dias por colaborador (para popover do card Pessoas)
@@ -1178,6 +1266,20 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           Escala histórica preservada após a incorporação desta unidade. Alterações estão bloqueadas.
+        </div>
+      )}
+      {canManageSchedule && !schedule.locked && vacationsLoading && (
+        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300">
+          <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+          Carregando férias aprovadas. A edição da escala será liberada após a validação.
+        </div>
+      )}
+      {vacationsError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {canManageSchedule && !schedule.locked
+            ? 'Não foi possível validar as férias. A edição da escala está bloqueada até os dados serem carregados.'
+            : 'Não foi possível validar as férias. Alguns conflitos podem não ser exibidos.'}
         </div>
       )}
       {ancillaryBootstrapError && (
@@ -1410,6 +1512,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                     <ShiftCard
                                       key={shift.id}
                                       shift={shift}
+                                      vacationConflict={vacationConflictForShift(shift)}
                                       userName={user?.username ?? 'Desconhecido'}
                                       userAvatar={user?.avatarUrl}
                                       userColor={user?.color}
@@ -1515,6 +1618,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                     unitName={entry.unitName}
                                     consecutiveDayCount={entry.consecutiveDayCount}
                                     user={user}
+                                    vacationConflict={vacationConflictForShift(shift)}
                                   />
                                 );
                               }
@@ -1524,6 +1628,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                 <ShiftCard
                                   key={`own-${shift.id}`}
                                   shift={{ ...shift, hasConflict: shift.hasConflict || hasCrossConflict }}
+                                  vacationConflict={vacationConflictForShift(shift)}
                                   userName={user?.username ?? 'Desconhecido'}
                                   userAvatar={user?.avatarUrl}
                                   userColor={user?.color}
@@ -1586,6 +1691,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         open={!!addDialog}
         onOpenChange={open => { if (!open) setAddDialog(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
+        vacations={vacations}
       />
 
       <ShiftDialog
@@ -1596,6 +1702,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         open={!!editShift}
         onOpenChange={open => { if (!open) setEditShift(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
+        vacations={vacations}
       />
 
       <DPBulkShiftEditDialog
