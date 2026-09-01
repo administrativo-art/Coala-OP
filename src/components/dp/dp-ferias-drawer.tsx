@@ -47,6 +47,8 @@ function fmt(d?: string | Date) {
 }
 
 const DONE = { fg: '#15803D', bg: 'rgba(34,197,94,0.14)', label: 'Concluído' };
+const SCHEDULED = { fg: '#7C3AED', bg: 'rgba(139,92,246,0.14)', label: 'Agendada' };
+const AWAITING_APPROVAL = { fg: '#A16207', bg: 'rgba(234,179,8,0.16)', label: 'Aguardando aprovação' };
 
 interface Props {
   userId: string | null;
@@ -109,7 +111,7 @@ function DrawerBody({ user, unitName, vacations, canEdit }: DrawerBodyProps) {
   );
   const openCycles = useMemo(
     () => concessive
-      .filter(c => c.status !== 'GOZADO')
+      .filter(c => c.status !== 'GOZADO' && c.status !== 'AGENDADO' && c.status !== 'AGUARDANDO_APROVACAO')
       .sort((a, b) => a.concessivePeriod.end.getTime() - b.concessivePeriod.end.getTime()),
     [concessive],
   );
@@ -187,11 +189,12 @@ function CycleBlock({
   canEdit: boolean;
   today: Date;
 }) {
-  const open = cycle.status !== 'GOZADO';
   const done = cycle.status === 'GOZADO';
+  const scheduled = cycle.status === 'AGENDADO';
+  const awaitingApproval = cycle.status === 'AGUARDANDO_APROVACAO';
   const risk = getCycleRisk(cycle, today);
   const progress = Math.round(getCycleProgress(cycle, today));
-  const rc = open ? RISK_HEX[risk] : DONE;
+  const rc = done ? DONE : scheduled ? SCHEDULED : awaitingApproval ? AWAITING_APPROVAL : RISK_HEX[risk];
 
   const active = cycle.records.filter(r => r.status !== 'REJECTED');
   const gozoDays = active.filter(r => r.recordType === 'gozo').reduce((t, r) => t + r.days, 0);
@@ -199,9 +202,16 @@ function CycleBlock({
   const taken = active.reduce((t, r) => t + r.days, 0);
   const balance = Math.max(0, 30 - taken);
 
-  const summaryLine = `${gozoDays}d gozados`
+  const gozoSummary = done
+    ? `${gozoDays}d gozados`
+    : scheduled
+      ? `${gozoDays}d programados`
+      : awaitingApproval
+        ? `${gozoDays}d lançados`
+        : `${gozoDays}d de gozo`;
+  const summaryLine = gozoSummary
     + (sold ? ` · ${sold}d vendidos` : '')
-    + (balance ? ` · ${balance}d em aberto` : ' · completo');
+    + (awaitingApproval ? ' · aprovação pendente' : balance ? ` · ${balance}d em aberto` : ' · completo');
 
   return (
     <div
@@ -209,7 +219,7 @@ function CycleBlock({
       style={{ borderLeftColor: rc.fg }}
     >
       <div className="flex items-start gap-3">
-        {open ? (
+        {!done ? (
           <div
             className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-full"
             style={{ background: `conic-gradient(from -90deg, ${rc.fg} ${progress * 3.6}deg, hsl(var(--secondary)) 0deg)` }}
@@ -251,7 +261,7 @@ function CycleBlock({
         <p className="mt-3 text-[11.5px] text-muted-foreground">Nenhum período lançado neste ciclo ainda.</p>
       )}
 
-      {open && canEdit && (
+      {balance > 0 && canEdit && (
         <RegisterForms cycleId={cycle.id} userId={userId} />
       )}
     </div>
