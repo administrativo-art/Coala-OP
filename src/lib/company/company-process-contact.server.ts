@@ -2,7 +2,7 @@ import "server-only";
 
 import { dbAdmin } from "@/lib/firebase-admin";
 
-export type CompanyEmailPurpose = "onboarding" | "termination" | "aso";
+export type CompanyEmailPurpose = "onboarding" | "termination" | "aso" | "vacation";
 
 export type CompanyProcessContact = {
   entityId: string;
@@ -24,13 +24,12 @@ function records(value: unknown) {
     : [];
 }
 
-export async function resolveCompanyProcessContact(
+function contactsFromDocuments(
+  documents: FirebaseFirestore.DocumentSnapshot[],
   purpose: CompanyEmailPurpose,
-  company?: { entityId?: unknown; cnpj?: unknown } | null,
-): Promise<CompanyProcessContact | null> {
-  const snapshot = await dbAdmin.collection("entities").get();
-  const matches = snapshot.docs.flatMap((document) => {
-    if (document.get("status") === "inactive") return [];
+) {
+  return documents.flatMap((document) => {
+    if (!document.exists || document.get("status") === "inactive") return [];
     const contact = document.get("contact");
     const emails = contact && typeof contact === "object" && !Array.isArray(contact)
       ? records((contact as Record<string, unknown>).emails)
@@ -49,20 +48,43 @@ export async function resolveCompanyProcessContact(
       } satisfies CompanyProcessContact];
     });
   });
+}
 
+export async function resolveCompanyProcessContact(
+  purpose: CompanyEmailPurpose,
+  company?: { entityId?: unknown; cnpj?: unknown } | null,
+): Promise<CompanyProcessContact | null> {
   const entityId = typeof company?.entityId === "string" ? company.entityId.trim() : "";
   const cnpj = String(company?.cnpj ?? "").replace(/\D/g, "");
+  let documents: FirebaseFirestore.DocumentSnapshot[];
+  if (entityId) {
+    documents = [await dbAdmin.collection("entities").doc(entityId).get()];
+  } else if (cnpj.length === 14) {
+    const [byCnpj, byDocument] = await Promise.all([
+      dbAdmin.collection("entities").where("cnpj", "==", cnpj).limit(3).get(),
+      dbAdmin.collection("entities").where("documentNormalized", "==", cnpj).limit(3).get(),
+    ]);
+    documents = [...new Map(
+      [...byCnpj.docs, ...byDocument.docs].map((document) => [document.id, document]),
+    ).values()];
+  } else {
+    const snapshot = await dbAdmin.collection("entities").limit(100).get();
+    if (snapshot.size >= 100) {
+      throw new Error(`Há muitas empresas para localizar o e-mail marcado para ${purpose}. Informe a empresa do processo.`);
+    }
+    documents = snapshot.docs;
+  }
+  const matches = contactsFromDocuments(documents, purpose);
   const scoped = matches.filter((match) => (
-    (entityId && match.entityId === entityId)
+    (!entityId && cnpj.length !== 14)
+    || (Boolean(entityId) && match.entityId === entityId)
     || (cnpj.length === 14 && match.companyCnpj === cnpj)
   ));
   if (scoped.length > 1) {
     throw new Error(`Há mais de um e-mail marcado para ${purpose} no CNPJ informado. Revise o cadastro da empresa.`);
   }
   if (scoped[0]) return scoped[0];
-  if (entityId || cnpj.length === 14) {
-    return matches.length === 1 ? matches[0] : null;
-  }
+  if (entityId || cnpj.length === 14) return null;
 
   if (matches.length > 1) {
     throw new Error(`Há mais de um e-mail de empresa marcado para ${purpose}. Revise os cadastros antes de continuar.`);

@@ -14,6 +14,7 @@ export type AuthenticatedApiRequestInit = Omit<RequestInit, "body"> & {
   body?: BodyInit | null;
   json?: unknown;
   fallbackError?: string;
+  responseType?: "auto" | "blob";
 };
 
 type AuthenticatedApiTransportInit = AuthenticatedApiRequestInit & {
@@ -59,6 +60,7 @@ export async function authenticatedApiRequest<T = unknown>(
     headers: callerHeaders,
     body,
     json,
+    responseType = "auto",
     cache,
     ...requestInit
   } = init;
@@ -86,7 +88,9 @@ export async function authenticatedApiRequest<T = unknown>(
     body: requestBody,
     cache: cache ?? "no-store",
   });
-  const payload = await readResponsePayload(response);
+  const payload = responseType === "blob" && response.ok
+    ? await response.blob()
+    : await readResponsePayload(response);
   if (!response.ok) {
     throw new AuthenticatedApiError(
       errorMessage(payload, fallbackError, response.status),

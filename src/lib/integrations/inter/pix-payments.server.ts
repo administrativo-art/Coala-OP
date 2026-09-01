@@ -56,10 +56,12 @@ export async function submitInterPix(input: {
   amount: number;
   description: string;
   beneficiary: ResolvedPaymentBeneficiary;
+  scheduledFor?: string | null;
 }) {
   const client = await createInterClient("pagamento-pix.write");
   const response = await client.post("/banking/v2/pix", {
     valor: Number(input.amount.toFixed(2)),
+    ...(input.scheduledFor ? { dataPagamento: input.scheduledFor } : {}),
     descricao: input.description.slice(0, 140),
     destinatario: recipient(input.beneficiary),
   }, { headers: { "x-id-idempotente": input.idempotencyKey } });
@@ -72,11 +74,12 @@ export async function getInterPixStatus(requestId: string) {
   return response.data as InterPixStatusResponse;
 }
 
-export function mapInterPixStatus(rawStatus: string | undefined) {
+export function mapInterPixStatus(rawStatus: string | undefined, scheduledFor?: string | null) {
   const status = (rawStatus ?? "").trim().toUpperCase();
   if (["PROCESSADO", "PAGO", "EFETIVADO", "CONCLUIDO", "CONCLUÍDO", "LIQUIDADO"].includes(status)) return "paid" as const;
   if (["REJEITADO", "RECUSADO", "CANCELADO"].includes(status)) return "rejected" as const;
   if (["EXPIRADO", "EXPIRADA", "PRAZO_EXPIRADO"].includes(status)) return "approval_expired" as const;
   if (["AGUARDANDO_APROVACAO", "EM_APROVACAO", "PENDENTE_APROVACAO"].includes(status)) return "awaiting_bank_approval" as const;
+  if (["AGENDADO", "PROGRAMADO"].includes(status) || (scheduledFor && scheduledFor > new Date().toISOString().slice(0, 10))) return "scheduled" as const;
   return "processing" as const;
 }

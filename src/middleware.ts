@@ -29,6 +29,7 @@ const PUBLIC_RECRUITMENT_API_PATHS = [
   '/api/hr/upload',
   '/api/hr/onboarding/public',
   '/api/hr/accountant',
+  '/api/hr/vacation-accountant',
   '/api/hr/aso/candidate',
   '/api/hr/aso/clinic',
 ];
@@ -37,6 +38,7 @@ const PUBLIC_STANDALONE_PAGE_PATHS = [
   '/aso/candidato',
   '/aso/clinica',
   '/contador/ficha-registro',
+  '/ferias/contabilidade',
 ];
 
 function matchesPathOrChild(pathname: string, allowedPath: string) {

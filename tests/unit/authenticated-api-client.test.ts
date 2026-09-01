@@ -121,6 +121,21 @@ test("retorna texto em sucesso não JSON e undefined em 204", async () => {
   assert.equal(emptyPayload, undefined);
 });
 
+test("preserva resposta binária quando o chamador solicita blob", async () => {
+  const payload = await authenticatedApiRequest<Blob>("/api/document.pdf", {
+    responseType: "blob",
+    getIdToken: tokenProvider,
+    fetchImpl: async () => new Response(new Uint8Array([37, 80, 68, 70]), {
+      status: 200,
+      headers: { "Content-Type": "application/pdf" },
+    }),
+  });
+
+  assert.ok(payload instanceof Blob);
+  assert.equal(payload.type, "application/pdf");
+  assert.deepEqual(Array.from(new Uint8Array(await payload.arrayBuffer())), [37, 80, 68, 70]);
+});
+
 test("preserva AbortSignal e propaga cancelamento", async () => {
   const controller = new AbortController();
   controller.abort();

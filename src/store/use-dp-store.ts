@@ -9,6 +9,17 @@ import type {
   DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
 } from '@/types';
 import { canonicalOperationalUnitId } from '@/lib/dp-units';
+import {
+  authenticatedApiRequest,
+  type AuthenticatedApiRequestInit,
+} from '@/lib/authenticated-api-client';
+
+async function dpApiRequest<T>(path: string, init: AuthenticatedApiRequestInit) {
+  return authenticatedApiRequest<T>(path, {
+    ...init,
+    getIdToken: async () => auth.currentUser?.getIdToken() ?? null,
+  });
+}
 
 export type DPResourceKey = 'units' | 'shiftDefs' | 'schedules' | 'vacations' | 'calendars';
 export type DPResourceSource = 'idle' | 'snapshot' | 'fallback' | 'error';
@@ -394,13 +405,53 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
     await batch.commit();
   },
   addVacation: async (data) => {
-    await addDoc(collection(db, 'dp_vacations'), stripUndefinedForCreate({ ...data, createdAt: serverTimestamp() }) as Record<string, unknown>);
+    await dpApiRequest('/api/dp/vacations', {
+      method: 'POST',
+      json: {
+        userId: data.userId,
+        status: data.status,
+        vacation: {
+          cycleId: data.cycleId,
+          recordType: data.recordType,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          days: data.days,
+          returnDate: data.returnDate,
+        },
+      },
+      fallbackError: 'Falha ao registrar férias.',
+    });
   },
   updateVacation: async ({ id, ...data }) => {
-    await updateDoc(doc(db, 'dp_vacations', id), sanitizeFirestoreUpdate(data) as Record<string, unknown>);
+    const current = get().vacations.find((vacation) => vacation.id === id);
+    const action = data.status === 'APPROVED' && current?.status !== 'APPROVED'
+      ? 'approve'
+      : data.status === 'REJECTED' && current?.status !== 'REJECTED'
+        ? 'reject'
+        : 'update_record';
+    await dpApiRequest(`/api/dp/vacations/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      json: action === 'update_record'
+        ? {
+            action,
+            vacation: {
+              cycleId: data.cycleId,
+              recordType: data.recordType,
+              startDate: data.startDate,
+              endDate: data.endDate,
+              days: data.days,
+              returnDate: data.returnDate,
+            },
+          }
+        : { action },
+      fallbackError: 'Falha ao atualizar férias.',
+    });
   },
   deleteVacation: async (vacationId) => {
-    await deleteDoc(doc(db, 'dp_vacations', vacationId));
+    await dpApiRequest(`/api/dp/vacations/${encodeURIComponent(vacationId)}`, {
+      method: 'DELETE',
+      fallbackError: 'Falha ao excluir férias.',
+    });
   },
   addCalendar: async (data) => {
     const ref = await addDoc(collection(db, 'dp_calendars'), stripUndefinedForCreate({ ...data, holidayCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);

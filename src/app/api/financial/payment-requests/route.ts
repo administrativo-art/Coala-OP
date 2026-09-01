@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Sem permissão para criar solicitações de pagamento." }, { status: 403 });
     }
     const input = createPaymentRequestSchema.parse(await request.json());
-    if (input.sourceType === "aso" || input.sourceType === "termination") return NextResponse.json({ error: "Este pagamento só pode ser criado pelo fluxo protegido do RH." }, { status: 403 });
+    if (input.sourceType === "aso" || input.sourceType === "termination" || input.sourceType === "vacation") return NextResponse.json({ error: "Este pagamento só pode ser criado pelo fluxo protegido do RH." }, { status: 403 });
     const created = await createPaymentRequest(input, { uid: actor.decoded.uid, email: actor.decoded.email, name: actor.userDoc.username });
     return NextResponse.json({ request: created }, { status: 201 });
   } catch (error) {
