@@ -80,6 +80,8 @@ test("acompanha o kit enviado em um único card", () => {
   assert.match(routeSource, /signatureRequest\.get\("signedStoragePath"\)/);
   assert.match(trackingSource, /signatureParticipants\.map\(participant/);
   assert.match(trackingSource, /SignatureParticipantCard/);
+  assert.doesNotMatch(trackingSource, /\{ label: 'Enviado', done: signatureSent/);
+  assert.doesNotMatch(trackingSource, /grid-cols-4/);
   assert.match(participantCardSource, /Convite enviado/);
   assert.match(participantCardSource, /E-mail entregue/);
   assert.match(participantCardSource, /Documento aberto/);

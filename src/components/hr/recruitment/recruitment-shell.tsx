@@ -11309,21 +11309,6 @@ function OnboardingView({ processes, pageInfo, loadingMoreScope, roles, jobFunct
                           ) : null}
                         </div>
                       </div>
-                      {signatureSent ? (
-                        <div className="mt-3 grid grid-cols-4 gap-1.5">
-                          {[
-                            { label: 'Enviado', done: signatureSent, icon: Send },
-                            { label: 'Aberto', done: signaturePackageViewed, icon: Eye },
-                            { label: 'Assinado', done: signatureCompleted, icon: CheckCircle2 },
-                            { label: 'Arquivado', done: signaturePackageArchived, icon: Archive },
-                          ].map(indicator => (
-                            <div key={indicator.label} className={`rounded-lg border px-2 py-2 text-center ${indicator.done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
-                              <indicator.icon className="mx-auto h-3.5 w-3.5" />
-                              <p className="mt-1 text-[9.5px] font-black">{indicator.label}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
                       {signatureParticipants.length ? (
                         <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
                           {signatureParticipants.map(participant => (
