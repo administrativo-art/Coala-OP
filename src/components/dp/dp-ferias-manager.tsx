@@ -22,6 +22,7 @@ import { CalendarDays, Search } from 'lucide-react';
 import { DPFeriasDrawer } from './dp-ferias-drawer';
 import {
   calculateVacationHealth,
+  CYCLE_STATUS_CONFIG,
   getVacationCycleHistory,
   RISK_PROGRESS_CLASS,
   VACATION_STATUS_HEX,
@@ -108,8 +109,44 @@ function ConcessivoCard({ item, onOpen }: { item: Enriched; onOpen: () => void }
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className="text-[11px] text-muted-foreground">Vence {format(deadline, 'dd/MM/yyyy', { locale: ptBR })}</span>
         <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
-          {Math.max(0, item.balance)}d a agendar
+          {risk === 'VENCIDA' && item.balance === 0 ? 'Período fora do prazo' : `${Math.max(0, item.balance)}d a agendar`}
         </span>
+      </div>
+    </div>
+  );
+}
+
+function ScheduledCard({ item, onOpen }: { item: Enriched; onOpen: () => void }) {
+  if (item.health.status !== 'CONCESSIVO') return null;
+  const awaitingApproval = item.health.cycleStatus === 'AGUARDANDO_APROVACAO';
+  const cfg = CYCLE_STATUS_CONFIG[item.health.cycleStatus];
+  const meta = [item.role, item.unitName].filter(Boolean).join(' · ');
+
+  return (
+    <div
+      onClick={onOpen}
+      className={`cursor-pointer rounded-2xl border border-l-4 ${awaitingApproval ? 'border-l-amber-500' : 'border-l-purple-500'} bg-card px-4 py-3.5 transition-shadow hover:shadow-md`}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          style={{ background: item.user.color || '#8B5CF6' }}
+        >
+          {initials(item.user.username)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-sm font-semibold">{item.user.username}</span>
+            <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
+              {awaitingApproval ? 'Aguardando aprovação' : 'Agendada'}
+            </span>
+          </div>
+          {meta && <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{meta}</div>}
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t pt-2.5 text-[11px] text-muted-foreground">
+        <span>Vence {format(item.health.details.deadline, 'dd/MM/yyyy', { locale: ptBR })}</span>
+        <span className="font-semibold">{awaitingApproval ? '30d lançados' : '30d programados'}</span>
       </div>
     </div>
   );
@@ -190,10 +227,7 @@ export function DPFeriasManager() {
         if (health.status === 'CONCESSIVO' && admDate) {
           const cycles = getVacationCycleHistory(admDate, userVacations);
           const openCycle = cycles.find(c => c.status !== 'GOZADO' && c.status !== 'AQUISITIVO');
-          if (openCycle) {
-            const active = openCycle.records.filter(r => r.status !== 'REJECTED');
-            balance = Math.max(0, 30 - active.reduce((t, r) => t + r.days, 0));
-          }
+          if (openCycle) balance = Math.max(0, openCycle.balance);
         }
 
         const unitName = user.unitIds?.[0]
@@ -213,6 +247,8 @@ export function DPFeriasManager() {
   const concessivo = useMemo(() =>
     filtered
       .filter(e => e.health.status === 'CONCESSIVO'
+        && e.health.cycleStatus !== 'AGENDADO'
+        && e.health.cycleStatus !== 'AGUARDANDO_APROVACAO'
         && (riskFilter === 'ALL' || (e.health.status === 'CONCESSIVO' && e.health.details.risk === riskFilter)))
       .sort((a, b) => {
         if (a.health.status !== 'CONCESSIVO' || b.health.status !== 'CONCESSIVO') return 0;
@@ -222,6 +258,14 @@ export function DPFeriasManager() {
         return a.health.details.deadline.getTime() - b.health.details.deadline.getTime();
       }),
     [filtered, riskFilter]);
+
+  const awaitingApproval = useMemo(() =>
+    filtered.filter(e => e.health.status === 'CONCESSIVO' && e.health.cycleStatus === 'AGUARDANDO_APROVACAO'),
+    [filtered]);
+
+  const scheduled = useMemo(() =>
+    filtered.filter(e => e.health.status === 'CONCESSIVO' && e.health.cycleStatus === 'AGENDADO'),
+    [filtered]);
 
   const aquisitivo = useMemo(() =>
     filtered
@@ -354,6 +398,36 @@ export function DPFeriasManager() {
           </div>
         )}
       </div>
+
+      {riskFilter === 'ALL' && awaitingApproval.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Aguardando aprovação</h2>
+            <Badge variant="secondary" className="text-xs">{awaitingApproval.length}</Badge>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {awaitingApproval.map(item => (
+              <ScheduledCard key={item.user.id} item={item} onOpen={() => setDrawerUserId(item.user.id)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {riskFilter === 'ALL' && scheduled.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Férias agendadas</h2>
+            <Badge variant="secondary" className="text-xs">{scheduled.length}</Badge>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {scheduled.map(item => (
+              <ScheduledCard key={item.user.id} item={item} onOpen={() => setDrawerUserId(item.user.id)} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Período aquisitivo */}
       {(isLoading || aquisitivo.length > 0) && (

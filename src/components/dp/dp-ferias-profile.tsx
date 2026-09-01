@@ -468,7 +468,7 @@ function CycleCard({ cycle, canEdit, canApprove, onAdd, onEdit, onDelete, onAppr
             ))}
           </div>
         )}
-        {canEdit && (
+        {canEdit && cycle.balance > 0 && (
           <Button
             variant="ghost"
             size="sm"
