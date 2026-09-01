@@ -19,7 +19,7 @@ import {
 import {
   PdvApiError,
   clonePdvLegalUserAccessToFilial,
-  updatePdvLegalUserAccess,
+  movePdvLegalUserAccessToFilial,
 } from "@/lib/integrations/pdv-legal-admin";
 
 const MANAGE_USERS_ONLY_FIELDS = new Set([
@@ -282,7 +282,7 @@ export async function PATCH(
         for (const plan of pdvSyncPlans) {
           const targetUnit = targetUnits.get(plan.targetUnitId)!;
           const updatedPdvUser = plan.kind === "move"
-            ? await updatePdvLegalUserAccess({
+            ? await movePdvLegalUserAccessToFilial({
                 userId: plan.sourceExternalUserId,
                 filialId: targetUnit.filialId,
                 profileId: plan.profileId,
