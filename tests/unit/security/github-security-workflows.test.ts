@@ -18,12 +18,11 @@ test("todas as GitHub Actions estão pinadas por SHA integral com versão humana
   }
 });
 
-test("CodeQL cobre JavaScript/TypeScript antes da promoção para production", () => {
+test("CodeQL cobre JavaScript/TypeScript antes da promoção sem repetir no push de main", () => {
   const workflow = readFileSync(join(workflowRoot, "codeql.yml"), "utf8");
   assert.match(workflow, /^\s*pull_request:\s*$/m);
-  assert.match(workflow, /^\s*push:\s*$/m);
+  assert.doesNotMatch(workflow, /^\s*push:\s*$/m);
   assert.match(workflow, /^\s*schedule:\s*$/m);
-  assert.match(workflow, /branches:\n\s+- main/);
   assert.match(workflow, /cron: "17 9 \* \* 1"/);
   assert.match(workflow, /languages: javascript-typescript/);
   assert.match(workflow, /security-events: write/);
@@ -32,6 +31,12 @@ test("CodeQL cobre JavaScript/TypeScript antes da promoção para production", (
     /if: github\.event_name != 'pull_request' \|\| github\.base_ref != 'production'/,
   );
   assert.doesNotMatch(workflow, /pull_request_target|continue-on-error/);
+});
+
+test("verify executa uma vez no PR e não repete depois do merge em main", () => {
+  const workflow = readFileSync(join(workflowRoot, "verify.yml"), "utf8");
+  assert.match(workflow, /^\s*pull_request:\s*$/m);
+  assert.doesNotMatch(workflow, /^\s*push:\s*$/m);
 });
 
 test("quality executa o ratchet sem mutar o baseline", () => {
