@@ -106,6 +106,7 @@ function statusLabel(status?: string | null) {
     ready_to_submit: "Autorizado pelo financeiro",
     submitting: "Enviando ao Inter",
     awaiting_bank_approval: "Aguardando aprovação no Inter",
+    scheduled: "Agendado",
     processing: "Processando no banco",
     paid: "Pago",
     not_applicable: "Sem pagamento devido",

@@ -311,8 +311,8 @@ function RecordRow({ record, concessiveEnd }: { record: DPVacationRecord; conces
         </div>
         <div className="mt-1 text-[11px] text-muted-foreground">
           {isVenda
-            ? `Abono pecuniário · pagamento em ${fmt(record.paymentDate)}`
-            : `${fmt(record.startDate)} → ${fmt(record.endDate)} · pagamento em ${fmt(record.paymentDate)}`}
+            ? 'Abono pecuniário'
+            : `${fmt(record.startDate)} → ${fmt(record.endDate)}${record.workflow?.payment.paidAt ? ` · pago em ${fmt(record.workflow.payment.paidAt)}` : ''}`}
         </div>
       </div>
     </div>
@@ -323,6 +323,7 @@ function RecordRow({ record, concessiveEnd }: { record: DPVacationRecord; conces
 
 function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string }) {
   const { addVacation } = useDP();
+  const { permissions } = useAuth();
   const { toast } = useToast();
   const [mode, setMode] = useState<'none' | 'gozo' | 'venda'>('none');
   const [saving, setSaving] = useState(false);
@@ -330,12 +331,11 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
   // gozo fields
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
-  const [payment, setPayment] = useState('');
   // venda fields
   const [vendaDays, setVendaDays] = useState('10');
 
   function reset() {
-    setMode('none'); setStart(''); setEnd(''); setPayment(''); setVendaDays('10');
+    setMode('none'); setStart(''); setEnd(''); setVendaDays('10');
   }
 
   async function save(recordType: 'gozo' | 'venda') {
@@ -352,7 +352,9 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
     }
     setSaving(true);
     try {
-      const status: DPVacationStatus = recordType === 'gozo' ? 'PLANNED' : 'APPROVED';
+      const status: DPVacationStatus = recordType === 'venda' && permissions.dp?.vacation?.approve
+        ? 'APPROVED'
+        : 'PLANNED';
       await addVacation({
         userId,
         cycleId,
@@ -361,7 +363,6 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
         status,
         startDate: recordType === 'gozo' ? start : undefined,
         endDate: recordType === 'gozo' ? end : undefined,
-        paymentDate: payment || undefined,
         warnings: [],
       });
       toast({ title: recordType === 'gozo' ? 'Gozo registrado.' : 'Venda registrada.' });
@@ -408,10 +409,9 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
               <input type="date" value={end} onChange={e => setEnd(e.target.value)} className={inputCls} />
             </label>
           </div>
-          <label className="mb-2.5 block">
-            <span className={labelCls}>Pagamento</span>
-            <input type="date" value={payment} onChange={e => setPayment(e.target.value)} className={inputCls} />
-          </label>
+          <p className="mb-2.5 text-[10.5px] font-semibold text-muted-foreground">
+            O pagamento será preparado pela trilha depois do recebimento e da aprovação do recibo do contador.
+          </p>
           <FormActions onCancel={reset} onSave={() => save('gozo')} saving={saving} />
         </div>
       )}
@@ -419,17 +419,13 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
       {mode === 'venda' && (
         <div>
           <div className="mb-2 text-[11.5px] font-bold">Comprar férias (abono)</div>
-          <div className="mb-2.5 grid grid-cols-2 gap-2">
+          <div className="mb-2.5">
             <label className="block">
               <span className={labelCls}>Dias (máx. 10)</span>
               <input
                 type="number" min={1} max={10} value={vendaDays}
                 onChange={e => setVendaDays(e.target.value)} className={inputCls}
               />
-            </label>
-            <label className="block">
-              <span className={labelCls}>Pagamento</span>
-              <input type="date" value={payment} onChange={e => setPayment(e.target.value)} className={inputCls} />
             </label>
           </div>
           <FormActions onCancel={reset} onSave={() => save('venda')} saving={saving} />

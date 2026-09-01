@@ -22,10 +22,18 @@ export async function createPaymentRequest(input: {
   legalEntitySnapshot?: PaymentLegalEntitySnapshot;
   amount: number;
   description: string;
+  scheduledFor?: string | null;
 }, actor: PaymentActor): Promise<PixBankPaymentRequest> {
   const existing = await findPaymentRequestBySource(input.sourceType, input.sourceId);
   if (existing) {
     if (existing.sourceType === "financial_inbox") throw new Error("A origem da solicitação bancária existente é incompatível.");
+    if (Math.abs(existing.amount - Number(input.amount.toFixed(2))) > 0.01
+      || existing.expenseId !== input.expenseId
+      || existing.beneficiaryReference?.sourceType !== input.beneficiaryReference.sourceType
+      || existing.beneficiaryReference?.sourceId !== input.beneficiaryReference.sourceId
+      || (existing.scheduledFor ?? null) !== (input.scheduledFor ?? null)) {
+      throw new Error("A solicitação bancária existente diverge dos dados aprovados. Faça a conferência antes de continuar.");
+    }
     return existing;
   }
   const beneficiary = await resolvePaymentBeneficiary(input.beneficiaryReference);
@@ -33,6 +41,9 @@ export async function createPaymentRequest(input: {
   const now = new Date().toISOString();
   const ref = paymentRequestRef(randomUUID());
   const status: BankPaymentRequestStatus = "awaiting_financial_authorization";
+  if (input.scheduledFor && (!isValidIsoDate(input.scheduledFor) || input.scheduledFor < todayInBelem())) {
+    throw new Error("A data programada do pagamento é inválida ou está no passado.");
+  }
   const request: PixBankPaymentRequest = {
     id: ref.id,
     ...input,
@@ -151,8 +162,12 @@ export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
   const now = new Date().toISOString();
   const request = await transitionPaymentRequest(id, ["awaiting_financial_authorization"], "ready_to_submit", { authorizedAt: now, authorizedBy: actor.uid });
   await addPaymentEvent(id, "FINANCIAL_AUTHORIZATION_GRANTED", actor);
-  if (request.sourceType === "aso" || request.sourceType === "termination") {
-    const notificationId = request.sourceType === "aso" ? `aso_payment_${request.sourceId}` : `termination_payment_${request.sourceId}`;
+  if (request.sourceType === "aso" || request.sourceType === "termination" || request.sourceType === "vacation") {
+    const notificationId = request.sourceType === "aso"
+      ? `aso_payment_${request.sourceId}`
+      : request.sourceType === "vacation"
+        ? `vacation_payment_${request.sourceId}`
+        : `termination_payment_${request.sourceId}`;
     await hrDbAdmin.collection("hrNotifications").doc(notificationId).set({ status: "completed", authorizedAt: now, authorizedBy: actor.uid, updatedAt: now }, { merge: true });
   }
   return request.sourceType === "termination" || request.sourceType === "aso" ? submitPaymentRequest(id, actor) : request;
@@ -254,11 +269,21 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         await paymentRequestRef(id).set({ beneficiarySnapshot: pending.beneficiarySnapshot }, { merge: true });
       }
     }
-    const result = await submitInterPix({ idempotencyKey: pending.idempotencyKey, amount: pending.amount, description: pending.description, beneficiary });
+    const result = await submitInterPix({
+      idempotencyKey: pending.idempotencyKey,
+      amount: pending.amount,
+      description: pending.description,
+      beneficiary,
+      scheduledFor: pending.scheduledFor,
+    });
     const interRequestId = String(result.codigoSolicitacao ?? "");
     if (!interRequestId) throw new Error("O Banco Inter não retornou o código da solicitação.");
     const approval = String(result.tipoRetorno ?? "").toUpperCase() === "APROVACAO";
-    const next = approval ? "awaiting_bank_approval" : "processing";
+    const next = approval
+      ? "awaiting_bank_approval"
+      : result.dataPagamento && result.dataPagamento > todayInBelem()
+        ? "scheduled"
+        : "processing";
     const request = await transitionPaymentRequest(id, ["submitting"], next, { interRequestId, submittedAt: new Date().toISOString(), bankStatus: result.tipoRetorno ?? null });
     await addPaymentEvent(id, approval ? "BANK_APPROVAL_REQUIRED" : "INTER_SUBMISSION_ACCEPTED", actor, { interRequestId, bankReturnType: result.tipoRetorno ?? null });
     return request;
@@ -293,6 +318,16 @@ async function completeSource(request: BankPaymentRequest) {
       updatedAt: new Date().toISOString(),
     }, { merge: true });
     return;
+  }
+  if (request.sourceType === "vacation") {
+    const { completeVacationPayment } = await import("@/features/hr/vacations/payment-completion.server");
+    await completeVacationPayment({
+      vacationId: request.sourceId,
+      paymentRequestId: request.id,
+      amount: request.amount,
+      paidAt: request.paidAt ?? new Date().toISOString(),
+      proofStoragePath: request.proofStoragePath ?? null,
+    });
   }
   if (request.sourceType === "purchase_order") {
     const now = new Date().toISOString();
@@ -398,7 +433,7 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
   const bank = await getInterPixStatus(current.interRequestId);
   const transaction = bank.transacaoPix ?? {};
   const rawStatus = String(transaction.status ?? "");
-  const next = mapInterPixStatus(rawStatus);
+  const next = mapInterPixStatus(rawStatus, current.scheduledFor);
   if (Number(transaction.valor ?? 0).toFixed(2) !== Number(current.amount).toFixed(2)) {
     await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "amount", bankStatus: rawStatus });
     throw new Error("O valor confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.");
@@ -433,7 +468,7 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
   }
   const patch: Record<string, unknown> = { bankStatus: rawStatus, endToEndId: transaction.endToEnd ?? null };
   if (next === "paid") patch.paidAt = transaction.dataHoraMovimento ?? new Date().toISOString();
-  let updated = await transitionPaymentRequest(id, ["awaiting_bank_approval", "processing", "failed", "rejected", "approval_expired"], next, patch);
+  let updated = await transitionPaymentRequest(id, ["awaiting_bank_approval", "scheduled", "processing", "failed", "rejected", "approval_expired"], next, patch);
   await addPaymentEvent(id, "BANK_STATUS_RECONCILED", actor, { bankStatus: rawStatus, status: next });
   if (next === "paid" && !updated.proofStoragePath) {
     const proofStoragePath = await createAndStoreConfirmedPaymentProof(updated);

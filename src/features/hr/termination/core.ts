@@ -352,7 +352,7 @@ export function recalculateTermination<T extends CltTerminationProcess>(process:
       steps = patchStep(steps, "termination_payment", { status: "completed", completedAt: process.payment?.paidAt ?? now.toISOString(), completedBy: "system:inter", blockedReason: null, note: "Pagamento confirmado e comprovante disponível." });
     } else if (paymentStatus === "not_applicable") {
       steps = patchStep(steps, "termination_payment", { status: "waived", completedAt: process.accountant?.approvedAt ?? now.toISOString(), completedBy: process.accountant?.approvedBy ?? "system", blockedReason: null, note: "Sem valor líquido a pagar." });
-    } else if (["awaiting_financial_authorization", "ready_to_submit", "submitting", "awaiting_bank_approval", "processing"].includes(paymentStatus)) {
+    } else if (["awaiting_financial_authorization", "ready_to_submit", "submitting", "awaiting_bank_approval", "scheduled", "processing"].includes(paymentStatus)) {
       steps = patchStep(steps, "termination_payment", { status: "waiting_external", startedAt: process.payment?.createdAt ?? now.toISOString(), dueAt: process.payment?.dueAt ?? null, blockedReason: null });
     } else if (["configuration_required", "failed", "rejected", "approval_expired"].includes(paymentStatus)) {
       steps = patchStep(steps, "termination_payment", { status: "blocked", dueAt: process.payment?.dueAt ?? null, blockedReason: process.payment?.lastError ?? "O pagamento precisa de atenção." });

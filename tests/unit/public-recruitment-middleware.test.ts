@@ -43,6 +43,15 @@ test('preserva a página e a API públicas de envio da ficha pelo contador', () 
   assertPassThrough('/api/hr/accountant/token-contador');
 });
 
+test('preserva o portal público do recibo de férias', () => {
+  const page = middleware(publicRequest('/ferias/contabilidade/token-ferias'));
+  assert.equal(page.headers.get('x-middleware-next'), '1');
+  assert.match(page.headers.get('cache-control') ?? '', /no-store/);
+  assert.equal(page.headers.get('x-robots-tag'), 'noindex, nofollow, noarchive');
+
+  assertPassThrough('/api/hr/vacation-accountant/token-ferias');
+});
+
 test('mantém íntegro o contrato do link público de admissão enviado por e-mail', () => {
   const page = middleware(publicRequest('/onboarding/token-admissao'));
   assert.equal(page.headers.get('x-middleware-rewrite'), `https://${PUBLIC_HOST}/vagas/onboarding/token-admissao`);

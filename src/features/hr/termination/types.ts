@@ -300,6 +300,7 @@ export type CltTerminationProcess = {
       | "ready_to_submit"
       | "submitting"
       | "awaiting_bank_approval"
+      | "scheduled"
       | "processing"
       | "paid"
       | "rejected"

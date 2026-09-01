@@ -4,6 +4,7 @@ import { Webhook } from "svix";
 import { deliveryStatusFromResendEvent, engagementStatusFromResendEvent, isDeliveryFailure } from "@/lib/email/resend-events";
 import { extractAppointmentProposal, hashAsoToken } from "@/features/hr/aso/workflow";
 import { hrDbAdmin } from "@/lib/firebase-rh-admin";
+import { dbAdmin } from "@/lib/firebase-admin";
 import { maybeAdvanceAfterFirstAccess } from "@/lib/hr/onboarding-access-provisioning";
 import {
   ingestFinancialEmail,
@@ -29,7 +30,12 @@ type ResendWebhookEvent = {
 
 function eventErrorMessage(event: ResendWebhookEvent, status: string) {
   const bounceMessage = event.data?.bounce?.message?.trim();
-  if (bounceMessage) return bounceMessage;
+  if (bounceMessage) {
+    return bounceMessage
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[e-mail]')
+      .replace(/\b\d{11,}\b/g, '[identificador]')
+      .slice(0, 500);
+  }
   if (status === "bounced") return "O servidor do destinatário recusou permanentemente o e-mail.";
   if (status === "complained") return "O destinatário marcou a mensagem como spam.";
   if (status === "failed") return "O Resend informou uma falha definitiva no envio.";
@@ -180,6 +186,36 @@ export async function POST(request: NextRequest) {
       const workflow = process.accountantWorkflow && typeof process.accountantWorkflow === "object" ? process.accountantWorkflow as Record<string, unknown> : {};
       const currentEmail = workflow.email && typeof workflow.email === "object" ? workflow.email as Record<string, unknown> : {};
       await processRef.set({ accountantWorkflow: { ...workflow, email: { ...currentEmail, ...(deliveryStatus ? { status: deliveryStatus } : {}), ...(deliveryStatus === "delivered" ? { deliveredAt: eventAt } : {}), ...(engagementStatus === "opened" ? { openedAt: eventAt } : {}), ...(engagementStatus === "clicked" ? { clickedAt: eventAt } : {}), ...(deliveryStatus && isDeliveryFailure(deliveryStatus) ? { lastError } : {}) }, updatedAt: eventAt }, updatedAt: eventAt }, { merge: true });
+    }
+
+    const vacationId = typeof data.vacationId === "string" ? data.vacationId : "";
+    if (vacationId && ["vacation_accountant_request", "vacation_receipt_correction"].includes(String(data.category))) {
+      const vacationRef = dbAdmin.collection("dp_vacations").doc(vacationId);
+      await dbAdmin.runTransaction(async (transaction) => {
+        const vacation = await transaction.get(vacationRef);
+        if (!vacation.exists) return;
+        const workflow = vacation.get("workflow");
+        if (!workflow || typeof workflow !== "object" || Array.isArray(workflow)) return;
+        const currentWorkflow = workflow as Record<string, unknown>;
+        const accountant = currentWorkflow.accountant && typeof currentWorkflow.accountant === "object" && !Array.isArray(currentWorkflow.accountant)
+          ? currentWorkflow.accountant as Record<string, unknown>
+          : {};
+        const lastError = deliveryStatus ? eventErrorMessage(event, deliveryStatus)?.slice(0, 500) ?? null : null;
+        transaction.update(vacationRef, {
+          workflow: {
+            ...currentWorkflow,
+            accountant: {
+              ...accountant,
+              ...(deliveryStatus ? { emailStatus: deliveryStatus } : {}),
+              ...(deliveryStatus === "delivered" ? { deliveredAt: eventAt } : {}),
+              ...(engagementStatus === "opened" ? { openedAt: eventAt } : {}),
+              ...(deliveryStatus && isDeliveryFailure(deliveryStatus) ? { status: "failed", lastError } : {}),
+            },
+            updatedAt: eventAt,
+          },
+          updatedAt: new Date(eventAt),
+        });
+      });
     }
 
     if (!deliveryStatus || !onboardingId || data.event !== "first_access") continue;

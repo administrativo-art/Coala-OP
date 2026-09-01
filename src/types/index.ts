@@ -2256,7 +2256,7 @@ export type Entity = {
       id: string;
       department: string;
       email: string;
-      purposes?: Array<'onboarding' | 'termination' | 'aso'>;
+      purposes?: Array<'onboarding' | 'termination' | 'aso' | 'vacation'>;
     }>;
   };
   responsible?: string; // Only for pessoa_juridica
@@ -3529,6 +3529,203 @@ export type DPHoliday = {
 export type DPVacationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PLANNED';
 export type DPVacationRecordType = 'gozo' | 'venda';
 
+export type DPVacationWorkflowStageId =
+  | 'scheduling'
+  | 'notice'
+  | 'accountant'
+  | 'receipt_review'
+  | 'payment'
+  | 'receipt_signature'
+  | 'closure';
+
+export type DPVacationWorkflowStepStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'waiting_external'
+  | 'blocked'
+  | 'completed'
+  | 'cancelled';
+
+export type DPVacationWorkflowOwner =
+  | 'hr'
+  | 'employee'
+  | 'accountant'
+  | 'finance'
+  | 'system';
+
+export type DPVacationWorkflowStep = {
+  id: DPVacationWorkflowStageId;
+  label: string;
+  owner: DPVacationWorkflowOwner;
+  status: DPVacationWorkflowStepStatus;
+  dueAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+  note?: string | null;
+};
+
+export type DPVacationLegalCheck = {
+  code: 'date_range' | 'notice_lead_time' | 'calendar_review' | 'cycle_review';
+  label: string;
+  status: 'ok' | 'warning' | 'blocked' | 'manual_review';
+  message: string;
+  blocking: boolean;
+};
+
+export type DPVacationSignatureParticipant = {
+  party: 'employee' | 'company';
+  providerSignatureId: string;
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+  status: 'sent' | 'viewed' | 'signed' | 'rejected' | 'delivery_failed';
+  invitedAt?: string | null;
+  emailSentAt?: string | null;
+  emailDeliveredAt?: string | null;
+  deliveryFailureReason?: string | null;
+  emailOpenedAt?: string | null;
+  viewedAt?: string | null;
+  signedAt?: string | null;
+  rejectedAt?: string | null;
+  lastIp?: string | null;
+  lastPort?: number | null;
+};
+
+export type DPVacationReceiptAnalysis = {
+  provider: 'openai' | 'local_fallback';
+  model: string;
+  documentTypeCode: string;
+  documentTypeConfidence: number;
+  employeeMatchStatus: 'MATCH' | 'POSSIBLE_MATCH' | 'MISMATCH' | 'UNKNOWN';
+  identifiedEmployeeName?: string | null;
+  extractedFields: {
+    employeeName?: string | null;
+    employer?: string | null;
+    cnpj?: string | null;
+    acquisitionPeriodStart?: string | null;
+    acquisitionPeriodEnd?: string | null;
+    vacationStartDate?: string | null;
+    vacationEndDate?: string | null;
+    numberOfDays?: number | null;
+    amountGross?: number | null;
+    amountDiscounts?: number | null;
+    amountNet?: number | null;
+    paymentDate?: string | null;
+    signatureDetected?: boolean | null;
+  };
+  fieldConfidences: Record<string, number>;
+  issues: string[];
+  warnings: string[];
+  analyzedAt: string;
+};
+
+export type DPVacationWorkflow = {
+  version: 1;
+  status: 'active' | 'completed' | 'cancelled';
+  currentStage: DPVacationWorkflowStageId;
+  steps: DPVacationWorkflowStep[];
+  legalAnalysis: {
+    analyzedAt: string;
+    asOfDate: string;
+    noticeDeadline: string | null;
+    paymentDeadline: string | null;
+    noticeLeadDays: number | null;
+    checks: DPVacationLegalCheck[];
+  };
+  notice: {
+    status: 'not_generated' | 'generating' | 'draft' | 'validated' | 'sending' | 'sent' | 'signed' | 'failed';
+    documentId?: string | null;
+    templateVersion?: string | null;
+    fileName?: string | null;
+    storagePath?: string | null;
+    hashSha256?: string | null;
+    sourceFingerprint?: string | null;
+    generationOperationId?: string | null;
+    generationRequestedAt?: string | null;
+    generatedAt?: string | null;
+    generatedBy?: string | null;
+    generationErrorCode?: string | null;
+    validatedAt?: string | null;
+    validatedBy?: string | null;
+    signatureRequestId?: string | null;
+    providerDocumentId?: string | null;
+    participants?: DPVacationSignatureParticipant[];
+    sentAt?: string | null;
+    sentBy?: string | null;
+    sendErrorCode?: string | null;
+    signedAt?: string | null;
+    signedStoragePath?: string | null;
+    signedHashSha256?: string | null;
+  };
+  accountant: {
+    status: 'not_started' | 'ready_to_send' | 'sending' | 'sent' | 'receipt_received' | 'correction_requested' | 'completed' | 'failed';
+    recipientEmail?: string | null;
+    communicationId?: string | null;
+    providerEmailId?: string | null;
+    emailStatus?: 'pending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'complained' | 'suppressed' | null;
+    sentAt?: string | null;
+    deliveredAt?: string | null;
+    openedAt?: string | null;
+    lastError?: string | null;
+    tokenHash?: string | null;
+    tokenExpiresAt?: string | null;
+    correctionRound?: number;
+  };
+  receipt: {
+    status: 'not_received' | 'processing' | 'review_pending' | 'correction_requested' | 'approved';
+    originalDocumentId?: string | null;
+    originalFileName?: string | null;
+    originalMimeType?: 'application/pdf' | null;
+    originalStoragePath?: string | null;
+    originalHashSha256?: string | null;
+    originalSize?: number | null;
+    originalUploadedAt?: string | null;
+    originalUploadedBy?: string | null;
+    analysis?: DPVacationReceiptAnalysis | null;
+    reviewedValues?: {
+      grossAmount: number;
+      discountAmount: number;
+      netAmount: number;
+      paymentDate?: string | null;
+    } | null;
+    reviewNotes?: string | null;
+    correctionReason?: string | null;
+    approvedAt?: string | null;
+    approvedBy?: string | null;
+  };
+  payment: {
+    status: 'not_started' | 'preparing' | 'awaiting_financial_authorization' | 'ready_to_submit' | 'awaiting_bank_approval' | 'scheduled' | 'processing' | 'paid' | 'failed';
+    dueAt?: string | null;
+    scheduledFor?: string | null;
+    amount?: number | null;
+    expenseId?: string | null;
+    paymentRequestId?: string | null;
+    paidAt?: string | null;
+    proofStoragePath?: string | null;
+    lastError?: string | null;
+  };
+  receiptSignature: {
+    status: 'blocked_until_payment' | 'ready' | 'sending' | 'sent' | 'signed' | 'failed';
+    signatureRequestId?: string | null;
+    providerDocumentId?: string | null;
+    participants?: DPVacationSignatureParticipant[];
+    sentAt?: string | null;
+    signedAt?: string | null;
+    signedStoragePath?: string | null;
+    signedHashSha256?: string | null;
+    signedDocumentId?: string | null;
+    lastError?: string | null;
+  };
+  closure: {
+    status: 'pending' | 'ready' | 'completed';
+    completedAt?: string | null;
+    completedBy?: string | null;
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DPVacationRecord = {
   id: string;
   userId: string;            // referência ao users/ (Firebase UID)
@@ -3541,6 +3738,7 @@ export type DPVacationRecord = {
   paymentDate?: string;
   returnDate?: string;
   warnings: string[];
+  workflow?: DPVacationWorkflow;
   createdAt: Timestamp;
 };
 
