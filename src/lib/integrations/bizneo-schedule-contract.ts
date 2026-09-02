@@ -62,6 +62,13 @@ export const pushBizneoScheduleSchema = z.object({
 
 export type BizneoScheduleShift = z.infer<typeof bizneoScheduleShiftSchema>;
 
+export const bizneoDayOffSchema = z.object({
+  bizneoUserId: z.number().int().positive(),
+  date: isoDateSchema,
+});
+
+export type BizneoDayOff = z.infer<typeof bizneoDayOffSchema>;
+
 function normalizeTime(value: string) {
   return value.length === 5 ? `${value}:00` : value;
 }
@@ -74,6 +81,16 @@ export function buildPublishedBizneoSchedulePayload(shift: Omit<BizneoScheduleSh
       ...(shift.name ? { name: shift.name } : {}),
       ...(shift.taxonId ? { taxon_id: shift.taxonId } : {}),
       time_ranges: shift.timeRanges,
+    },
+  };
+}
+
+export function buildPublishedBizneoDayOffPayload(dayOff: BizneoDayOff) {
+  return {
+    one_time_schedule: {
+      date: dayOff.date,
+      state: 'published' as const,
+      time_ranges: [] as const,
     },
   };
 }

@@ -732,7 +732,7 @@ export type PermissionSet = {
   signage: { view: boolean; manage: boolean; };
   dp: {
     view: boolean;
-    schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; };
+    schedules: { view: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; publishBizneo: boolean; };
     vacation: { viewAll: boolean; request: boolean; approve: boolean; manageSettings: boolean; };
     collaborators: { view: boolean; ownProfileOnly?: boolean; add: boolean; edit: boolean; terminate: boolean; syncProfile: boolean; };
     settings: { manageUnits: boolean; manageShifts: boolean; manageCalendars: boolean; };
@@ -2847,7 +2847,7 @@ export const defaultGuestPermissions: PermissionSet = {
     signage: { view: false, manage: false },
     dp: {
       view: false,
-      schedules: { view: false, create: false, edit: false, delete: false, export: false },
+      schedules: { view: false, create: false, edit: false, delete: false, export: false, publishBizneo: false },
       vacation: { viewAll: false, request: false, approve: false, manageSettings: false },
       collaborators: { view: false, ownProfileOnly: false, add: false, edit: false, terminate: false, syncProfile: false },
       settings: { manageUnits: false, manageShifts: false, manageCalendars: false },
@@ -2957,7 +2957,7 @@ export const defaultAdminPermissions: PermissionSet = {
     signage: { view: true, manage: true },
     dp: {
       view: true,
-      schedules: { view: true, create: true, edit: true, delete: true, export: true },
+      schedules: { view: true, create: true, edit: true, delete: true, export: true, publishBizneo: true },
       vacation: { viewAll: true, request: true, approve: true, manageSettings: true },
       collaborators: { view: true, ownProfileOnly: false, add: true, edit: true, terminate: true, syncProfile: true },
       settings: { manageUnits: true, manageShifts: true, manageCalendars: true },
@@ -3501,6 +3501,14 @@ export type DPShift = {
   startTime: string;
   endTime: string;
   type: 'work' | 'day_off';
+  dayOffSource?: 'predicted' | 'manual';
+  dayOffConfirmedAt?: Timestamp;
+  dayOffConfirmedBy?: string;
+  bizneoOperationId?: string;
+  bizneoSyncStatus?: 'pending' | 'publishing' | 'published' | 'failed';
+  bizneoSyncUpdatedAt?: Timestamp;
+  bizneoPublishedAt?: Timestamp;
+  bizneoLastErrorCode?: string;
   hasConflict?: boolean;
   consecutiveDayCount?: number;
   createdAt: Timestamp;

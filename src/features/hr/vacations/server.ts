@@ -8,7 +8,6 @@ import type { NextRequest } from 'next/server';
 import { createPaymentRequest, refreshPaymentRequest } from '@/features/financial/payment-requests/service.server';
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
 import { resolveDocumentLegalEntitySnapshot } from '@/features/hr/documents/legal-entity-snapshot.server';
-import { applyCoalaLetterheadToPdf } from '@/features/hr/documents/letterhead-pdf.server';
 import { resolveCompanyDocumentSignatory } from '@/features/hr/documents/company-document-signatory.server';
 import { canAccessUserByUnit } from '@/lib/unit-access';
 import { adminApp, dbAdmin } from '@/lib/firebase-admin';
@@ -53,6 +52,8 @@ import {
 import { buildVacationNoticePdf } from './vacation-notice-pdf.server';
 
 const VACATION_QUERY_LIMIT = 200;
+const VACATION_CYCLE_QUERY_LIMIT = 31;
+const VACATION_NOTICE_TEMPLATE_VERSION = '2.0';
 const PUBLIC_RECRUITMENT_URL = process.env.NEXT_PUBLIC_RECRUITMENT_URL?.trim()
   || 'https://vagas.coalashakes.com';
 
@@ -260,20 +261,176 @@ function requiredText(value: unknown, code: string, safeMessage: string) {
   return normalized;
 }
 
-function vacationSourceFingerprint(input: {
-  vacationId: string;
-  userId: string;
-  cycleId: string;
-  startDate: string;
-  endDate: string;
-  returnDate: string;
-  days: number;
-  employeeName: string;
-  employeeEmail: string;
-  companyLegalName: string;
-  companyCnpj: string;
-  companyAddress: string;
-}) {
+function asIsoDate(value: unknown) {
+  if (!value) return '';
+  if (typeof value === 'string') return value.slice(0, 10);
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : '';
+  if (typeof value === 'object' && value !== null) {
+    const candidate = value as { toDate?: unknown; seconds?: unknown; _seconds?: unknown };
+    if (typeof candidate.toDate === 'function') {
+      const date = (candidate.toDate as () => Date)();
+      return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+    }
+    const seconds = Number(candidate.seconds ?? candidate._seconds);
+    if (Number.isFinite(seconds)) return new Date(seconds * 1_000).toISOString().slice(0, 10);
+  }
+  return '';
+}
+
+function fieldText(snapshot: FirebaseFirestore.DocumentSnapshot) {
+  const data = snapshot.data() ?? {};
+  return typeof data.value_text === 'string' ? data.value_text.trim() : '';
+}
+
+function fieldDate(snapshot: FirebaseFirestore.DocumentSnapshot) {
+  const data = snapshot.data() ?? {};
+  return asIsoDate(data.value_date ?? data.value_text);
+}
+
+function formattedCpf(value: string) {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 11
+    ? digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+    : value;
+}
+
+function isoDateForYear(source: string, year: number) {
+  const [, month, rawDay] = source.split('-').map(Number);
+  if (!month || !rawDay || !Number.isInteger(year)) return '';
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month - 1, Math.min(rawDay, lastDay))).toISOString().slice(0, 10);
+}
+
+function shiftIsoDate(value: string, days: number) {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return '';
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function vacationCyclePeriod(cycleId: string, admissionDate: string) {
+  const match = /^(\d{4})-(\d{4})$/.exec(cycleId);
+  if (!match || Number(match[2]) !== Number(match[1]) + 1) {
+    throw conflict('DP_VACATION_CYCLE_INVALID', 'O período aquisitivo informado é inválido.');
+  }
+  const startYear = Number(match[1]);
+  const acquisitionPeriodStart = isoDateForYear(admissionDate, startYear);
+  const nextAnniversary = isoDateForYear(admissionDate, startYear + 1);
+  const followingAnniversary = isoDateForYear(admissionDate, startYear + 2);
+  if (!acquisitionPeriodStart || !nextAnniversary || !followingAnniversary) {
+    throw conflict('DP_VACATION_ADMISSION_DATE_INVALID', 'A data de admissão da colaboradora é inválida.');
+  }
+  return {
+    acquisitionPeriodStart,
+    acquisitionPeriodEnd: shiftIsoDate(nextAnniversary, -1),
+    concessiveDeadline: shiftIsoDate(followingAnniversary, -1),
+  };
+}
+
+function formatBelemDateTime(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'data registrada no sistema';
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Belem',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date).replace(',', ' às');
+}
+
+type VacationCycleRecord = Pick<
+  DPVacationRecord,
+  'id' | 'cycleId' | 'recordType' | 'startDate' | 'endDate' | 'days' | 'status'
+>;
+
+function vacationCycleQuery(userId: string, cycleId: string) {
+  return dbAdmin.collection('dp_vacations')
+    .where('userId', '==', userId)
+    .where('cycleId', '==', cycleId)
+    .limit(VACATION_CYCLE_QUERY_LIMIT);
+}
+
+function vacationCycleRecords(snapshot: FirebaseFirestore.QuerySnapshot): VacationCycleRecord[] {
+  if (snapshot.size >= VACATION_CYCLE_QUERY_LIMIT) {
+    throw conflict(
+      'DP_VACATION_CYCLE_RECORD_LIMIT',
+      'Há registros demais neste ciclo para gerar o documento com segurança.',
+    );
+  }
+  return snapshot.docs.map((document) => ({
+    id: document.id,
+    ...document.data(),
+  } as VacationCycleRecord));
+}
+
+async function loadVacationEmployeeDocumentData(user: User) {
+  const employeeId = getHrEmployeeId(user);
+  if (!employeeId) {
+    throw conflict(
+      'DP_VACATION_EMPLOYEE_LINK_REQUIRED',
+      'Vincule a colaboradora ao cadastro do RH antes de gerar o aviso.',
+    );
+  }
+  const fieldValues = hrDbAdmin.collection('employees').doc(employeeId).collection('field_values');
+  const [cpfSnapshot, ctpsNumberSnapshot, ctpsSeriesSnapshot, admissionSnapshot] = await Promise.all([
+    fieldValues.doc('employee.cpf').get(),
+    fieldValues.doc('employee.ctps_number').get(),
+    fieldValues.doc('employee.ctps_series').get(),
+    fieldValues.doc('employee.admission_date').get(),
+  ]);
+  const employeeCpf = requiredText(
+    fieldText(cpfSnapshot),
+    'DP_VACATION_EMPLOYEE_CPF_REQUIRED',
+    'Informe o CPF da colaboradora no cadastro do RH antes de gerar o aviso.',
+  );
+  const employeeAdmissionDate = requiredText(
+    asIsoDate(user.admissionDate) || fieldDate(admissionSnapshot),
+    'DP_VACATION_EMPLOYEE_ADMISSION_REQUIRED',
+    'Informe a data de admissão da colaboradora antes de gerar o aviso.',
+  );
+  const employeeRole = requiredText(
+    user.jobRoleName || user.jobFunctionNames?.[0],
+    'DP_VACATION_EMPLOYEE_ROLE_REQUIRED',
+    'Informe o cargo da colaboradora antes de gerar o aviso.',
+  );
+  const ctpsNumber = fieldText(ctpsNumberSnapshot);
+  const ctpsSeries = fieldText(ctpsSeriesSnapshot);
+  return {
+    employeeCpf,
+    employeeAdmissionDate,
+    employeeRole,
+    employeeRegistration: user.registrationIdBizneo?.trim()
+      || user.registrationIdPdv?.trim()
+      || 'Não informada',
+    employeeCtps: ctpsNumber
+      ? `${ctpsNumber}${ctpsSeries ? ` · série ${ctpsSeries}` : ''}`
+      : `CTPS Digital · CPF ${formattedCpf(employeeCpf)}`,
+  };
+}
+
+function vacationCycleDocumentSummary(records: VacationCycleRecord[]) {
+  const active = records.filter((record) => record.status !== 'REJECTED');
+  const allowanceDays = active
+    .filter((record) => record.recordType === 'venda')
+    .reduce((total, record) => total + Number(record.days || 0), 0);
+  const statusLabels: Record<string, string> = {
+    APPROVED: 'Aprovada',
+    PLANNED: 'Planejada',
+    PENDING: 'Pendente',
+  };
+  return {
+    allowanceText: allowanceDays > 0 ? `${allowanceDays} dias requeridos` : 'Não requerido',
+    installments: active
+      .filter((record) => record.recordType === 'gozo' && record.startDate && record.endDate)
+      .sort((left, right) => String(left.startDate).localeCompare(String(right.startDate)))
+      .map((record) => ({
+        startDate: record.startDate!,
+        endDate: record.endDate!,
+        days: Number(record.days),
+        status: statusLabels[record.status] ?? record.status,
+      })),
+  };
+}
+
+function vacationSourceFingerprint(input: Record<string, unknown>) {
   return createHash('sha256').update(JSON.stringify(input)).digest('hex');
 }
 
@@ -341,7 +498,19 @@ async function ensureVacationAccountantRequestSent(vacationId: string) {
   const employeeName = requiredText(user.username, 'DP_VACATION_EMPLOYEE_NAME_REQUIRED', 'Informe o nome da colaboradora.');
   const startDate = requiredText(current.startDate, 'DP_VACATION_START_REQUIRED', 'Informe o início das férias.');
   const endDate = requiredText(current.endDate, 'DP_VACATION_END_REQUIRED', 'Informe o término das férias.');
+  const expectedReturnDate = requiredText(current.returnDate, 'DP_VACATION_RETURN_REQUIRED', 'Informe a data de retorno.');
   const cycleId = requiredText(current.cycleId, 'DP_VACATION_CYCLE_REQUIRED', 'Informe o período aquisitivo.');
+  const signedAt = requiredText(
+    workflow.notice.signedAt,
+    'DP_VACATION_NOTICE_SIGNED_AT_REQUIRED',
+    'A data da assinatura do aviso ainda não está disponível.',
+  );
+  const [employee, cycleSnapshot] = await Promise.all([
+    loadVacationEmployeeDocumentData(user),
+    vacationCycleQuery(user.id, cycleId).get(),
+  ]);
+  const cyclePeriod = vacationCyclePeriod(cycleId, employee.employeeAdmissionDate);
+  const cycleSummary = vacationCycleDocumentSummary(vacationCycleRecords(cycleSnapshot));
   const correctionReason = workflow.receipt.status === 'correction_requested'
     ? workflow.receipt.correctionReason ?? null
     : null;
@@ -433,10 +602,17 @@ async function ensureVacationAccountantRequestSent(vacationId: string) {
   const uploadUrl = `${PUBLIC_RECRUITMENT_URL}/ferias/contabilidade/${token}`;
   const email = vacationAccountantEmailContent({
     employeeName,
-    companyLegalName: employer.legalName,
-    acquisitionCycle: cycleId,
+    employeeCpf: formattedCpf(employee.employeeCpf),
+    employeeRegistration: employee.employeeRegistration,
+    acquisitionPeriodStart: cyclePeriod.acquisitionPeriodStart,
+    acquisitionPeriodEnd: cyclePeriod.acquisitionPeriodEnd,
     vacationStartDate: startDate,
     vacationEndDate: endDate,
+    vacationDays: Number(current.days),
+    returnDate: expectedReturnDate,
+    allowanceText: cycleSummary.allowanceText,
+    thirteenthAdvanceText: 'Não requerida',
+    noticeSignedAt: formatBelemDateTime(signedAt),
     receiptUploadUrl: uploadUrl,
     correctionReason,
   });
@@ -756,6 +932,7 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
     current: Record<string, unknown>;
     user: User;
     workflow: DPVacationWorkflow;
+    cycleRecords: VacationCycleRecord[];
   }> => {
     const snapshot = await transaction.get(vacationRef);
     if (!snapshot.exists) throw notFound();
@@ -776,6 +953,9 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
     if (workflow.legalAnalysis.checks.some((check) => check.blocking)) {
       throw conflict('DP_VACATION_LEGAL_BLOCK', 'Corrija os impedimentos antes de gerar o aviso.');
     }
+    const cycleId = requiredText(current.cycleId, 'DP_VACATION_CYCLE_REQUIRED', 'Informe o período aquisitivo.');
+    const cycleSnapshot = await transaction.get(vacationCycleQuery(user.id, cycleId));
+    const cycleRecords = vacationCycleRecords(cycleSnapshot);
     const nextWorkflow: DPVacationWorkflow = {
       ...workflow,
       currentStage: 'notice',
@@ -801,7 +981,7 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       now,
       { operationId, documentId },
     ));
-    return { current, user, workflow: nextWorkflow };
+    return { current, user, workflow: nextWorkflow, cycleRecords };
   });
 
   try {
@@ -820,7 +1000,19 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
     const endDate = requiredText(current.endDate, 'DP_VACATION_END_REQUIRED', 'Informe o término das férias.');
     const expectedReturnDate = requiredText(current.returnDate, 'DP_VACATION_RETURN_REQUIRED', 'Informe a data de retorno.');
     const cycleId = requiredText(current.cycleId, 'DP_VACATION_CYCLE_REQUIRED', 'Informe o período aquisitivo.');
-    const employer = await resolveVacationEmployer(source.user);
+    const [employer, employee] = await Promise.all([
+      resolveVacationEmployer(source.user),
+      loadVacationEmployeeDocumentData(source.user),
+    ]);
+    const cyclePeriod = vacationCyclePeriod(cycleId, employee.employeeAdmissionDate);
+    const cycleSummary = vacationCycleDocumentSummary(source.cycleRecords);
+    const noticeLeadDays = source.workflow.legalAnalysis.noticeLeadDays;
+    if (noticeLeadDays === null) {
+      throw conflict('DP_VACATION_NOTICE_LEAD_TIME_REQUIRED', 'Não foi possível calcular a antecedência do aviso.');
+    }
+    const observations = noticeLeadDays < 30
+      ? `Aviso emitido com ${noticeLeadDays} dias de antecedência. O prazo recomendado pelo art. 135 da CLT é de 30 dias.`
+      : null;
     const fingerprintInput = {
       vacationId,
       userId: source.user.id,
@@ -831,27 +1023,40 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       days: Number(current.days),
       employeeName,
       employeeEmail,
+      ...employee,
+      ...cyclePeriod,
+      ...cycleSummary,
+      noticeLeadDays,
+      observations,
       companyLegalName: employer.legalName,
       companyCnpj: employer.cnpj,
       companyAddress: employer.address,
     };
     const sourceFingerprint = vacationSourceFingerprint(fingerprintInput);
-    const rawPdf = await buildVacationNoticePdf({
-      documentId,
+    const buffer = await buildVacationNoticePdf({
       companyLegalName: employer.legalName,
       companyCnpj: employer.cnpj,
       companyAddress: employer.address,
       employeeName,
+      employeeCpf: employee.employeeCpf,
+      employeeCtps: employee.employeeCtps,
+      employeeRegistration: employee.employeeRegistration,
+      employeeRole: employee.employeeRole,
+      employeeAdmissionDate: employee.employeeAdmissionDate,
       employeeEmail,
-      acquisitionCycle: cycleId,
+      ...cyclePeriod,
       startDate,
       endDate,
       returnDate: expectedReturnDate,
       days: Number(current.days),
-      communicationDate: asOfDate,
+      entitledDays: 30,
+      allowanceText: cycleSummary.allowanceText,
+      thirteenthAdvanceText: 'Não requerida',
       paymentDeadline: source.workflow.legalAnalysis.paymentDeadline ?? startDate,
+      noticeLeadDays,
+      observations,
+      installments: cycleSummary.installments,
     });
-    const buffer = await applyCoalaLetterheadToPdf(rawPdf);
     const hashSha256 = createHash('sha256').update(buffer).digest('hex');
     const fileName = `aviso-de-ferias-${safeFilePart(employeeName)}.pdf`;
     const storagePath = `hr/vacations/${vacationId}/notice/${operationId}.pdf`;
@@ -885,7 +1090,7 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
         notice: {
           status: 'draft',
           documentId,
-          templateVersion: '1.0',
+          templateVersion: VACATION_NOTICE_TEMPLATE_VERSION,
           fileName,
           storagePath,
           hashSha256,
@@ -909,7 +1114,7 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
         'VACATION_NOTICE_GENERATED',
         'Aviso de férias gerado e aguardando validação do RH.',
         generatedAt,
-        { documentId, hashSha256, sourceFingerprint, templateVersion: '1.0' },
+        { documentId, hashSha256, sourceFingerprint, templateVersion: VACATION_NOTICE_TEMPLATE_VERSION },
       ));
     });
     return { id: vacationId, workflow: generatedWorkflow };

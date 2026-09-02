@@ -1,6 +1,7 @@
 import { dbAdmin } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
+  buildPublishedBizneoDayOffPayload,
   buildPublishedBizneoSchedulePayload,
   type BizneoTimeRange,
 } from '@/lib/integrations/bizneo-schedule-contract';
@@ -181,6 +182,74 @@ export type PushShiftResult = {
 };
 
 export type { BizneoTimeRange } from '@/lib/integrations/bizneo-schedule-contract';
+
+export class BizneoScheduleApiError extends Error {
+  constructor(readonly status: number, operation: 'read' | 'write') {
+    super(`[Bizneo] Falha ao ${operation === 'read' ? 'consultar' : 'publicar'} escala (HTTP ${status}).`);
+    this.name = 'BizneoScheduleApiError';
+  }
+}
+
+export type BizneoScheduleDay = {
+  date: string;
+  kind: string | null;
+  absenceCount: number;
+  timeRanges: BizneoTimeRange[];
+};
+
+export async function fetchBizneoScheduleDay(
+  bizneoUserId: number,
+  date: string,
+): Promise<BizneoScheduleDay | null> {
+  const token = getToken();
+  const query = new URLSearchParams({ token, start_at: date, end_at: date });
+  const response = await fetch(`${BASE_URL}/users/${bizneoUserId}/schedules?${query}`, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new BizneoScheduleApiError(response.status, 'read');
+
+  const payload = await response.json() as { day_details?: unknown };
+  const days = Array.isArray(payload.day_details) ? payload.day_details : [];
+  const day = days.find((entry): entry is Record<string, unknown> => (
+    !!entry && typeof entry === 'object' && (entry as Record<string, unknown>).date === date
+  ));
+  if (!day) return null;
+
+  const absences = Array.isArray(day.absences) ? day.absences : [];
+  const rawRanges = Array.isArray(day.time_ranges) ? day.time_ranges : [];
+  const timeRanges = rawRanges.flatMap((range) => {
+    if (!range || typeof range !== 'object') return [];
+    const startAt = (range as Record<string, unknown>).start_at;
+    const endAt = (range as Record<string, unknown>).end_at;
+    if (typeof startAt !== 'string' || typeof endAt !== 'string') return [];
+    return [{ start_at: startAt, end_at: endAt }];
+  });
+
+  return {
+    date,
+    kind: typeof day.kind === 'string' ? day.kind : null,
+    absenceCount: absences.length,
+    timeRanges,
+  };
+}
+
+export async function pushDayOffToBizneo(
+  bizneoUserId: number,
+  date: string,
+): Promise<void> {
+  const token = getToken();
+  const body = buildPublishedBizneoDayOffPayload({ bizneoUserId, date });
+  const response = await fetch(
+    `${BASE_URL}/users/${bizneoUserId}/one-time-schedules?${new URLSearchParams({ token })}`,
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) throw new BizneoScheduleApiError(response.status, 'write');
+}
 
 export async function pushShiftToBizneo(
   bizneoUserId: number,
