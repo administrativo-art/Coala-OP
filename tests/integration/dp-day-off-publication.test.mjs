@@ -11,7 +11,7 @@ process.env.BIZNEO_TOKEN = 'integration-test-token';
 
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
-const { publishDayOff } = await import('../../src/features/dp/day-offs/service.server.ts');
+const { publishDayOff, removeDayOff } = await import('../../src/features/dp/day-offs/service.server.ts');
 
 const scheduleId = 'integration-day-off-schedule';
 const unitId = 'integration-day-off-unit';
@@ -105,10 +105,24 @@ test('confirma, publica e torna a folga idempotente', async (t) => {
     ['2026-09-09', 'one_time_rest'],
   ]);
   let postCount = 0;
+  let deleteCount = 0;
   let transientFailureDate = '2026-09-10';
+  let transientRemovalDate = '2026-09-09';
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     const method = init?.method ?? 'GET';
+    if (method === 'DELETE') {
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      const date = body.one_time_schedule?.date;
+      assert.equal(typeof date, 'string');
+      if (date === transientRemovalDate) {
+        transientRemovalDate = '';
+        return new Response('{}', { status: 503, headers: { 'Content-Type': 'application/json' } });
+      }
+      externalKinds.set(date, 'schedule');
+      deleteCount += 1;
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     if (method === 'POST') {
       const body = JSON.parse(String(init?.body ?? '{}'));
       const date = body.one_time_schedule?.date;
@@ -221,4 +235,92 @@ test('confirma, publica e torna a folga idempotente', async (t) => {
   const operations = await dbAdmin.collection('dp_bizneo_day_off_operations').get();
   assert.equal(operations.size, 3);
   assert.ok(operations.docs.every((document) => document.get('status') === 'published'));
+
+  const publishedDayOff = dayOffs.find((document) => document.get('date') === '2026-09-07');
+  assert.ok(publishedDayOff);
+  await assert.rejects(
+    () => removeDayOff({
+      context: {
+        ...context,
+        isDefaultAdmin: false,
+        userDoc: { ...context.userDoc, unitIds: [unitId] },
+        permissions: permissionsWithoutPublication,
+      },
+      scheduleId,
+      input: {
+        shiftId: publishedDayOff.id,
+        userId,
+        unitId,
+        date: '2026-09-07',
+      },
+      requestId: 'request-remove-forbidden',
+    }),
+    (error) => error?.code === 'DP_DAY_OFF_PUBLISH_FORBIDDEN',
+  );
+  const removed = await removeDayOff({
+    context,
+    scheduleId,
+    input: {
+      shiftId: publishedDayOff.id,
+      userId,
+      unitId,
+      date: '2026-09-07',
+    },
+    requestId: 'request-remove',
+  });
+  assert.equal(removed.alreadyRemoved, false);
+  assert.equal(deleteCount, 1);
+  assert.equal((await publishedDayOff.ref.get()).exists, false);
+
+  const removedAgain = await removeDayOff({
+    context,
+    scheduleId,
+    input: {
+      shiftId: publishedDayOff.id,
+      userId,
+      unitId,
+      date: '2026-09-07',
+    },
+    requestId: 'request-remove-again',
+  });
+  assert.equal(removedAgain.alreadyRemoved, true);
+  assert.equal(deleteCount, 1);
+  assert.equal((await dbAdmin.collection('dp_bizneo_day_off_operations').doc(
+    publishedDayOff.get('bizneoOperationId'),
+  ).get()).get('status'), 'removed');
+
+  const manualDayOff = dayOffs.find((document) => document.get('date') === '2026-09-09');
+  assert.ok(manualDayOff);
+  await assert.rejects(
+    () => removeDayOff({
+      context,
+      scheduleId,
+      input: {
+        shiftId: manualDayOff.id,
+        userId,
+        unitId,
+        date: '2026-09-09',
+      },
+      requestId: 'request-remove-transient-failure',
+    }),
+    (error) => error?.code === 'BIZNEO_DAY_OFF_REMOVAL_TEMPORARILY_UNAVAILABLE',
+  );
+  const retainedAfterFailure = await manualDayOff.ref.get();
+  assert.equal(retainedAfterFailure.exists, true);
+  assert.equal(retainedAfterFailure.get('bizneoSyncStatus'), 'removal_failed');
+
+  const removalRetried = await removeDayOff({
+    context,
+    scheduleId,
+    input: {
+      shiftId: manualDayOff.id,
+      userId,
+      unitId,
+      date: '2026-09-09',
+    },
+    requestId: 'request-remove-after-transient-failure',
+  });
+  assert.equal(removalRetried.alreadyRemoved, false);
+  assert.equal(deleteCount, 2);
+  assert.equal((await manualDayOff.ref.get()).exists, false);
 });

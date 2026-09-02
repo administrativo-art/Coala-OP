@@ -14,11 +14,19 @@ export const publishDayOffSchema = z.object({
   source: dayOffSourceSchema,
 });
 
+export const removeDayOffSchema = z.object({
+  shiftId: z.string().trim().min(1).max(180),
+  userId: z.string().trim().min(1).max(180),
+  unitId: z.string().trim().min(1).max(180),
+  date: isoDateSchema,
+});
+
 export const dayOffRouteSchema = z.object({
   scheduleId: z.string().trim().min(1).max(180),
 });
 
 export type PublishDayOffInput = z.infer<typeof publishDayOffSchema>;
+export type RemoveDayOffInput = z.infer<typeof removeDayOffSchema>;
 
 export type PublishDayOffResult = {
   dayOff: {
@@ -31,4 +39,9 @@ export type PublishDayOffResult = {
     bizneoSyncStatus: 'published';
   };
   alreadyPublished: boolean;
+};
+
+export type RemoveDayOffResult = {
+  removed: true;
+  alreadyRemoved: boolean;
 };

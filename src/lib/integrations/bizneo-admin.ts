@@ -184,8 +184,8 @@ export type PushShiftResult = {
 export type { BizneoTimeRange } from '@/lib/integrations/bizneo-schedule-contract';
 
 export class BizneoScheduleApiError extends Error {
-  constructor(readonly status: number, operation: 'read' | 'write') {
-    super(`[Bizneo] Falha ao ${operation === 'read' ? 'consultar' : 'publicar'} escala (HTTP ${status}).`);
+  constructor(readonly status: number, operation: 'read' | 'write' | 'delete') {
+    super(`[Bizneo] Falha ao ${operation === 'read' ? 'consultar' : operation === 'delete' ? 'remover' : 'publicar'} escala (HTTP ${status}).`);
     this.name = 'BizneoScheduleApiError';
   }
 }
@@ -249,6 +249,22 @@ export async function pushDayOffToBizneo(
     },
   );
   if (!response.ok) throw new BizneoScheduleApiError(response.status, 'write');
+}
+
+export async function removeDayOffFromBizneo(
+  bizneoUserId: number,
+  date: string,
+): Promise<void> {
+  const token = getToken();
+  const response = await fetch(
+    `${BASE_URL}/users/${bizneoUserId}/one-time-schedules?${new URLSearchParams({ token })}`,
+    {
+      method: 'DELETE',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ one_time_schedule: { date } }),
+    },
+  );
+  if (!response.ok) throw new BizneoScheduleApiError(response.status, 'delete');
 }
 
 export async function pushShiftToBizneo(
