@@ -1,5 +1,9 @@
 import { dbAdmin } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
+import {
+  buildPublishedBizneoSchedulePayload,
+  type BizneoTimeRange,
+} from '@/lib/integrations/bizneo-schedule-contract';
 
 const BASE_URL = 'https://coala.bizneohr.com/api/v1';
 
@@ -176,7 +180,7 @@ export type PushShiftResult = {
   error?: string;
 };
 
-export type BizneoTimeRange = { start_at: string; end_at: string };
+export type { BizneoTimeRange } from '@/lib/integrations/bizneo-schedule-contract';
 
 export async function pushShiftToBizneo(
   bizneoUserId: number,
@@ -187,15 +191,13 @@ export async function pushShiftToBizneo(
 ): Promise<void> {
   const token = getToken();
 
-  const body = {
-    one_time_schedule: {
-      date,
-      state: 'draft',
-      ...(name ? { name } : {}),
-      ...(taxonId ? { taxon_id: taxonId } : {}),
-      time_ranges: timeRanges,
-    },
-  };
+  const body = buildPublishedBizneoSchedulePayload({
+    bizneoUserId,
+    date,
+    timeRanges,
+    name,
+    taxonId,
+  });
 
   const res = await fetch(
     `${BASE_URL}/users/${bizneoUserId}/one-time-schedules?token=${token}`,
