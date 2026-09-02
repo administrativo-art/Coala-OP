@@ -29,6 +29,32 @@ service cloud.firestore {
       );
     }
 
+    function hasNoBizneoDayOffPublicationFields(data) {
+      return !data.keys().hasAny([
+        'dayOffSource',
+        'dayOffConfirmedAt',
+        'dayOffConfirmedBy',
+        'bizneoOperationId',
+        'bizneoSyncStatus',
+        'bizneoSyncUpdatedAt',
+        'bizneoPublishedAt',
+        'bizneoLastErrorCode'
+      ]);
+    }
+
+    function keepsBizneoDayOffPublicationFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'dayOffSource',
+        'dayOffConfirmedAt',
+        'dayOffConfirmedBy',
+        'bizneoOperationId',
+        'bizneoSyncStatus',
+        'bizneoSyncUpdatedAt',
+        'bizneoPublishedAt',
+        'bizneoLastErrorCode'
+      ]);
+    }
+
     function getProfileId() {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.profileId != null
@@ -709,11 +735,20 @@ service cloud.firestore {
         allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
           && request.resource.data.keys().hasAll(['userId', 'date', 'startTime', 'endTime'])
           && request.resource.data.userId is string
-          && request.resource.data.date is string;
+          && request.resource.data.date is string
+          && hasNoBizneoDayOffPublicationFields(request.resource.data);
         allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
-          && request.resource.data.userId is string;
-        allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true);
+          && request.resource.data.userId is string
+          && keepsBizneoDayOffPublicationFieldsUnchanged()
+          && resource.data.get('bizneoOperationId', '') == '';
+        allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
+          && resource.data.get('bizneoOperationId', '') == '';
       }
+    }
+
+    // Intenções de publicação no Bizneo são manipuladas somente pelo servidor.
+    match /dp_bizneo_day_off_operations/{operationId} {
+      allow read, write: if false;
     }
 
     match /{path=**}/shifts/{shiftId} {

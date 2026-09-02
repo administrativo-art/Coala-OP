@@ -91,6 +91,25 @@ test("normaliza erro JSON com status e payload", async () => {
   );
 });
 
+test("preserva mensagem segura do envelope de observabilidade", async () => {
+  await assert.rejects(
+    () => authenticatedApiRequest("/api/example", {
+      getIdToken: tokenProvider,
+      fetchImpl: async () => new Response(JSON.stringify({
+        error: { code: "DAY_OFF_CONFLICT", message: "A folga não pode ser publicada." },
+      }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      }),
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AuthenticatedApiError);
+      assert.equal(error.message, "A folga não pode ser publicada.");
+      return true;
+    },
+  );
+});
+
 test("normaliza erro não JSON sem expor o corpo como mensagem", async () => {
   await assert.rejects(
     () => authenticatedApiRequest("/api/example", {
