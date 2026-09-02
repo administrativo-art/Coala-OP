@@ -15,9 +15,15 @@ export type CoalaEmailTemplateInput = {
   message: string;
   afterActionMessage?: string;
   emphasis?: string;
+  details?: Array<{
+    label: string;
+    value: string;
+  }>;
   logoUrl?: string;
   highlightBlock?: {
+    title?: string;
     text: string;
+    note?: string;
     tone: "green" | "pink";
     action?: { label: string; url: string };
   };
@@ -45,6 +51,9 @@ export function renderCoalaEmail(input: CoalaEmailTemplateInput) {
   const emphasis = input.emphasis
     ? `<p style="margin:20px 0 0;font-size:16px;line-height:1.6;color:#273348"><strong>${escapeHtml(input.emphasis)}</strong></p>`
     : "";
+  const details = input.details?.length
+    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:22px 0 0;border-collapse:collapse;border-top:1px solid #e7e9ee">${input.details.map((item) => `<tr><td style="width:38%;padding:10px 12px 10px 0;border-bottom:1px solid #e7e9ee;font-size:13px;line-height:1.45;color:#697386;font-weight:700;vertical-align:top">${escapeHtml(item.label)}</td><td style="padding:10px 0;border-bottom:1px solid #e7e9ee;font-size:14px;line-height:1.45;color:#273348;font-weight:600;vertical-align:top">${escapeHtml(item.value)}</td></tr>`).join("")}</table>`
+    : "";
   const highlightBlock = input.highlightBlock
     ? (() => {
         const green = input.highlightBlock?.tone === "green";
@@ -52,10 +61,17 @@ export function renderCoalaEmail(input: CoalaEmailTemplateInput) {
         const border = green ? "#86efac" : "#f9a8d4";
         const color = green ? "#166534" : "#9d174d";
         const actionColor = green ? "#166534" : "#ec4899";
+        const blockTitle = input.highlightBlock?.title
+          ? `<p style="margin:0 0 6px;font-size:17px;line-height:1.4;color:${color};font-weight:800">${escapeHtml(input.highlightBlock.title)}</p>`
+          : "";
+        const blockTextWeight = input.highlightBlock?.title ? "500" : "700";
+        const blockNote = input.highlightBlock?.note
+          ? `<p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:#697386">${escapeHtml(input.highlightBlock.note)}</p>`
+          : "";
         const blockAction = input.highlightBlock?.action
           ? `<a href="${escapeHtml(input.highlightBlock.action.url)}" style="display:inline-block;margin-top:14px;padding:11px 18px;background:${actionColor};color:#ffffff;text-decoration:none;border-radius:8px;font-weight:700">${escapeHtml(input.highlightBlock.action.label)}</a>`
           : "";
-        return `<div style="margin:20px 0 0;padding:18px 20px;background:${background};border:1px solid ${border};border-radius:10px"><p style="margin:0;font-size:16px;line-height:1.6;color:${color};font-weight:700">${escapeHtml(input.highlightBlock.text).replaceAll("\n", "<br />")}</p>${blockAction}</div>`;
+        return `<div style="margin:22px 0 0;padding:20px;background:${background};border:1px solid ${border};border-radius:10px">${blockTitle}<p style="margin:0;font-size:15px;line-height:1.6;color:${color};font-weight:${blockTextWeight}">${escapeHtml(input.highlightBlock.text).replaceAll("\n", "<br />")}</p>${blockAction}${blockNote}</div>`;
       })()
     : "";
   const footer = input.footer === null
@@ -80,6 +96,7 @@ export function renderCoalaEmail(input: CoalaEmailTemplateInput) {
           <tr><td style="padding:30px 28px">
             ${title ? `<h1 style="margin:0 0 16px;font-size:24px;line-height:1.25">${title}</h1>` : ""}
             <p style="margin:0;font-size:16px;line-height:1.6;color:#3b465a">${message}</p>
+            ${details}
             ${highlightBlock}
             ${emphasis}
             ${action}
