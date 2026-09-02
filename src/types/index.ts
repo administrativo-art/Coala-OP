@@ -3505,7 +3505,7 @@ export type DPShift = {
   dayOffConfirmedAt?: Timestamp;
   dayOffConfirmedBy?: string;
   bizneoOperationId?: string;
-  bizneoSyncStatus?: 'pending' | 'publishing' | 'published' | 'failed';
+  bizneoSyncStatus?: 'pending' | 'publishing' | 'published' | 'failed' | 'removing' | 'removal_failed';
   bizneoSyncUpdatedAt?: Timestamp;
   bizneoPublishedAt?: Timestamp;
   bizneoLastErrorCode?: string;

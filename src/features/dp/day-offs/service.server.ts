@@ -11,10 +11,16 @@ import {
   BizneoScheduleApiError,
   fetchBizneoScheduleDay,
   pushDayOffToBizneo,
+  removeDayOffFromBizneo,
 } from '@/lib/integrations/bizneo-admin';
 import { AppError } from '@/lib/observability/app-error';
 import { canAccessUnit } from '@/lib/unit-access';
-import type { PublishDayOffInput, PublishDayOffResult } from './schemas';
+import type {
+  PublishDayOffInput,
+  PublishDayOffResult,
+  RemoveDayOffInput,
+  RemoveDayOffResult,
+} from './schemas';
 
 const OPERATIONS_COLLECTION = 'dp_bizneo_day_off_operations';
 const SHIFT_QUERY_LIMIT = 200;
@@ -33,6 +39,19 @@ type PreparedDayOff = {
   source: 'predicted' | 'manual';
   bizneoUserId: number;
   alreadyPublished: boolean;
+};
+
+type PreparedDayOffRemoval = {
+  operationRef: DocumentReference;
+  shiftRef: DocumentReference;
+  operationId: string;
+  scheduleId: string;
+  shiftId: string;
+  userId: string;
+  unitId: string;
+  date: string;
+  bizneoUserId: number;
+  alreadyRemoved: boolean;
 };
 
 function opaqueId(...parts: string[]) {
@@ -117,6 +136,27 @@ function normalizeExternalError(cause: unknown) {
     code: 'BIZNEO_DAY_OFF_REQUEST_FAILED',
     kind: 'TRANSIENT_EXTERNAL',
     safeMessage: 'Não foi possível acessar o Bizneo. A folga ficou pendente para nova tentativa.',
+    cause,
+  });
+}
+
+function normalizeRemovalError(cause: unknown) {
+  if (cause instanceof AppError) return cause;
+  if (cause instanceof BizneoScheduleApiError) {
+    const transient = cause.status === 408 || cause.status === 429 || cause.status >= 500;
+    return new AppError({
+      code: transient ? 'BIZNEO_DAY_OFF_REMOVAL_TEMPORARILY_UNAVAILABLE' : 'BIZNEO_DAY_OFF_REMOVAL_REJECTED',
+      kind: transient ? 'TRANSIENT_EXTERNAL' : 'PERMANENT_EXTERNAL',
+      safeMessage: transient
+        ? 'O Bizneo está temporariamente indisponível. A folga não foi removida e pode ser tentada novamente.'
+        : 'O Bizneo recusou a remoção da folga. Ela permanece registrada no Coala One.',
+      cause,
+    });
+  }
+  return new AppError({
+    code: 'BIZNEO_DAY_OFF_REMOVAL_REQUEST_FAILED',
+    kind: 'TRANSIENT_EXTERNAL',
+    safeMessage: 'Não foi possível remover a folga no Bizneo. Ela permanece registrada no Coala One.',
     cause,
   });
 }
@@ -336,6 +376,16 @@ async function prepareDayOff(params: {
         safeMessage: 'Esta folga já está sendo enviada ao Bizneo.',
       });
     }
+    if (
+      operation.status === 'removing'
+      && Date.now() - timestampMillis(operation.updatedAt) < PUBLISHING_LEASE_MS
+    ) {
+      throw new AppError({
+        code: 'DP_DAY_OFF_REMOVAL_IN_PROGRESS',
+        kind: 'CONFLICT',
+        safeMessage: 'Esta folga está sendo removida do Bizneo.',
+      });
+    }
 
     const now = Timestamp.now();
     const confirmedAt = existingDayOff?.get('dayOffConfirmedAt') ?? now;
@@ -375,6 +425,7 @@ async function prepareDayOff(params: {
       updatedAt: now,
       lastRequestId: requestId,
       lastErrorCode: FieldValue.delete(),
+      removedAt: FieldValue.delete(),
     }, { merge: true });
     const auditRef = dbAdmin.collection('actionLogs').doc();
     transaction.set(auditRef, businessAudit({
@@ -568,4 +619,279 @@ export async function publishDayOff(params: {
     },
     alreadyPublished: false,
   };
+}
+
+async function prepareDayOffRemoval(params: {
+  context: ServerUserContext;
+  scheduleId: string;
+  input: RemoveDayOffInput;
+  requestId: string;
+}): Promise<PreparedDayOffRemoval> {
+  const { context, scheduleId, input, requestId } = params;
+  assertPublishPermission(context);
+
+  const operationId = opaqueId(context.workspace_id, input.userId, input.date);
+  const operationRef = dbAdmin.collection(OPERATIONS_COLLECTION).doc(operationId);
+  const scheduleRef = dbAdmin.collection('dp_schedules').doc(scheduleId);
+  const shiftRef = scheduleRef.collection('shifts').doc(input.shiftId);
+  const userRef = dbAdmin.collection('users').doc(input.userId);
+  const unitRef = dbAdmin.collection('dp_units').doc(input.unitId);
+
+  return dbAdmin.runTransaction(async (transaction) => {
+    const scheduleSnapshot = await transaction.get(scheduleRef);
+    const shiftSnapshot = await transaction.get(shiftRef);
+    const operationSnapshot = await transaction.get(operationRef);
+    const userSnapshot = await transaction.get(userRef);
+    const unitSnapshot = await transaction.get(unitRef);
+
+    const operation = operationSnapshot.data() ?? {};
+    if (
+      operationSnapshot.exists
+      && (
+        operation.workspaceId !== context.workspace_id
+        || operation.userId !== input.userId
+        || operation.date !== input.date
+        || operation.scheduleId !== scheduleId
+        || operation.shiftId !== input.shiftId
+        || operation.unitId !== input.unitId
+      )
+    ) {
+      throw new AppError({ code: 'DP_DAY_OFF_REMOVAL_OPERATION_MISMATCH', kind: 'DATA_INTEGRITY' });
+    }
+
+    if (!scheduleSnapshot.exists) {
+      throw new AppError({ code: 'DP_SCHEDULE_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Escala não encontrada.' });
+    }
+    if (!userSnapshot.exists) {
+      throw new AppError({ code: 'DP_DAY_OFF_USER_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Colaboradora não encontrada.' });
+    }
+    if (!unitSnapshot.exists) {
+      throw new AppError({ code: 'DP_DAY_OFF_UNIT_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Unidade não encontrada.' });
+    }
+    if (!canAccessUnit(context.userDoc, input.unitId, { isDefaultAdmin: context.isDefaultAdmin })) {
+      throw new AppError({ code: 'DP_DAY_OFF_UNIT_FORBIDDEN', kind: 'AUTHORIZATION', safeMessage: 'Sem acesso à unidade desta folga.' });
+    }
+    if (!shiftSnapshot.exists && operation.status === 'removed') {
+      return {
+        operationRef,
+        shiftRef,
+        operationId,
+        scheduleId,
+        shiftId: input.shiftId,
+        userId: input.userId,
+        unitId: input.unitId,
+        date: input.date,
+        bizneoUserId: Number(operation.bizneoUserId ?? 0),
+        alreadyRemoved: true,
+      };
+    }
+    if (!shiftSnapshot.exists) {
+      throw new AppError({ code: 'DP_DAY_OFF_NOT_FOUND', kind: 'NOT_FOUND', safeMessage: 'Folga não encontrada.' });
+    }
+    if (
+      shiftSnapshot.get('type') !== 'day_off'
+      || shiftSnapshot.get('userId') !== input.userId
+      || shiftSnapshot.get('unitId') !== input.unitId
+      || shiftSnapshot.get('date') !== input.date
+      || shiftSnapshot.get('bizneoOperationId') !== operationId
+    ) {
+      throw new AppError({
+        code: 'DP_DAY_OFF_REMOVAL_TARGET_MISMATCH',
+        kind: 'CONFLICT',
+        safeMessage: 'A folga mudou desde que a página foi carregada. Atualize a escala e tente novamente.',
+      });
+    }
+    if (!operationSnapshot.exists) {
+      throw new AppError({ code: 'DP_DAY_OFF_REMOVAL_OPERATION_MISSING', kind: 'DATA_INTEGRITY' });
+    }
+    if (
+      operation.status === 'removing'
+      && Date.now() - timestampMillis(operation.updatedAt) < PUBLISHING_LEASE_MS
+    ) {
+      throw new AppError({
+        code: 'DP_DAY_OFF_REMOVAL_IN_PROGRESS',
+        kind: 'CONFLICT',
+        safeMessage: 'Esta folga já está sendo removida do Bizneo.',
+      });
+    }
+
+    const bizneoUserId = Number(String(userSnapshot.get('registrationIdBizneo') ?? '').trim());
+    if (!Number.isInteger(bizneoUserId) || bizneoUserId <= 0) {
+      throw new AppError({
+        code: 'DP_DAY_OFF_BIZNEO_LINK_MISSING',
+        kind: 'EXPECTED_BUSINESS',
+        safeMessage: 'A colaboradora não possui um vínculo válido com o Bizneo.',
+      });
+    }
+
+    const now = Timestamp.now();
+    transaction.update(shiftRef, {
+      bizneoSyncStatus: 'removing',
+      bizneoSyncUpdatedAt: now,
+      bizneoLastErrorCode: FieldValue.delete(),
+      updatedAt: now,
+    });
+    transaction.update(operationRef, {
+      status: 'removing',
+      removalAttemptCount: Number(operation.removalAttemptCount ?? 0) + 1,
+      updatedAt: now,
+      lastRemovalRequestId: requestId,
+      lastErrorCode: FieldValue.delete(),
+    });
+    transaction.set(dbAdmin.collection('actionLogs').doc(), businessAudit({
+      context,
+      action: 'day_off_removal_requested',
+      now,
+      requestId,
+      metadata: {
+        operation_id: operationId,
+        schedule_id: scheduleId,
+        shift_id: input.shiftId,
+        user_id: input.userId,
+        unit_id: input.unitId,
+        date: input.date,
+      },
+    }));
+
+    return {
+      operationRef,
+      shiftRef,
+      operationId,
+      scheduleId,
+      shiftId: input.shiftId,
+      userId: input.userId,
+      unitId: input.unitId,
+      date: input.date,
+      bizneoUserId,
+      alreadyRemoved: false,
+    };
+  });
+}
+
+async function markDayOffRemoved(
+  prepared: PreparedDayOffRemoval,
+  context: ServerUserContext,
+  requestId: string,
+) {
+  await dbAdmin.runTransaction(async (transaction) => {
+    const operationSnapshot = await transaction.get(prepared.operationRef);
+    const shiftSnapshot = await transaction.get(prepared.shiftRef);
+    if (!operationSnapshot.exists) {
+      throw new AppError({ code: 'DP_DAY_OFF_REMOVAL_STATE_MISSING', kind: 'DATA_INTEGRITY' });
+    }
+    if (!shiftSnapshot.exists && operationSnapshot.get('status') === 'removed') return;
+    if (
+      !shiftSnapshot.exists
+      || operationSnapshot.get('workspaceId') !== context.workspace_id
+      || operationSnapshot.get('shiftId') !== prepared.shiftId
+      || operationSnapshot.get('lastRemovalRequestId') !== requestId
+      || operationSnapshot.get('status') !== 'removing'
+      || shiftSnapshot.get('bizneoOperationId') !== prepared.operationId
+    ) {
+      throw new AppError({ code: 'DP_DAY_OFF_REMOVAL_STATE_CHANGED', kind: 'CONFLICT' });
+    }
+
+    const now = Timestamp.now();
+    transaction.delete(prepared.shiftRef);
+    transaction.update(prepared.operationRef, {
+      status: 'removed',
+      removedAt: now,
+      updatedAt: now,
+      lastErrorCode: FieldValue.delete(),
+    });
+    transaction.set(dbAdmin.collection('actionLogs').doc(), businessAudit({
+      context,
+      action: 'day_off_removed_from_bizneo',
+      now,
+      requestId,
+      metadata: {
+        operation_id: prepared.operationId,
+        schedule_id: prepared.scheduleId,
+        shift_id: prepared.shiftId,
+        user_id: prepared.userId,
+        unit_id: prepared.unitId,
+        date: prepared.date,
+      },
+    }));
+  });
+}
+
+async function markDayOffRemovalFailed(
+  prepared: PreparedDayOffRemoval,
+  context: ServerUserContext,
+  requestId: string,
+  errorCode: string,
+) {
+  await dbAdmin.runTransaction(async (transaction) => {
+    const operationSnapshot = await transaction.get(prepared.operationRef);
+    const shiftSnapshot = await transaction.get(prepared.shiftRef);
+    if (!operationSnapshot.exists || !shiftSnapshot.exists) return;
+    if (
+      operationSnapshot.get('workspaceId') !== context.workspace_id
+      || operationSnapshot.get('shiftId') !== prepared.shiftId
+      || operationSnapshot.get('lastRemovalRequestId') !== requestId
+      || operationSnapshot.get('status') !== 'removing'
+      || shiftSnapshot.get('bizneoOperationId') !== prepared.operationId
+    ) return;
+
+    const now = Timestamp.now();
+    transaction.update(prepared.operationRef, {
+      status: 'removal_failed',
+      updatedAt: now,
+      lastErrorCode: errorCode,
+    });
+    transaction.update(prepared.shiftRef, {
+      bizneoSyncStatus: 'removal_failed',
+      bizneoSyncUpdatedAt: now,
+      bizneoLastErrorCode: errorCode,
+      updatedAt: now,
+    });
+    transaction.set(dbAdmin.collection('actionLogs').doc(), businessAudit({
+      context,
+      action: 'day_off_bizneo_removal_failed',
+      now,
+      requestId,
+      metadata: {
+        operation_id: prepared.operationId,
+        schedule_id: prepared.scheduleId,
+        shift_id: prepared.shiftId,
+        user_id: prepared.userId,
+        unit_id: prepared.unitId,
+        date: prepared.date,
+        error_code: errorCode,
+      },
+    }));
+  });
+}
+
+export async function removeDayOff(params: {
+  context: ServerUserContext;
+  scheduleId: string;
+  input: RemoveDayOffInput;
+  requestId: string;
+}): Promise<RemoveDayOffResult> {
+  const prepared = await prepareDayOffRemoval(params);
+  if (prepared.alreadyRemoved) return { removed: true, alreadyRemoved: true };
+
+  try {
+    const before = await fetchBizneoScheduleDay(prepared.bizneoUserId, prepared.date);
+    if (before?.kind === 'one_time_rest') {
+      await removeDayOffFromBizneo(prepared.bizneoUserId, prepared.date);
+      const after = await fetchBizneoScheduleDay(prepared.bizneoUserId, prepared.date);
+      if (after?.kind === 'one_time_rest') {
+        throw new AppError({
+          code: 'BIZNEO_DAY_OFF_REMOVAL_VERIFICATION_FAILED',
+          kind: 'PERMANENT_EXTERNAL',
+          safeMessage: 'O Bizneo recebeu a operação, mas a folga continua ativa. Tente novamente.',
+        });
+      }
+    }
+    await markDayOffRemoved(prepared, params.context, params.requestId);
+  } catch (cause) {
+    const error = normalizeRemovalError(cause);
+    await markDayOffRemovalFailed(prepared, params.context, params.requestId, error.code).catch(() => undefined);
+    throw error;
+  }
+
+  return { removed: true, alreadyRemoved: false };
 }

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { publishDayOffSchema } from '../../src/features/dp/day-offs/schemas';
+import { publishDayOffSchema, removeDayOffSchema } from '../../src/features/dp/day-offs/schemas';
 import { isPredictedDayOffDate } from '../../src/lib/dp-shift-rules';
 import { defaultAdminPermissions, defaultGuestPermissions } from '../../src/types/index';
+
+const scheduleEditorSource = readFileSync('src/components/dp/dp-schedule-editor.tsx', 'utf8');
 
 test('segrega a publicação no Bizneo da edição comum da escala', () => {
   assert.equal(defaultGuestPermissions.dp.schedules.publishBizneo, false);
@@ -37,6 +40,20 @@ test('rejeita data inexistente e origem desconhecida', () => {
   }).success, false);
 });
 
+test('remoção exige a identidade completa da folga gerenciada', () => {
+  assert.equal(removeDayOffSchema.safeParse({
+    shiftId: 'day-off-1',
+    userId: 'user-1',
+    unitId: 'unit-1',
+    date: '2026-09-07',
+  }).success, true);
+  assert.equal(removeDayOffSchema.safeParse({
+    userId: 'user-1',
+    unitId: 'unit-1',
+    date: '2026-09-07',
+  }).success, false);
+});
+
 test('prevê folga somente ao final de cada bloco completo de seis dias', () => {
   const sixDays = new Set([
     '2026-09-01',
@@ -55,4 +72,22 @@ test('prevê folga somente ao final de cada bloco completo de seis dias', () => 
     `2026-09-${String(index + 1).padStart(2, '0')}`
   )));
   assert.equal(isPredictedDayOffDate(twelveDays, '2026-09-13'), true);
+});
+
+test('usa o selo da folga prevista como ação sem renderizar botão avulso', () => {
+  const start = scheduleEditorSource.indexOf('function DayOffBadge');
+  const end = scheduleEditorSource.indexOf('// ─── Main Component', start);
+  const component = scheduleEditorSource.slice(start, end);
+
+  assert.match(component, /badgeLabel = canAction \? actionLabel : 'Folga prevista'/);
+  assert.match(component, /className=\{cn\([\s\S]*?'ml-auto inline-flex h-6 shrink-0/);
+  assert.equal(component.match(/onClick=\{onPublish\}/g)?.length, 1);
+  assert.doesNotMatch(component, /mt-1\.5 flex h-6 w-full/);
+});
+
+test('mantém ausências de alocação e remoção de folga visíveis na própria célula', () => {
+  assert.match(scheduleEditorSource, /Sem unidade vinculada/);
+  assert.match(scheduleEditorSource, /Folga em \$\{sourceUnitName\}/);
+  assert.match(scheduleEditorSource, /aria-label=\{removalFailed \?/);
+  assert.match(scheduleEditorSource, /method: 'DELETE'/);
 });
