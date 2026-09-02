@@ -16,7 +16,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, Kiosk, User } from '@/types';
-import type { PublishDayOffResult } from '@/features/dp/day-offs/schemas';
+import type { PublishDayOffResult, RemoveDayOffResult } from '@/features/dp/day-offs/schemas';
 import { cn } from '@/lib/utils';
 import {
   activeOperationalUnits,
@@ -611,30 +611,51 @@ function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user, vacationC
   );
 }
 
-function DayOffBadge({ explicit, shift, user, canPublish, busy, onPublish }: {
+function DayOffBadge({
+  explicit,
+  shift,
+  user,
+  contextLabel,
+  canPublish,
+  canRemove,
+  publishing,
+  removing,
+  onPublish,
+  onRemove,
+}: {
   explicit: boolean;
   shift?: DPShift;
   user: { username: string; avatarUrl?: string; color?: string };
+  contextLabel?: string;
   canPublish: boolean;
-  busy: boolean;
+  canRemove: boolean;
+  publishing: boolean;
+  removing: boolean;
   onPublish: () => void;
+  onRemove: () => void;
 }) {
   const color = user.color ?? getUserColor(user.username);
   const status = shift?.bizneoSyncStatus;
   const isPublished = explicit && status === 'published';
-  const isPublishing = busy;
+  const isPublishing = publishing;
+  const isRemoving = removing || status === 'removing';
+  const removalFailed = status === 'removal_failed';
   const hasFailed = explicit && status === 'failed';
   const isPendingRetry = explicit && (status === 'publishing' || status === 'pending');
   const needsRetry = hasFailed || isPendingRetry;
-  const canAction = canPublish && !isPublished && !isPublishing;
+  const canAction = canPublish && !isPublished && !isPublishing && !isRemoving && !removalFailed;
+  const canRemoveAction = canRemove && explicit && !isPublishing && !isRemoving;
+  const actionLabel = needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Confirmar folga';
   let badgeLabel = 'Folga';
-  if (!explicit) badgeLabel = 'Folga prevista';
-  else if (isPublished) badgeLabel = 'Folga confirmada';
+  if (isRemoving) badgeLabel = 'Removendo';
+  else if (removalFailed) badgeLabel = 'Falha ao remover';
   else if (isPublishing) badgeLabel = 'Enviando';
+  else if (!explicit) badgeLabel = canAction ? actionLabel : 'Folga prevista';
+  else if (isPublished) badgeLabel = 'Folga confirmada';
   else if (hasFailed) badgeLabel = 'Falha no Bizneo';
   else if (isPendingRetry) badgeLabel = 'Envio pendente';
 
-  const badgeTone = hasFailed
+  const badgeTone = hasFailed || removalFailed
     ? 'border-destructive/30 bg-destructive/5 text-destructive'
     : isPendingRetry
       ? 'border-amber-300/60 bg-amber-50/70 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
@@ -656,26 +677,75 @@ function DayOffBadge({ explicit, shift, user, canPublish, busy, onPublish }: {
             {initials(user.username)}
           </AvatarFallback>
         </Avatar>
-        <span className="truncate text-[11px] font-medium">{user.username}</span>
-        <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">
-          {isPublishing && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-          {badgeLabel}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[11px] font-medium">{user.username}</p>
+          {contextLabel && (
+            <p className="truncate text-[9px] opacity-75">{contextLabel}</p>
+          )}
+        </div>
+        {canAction ? (
+          <button
+            type="button"
+            onClick={onPublish}
+            className={cn(
+              'ml-auto inline-flex h-6 shrink-0 items-center justify-center rounded-full border px-3 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              hasFailed
+                ? 'border-destructive/30 hover:bg-destructive/10'
+                : 'border-border/60 bg-background/70 hover:bg-background',
+            )}
+          >
+            {actionLabel}
+          </button>
+        ) : (
+          <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">
+            {(isPublishing || isRemoving) && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+            {badgeLabel}
+          </Badge>
+        )}
+        {canRemoveAction && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current/60 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label={removalFailed ? `Tentar remover novamente a folga de ${user.username}` : `Remover folga de ${user.username}`}
+            title={removalFailed ? 'Tentar remover novamente' : 'Remover folga'}
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UnassignedBadge({ user, statusLabel = 'Sem unidade vinculada' }: {
+  user: { username: string; avatarUrl?: string; color?: string };
+  statusLabel?: 'Sem unidade vinculada' | 'Férias';
+}) {
+  const color = user.color ?? getUserColor(user.username);
+  const isVacation = statusLabel === 'Férias';
+  return (
+    <div
+      className={cn(
+        'rounded border px-2 py-1.5',
+        isVacation
+          ? 'border-violet-200 bg-violet-50/70 text-violet-700 dark:border-violet-900 dark:bg-violet-950/20 dark:text-violet-300'
+          : 'border-slate-200 bg-slate-50/70 text-slate-600 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300',
+      )}
+      title={`${user.username} — ${isVacation ? 'Férias aprovadas' : 'Sem unidade vinculada neste dia'}`}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <Avatar className="h-5 w-5 shrink-0">
+          <AvatarImage src={user.avatarUrl} />
+          <AvatarFallback style={{ background: color }} className="text-[8px] text-white">
+            {initials(user.username)}
+          </AvatarFallback>
+        </Avatar>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{user.username}</span>
+        <Badge variant="outline" className="shrink-0 text-[10px] font-medium">
+          {statusLabel}
         </Badge>
       </div>
-      {canAction && (
-        <button
-          type="button"
-          onClick={onPublish}
-          className={cn(
-            'mt-1.5 flex h-6 w-full items-center justify-center rounded border px-2 text-[10px] font-semibold transition-colors',
-            hasFailed
-              ? 'border-destructive/30 hover:bg-destructive/10'
-              : 'border-border/60 hover:bg-background/70',
-          )}
-        >
-          {needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Confirmar folga'}
-        </button>
-      )}
     </div>
   );
 }
@@ -830,6 +900,12 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [manualDayOffDialog, setManualDayOffDialog] = useState<{ date: string; unitId: string } | null>(null);
   const [publishingDayOffKey, setPublishingDayOffKey] = useState<string | null>(null);
+  const [removingDayOffKey, setRemovingDayOffKey] = useState<string | null>(null);
+  const [dayOffRemovalTarget, setDayOffRemovalTarget] = useState<{
+    shift: DPShift;
+    userName: string;
+    unitName: string;
+  } | null>(null);
   const [editShift, setEditShift] = useState<DPShift | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPShift | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -872,6 +948,42 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       return false;
     } finally {
       setPublishingDayOffKey(null);
+    }
+  }
+
+  async function confirmDayOffRemoval() {
+    if (!dayOffRemovalTarget || removingDayOffKey) return;
+    const { shift } = dayOffRemovalTarget;
+    const key = `${shift.userId}::${shift.date}`;
+    setRemovingDayOffKey(key);
+    try {
+      const result = await api<RemoveDayOffResult>(
+        `/api/dp/schedules/${encodeURIComponent(shift.scheduleId)}/day-offs`,
+        {
+          method: 'DELETE',
+          json: {
+            shiftId: shift.id,
+            userId: shift.userId,
+            unitId: shift.unitId,
+            date: shift.date,
+          },
+          fallbackError: 'Falha ao remover a folga.',
+        },
+      );
+      toast({
+        title: result.alreadyRemoved ? 'Folga já removida.' : 'Folga removida.',
+        description: 'O Bizneo e o Coala One foram atualizados.',
+      });
+      setDayOffRemovalTarget(null);
+    } catch (caught) {
+      toast({
+        title: 'Não foi possível remover a folga.',
+        description: caught instanceof Error ? caught.message : 'Tente novamente.',
+        variant: 'destructive',
+      });
+      setDayOffRemovalTarget(null);
+    } finally {
+      setRemovingDayOffKey(null);
     }
   }
 
@@ -1069,6 +1181,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const prevSiblingWorkShifts = useMemo(() => prevSiblingShifts.filter(isWorkShift), [prevSiblingShifts]);
   const siblingWorkShifts = useMemo(() => siblingShifts.filter(isWorkShift), [siblingShifts]);
   const siblingDayOffShifts = useMemo(() => siblingShifts.filter(isDayOffShift), [siblingShifts]);
+  const currentScheduleUserIds = useMemo(
+    () => new Set(shifts.map((shift) => shift.userId)),
+    [shifts],
+  );
   const approvedVacationIndex = useMemo(
     () => buildApprovedVacationIndex(vacations),
     [vacations],
@@ -1108,14 +1224,15 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const ghostIndex = useMemo(() => {
     if (!isPerUnit || !schedule.unitId) return {} as Record<string, Record<string, { shift: DPShift; unitName: string; consecutiveDayCount: number }[]>>;
     // Users who are officially linked to this unit (multi-unit workers)
-    const linkedUserIds = new Set(
+    const linkedUserIds = new Set([
       operationalUsers
         .filter(u => userMatchesDPUnit(u, schedule.unitId, units, kiosks))
-        .map(u => u.id)
-    );
+        .map(u => u.id),
+      ...currentScheduleUserIds,
+    ].flat());
     const idx: Record<string, Record<string, { shift: DPShift; unitName: string; consecutiveDayCount: number }[]>> = {};
     for (const s of siblingWorkShifts) {
-      if (linkedUserIds.size > 0 && !linkedUserIds.has(s.userId)) continue;
+      if (!linkedUserIds.has(s.userId)) continue;
       const unitName = units.find(u => u.id === s.unitId)?.name ?? s.unitId;
       const consecutiveDayCount = consecutiveCountMap.get(s.id) ?? 1;
       if (!idx[s.date]) idx[s.date] = {};
@@ -1128,7 +1245,16 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       });
     });
     return idx;
-  }, [isPerUnit, schedule.unitId, siblingWorkShifts, operationalUsers, units, kiosks, consecutiveCountMap]);
+  }, [
+    consecutiveCountMap,
+    currentScheduleUserIds,
+    isPerUnit,
+    kiosks,
+    operationalUsers,
+    schedule.unitId,
+    siblingWorkShifts,
+    units,
+  ]);
 
   // Cross-unit conflict detection: userId → dates occupied in sibling units
   const siblingOccupied = useMemo(() => {
@@ -1173,15 +1299,35 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const dayOffIndex = useMemo(() => {
     const activeUnitIds = new Set(activeUnits.map((unit) => unit.id));
     const visibleUserIds = userFilter === '__all__' ? null : new Set([userFilter]);
-    const entries = new Map<string, { userId: string; explicit: boolean; shift?: DPShift }>();
+    const entries = new Map<string, {
+      userId: string;
+      explicit: boolean;
+      shift?: DPShift;
+      sourceUnitId: string;
+      sourceUnitName: string;
+    }>();
 
-    const registerEntry = (date: string, unitId: string, userId: string, explicit: boolean, shift?: DPShift) => {
-      if (!currentMonthDateSet.has(date) || !activeUnitIds.has(unitId)) return;
+    const registerEntry = (params: {
+      date: string;
+      displayUnitId: string;
+      sourceUnitId: string;
+      userId: string;
+      explicit: boolean;
+      shift?: DPShift;
+    }) => {
+      const { date, displayUnitId, sourceUnitId, userId, explicit, shift } = params;
+      if (!currentMonthDateSet.has(date) || !activeUnitIds.has(displayUnitId)) return;
       if (visibleUserIds && !visibleUserIds.has(userId)) return;
-      const key = `${date}::${unitId}::${userId}`;
+      const key = `${date}::${displayUnitId}::${userId}`;
       const existing = entries.get(key);
       if (existing?.explicit) return;
-      entries.set(key, { userId, explicit: explicit || existing?.explicit || false, shift: shift ?? existing?.shift });
+      entries.set(key, {
+        userId,
+        explicit: explicit || existing?.explicit || false,
+        shift: shift ?? existing?.shift,
+        sourceUnitId,
+        sourceUnitName: units.find((unit) => unit.id === sourceUnitId)?.name ?? sourceUnitId,
+      });
     };
 
     const visibleExplicitDayOffs = isPerUnit ? [...dayOffShifts, ...siblingDayOffShifts] : dayOffShifts;
@@ -1189,13 +1335,20 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       let displayUnitId = shift.unitId;
       if (isPerUnit && schedule.unitId) {
         const linkedToCurrentUser = operationalUsers.find((user) => user.id === shift.userId);
-        const linkedToCurrent = linkedToCurrentUser
+        const linkedToCurrent = currentScheduleUserIds.has(shift.userId) || (linkedToCurrentUser
           ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks)
-          : false;
+          : false);
         if (linkedToCurrent || shift.unitId === schedule.unitId) displayUnitId = schedule.unitId;
         else return;
       }
-      registerEntry(shift.date, displayUnitId, shift.userId, true, shift);
+      registerEntry({
+        date: shift.date,
+        displayUnitId,
+        sourceUnitId: shift.unitId,
+        userId: shift.userId,
+        explicit: true,
+        shift,
+      });
     });
 
     streakState.predictedDayOffsByUser.forEach((items, userId) => {
@@ -1203,17 +1356,29 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         let displayUnitId = item.sourceUnitId;
         if (isPerUnit && schedule.unitId) {
           const linkedToCurrentUser = operationalUsers.find((user) => user.id === userId);
-          const linkedToCurrent = linkedToCurrentUser
+          const linkedToCurrent = currentScheduleUserIds.has(userId) || (linkedToCurrentUser
             ? userMatchesDPUnit(linkedToCurrentUser, schedule.unitId, units, kiosks)
-            : false;
+            : false);
           if (linkedToCurrent || item.sourceUnitId === schedule.unitId) displayUnitId = schedule.unitId;
           else return;
         }
-        registerEntry(item.date, displayUnitId, userId, false);
+        registerEntry({
+          date: item.date,
+          displayUnitId,
+          sourceUnitId: item.sourceUnitId,
+          userId,
+          explicit: false,
+        });
       });
     });
 
-    const idx: Record<string, Record<string, { userId: string; explicit: boolean; shift?: DPShift }[]>> = {};
+    const idx: Record<string, Record<string, Array<{
+      userId: string;
+      explicit: boolean;
+      shift?: DPShift;
+      sourceUnitId: string;
+      sourceUnitName: string;
+    }>>> = {};
     entries.forEach((entry, key) => {
       const [date, unitId] = key.split('::');
       if (!idx[date]) idx[date] = {};
@@ -1224,6 +1389,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     return idx;
   }, [
     activeUnits,
+    currentScheduleUserIds,
     currentMonthDateSet,
     dayOffShifts,
     isPerUnit,
@@ -1235,6 +1401,37 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     units,
     userFilter,
   ]);
+
+  const rosterUserIdsByUnit = useMemo(() => {
+    const roster = new Map<string, Set<string>>(
+      activeUnits.map((unit) => [unit.id, new Set<string>()]),
+    );
+
+    activeUnits.forEach((unit) => {
+      operationalUsers.forEach((candidate) => {
+        if (userMatchesDPUnit(candidate, unit.id, units, kiosks)) {
+          roster.get(unit.id)?.add(candidate.id);
+        }
+      });
+    });
+
+    [...workShifts, ...dayOffShifts].forEach((shift) => {
+      const unit = activeUnits.find((candidate) => operationalUnitIdsMatch(candidate.id, shift.unitId, units));
+      if (unit) roster.get(unit.id)?.add(shift.userId);
+    });
+
+    return new Map(
+      Array.from(roster.entries()).map(([unitId, userIds]) => [unitId, Array.from(userIds)]),
+    );
+  }, [activeUnits, dayOffShifts, kiosks, operationalUsers, units, workShifts]);
+
+  const occupiedUserDateKeys = useMemo(
+    () => new Set(
+      (isPerUnit ? [...workShifts, ...siblingWorkShifts] : workShifts)
+        .map((shift) => `${shift.date}::${shift.userId}`),
+    ),
+    [isPerUnit, siblingWorkShifts, workShifts],
+  );
 
   // Index shifts: [date][unitId] → DPShift[] (com filtros e contagem consecutiva)
   const shiftIndex = useMemo(() => {
@@ -1780,6 +1977,24 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                         ...cellShifts.map(shift => ({ kind: 'own' as const, shift })),
                         ...ghosts.map(ghost => ({ kind: 'ghost' as const, ...ghost })),
                       ].sort((left, right) => compareWorkShiftsByTime(left.shift, right.shift));
+                      const visibleDayOffUserIds = new Set(dayOffEntries.map((entry) => entry.userId));
+                      const unassignedUsers = (rosterUserIdsByUnit.get(unit.id) ?? [])
+                        .filter((userId) => (
+                          (userFilter === '__all__' || userFilter === userId)
+                          && !occupiedUserDateKeys.has(`${date}::${userId}`)
+                          && !visibleDayOffUserIds.has(userId)
+                        ))
+                        .flatMap((userId) => {
+                          const candidate = effectiveUserMap.get(userId);
+                          if (!candidate) return [];
+                          const vacation = findApprovedVacationInIndex(approvedVacationIndex, userId, date);
+                          return [{
+                            userId,
+                            user: candidate,
+                            statusLabel: vacation ? 'Férias' as const : 'Sem unidade vinculada' as const,
+                          }];
+                        })
+                        .sort((left, right) => left.user.username.localeCompare(right.user.username, 'pt-BR'));
 
                       return (
                         <td
@@ -1828,7 +2043,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                 {displayWorkEntries.length > 0 && (
                                   <div className="border-t border-dashed border-muted-foreground/20 my-0.5" />
                                 )}
-                                {dayOffEntries.map(({ userId, explicit, shift }) => {
+                                {dayOffEntries.map(({ userId, explicit, shift, sourceUnitId, sourceUnitName }) => {
                                   const user = effectiveUserMap.get(userId);
                                   if (!user) return null;
                                   const shouldRetry = shift?.bizneoSyncStatus === 'failed'
@@ -1845,8 +2060,15 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                       explicit={explicit}
                                       shift={shift}
                                       user={user}
+                                      contextLabel={
+                                        sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units)
+                                          ? `Folga em ${sourceUnitName}`
+                                          : undefined
+                                      }
                                       canPublish={canPublishDayOff && (explicit || !schedule.locked)}
-                                      busy={publishingDayOffKey === `${userId}::${date}`}
+                                      canRemove={canPublishDayOff && explicit}
+                                      publishing={publishingDayOffKey === `${userId}::${date}`}
+                                      removing={removingDayOffKey === `${userId}::${date}`}
                                       onPublish={() => void handlePublishDayOff({
                                         scheduleId: shift?.scheduleId,
                                         userId,
@@ -1854,9 +2076,31 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                         date,
                                         source,
                                       })}
+                                      onRemove={() => {
+                                        if (!shift) return;
+                                        setDayOffRemovalTarget({
+                                          shift,
+                                          userName: user.username,
+                                          unitName: sourceUnitName,
+                                        });
+                                      }}
                                     />
                                   );
                                 })}
+                              </>
+                            )}
+                            {unassignedUsers.length > 0 && (
+                              <>
+                                {(displayWorkEntries.length > 0 || dayOffEntries.length > 0) && (
+                                  <div className="my-0.5 border-t border-dashed border-muted-foreground/20" />
+                                )}
+                                {unassignedUsers.map((candidate) => (
+                                  <UnassignedBadge
+                                    key={`${date}-${unit.id}-${candidate.userId}-unassigned`}
+                                    user={candidate.user}
+                                    statusLabel={candidate.statusLabel}
+                                  />
+                                ))}
                               </>
                             )}
                             {(canEdit || (canPublishDayOff && !schedule.locked)) && (
@@ -1947,6 +2191,39 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         deleteShiftsBatch={deleteShiftsBatch}
         onApplied={resetBulkSelection}
       />
+
+      <AlertDialog
+        open={!!dayOffRemovalTarget}
+        onOpenChange={(open) => {
+          if (!open && !removingDayOffKey) setDayOffRemovalTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover folga?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A folga de {dayOffRemovalTarget?.userName} em{' '}
+              {dayOffRemovalTarget?.shift.date
+                ? format(parseISO(dayOffRemovalTarget.shift.date), "dd 'de' MMMM", { locale: ptBR })
+                : ''}{' '}
+              ({dayOffRemovalTarget?.unitName}) será removida do Bizneo e do Coala One. Se a remoção externa falhar, o registro será mantido para nova tentativa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!removingDayOffKey}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDayOffRemoval();
+              }}
+              disabled={!!removingDayOffKey}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removingDayOffKey ? 'Removendo...' : 'Remover folga'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
