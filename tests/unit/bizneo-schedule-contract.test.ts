@@ -2,9 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildPublishedBizneoDayOffPayload,
   buildPublishedBizneoSchedulePayload,
   pushBizneoScheduleSchema,
 } from '../../src/lib/integrations/bizneo-schedule-contract';
+
+test('publica folga como turno pontual sem intervalos', () => {
+  const payload = buildPublishedBizneoDayOffPayload({
+    bizneoUserId: 17044767,
+    date: '2026-09-06',
+  });
+
+  assert.deepEqual(payload, {
+    one_time_schedule: {
+      date: '2026-09-06',
+      state: 'published',
+      time_ranges: [],
+    },
+  });
+});
 
 const morningShift = {
   bizneoUserId: 17044767,

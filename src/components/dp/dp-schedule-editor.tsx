@@ -13,8 +13,10 @@ import { useDPHolidays } from '@/hooks/use-dp-holidays';
 import { useDPSiblingShifts } from '@/hooks/use-dp-sibling-shifts';
 import { useDPScheduleVacations } from '@/hooks/use-dp-schedule-vacations';
 import { useAuth } from '@/hooks/use-auth';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
 import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, Kiosk, User } from '@/types';
+import type { PublishDayOffResult } from '@/features/dp/day-offs/schemas';
 import { cn } from '@/lib/utils';
 import {
   activeOperationalUnits,
@@ -60,8 +62,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, CalendarOff, Loader2, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { useToast } from '@/hooks/use-toast';
@@ -367,6 +370,90 @@ function ShiftDialog({
   );
 }
 
+function ManualDayOffDialog({
+  open,
+  onOpenChange,
+  date,
+  unit,
+  users,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  date: string;
+  unit?: DPUnit;
+  users: User[];
+  onConfirm: (userId: string) => Promise<boolean>;
+}) {
+  const [userId, setUserId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  React.useEffect(() => {
+    if (open) setUserId('');
+  }, [open]);
+
+  async function handleConfirm() {
+    if (!userId) return;
+    setSubmitting(true);
+    try {
+      const success = await onConfirm(userId);
+      if (success) onOpenChange(false);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Lançar folga manualmente</DialogTitle>
+          <DialogDescription>
+            A folga será registrada no Coala One e publicada no Bizneo.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+            <p className="font-medium">
+              {date ? format(parseISO(date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'Data não informada'}
+            </p>
+            <p className="text-xs text-muted-foreground">{unit?.name ?? 'Unidade não informada'}</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Colaboradora</Label>
+            <Select value={userId} onValueChange={setUserId} disabled={submitting}>
+              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {users.map((item) => (
+                  <SelectItem key={item.id} value={item.id} disabled={!item.registrationIdBizneo}>
+                    {item.username}{item.registrationIdBizneo ? '' : ' — sem vínculo Bizneo'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Se existir um turno de trabalho nessa data, remova ou substitua o turno antes de lançar a folga.
+          </p>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button type="button" disabled={!userId || submitting} onClick={() => void handleConfirm()}>
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Confirmar folga
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Shift Card ───────────────────────────────────────────────────────────────
 
 interface ShiftCardProps {
@@ -524,31 +611,71 @@ function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user, vacationC
   );
 }
 
-function DayOffBadge({ explicit, user }: {
+function DayOffBadge({ explicit, shift, user, canPublish, busy, onPublish }: {
   explicit: boolean;
+  shift?: DPShift;
   user: { username: string; avatarUrl?: string; color?: string };
+  canPublish: boolean;
+  busy: boolean;
+  onPublish: () => void;
 }) {
   const color = user.color ?? getUserColor(user.username);
+  const status = shift?.bizneoSyncStatus;
+  const isPublished = explicit && status === 'published';
+  const isPublishing = busy;
+  const hasFailed = explicit && status === 'failed';
+  const isPendingRetry = explicit && (status === 'publishing' || status === 'pending');
+  const needsRetry = hasFailed || isPendingRetry;
+  const canAction = canPublish && !isPublished && !isPublishing;
+  let badgeLabel = 'Folga';
+  if (!explicit) badgeLabel = 'Folga prevista';
+  else if (isPublished) badgeLabel = 'Folga confirmada';
+  else if (isPublishing) badgeLabel = 'Enviando';
+  else if (hasFailed) badgeLabel = 'Falha no Bizneo';
+  else if (isPendingRetry) badgeLabel = 'Envio pendente';
+
+  const badgeTone = hasFailed
+    ? 'border-destructive/30 bg-destructive/5 text-destructive'
+    : isPendingRetry
+      ? 'border-amber-300/60 bg-amber-50/70 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
+      : explicit
+        ? 'border-emerald-200 bg-emerald-50/80 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
+        : 'border-sky-200 bg-sky-50/80 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300';
   return (
     <div
       className={cn(
-        'rounded border px-2 py-1.5 flex items-center gap-2 min-w-0',
-        explicit
-          ? 'border-emerald-200 bg-emerald-50/80 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
-          : 'border-sky-200 bg-sky-50/80 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300'
+        'rounded border px-2 py-1.5 min-w-0',
+        badgeTone,
       )}
-      title={`${user.username} — ${explicit ? 'Folga' : 'Folga prevista'}`}
+      title={`${user.username} — ${badgeLabel}`}
     >
-      <Avatar className="w-5 h-5 shrink-0">
-        <AvatarImage src={user.avatarUrl} />
-        <AvatarFallback style={{ background: color }} className="text-[8px] text-white">
-          {initials(user.username)}
-        </AvatarFallback>
-      </Avatar>
-      <span className="truncate text-[11px] font-medium">{user.username}</span>
-      <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">
-        {explicit ? 'Folga' : 'Folga prevista'}
-      </Badge>
+      <div className="flex items-center gap-2 min-w-0">
+        <Avatar className="w-5 h-5 shrink-0">
+          <AvatarImage src={user.avatarUrl} />
+          <AvatarFallback style={{ background: color }} className="text-[8px] text-white">
+            {initials(user.username)}
+          </AvatarFallback>
+        </Avatar>
+        <span className="truncate text-[11px] font-medium">{user.username}</span>
+        <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">
+          {isPublishing && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+          {badgeLabel}
+        </Badge>
+      </div>
+      {canAction && (
+        <button
+          type="button"
+          onClick={onPublish}
+          className={cn(
+            'mt-1.5 flex h-6 w-full items-center justify-center rounded border px-2 text-[10px] font-semibold transition-colors',
+            hasFailed
+              ? 'border-destructive/30 hover:bg-destructive/10'
+              : 'border-border/60 hover:bg-background/70',
+          )}
+        >
+          {needsRetry ? 'Tentar novamente' : explicit ? 'Enviar ao Bizneo' : 'Confirmar folga'}
+        </button>
+      )}
     </div>
   );
 }
@@ -592,6 +719,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     error: vacationsError,
   } = useDPScheduleVacations(schedule.id);
   const { toast } = useToast();
+  const api = useAuthenticatedApi();
   const bootstrapLoading =
     (unitsLoading && units.length === 0) ||
     (shiftDefsLoading && shiftDefinitions.length === 0);
@@ -688,10 +816,20 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const scheduleUnit = schedule.unitId ? units.find((unit) => unit.id === schedule.unitId) : undefined;
   const isArchivedUnitSchedule = scheduleUnit?.isArchived === true;
   const canManageSchedule = (permissions.dp?.schedules?.edit ?? false) && !isArchivedUnitSchedule;
+  const canPublishDayOff = !isArchivedUnitSchedule && (
+    isDefaultAdmin
+    || (
+      (permissions.dp?.schedules?.view ?? false)
+      && (permissions.dp?.schedules?.edit ?? false)
+      && (permissions.dp?.schedules?.publishBizneo ?? false)
+    )
+  );
   const vacationDataReady = !vacationsLoading && !vacationsError;
   const canEdit = canManageSchedule && !schedule.locked && vacationDataReady;
 
   const [addDialog, setAddDialog] = useState<{ date: string; unitId: string } | null>(null);
+  const [manualDayOffDialog, setManualDayOffDialog] = useState<{ date: string; unitId: string } | null>(null);
+  const [publishingDayOffKey, setPublishingDayOffKey] = useState<string | null>(null);
   const [editShift, setEditShift] = useState<DPShift | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPShift | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -700,6 +838,42 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkSelectionActive, setBulkSelectionActive] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
+
+  async function handlePublishDayOff(params: {
+    scheduleId?: string;
+    userId: string;
+    unitId: string;
+    date: string;
+    source: 'predicted' | 'manual' | 'retry';
+  }) {
+    const key = `${params.userId}::${params.date}`;
+    if (publishingDayOffKey) return false;
+    setPublishingDayOffKey(key);
+    try {
+      const result = await api<PublishDayOffResult>(
+        `/api/dp/schedules/${encodeURIComponent(params.scheduleId ?? schedule.id)}/day-offs`,
+        {
+          method: 'POST',
+          json: params,
+          fallbackError: 'Falha ao publicar a folga.',
+        },
+      );
+      toast({
+        title: result.alreadyPublished ? 'Folga já confirmada.' : 'Folga confirmada.',
+        description: 'O Bizneo reconheceu o dia como folga.',
+      });
+      return true;
+    } catch (caught) {
+      toast({
+        title: 'Não foi possível publicar a folga.',
+        description: caught instanceof Error ? caught.message : 'Tente novamente.',
+        variant: 'destructive',
+      });
+      return false;
+    } finally {
+      setPublishingDayOffKey(null);
+    }
+  }
 
   async function handleLock() {
     if (!permissions.dp?.schedules?.edit) return;
@@ -840,6 +1014,13 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     activeUsers.filter(u => u.operacional === true),
     [activeUsers]
   );
+  const manualDayOffUsers = useMemo(() => {
+    if (!manualDayOffDialog?.unitId) return operationalUsers;
+    const linked = operationalUsers.filter((candidate) => (
+      userMatchesDPUnit(candidate, manualDayOffDialog.unitId, units, kiosks)
+    ));
+    return linked.length > 0 ? linked : operationalUsers;
+  }, [kiosks, manualDayOffDialog?.unitId, operationalUsers, units]);
 
   // User lookup map
   const userMap = useMemo(() => {
@@ -992,15 +1173,15 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const dayOffIndex = useMemo(() => {
     const activeUnitIds = new Set(activeUnits.map((unit) => unit.id));
     const visibleUserIds = userFilter === '__all__' ? null : new Set([userFilter]);
-    const entries = new Map<string, { userId: string; explicit: boolean }>();
+    const entries = new Map<string, { userId: string; explicit: boolean; shift?: DPShift }>();
 
-    const registerEntry = (date: string, unitId: string, userId: string, explicit: boolean) => {
+    const registerEntry = (date: string, unitId: string, userId: string, explicit: boolean, shift?: DPShift) => {
       if (!currentMonthDateSet.has(date) || !activeUnitIds.has(unitId)) return;
       if (visibleUserIds && !visibleUserIds.has(userId)) return;
       const key = `${date}::${unitId}::${userId}`;
       const existing = entries.get(key);
       if (existing?.explicit) return;
-      entries.set(key, { userId, explicit: explicit || existing?.explicit || false });
+      entries.set(key, { userId, explicit: explicit || existing?.explicit || false, shift: shift ?? existing?.shift });
     };
 
     const visibleExplicitDayOffs = isPerUnit ? [...dayOffShifts, ...siblingDayOffShifts] : dayOffShifts;
@@ -1014,7 +1195,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         if (linkedToCurrent || shift.unitId === schedule.unitId) displayUnitId = schedule.unitId;
         else return;
       }
-      registerEntry(shift.date, displayUnitId, shift.userId, true);
+      registerEntry(shift.date, displayUnitId, shift.userId, true, shift);
     });
 
     streakState.predictedDayOffsByUser.forEach((items, userId) => {
@@ -1032,7 +1213,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       });
     });
 
-    const idx: Record<string, Record<string, { userId: string; explicit: boolean }[]>> = {};
+    const idx: Record<string, Record<string, { userId: string; explicit: boolean; shift?: DPShift }[]>> = {};
     entries.forEach((entry, key) => {
       const [date, unitId] = key.split('::');
       if (!idx[date]) idx[date] = {};
@@ -1647,27 +1828,58 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                 {displayWorkEntries.length > 0 && (
                                   <div className="border-t border-dashed border-muted-foreground/20 my-0.5" />
                                 )}
-                                {dayOffEntries.map(({ userId, explicit }) => {
+                                {dayOffEntries.map(({ userId, explicit, shift }) => {
                                   const user = effectiveUserMap.get(userId);
                                   if (!user) return null;
+                                  const shouldRetry = shift?.bizneoSyncStatus === 'failed'
+                                    || shift?.bizneoSyncStatus === 'publishing'
+                                    || shift?.bizneoSyncStatus === 'pending';
+                                  const source = !explicit
+                                    ? 'predicted' as const
+                                    : shouldRetry
+                                      ? 'retry' as const
+                                      : 'manual' as const;
                                   return (
                                     <DayOffBadge
                                       key={`${date}-${unit.id}-${userId}-${explicit ? 'explicit' : 'predicted'}`}
                                       explicit={explicit}
+                                      shift={shift}
                                       user={user}
+                                      canPublish={canPublishDayOff && (explicit || !schedule.locked)}
+                                      busy={publishingDayOffKey === `${userId}::${date}`}
+                                      onPublish={() => void handlePublishDayOff({
+                                        scheduleId: shift?.scheduleId,
+                                        userId,
+                                        unitId: shift?.unitId ?? unit.id,
+                                        date,
+                                        source,
+                                      })}
                                     />
                                   );
                                 })}
                               </>
                             )}
-                            {canEdit && (
-                              <button
-                                onClick={() => setAddDialog({ date, unitId: unit.id })}
-                                className="flex items-center gap-1.5 rounded-lg border border-dashed border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors text-muted-foreground/40 hover:text-primary/60 px-2 py-1.5 text-xs w-full"
-                              >
-                                <Plus className="h-3 w-3 shrink-0" />
-                                <span>Adicionar</span>
-                              </button>
+                            {(canEdit || (canPublishDayOff && !schedule.locked)) && (
+                              <div className={cn('grid gap-1', canEdit && canPublishDayOff ? 'grid-cols-2' : 'grid-cols-1')}>
+                                {canEdit && (
+                                  <button
+                                    onClick={() => setAddDialog({ date, unitId: unit.id })}
+                                    className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors text-muted-foreground/50 hover:text-primary/70 px-2 py-1.5 text-xs w-full"
+                                  >
+                                    <Plus className="h-3 w-3 shrink-0" />
+                                    <span>Adicionar</span>
+                                  </button>
+                                )}
+                                {canPublishDayOff && !schedule.locked && (
+                                  <button
+                                    onClick={() => setManualDayOffDialog({ date, unitId: unit.id })}
+                                    className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-sky-300/70 hover:border-sky-500 hover:bg-sky-50 transition-colors text-sky-600/80 px-2 py-1.5 text-xs w-full dark:border-sky-800 dark:hover:bg-sky-950/20"
+                                  >
+                                    <CalendarOff className="h-3 w-3 shrink-0" />
+                                    <span>Folga</span>
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>
@@ -1692,6 +1904,20 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         onOpenChange={open => { if (!open) setAddDialog(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
         vacations={vacations}
+      />
+
+      <ManualDayOffDialog
+        open={!!manualDayOffDialog}
+        onOpenChange={(open) => { if (!open) setManualDayOffDialog(null); }}
+        date={manualDayOffDialog?.date ?? ''}
+        unit={activeUnits.find((unit) => unit.id === manualDayOffDialog?.unitId)}
+        users={manualDayOffUsers}
+        onConfirm={(userId) => handlePublishDayOff({
+          userId,
+          unitId: manualDayOffDialog?.unitId ?? '',
+          date: manualDayOffDialog?.date ?? '',
+          source: 'manual',
+        })}
       />
 
       <ShiftDialog

@@ -923,6 +923,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                     {renderPermissionSwitch("permissions.dp.schedules.edit" as any, "Editar Escalas", "Permite adicionar/editar/remover turnos.", !dpSchedulesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.schedules.delete" as any, "Excluir Escalas", "Permite excluir escalas completas.", !dpSchedulesViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.schedules.export" as any, "Exportar para Bizneo", "Permite gerar o arquivo de exportação.", !dpSchedulesViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.schedules.publishBizneo" as any, "Publicar no Bizneo", "Permite confirmar folgas e alterar a escala publicada no Bizneo.", !dpSchedulesViewWatch, true)}
                                   </div>
                                 </div>
 

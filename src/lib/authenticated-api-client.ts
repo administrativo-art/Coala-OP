@@ -24,6 +24,11 @@ type AuthenticatedApiTransportInit = AuthenticatedApiRequestInit & {
 
 function errorMessage(payload: unknown, fallbackError: string, status: number) {
   if (payload && typeof payload === "object") {
+    const nestedError = (payload as Record<string, unknown>).error;
+    if (nestedError && typeof nestedError === "object") {
+      const nestedMessage = (nestedError as Record<string, unknown>).message;
+      if (typeof nestedMessage === "string" && nestedMessage.trim()) return nestedMessage.trim();
+    }
     for (const key of ["error", "message"] as const) {
       const value = (payload as Record<string, unknown>)[key];
       if (typeof value === "string" && value.trim()) return value.trim();

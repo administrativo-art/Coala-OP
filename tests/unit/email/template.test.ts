@@ -35,3 +35,24 @@ test("renderCoalaEmail usa a marca Coala One e oferece acesso secundário", () =
   assert.match(html, />Acessar o Coala One</);
   assert.match(html, /Essa é uma mensagem automática, não responda esse e-mail\./);
 });
+
+test("renderCoalaEmail apresenta detalhes e chamada segura sem expor HTML", () => {
+  const html = renderCoalaEmail({
+    message: "Confira os dados.",
+    details: [{ label: "Colaborador(a)", value: "Maria <Edna>" }],
+    highlightBlock: {
+      tone: "pink",
+      title: "Envio seguro",
+      text: "Anexe o PDF original.",
+      note: "Link exclusivo & pessoal.",
+      action: { label: "Anexar", url: "https://exemplo.test/?a=1&b=2" },
+    },
+  });
+
+  assert.match(html, /Colaborador\(a\)/);
+  assert.match(html, /Maria &lt;Edna&gt;/);
+  assert.match(html, /Envio seguro/);
+  assert.match(html, /Link exclusivo &amp; pessoal/);
+  assert.match(html, /a=1&amp;b=2/);
+  assert.doesNotMatch(html, /Maria <Edna>/);
+});
