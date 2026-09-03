@@ -64,7 +64,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, CalendarOff, Loader2, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, CalendarOff, Clock3, Loader2, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { useToast } from '@/hooks/use-toast';
@@ -74,7 +74,16 @@ import {
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
 import { matchDPUnitForKiosk } from '@/lib/dp-kiosk-match';
-import { buildShiftStreakState, compareWorkShiftsByTime, isDayOffShift, isWorkShift } from '@/lib/dp-shift-rules';
+import {
+  buildCrossUnitConflictShiftIds,
+  buildShiftStreakState,
+  buildWorkDayOffConflictKeys,
+  buildWorkDayOffConflictShiftIds,
+  compareWorkShiftsByTime,
+  isDayOffShift,
+  isWorkShift,
+} from '@/lib/dp-shift-rules';
+import { buildDailyUnitCoverage, type DPDailyCoverage } from '@/lib/dp-operating-hours';
 import {
   buildApprovedVacationIndex,
   findApprovedVacationForDate,
@@ -143,11 +152,13 @@ interface ShiftDialogProps {
   onOpenChange: (v: boolean) => void;
   /** userId → Set<date> of dates already occupied in sibling units */
   siblingOccupied?: Map<string, Set<string>>;
+  /** userId → datas com folga explicitamente registrada */
+  dayOffOccupied?: Map<string, Set<string>>;
   vacations: DPVacationRecord[];
 }
 
 function ShiftDialog({
-  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, vacations,
+  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, dayOffOccupied, vacations,
 }: ShiftDialogProps) {
   const { activeUsers } = useAuth();
   const { kiosks } = useKiosks();
@@ -218,6 +229,15 @@ function ShiftDialog({
   }
 
   async function onSubmit(values: ShiftFormValues) {
+    if (dayOffOccupied?.get(values.userId)?.has(values.date)) {
+      toast({
+        title: 'Existe uma folga confirmada nesta data.',
+        description: 'Remova a folga e aguarde a confirmação do Bizneo antes de atribuir o turno.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const approvedVacation = findApprovedVacationForDate(vacations, values.userId, values.date);
     if (approvedVacation) {
       toast({
@@ -232,7 +252,7 @@ function ShiftDialog({
     const userName = operationalUsers.find((user) => user.id === values.userId)?.username ?? shift?.userName;
     try {
       if (isEdit && shift) {
-        await updateShift({ ...shift, ...values, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict || shift.hasConflict });
+        await updateShift({ ...shift, ...values, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict });
         toast({ title: 'Turno atualizado.' });
       } else {
         await addShift({ ...values, scheduleId, ...(userName ? { userName } : {}), type: 'work', hasConflict: hasCrossConflict });
@@ -246,8 +266,12 @@ function ShiftDialog({
         });
       }
       onOpenChange(false);
-    } catch {
-      toast({ title: 'Erro ao salvar turno.', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Erro ao salvar turno.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
     }
   }
 
@@ -622,6 +646,7 @@ function DayOffBadge({
   removing,
   onPublish,
   onRemove,
+  conflictsWithWork = false,
 }: {
   explicit: boolean;
   shift?: DPShift;
@@ -633,6 +658,7 @@ function DayOffBadge({
   removing: boolean;
   onPublish: () => void;
   onRemove: () => void;
+  conflictsWithWork?: boolean;
 }) {
   const color = user.color ?? getUserColor(user.username);
   const status = shift?.bizneoSyncStatus;
@@ -655,7 +681,9 @@ function DayOffBadge({
   else if (hasFailed) badgeLabel = 'Falha no Bizneo';
   else if (isPendingRetry) badgeLabel = 'Envio pendente';
 
-  const badgeTone = hasFailed || removalFailed
+  if (conflictsWithWork) badgeLabel = 'Conflito: também escalada';
+
+  const badgeTone = conflictsWithWork || hasFailed || removalFailed
     ? 'border-destructive/30 bg-destructive/5 text-destructive'
     : isPendingRetry
       ? 'border-amber-300/60 bg-amber-50/70 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
@@ -713,6 +741,28 @@ function DayOffBadge({
             <Trash2 className="h-3 w-3" />
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function CoverageAlertBadge({ coverage }: { coverage: DPDailyCoverage }) {
+  if (coverage.gaps.length === 0) return null;
+  const gaps = coverage.gaps.map((gap) => `${gap.startTime}–${gap.endTime}`).join(', ');
+  const wholeDayUncovered = coverage.gaps.length === 1
+    && coverage.gaps[0].startTime === coverage.startTime
+    && coverage.gaps[0].endTime === coverage.endTime;
+  return (
+    <div
+      className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-destructive"
+      title={`Período sem cobertura: ${gaps}`}
+    >
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold">
+          {wholeDayUncovered ? 'Unidade sem cobertura' : 'Cobertura incompleta'}
+        </p>
+        <p className="truncate text-[10px]">Sem turno: {gaps}</p>
       </div>
     </div>
   );
@@ -1181,6 +1231,34 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const prevSiblingWorkShifts = useMemo(() => prevSiblingShifts.filter(isWorkShift), [prevSiblingShifts]);
   const siblingWorkShifts = useMemo(() => siblingShifts.filter(isWorkShift), [siblingShifts]);
   const siblingDayOffShifts = useMemo(() => siblingShifts.filter(isDayOffShift), [siblingShifts]);
+  const visibleDayOffShifts = useMemo(
+    () => isPerUnit ? [...dayOffShifts, ...siblingDayOffShifts] : dayOffShifts,
+    [dayOffShifts, isPerUnit, siblingDayOffShifts],
+  );
+  const dayOffOccupied = useMemo(() => {
+    const occupied = new Map<string, Set<string>>();
+    visibleDayOffShifts.forEach((shift) => {
+      if (!occupied.has(shift.userId)) occupied.set(shift.userId, new Set());
+      occupied.get(shift.userId)!.add(shift.date);
+    });
+    return occupied;
+  }, [visibleDayOffShifts]);
+  const workDayOffConflictShiftIds = useMemo(
+    () => buildWorkDayOffConflictShiftIds([
+      ...workShifts,
+      ...visibleDayOffShifts,
+      ...(isPerUnit ? siblingWorkShifts : []),
+    ]),
+    [isPerUnit, siblingWorkShifts, visibleDayOffShifts, workShifts],
+  );
+  const workDayOffConflictKeys = useMemo(
+    () => buildWorkDayOffConflictKeys([
+      ...workShifts,
+      ...visibleDayOffShifts,
+      ...(isPerUnit ? siblingWorkShifts : []),
+    ]),
+    [isPerUnit, siblingWorkShifts, visibleDayOffShifts, workShifts],
+  );
   const currentScheduleUserIds = useMemo(
     () => new Set(shifts.map((shift) => shift.userId)),
     [shifts],
@@ -1266,23 +1344,34 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     return m;
   }, [siblingWorkShifts]);
 
-  // IDs of current-unit shifts that conflict with a sibling schedule (same user, same date)
+  // IDs of current-unit shifts that conflict with a sibling schedule (same user, same date).
+  // This is intentionally derived from the live sibling listeners. A persisted
+  // hasConflict may be stale after the conflicting shift is deleted elsewhere.
   const crossConflictShiftIds = useMemo(() => {
     if (!isPerUnit) return new Set<string>();
-    const ids = new Set<string>();
-    for (const s of workShifts) {
-      if (siblingOccupied.get(s.userId)?.has(s.date)) ids.add(s.id);
-    }
-    return ids;
-  }, [isPerUnit, workShifts, siblingOccupied]);
+    return buildCrossUnitConflictShiftIds(workShifts, siblingWorkShifts);
+  }, [isPerUnit, siblingWorkShifts, workShifts]);
+
+  const prevCrossConflictShiftIds = useMemo(() => {
+    if (!isPerUnit) return new Set<string>();
+    return buildCrossUnitConflictShiftIds(prevWorkShifts, prevSiblingWorkShifts);
+  }, [isPerUnit, prevSiblingWorkShifts, prevWorkShifts]);
 
   const shiftsWithConsecutive = useMemo(() =>
-    workShifts.map(s => ({ ...s, consecutiveDayCount: consecutiveCountMap.get(s.id) ?? 1 })),
-  [workShifts, consecutiveCountMap]);
+    workShifts.map(s => ({
+      ...s,
+      hasConflict: crossConflictShiftIds.has(s.id) || workDayOffConflictShiftIds.has(s.id),
+      consecutiveDayCount: consecutiveCountMap.get(s.id) ?? 1,
+    })),
+  [consecutiveCountMap, crossConflictShiftIds, workDayOffConflictShiftIds, workShifts]);
 
   const prevShiftsWithConsecutive = useMemo(() =>
-    prevWorkShifts.map(s => ({ ...s, consecutiveDayCount: consecutiveCountMap.get(s.id) ?? 1 })),
-  [prevWorkShifts, consecutiveCountMap]);
+    prevWorkShifts.map(s => ({
+      ...s,
+      hasConflict: prevCrossConflictShiftIds.has(s.id),
+      consecutiveDayCount: consecutiveCountMap.get(s.id) ?? 1,
+    })),
+  [consecutiveCountMap, prevCrossConflictShiftIds, prevWorkShifts]);
 
   // Index prev shifts with correct consecutive counts
   const prevShiftIndexWithCount = useMemo(() => {
@@ -1433,6 +1522,22 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     [isPerUnit, siblingWorkShifts, workShifts],
   );
 
+  const coverageByCellKey = useMemo(() => {
+    const coverage = new Map<string, DPDailyCoverage>();
+    activeUnits.forEach((unit) => {
+      const unitShifts = workShifts.filter((shift) => operationalUnitIdsMatch(unit.id, shift.unitId, units));
+      days.forEach(({ date }) => {
+        const daily = buildDailyUnitCoverage({
+          date,
+          operatingHours: unit.operatingHours,
+          shifts: unitShifts,
+        });
+        if (daily.gaps.length > 0) coverage.set(`${date}::${unit.id}`, daily);
+      });
+    });
+    return coverage;
+  }, [activeUnits, days, units, workShifts]);
+
   // Index shifts: [date][unitId] → DPShift[] (com filtros e contagem consecutiva)
   const shiftIndex = useMemo(() => {
     const idx: Record<string, Record<string, DPShift[]>> = {};
@@ -1440,7 +1545,8 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       if (defFilter !== '__all__' && shift.shiftDefinitionId !== defFilter) continue;
       if (userFilter !== '__all__' && shift.userId !== userFilter) continue;
       const hasVacationConflict = vacationConflictByShiftId.has(shiftVacationKey(shift));
-      if (onlyAlerts && !shift.hasConflict && !hasVacationConflict && !(shift.consecutiveDayCount && shift.consecutiveDayCount >= 7)) continue;
+      const hasCoverageAlert = coverageByCellKey.has(`${shift.date}::${shift.unitId}`);
+      if (onlyAlerts && !hasCoverageAlert && !shift.hasConflict && !hasVacationConflict && !(shift.consecutiveDayCount && shift.consecutiveDayCount >= 7)) continue;
       if (!idx[shift.date]) idx[shift.date] = {};
       if (!idx[shift.date][shift.unitId]) idx[shift.date][shift.unitId] = [];
       idx[shift.date][shift.unitId].push(shift);
@@ -1449,13 +1555,19 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       Object.values(byUnit).forEach((items) => items.sort(compareWorkShiftsByTime));
     });
     return idx;
-  }, [shiftsWithConsecutive, defFilter, userFilter, onlyAlerts, vacationConflictByShiftId]);
+  }, [coverageByCellKey, shiftsWithConsecutive, defFilter, userFilter, onlyAlerts, vacationConflictByShiftId]);
 
   // Stats
-  const conflictCount = useMemo(
-    () => workShifts.filter((shift) => shift.hasConflict || vacationConflictByShiftId.has(shiftVacationKey(shift))).length,
-    [vacationConflictByShiftId, workShifts],
-  );
+  const conflictCount = useMemo(() => {
+    const issues = new Set<string>();
+    workShifts.forEach((shift) => {
+      if (crossConflictShiftIds.has(shift.id)) issues.add(`cross:${shift.id}`);
+      if (vacationConflictByShiftId.has(shiftVacationKey(shift))) issues.add(`vacation:${shift.id}`);
+    });
+    workDayOffConflictKeys.forEach((key) => issues.add(`day-off:${key}`));
+    return issues.size;
+  }, [crossConflictShiftIds, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
+  const coverageAlertCount = coverageByCellKey.size;
   const uniqueCollaborators = useMemo(() => new Set(workShifts.map(s => s.userId)).size, [workShifts]);
 
   // Dias por colaborador (para popover do card Pessoas)
@@ -1682,7 +1794,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
       )}
 
       {/* Stats boxes */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Popover>
           <PopoverTrigger asChild>
             <div className="rounded-xl border bg-card px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors">
@@ -1716,6 +1828,13 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
             <span>Conflito{conflictCount !== 1 ? 's' : ''}</span>
           </div>
           <p className={`text-lg font-bold ${conflictCount > 0 ? 'text-destructive' : ''}`}>{conflictCount}</p>
+        </div>
+        <div className={`rounded-xl border px-4 py-3 ${coverageAlertCount > 0 ? 'bg-destructive/5 border-destructive/30' : 'bg-card'}`}>
+          <div className={`flex items-center gap-2 text-xs mb-1 ${coverageAlertCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+            <Clock3 className="h-3.5 w-3.5" />
+            <span>Cobertura</span>
+          </div>
+          <p className={`text-lg font-bold ${coverageAlertCount > 0 ? 'text-destructive' : ''}`}>{coverageAlertCount}</p>
         </div>
         <div className="rounded-xl border bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
@@ -1969,6 +2088,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                     {/* Unit cells */}
                     {activeUnits.map(unit => {
                       const cellShifts = shiftIndex[date]?.[unit.id] ?? [];
+                      const coverageAlert = coverageByCellKey.get(`${date}::${unit.id}`);
                       const dayOffEntries = dayOffIndex[date]?.[unit.id] ?? [];
                       const ghosts = isPerUnit
                         ? Object.values(ghostIndex[date] ?? {}).flat()
@@ -2002,6 +2122,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                           className="border-r px-2 py-2 align-top last:border-r-0 min-w-[200px]"
                         >
                           <div className="flex flex-col gap-1">
+                            {coverageAlert ? <CoverageAlertBadge coverage={coverageAlert} /> : null}
                             {displayWorkEntries.map((entry) => {
                               const { shift } = entry;
                               const user = effectiveUserMap.get(shift.userId);
@@ -2019,11 +2140,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                 );
                               }
                               const def = shift.shiftDefinitionId ? defMap.get(shift.shiftDefinitionId) : undefined;
-                              const hasCrossConflict = crossConflictShiftIds.has(shift.id);
                               return (
                                 <ShiftCard
                                   key={`own-${shift.id}`}
-                                  shift={{ ...shift, hasConflict: shift.hasConflict || hasCrossConflict }}
+                                  shift={shift}
                                   vacationConflict={vacationConflictForShift(shift)}
                                   userName={user?.username ?? 'Desconhecido'}
                                   userAvatar={user?.avatarUrl}
@@ -2084,6 +2204,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
                                           unitName: sourceUnitName,
                                         });
                                       }}
+                                      conflictsWithWork={workDayOffConflictKeys.has(`${userId}::${date}`)}
                                     />
                                   );
                                 })}
@@ -2147,6 +2268,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         open={!!addDialog}
         onOpenChange={open => { if (!open) setAddDialog(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
+        dayOffOccupied={dayOffOccupied}
         vacations={vacations}
       />
 
@@ -2172,6 +2294,7 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         open={!!editShift}
         onOpenChange={open => { if (!open) setEditShift(null); }}
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
+        dayOffOccupied={dayOffOccupied}
         vacations={vacations}
       />
 

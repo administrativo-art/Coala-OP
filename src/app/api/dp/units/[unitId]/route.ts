@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 
 import { dbAdmin } from "@/lib/firebase-admin";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
@@ -10,6 +11,8 @@ import {
   setOptionalBooleanPatch,
   setOptionalNumberPatch,
   setOptionalStringPatch,
+  hasOwn,
+  optionalOperatingHours,
 } from "@/app/api/dp/_unit-structure";
 
 export const runtime = "nodejs";
@@ -60,6 +63,9 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
     setOptionalStringPatch(update, body, "externalId");
     setOptionalStringPatch(update, body, "pdvFilialId");
     setOptionalNumberPatch(update, body, "bizneoTaxonId");
+    if (hasOwn(body, "operatingHours")) {
+      update.operatingHours = optionalOperatingHours(body.operatingHours) ?? FieldValue.delete();
+    }
     setOptionalNumberPatch(update, body, "auditChecklistThreshold");
 
     if (Object.prototype.hasOwnProperty.call(body, "externalSource")) {

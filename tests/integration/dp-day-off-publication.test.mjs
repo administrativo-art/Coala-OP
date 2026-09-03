@@ -12,6 +12,7 @@ process.env.BIZNEO_TOKEN = 'integration-test-token';
 const { defaultAdminPermissions, defaultGuestPermissions } = await import('../../src/types/index.ts');
 const { dbAdmin } = await import('../../src/lib/firebase-admin.ts');
 const { publishDayOff, removeDayOff } = await import('../../src/features/dp/day-offs/service.server.ts');
+const { saveWorkShift } = await import('../../src/features/dp/shifts/service.server.ts');
 
 const scheduleId = 'integration-day-off-schedule';
 const unitId = 'integration-day-off-unit';
@@ -323,4 +324,99 @@ test('confirma, publica e torna a folga idempotente', async (t) => {
   assert.equal(removalRetried.alreadyRemoved, false);
   assert.equal(deleteCount, 2);
   assert.equal((await manualDayOff.ref.get()).exists, false);
+});
+
+test('impede criar ou transferir turno para uma pessoa com folga', async (t) => {
+  const workScheduleId = 'integration-work-shift-schedule';
+  const workUnitId = 'integration-work-shift-unit';
+  const workUserId = 'integration-work-shift-user';
+  const dayOffUserId = 'integration-work-shift-user-with-day-off';
+  const date = '2026-09-06';
+  const scheduleRef = dbAdmin.collection('dp_schedules').doc(workScheduleId);
+  const shiftsRef = scheduleRef.collection('shifts');
+
+  async function cleanupWorkShiftFixture() {
+    await clearCollection(shiftsRef);
+    await Promise.all([
+      scheduleRef.delete(),
+      dbAdmin.collection('dp_units').doc(workUnitId).delete(),
+      dbAdmin.collection('users').doc(workUserId).delete(),
+      dbAdmin.collection('users').doc(dayOffUserId).delete(),
+    ]);
+  }
+
+  await cleanupWorkShiftFixture();
+  t.after(cleanupWorkShiftFixture);
+
+  await Promise.all([
+    scheduleRef.set({
+      name: 'Setembro de 2026',
+      year: 2026,
+      month: 9,
+      unitId: workUnitId,
+      shiftCount: 0,
+      locked: false,
+      createdAt: new Date(),
+    }),
+    dbAdmin.collection('dp_units').doc(workUnitId).set({ name: 'Quiosque de integração', createdAt: new Date() }),
+    dbAdmin.collection('users').doc(workUserId).set({ username: 'Sem folga', isActive: true }),
+    dbAdmin.collection('users').doc(dayOffUserId).set({ username: 'Com folga', isActive: true }),
+  ]);
+  await shiftsRef.doc('published-day-off').set({
+    scheduleId: workScheduleId,
+    unitId: workUnitId,
+    userId: dayOffUserId,
+    date,
+    startTime: '',
+    endTime: '',
+    type: 'day_off',
+    bizneoSyncStatus: 'published',
+    createdAt: new Date(),
+  });
+
+  const input = {
+    userId: dayOffUserId,
+    userName: 'Com folga',
+    unitId: workUnitId,
+    date,
+    startTime: '08:45',
+    endTime: '15:00',
+    type: 'work',
+  };
+  await assert.rejects(
+    () => saveWorkShift({
+      context,
+      scheduleId: workScheduleId,
+      shiftId: 'work-1',
+      input,
+      mode: 'create',
+      requestId: 'request-create-with-day-off',
+    }),
+    (error) => error?.code === 'DP_SHIFT_DAY_OFF_CONFLICT',
+  );
+  assert.equal((await shiftsRef.doc('work-1').get()).exists, false);
+
+  const created = await saveWorkShift({
+    context,
+    scheduleId: workScheduleId,
+    shiftId: 'work-1',
+    input: { ...input, userId: workUserId, userName: 'Sem folga' },
+    mode: 'create',
+    requestId: 'request-create-without-day-off',
+  });
+  assert.equal(created.shiftId, 'work-1');
+  assert.equal((await scheduleRef.get()).get('shiftCount'), 1);
+
+  await assert.rejects(
+    () => saveWorkShift({
+      context,
+      scheduleId: workScheduleId,
+      shiftId: 'work-1',
+      input,
+      mode: 'update',
+      requestId: 'request-transfer-to-day-off',
+    }),
+    (error) => error?.code === 'DP_SHIFT_DAY_OFF_CONFLICT',
+  );
+  assert.equal((await shiftsRef.doc('work-1').get()).get('userId'), workUserId);
 });

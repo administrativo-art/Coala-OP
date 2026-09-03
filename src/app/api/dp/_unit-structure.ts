@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
+import { dpOperatingHoursSchema } from "@/lib/dp-operating-hours";
 
 type JsonObject = Record<string, unknown>;
 
@@ -77,6 +78,15 @@ export function optionalNumber(value: unknown) {
 
 export function optionalBoolean(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
+}
+
+export function optionalOperatingHours(value: unknown) {
+  if (value === null || value === undefined) return undefined;
+  const parsed = dpOperatingHoursSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error("Horário de funcionamento inválido. Confira os dias e os horários de abertura e encerramento.");
+  }
+  return parsed.data;
 }
 
 export function cleanDocument<T extends JsonObject>(payload: T) {

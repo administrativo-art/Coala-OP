@@ -10,6 +10,66 @@ export function isWorkShift(shift: DPShift) {
   return shift.type !== 'day_off';
 }
 
+function shiftOccupationKey(shift: Pick<DPShift, 'userId' | 'date'>) {
+  return `${shift.userId}::${shift.date}`;
+}
+
+/**
+ * Conflitos entre unidades são estado derivado das escalas-irmãs atuais.
+ * O campo persistido em um turno pode ter sido calculado antes de outra
+ * alocação ser removida; por isso ele não participa desta decisão.
+ */
+export function buildCrossUnitConflictShiftIds(
+  currentShifts: readonly DPShift[],
+  siblingShifts: readonly DPShift[],
+) {
+  const siblingOccupations = new Set(
+    siblingShifts
+      .filter(isWorkShift)
+      .map(shiftOccupationKey),
+  );
+
+  return new Set(
+    currentShifts
+      .filter(isWorkShift)
+      .filter((shift) => siblingOccupations.has(shiftOccupationKey(shift)))
+      .map((shift) => shift.id),
+  );
+}
+
+/**
+ * Um registro de folga e um turno de trabalho para a mesma pessoa/data são
+ * estados mutuamente exclusivos. A derivação mantém inconsistências antigas
+ * visíveis até que a operação seja reconciliada.
+ */
+export function buildWorkDayOffConflictShiftIds(shifts: readonly DPShift[]) {
+  const conflictKeys = buildWorkDayOffConflictKeys(shifts);
+
+  return new Set(
+    shifts
+      .filter(isWorkShift)
+      .filter((shift) => conflictKeys.has(shiftOccupationKey(shift)))
+      .map((shift) => shift.id),
+  );
+}
+
+export function buildWorkDayOffConflictKeys(shifts: readonly DPShift[]) {
+  const workOccupations = new Set(
+    shifts
+      .filter(isWorkShift)
+      .map(shiftOccupationKey),
+  );
+  const dayOffOccupations = new Set(
+    shifts
+      .filter(isDayOffShift)
+      .map(shiftOccupationKey),
+  );
+
+  return new Set(
+    [...dayOffOccupations].filter((key) => workOccupations.has(key)),
+  );
+}
+
 export function compareWorkShiftsByTime(left: DPShift, right: DPShift) {
   const byStart = left.startTime.localeCompare(right.startTime);
   if (byStart !== 0) return byStart;
