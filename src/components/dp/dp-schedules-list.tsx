@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, limit, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 import { useDP } from '@/components/dp-context';
@@ -16,6 +16,7 @@ import {
   shiftDefinitionMatchesUnit,
 } from '@/lib/dp-shift-definitions';
 import { isWorkShift } from '@/lib/dp-shift-rules';
+import { buildBizneoExportDayOffBlockers } from '@/lib/dp-bizneo-export-preflight';
 import { activeOperationalUnits, canonicalOperationalUnitId } from '@/lib/dp-units';
 import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
 
@@ -307,6 +308,7 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
   units: Array<{ id: string; name: string }>;
   shiftDefinitions: any[];
 }) {
+  const MAX_SHIFTS_PER_SCHEDULE_EXPORT = 1000;
   const now = new Date();
   const { activeUsers, firebaseUser } = useAuth();
   const { toast } = useToast();
@@ -371,7 +373,13 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
       const allShifts: (DPShift & { scheduleUnitId?: string })[] = [];
       await Promise.all(
         schedulesToExport.map(async (sched) => {
-          const snap = await getDocs(collection(db, 'dp_schedules', sched.id, 'shifts'));
+          const snap = await getDocs(query(
+            collection(db, 'dp_schedules', sched.id, 'shifts'),
+            limit(MAX_SHIFTS_PER_SCHEDULE_EXPORT + 1),
+          ));
+          if (snap.size > MAX_SHIFTS_PER_SCHEDULE_EXPORT) {
+            throw new Error(`A escala ${sched.name} excede o limite seguro de exportação.`);
+          }
           snap.docs.forEach(d => {
             allShifts.push({ id: d.id, ...d.data(), scheduleUnitId: sched.unitId } as any);
           });
@@ -379,6 +387,26 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
       );
 
       const exportableShifts = allShifts.filter(isWorkShift);
+      const userMap = new Map(activeUsers.map(u => [u.id, u]));
+      const dayOffBlockers = buildBizneoExportDayOffBlockers(allShifts);
+
+      if (dayOffBlockers.length > 0) {
+        const details = dayOffBlockers.map((blocker) => {
+          const userName = userMap.get(blocker.userId)?.username ?? 'Colaborador não localizado';
+          const reason = blocker.kind === 'work_day_off_conflict'
+            ? 'possui turno e folga'
+            : `sincronização da folga: ${blocker.syncStatus ?? 'não confirmada'}`;
+          return `${formatShiftDate(blocker.date)} · ${userName} · ${reason}`;
+        });
+        const preview = details.slice(0, 4).join('; ');
+        const remainder = details.length > 4 ? `; +${details.length - 4} pendência(s)` : '';
+        toast({
+          title: 'Reconcilie as folgas antes de exportar.',
+          description: `${preview}${remainder}.`,
+          variant: 'destructive',
+        });
+        return;
+      }
 
       if (exportableShifts.length === 0) {
         toast({ title: 'Nenhum turno nas escalas selecionadas.' });
@@ -386,7 +414,6 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
       }
 
       const defMap = new Map(shiftDefinitions.map(d => [d.id, d]));
-      const userMap = new Map(activeUsers.map(u => [u.id, u]));
       const unresolvedShiftDetails = new Set<string>();
 
       const rows = exportableShifts
