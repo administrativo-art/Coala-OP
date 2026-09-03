@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -170,9 +171,17 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-[13px] font-semibold text-[#444]">
-                  Senha
-                </Label>
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="password" className="text-[13px] font-semibold text-[#444]">
+                    Senha
+                  </Label>
+                  <Link
+                    href="/forgot-password"
+                    className="rounded-sm text-xs font-semibold text-[#C4187A] transition-colors hover:text-[#9E145F] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E91E8C]/40 focus-visible:ring-offset-2"
+                  >
+                    Esqueci minha senha
+                  </Link>
+                </div>
                 <div className="relative">
                   <Input
                     id="password"
