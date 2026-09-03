@@ -90,7 +90,7 @@ import {
   findApprovedVacationInIndex,
   formatVacationPeriod,
 } from '@/lib/dp-vacation-schedule-rules';
-import { DPBulkShiftEditDialog } from '@/components/dp/dp-bulk-shift-edit-dialog';
+import { DPBulkShiftEditPanel } from '@/components/dp/dp-bulk-shift-edit-dialog';
 import { canAccessUnit, filterUnitsByAccess, resolveUnitAccess } from '@/lib/unit-access';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -804,9 +804,10 @@ function UnassignedBadge({ user, statusLabel = 'Sem unidade vinculada' }: {
 
 interface DPScheduleEditorProps {
   schedule: DPSchedule;
+  embedded?: boolean;
 }
 
-export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
+export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEditorProps) {
   const { activeUsers, permissions, updateUser, user, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const {
@@ -828,7 +829,6 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     shifts,
     loading,
     error: shiftsError,
-    addShiftsBatch,
     updateShiftsBatch,
     deleteShift: doDelete,
     deleteShiftsBatch,
@@ -961,7 +961,6 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   const [deleting, setDeleting] = useState(false);
   const [locking, setLocking] = useState(false);
   const [prevExpanded, setPrevExpanded] = useState(false);
-  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkSelectionActive, setBulkSelectionActive] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
 
@@ -1074,13 +1073,6 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     }
   }
 
-  React.useEffect(() => {
-    if (!bulkDialogOpen) {
-      setBulkSelectionActive(false);
-      setSelectedShiftIds([]);
-    }
-  }, [bulkDialogOpen]);
-
   function toggleSelectedShift(shiftId: string) {
     setSelectedShiftIds((prev) => (
       prev.includes(shiftId)
@@ -1092,20 +1084,6 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
   function resetBulkSelection() {
     setBulkSelectionActive(false);
     setSelectedShiftIds([]);
-  }
-
-  function handleBulkButtonClick() {
-    if (!bulkSelectionActive) {
-      setBulkSelectionActive(true);
-      return;
-    }
-
-    if (selectedShiftIds.length === 0) {
-      toast({ title: 'Selecione os turnos que deseja alterar.' });
-      return;
-    }
-
-    setBulkDialogOpen(true);
   }
 
   React.useEffect(() => {
@@ -1557,6 +1535,23 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     return idx;
   }, [coverageByCellKey, shiftsWithConsecutive, defFilter, userFilter, onlyAlerts, vacationConflictByShiftId]);
 
+  const visibleWorkShiftIds = useMemo(() => Array.from(new Set(
+    Object.values(shiftIndex).flatMap((byUnit) => (
+      Object.values(byUnit).flatMap((items) => items.map((shift) => shift.id))
+    )),
+  )), [shiftIndex]);
+
+  const allVisibleShiftsSelected = visibleWorkShiftIds.length > 0
+    && visibleWorkShiftIds.every((id) => selectedShiftIds.includes(id));
+
+  function toggleVisibleShiftSelection() {
+    const visibleIds = new Set(visibleWorkShiftIds);
+    setSelectedShiftIds((previous) => {
+      if (allVisibleShiftsSelected) return previous.filter((id) => !visibleIds.has(id));
+      return Array.from(new Set([...previous, ...visibleWorkShiftIds]));
+    });
+  }
+
   // Stats
   const conflictCount = useMemo(() => {
     const issues = new Set<string>();
@@ -1706,11 +1701,17 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
+        {!embedded && (
+          <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
+        )}
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold truncate">{schedule.name}</h1>
+          {embedded ? (
+            <h2 className="text-lg font-semibold truncate">{scheduleUnit?.name ?? 'Todas as unidades'}</h2>
+          ) : (
+            <h1 className="text-xl font-semibold truncate">{schedule.name}</h1>
+          )}
           <p className="text-sm text-muted-foreground">
-            {MONTHS[schedule.month - 1]} {schedule.year}
+            {embedded ? 'Escala da unidade' : `${MONTHS[schedule.month - 1]} ${schedule.year}`}
           </p>
         </div>
         {canManageSchedule && (
@@ -1726,14 +1727,10 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
             </Button>
           )
         )}
-        {canEdit && (
-          <Button size="sm" variant="outline" onClick={handleBulkButtonClick}>
+        {canEdit && !bulkSelectionActive && (
+          <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)}>
             <Sparkles className="mr-2 h-4 w-4" />
-            {bulkSelectionActive
-              ? selectedShiftIds.length > 0
-                ? `Alterar em lote (${selectedShiftIds.length})`
-                : 'Selecionar turnos'
-              : 'Editar em lote'}
+            Editar em lote
           </Button>
         )}
         {canEdit && (
@@ -1778,20 +1775,40 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
           Alguns dados auxiliares da escala não carregaram: {ancillaryBootstrapError}
         </div>
       )}
-      {canEdit && bulkSelectionActive && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2 text-sm text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300">
+
+      <div className={cn(
+        'grid items-start gap-4',
+        bulkSelectionActive && 'min-[1180px]:grid-cols-[minmax(0,1fr)_19rem]',
+      )}>
+        <div className="min-w-0 space-y-4">
+        {canEdit && bulkSelectionActive && (
+          <div className="sticky top-2 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/95 px-3 py-2 text-sm text-sky-700 shadow-sm backdrop-blur dark:border-sky-900/40 dark:bg-sky-950/90 dark:text-sky-300">
           <div className="min-w-0">
             <p className="font-medium">Seleção de turnos ativa</p>
-            <p className="text-xs opacity-80">Clique nos cards de turno que deseja alterar em lote.</p>
+            <p className="text-xs opacity-80">Clique nos cards ou selecione todos os turnos que estão visíveis nos filtros.</p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
             <Badge variant="outline">{selectedShiftIds.length} turno(s)</Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleVisibleShiftSelection}
+              disabled={visibleWorkShiftIds.length === 0}
+            >
+              {allVisibleShiftsSelected ? 'Desmarcar visíveis' : 'Selecionar visíveis'}
+            </Button>
+            {selectedShiftIds.length > 0 && (
+              <Button type="button" variant="ghost" size="sm" onClick={clearSelectedShiftIds}>
+                Limpar seleção
+              </Button>
+            )}
             <Button type="button" variant="ghost" size="sm" onClick={resetBulkSelection}>
               Cancelar
             </Button>
           </div>
-        </div>
-      )}
+          </div>
+        )}
 
       {/* Stats boxes */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -2257,6 +2274,22 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
           </table>
         </div>
       )}
+        </div>
+
+        {canEdit && bulkSelectionActive && (
+          <DPBulkShiftEditPanel
+            selectedShifts={selectedBulkShifts}
+            allCurrentShifts={shifts}
+            previousShifts={isPerUnit ? [...prevShifts, ...prevSiblingShifts] : prevShifts}
+            siblingShifts={siblingShifts}
+            shiftDefinitions={shiftDefinitions}
+            updateShiftsBatch={updateShiftsBatch}
+            deleteShiftsBatch={deleteShiftsBatch}
+            onApplied={resetBulkSelection}
+            onCancel={resetBulkSelection}
+          />
+        )}
+      </div>
 
       {/* Dialogs */}
       <ShiftDialog
@@ -2296,23 +2329,6 @@ export function DPScheduleEditor({ schedule }: DPScheduleEditorProps) {
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
         dayOffOccupied={dayOffOccupied}
         vacations={vacations}
-      />
-
-      <DPBulkShiftEditDialog
-        open={bulkDialogOpen}
-        onOpenChange={(open) => {
-          setBulkDialogOpen(open);
-          if (!open) resetBulkSelection();
-        }}
-        selectedShifts={selectedBulkShifts}
-        allCurrentShifts={shifts}
-        previousShifts={isPerUnit ? [...prevShifts, ...prevSiblingShifts] : prevShifts}
-        siblingShifts={siblingShifts}
-        shiftDefinitions={shiftDefinitions}
-        addShiftsBatch={addShiftsBatch}
-        updateShiftsBatch={updateShiftsBatch}
-        deleteShiftsBatch={deleteShiftsBatch}
-        onApplied={resetBulkSelection}
       />
 
       <AlertDialog
