@@ -8,14 +8,6 @@ import { buildShiftStreakState } from '@/lib/dp-shift-rules';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -24,9 +16,9 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { Wand2 } from 'lucide-react';
+import { AlertTriangle, Trash2, Wand2, X } from 'lucide-react';
 
-type BulkAction = 'replace' | 'clear' | 'day_off';
+type BulkAction = 'replace' | 'clear';
 
 type SelectedShiftItem = {
   shift: DPShift;
@@ -34,22 +26,25 @@ type SelectedShiftItem = {
   unitName: string;
 };
 
-interface BulkShiftEditDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+interface BulkShiftEditPanelProps {
   selectedShifts: SelectedShiftItem[];
   allCurrentShifts: DPShift[];
   previousShifts: DPShift[];
   siblingShifts: DPShift[];
   shiftDefinitions: DPShiftDefinition[];
-  addShiftsBatch: (data: Omit<DPShift, 'id' | 'createdAt'>[]) => Promise<void>;
   updateShiftsBatch: (shifts: DPShift[]) => Promise<void>;
   deleteShiftsBatch: (shifts: Pick<DPShift, 'id' | 'type'>[]) => Promise<void>;
   onApplied: () => void;
+  onCancel: () => void;
 }
 
 function uniqSorted(values: string[]) {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+}
+
+function formatDate(date: string) {
+  const [year, month, day] = date.split('-');
+  return year && month && day ? `${day}/${month}/${year}` : date;
 }
 
 function getPredictedDayOffDates(shifts: DPShift[]) {
@@ -61,33 +56,23 @@ function getPredictedDayOffDates(shifts: DPShift[]) {
   );
 }
 
-export function DPBulkShiftEditDialog({
-  open,
-  onOpenChange,
+export function DPBulkShiftEditPanel({
   selectedShifts,
   allCurrentShifts,
   previousShifts,
   siblingShifts,
   shiftDefinitions,
-  addShiftsBatch,
   updateShiftsBatch,
   deleteShiftsBatch,
   onApplied,
-}: BulkShiftEditDialogProps) {
+  onCancel,
+}: BulkShiftEditPanelProps) {
   const { toast } = useToast();
   const [action, setAction] = React.useState<BulkAction>('replace');
   const [shiftDefinitionId, setShiftDefinitionId] = React.useState('');
   const [startTime, setStartTime] = React.useState('');
   const [endTime, setEndTime] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!open) return;
-    setAction('replace');
-    setShiftDefinitionId('');
-    setStartTime('');
-    setEndTime('');
-  }, [open]);
 
   const affectedUsers = React.useMemo(
     () => uniqSorted(selectedShifts.map((item) => item.userName)),
@@ -119,32 +104,18 @@ export function DPBulkShiftEditDialog({
       ];
     }
 
-    if (action === 'day_off') {
-      afterCurrent = [
-        ...afterCurrent,
-        ...selectedShifts.map(({ shift }) => ({
-          ...shift,
-          shiftDefinitionId: undefined,
-          startTime: '',
-          endTime: '',
-          type: 'day_off' as const,
-        })),
-      ];
-    }
-
     const beforePredicted = new Set(getPredictedDayOffDates(beforeCombined));
-    const afterPredicted = new Set(getPredictedDayOffDates([...previousShifts, ...siblingShifts, ...afterCurrent]));
+    const afterPredicted = new Set(getPredictedDayOffDates([
+      ...previousShifts,
+      ...siblingShifts,
+      ...afterCurrent,
+    ]));
 
     return {
-      selectedCount: selectedShifts.length,
-      uniqueUsers: affectedUsers.length,
-      uniqueUnits: affectedUnits.length,
       predictedAdded: Array.from(afterPredicted).filter((date) => !beforePredicted.has(date)),
       predictedRemoved: Array.from(beforePredicted).filter((date) => !afterPredicted.has(date)),
     };
-  }, [action, affectedUnits.length, affectedUsers.length, allCurrentShifts, endTime, previousShifts, selectedShifts, shiftDefinitionId, siblingShifts, startTime]);
-
-  const actionRequiresShift = action === 'replace';
+  }, [action, allCurrentShifts, endTime, previousShifts, selectedShifts, shiftDefinitionId, siblingShifts, startTime]);
 
   const handleDefinitionChange = (value: string) => {
     setShiftDefinitionId(value);
@@ -160,8 +131,13 @@ export function DPBulkShiftEditDialog({
       return;
     }
 
-    if (actionRequiresShift && !shiftDefinitionId && (!startTime || !endTime)) {
+    if (action === 'replace' && (!startTime || !endTime)) {
       toast({ title: 'Selecione um turno ou informe início e fim.', variant: 'destructive' });
+      return;
+    }
+
+    if (action === 'replace' && startTime >= endTime) {
+      toast({ title: 'O horário final deve ser posterior ao horário inicial.', variant: 'destructive' });
       return;
     }
 
@@ -177,36 +153,15 @@ export function DPBulkShiftEditDialog({
             type: 'work',
           }))
         );
-      }
-
-      if (action === 'clear') {
+      } else {
         await deleteShiftsBatch(selectedShifts.map(({ shift }) => ({ id: shift.id, type: shift.type })));
-      }
-
-      if (action === 'day_off') {
-        await deleteShiftsBatch(selectedShifts.map(({ shift }) => ({ id: shift.id, type: shift.type })));
-        await addShiftsBatch(
-          selectedShifts.map(({ shift }) => ({
-            scheduleId: shift.scheduleId,
-            unitId: shift.unitId,
-            userId: shift.userId,
-            ...(shift.userName ? { userName: shift.userName } : {}),
-            shiftDefinitionId: undefined,
-            date: shift.date,
-            startTime: '',
-            endTime: '',
-            type: 'day_off',
-            hasConflict: false,
-          }))
-        );
       }
 
       toast({
-        title: 'Alteração em lote aplicada.',
-        description: `${selectedShifts.length} turno(s) atualizados.`,
+        title: action === 'clear' ? 'Turnos removidos.' : 'Turnos substituídos.',
+        description: `${selectedShifts.length} turno(s) alterados.`,
       });
       onApplied();
-      onOpenChange(false);
     } catch {
       toast({ title: 'Erro ao aplicar alteração em lote.', variant: 'destructive' });
     } finally {
@@ -215,135 +170,135 @@ export function DPBulkShiftEditDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Alterar turnos em lote</DialogTitle>
-          <DialogDescription>
-            A alteração será aplicada somente aos turnos selecionados na grade.
-          </DialogDescription>
-        </DialogHeader>
+    <aside className="rounded-xl border bg-card shadow-sm min-[1180px]:sticky min-[1180px]:top-4 min-[1180px]:max-h-[calc(100vh-2rem)] min-[1180px]:overflow-y-auto">
+      <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b bg-card/95 px-4 py-3 backdrop-blur">
+        <div>
+          <h3 className="text-sm font-semibold">Edição em lote</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">As opções acompanham a escala.</p>
+        </div>
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onCancel} aria-label="Fechar edição em lote">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
 
-        <div className="space-y-5">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{selectedShifts.length} turno(s)</Badge>
-            <Badge variant="outline">{affectedUsers.length} colaborador(es)</Badge>
-            <Badge variant="outline">{affectedUnits.length} unidade(s)</Badge>
+      <div className="space-y-4 p-4">
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="outline">{selectedShifts.length} turnos</Badge>
+          <Badge variant="outline">{affectedUsers.length} pessoas</Badge>
+          <Badge variant="outline">{affectedUnits.length} unidades</Badge>
+        </div>
+
+        {selectedShifts.length === 0 ? (
+          <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+            Selecione os turnos na escala para liberar as opções.
           </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Ação</label>
-            <div className="grid gap-2 md:grid-cols-3">
-              {[
-                ['replace', 'Substituir turno'],
-                ['clear', 'Limpar'],
-                ['day_off', 'Marcar folga'],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setAction(value as BulkAction)}
-                  className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                    action === value
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {actionRequiresShift && (
-            <div className="space-y-3 rounded-xl border p-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Turno pré-definido</label>
-                <Select value={shiftDefinitionId || '__manual__'} onValueChange={(value) => {
-                  if (value === '__manual__') {
-                    setShiftDefinitionId('');
-                    return;
-                  }
-                  handleDefinitionChange(value);
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__manual__">— Manual —</SelectItem>
-                    {shiftDefinitions.map((definition) => (
-                      <SelectItem key={definition.id} value={definition.id}>
-                        {definition.name} ({definition.startTime}–{definition.endTime})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <p className="text-xs font-medium">Ação</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ['replace', 'Substituir'],
+                  ['clear', 'Remover'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setAction(value as BulkAction)}
+                    className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
+                      action === value
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
+            </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+            {action === 'replace' ? (
+              <div className="space-y-3 rounded-lg border p-3">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Início</label>
-                  <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                  <label className="text-xs font-medium">Turno</label>
+                  <Select value={shiftDefinitionId || '__manual__'} onValueChange={(value) => {
+                    if (value === '__manual__') {
+                      setShiftDefinitionId('');
+                      return;
+                    }
+                    handleDefinitionChange(value);
+                  }}>
+                    <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__manual__">— Manual —</SelectItem>
+                      {shiftDefinitions.map((definition) => (
+                        <SelectItem key={definition.id} value={definition.id}>
+                          {definition.name} ({definition.startTime}–{definition.endTime})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Fim</label>
-                  <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Início</label>
+                    <Input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="h-9" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Fim</label>
+                    <Input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="h-9" />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-
-          <div className="rounded-xl border p-4 space-y-3">
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg bg-muted/40 p-3">
-                <p className="text-xs text-muted-foreground">Turnos selecionados</p>
-                <p className="mt-1 text-lg font-semibold">{preview?.selectedCount ?? 0}</p>
-              </div>
-              <div className="rounded-lg bg-muted/40 p-3">
-                <p className="text-xs text-muted-foreground">Colaboradores afetados</p>
-                <p className="mt-1 text-lg font-semibold">{preview?.uniqueUsers ?? 0}</p>
-              </div>
-              <div className="rounded-lg bg-muted/40 p-3">
-                <p className="text-xs text-muted-foreground">Unidades afetadas</p>
-                <p className="mt-1 text-lg font-semibold">{preview?.uniqueUnits ?? 0}</p>
-              </div>
-            </div>
-
-            {preview && (preview.predictedAdded.length > 0 || preview.predictedRemoved.length > 0) && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-700">
-                {preview.predictedAdded.length > 0 && (
-                  <p>Novas folgas previstas: {preview.predictedAdded.join(', ')}.</p>
-                )}
-                {preview.predictedRemoved.length > 0 && (
-                  <p>Folgas previstas removidas: {preview.predictedRemoved.join(', ')}.</p>
-                )}
+            ) : (
+              <div className="flex gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>Os turnos selecionados serão excluídos sem criar folgas no lugar.</p>
               </div>
             )}
 
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Turnos selecionados</p>
-              <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
+            {preview && (preview.predictedAdded.length > 0 || preview.predictedRemoved.length > 0) && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-700">
+                {preview.predictedAdded.length > 0 && <p>Novas folgas previstas: {preview.predictedAdded.join(', ')}.</p>}
+                {preview.predictedRemoved.length > 0 && <p>Folgas previstas removidas: {preview.predictedRemoved.join(', ')}.</p>}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium">Selecionados</p>
+              <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
                 {selectedShifts.map(({ shift, userName, unitName }) => (
-                  <div key={shift.id} className="rounded-lg border px-3 py-2 text-xs">
-                    <div className="font-medium">{userName}</div>
-                    <div className="text-muted-foreground">
-                      {shift.date} · {unitName} · {shift.startTime}–{shift.endTime}
-                    </div>
+                  <div key={shift.id} className="rounded-lg border px-2.5 py-2 text-xs">
+                    <p className="truncate font-medium">{userName}</p>
+                    <p className="truncate text-muted-foreground">
+                      {formatDate(shift.date)} · {unitName}
+                    </p>
+                    <p className="text-muted-foreground">{shift.startTime}–{shift.endTime}</p>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
+      </div>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button type="button" onClick={handleApply} disabled={submitting}>
-            <Wand2 className="mr-2 h-4 w-4" />
-            {submitting ? 'Aplicando...' : 'Aplicar alterações'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <div className="sticky bottom-0 border-t bg-card/95 p-3 backdrop-blur">
+        <Button
+          type="button"
+          className="w-full"
+          variant={action === 'clear' ? 'destructive' : 'default'}
+          onClick={handleApply}
+          disabled={selectedShifts.length === 0 || submitting}
+        >
+          {action === 'clear' ? <Trash2 className="mr-2 h-4 w-4" /> : <Wand2 className="mr-2 h-4 w-4" />}
+          {submitting
+            ? 'Aplicando...'
+            : action === 'clear'
+              ? `Remover ${selectedShifts.length}`
+              : `Substituir ${selectedShifts.length}`}
+        </Button>
+      </div>
+    </aside>
   );
 }

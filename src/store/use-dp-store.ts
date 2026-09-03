@@ -2,13 +2,14 @@ import { create } from 'zustand';
 import { auth, db } from '@/lib/firebase';
 import {
   collection, addDoc, updateDoc, deleteDoc, doc,
-  serverTimestamp, writeBatch, increment, getDocs, deleteField
+  serverTimestamp, writeBatch, increment, getDocs, deleteField, runTransaction
 } from 'firebase/firestore';
 import type {
   DPUnit, DPUnitGroup, DPUnitOrganization, DPShiftDefinition,
   DPSchedule, DPVacationRecord, DPCalendar, DPHoliday,
 } from '@/types';
 import { canonicalOperationalUnitId } from '@/lib/dp-units';
+import { buildDPScheduleDocumentId } from '@/lib/dp-schedule-periods';
 import {
   authenticatedApiRequest,
   type AuthenticatedApiRequestInit,
@@ -381,8 +382,22 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
     if (duplicate) {
       throw new Error('Já existe uma escala para esta unidade ou para uma unidade incorporada neste período.');
     }
-    const ref = await addDoc(collection(db, 'dp_schedules'), stripUndefinedForCreate({ ...data, shiftCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);
-    return ref.id;
+    const scheduleRef = doc(
+      db,
+      'dp_schedules',
+      buildDPScheduleDocumentId(data.year, data.month, canonicalUnitId ?? unit.id),
+    );
+    await runTransaction(db, async (transaction) => {
+      const existing = await transaction.get(scheduleRef);
+      if (existing.exists()) {
+        throw new Error('Já existe uma escala para esta unidade neste período.');
+      }
+      transaction.set(
+        scheduleRef,
+        stripUndefinedForCreate({ ...data, shiftCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>,
+      );
+    });
+    return scheduleRef.id;
   },
   updateSchedule: async ({ id, ...data }) => {
     const existing = get().schedules.find((schedule) => schedule.id === id);
