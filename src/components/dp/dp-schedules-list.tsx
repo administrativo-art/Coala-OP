@@ -33,16 +33,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   Form,
   FormControl,
   FormField,
@@ -57,7 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, CalendarDays, Trash2, Download, Lock } from 'lucide-react';
+import { Plus, CalendarDays, Download, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createAuditLog } from '@/features/audit/client';
 
@@ -142,13 +132,30 @@ type ScheduleFormValues = z.infer<typeof scheduleSchema>;
 
 // ─── Create Dialog ────────────────────────────────────────────────────────────
 
-function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, units, schedules }: {
+export function CreateScheduleDialog({
+  open,
+  onOpenChange,
+  defaultUnitId,
+  defaultMonth,
+  defaultYear,
+  lockPeriod,
+  excludeUnitIds,
+  calendars,
+  units,
+  schedules,
+  onCreated,
+}: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   defaultUnitId?: string;
+  defaultMonth?: number;
+  defaultYear?: number;
+  lockPeriod?: boolean;
+  excludeUnitIds?: string[];
   calendars: any[];
   units: DPUnit[];
   schedules: DPSchedule[];
+  onCreated?: (id: string, month: number, year: number) => void;
 }) {
   const { addSchedule } = useDP();
   const { toast } = useToast();
@@ -158,8 +165,8 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
   const form = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleSchema),
     defaultValues: {
-      month: now.getMonth() + 1,
-      year: now.getFullYear(),
+      month: defaultMonth ?? now.getMonth() + 1,
+      year: defaultYear ?? now.getFullYear(),
       calendarId: '',
       unitId: defaultUnitId ?? '',
     },
@@ -167,8 +174,8 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
 
   React.useEffect(() => {
     if (open) form.reset({
-      month: now.getMonth() + 1,
-      year: now.getFullYear(),
+      month: defaultMonth ?? now.getMonth() + 1,
+      year: defaultYear ?? now.getFullYear(),
       calendarId: '',
       unitId: defaultUnitId ?? '',
     });
@@ -176,7 +183,12 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
 
   const watchedUnit = form.watch('unitId');
   const watchedYear = form.watch('year');
-  const selectableUnits = React.useMemo(() => activeOperationalUnits(units), [units]);
+  const selectableUnits = React.useMemo(() => {
+    const active = activeOperationalUnits(units);
+    if (!excludeUnitIds?.length) return active;
+    const excluded = new Set(excludeUnitIds);
+    return active.filter(u => !excluded.has(u.id));
+  }, [units, excludeUnitIds]);
 
   // Clear calendarId when year changes (previous year's calendar would be invalid)
   React.useEffect(() => {
@@ -205,7 +217,11 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
       const id = await addSchedule({ name, month: values.month, year: values.year, calendarId: values.calendarId, unitId: values.unitId });
       toast({ title: 'Escala criada.' });
       onOpenChange(false);
-      router.push(`/dashboard/dp/schedules/${id}`);
+      if (onCreated) {
+        onCreated(id, values.month, values.year);
+      } else {
+        router.push(`/dashboard/dp/schedules/${id}`);
+      }
     } catch {
       toast({ title: 'Erro ao criar escala.', variant: 'destructive' });
     }
@@ -217,7 +233,9 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
         <DialogHeader>
           <DialogTitle>Criar Escala</DialogTitle>
           <DialogDescription>
-            Selecione unidade, período e calendário para criar uma nova escala mensal.
+            {lockPeriod
+              ? `Selecione a unidade e o calendário para criar a escala de ${MONTHS[(defaultMonth ?? 1) - 1]} de ${defaultYear}.`
+              : 'Selecione unidade, período e calendário para criar uma nova escala mensal.'}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -238,7 +256,7 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
               <FormField control={form.control} name="month" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Mês</FormLabel>
-                  <Select value={String(field.value)} onValueChange={v => field.onChange(Number(v))}>
+                  <Select value={String(field.value)} onValueChange={v => field.onChange(Number(v))} disabled={lockPeriod}>
                     <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                     <SelectContent>
                       {MONTHS.map((m, i) => {
@@ -257,7 +275,7 @@ function CreateScheduleDialog({ open, onOpenChange, defaultUnitId, calendars, un
               <FormField control={form.control} name="year" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Ano</FormLabel>
-                  <Select value={String(field.value)} onValueChange={v => field.onChange(Number(v))}>
+                  <Select value={String(field.value)} onValueChange={v => field.onChange(Number(v))} disabled={lockPeriod}>
                     <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                     <SelectContent>
                       {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
@@ -609,7 +627,6 @@ function BizneoExportDialog({ open, onOpenChange, schedules, units, shiftDefinit
 
 export function DPSchedulesList() {
   const {
-    deleteSchedule,
     schedules,
     schedulesLoading,
     schedulesError,
@@ -624,14 +641,9 @@ export function DPSchedulesList() {
     shiftDefsError,
   } = useDP();
   const { permissions, user, isDefaultAdmin } = useAuth();
-  const { toast } = useToast();
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
-  const [createDefaultUnit, setCreateDefaultUnit] = useState<string | undefined>();
   const [exportBizneoOpen, setExportBizneoOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<DPSchedule | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const createDependenciesReady = !unitsLoading && !calendarsLoading && !unitsError && !calendarsError;
   const exportDependenciesReady = !shiftDefsLoading && !unitsLoading && !shiftDefsError && !unitsError;
   const ancillaryErrors = [unitsError, calendarsError, shiftDefsError].filter(Boolean);
@@ -652,82 +664,30 @@ export function DPSchedulesList() {
   }, [isDefaultAdmin, schedules, user]);
 
   const canCreate = permissions.dp?.schedules?.create ?? false;
-  const canDelete = permissions.dp?.schedules?.delete ?? false;
 
-  function openCreate(unitId?: string) {
-    setCreateDefaultUnit(unitId);
-    setCreateOpen(true);
-  }
-
-  // Group schedules by canonical unit so preserved history from incorporated
-  // units appears together with the active destination unit.
-  const groupedByUnit = React.useMemo(() => {
-    // unitId → year → schedules
-    const byUnit = new Map<string, Map<number, DPSchedule[]>>();
-
+  // Group schedules by year+month across every unit — the top-level list is
+  // just the months; picking a month opens the per-unit view with a sidebar.
+  const groupedByMonth = React.useMemo(() => {
+    const byPeriod = new Map<string, DPSchedule[]>();
     for (const s of visibleSchedules) {
-      const key = canonicalOperationalUnitId(s.unitId, units) ?? '__legacy__';
-      if (!byUnit.has(key)) byUnit.set(key, new Map());
-      const byYear = byUnit.get(key)!;
-      if (!byYear.has(s.year)) byYear.set(s.year, []);
-      byYear.get(s.year)!.push(s);
+      const key = `${s.year}-${String(s.month).padStart(2, '0')}`;
+      if (!byPeriod.has(key)) byPeriod.set(key, []);
+      byPeriod.get(key)!.push(s);
     }
-
-    // Sort years descending within each unit; sort months descending within year
-    byUnit.forEach(byYear => {
-      byYear.forEach(items => items.sort((a, b) => b.month - a.month));
-    });
-
-    // Build ordered array: known units first (preserving DP unit order), then legacy
-    const result: Array<{ unitId: string; unitName: string; byYear: [number, DPSchedule[]][] }> = [];
-
-    // Per-unit sections, ordered by unit name
-    const unitOrder = units
-      .map(unit => canonicalOperationalUnitId(unit.id, units))
-      .filter((unitId): unitId is string => !!unitId);
-    const seen = new Set<string>();
-    for (const uid of [...unitOrder, ...[...byUnit.keys()].filter(k => k !== '__legacy__')]) {
-      if (seen.has(uid) || !byUnit.has(uid)) continue;
-      seen.add(uid);
-      const unit = units.find(u => u.id === uid);
-      result.push({
-        unitId: uid,
-        unitName: unit?.name ?? uid,
-        byYear: Array.from(byUnit.get(uid)!.entries()).sort((a, b) => b[0] - a[0]),
-      });
-    }
-
-    // Legacy section at the end
-    if (byUnit.has('__legacy__')) {
-      result.push({
-        unitId: '__legacy__',
-        unitName: 'Todas as unidades',
-        byYear: Array.from(byUnit.get('__legacy__')!.entries()).sort((a, b) => b[0] - a[0]),
-      });
-    }
-
-    return result;
-  }, [units, visibleSchedules]);
-
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    const targetUnit = units.find((unit) => unit.id === deleteTarget.unitId);
-    if (targetUnit?.isArchived === true) {
-      toast({ title: 'Escalas históricas de unidades incorporadas não podem ser excluídas.', variant: 'destructive' });
-      setDeleteTarget(null);
-      return;
-    }
-    setDeleting(true);
-    try {
-      await deleteSchedule(deleteTarget.id);
-      toast({ title: 'Escala excluída.' });
-    } catch {
-      toast({ title: 'Erro ao excluir escala.', variant: 'destructive' });
-    } finally {
-      setDeleting(false);
-      setDeleteTarget(null);
-    }
-  }
+    return Array.from(byPeriod.entries())
+      .map(([period, items]) => {
+        const [year, month] = period.split('-').map(Number);
+        return {
+          period,
+          year,
+          month,
+          unitCount: items.length,
+          shiftCount: items.reduce((sum, s) => sum + (s.shiftCount ?? 0), 0),
+          allLocked: items.every(s => s.locked),
+        };
+      })
+      .sort((a, b) => (b.year - a.year) || (b.month - a.month));
+  }, [visibleSchedules]);
 
   if (schedulesLoading && schedules.length === 0) {
     return (
@@ -766,77 +726,38 @@ export function DPSchedulesList() {
           <CalendarDays className="h-8 w-8 opacity-30" />
           <p className="text-sm">Nenhuma escala cadastrada.</p>
           {canCreate && (
-            <Button onClick={() => openCreate()} className="mt-2" disabled={!createDependenciesReady}>
+            <Button onClick={() => setCreateOpen(true)} className="mt-2" disabled={!createDependenciesReady}>
               <Plus className="mr-2 h-4 w-4" />
               Criar primeira escala
             </Button>
           )}
         </div>
       ) : (
-        groupedByUnit.map(({ unitId, unitName, byYear }) => (
-          <div key={unitId}>
-            {/* Unit section header */}
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                {unitName}
+        <div className="rounded-xl border bg-card overflow-hidden divide-y">
+          {groupedByMonth.map(({ period, year, month, unitCount, shiftCount, allLocked }) => (
+            <div
+              key={period}
+              className="group flex cursor-pointer items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/40"
+              onClick={() => router.push(`/dashboard/dp/schedules/month/${period}`)}
+            >
+              <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <CalendarDays className="h-4 w-4 text-primary" />
+              </div>
+
+              <p className="flex-1 text-sm font-medium flex items-center gap-2">
+                {MONTHS[month - 1]} de {year}
+                {allLocked && <Lock className="h-3 w-3 text-muted-foreground/60" />}
               </p>
-              {canCreate && unitId !== '__legacy__' && activeUnits.some((unit) => unit.id === unitId) && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => openCreate(unitId)}
-                  disabled={!createDependenciesReady}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Criar
-                </Button>
-              )}
+
+              <Badge variant="secondary" className="text-xs shrink-0">
+                {unitCount} {unitCount === 1 ? 'unidade' : 'unidades'}
+              </Badge>
+              <Badge variant="outline" className="text-xs shrink-0">
+                {shiftCount} {shiftCount === 1 ? 'turno' : 'turnos'}
+              </Badge>
             </div>
-
-            {/* Years within this unit */}
-            <div className="space-y-4">
-              {byYear.map(([year, items]) => (
-                <div key={year}>
-                  <p className="text-[10px] text-muted-foreground/60 mb-1.5 pl-1">{year}</p>
-                  <div className="rounded-xl border bg-card overflow-hidden divide-y">
-                    {items.map(s => (
-                      <div
-                        key={s.id}
-                        className="group flex cursor-pointer items-center gap-2.5 px-3 py-2 transition-colors hover:bg-muted/40"
-                        onClick={() => router.push(`/dashboard/dp/schedules/${s.id}`)}
-                        onMouseEnter={() => setHoveredId(s.id)}
-                        onMouseLeave={() => setHoveredId(null)}
-                      >
-                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <CalendarDays className="h-4 w-4 text-primary" />
-                        </div>
-
-                        <p className="flex-1 text-sm font-medium flex items-center gap-2">
-                          {MONTHS[s.month - 1]}
-                          {s.locked && <Lock className="h-3 w-3 text-muted-foreground/60" />}
-                        </p>
-
-                        <Badge variant="secondary" className="text-xs shrink-0">
-                          {s.shiftCount} {s.shiftCount === 1 ? 'turno' : 'turnos'}
-                        </Badge>
-
-                        {canDelete && hoveredId === s.id && units.find((unit) => unit.id === s.unitId)?.isArchived !== true && (
-                          <button
-                            onClick={e => { e.stopPropagation(); setDeleteTarget(s); }}
-                            className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
 
       {/* FABs */}
@@ -854,7 +775,7 @@ export function DPSchedulesList() {
         )}
         {canCreate && visibleSchedules.length > 0 && (
           <Button
-            onClick={() => openCreate()}
+            onClick={() => setCreateOpen(true)}
             className="h-9 gap-1.5 rounded-lg px-3 text-xs shadow-md"
             size="lg"
             disabled={!createDependenciesReady}
@@ -868,10 +789,13 @@ export function DPSchedulesList() {
       <CreateScheduleDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        defaultUnitId={createDefaultUnit}
         calendars={calendars}
         units={activeUnits}
         schedules={visibleSchedules}
+        onCreated={(id, month, year) => {
+          const period = `${year}-${String(month).padStart(2, '0')}`;
+          router.push(`/dashboard/dp/schedules/month/${period}?schedule=${id}`);
+        }}
       />
       <BizneoExportDialog
         open={exportBizneoOpen}
@@ -880,27 +804,6 @@ export function DPSchedulesList() {
         units={units}
         shiftDefinitions={shiftDefinitions}
       />
-
-      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir escala?</AlertDialogTitle>
-            <AlertDialogDescription>
-              A escala <strong>{deleteTarget?.name}</strong> e todos os seus turnos serão excluídos permanentemente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleting ? 'Excluindo...' : 'Excluir'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
