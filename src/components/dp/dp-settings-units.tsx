@@ -23,8 +23,17 @@ import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
 import { shiftDefinitionMatchesUnit } from "@/lib/dp-shift-definitions";
+import {
+  DP_WEEKDAYS,
+  dpOperatingHoursSchema,
+  emptyOperatingHours,
+  formatOperatingHoursSummary,
+  normalizeOperatingHours,
+  type DPWeekdayKey,
+} from "@/lib/dp-operating-hours";
 import { activeOperationalUnits } from "@/lib/dp-units";
 import type {
+  DPOperatingHours,
   DPShiftDefinition,
   DPUnit,
   DPUnitGroup,
@@ -72,6 +81,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 type OrganizationDialogState =
@@ -118,6 +128,7 @@ type UnitForm = {
   kioskId: string;
   pdvFilialId: string;
   bizneoTaxonId: string;
+  operatingHours: DPOperatingHours;
 };
 
 type MergedOperationalUnit = {
@@ -347,6 +358,7 @@ export function DPSettingsUnits() {
     kioskId: "",
     pdvFilialId: "",
     bizneoTaxonId: "",
+    operatingHours: emptyOperatingHours(),
   });
   const unitCnpjValidation = unitForm.cnpj.trim()
     ? CnpjValidator.validate(unitForm.cnpj)
@@ -492,6 +504,7 @@ export function DPSettingsUnits() {
           typeof unitDialog.unit.bizneoTaxonId === "number"
             ? String(unitDialog.unit.bizneoTaxonId)
             : "",
+        operatingHours: normalizeOperatingHours(unitDialog.unit.operatingHours),
       });
       return;
     }
@@ -514,6 +527,7 @@ export function DPSettingsUnits() {
         firstCandidate?.bizneoId && !Number.isNaN(Number(firstCandidate.bizneoId))
           ? String(Number(firstCandidate.bizneoId))
           : "",
+      operatingHours: emptyOperatingHours(),
     });
   }, [groupById, kiosks, syncCandidates, unitDialog]);
 
@@ -695,6 +709,7 @@ export function DPSettingsUnits() {
     const name = unitForm.name.trim();
     if (!name) return;
     if (unitCnpjValidation && !unitCnpjValidation.valid) return;
+    if (!dpOperatingHoursSchema.safeParse(unitForm.operatingHours).success) return;
 
     const selectedGroup = unitForm.groupId ? groupById.get(unitForm.groupId) : null;
     const organizationId = selectedGroup?.organizationId ?? unitForm.organizationId;
@@ -718,6 +733,7 @@ export function DPSettingsUnits() {
           groupId: unitForm.groupId || undefined,
           pdvFilialId: unitForm.pdvFilialId.trim() || undefined,
           bizneoTaxonId,
+          operatingHours: unitForm.operatingHours,
         });
       } else {
         await addUnit({
@@ -731,6 +747,7 @@ export function DPSettingsUnits() {
           externalId: unitDialog?.mode === "sync" ? selectedKiosk?.id : undefined,
           pdvFilialId: unitForm.pdvFilialId.trim() || selectedKiosk?.pdvFilialId || undefined,
           bizneoTaxonId,
+          operatingHours: unitForm.operatingHours,
         });
       }
       setUnitDialog(null);
@@ -821,6 +838,31 @@ export function DPSettingsUnits() {
           ? String(Number(kiosk.bizneoId))
         : "",
     }));
+  }
+
+  function updateOperatingDay(
+    weekday: DPWeekdayKey,
+    patch: { isOpen: boolean } | { startTime: string } | { endTime: string },
+  ) {
+    setUnitForm((current) => {
+      const existing = current.operatingHours[weekday];
+      let nextDay = existing;
+      if ("isOpen" in patch) {
+        nextDay = patch.isOpen
+          ? {
+              isOpen: true,
+              startTime: existing.isOpen ? existing.startTime : "09:00",
+              endTime: existing.isOpen ? existing.endTime : "21:00",
+            }
+          : { isOpen: false };
+      } else if (existing.isOpen) {
+        nextDay = { ...existing, ...patch };
+      }
+      return {
+        ...current,
+        operatingHours: { ...current.operatingHours, [weekday]: nextDay },
+      };
+    });
   }
 
   function renderResponsibilitySummary(entity: DPUnitResponsibility) {
@@ -1091,6 +1133,7 @@ export function DPSettingsUnits() {
         ? `Bizneo ${unit.bizneoTaxonId}`
         : "Sem Bizneo",
     ].filter(Boolean) as string[];
+    const operatingHoursSummary = formatOperatingHoursSummary(unit.dpUnit?.operatingHours);
 
     return (
       <div
@@ -1145,6 +1188,12 @@ export function DPSettingsUnits() {
               {unit.dpUnit.address}
             </p>
           ) : null}
+          <p className={cn(
+            "mt-1 truncate text-xs",
+            operatingHoursSummary ? "text-muted-foreground" : "font-medium text-amber-700 dark:text-amber-400",
+          )} title={operatingHoursSummary ?? undefined}>
+            {operatingHoursSummary ? `Funcionamento: ${operatingHoursSummary}` : "Horário de funcionamento não configurado"}
+          </p>
         </div>
         <div className="opacity-60 transition-opacity group-hover/unit:opacity-100">
           {renderActionsForMergedUnit(unit)}
@@ -1557,6 +1606,56 @@ export function DPSettingsUnits() {
               />
             </div>
 
+            <div className="space-y-3 rounded-xl border p-4">
+              <div>
+                <Label>Horário de funcionamento</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  A escala usará estes intervalos para identificar períodos sem nenhum turno cobrindo a unidade.
+                </p>
+              </div>
+              <div className="divide-y rounded-lg border">
+                {DP_WEEKDAYS.map(({ key, label }) => {
+                  const operatingDay = unitForm.operatingHours[key];
+                  return (
+                    <div key={key} className="grid grid-cols-[minmax(120px,1fr)_auto] items-center gap-3 px-3 py-2 sm:grid-cols-[minmax(150px,1fr)_auto_110px_110px]">
+                      <span className="text-sm font-medium">{label}</span>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={operatingDay.isOpen}
+                          onCheckedChange={(checked) => updateOperatingDay(key, { isOpen: checked })}
+                          aria-label={`${operatingDay.isOpen ? "Fechar" : "Abrir"} ${label}`}
+                        />
+                        <span className="w-14 text-xs text-muted-foreground">
+                          {operatingDay.isOpen ? "Aberta" : "Fechada"}
+                        </span>
+                      </div>
+                      <Input
+                        type="time"
+                        value={operatingDay.isOpen ? operatingDay.startTime : ""}
+                        onChange={(event) => updateOperatingDay(key, { startTime: event.target.value })}
+                        disabled={!operatingDay.isOpen}
+                        aria-label={`Abertura de ${label}`}
+                        className="tabular-nums"
+                      />
+                      <Input
+                        type="time"
+                        value={operatingDay.isOpen ? operatingDay.endTime : ""}
+                        onChange={(event) => updateOperatingDay(key, { endTime: event.target.value })}
+                        disabled={!operatingDay.isOpen}
+                        aria-label={`Encerramento de ${label}`}
+                        className="tabular-nums"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              {!dpOperatingHoursSchema.safeParse(unitForm.operatingHours).success ? (
+                <p className="text-xs font-medium text-destructive">
+                  Em cada dia aberto, o encerramento deve ser posterior à abertura.
+                </p>
+              ) : null}
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Organização</Label>
@@ -1672,6 +1771,7 @@ export function DPSettingsUnits() {
                 saving === "unit" ||
                 !unitForm.name.trim() ||
                 (unitCnpjValidation !== null && !unitCnpjValidation.valid) ||
+                !dpOperatingHoursSchema.safeParse(unitForm.operatingHours).success ||
                 (unitDialog?.mode === "sync" && !unitForm.kioskId)
               }
             >

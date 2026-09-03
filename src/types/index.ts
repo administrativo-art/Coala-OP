@@ -3422,9 +3422,16 @@ export type DPUnit = {
   externalId?: string;
   pdvFilialId?: string;
   bizneoTaxonId?: number; // ID do taxon (local) no Bizneo
+  operatingHours?: DPOperatingHours;
   auditChecklistThreshold?: number;
   createdAt: Timestamp;
 };
+
+export type DPOperatingHoursDay =
+  | { isOpen: false }
+  | { isOpen: true; startTime: string; endTime: string };
+
+export type DPOperatingHours = Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DPOperatingHoursDay>;
 
 export type DPUnitResponsibilitySource = 'job_role' | 'job_function';
 

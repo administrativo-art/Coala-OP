@@ -1,13 +1,35 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import {
-  collection, onSnapshot, addDoc, updateDoc, deleteDoc,
+  collection, onSnapshot,
   doc, query, orderBy, serverTimestamp, writeBatch, increment, getDocs,
 } from 'firebase/firestore';
 import type { DPShift } from '@/types';
 import { rebalanceGoalsForSchedule } from '@/lib/goals-schedule-rebalance';
+import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
+
+function workShiftPayload(data: Omit<DPShift, 'id' | 'createdAt'> | DPShift) {
+  return {
+    userId: data.userId,
+    ...(data.userName ? { userName: data.userName } : {}),
+    unitId: data.unitId,
+    date: data.date,
+    ...(data.shiftDefinitionId ? { shiftDefinitionId: data.shiftDefinitionId } : {}),
+    startTime: data.startTime,
+    endTime: data.endTime,
+    type: 'work' as const,
+  };
+}
+
+async function saveWorkShiftRequest(scheduleId: string, shiftId: string, method: 'PUT' | 'PATCH', data: Omit<DPShift, 'id' | 'createdAt'> | DPShift) {
+  return authenticatedApiRequest(`/api/dp/schedules/${encodeURIComponent(scheduleId)}/shifts/${encodeURIComponent(shiftId)}`, {
+    method,
+    json: workShiftPayload(data),
+    getIdToken: async () => auth.currentUser?.getIdToken() ?? null,
+  });
+}
 
 export interface DPShiftsHookResult {
   shifts: DPShift[];
@@ -83,16 +105,10 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
 
   const addShift = useCallback(async (data: Omit<DPShift, 'id' | 'createdAt'>) => {
     if (!scheduleId) return;
-    const batch = writeBatch(db);
     const shiftRef = doc(collection(db, 'dp_schedules', scheduleId, 'shifts'));
-    batch.set(shiftRef, { ...data, createdAt: serverTimestamp() });
-    const workCount = countWorkItems([data]);
-    if (workCount > 0) {
-      batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(workCount) });
-    }
-    await batch.commit();
+    await saveWorkShiftRequest(scheduleId, shiftRef.id, 'PUT', data);
     await rebalanceGoalsForSchedule(scheduleId);
-  }, [countWorkItems, scheduleId]);
+  }, [scheduleId]);
 
   const addShiftsBatch = useCallback(async (data: Omit<DPShift, 'id' | 'createdAt'>[]) => {
     if (!scheduleId || data.length === 0) return;
@@ -116,7 +132,7 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
 
   const updateShift = useCallback(async ({ id, ...data }: DPShift) => {
     if (!scheduleId) return;
-    await updateDoc(doc(db, 'dp_schedules', scheduleId, 'shifts', id), data as any);
+    await saveWorkShiftRequest(scheduleId, id, 'PATCH', data as DPShift);
     await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
