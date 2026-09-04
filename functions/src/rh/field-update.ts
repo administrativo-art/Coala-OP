@@ -23,7 +23,12 @@ import {
   type ProfileAccessPermission,
   calcProfileCompletion,
 } from './types.js';
+import {
+  canEditRhProfilesFromPermissions,
+  resolveRhRoleFromPermissions,
+} from './access-policy.js';
 
+const db = getFirestore('coala');
 const hrDb = getFirestore('coala-rh');
 
 const internalAppCors = [
@@ -44,6 +49,75 @@ async function getFieldMap(): Promise<FieldMap> {
 async function getRhCache(uid: string): Promise<RhAccessCache | null> {
   const snap = await hrDb.collection('rh_access_cache').doc(uid).get();
   return snap.exists ? (snap.data() as RhAccessCache) : null;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+}
+
+async function resolveCurrentRhAccess(
+  uid: string,
+  token: Record<string, unknown>,
+): Promise<{
+  cache: RhAccessCache;
+  canEditOtherProfiles: boolean;
+  unitIds: string[];
+} | null> {
+  const [cached, userSnap] = await Promise.all([
+    getRhCache(uid),
+    db.collection('users').doc(uid).get(),
+  ]);
+  if (!userSnap.exists) return null;
+
+  const userData = userSnap.data() ?? {};
+  const profileId = typeof userData.profileId === 'string' && userData.profileId.trim()
+    ? userData.profileId.trim()
+    : typeof token.profileId === 'string' && token.profileId.trim()
+      ? token.profileId.trim()
+      : null;
+  const profileSnap = profileId
+    ? await db.collection('profiles').doc(profileId).get()
+    : null;
+  const profileData = profileSnap?.data() ?? {};
+  const permissionContext = {
+    tokenIsDefaultAdmin: token.isDefaultAdmin === true,
+    profileIsDefaultAdmin: profileData.isDefaultAdmin === true,
+    userPermissions: userData.permissions as Record<string, unknown> | undefined,
+    profilePermissions: profileData.permissions as Record<string, unknown> | undefined,
+  };
+  const role = resolveRhRoleFromPermissions(permissionContext);
+  if (!role) return null;
+
+  const currentUnitIds = stringList(userData.unitIds);
+  const legacyUnitIds = stringList(userData.assignedKioskIds);
+  const unitIds = Array.from(new Set([...currentUnitIds, ...legacyUnitIds]));
+  const managerUnitId = unitIds[0] ?? cached?.unit_id;
+  const bizneoEmployeeId = userData.registrationIdBizneo != null
+    ? String(userData.registrationIdBizneo).trim()
+    : cached?.bizneo_employee_id;
+  const access: RhAccessCache = {
+    ...cached,
+    auth_uid: uid,
+    user_id: uid,
+    rh_role: role,
+    ...(bizneoEmployeeId ? { bizneo_employee_id: bizneoEmployeeId } : {}),
+    ...(role === 'manager' && managerUnitId ? { unit_id: managerUnitId } : {}),
+    ...(typeof userData.jobRoleId === 'string' ? { job_role_id: userData.jobRoleId } : {}),
+    job_role_ids: stringList(userData.jobRoleIds),
+    role_ids: stringList(userData.roleIds),
+    job_function_ids: stringList(userData.jobFunctionIds),
+    function_ids: stringList(userData.functionIds),
+    updated_at: Timestamp.now(),
+  };
+
+  await hrDb.collection('rh_access_cache').doc(uid).set(access, { merge: true });
+  return {
+    cache: access,
+    canEditOtherProfiles: canEditRhProfilesFromPermissions(permissionContext),
+    unitIds,
+  };
 }
 
 function normalizeAccessList(values: unknown): string[] {
@@ -314,10 +388,15 @@ export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
     }
 
     // 1. Buscar cache de permissões
-    const cache = await getRhCache(uid);
-    if (!cache?.rh_role) throw new HttpsError('permission-denied', 'Sem acesso ao módulo RH.');
-    const role = cache.rh_role as RhRole;
+    const currentAccess = await resolveCurrentRhAccess(uid, request.auth.token);
+    if (!currentAccess?.cache.rh_role) throw new HttpsError('permission-denied', 'Sem acesso ao módulo RH.');
+    const cache = currentAccess.cache;
     const isOwner = cache.bizneo_employee_id === employee_id;
+    if (!currentAccess.canEditOtherProfiles && !isOwner) {
+      throw new HttpsError('permission-denied', 'Sem permissão para editar este perfil.');
+    }
+    // Um usuário que só pode editar o próprio perfil deve passar pela matriz como employee.
+    const role: RhRole = currentAccess.canEditOtherProfiles ? cache.rh_role as RhRole : 'employee';
 
     // 2. Verificar que o colaborador existe
     const empRef  = hrDb.collection('employees').doc(employee_id);
@@ -326,7 +405,11 @@ export const onFieldUpdate = onCall<OnFieldUpdateRequest>(
     const empData = empSnap.data()!;
 
     // Manager só edita colaboradores da mesma unit_id
-    if (role === 'manager' && !isOwner && empData.unit_id !== cache.unit_id) {
+    const managerUnitIds = new Set([
+      ...currentAccess.unitIds,
+      ...(cache.unit_id ? [cache.unit_id] : []),
+    ]);
+    if (role === 'manager' && !isOwner && !managerUnitIds.has(empData.unit_id)) {
       throw new HttpsError('permission-denied', 'Manager não tem acesso a este colaborador.');
     }
 

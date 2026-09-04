@@ -20,6 +20,7 @@ import {
   type BizneoCustomField,
 } from './bizneo-client.js';
 import { calcProfileCompletion, type FieldMap, type EmployeeFieldValue } from './types.js';
+import { resolveRhRoleFromPermissions } from './access-policy.js';
 
 const db    = getFirestore('coala');
 const hrDb  = getFirestore('coala-rh');
@@ -47,9 +48,20 @@ export const syncRhAccessCache = onDocumentWritten(
     }
 
     const userData = after.data() ?? {};
-    const rhRole: string | undefined = userData.permissions?.dp?.rh_role;
+    const profileId = typeof userData.profileId === 'string' && userData.profileId.trim()
+      ? userData.profileId.trim()
+      : null;
+    const profileSnap = profileId
+      ? await db.collection('profiles').doc(profileId).get()
+      : null;
+    const profileData = profileSnap?.data() ?? {};
+    const rhRole = resolveRhRoleFromPermissions({
+      profileIsDefaultAdmin: profileData.isDefaultAdmin === true,
+      userPermissions: userData.permissions,
+      profilePermissions: profileData.permissions,
+    });
 
-    if (!rhRole || !['employee', 'manager', 'admin'].includes(rhRole)) {
+    if (!rhRole) {
       await hrDb.collection('rh_access_cache').doc(uid).delete().catch(() => null);
       console.log(`[syncRhAccessCache] uid=${uid} sem rh_role válido — cache RH removido`);
       return;
