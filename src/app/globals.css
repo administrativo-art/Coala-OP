@@ -247,6 +247,17 @@
   padding-bottom: 0.5rem;
 }
 
+/* O módulo de escalas segue o sistema visual próprio do handoff. */
+.personal-section-density .dp-schedules-list-title {
+  font-size: 29px !important;
+  line-height: 34px !important;
+}
+
+.personal-section-density .dp-schedule-month-title {
+  font-size: 19px !important;
+  line-height: 24px !important;
+}
+
 @media (min-width: 768px) {
   .personal-section-density {
     padding: 1.5rem !important;
