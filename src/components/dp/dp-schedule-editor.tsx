@@ -15,7 +15,7 @@ import { useDPScheduleVacations } from '@/hooks/use-dp-schedule-vacations';
 import { useAuth } from '@/hooks/use-auth';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { useKiosks } from '@/hooks/use-kiosks';
-import type { DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, Kiosk, User } from '@/types';
+import type { DPCoverageDemandWindow, DPSchedule, DPScheduleSnapshot, DPShift, DPUnit, DPVacationRecord, Kiosk, User } from '@/types';
 import type { PublishDayOffResult, RemoveDayOffResult } from '@/features/dp/day-offs/schemas';
 import { cn } from '@/lib/utils';
 import {
@@ -83,7 +83,14 @@ import {
   isDayOffShift,
   isWorkShift,
 } from '@/lib/dp-shift-rules';
-import { buildDailyUnitCoverage, type DPDailyCoverage } from '@/lib/dp-operating-hours';
+import { buildDailyUnitCoverage } from '@/lib/dp-operating-hours';
+import {
+  buildDailyOnDemandCoverage,
+  normalizeDPCoverageDemands,
+  resolveDPCoverageMode,
+  saveCoverageDemandsSchema,
+  type DPDailyCoverage,
+} from '@/lib/dp-coverage-demands';
 import {
   buildApprovedVacationIndex,
   findApprovedVacationForDate,
@@ -746,25 +753,279 @@ function DayOffBadge({
   );
 }
 
-function CoverageAlertBadge({ coverage }: { coverage: DPDailyCoverage }) {
-  if (coverage.gaps.length === 0) return null;
-  const gaps = coverage.gaps.map((gap) => `${gap.startTime}–${gap.endTime}`).join(', ');
-  const wholeDayUncovered = coverage.gaps.length === 1
+function CoverageStatus({
+  coverage,
+  canEditDemand,
+  onEditDemand,
+}: {
+  coverage: DPDailyCoverage;
+  canEditDemand: boolean;
+  onEditDemand?: () => void;
+}) {
+  if (coverage.mode === 'fixed_hours' && coverage.gaps.length === 0) return null;
+
+  if (coverage.mode === 'on_demand' && !coverage.hasDemand) {
+    return (
+      <div className={cn(
+        'flex items-center justify-between gap-2 rounded-lg border border-dashed px-2.5 py-2',
+        coverage.hasUnplannedShifts
+          ? 'border-amber-300 bg-amber-50/60 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
+          : 'border-border/70 bg-muted/20 text-muted-foreground',
+      )}>
+        <div className="flex min-w-0 items-center gap-2">
+          <Clock3 className="h-3.5 w-3.5 shrink-0" />
+          <p className="truncate text-[11px] font-medium">
+            {coverage.hasUnplannedShifts ? 'Equipe escalada sem demanda' : 'Sem demanda'}
+          </p>
+        </div>
+        {canEditDemand && onEditDemand ? (
+          <button
+            type="button"
+            onClick={onEditDemand}
+            className="shrink-0 text-[10px] font-semibold text-primary hover:underline"
+          >
+            Definir
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (coverage.mode === 'on_demand' && coverage.gaps.length === 0) {
+    const ranges = coverage.windows
+      .map((window) => `${window.startTime}–${window.endTime} · ${window.minimumPeople} pessoa${window.minimumPeople === 1 ? '' : 's'}`)
+      .join(', ');
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-300 bg-emerald-50/60 px-2.5 py-2 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300" title={ranges}>
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold">Demanda coberta</p>
+          <p className="truncate text-[10px]">{ranges}</p>
+        </div>
+        {canEditDemand && onEditDemand ? (
+          <button type="button" onClick={onEditDemand} className="shrink-0 text-[10px] font-semibold hover:underline">
+            Editar
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  const gaps = coverage.gaps.map((gap) => {
+    const people = gap.requiredPeople === undefined
+      ? ''
+      : ` · ${gap.scheduledPeople ?? 0}/${gap.requiredPeople} pessoas`;
+    return `${gap.startTime}–${gap.endTime}${people}`;
+  }).join(', ');
+  const wholeDayUncovered = coverage.mode === 'fixed_hours'
+    && coverage.gaps.length === 1
     && coverage.gaps[0].startTime === coverage.startTime
     && coverage.gaps[0].endTime === coverage.endTime;
   return (
     <div
-      className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-destructive"
+      className="flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-destructive"
       title={`Período sem cobertura: ${gaps}`}
     >
-      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-      <div className="min-w-0">
-        <p className="text-[11px] font-semibold">
-          {wholeDayUncovered ? 'Unidade sem cobertura' : 'Cobertura incompleta'}
-        </p>
-        <p className="truncate text-[10px]">Sem turno: {gaps}</p>
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold">
+            {wholeDayUncovered ? 'Unidade sem cobertura' : 'Cobertura incompleta'}
+          </p>
+          <p className="truncate text-[10px]">Falta: {gaps}</p>
+        </div>
       </div>
+      {coverage.mode === 'on_demand' && canEditDemand && onEditDemand ? (
+        <button type="button" onClick={onEditDemand} className="shrink-0 text-[10px] font-semibold hover:underline">
+          Editar
+        </button>
+      ) : null}
     </div>
+  );
+}
+
+type CoverageDemandRow = DPCoverageDemandWindow & { reason: string };
+
+function emptyCoverageDemandRow(): CoverageDemandRow {
+  return { startTime: '09:00', endTime: '18:00', minimumPeople: 1, reason: '' };
+}
+
+function CoverageDemandDialog({
+  scheduleId,
+  unit,
+  date,
+  initialWindows,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  scheduleId: string;
+  unit: DPUnit;
+  date: string;
+  initialWindows: DPCoverageDemandWindow[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: (date: string, windows: DPCoverageDemandWindow[]) => void;
+}) {
+  const api = useAuthenticatedApi();
+  const { toast } = useToast();
+  const [rows, setRows] = useState<CoverageDemandRow[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setRows(initialWindows.length > 0
+      ? initialWindows.map((window) => ({ ...window, reason: window.reason ?? '' }))
+      : [emptyCoverageDemandRow()]);
+  }, [initialWindows, open]);
+
+  const parsed = saveCoverageDemandsSchema.safeParse({
+    unitId: unit.id,
+    windows: rows.map((row) => ({ ...row, reason: row.reason.trim() || undefined })),
+  });
+
+  async function save(windows: DPCoverageDemandWindow[]) {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const result = await api<{ date: string; windows: DPCoverageDemandWindow[] }>(
+        `/api/dp/schedules/${encodeURIComponent(scheduleId)}/coverage-demands/${encodeURIComponent(date)}`,
+        {
+          method: 'PUT',
+          json: { unitId: unit.id, windows },
+          fallbackError: 'Falha ao salvar a demanda.',
+        },
+      );
+      onSaved(result.date, result.windows);
+      onOpenChange(false);
+      toast({ title: windows.length > 0 ? 'Demanda salva.' : 'Demanda removida.' });
+    } catch (caught) {
+      toast({
+        title: 'Não foi possível salvar a demanda.',
+        description: caught instanceof Error ? caught.message : 'Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const formattedDate = format(parseISO(date), "EEEE, dd 'de' MMMM", { locale: ptBR });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Demanda do dia</DialogTitle>
+          <DialogDescription className="capitalize">
+            {unit.name} · {formattedDate}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {rows.map((row, index) => (
+            <div key={`${index}-${row.startTime}`} className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[105px_105px_100px_minmax(0,1fr)_auto]">
+              <div className="space-y-1.5">
+                <Label htmlFor={`demand-start-${index}`}>Início</Label>
+                <Input
+                  id={`demand-start-${index}`}
+                  type="time"
+                  value={row.startTime}
+                  onChange={(event) => setRows((current) => current.map((item, itemIndex) => (
+                    itemIndex === index ? { ...item, startTime: event.target.value } : item
+                  )))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`demand-end-${index}`}>Fim</Label>
+                <Input
+                  id={`demand-end-${index}`}
+                  type="time"
+                  value={row.endTime}
+                  onChange={(event) => setRows((current) => current.map((item, itemIndex) => (
+                    itemIndex === index ? { ...item, endTime: event.target.value } : item
+                  )))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`demand-people-${index}`}>Mínimo</Label>
+                <Input
+                  id={`demand-people-${index}`}
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={row.minimumPeople}
+                  onChange={(event) => setRows((current) => current.map((item, itemIndex) => (
+                    itemIndex === index ? { ...item, minimumPeople: Number(event.target.value) } : item
+                  )))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`demand-reason-${index}`}>Motivo</Label>
+                <Input
+                  id={`demand-reason-${index}`}
+                  value={row.reason}
+                  maxLength={160}
+                  placeholder="Ex.: recebimento de carga"
+                  onChange={(event) => setRows((current) => current.map((item, itemIndex) => (
+                    itemIndex === index ? { ...item, reason: event.target.value } : item
+                  )))}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setRows((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  aria-label={`Remover intervalo ${index + 1}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setRows((current) => [...current, emptyCoverageDemandRow()])}
+            disabled={rows.length >= 12}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Adicionar intervalo
+          </Button>
+          {!parsed.success && rows.length > 0 ? (
+            <p className="text-xs font-medium text-destructive">
+              Confira os horários, a quantidade mínima e evite intervalos sobrepostos.
+            </p>
+          ) : null}
+        </div>
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void save([])}
+            disabled={saving || initialWindows.length === 0}
+          >
+            Remover demanda
+          </Button>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => parsed.success && void save(parsed.data.windows)}
+              disabled={saving || rows.length === 0 || !parsed.success}
+            >
+              {saving ? 'Salvando...' : 'Salvar demanda'}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -963,6 +1224,12 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
   const [prevExpanded, setPrevExpanded] = useState(false);
   const [bulkSelectionActive, setBulkSelectionActive] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
+  const [coverageDemands, setCoverageDemands] = useState(() => normalizeDPCoverageDemands(schedule.coverageDemands));
+  const [coverageDemandDialog, setCoverageDemandDialog] = useState<{ date: string; unit: DPUnit } | null>(null);
+
+  React.useEffect(() => {
+    setCoverageDemands(normalizeDPCoverageDemands(schedule.coverageDemands));
+  }, [schedule.coverageDemands, schedule.id]);
 
   async function handlePublishDayOff(params: {
     scheduleId?: string;
@@ -1503,18 +1770,20 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
   const coverageByCellKey = useMemo(() => {
     const coverage = new Map<string, DPDailyCoverage>();
     activeUnits.forEach((unit) => {
+      const mode = resolveDPCoverageMode(unit);
+      if (mode === 'disabled') return;
       const unitShifts = workShifts.filter((shift) => operationalUnitIdsMatch(unit.id, shift.unitId, units));
       days.forEach(({ date }) => {
-        const daily = buildDailyUnitCoverage({
-          date,
-          operatingHours: unit.operatingHours,
-          shifts: unitShifts,
-        });
-        if (daily.gaps.length > 0) coverage.set(`${date}::${unit.id}`, daily);
+        const daily = mode === 'on_demand'
+          ? buildDailyOnDemandCoverage({ date, windows: coverageDemands[date] ?? [], shifts: unitShifts })
+          : buildDailyUnitCoverage({ date, operatingHours: unit.operatingHours, shifts: unitShifts });
+        if (mode === 'on_demand' || daily.gaps.length > 0) {
+          coverage.set(`${date}::${unit.id}`, daily);
+        }
       });
     });
     return coverage;
-  }, [activeUnits, days, units, workShifts]);
+  }, [activeUnits, coverageDemands, days, units, workShifts]);
 
   // Index shifts: [date][unitId] → DPShift[] (com filtros e contagem consecutiva)
   const shiftIndex = useMemo(() => {
@@ -1523,7 +1792,7 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
       if (defFilter !== '__all__' && shift.shiftDefinitionId !== defFilter) continue;
       if (userFilter !== '__all__' && shift.userId !== userFilter) continue;
       const hasVacationConflict = vacationConflictByShiftId.has(shiftVacationKey(shift));
-      const hasCoverageAlert = coverageByCellKey.has(`${shift.date}::${shift.unitId}`);
+      const hasCoverageAlert = (coverageByCellKey.get(`${shift.date}::${shift.unitId}`)?.gaps.length ?? 0) > 0;
       if (onlyAlerts && !hasCoverageAlert && !shift.hasConflict && !hasVacationConflict && !(shift.consecutiveDayCount && shift.consecutiveDayCount >= 7)) continue;
       if (!idx[shift.date]) idx[shift.date] = {};
       if (!idx[shift.date][shift.unitId]) idx[shift.date][shift.unitId] = [];
@@ -1562,7 +1831,10 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
     workDayOffConflictKeys.forEach((key) => issues.add(`day-off:${key}`));
     return issues.size;
   }, [crossConflictShiftIds, vacationConflictByShiftId, workDayOffConflictKeys, workShifts]);
-  const coverageAlertCount = coverageByCellKey.size;
+  const coverageAlertCount = useMemo(
+    () => [...coverageByCellKey.values()].filter((coverage) => coverage.gaps.length > 0).length,
+    [coverageByCellKey],
+  );
   const uniqueCollaborators = useMemo(() => new Set(workShifts.map(s => s.userId)).size, [workShifts]);
 
   // Dias por colaborador (para popover do card Pessoas)
@@ -2139,7 +2411,13 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
                           className="border-r px-2 py-2 align-top last:border-r-0 min-w-[200px]"
                         >
                           <div className="flex flex-col gap-1">
-                            {coverageAlert ? <CoverageAlertBadge coverage={coverageAlert} /> : null}
+                            {coverageAlert ? (
+                              <CoverageStatus
+                                coverage={coverageAlert}
+                                canEditDemand={canEdit && coverageAlert.mode === 'on_demand'}
+                                onEditDemand={() => setCoverageDemandDialog({ date, unit })}
+                              />
+                            ) : null}
                             {displayWorkEntries.map((entry) => {
                               const { shift } = entry;
                               const user = effectiveUserMap.get(shift.userId);
@@ -2292,6 +2570,25 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
       </div>
 
       {/* Dialogs */}
+      {coverageDemandDialog ? (
+        <CoverageDemandDialog
+          scheduleId={schedule.id}
+          unit={coverageDemandDialog.unit}
+          date={coverageDemandDialog.date}
+          initialWindows={coverageDemands[coverageDemandDialog.date] ?? []}
+          open
+          onOpenChange={(open) => { if (!open) setCoverageDemandDialog(null); }}
+          onSaved={(date, windows) => {
+            setCoverageDemands((current) => {
+              const next = { ...current };
+              if (windows.length > 0) next[date] = windows;
+              else delete next[date];
+              return next;
+            });
+          }}
+        />
+      ) : null}
+
       <ShiftDialog
         scheduleId={schedule.id}
         defaultDate={addDialog?.date}
