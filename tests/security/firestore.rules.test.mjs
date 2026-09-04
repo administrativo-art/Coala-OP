@@ -60,7 +60,7 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
       await Promise.all([
         setDoc(doc(firestore, "profiles/schedule-editor"), {
           name: "Editor de escalas",
-          permissions: { dp: { schedules: { edit: true } } },
+          permissions: { dp: { schedules: { create: true, edit: true } } },
         }),
         setDoc(doc(firestore, "users/editor"), {
           profileId: "schedule-editor",
@@ -85,6 +85,22 @@ test("folgas gerenciadas pelo Bizneo só podem ser alteradas pelo servidor", asy
     });
 
     const editor = environment.authenticatedContext("editor").firestore();
+    await assertSucceeds(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
+      name: "Setembro de 2026 — revisada",
+    }));
+    await assertFails(updateDoc(doc(editor, "dp_schedules/schedule-1"), {
+      coverageDemands: {
+        "2026-09-08": [{ startTime: "09:00", endTime: "12:00", minimumPeople: 2 }],
+      },
+    }));
+    await assertFails(setDoc(doc(editor, "dp_schedules/schedule-forged-demand"), {
+      name: "Outubro de 2026",
+      month: 10,
+      year: 2026,
+      coverageDemands: {
+        "2026-10-01": [{ startTime: "09:00", endTime: "12:00", minimumPeople: 2 }],
+      },
+    }));
     await assertSucceeds(setDoc(doc(editor, "dp_schedules/schedule-1/shifts/work"), {
       userId: "collaborator-1",
       unitId: "unit-1",

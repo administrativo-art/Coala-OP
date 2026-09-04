@@ -22,6 +22,7 @@ import { useDPBootstrap } from "@/hooks/use-dp-bootstrap";
 import { useHrBootstrap } from "@/hooks/use-hr-bootstrap";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { CnpjValidator } from "@/lib/company/cnpj-validator";
+import { resolveDPCoverageMode } from "@/lib/dp-coverage-demands";
 import { shiftDefinitionMatchesUnit } from "@/lib/dp-shift-definitions";
 import {
   DP_WEEKDAYS,
@@ -33,6 +34,7 @@ import {
 } from "@/lib/dp-operating-hours";
 import { activeOperationalUnits } from "@/lib/dp-units";
 import type {
+  DPCoverageMode,
   DPOperatingHours,
   DPShiftDefinition,
   DPUnit,
@@ -128,6 +130,7 @@ type UnitForm = {
   kioskId: string;
   pdvFilialId: string;
   bizneoTaxonId: string;
+  coverageMode: DPCoverageMode;
   operatingHours: DPOperatingHours;
 };
 
@@ -358,6 +361,7 @@ export function DPSettingsUnits() {
     kioskId: "",
     pdvFilialId: "",
     bizneoTaxonId: "",
+    coverageMode: "fixed_hours",
     operatingHours: emptyOperatingHours(),
   });
   const unitCnpjValidation = unitForm.cnpj.trim()
@@ -504,6 +508,7 @@ export function DPSettingsUnits() {
           typeof unitDialog.unit.bizneoTaxonId === "number"
             ? String(unitDialog.unit.bizneoTaxonId)
             : "",
+        coverageMode: resolveDPCoverageMode(unitDialog.unit),
         operatingHours: normalizeOperatingHours(unitDialog.unit.operatingHours),
       });
       return;
@@ -527,6 +532,7 @@ export function DPSettingsUnits() {
         firstCandidate?.bizneoId && !Number.isNaN(Number(firstCandidate.bizneoId))
           ? String(Number(firstCandidate.bizneoId))
           : "",
+      coverageMode: "fixed_hours",
       operatingHours: emptyOperatingHours(),
     });
   }, [groupById, kiosks, syncCandidates, unitDialog]);
@@ -733,6 +739,7 @@ export function DPSettingsUnits() {
           groupId: unitForm.groupId || undefined,
           pdvFilialId: unitForm.pdvFilialId.trim() || undefined,
           bizneoTaxonId,
+          coverageMode: unitForm.coverageMode,
           operatingHours: unitForm.operatingHours,
         });
       } else {
@@ -747,6 +754,7 @@ export function DPSettingsUnits() {
           externalId: unitDialog?.mode === "sync" ? selectedKiosk?.id : undefined,
           pdvFilialId: unitForm.pdvFilialId.trim() || selectedKiosk?.pdvFilialId || undefined,
           bizneoTaxonId,
+          coverageMode: unitForm.coverageMode,
           operatingHours: unitForm.operatingHours,
         });
       }
@@ -1133,7 +1141,16 @@ export function DPSettingsUnits() {
         ? `Bizneo ${unit.bizneoTaxonId}`
         : "Sem Bizneo",
     ].filter(Boolean) as string[];
+    const coverageMode = resolveDPCoverageMode(unit.dpUnit);
     const operatingHoursSummary = formatOperatingHoursSummary(unit.dpUnit?.operatingHours);
+    const coverageSummary = coverageMode === "on_demand"
+      ? "Cobertura sob demanda · definida por data na escala mensal"
+      : coverageMode === "disabled"
+        ? "Controle de cobertura desativado"
+        : operatingHoursSummary
+          ? `Funcionamento: ${operatingHoursSummary}`
+          : "Horário de funcionamento não configurado";
+    const coverageNeedsConfiguration = coverageMode === "fixed_hours" && !operatingHoursSummary;
 
     return (
       <div
@@ -1190,9 +1207,9 @@ export function DPSettingsUnits() {
           ) : null}
           <p className={cn(
             "mt-1 truncate text-xs",
-            operatingHoursSummary ? "text-muted-foreground" : "font-medium text-amber-700 dark:text-amber-400",
-          )} title={operatingHoursSummary ?? undefined}>
-            {operatingHoursSummary ? `Funcionamento: ${operatingHoursSummary}` : "Horário de funcionamento não configurado"}
+            coverageNeedsConfiguration ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+          )} title={coverageSummary}>
+            {coverageSummary}
           </p>
         </div>
         <div className="opacity-60 transition-opacity group-hover/unit:opacity-100">
@@ -1608,52 +1625,81 @@ export function DPSettingsUnits() {
 
             <div className="space-y-3 rounded-xl border p-4">
               <div>
-                <Label>Horário de funcionamento</Label>
+                <Label>Modelo de cobertura</Label>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  A escala usará estes intervalos para identificar períodos sem nenhum turno cobrindo a unidade.
+                  Define como a escala identifica falta de pessoas na unidade.
                 </p>
               </div>
-              <div className="divide-y rounded-lg border">
-                {DP_WEEKDAYS.map(({ key, label }) => {
-                  const operatingDay = unitForm.operatingHours[key];
-                  return (
-                    <div key={key} className="grid grid-cols-[minmax(120px,1fr)_auto] items-center gap-3 px-3 py-2 sm:grid-cols-[minmax(150px,1fr)_auto_110px_110px]">
-                      <span className="text-sm font-medium">{label}</span>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={operatingDay.isOpen}
-                          onCheckedChange={(checked) => updateOperatingDay(key, { isOpen: checked })}
-                          aria-label={`${operatingDay.isOpen ? "Fechar" : "Abrir"} ${label}`}
-                        />
-                        <span className="w-14 text-xs text-muted-foreground">
-                          {operatingDay.isOpen ? "Aberta" : "Fechada"}
-                        </span>
-                      </div>
-                      <Input
-                        type="time"
-                        value={operatingDay.isOpen ? operatingDay.startTime : ""}
-                        onChange={(event) => updateOperatingDay(key, { startTime: event.target.value })}
-                        disabled={!operatingDay.isOpen}
-                        aria-label={`Abertura de ${label}`}
-                        className="tabular-nums"
-                      />
-                      <Input
-                        type="time"
-                        value={operatingDay.isOpen ? operatingDay.endTime : ""}
-                        onChange={(event) => updateOperatingDay(key, { endTime: event.target.value })}
-                        disabled={!operatingDay.isOpen}
-                        aria-label={`Encerramento de ${label}`}
-                        className="tabular-nums"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              {!dpOperatingHoursSchema.safeParse(unitForm.operatingHours).success ? (
-                <p className="text-xs font-medium text-destructive">
-                  Em cada dia aberto, o encerramento deve ser posterior à abertura.
+              <Select
+                value={unitForm.coverageMode}
+                onValueChange={(coverageMode: DPCoverageMode) => setUnitForm((current) => ({ ...current, coverageMode }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed_hours">Horário fixo</SelectItem>
+                  <SelectItem value="on_demand">Sob demanda</SelectItem>
+                  <SelectItem value="disabled">Sem controle de cobertura</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {unitForm.coverageMode === "fixed_hours" ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    A escala usará os intervalos abaixo para identificar períodos sem nenhum turno cobrindo a unidade.
+                  </p>
+                  <div className="divide-y rounded-lg border">
+                    {DP_WEEKDAYS.map(({ key, label }) => {
+                      const operatingDay = unitForm.operatingHours[key];
+                      return (
+                        <div key={key} className="grid grid-cols-[minmax(120px,1fr)_auto] items-center gap-3 px-3 py-2 sm:grid-cols-[minmax(150px,1fr)_auto_110px_110px]">
+                          <span className="text-sm font-medium">{label}</span>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={operatingDay.isOpen}
+                              onCheckedChange={(checked) => updateOperatingDay(key, { isOpen: checked })}
+                              aria-label={`${operatingDay.isOpen ? "Fechar" : "Abrir"} ${label}`}
+                            />
+                            <span className="w-14 text-xs text-muted-foreground">
+                              {operatingDay.isOpen ? "Aberta" : "Fechada"}
+                            </span>
+                          </div>
+                          <Input
+                            type="time"
+                            value={operatingDay.isOpen ? operatingDay.startTime : ""}
+                            onChange={(event) => updateOperatingDay(key, { startTime: event.target.value })}
+                            disabled={!operatingDay.isOpen}
+                            aria-label={`Abertura de ${label}`}
+                            className="tabular-nums"
+                          />
+                          <Input
+                            type="time"
+                            value={operatingDay.isOpen ? operatingDay.endTime : ""}
+                            onChange={(event) => updateOperatingDay(key, { endTime: event.target.value })}
+                            disabled={!operatingDay.isOpen}
+                            aria-label={`Encerramento de ${label}`}
+                            className="tabular-nums"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {!dpOperatingHoursSchema.safeParse(unitForm.operatingHours).success ? (
+                    <p className="text-xs font-medium text-destructive">
+                      Em cada dia aberto, o encerramento deve ser posterior à abertura.
+                    </p>
+                  ) : null}
+                </>
+              ) : unitForm.coverageMode === "on_demand" ? (
+                <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
+                  Os intervalos e a quantidade mínima de pessoas serão definidos separadamente em cada data da escala mensal.
                 </p>
-              ) : null}
+              ) : (
+                <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  A escala não exibirá alertas de cobertura para esta unidade.
+                </p>
+              )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
