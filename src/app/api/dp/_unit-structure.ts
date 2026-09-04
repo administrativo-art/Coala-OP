@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser, type ServerUserContext } from "@/lib/auth-server";
+import { dpCoverageModeSchema } from "@/lib/dp-coverage-demands";
 import { dpOperatingHoursSchema } from "@/lib/dp-operating-hours";
 
 type JsonObject = Record<string, unknown>;
@@ -86,6 +87,13 @@ export function optionalOperatingHours(value: unknown) {
   if (!parsed.success) {
     throw new Error("Horário de funcionamento inválido. Confira os dias e os horários de abertura e encerramento.");
   }
+  return parsed.data;
+}
+
+export function optionalCoverageMode(value: unknown) {
+  if (value === null || value === undefined || value === "") return undefined;
+  const parsed = dpCoverageModeSchema.safeParse(value);
+  if (!parsed.success) throw new Error("Modo de cobertura inválido.");
   return parsed.data;
 }
 

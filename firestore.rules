@@ -718,11 +718,13 @@ service cloud.firestore {
       allow read: if isAuth() && (isAdmin() || getPerms().dp.schedules.view == true);
       allow create: if isAuth() && (isAdmin() || getPerms().dp.schedules.create == true)
         && request.resource.data.keys().hasAll(['name', 'month', 'year'])
+        && !request.resource.data.keys().hasAny(['coverageDemands'])
         && request.resource.data.name is string
         && request.resource.data.month is int
         && request.resource.data.year is int;
       allow update: if isAuth() && (isAdmin() || getPerms().dp.schedules.edit == true)
-        && request.resource.data.name is string;
+        && request.resource.data.name is string
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coverageDemands']);
       allow delete: if isAuth() && (isAdmin() || getPerms().dp.schedules.delete == true);
 
       // Turnos (subcoleção)
