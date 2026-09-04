@@ -938,12 +938,12 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                   </div>
                                 </div>
 
-                                {/* Gestão do colaborador */}
+                                {/* Perfil do colaborador */}
                                 <div className="pl-4 border-l-2 ml-2 space-y-2">
-                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><UserCircle className="h-4 w-4" /> Gestão do colaborador</h4>
-                                  {renderPermissionSwitch("permissions.dp.collaborators.view" as any, "Visualizar Gestão do colaborador", "Permite abrir a área de Gestão do colaborador.", !dpViewWatch)}
+                                  <h4 className="font-semibold text-md mb-2 flex items-center gap-1.5"><UserCircle className="h-4 w-4" /> Perfil do colaborador</h4>
+                                  {renderPermissionSwitch("permissions.dp.collaborators.view" as any, "Acessar perfil do colaborador", "Exibe o item Perfil do colaborador e permite consultar os perfis autorizados.", false)}
                                   <div className="pl-6 space-y-2">
-                                    {renderPermissionSwitch("permissions.dp.collaborators.ownProfileOnly" as any, "Visualização somente do titular", "Quando ativo, o usuário acessa apenas o próprio perfil na Gestão do colaborador. Não vê diretório, cards ou perfis de outras pessoas.", !dpCollaboratorsViewWatch, true)}
+                                    {renderPermissionSwitch("permissions.dp.collaborators.ownProfileOnly" as any, "Restringir ao próprio perfil", "Quando ativo, o usuário acessa somente o próprio perfil. Não vê o diretório nem os perfis de outras pessoas.", !dpCollaboratorsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.collaborators.add" as any, "Adicionar Colaboradores", "Permite cadastrar novos colaboradores.", !dpCollaboratorsViewWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.collaborators.edit" as any, "Editar Colaboradores", "Permite editar dados de colaboradores existentes.", !dpCollaboratorsViewWatch || dpCollaboratorsOwnOnlyWatch, true)}
                                     {renderPermissionSwitch("permissions.dp.collaborators.syncProfile" as any, "Sincronizar Perfil RH", "Permite atualizar manualmente o perfil complementar do colaborador a partir dos dados-base do DP.", !dpCollaboratorsViewWatch || dpCollaboratorsOwnOnlyWatch, true)}
