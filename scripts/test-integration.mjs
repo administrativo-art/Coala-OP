@@ -78,7 +78,7 @@ const child = spawn(
     "firebase.test.json",
     "--only",
     "firestore",
-    "node --conditions=react-server --import tsx --test tests/integration/cash-closure-repository.test.mjs tests/integration/dp-day-off-publication.test.mjs",
+    "node --conditions=react-server --import tsx --test tests/integration/cash-closure-repository.test.mjs tests/integration/dp-day-off-publication.test.mjs tests/integration/pdv-sales-reconciliation.test.mjs",
   ],
   { env, shell: process.platform === "win32", stdio: "inherit" },
 );
