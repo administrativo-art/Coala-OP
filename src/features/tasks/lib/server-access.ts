@@ -69,6 +69,46 @@ function taskWatcherIds(task: Task & Record<string, unknown>) {
   };
 }
 
+function taskVisibilityScope(task: Task & Record<string, unknown>) {
+  const scope = task.visibilityScope ?? task.visibility_scope;
+  return scope === "assignee" || scope === "assignee_and_watchers"
+    ? scope
+    : null;
+}
+
+function isTaskCreator(
+  context: Pick<ServerUserContext, "userDoc">,
+  task: Task & Record<string, unknown>,
+) {
+  const createdByUserId = String(task.createdByUserId ?? task.created_by_user_id ?? "");
+  return createdByUserId === context.userDoc.id;
+}
+
+function isTaskWatcher(
+  context: Pick<ServerUserContext, "userDoc" | "profileId">,
+  task: Task & Record<string, unknown>,
+) {
+  const watchers = taskWatcherIds(task);
+  if (watchers.users.includes(context.userDoc.id)) return true;
+  if (context.profileId && watchers.profiles.includes(context.profileId)) return true;
+  return watchers.roles.some((roleId) => getUserRoleIds(context).includes(roleId));
+}
+
+function canViewRestrictedTask(context: ServerUserContext, task: Task & Record<string, unknown>) {
+  const scope = taskVisibilityScope(task);
+  if (!scope) return null;
+  if (isTaskAssignedToContext(context, task) || isTaskApprovalTurnForContext(context, task)) return true;
+  if (scope === "assignee_and_watchers" && (isTaskCreator(context, task) || isTaskWatcher(context, task))) {
+    return true;
+  }
+  return false;
+}
+
+function canActOnRestrictedTask(context: ServerUserContext, task: Task & Record<string, unknown>) {
+  if (!taskVisibilityScope(task)) return null;
+  return isTaskAssignedToContext(context, task) || isTaskApprovalTurnForContext(context, task);
+}
+
 function getLegacyOriginType(task: Task & Record<string, unknown>) {
   const origin = task.origin;
   if (origin && typeof origin === "object" && "kind" in origin && origin.kind === "legacy") {
@@ -188,19 +228,19 @@ export function canViewTask(context: ServerUserContext, task: Task & Record<stri
     return context.isDefaultAdmin || context.permissions.tasks.manage || isStockCountOwner(context, task);
   }
   if (hasIntegratedTaskAccess(context, task)) return true;
-  if (context.isDefaultAdmin || context.permissions.tasks.manage) return true;
-  if (!context.permissions.tasks.view) return false;
+  if (context.isDefaultAdmin) return true;
+  if (!context.permissions.tasks.view && !context.permissions.tasks.manage) return false;
+
+  const restrictedAccess = canViewRestrictedTask(context, task);
+  if (restrictedAccess !== null) return restrictedAccess;
+
+  if (context.permissions.tasks.manage) return true;
 
   if (isTaskAssignedToContext(context, task)) return true;
   if (isTaskApprovalTurnForContext(context, task)) return true;
 
-  const createdByUserId = String(task.createdByUserId ?? task.created_by_user_id ?? "");
-  if (createdByUserId && createdByUserId === context.userDoc.id) return true;
-
-  const watchers = taskWatcherIds(task);
-  if (watchers.users.includes(context.userDoc.id)) return true;
-  if (context.profileId && watchers.profiles.includes(context.profileId)) return true;
-  if (watchers.roles.some((roleId) => getUserRoleIds(context).includes(roleId))) return true;
+  if (isTaskCreator(context, task)) return true;
+  if (isTaskWatcher(context, task)) return true;
 
   if (relatedUnitIds.length > 0) return true;
 
@@ -228,8 +268,13 @@ export function canActOnTask(context: ServerUserContext, task: Task & Record<str
     return isStockCountOwner(context, task);
   }
   if (hasIntegratedTaskAccess(context, task)) return true;
-  if (context.isDefaultAdmin || context.permissions.tasks.manage) return true;
-  if (!context.permissions.tasks.view) return false;
+  if (context.isDefaultAdmin) return true;
+  if (!context.permissions.tasks.view && !context.permissions.tasks.manage) return false;
+
+  const restrictedAccess = canActOnRestrictedTask(context, task);
+  if (restrictedAccess === false) return false;
+
+  if (context.permissions.tasks.manage) return true;
   if (isTaskApprovalTurnForContext(context, task)) return true;
   if (task.status === "pending" || task.status === "reopened" || task.status === "in_progress") {
     return isTaskAssignedToContext(context, task);
