@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/inter-tight";
 import "./globals.css";
 import { brand } from "@/config/brand";
 import { AppProviders } from "@/components/app-providers";

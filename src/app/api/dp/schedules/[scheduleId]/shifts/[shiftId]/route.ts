@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { saveWorkShiftSchema, workShiftRouteSchema } from '@/features/dp/shifts/schemas';
+import { applyWorkShiftBulkChange } from '@/features/dp/shifts/bulk-service.server';
 import { saveWorkShift } from '@/features/dp/shifts/service.server';
 import { requireUser } from '@/lib/auth-server';
 import { AppError, withApiErrorHandling } from '@/lib/observability';
@@ -57,3 +58,27 @@ export const PATCH = withApiErrorHandling<RouteContext>({
   operation: 'update-work-shift',
   routeOrJob: ROUTE,
 }, async (request, contextArg, observation) => handleSave(request, contextArg, 'update', observation.requestId));
+
+export const DELETE = withApiErrorHandling<RouteContext>({
+  source: 'api-dp',
+  operation: 'delete-work-shift',
+  routeOrJob: ROUTE,
+}, async (request, contextArg, observation) => {
+  const context = await requireUser(request).catch((cause) => {
+    throw new AppError({ code: 'AUTHENTICATION_REQUIRED', kind: 'AUTHENTICATION', cause });
+  });
+  const parsedRoute = workShiftRouteSchema.safeParse(await contextArg.params);
+  if (!parsedRoute.success) {
+    throw new AppError({ code: 'DP_SHIFT_ROUTE_INVALID', kind: 'VALIDATION' });
+  }
+
+  const result = await applyWorkShiftBulkChange({
+    context,
+    scheduleId: parsedRoute.data.scheduleId,
+    input: { action: 'delete', shiftIds: [parsedRoute.data.shiftId] },
+    requestId: observation.requestId,
+  });
+  return NextResponse.json(result, {
+    headers: { 'Cache-Control': 'private, no-store' },
+  });
+});
