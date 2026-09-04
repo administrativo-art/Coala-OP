@@ -38,9 +38,7 @@ export function useDPScheduleFilledDays(schedules: DPSchedule[]) {
           [scheduleId]: filledDays,
         }));
       },
-      (error) => {
-        console.error(`[useDPScheduleFilledDays] Falha ao carregar ${scheduleId}.`, error);
-      },
+      () => undefined,
     )).reduce<() => void>((unsubscribeAll, unsubscribe) => () => {
       unsubscribeAll();
       unsubscribe();
