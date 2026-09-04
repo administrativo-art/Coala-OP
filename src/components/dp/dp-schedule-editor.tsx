@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format, getDaysInMonth, isToday, parseISO, parse } from 'date-fns';
+import { format, getDaysInMonth, isToday, parseISO, parse, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
@@ -703,6 +703,29 @@ function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user, vacationC
       )}
       <span className={`shrink-0 text-[9.5px] font-bold ${countColor}`}>{consecutiveDayCount}</span>
       <span className="max-w-24 shrink truncate rounded bg-muted px-1 text-[8.5px] text-muted-foreground/70">{unitName}</span>
+    </div>
+  );
+}
+
+// ─── Last Sunday Badge ────────────────────────────────────────────────────────
+
+function LastSundayBadge({ user, dateLabel }: {
+  user: { username: string; avatarUrl?: string; color?: string };
+  dateLabel: string;
+}) {
+  const color = user.color ?? getUserColor(user.username);
+  return (
+    <div
+      className="inline-flex h-6 w-fit max-w-full min-w-0 items-center gap-1 rounded-[7px] border border-dashed border-muted-foreground/25 bg-muted/20 px-1.5 py-0 self-start justify-self-start"
+      title={`${user.username} — trabalhou no domingo anterior (${dateLabel})`}
+    >
+      <Avatar className="h-3.5 w-3.5 shrink-0">
+        <AvatarImage src={user.avatarUrl} />
+        <AvatarFallback style={{ background: color, fontSize: 6 }} className="text-white">
+          {initials(user.username)}
+        </AvatarFallback>
+      </Avatar>
+      <span className="max-w-24 truncate text-[9.5px] font-semibold text-muted-foreground">{user.username}</span>
     </div>
   );
 }
@@ -1641,6 +1664,21 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
     [isPerUnit, prevSiblingWorkShifts, prevWorkShifts, siblingWorkShifts, workShifts]
   );
   const consecutiveCountMap = streakState.countByShiftId;
+
+  // lastSundayShiftsByDate[date] = work shifts of THIS unit on that date.
+  // Combines the current schedule with the previous month's own-unit shifts
+  // (already loaded for streak carry-over) so the first Sunday of the month
+  // can still look back across the month boundary.
+  const lastSundayShiftsByDate = useMemo(() => {
+    if (!isPerUnit) return {} as Record<string, DPShift[]>;
+    const idx: Record<string, DPShift[]> = {};
+    for (const s of [...workShifts, ...prevWorkShifts]) {
+      if (!idx[s.date]) idx[s.date] = [];
+      idx[s.date].push(s);
+    }
+    Object.values(idx).forEach((items) => items.sort(compareWorkShiftsByTime));
+    return idx;
+  }, [isPerUnit, workShifts, prevWorkShifts]);
 
   // ghostIndex[date][userId] = { shift, unitName, consecutiveDayCount }[]
   // Shows users from sibling units who are also linked to the current unit.
@@ -2653,6 +2691,25 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                             />
                           );
                         });
+                      const priorSundayDate = isSunday
+                        ? format(subDays(parse(date, 'yyyy-MM-dd', new Date()), 7), 'yyyy-MM-dd')
+                        : null;
+                      const priorSundayDateLabel = priorSundayDate
+                        ? format(parse(priorSundayDate, 'yyyy-MM-dd', new Date()), 'dd/MM')
+                        : '';
+                      const lastSundayTags = priorSundayDate
+                        ? (lastSundayShiftsByDate[priorSundayDate] ?? []).map((shift) => {
+                          const user = effectiveUserMap.get(shift.userId);
+                          if (!user) return null;
+                          return (
+                            <LastSundayBadge
+                              key={`last-sunday-${shift.id}`}
+                              user={user}
+                              dateLabel={priorSundayDateLabel}
+                            />
+                          );
+                        })
+                        : [];
                       const dayOffCards = dayOffEntries.map(({ userId, explicit, shift, sourceUnitId, sourceUnitName }) => {
                         const user = effectiveUserMap.get(userId);
                         if (!user) return null;
@@ -2723,10 +2780,20 @@ export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviou
                                 {workCards}
                                 {addShiftButton}
                               </div>
-                              {ghostTags.some(Boolean) && (
-                                <div className="mt-1.5 flex items-start gap-1.5 border-t border-dashed border-[#e3e9f1] pt-1.5">
-                                  <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-[#a3aec0]">Em outras unidades</span>
-                                  <div className="flex min-w-0 flex-wrap gap-1">{ghostTags}</div>
+                              {(ghostTags.some(Boolean) || lastSundayTags.some(Boolean)) && (
+                                <div className="mt-1.5 flex flex-col gap-1 border-t border-dashed border-[#e3e9f1] pt-1.5">
+                                  {ghostTags.some(Boolean) && (
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-[#a3aec0]">Em outras unidades</span>
+                                      <div className="flex min-w-0 flex-wrap gap-1">{ghostTags}</div>
+                                    </div>
+                                  )}
+                                  {lastSundayTags.some(Boolean) && (
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-[#a3aec0]">Domingo passado</span>
+                                      <div className="flex min-w-0 flex-wrap gap-1">{lastSundayTags}</div>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                               </div>
