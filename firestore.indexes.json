@@ -424,6 +424,28 @@
       ]
     },
     {
+      "collectionGroup": "goalPeriods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "kioskId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "templateType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startDate",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "shifts",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

@@ -105,7 +105,11 @@ test('mantém o catálogo e a allowlist mínimos das credenciais do PDV Legal', 
     'PDVLEGAL_USERNAME',
     'PDVLEGAL_PASSWORD',
   ]);
-  assert.deepEqual(PDVLEGAL_SECRET_CONSUMERS, ['hourlyPdvSync', 'syncGoalsForRange']);
+  assert.deepEqual(PDVLEGAL_SECRET_CONSUMERS, [
+    'hourlyPdvSync',
+    'reconcilePdvSalesHistory',
+    'syncGoalsForRange',
+  ]);
   assert.equal(new Set(PDVLEGAL_SECRET_NAMES).size, PDVLEGAL_SECRET_NAMES.length);
   assert.equal(new Set(PDVLEGAL_SECRET_CONSUMERS).size, PDVLEGAL_SECRET_CONSUMERS.length);
 });
