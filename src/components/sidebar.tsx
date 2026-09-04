@@ -16,7 +16,7 @@ import {
   ReceiptText, Landmark, ListChecks, Settings, HelpCircle,
   DollarSign, ShoppingCart, Network, Users, PackageCheck,
   ClipboardCheck, ListOrdered, Truck, BarChart3, ShieldAlert, Repeat, Shirt,
-  Files, Building2, FileStack, Banknote
+  Files, Building2, FileStack, Banknote, UserCircle
 } from "lucide-react";
 import { FileText } from "@phosphor-icons/react";
 
@@ -178,12 +178,24 @@ export function GlassSidebar({ open, onOpenChange }: SidebarProps) {
           },
           {
             label: "Gestão do colaborador",
-            href: permissions.dp?.collaborators?.ownProfileOnly === true && user?.id
-              ? `/dashboard/dp/collaborators/${user.id}`
-              : "/dashboard/dp/collaborators",
+            href: "__group:collaborator-management",
             icon: Users,
-            show: permissions.dp?.collaborators?.view,
+            show:
+              permissions.dp?.collaborators?.view ||
+              hasFormalizationPermission(permissions, "view") ||
+              permissions.dp?.schedules?.view ||
+              permissions.dp?.vacation?.viewAll ||
+              permissions.stock.uniforms?.view ||
+              permissions.dp?.view,
             children: [
+              {
+                label: "Perfil do colaborador",
+                href: permissions.dp?.collaborators?.ownProfileOnly === true && user?.id
+                  ? `/dashboard/dp/collaborators/${user.id}`
+                  : "/dashboard/dp/collaborators",
+                icon: UserCircle,
+                show: permissions.dp?.collaborators?.view,
+              },
               { label: "Integração", href: "/dashboard/hr/recruitment/integration", icon: ClipboardCheck, show: hasFormalizationPermission(permissions, "view") },
               { label: "Escala", href: "/dashboard/dp/schedules", icon: CalendarDays, show: permissions.dp?.schedules?.view },
               { label: "Férias", href: "/dashboard/dp/ferias", icon: Umbrella, show: permissions.dp?.vacation?.viewAll },

@@ -569,7 +569,7 @@ async function createHrTask(context: ServerUserContext, process: CltTerminationP
       originLink: `/dashboard/dp/terminations/${process.id}`,
       origin: { kind: "manual", details: { processType: "termination", processId: process.id } },
       idempotencyKey: `termination-${process.id}-${suffix}`,
-      visibilityScope: "project",
+      visibilityScope: "assignee_and_watchers",
     },
   });
 }
