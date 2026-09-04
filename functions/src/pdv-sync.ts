@@ -1,4 +1,10 @@
+import { createHash } from 'node:crypto';
 import { convertValue } from './conversion.js';
+import {
+  decidePdvSnapshot,
+  type PendingDecrease,
+  type PdvSnapshotMetrics,
+} from './pdv-reconciliation-policy.js';
 
 function getEnv(name: string): string {
   const val = process.env[name];
@@ -7,6 +13,35 @@ function getEnv(name: string): string {
 }
 
 const BASE_URL = 'https://api.tabletcloud.com.br';
+const CATALOG_LIMITS = {
+  simulations: 500,
+  simulationItems: 3000,
+  baseProducts: 500,
+} as const;
+const GOAL_QUERY_LIMITS = {
+  periodsPerKiosk: 4,
+  usersPerKiosk: 100,
+  employeeGoalsPerPeriod: 200,
+  schedulesPerMonth: 20,
+  shiftsPerScheduleChunk: 1000,
+} as const;
+
+type CatalogSimulation = { id: string; name?: string; ppo?: { sku?: unknown } } & Record<string, any>;
+type CatalogSimulationItem = { id: string; simulationId?: string; baseProductId?: string } & Record<string, any>;
+type CatalogBaseProduct = { id: string; name?: string; unit?: string; category?: string } & Record<string, any>;
+
+export type PdvSyncCatalog = {
+  simulationBySku: Map<string, CatalogSimulation>;
+  simulationItemsBySimulation: Map<string, CatalogSimulationItem[]>;
+  baseProductById: Map<string, CatalogBaseProduct>;
+};
+
+export type PdvSyncOptions = {
+  accessToken?: string;
+  catalog?: PdvSyncCatalog;
+  mode?: 'live' | 'reconciliation' | 'manual';
+  runId?: string;
+};
 
 /**
  * Erro estruturado para qualquer falha de comunicação ou formato inesperado
@@ -175,12 +210,409 @@ function emptyDiagnostics(): SyncDiagnostics {
   };
 }
 
-export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId: string, db: FirebaseFirestore.Firestore) {
-  const token = await getAccessToken();
+function assertCatalogQueryWithinLimit(
+  label: string,
+  size: number,
+  limit: number,
+): void {
+  if (size >= limit) {
+    throw new PdvApiError(
+      `Catálogo ${label} atingiu o limite seguro de ${limit} documentos.`,
+      'CATALOG_LIMIT_REACHED',
+    );
+  }
+}
+
+export async function loadPdvSyncCatalog(
+  db: FirebaseFirestore.Firestore,
+): Promise<PdvSyncCatalog> {
+  const [simulationsSnap, simulationItemsSnap, baseProductsSnap] = await Promise.all([
+    db.collection('productSimulations').limit(CATALOG_LIMITS.simulations).get(),
+    db.collection('productSimulationItems').limit(CATALOG_LIMITS.simulationItems).get(),
+    db.collection('baseProducts').limit(CATALOG_LIMITS.baseProducts).get(),
+  ]);
+
+  assertCatalogQueryWithinLimit('de produtos', simulationsSnap.size, CATALOG_LIMITS.simulations);
+  assertCatalogQueryWithinLimit('de fichas técnicas', simulationItemsSnap.size, CATALOG_LIMITS.simulationItems);
+  assertCatalogQueryWithinLimit('de insumos', baseProductsSnap.size, CATALOG_LIMITS.baseProducts);
+
+  const simulationBySku = new Map<string, CatalogSimulation>();
+  for (const doc of simulationsSnap.docs) {
+    const simulation = { id: doc.id, ...doc.data() } as CatalogSimulation;
+    const sku = simulation.ppo?.sku?.toString().trim();
+    if (sku) simulationBySku.set(sku, simulation);
+  }
+
+  const simulationItemsBySimulation = new Map<string, CatalogSimulationItem[]>();
+  for (const doc of simulationItemsSnap.docs) {
+    const item = { id: doc.id, ...doc.data() } as CatalogSimulationItem;
+    if (!item.simulationId) continue;
+    const entries = simulationItemsBySimulation.get(item.simulationId) ?? [];
+    entries.push(item);
+    simulationItemsBySimulation.set(item.simulationId, entries);
+  }
+
+  const baseProductById = new Map<string, CatalogBaseProduct>();
+  for (const doc of baseProductsSnap.docs) {
+    baseProductById.set(doc.id, { id: doc.id, ...doc.data() } as CatalogBaseProduct);
+  }
+
+  return { simulationBySku, simulationItemsBySimulation, baseProductById };
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function cents(value: unknown): number {
+  const numberValue = Number(value ?? 0);
+  return Number.isFinite(numberValue) ? Math.round(numberValue * 100) : 0;
+}
+
+function metricFromExistingReport(data: FirebaseFirestore.DocumentData | undefined): PdvSnapshotMetrics | null {
+  if (!data) return null;
+  const items = Array.isArray(data.items) ? data.items : [];
+  const couponCount = Object.values(data.hourlySales ?? {})
+    .reduce((sum: number, count) => sum + Number(count ?? 0), 0);
+  const itemQuantity = items.reduce((sum: number, item: any) => sum + Number(item.quantity ?? 0), 0);
+  const revenueCents = items.reduce(
+    (sum: number, item: any) => sum + cents(Number(item.quantity ?? 0) * Number(item.unitPrice ?? 0)),
+    0,
+  );
+  return {
+    couponCount: Number(data.sourceCouponCount ?? couponCount),
+    itemQuantity: Number(data.sourceItemQuantity ?? itemQuantity),
+    revenueCents: Number(data.sourceRevenueCents ?? revenueCents),
+    fingerprint: typeof data.sourceFingerprint === 'string'
+      ? data.sourceFingerprint
+      : `legacy:${couponCount}:${itemQuantity}:${revenueCents}`,
+  };
+}
+
+type PersistablePdvSnapshot = {
+  reportId: string;
+  report: FirebaseFirestore.DocumentData;
+  consumptionReport: FirebaseFirestore.DocumentData;
+  metrics: PdvSnapshotMetrics;
+  dailyRevenue: number;
+  revenueByOperator: Record<string, number>;
+};
+
+type EmployeeGoalEntry = {
+  ref: FirebaseFirestore.DocumentReference;
+  data: Record<string, any>;
+};
+
+function pendingDecreaseFromState(data: FirebaseFirestore.DocumentData | undefined): PendingDecrease | null {
+  const pending = data?.pendingDecrease;
+  if (!pending || typeof pending.fingerprint !== 'string') return null;
+  const confirmations = Number(pending.confirmations);
+  if (!Number.isInteger(confirmations) || confirmations < 1) return null;
+  return { fingerprint: pending.fingerprint, confirmations };
+}
+
+function dateFallsWithinPeriod(dateStr: string, period: FirebaseFirestore.DocumentData): boolean {
+  const date = new Date(`${dateStr}T12:00:00Z`);
+  const start = period.startDate?.toDate?.() ?? new Date(0);
+  const end = period.endDate?.toDate?.() ?? new Date(8640000000000000);
+  return date >= start && date <= end;
+}
+
+async function persistPdvSnapshot(
+  dateStr: string,
+  kioskId: string,
+  snapshot: PersistablePdvSnapshot,
+  db: FirebaseFirestore.Firestore,
+  options: PdvSyncOptions,
+): Promise<'applied' | 'unchanged' | 'held'> {
+  const reportRef = db.collection('salesReports').doc(`sales_${snapshot.reportId}`);
+  const consumptionRef = db.collection('consumptionReports').doc(`cons_${snapshot.reportId}`);
+  const stateRef = db.collection('pdvSyncReconciliationStates').doc(`${kioskId}_${dateStr}`);
+  const syncDate = new Date(`${dateStr}T12:00:00Z`);
+  const [year, month] = dateStr.split('-').map(Number);
+
+  return db.runTransaction(async (transaction) => {
+    const periodsQuery = db.collection('goalPeriods')
+      .where('kioskId', '==', kioskId)
+      .where('templateType', '==', 'revenue')
+      .where('startDate', '<=', syncDate)
+      .orderBy('startDate', 'desc')
+      .limit(GOAL_QUERY_LIMITS.periodsPerKiosk);
+    const usersQuery = db.collection('users')
+      .where('assignedKioskIds', 'array-contains', kioskId)
+      .limit(GOAL_QUERY_LIMITS.usersPerKiosk);
+    const schedulesQuery = db.collection('dp_schedules')
+      .where('year', '==', year)
+      .where('month', '==', month)
+      .limit(GOAL_QUERY_LIMITS.schedulesPerMonth);
+
+    const [existingReport, stateDoc] = await Promise.all([
+      transaction.get(reportRef),
+      transaction.get(stateRef),
+    ]);
+
+    const existingMetrics = metricFromExistingReport(existingReport.data());
+    const pendingDecrease = pendingDecreaseFromState(stateDoc.data());
+    const decision = decidePdvSnapshot({ existing: existingMetrics, incoming: snapshot.metrics, pendingDecrease });
+    const now = new Date();
+
+    if (decision.action === 'hold') {
+      transaction.set(stateRef, {
+        kioskId,
+        date: dateStr,
+        status: 'attention_required',
+        reason: decision.reason,
+        existingMetrics,
+        pendingDecrease: {
+          ...snapshot.metrics,
+          confirmations: decision.confirmations,
+          firstObservedAt: pendingDecrease?.fingerprint === snapshot.metrics.fingerprint
+            ? stateDoc.data()?.pendingDecrease?.firstObservedAt ?? now
+            : now,
+          lastObservedAt: now,
+        },
+        updatedAt: now,
+        runId: options.runId ?? null,
+      }, { merge: true });
+      return 'held';
+    }
+
+    if (decision.action === 'unchanged') {
+      if (decision.clearPending) {
+        transaction.set(stateRef, {
+          status: 'verified',
+          reason: null,
+          pendingDecrease: null,
+          updatedAt: now,
+          runId: options.runId ?? null,
+        }, { merge: true });
+      }
+      return 'unchanged';
+    }
+
+    const periodsSnap = await transaction.get(periodsQuery);
+    const periods = periodsSnap.docs.filter((doc) => {
+      const period = doc.data();
+      return period.status !== 'cancelled'
+        && dateFallsWithinPeriod(dateStr, period);
+    });
+
+    const employeeGoalSnaps = await Promise.all(periods.map((periodDoc) => transaction.get(
+      db.collection('employeeGoals')
+        .where('periodId', '==', periodDoc.id)
+        .limit(GOAL_QUERY_LIMITS.employeeGoalsPerPeriod),
+    )));
+    for (const goalsSnap of employeeGoalSnaps) {
+      assertCatalogQueryWithinLimit('de metas individuais', goalsSnap.size, GOAL_QUERY_LIMITS.employeeGoalsPerPeriod);
+    }
+
+    const usersSnap = periods.length > 0
+      ? await transaction.get(usersQuery)
+      : null;
+    if (usersSnap) {
+      assertCatalogQueryWithinLimit('de usuários da unidade', usersSnap.size, GOAL_QUERY_LIMITS.usersPerKiosk);
+    }
+    const operatorIdToUserId: Record<string, string> = {};
+    for (const userDoc of usersSnap?.docs ?? []) {
+      const operatorId = userDoc.data().pdvOperatorIds?.[kioskId];
+      if (operatorId != null) operatorIdToUserId[String(operatorId)] = userDoc.id;
+    }
+    const revenueByEmployeeId: Record<string, number> = {};
+    for (const [operatorId, userId] of Object.entries(operatorIdToUserId)) {
+      revenueByEmployeeId[userId] = snapshot.revenueByOperator[operatorId] ?? 0;
+    }
+
+    const goalsByPeriod = new Map<string, Map<string, EmployeeGoalEntry[]>>();
+    const multiShiftEmployeeIds = new Set<string>();
+    employeeGoalSnaps.forEach((goalsSnap, index) => {
+      const byEmployee = new Map<string, EmployeeGoalEntry[]>();
+      for (const goalDoc of goalsSnap.docs) {
+        const goal = goalDoc.data() as Record<string, any>;
+        if (!Object.prototype.hasOwnProperty.call(revenueByEmployeeId, goal.employeeId)) continue;
+        const entries = byEmployee.get(goal.employeeId) ?? [];
+        entries.push({ ref: goalDoc.ref, data: goal });
+        byEmployee.set(goal.employeeId, entries);
+      }
+      for (const [employeeId, entries] of byEmployee) {
+        if (entries.length > 1 && entries.some(entry => entry.data.shiftId)) {
+          multiShiftEmployeeIds.add(employeeId);
+        }
+      }
+      goalsByPeriod.set(periods[index].id, byEmployee);
+    });
+
+    const workedTimesByEmployee = new Map<string, string>();
+    const employeeIds = [...multiShiftEmployeeIds];
+    const schedulesSnap = employeeIds.length > 0
+      ? await transaction.get(schedulesQuery)
+      : null;
+    if (schedulesSnap) {
+      assertCatalogQueryWithinLimit('de escalas mensais', schedulesSnap.size, GOAL_QUERY_LIMITS.schedulesPerMonth);
+    }
+    for (const scheduleDoc of schedulesSnap?.docs ?? []) {
+      for (let index = 0; index < employeeIds.length; index += 30) {
+        const chunk = employeeIds.slice(index, index + 30);
+        if (chunk.length === 0) continue;
+        const shiftsSnap = await transaction.get(
+          scheduleDoc.ref.collection('shifts')
+            .where('userId', 'in', chunk)
+            .where('date', '==', dateStr)
+            .limit(GOAL_QUERY_LIMITS.shiftsPerScheduleChunk),
+        );
+        assertCatalogQueryWithinLimit('de turnos da escala', shiftsSnap.size, GOAL_QUERY_LIMITS.shiftsPerScheduleChunk);
+        for (const shiftDoc of shiftsSnap.docs) {
+          const shift = shiftDoc.data();
+          if (shift.type !== 'work' || !shift.startTime || !shift.endTime || !shift.userId) continue;
+          workedTimesByEmployee.set(shift.userId, `${shift.startTime}-${shift.endTime}`);
+        }
+      }
+    }
+
+    const existingCreatedAt = existingReport.data()?.createdAt;
+    transaction.set(reportRef, {
+      ...snapshot.report,
+      createdAt: existingCreatedAt ?? now.toISOString(),
+      updatedAt: now.toISOString(),
+      sourceCouponCount: snapshot.metrics.couponCount,
+      sourceItemQuantity: snapshot.metrics.itemQuantity,
+      sourceRevenueCents: snapshot.metrics.revenueCents,
+      sourceFingerprint: snapshot.metrics.fingerprint,
+      reconciliationStatus: 'verified',
+      reconciledAt: now,
+      syncMode: options.mode ?? 'live',
+      syncRunId: options.runId ?? null,
+    });
+    transaction.set(consumptionRef, {
+      ...snapshot.consumptionReport,
+      createdAt: existingCreatedAt ?? now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+    transaction.set(stateRef, {
+      kioskId,
+      date: dateStr,
+      status: 'verified',
+      reason: decision.reason,
+      appliedMetrics: snapshot.metrics,
+      pendingDecrease: null,
+      lastAppliedAt: now,
+      updatedAt: now,
+      runId: options.runId ?? null,
+    });
+
+    periods.forEach((periodDoc, periodIndex) => {
+      const period = periodDoc.data();
+      const progress = { ...(period.dailyProgress ?? {}), [dateStr]: snapshot.dailyRevenue };
+      const currentValue = Object.values(progress)
+        .reduce((sum: number, value) => sum + Number(value ?? 0), 0);
+      transaction.update(periodDoc.ref, { dailyProgress: progress, currentValue, updatedAt: now });
+
+      const shiftIdByTime = new Map<string, string>();
+      for (const shift of Array.isArray(period.shifts) ? period.shifts : []) {
+        const times = extractShiftTimes(shift.label ?? '');
+        if (times) shiftIdByTime.set(`${times.start}-${times.end}`, shift.id);
+      }
+
+      const byEmployee = goalsByPeriod.get(periods[periodIndex].id)
+        ?? new Map<string, EmployeeGoalEntry[]>();
+      for (const [employeeId, goals] of byEmployee) {
+        const employeeRevenue = revenueByEmployeeId[employeeId] ?? 0;
+        const workedShiftId = shiftIdByTime.get(workedTimesByEmployee.get(employeeId) ?? '') ?? null;
+        const hasMultipleShifts = goals.length > 1 && goals.some(goal => goal.data.shiftId);
+        const totalTarget = goals.reduce((sum, goal) => sum + Number(goal.data.targetValue ?? 0), 0);
+
+        for (const goal of goals) {
+          let revenueForGoal = employeeRevenue;
+          if (hasMultipleShifts && goal.data.shiftId && workedShiftId !== null) {
+            revenueForGoal = goal.data.shiftId === workedShiftId ? employeeRevenue : 0;
+          } else if (hasMultipleShifts) {
+            const target = Number(goal.data.targetValue ?? 0);
+            revenueForGoal = employeeRevenue * (totalTarget > 0 ? target / totalTarget : 1 / goals.length);
+          }
+
+          const previousValue = Number(goal.data.dailyProgress?.[dateStr] ?? 0);
+          if (previousValue === revenueForGoal) continue;
+          transaction.update(goal.ref, {
+            dailyProgress: { ...(goal.data.dailyProgress ?? {}), [dateStr]: revenueForGoal },
+            currentValue: Number(goal.data.currentValue ?? 0) - previousValue + revenueForGoal,
+            updatedAt: now,
+          });
+        }
+      }
+    });
+
+    return 'applied';
+  });
+}
+
+async function recordEmptyPdvResponse(
+  dateStr: string,
+  kioskId: string,
+  db: FirebaseFirestore.Firestore,
+  options: PdvSyncOptions,
+): Promise<'empty' | 'held'> {
+  const reportId = `sync_${kioskId}_${dateStr.replace(/-/g, '_')}`;
+  const reportRef = db.collection('salesReports').doc(`sales_${reportId}`);
+  const stateRef = db.collection('pdvSyncReconciliationStates').doc(`${kioskId}_${dateStr}`);
+
+  return db.runTransaction(async (transaction) => {
+    const [existingReport, existingState] = await Promise.all([
+      transaction.get(reportRef),
+      transaction.get(stateRef),
+    ]);
+    const existingMetrics = metricFromExistingReport(existingReport.data());
+    if (!existingMetrics) return 'empty';
+
+    const now = new Date();
+    const priorPending = existingState.data()?.pendingDecrease;
+    transaction.set(stateRef, {
+      kioskId,
+      date: dateStr,
+      status: 'attention_required',
+      reason: 'empty_after_data',
+      existingMetrics,
+      pendingDecrease: {
+        couponCount: 0,
+        itemQuantity: 0,
+        revenueCents: 0,
+        fingerprint: 'empty-response',
+        confirmations: 0,
+        firstObservedAt: priorPending?.fingerprint === 'empty-response'
+          ? priorPending.firstObservedAt ?? now
+          : now,
+        lastObservedAt: now,
+      },
+      updatedAt: now,
+      runId: options.runId ?? null,
+    }, { merge: true });
+    return 'held';
+  });
+}
+
+export async function syncDayAdmin(
+  dateStr: string,
+  kioskId: string,
+  pdvFilialId: string,
+  db: FirebaseFirestore.Firestore,
+  options: PdvSyncOptions = {},
+) {
+  const token = options.accessToken ?? await getAccessToken();
   const coupons = await fetchAllCouponsForDay(token, dateStr, pdvFilialId);
   if (!coupons || coupons.length === 0) {
-    console.log(`[PDV Sync] ${dateStr} ${kioskId}: sem cupons, pulando.`);
-    return { success: true, count: 0, dailyRevenue: 0, diagnostics: emptyDiagnostics(), warnings: [] as string[] };
+    const persistence = await recordEmptyPdvResponse(dateStr, kioskId, db, options);
+    console.log(`[PDV Sync] ${dateStr} ${kioskId}: sem cupons; persistência ${persistence}.`);
+    return {
+      success: true,
+      count: 0,
+      dailyRevenue: 0,
+      diagnostics: emptyDiagnostics(),
+      warnings: [] as string[],
+      persistence,
+    };
   }
 
   // Log estrutura do primeiro cupom e primeiro item para diagnóstico
@@ -192,23 +624,17 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
     console.log(`[PDV Sync] ${dateStr} item[0] sample:`, JSON.stringify(firstItems[0]).slice(0, 300));
   }
 
-  const simsSnap = await db.collection('productSimulations').get();
-  const simulations = simsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-
-  // Fichas técnicas (insumos por simulação) + insumos base — para o consumo teórico
-  const simItemsSnap = await db.collection('productSimulationItems').get();
-  const allSimItems = simItemsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-  const bpSnap = await db.collection('baseProducts').get();
-  const baseProducts = bpSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-  const simItemsBySim: Record<string, any[]> = {};
-  for (const si of allSimItems) {
-    (simItemsBySim[si.simulationId] ??= []).push(si);
-  }
-  const baseProductById: Record<string, any> = {};
-  for (const bp of baseProducts) baseProductById[bp.id] = bp;
+  const catalog = options.catalog ?? await loadPdvSyncCatalog(db);
 
   const date = new Date(dateStr + 'T12:00:00Z');
-  const productTotals: Record<string, any> = {};
+  const productTotals: Record<string, {
+    sku: string;
+    productName: string;
+    quantity: number;
+    simulationId: string;
+    timestamp: string;
+    revenueCents: number;
+  }> = {};
   const hourlySales: Record<string, number> = {};
   const productHourlySales: Record<string, Record<string, number>> = {};
   const comboCounts: Record<string, number> = {};
@@ -216,8 +642,8 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   const consumptionByBaseProduct: Record<string, { name: string; quantity: number }> = {};
 
   // Revenue tracking for goals
-  let dailyRevenue = 0;
-  const revenueByOperator: Record<string, number> = {};
+  let dailyRevenueCents = 0;
+  const revenueCentsByOperator: Record<string, number> = {};
   // Quantity per operator per product (simulationId)
   const productQtyByOperator: Record<string, Record<string, number>> = {};
 
@@ -244,70 +670,84 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
       diag.itemsSeen++;
       if (item.iscancelado) { diag.itemsCancelled++; continue; }
       const possibleSkus = [item.codigoVenda, item.codproduto, item.codProdutoExterno, item.CodRef, item.Codigo].filter(Boolean).map(c => c.toString().trim());
-      const qty = item.quantidade || item.Quantidade || 0;
+      const qty = Number(item.quantidade || item.Quantidade || 0);
       // valortotal já é o total do item (qty × preço − desconto + acréscimo)
-      const revenue = item.valortotal || 0;
-      if (!revenue) diag.itemsZeroValue++;
+      const itemRevenueCents = cents(item.valortotal ?? item.ValorTotal);
+      if (!itemRevenueCents) diag.itemsZeroValue++;
 
       // Accumulate revenue for goals
-      dailyRevenue += revenue;
+      dailyRevenueCents += itemRevenueCents;
       // Operador preferencial: do item; fallback: do cupom
       const operatorId = item.usuariooperador_id ?? couponOperatorId;
       if (operatorId != null) {
         const opKey = String(operatorId);
-        revenueByOperator[opKey] = (revenueByOperator[opKey] || 0) + revenue;
+        revenueCentsByOperator[opKey] = (revenueCentsByOperator[opKey] || 0) + itemRevenueCents;
       }
 
-      const sim = simulations.find(s => {
-        const simSku = s.ppo?.sku?.toString().trim();
-        return simSku && possibleSkus.includes(simSku);
-      });
+      const sim = possibleSkus.map(sku => catalog.simulationBySku.get(sku)).find(Boolean);
+      const rawSku = possibleSkus[0] || 'SEM_SKU';
+      const rawName = item.Descricao || item.nomeProduto || item.descricao || 'Produto sem descrição';
       if (!sim) {
         diag.itemsUnmapped++;
-        const key = possibleSkus[0] || 'SEM_SKU';
-        if (!unmappedSkuMap[key]) {
-          unmappedSkuMap[key] = { sku: key, name: item.Descricao || item.nomeProduto || item.descricao || 'Sem descrição', count: 0 };
+        if (!unmappedSkuMap[rawSku]) {
+          unmappedSkuMap[rawSku] = { sku: rawSku, name: rawName, count: 0 };
         }
-        unmappedSkuMap[key].count++;
-        continue;
+        unmappedSkuMap[rawSku].count++;
+      } else {
+        diag.itemsMapped++;
       }
-      diag.itemsMapped++;
+
+      // Itens sem ficha também permanecem no relatório: receita não pode
+      // desaparecer só porque o cadastro de custo ainda está incompleto.
+      const simulationId = sim?.id ?? `pdv-unmapped:${rawSku}`;
+      const productName = sim?.name || rawName;
+      const sku = sim?.ppo?.sku?.toString().trim() || rawSku;
 
       // Track quantity per operator per product
       if (operatorId != null) {
         const opKey = String(operatorId);
         if (!productQtyByOperator[opKey]) productQtyByOperator[opKey] = {};
-        productQtyByOperator[opKey][sim.id] = (productQtyByOperator[opKey][sim.id] || 0) + qty;
+        productQtyByOperator[opKey][simulationId] = (productQtyByOperator[opKey][simulationId] || 0) + qty;
       }
-      const sku = sim.ppo?.sku?.toString().trim() || possibleSkus[0];
-      const existingComboItem = validMappedItemsForCombo.find(i => i.name === sim.name);
+      const existingComboItem = validMappedItemsForCombo.find(i => i.name === productName);
       if (existingComboItem) existingComboItem.qty += qty;
-      else validMappedItemsForCombo.push({ name: sim.name, qty });
+      else validMappedItemsForCombo.push({ name: productName, qty });
 
       const itTime = item.dtmovimento || coupon.dtabertura || coupon.dtrecebimento;
       const itemTimestamp = extractPdvTime(itTime || '') || `${hour}:00`;
-      if (!productTotals[sim.id]) {
-        productTotals[sim.id] = {
+      if (!productTotals[simulationId]) {
+        productTotals[simulationId] = {
           sku,
-          productName: sim.name,
+          productName,
           quantity: 0,
-          simulationId: sim.id,
+          simulationId,
           timestamp: itemTimestamp,
-          unitPrice: item.PrecoVenda || item.precoVenda || (qty > 0 ? revenue / qty : 0),
+          revenueCents: 0,
         };
       }
-      productTotals[sim.id].quantity += qty;
-      if (!productHourlySales[sim.id]) productHourlySales[sim.id] = {};
-      productHourlySales[sim.id][hour] = (productHourlySales[sim.id][hour] || 0) + qty;
+      productTotals[simulationId].quantity += qty;
+      productTotals[simulationId].revenueCents += itemRevenueCents;
+      if (!productHourlySales[simulationId]) productHourlySales[simulationId] = {};
+      productHourlySales[simulationId][hour] = (productHourlySales[simulationId][hour] || 0) + qty;
 
       // Consumo teórico de insumos base: expande a ficha técnica da simulação
-      for (const simItem of simItemsBySim[sim.id] ?? []) {
-        const bp = baseProductById[simItem.baseProductId];
-        if (!bp) continue;
+      if (!sim) continue;
+      for (const simItem of catalog.simulationItemsBySimulation.get(sim.id) ?? []) {
+        const bp = simItem.baseProductId
+          ? catalog.baseProductById.get(simItem.baseProductId)
+          : undefined;
+        if (!bp?.unit || !bp.category) continue;
         try {
-          const valuePerUnit = convertValue(simItem.quantity, simItem.overrideUnit || bp.unit, bp.unit, bp.category);
+          const valuePerUnit = convertValue(
+            simItem.quantity,
+            simItem.overrideUnit || bp.unit,
+            bp.unit,
+            bp.category,
+          );
           const consumed = qty * valuePerUnit;
-          if (!consumptionByBaseProduct[bp.id]) consumptionByBaseProduct[bp.id] = { name: bp.name, quantity: 0 };
+          if (!consumptionByBaseProduct[bp.id]) {
+            consumptionByBaseProduct[bp.id] = { name: bp.name || 'Insumo sem nome', quantity: 0 };
+          }
           consumptionByBaseProduct[bp.id].quantity += consumed;
         } catch {
           /* unidade incompatível — ignora este insumo */
@@ -332,204 +772,95 @@ export async function syncDayAdmin(dateStr: string, kioskId: string, pdvFilialId
   if (diag.itemsSeen > 0 && diag.itemsUnmapped / diag.itemsSeen > 0.5) {
     warnings.push(`Mais da metade dos itens (${diag.itemsUnmapped}/${diag.itemsSeen}) sem ficha técnica.`);
   }
-  if (diag.couponsReceived > 0 && dailyRevenue === 0) {
+  if (diag.couponsReceived > 0 && dailyRevenueCents === 0) {
     warnings.push('Cupons recebidos, mas faturamento calculado foi R$ 0,00 — verifique o campo valortotal da API.');
   }
   if (warnings.length > 0) {
     console.warn(`[PDV Sync] ${dateStr} ${kioskId}: ⚠️ ${warnings.join(' | ')}`, JSON.stringify(diag));
   }
 
-  const reportId = `sync_${kioskId}_${dateStr.replace(/-/g, '_')}`;
-  await db.collection('salesReports').doc(`sales_${reportId}`).set({
-    reportName: `Sincronização Automática ${dateStr}`,
-    month: date.getMonth() + 1, year: date.getFullYear(), day: date.getDate(), kioskId, createdAt: new Date().toISOString(),
-    consumptionReportId: `cons_${reportId}`,
-    items: Object.values(productTotals), hourlySales, productHourlySales,
-    combos: Object.entries(comboCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
+  const reportItems = Object.values(productTotals)
+    .map(({ revenueCents, ...item }) => ({
+      ...item,
+      unitPrice: item.quantity > 0 ? (revenueCents / 100) / item.quantity : 0,
+    }))
+    .sort((left, right) => left.simulationId.localeCompare(right.simulationId));
+  const reportRevenueCents = reportItems.reduce(
+    (sum, item) => sum + cents(item.quantity * item.unitPrice),
+    0,
+  );
+  if (reportRevenueCents !== dailyRevenueCents) {
+    throw new PdvApiError(
+      `Invariante de faturamento violada em ${kioskId}/${dateStr}.`,
+      'REVENUE_INVARIANT_FAILED',
+      `api=${dailyRevenueCents};report=${reportRevenueCents}`,
+    );
+  }
+
+  const combos = Object.entries(comboCounts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name));
+  const revenueByOperator = Object.fromEntries(
+    Object.entries(revenueCentsByOperator).map(([operatorId, value]) => [operatorId, value / 100]),
+  );
+  const dailyRevenue = dailyRevenueCents / 100;
+  const sourceCouponCount = Object.values(hourlySales).reduce((sum, value) => sum + value, 0);
+  const sourceItemQuantity = reportItems.reduce((sum, item) => sum + item.quantity, 0);
+  const sourceFingerprint = createHash('sha256').update(stableStringify({
+    items: reportItems,
+    hourlySales,
+    productHourlySales,
+    combos,
     productQtyByOperator,
-    syncDiagnostics: diag,
-  });
+    revenueByOperator,
+    diagnostics: diag,
+  })).digest('hex');
+  const reportId = `sync_${kioskId}_${dateStr.replace(/-/g, '_')}`;
+  const persistence = await persistPdvSnapshot(dateStr, kioskId, {
+    reportId,
+    report: {
+      reportName: `Sincronização Automática ${dateStr}`,
+      month: date.getMonth() + 1,
+      year: date.getFullYear(),
+      day: date.getDate(),
+      kioskId,
+      consumptionReportId: `cons_${reportId}`,
+      items: reportItems,
+      hourlySales,
+      productHourlySales,
+      combos,
+      productQtyByOperator,
+      syncDiagnostics: diag,
+    },
+    consumptionReport: {
+      reportName: `Sincronização Automática ${dateStr}`,
+      month: date.getMonth() + 1,
+      year: date.getFullYear(),
+      day: date.getDate(),
+      kioskId,
+      status: 'completed',
+      results: Object.entries(consumptionByBaseProduct).map(([id, data]) => ({
+        productId: id,
+        productName: data.name,
+        consumedQuantity: data.quantity,
+        baseProductId: id,
+      })),
+    },
+    metrics: {
+      couponCount: sourceCouponCount,
+      itemQuantity: sourceItemQuantity,
+      revenueCents: dailyRevenueCents,
+      fingerprint: sourceFingerprint,
+    },
+    dailyRevenue,
+    revenueByOperator,
+  }, db, options);
 
-  // Relatório de consumo teórico de insumos (Vendas API) — alimenta a Conferência de Estoque.
-  await db.collection('consumptionReports').doc(`cons_${reportId}`).set({
-    reportName: `Sincronização Automática ${dateStr}`,
-    month: date.getMonth() + 1, year: date.getFullYear(), day: date.getDate(), kioskId,
-    createdAt: new Date().toISOString(), status: 'completed',
-    results: Object.entries(consumptionByBaseProduct).map(([id, data]) => ({
-      productId: id, productName: data.name, consumedQuantity: data.quantity, baseProductId: id,
-    })),
-  });
 
-  // ── Update active goal periods ────────────────────────────────────────────
+  console.log(
+    `[PDV Sync] ${dateStr} ${kioskId}: faturamento R$ ${dailyRevenue.toFixed(2)}, `
+    + `cupons ${sourceCouponCount}, persistência ${persistence}.`,
+  );
 
-  console.log(`[PDV Sync] ${dateStr} ${kioskId}: faturamento total = R$ ${dailyRevenue.toFixed(2)}, operadores = ${Object.keys(revenueByOperator).length}`);
-
-  await syncGoalsForDay(dateStr, kioskId, dailyRevenue, revenueByOperator, db);
-
-  return { success: true, count: coupons.length, dailyRevenue, diagnostics: diag, warnings };
-}
-
-export async function syncGoalsForDay(
-  dateStr: string,
-  kioskId: string,
-  dailyRevenue: number,
-  revenueByOperator: Record<string, number>,
-  db: FirebaseFirestore.Firestore,
-) {
-  const periodsSnap = await db.collection('goalPeriods')
-    .where('kioskId', '==', kioskId)
-    .where('status', '==', 'active')
-    .get();
-
-  if (periodsSnap.empty) return;
-
-  // Fetch users for operator ID mapping
-  const usersSnap = await db.collection('users')
-    .where('assignedKioskIds', 'array-contains', kioskId)
-    .get();
-
-  const operatorIdToUserId: Record<string, string> = {};
-  for (const u of usersSnap.docs) {
-    const opId = u.data().pdvOperatorIds?.[kioskId];
-    if (opId != null) operatorIdToUserId[String(opId)] = u.id;
-  }
-
-  // dateStr as timestamp for range comparison
-  const syncDate = new Date(dateStr + 'T12:00:00Z');
-
-  for (const periodDoc of periodsSnap.docs) {
-    const period = periodDoc.data();
-
-    // Only handle revenue type for now (qty/ticket/product require different calculation)
-    const templateType = period.templateType ?? 'revenue';
-    if (templateType !== 'revenue') continue;
-
-    // Filter: dateStr must fall within the period's startDate–endDate range
-    const periodStart: Date = period.startDate?.toDate?.() ?? new Date(0);
-    const periodEnd: Date = period.endDate?.toDate?.() ?? new Date(8640000000000000);
-    if (syncDate < periodStart || syncDate > periodEnd) continue;
-
-    // Update dailyProgress and recalculate currentValue
-    const currentProgress: Record<string, number> = period.dailyProgress ?? {};
-    const updatedProgress = { ...currentProgress, [dateStr]: dailyRevenue };
-    const newCurrentValue = Object.values(updatedProgress).reduce((a: number, b: number) => a + b, 0);
-
-    await db.collection('goalPeriods').doc(periodDoc.id).update({
-      dailyProgress: updatedProgress,
-      currentValue: newCurrentValue,
-      updatedAt: new Date(),
-    });
-
-    // Update EmployeeGoal.currentValue per operator
-    const empGoalsSnap = await db.collection('employeeGoals')
-      .where('periodId', '==', periodDoc.id)
-      .get();
-
-    // Revenue por employeeId (evita re-lookup do opId no loop interno)
-    const revenueByEmployeeId: Record<string, number> = {};
-    for (const [opId, userId] of Object.entries(operatorIdToUserId)) {
-      revenueByEmployeeId[userId] = revenueByOperator[opId] ?? 0;
-    }
-
-    // Agrupar goals por employeeId para detectar funcionários com múltiplos turnos
-    type EgEntry = { doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>; eg: Record<string, any> };
-    const goalsByEmployee = new Map<string, EgEntry[]>();
-    for (const egDoc of empGoalsSnap.docs) {
-      const eg = egDoc.data() as Record<string, any>;
-      if (!revenueByEmployeeId.hasOwnProperty(eg.employeeId)) continue;
-      const list = goalsByEmployee.get(eg.employeeId) ?? [];
-      list.push({ doc: egDoc, eg });
-      goalsByEmployee.set(eg.employeeId, list);
-    }
-
-    // Para funcionários com múltiplos goals de turno, determinar qual turno foi trabalhado em dateStr
-    const workedShiftByEmployee: Record<string, string> = {};
-    const multiShiftEmployeeIds = [...goalsByEmployee.entries()]
-      .filter(([, list]) => list.length > 1 && list.some(e => e.eg.shiftId))
-      .map(([uid]) => uid);
-
-    if (multiShiftEmployeeIds.length > 0 && Array.isArray(period.shifts) && period.shifts.length > 0) {
-      // Mapa de "HH:MM-HH:MM" → shiftId extraído dos labels do período
-      const timeKeyToShiftId: Record<string, string> = {};
-      for (const sh of period.shifts as Array<{ id: string; label: string }>) {
-        const times = extractShiftTimes(sh.label ?? '');
-        if (times) timeKeyToShiftId[`${times.start}-${times.end}`] = sh.id;
-      }
-
-      if (Object.keys(timeKeyToShiftId).length > 0) {
-        const [yearStr, monthStr] = dateStr.split('-');
-        try {
-          const schedSnap = await db.collection('dp_schedules')
-            .where('year', '==', Number(yearStr))
-            .where('month', '==', Number(monthStr))
-            .get();
-
-          for (const schedDoc of schedSnap.docs) {
-            for (let i = 0; i < multiShiftEmployeeIds.length; i += 30) {
-              const chunk = multiShiftEmployeeIds.slice(i, i + 30);
-              try {
-                const shiftsSnap = await db.collection('dp_schedules').doc(schedDoc.id)
-                  .collection('shifts')
-                  .where('userId', 'in', chunk)
-                  .get();
-                for (const sd of shiftsSnap.docs) {
-                  const s = sd.data() as Record<string, any>;
-                  if (s.date !== dateStr || s.type !== 'work' || !s.startTime || !s.endTime || !s.userId) continue;
-                  const tKey = `${s.startTime}-${s.endTime}`;
-                  const shiftId = timeKeyToShiftId[tKey];
-                  if (shiftId) workedShiftByEmployee[s.userId as string] = shiftId;
-                }
-              } catch (e) {
-                console.warn(`[Goals Sync] Falha ao carregar shifts de ${schedDoc.id}`, e);
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('[Goals Sync] Falha ao carregar dp_schedules', e);
-        }
-      }
-
-      // Log de funcionários sem dados de escala
-      const semEscala = multiShiftEmployeeIds.filter(uid => !workedShiftByEmployee[uid]);
-      if (semEscala.length > 0) {
-        console.warn(`[Goals Sync] ${kioskId} ${dateStr}: ${semEscala.length} funcionário(s) com múltiplos turnos sem dados de escala — revenue será distribuído proporcionalmente entre os goals.`, semEscala);
-      }
-    }
-
-    // Atualizar cada goal com o revenue correto
-    for (const [employeeId, goals] of goalsByEmployee) {
-      const empDailyRevenue = revenueByEmployeeId[employeeId] ?? 0;
-      const isMultiShift = goals.length > 1 && goals.some(e => e.eg.shiftId);
-      const workedShiftId = workedShiftByEmployee[employeeId] ?? null;
-      const totalTargetValue = goals.reduce((sum, { eg }) => sum + (Number(eg.targetValue) || 0), 0);
-
-      for (const { doc: egDoc, eg } of goals) {
-        // Se funcionário tem múltiplos goals de turno e sabemos qual turno trabalhou,
-        // atribui revenue apenas ao goal do turno correto; caso contrário, divide
-        // proporcionalmente ao target para preservar o total sem duplicação.
-        let revenueForGoal = empDailyRevenue;
-        if (isMultiShift && eg.shiftId && workedShiftId !== null) {
-          revenueForGoal = eg.shiftId === workedShiftId ? empDailyRevenue : 0;
-        } else if (isMultiShift) {
-          const goalTargetValue = Number(eg.targetValue) || 0;
-          const fallbackShare = totalTargetValue > 0 ? (goalTargetValue / totalTargetValue) : (1 / goals.length);
-          revenueForGoal = empDailyRevenue * fallbackShare;
-        }
-
-        const prevDayValue = (eg.dailyProgress ?? {})[dateStr] ?? 0;
-        if (prevDayValue === revenueForGoal) continue;
-
-        const updatedEgProgress = { ...(eg.dailyProgress ?? {}), [dateStr]: revenueForGoal };
-        const newEgCurrentValue = (eg.currentValue ?? 0) - prevDayValue + revenueForGoal;
-
-        await db.collection('employeeGoals').doc(egDoc.id).update({
-          currentValue: newEgCurrentValue,
-          dailyProgress: updatedEgProgress,
-          updatedAt: new Date(),
-        });
-      }
-    }
-
-    console.log(`[Goals Sync] ${kioskId} ${dateStr}: período ${periodDoc.id} atualizado. Faturamento: R$ ${dailyRevenue.toFixed(2)}`);
-  }
+  return { success: true, count: coupons.length, dailyRevenue, diagnostics: diag, warnings, persistence };
 }

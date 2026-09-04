@@ -7,5 +7,6 @@ export const PDVLEGAL_SECRET_NAMES = [
 
 export const PDVLEGAL_SECRET_CONSUMERS = [
   'hourlyPdvSync',
+  'reconcilePdvSalesHistory',
   'syncGoalsForRange',
 ] as const;

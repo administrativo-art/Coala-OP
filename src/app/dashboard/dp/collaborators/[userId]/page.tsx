@@ -33,7 +33,11 @@ import { createAuditLog } from "@/features/audit/client";
 import type { DPUnit, DPVacationRecord, User, UserPdvAccess } from "@/types";
 import { getHrEmployeeId } from "@/lib/hr/person-link";
 import { CollaboratorUniforms } from "@/components/collaborator-uniforms";
-import { useEmployeeProfile, useFieldMap } from "@/features/rh/hooks/useEmployeeProfile";
+import {
+  useEmployeeProfile,
+  useFieldMap,
+  type EmployeeProfileState,
+} from "@/features/rh/hooks/useEmployeeProfile";
 import { SectionEditModal } from "@/features/rh/components/SectionEditModal";
 import type { EmployeeFieldValue, FieldMapEntry, FieldVisibility, NormalizedFieldVisibility, RhRole } from "@/types/rh";
 import { canViewField, normalizeFieldVisibility } from "@/types/rh";
@@ -765,16 +769,12 @@ function familyDocumentStatusClassName(status: FamilyDocumentStatus) {
 }
 
 function EmployeeAsoControlPanel({
-  employeeId,
-  reloadKey,
+  profileState,
   action,
 }: {
-  employeeId: string;
-  reloadKey?: number;
+  profileState: EmployeeProfileState;
   action?: React.ReactNode;
 }) {
-  const profileState = useEmployeeProfile(employeeId, reloadKey);
-
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
       <Panel title="Controle de ASOs" icon={FileText} action={action}>
@@ -851,21 +851,21 @@ function EmployeeAsoControlPanel({
 
 function EmployeeFamilySalaryPanel({
   employeeId,
-  reloadKey,
+  profileState,
+  onProfileChanged,
   action,
   canEdit,
 }: {
   employeeId: string;
-  reloadKey?: number;
+  profileState: EmployeeProfileState;
+  onProfileChanged: () => void;
   action?: React.ReactNode;
   canEdit?: boolean;
 }) {
-  const [profileReloadKey, setProfileReloadKey] = useState(0);
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<ChildDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const profileState = useEmployeeProfile(employeeId, (reloadKey ?? 0) + profileReloadKey);
 
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
@@ -923,7 +923,7 @@ function EmployeeFamilySalaryPanel({
       await callOnFieldUpdate({ employee_id: employeeId, field_key: "employee.has_family_salary", value: eligibleCount > 0 });
       await callOnFieldUpdate({ employee_id: employeeId, field_key: SYSTEM_FIELD_KEYS.familySalarySummary, value: nextSummary });
       setEditing(false);
-      setProfileReloadKey((value) => value + 1);
+      onProfileChanged();
       setMessage("Filhos atualizados.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao salvar filhos.");
@@ -1199,17 +1199,20 @@ function EmployeeProfileFields({
   user,
   units,
   onUpdateUser,
-  reloadKey = 0,
+  profileState,
+  onProfileChanged,
+  onFieldMapChanged,
 }: {
   user: User;
   units: DPUnit[];
   onUpdateUser: (user: User) => Promise<void>;
-  reloadKey?: number;
+  profileState: EmployeeProfileState;
+  onProfileChanged: () => void;
+  onFieldMapChanged: () => void;
 }) {
   const { firebaseUser, permissions, user: currentUser } = useAuth();
   const employeeId = getHrEmployeeId(user) ?? user.id;
   const [editKey, setEditKey] = useState<string | null>(null);
-  const [profileReloadKey, setProfileReloadKey] = useState(0);
   const [visibilitySavingKey, setVisibilitySavingKey] = useState<string | null>(null);
   const [visibilityMessage, setVisibilityMessage] = useState<string | null>(null);
   const [systemActionSaving, setSystemActionSaving] = useState<string | null>(null);
@@ -1224,16 +1227,30 @@ function EmployeeProfileFields({
   const [pdvProfileId, setPdvProfileId] = useState("");
   const [pdvProfiles, setPdvProfiles] = useState<Array<{ id: string; name: string }>>([]);
   const [pdvCatalogLoading, setPdvCatalogLoading] = useState(false);
-  const profileState = useEmployeeProfile(employeeId, profileReloadKey + reloadKey);
-
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
-      <Panel title="Perfil do colaborador" icon={IdCard}>
-        <div className="space-y-3">
-          <div className="h-20 animate-pulse rounded-2xl bg-slate-100" />
-          <div className="h-32 animate-pulse rounded-2xl bg-slate-100" />
+      <div className="grid gap-2.5 lg:grid-cols-[160px_minmax(0,1fr)]">
+        <aside className="hidden space-y-2 lg:block">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-7 animate-pulse rounded-md bg-slate-100" />
+          ))}
+        </aside>
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, sectionIndex) => (
+            <section key={sectionIndex} className="overflow-hidden rounded-xl border border-[#dedfe4] bg-white shadow-sm">
+              <div className="flex items-center gap-3 border-b border-[#e8e8ec] px-3 py-2">
+                <div className="h-6 w-6 animate-pulse rounded-md bg-[#fff0f6]" />
+                <div className="h-3 w-32 animate-pulse rounded bg-slate-100" />
+              </div>
+              <div className="grid gap-2 p-2.5 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 3 }).map((__, fieldIndex) => (
+                  <div key={fieldIndex} className="h-16 animate-pulse rounded-xl bg-slate-100" />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
-      </Panel>
+      </div>
     );
   }
 
@@ -1424,7 +1441,7 @@ function EmployeeProfileFields({
         throw new Error(typeof payload.error === "string" ? payload.error : "Falha ao salvar a visibilidade do campo.");
       }
       setVisibilityMessage(`Visibilidade de "${fieldDisplayLabel(entry.label)}" atualizada para ${FIELD_VISIBILITY_LABELS[normalizeFieldVisibility(visibility)]}.`);
-      setProfileReloadKey((value) => value + 1);
+      onFieldMapChanged();
     } catch (error) {
       setVisibilityMessage(error instanceof Error ? error.message : "Falha ao salvar a visibilidade do campo.");
     } finally {
@@ -1470,7 +1487,7 @@ function EmployeeProfileFields({
         throw new Error(typeof payload.error === "string" ? payload.error : "Falha ao salvar a visibilidade do card.");
       }
       setVisibilityMessage(`Visibilidade de "${sectionDisplayLabel(section)}" atualizada para ${FIELD_VISIBILITY_LABELS[normalizeFieldVisibility(visibility)]}.`);
-      setProfileReloadKey((value) => value + 1);
+      onFieldMapChanged();
     } catch (error) {
       setVisibilityMessage(error instanceof Error ? error.message : "Falha ao salvar a visibilidade do card.");
     } finally {
@@ -1859,7 +1876,10 @@ function EmployeeProfileFields({
           fields={allFields}
           role={role}
           onClose={() => setEditKey(null)}
-          onSaved={() => setEditKey(null)}
+          onSaved={() => {
+            setEditKey(null);
+            onProfileChanged();
+          }}
         />
       )}
       {pdvEditorAccessId ? (
@@ -1938,16 +1958,12 @@ function EmployeeProfileFields({
 
 function EmployeeProfileHeaderSummary({
   userId,
-  bizneoEmployeeId,
-  reloadKey = 0,
+  profileState,
 }: {
   userId: string;
-  bizneoEmployeeId?: string | null;
-  reloadKey?: number;
+  profileState: EmployeeProfileState;
 }) {
   const { firebaseUser, permissions, user: currentUser } = useAuth();
-  const employeeId = bizneoEmployeeId || userId;
-  const profileState = useEmployeeProfile(employeeId, reloadKey);
 
   if (profileState.status === "idle" || profileState.status === "loading") {
     return (
@@ -2285,6 +2301,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const { toast } = useToast();
   const { shiftDefinitions, units, vacations, vacationsLoading } = useDPBootstrap();
   const [fieldMapReloadKey, setFieldMapReloadKey] = useState(0);
+  const [employeeProfileReloadKey, setEmployeeProfileReloadKey] = useState(0);
   const [systemVisibilitySavingKey, setSystemVisibilitySavingKey] = useState<string | null>(null);
   const [systemVisibilityMessage, setSystemVisibilityMessage] = useState<string | null>(null);
   const [transportVoucherEditorOpen, setTransportVoucherEditorOpen] = useState(false);
@@ -2298,9 +2315,22 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
   const [terminationDialogOpen, setTerminationDialogOpen] = useState(false);
   const [terminationSaving, setTerminationSaving] = useState(false);
   const { fieldMap: profileLayout } = useFieldMap(fieldMapReloadKey);
-
   const allUsers: User[] = [...activeUsers, ...terminatedUsers];
   const user = allUsers.find((entry) => entry.id === userId);
+  const employeeId = user ? getHrEmployeeId(user) ?? user.id : "";
+  const employeeProfileState = useEmployeeProfile(
+    employeeId,
+    fieldMapReloadKey + employeeProfileReloadKey,
+  );
+
+  function reloadEmployeeProfile() {
+    setEmployeeProfileReloadKey((value) => value + 1);
+  }
+
+  function reloadEmployeeFieldMap() {
+    setFieldMapReloadKey((value) => value + 1);
+  }
+
   useEffect(() => {
     if (!firebaseUser || !user) return;
     void createAuditLog(firebaseUser, {
@@ -2750,8 +2780,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
       visible: canShowSystemBlock(systemBlockKeys.asoControl),
       content: (
         <EmployeeAsoControlPanel
-          employeeId={getHrEmployeeId(collaborator) ?? collaborator.id}
-          reloadKey={fieldMapReloadKey}
+          profileState={employeeProfileState}
           action={systemBlockVisibilityControl(systemBlockKeys.asoControl)}
         />
       ),
@@ -2762,8 +2791,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
       visible: canShowSystemBlock(systemBlockKeys.familySalary),
       content: (
         <EmployeeFamilySalaryPanel
-          employeeId={getHrEmployeeId(collaborator) ?? collaborator.id}
-          reloadKey={fieldMapReloadKey}
+          employeeId={employeeId}
+          profileState={employeeProfileState}
+          onProfileChanged={reloadEmployeeProfile}
           action={systemBlockVisibilityControl(systemBlockKeys.familySalary)}
           canEdit={canManageSystemFieldVisibility}
         />
@@ -2957,8 +2987,7 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           <div className="min-w-0 md:w-[320px]">
             <EmployeeProfileHeaderSummary
               userId={user.id}
-              bizneoEmployeeId={user.registrationIdBizneo}
-              reloadKey={fieldMapReloadKey}
+              profileState={employeeProfileState}
             />
           </div>
           <div className="flex shrink-0 items-center md:justify-end">
@@ -3036,7 +3065,9 @@ export default function CollaboratorProfilePage({ params }: { params: Promise<{ 
           user={user}
           units={units}
           onUpdateUser={updateUser}
-          reloadKey={fieldMapReloadKey}
+          profileState={employeeProfileState}
+          onProfileChanged={reloadEmployeeProfile}
+          onFieldMapChanged={reloadEmployeeFieldMap}
         />
 
         <div className="space-y-2.5">
