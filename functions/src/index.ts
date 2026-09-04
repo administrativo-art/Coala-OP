@@ -6,7 +6,8 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { syncDayAdmin } from './pdv-sync.js';
+import { getAccessToken, loadPdvSyncCatalog, syncDayAdmin } from './pdv-sync.js';
+import { reconciliationDates } from './pdv-reconciliation-policy.js';
 import { PDVLEGAL_SECRET_NAMES } from './pdv-secret-contract.js';
 import { randomUUID } from 'node:crypto';
 import { applyUserTerminationEffects } from './user-termination-effects.js';
@@ -707,6 +708,31 @@ export const syncBizneoUsersMonthly = onSchedule({
 // --- Rotina Diária de Sincronização (PDV Legal -> Coala) ---
 // --- Rotina Horária de Sincronização (PDV Legal -> Coala) ---
 // Mantém as metas atualizadas durante o dia de funcionamento
+const PDV_KIOSK_QUERY_LIMIT = 50;
+const PDV_FALLBACK_FILIAL_IDS: Record<string, string> = {
+  'tirirical': '17343',
+  'joao-paulo': '17344',
+};
+
+async function listPdvKiosks(): Promise<Array<{ kioskId: string; pdvFilialId: string }>> {
+  const kiosksSnap = await db.collection('kiosks').limit(PDV_KIOSK_QUERY_LIMIT).get();
+  if (kiosksSnap.size >= PDV_KIOSK_QUERY_LIMIT) {
+    throw new Error(`A consulta de unidades atingiu o limite seguro de ${PDV_KIOSK_QUERY_LIMIT}.`);
+  }
+
+  return kiosksSnap.docs.flatMap((doc) => {
+    const pdvFilialId = doc.data().pdvFilialId || PDV_FALLBACK_FILIAL_IDS[doc.id];
+    return pdvFilialId ? [{ kioskId: doc.id, pdvFilialId: String(pdvFilialId) }] : [];
+  });
+}
+
+function pdvSyncErrorSummary(error: unknown): { name: string; code?: string } {
+  if (!(error instanceof Error)) return { name: 'UnknownError' };
+  const errorWithCode = error as Error & { code?: unknown };
+  const code = typeof errorWithCode.code === 'string' ? errorWithCode.code : undefined;
+  return code ? { name: error.name, code } : { name: error.name };
+}
+
 export const hourlyPdvSync = onSchedule({
   schedule: "0 8-23 * * *", // Cada hora das 08:00 às 23:00
   timeZone: "America/Sao_Paulo",
@@ -718,40 +744,98 @@ export const hourlyPdvSync = onSchedule({
   const brtMs = nowUtc.getTime() - 3 * 60 * 60 * 1000;
   const dateStr = new Date(brtMs).toISOString().split('T')[0];
   console.log(`[hourlyPdvSync] Iniciando para data BRT: ${dateStr}`);
+  const failedKioskIds: string[] = [];
 
   try {
-    const kiosksSnap = await db.collection('kiosks').get();
-    console.log(`[hourlyPdvSync] ${kiosksSnap.size} quiosques encontrados na coleção.`);
+    const [kiosks, accessToken, catalog] = await Promise.all([
+      listPdvKiosks(),
+      getAccessToken(),
+      loadPdvSyncCatalog(db),
+    ]);
+    console.log(`[hourlyPdvSync] ${kiosks.length} unidades com PDV configurado.`);
 
     let synced = 0;
-    let skipped = 0;
+    let failed = 0;
 
-    const HOURLY_FALLBACK_MAP: Record<string, string> = {
-      'tirirical': '17343',
-      'joao-paulo': '17344',
-    };
-
-    for (const doc of kiosksSnap.docs) {
-      const kiosk = doc.data();
-      const pdvFilialId = kiosk.pdvFilialId || HOURLY_FALLBACK_MAP[doc.id];
-      if (!pdvFilialId) {
-        console.log(`[hourlyPdvSync] Quiosque ${doc.id} (${kiosk.name ?? '?'}) sem pdvFilialId — ignorado.`);
-        skipped++;
-        continue;
-      }
-
-      console.log(`[hourlyPdvSync] Sincronizando ${doc.id} (filial ${pdvFilialId}) para ${dateStr}...`);
+    for (const kiosk of kiosks) {
+      console.log(`[hourlyPdvSync] Sincronizando ${kiosk.kioskId} para ${dateStr}...`);
       try {
-        await syncDayAdmin(dateStr, doc.id, pdvFilialId, db);
+        await syncDayAdmin(dateStr, kiosk.kioskId, kiosk.pdvFilialId, db, {
+          accessToken,
+          catalog,
+          mode: 'live',
+        });
         synced++;
-      } catch (kioskError) {
-        console.error(`[hourlyPdvSync] Erro no quiosque ${doc.id}:`, kioskError);
+      } catch {
+        failed++;
+        failedKioskIds.push(kiosk.kioskId);
       }
     }
 
-    console.log(`[hourlyPdvSync] Concluído. Sincronizados: ${synced}, ignorados: ${skipped}.`);
+    console.log(`[hourlyPdvSync] Concluído. Sincronizados: ${synced}, falhas: ${failed}.`);
+    if (failed > 0) {
+      throw new Error(`Sincronização horária incompleta: ${failed} unidade(s) com falha.`);
+    }
   } catch (e) {
-    console.error("[hourlyPdvSync] Erro geral:", e);
+    const eventId = randomUUID();
+    console.error('[hourlyPdvSync] Erro geral.', {
+      eventId,
+      failedKioskIds,
+      ...pdvSyncErrorSummary(e),
+    });
+    throw e;
+  }
+});
+
+// Reconcilia respostas tardias/retroativas da API sem regravar snapshots iguais.
+// Janela diária: D-1 a D-7. Nos dias 2 e 7, inclui todo o mês anterior.
+export const reconcilePdvSalesHistory = onSchedule({
+  schedule: '15 4 * * *',
+  timeZone: BRT,
+  retryCount: 2,
+  timeoutSeconds: 540,
+  memory: '1GiB',
+  secrets: [...PDVLEGAL_SECRET_NAMES],
+}, async () => {
+  const runId = randomUUID();
+  const businessDate = getBrtDate(new Date());
+  const dates = reconciliationDates(businessDate);
+  console.log('[reconcilePdvSalesHistory] Iniciando.', { runId, businessDate, dates: dates.length });
+
+  const [kiosks, accessToken, catalog] = await Promise.all([
+    listPdvKiosks(),
+    getAccessToken(),
+    loadPdvSyncCatalog(db),
+  ]);
+  const summary = { applied: 0, unchanged: 0, held: 0, empty: 0, failed: 0 };
+
+  for (const date of dates) {
+    for (const kiosk of kiosks) {
+      try {
+        const result = await syncDayAdmin(date, kiosk.kioskId, kiosk.pdvFilialId, db, {
+          accessToken,
+          catalog,
+          mode: 'reconciliation',
+          runId,
+        });
+        summary[result.persistence] += 1;
+      } catch (error) {
+        summary.failed += 1;
+        const eventId = randomUUID();
+        console.error('[reconcilePdvSalesHistory] Falha ao reconciliar data/unidade.', {
+          eventId,
+          runId,
+          date,
+          kioskId: kiosk.kioskId,
+          ...pdvSyncErrorSummary(error),
+        });
+      }
+    }
+  }
+
+  console.log('[reconcilePdvSalesHistory] Concluído.', { runId, ...summary });
+  if (summary.failed > 0) {
+    throw new Error(`Reconciliação PDV incompleta. runId=${runId}; falhas=${summary.failed}`);
   }
 });
 
@@ -804,11 +888,21 @@ export const syncGoalsForRange = onCall(
     const results: DayResult[] = [];
     const current = new Date(startDate + 'T12:00:00Z');
     const end = new Date(endDate + 'T12:00:00Z');
+    const runId = randomUUID();
+    const [accessToken, catalog] = await Promise.all([
+      getAccessToken(),
+      loadPdvSyncCatalog(db),
+    ]);
 
     while (current <= end) {
       const dateStr = current.toISOString().split('T')[0];
       try {
-        const result = await syncDayAdmin(dateStr, kioskId, pdvFilialId, db) as any;
+        const result = await syncDayAdmin(dateStr, kioskId, pdvFilialId, db, {
+          accessToken,
+          catalog,
+          mode: 'manual',
+          runId,
+        }) as any;
         results.push({
           date: dateStr,
           revenue: result.dailyRevenue,

@@ -159,9 +159,11 @@ export async function GET(
       .filter(([, entry]) => canViewField(entry.visibility, role, visibilityContext, entry.access, fieldMap.access_matrix))
       .map(([key]) => key);
 
-    const fieldValueSnaps = await Promise.all(
-      readableKeys.map((key) => employeeSnap.ref.collection("field_values").doc(key).get()),
-    );
+    // BatchGet mantém a autorização por chave e evita uma ida ao Firestore para cada campo.
+    const fieldValueRefs = readableKeys.map((key) => employeeSnap.ref.collection("field_values").doc(key));
+    const fieldValueSnaps = fieldValueRefs.length > 0
+      ? await hrDbAdmin.getAll(...fieldValueRefs)
+      : [];
     const fieldValues = Object.fromEntries(
       fieldValueSnaps
         .filter((snap) => snap.exists)

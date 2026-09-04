@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/use-auth';
 import { rhDb } from '@/lib/firebase-rh';
@@ -26,7 +26,7 @@ export type EmployeeProfileData = {
   periodo_experiencia: ProbationProcessState | null;
 };
 
-type State =
+export type EmployeeProfileState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'error'; message: string }
@@ -36,16 +36,24 @@ function cleanIds(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
 }
 
-export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): State {
+export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): EmployeeProfileState {
   const { firebaseUser, user } = useAuth();
-  const [state, setState] = useState<State>({ status: 'idle' });
+  const [state, setState] = useState<EmployeeProfileState>({ status: 'idle' });
+  const loadedEmployeeId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!user || !bizneoEmployeeId) return;
+    if (!user || !bizneoEmployeeId) {
+      loadedEmployeeId.current = null;
+      setState({ status: 'idle' });
+      return;
+    }
     let cancelled = false;
 
     async function load() {
-      setState({ status: 'loading' });
+      // Durante uma revalidação, preserva o conteúdo já renderizado para não remontar a página em skeletons.
+      if (loadedEmployeeId.current !== bizneoEmployeeId) {
+        setState({ status: 'loading' });
+      }
       try {
         if (firebaseUser) {
           const token = await firebaseUser.getIdToken();
@@ -56,6 +64,7 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Sta
           const payload = await response.json().catch(() => ({}));
           if (response.ok) {
             if (!cancelled) {
+              loadedEmployeeId.current = bizneoEmployeeId;
               setState({ status: 'ok', data: payload as EmployeeProfileData });
             }
             return;
@@ -120,6 +129,7 @@ export function useEmployeeProfile(bizneoEmployeeId: string, reloadKey = 0): Sta
         });
 
         if (!cancelled) {
+          loadedEmployeeId.current = bizneoEmployeeId;
           setState({
             status: 'ok',
             data: {
