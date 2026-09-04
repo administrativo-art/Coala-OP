@@ -20,9 +20,12 @@ import { isWorkShift } from '@/lib/dp-shift-rules';
 import { buildBizneoExportDayOffBlockers } from '@/lib/dp-bizneo-export-preflight';
 import { activeOperationalUnits, canonicalOperationalUnitId } from '@/lib/dp-units';
 import { formatDPSchedulePeriod, getAutomaticDPSchedulePeriods } from '@/lib/dp-schedule-periods';
+import { filterUnitsByAccess } from '@/lib/unit-access';
+import { resolveDPUnitCity } from '@/lib/dp-unit-city';
+import { countExpectedDPUnitDays } from '@/lib/dp-schedule-progress';
+import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import {
@@ -48,9 +51,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CalendarDays, Download, Lock, Plus } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Download, Lock, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createAuditLog } from '@/features/audit/client';
+import { DPSchedulesSidebar, type DPSchedulesSidebarGroup } from '@/components/dp/dp-schedules-sidebar';
+import { useDPScheduleFilledDays } from '@/hooks/use-dp-schedule-filled-days';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -62,6 +67,26 @@ const MONTHS = [
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 4 }, (_, i) => currentYear - 1 + i);
 const PLANNING_YEARS = Array.from({ length: 6 }, (_, i) => currentYear + i);
+
+const BRAZILIAN_STATE_NAMES: Record<string, string> = {
+  AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará',
+  DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso',
+  MS: 'Mato Grosso do Sul', MG: 'Minas Gerais', PA: 'Pará', PB: 'Paraíba', PR: 'Paraná',
+  PE: 'Pernambuco', PI: 'Piauí', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte',
+  RS: 'Rio Grande do Sul', RO: 'Rondônia', RR: 'Roraima', SC: 'Santa Catarina',
+  SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins',
+};
+
+function normalizeLocationLabel(value: string) {
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function stateCodeOf(state: string) {
+  const upper = state.toUpperCase();
+  if (BRAZILIAN_STATE_NAMES[upper]) return upper;
+  return Object.entries(BRAZILIAN_STATE_NAMES)
+    .find(([, name]) => normalizeLocationLabel(name) === normalizeLocationLabel(state))?.[0] ?? '—';
+}
 
 function resolveBizneoShiftId(def?: { bizneoTemplateId?: string; code?: string }) {
   const explicitId = String(def?.bizneoTemplateId ?? '').trim();
@@ -714,11 +739,13 @@ export function DPSchedulesList() {
     units,
     unitsLoading,
     unitsError,
+    unitGroups,
+    calendars,
     shiftDefinitions,
     shiftDefsLoading,
     shiftDefsError,
   } = useDP();
-  const { permissions } = useAuth();
+  const { permissions, user, isDefaultAdmin } = useAuth();
   const router = useRouter();
   const [addMonthOpen, setAddMonthOpen] = useState(false);
   const [exportBizneoOpen, setExportBizneoOpen] = useState(false);
@@ -726,51 +753,233 @@ export function DPSchedulesList() {
   const ancillaryErrors = [unitsError, shiftDefsError].filter(Boolean);
   const visibleSchedules = useAccessibleDPSchedules();
 
-  // Group schedules by year+month across every unit — the top-level list is
-  // just the months; picking a month opens the per-unit view with a sidebar.
-  const groupedByMonth = React.useMemo(() => {
-    const byPeriod = new Map<string, DPSchedule[]>();
-    for (const { period } of getAutomaticDPSchedulePeriods()) {
-      byPeriod.set(period, []);
-    }
-    for (const s of visibleSchedules) {
-      const key = formatDPSchedulePeriod(s.year, s.month);
-      if (!byPeriod.has(key)) byPeriod.set(key, []);
-      byPeriod.get(key)!.push(s);
-    }
-    return Array.from(byPeriod.entries())
-      .map(([period, items]) => {
-        const [year, month] = period.split('-').map(Number);
-        return {
-          period,
-          year,
-          month,
-          unitCount: new Set(items.map((schedule) => (
-            schedule.unitId
-              ? canonicalOperationalUnitId(schedule.unitId, units)
-              : `all-units:${schedule.id}`
-          ))).size,
-          shiftCount: items.reduce((sum, s) => sum + (s.shiftCount ?? 0), 0),
-          allLocked: items.length > 0 && items.every(s => s.locked),
-          isEmpty: items.length === 0,
-        };
-      })
-      .sort((a, b) => (b.year - a.year) || (b.month - a.month));
-  }, [units, visibleSchedules]);
+  const now = React.useMemo(() => new Date(), []);
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [unitQuery, setUnitQuery] = useState('');
 
-  const groupedByYear = React.useMemo(() => {
-    const byYear = new Map<number, Array<(typeof groupedByMonth)[number]>>();
-    for (const summary of groupedByMonth) {
-      if (!byYear.has(summary.year)) byYear.set(summary.year, []);
-      byYear.get(summary.year)!.push(summary);
+  const accessibleUnits = React.useMemo(
+    () => (user ? filterUnitsByAccess(activeOperationalUnits(units), user, { isDefaultAdmin }) : []),
+    [isDefaultAdmin, units, user],
+  );
+  const totalUnits = accessibleUnits.length;
+
+  const canonicalOf = React.useCallback(
+    (unitId: string) => canonicalOperationalUnitId(unitId, units) ?? unitId,
+    [units],
+  );
+
+  // Canonical unit id → { city, state }, derived from the newest schedule that
+  // links a holiday calendar (calendars carry city/state), then unit address/group.
+  const locationByUnit = React.useMemo(() => {
+    const calendarById = new Map(calendars.map((c) => [c.id, c]));
+    const groupById = new Map(unitGroups.map((g) => [g.id, g]));
+    const newestFirst = [...visibleSchedules].sort((a, b) => (b.year - a.year) || (b.month - a.month));
+    const map = new Map<string, { city: string; state?: string }>();
+    for (const s of newestFirst) {
+      if (!s.unitId || !s.calendarId) continue;
+      const key = canonicalOf(s.unitId);
+      const cal = calendarById.get(s.calendarId);
+      const city = cal?.city?.trim();
+      const state = cal?.state?.trim();
+      const current = map.get(key);
+      if ((!current?.city && city) || (!current?.state && state)) {
+        map.set(key, {
+          city: current?.city || city || '',
+          state: current?.state || state || undefined,
+        });
+      }
     }
-    return Array.from(byYear.entries())
-      .map(([year, months]) => ({
-        year,
-        months: months.sort((a, b) => b.month - a.month),
-      }))
-      .sort((a, b) => b.year - a.year);
-  }, [groupedByMonth]);
+    for (const u of accessibleUnits) {
+      const key = canonicalOf(u.id);
+      const current = map.get(key);
+      map.set(key, {
+        city: current?.city || resolveDPUnitCity({
+          address: u.address,
+          groupName: u.groupId ? groupById.get(u.groupId)?.name : undefined,
+        }),
+        state: current?.state,
+      });
+    }
+    return map;
+  }, [accessibleUnits, calendars, canonicalOf, unitGroups, visibleSchedules]);
+
+  const overview = React.useMemo(() => {
+    const states = new Set<string>();
+    const cities = new Set<string>();
+    for (const u of accessibleUnits) {
+      const loc = locationByUnit.get(canonicalOf(u.id));
+      if (loc?.state) states.add(loc.state);
+      if (loc?.city) cities.add(loc.city);
+    }
+    return { states: states.size, cities: cities.size };
+  }, [accessibleUnits, canonicalOf, locationByUnit]);
+
+  const sidebarSchedules = React.useMemo(() => visibleSchedules.filter((schedule) => (
+    schedule.year === currentYear && schedule.month === currentMonth
+  )), [currentMonth, currentYear, visibleSchedules]);
+  const filledDaysByScheduleId = useDPScheduleFilledDays(sidebarSchedules);
+
+  const sidebarGroups = React.useMemo<DPSchedulesSidebarGroup[]>(() => {
+    const scheduleByCanonicalUnit = new Map<string, DPSchedule>();
+    sidebarSchedules.forEach((schedule) => {
+      if (!schedule.unitId) return;
+      const canonicalId = canonicalOf(schedule.unitId);
+      if (!scheduleByCanonicalUnit.has(canonicalId)) scheduleByCanonicalUnit.set(canonicalId, schedule);
+    });
+
+    const queryValue = normalizeLocationLabel(unitQuery.trim());
+    const byState = new Map<string, Map<string, DPUnit[]>>();
+    accessibleUnits.forEach((unit) => {
+      const location = locationByUnit.get(canonicalOf(unit.id));
+      const city = location?.city || 'Sem cidade definida';
+      const stateValue = location?.state?.trim() || 'Sem estado definido';
+      if (queryValue && ![unit.name, city, stateValue].some((value) => (
+        normalizeLocationLabel(value).includes(queryValue)
+      ))) return;
+      if (!byState.has(stateValue)) byState.set(stateValue, new Map());
+      const byCity = byState.get(stateValue)!;
+      if (!byCity.has(city)) byCity.set(city, []);
+      byCity.get(city)!.push(unit);
+    });
+
+    return Array.from(byState.entries())
+      .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
+      .map(([state, byCity]) => {
+        const stateCode = stateCodeOf(state);
+        const cities = Array.from(byCity.entries())
+          .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
+          .map(([city, cityUnits]) => ({
+            city,
+            units: cityUnits
+              .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+              .map((unit) => {
+                const schedule = scheduleByCanonicalUnit.get(canonicalOf(unit.id));
+                const period = formatDPSchedulePeriod(currentYear, currentMonth);
+                return {
+                  key: unit.id,
+                  name: unit.name,
+                  locked: schedule?.locked,
+                  filledDays: schedule ? filledDaysByScheduleId[schedule.id] ?? 0 : 0,
+                  expectedDays: countExpectedDPUnitDays({ unit, year: currentYear, month: currentMonth, shiftDefinitions }),
+                  onClick: () => router.push(
+                    `/dashboard/dp/schedules/month/${period}${schedule ? `?schedule=${schedule.id}` : '?create=1'}`,
+                  ),
+                };
+              }),
+          }));
+        return {
+          state: BRAZILIAN_STATE_NAMES[stateCode] ?? state,
+          stateCode,
+          unitCount: cities.reduce((sum, city) => sum + city.units.length, 0),
+          cities,
+        };
+      });
+  }, [accessibleUnits, canonicalOf, currentMonth, currentYear, filledDaysByScheduleId, locationByUnit, router, shiftDefinitions, sidebarSchedules, unitQuery]);
+
+  const summarize = React.useCallback((year: number, month: number) => {
+    const items = visibleSchedules.filter((s) => s.year === year && s.month === month);
+    const hasData = items.length > 0;
+    const allLocked = hasData && items.every((s) => s.locked);
+    const legacyAllUnits = items.some((s) => !s.unitId);
+    const startedCanonical = new Set(items.filter((s) => s.unitId).map((s) => canonicalOf(s.unitId!)));
+    const startedCount = !hasData
+      ? 0
+      : legacyAllUnits
+        ? totalUnits
+        : accessibleUnits.filter((u) => startedCanonical.has(canonicalOf(u.id))).length;
+    const shiftCount = items.reduce((sum, s) => sum + (s.shiftCount ?? 0), 0);
+    const isPast = year < currentYear || (year === currentYear && month < currentMonth);
+    const isCurrent = year === currentYear && month === currentMonth;
+    const missing = Math.max(0, totalUnits - startedCount);
+    const tone: 'active' | 'draft' | 'locked' | 'empty' = !hasData
+      ? 'empty'
+      : allLocked || isPast
+        ? 'locked'
+        : isCurrent
+          ? 'active'
+          : 'draft';
+    const statusLabel = !hasData
+      ? 'Não iniciada'
+      : allLocked
+        ? 'Trancada'
+        : isPast
+          ? 'Encerrada'
+          : isCurrent
+            ? 'Em andamento'
+            : 'Rascunho';
+    const alert = hasData && !allLocked && isPast
+      ? 'Rever'
+      : isCurrent && missing > 0
+        ? `${missing} sem escala`
+        : null;
+    return {
+      period: formatDPSchedulePeriod(year, month),
+      month,
+      hasData,
+      allLocked,
+      startedCount,
+      missing,
+      shiftCount,
+      tone,
+      statusLabel,
+      alert,
+      pct: totalUnits ? Math.round((startedCount / totalUnits) * 100) : 0,
+    };
+  }, [accessibleUnits, canonicalOf, currentMonth, currentYear, totalUnits, visibleSchedules]);
+
+  const years = React.useMemo(() => {
+    const set = new Set<number>([currentYear]);
+    for (const { year } of getAutomaticDPSchedulePeriods()) set.add(year);
+    for (const s of visibleSchedules) set.add(s.year);
+    return Array.from(set).sort((a, b) => b - a);
+  }, [currentYear, visibleSchedules]);
+
+  const effectiveYear = years.includes(selectedYear) ? selectedYear : (years[0] ?? currentYear);
+
+  const monthCards = React.useMemo(
+    () => Array.from({ length: 12 }, (_, i) => ({ name: MONTHS[i], ...summarize(effectiveYear, i + 1) })),
+    [effectiveYear, summarize],
+  );
+  const sidebarSummary = summarize(currentYear, currentMonth);
+
+  const attention = React.useMemo(() => {
+    const out: Array<{ key: string; title: string; detail: string; tone: 'err' | 'warn'; period: string }> = [];
+    if (totalUnits > 0) {
+      const current = summarize(currentYear, currentMonth);
+      if (current.missing > 0) {
+        out.push({
+          key: 'current-missing',
+          title: `${current.missing} ${current.missing === 1 ? 'unidade' : 'unidades'} sem escala`,
+          detail: `${MONTHS[currentMonth - 1]} de ${currentYear} · escala do mês em aberto`,
+          tone: 'warn',
+          period: formatDPSchedulePeriod(currentYear, currentMonth),
+        });
+      }
+      for (let offset = 1; offset <= 3; offset += 1) {
+        const d = new Date(currentYear, currentMonth - 1 - offset, 1);
+        const s = summarize(d.getFullYear(), d.getMonth() + 1);
+        if (s.hasData && !s.allLocked) {
+          out.push({
+            key: `open-${s.period}`,
+            title: `${MONTHS[d.getMonth()]} ainda não foi trancada`,
+            detail: `${s.startedCount} de ${totalUnits} unidades · mês encerrado`,
+            tone: 'err',
+            period: s.period,
+          });
+        }
+      }
+    }
+    return out.slice(0, 3);
+  }, [currentMonth, currentYear, summarize, totalUnits]);
+
+  const toneStyles: Record<'active' | 'draft' | 'locked' | 'empty', { card: string; bar: string; status: string }> = {
+    active: { card: 'border-[#f9a8c4] bg-white shadow-[0_16px_28px_-22px_rgba(219,39,119,0.65)]', bar: 'bg-[#db2777]', status: 'text-[#db2777]' },
+    draft: { card: 'border-[#dbe7f4] bg-white', bar: 'bg-[#0ea5e9]', status: 'text-[#0369a1]' },
+    locked: { card: 'border-[#e3e9f1] bg-white', bar: 'bg-[#94a3b8]', status: 'text-[#94a3b8]' },
+    empty: { card: 'border-[#e3e9f1] bg-[#f5f7fa]', bar: 'bg-[#d9e0e9]', status: 'text-[#a3aec0]' },
+  };
 
   if (schedulesLoading && schedules.length === 0) {
     return (
@@ -797,74 +1006,178 @@ export function DPSchedulesList() {
   }
 
   return (
-    <div className="space-y-8">
+    <div
+      className="dp-schedules-redesign flex flex-col gap-[6px] bg-[#eef1f6] lg:h-[calc(100vh-7.25rem)] lg:min-h-[680px] lg:flex-row"
+      style={{ fontFamily: "'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif" }}
+    >
+      <DPSchedulesSidebar
+        groups={sidebarGroups}
+        query={unitQuery}
+        onQueryChange={setUnitQuery}
+        onBack={() => router.push('/dashboard/dp/schedules')}
+        startedCount={sidebarSummary.startedCount}
+        totalCount={totalUnits}
+        emptyLabel={unitQuery ? 'Nenhuma unidade encontrada.' : 'Nenhuma unidade disponível.'}
+      />
+
+      <div className="no-scrollbar min-w-0 flex-1 overflow-y-auto bg-[#eef1f6]">
+      <div className="mx-auto max-w-[1180px] px-[18px] pb-11 pt-7 md:px-[34px] md:pt-[34px]">
       {ancillaryErrors.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
+        <div className="mb-4 rounded-[12px] border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
           <p className="font-medium">Alguns dados auxiliares de Escalas não carregaram.</p>
           <p className="mt-1 text-amber-800/80">{ancillaryErrors[0]}</p>
         </div>
       )}
-      <div className="flex flex-wrap justify-end gap-2">
-        {visibleSchedules.some((schedule) => schedule.unitId) && (
-          <Button
-            onClick={() => setExportBizneoOpen(true)}
-            variant="outline"
-            size="sm"
-            disabled={!exportDependenciesReady}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Exportar para o Bizneo
-          </Button>
-        )}
-        {permissions.dp?.schedules?.create && (
-          <Button type="button" size="sm" onClick={() => setAddMonthOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Adicionar mês
-          </Button>
-        )}
+
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#db2777]">Escalas operacionais</p>
+          <h1 className="dp-schedules-list-title mt-[7px] text-[29px] font-black leading-[34px] tracking-[-0.025em] text-[#0f172a]">Meses de escala</h1>
+          <p className="mt-2 text-[13.5px] font-semibold text-[#64748b]">
+            {totalUnits} {totalUnits === 1 ? 'unidade' : 'unidades'}
+            {overview.states > 0 && ` · ${overview.states} ${overview.states === 1 ? 'estado' : 'estados'}`}
+            {overview.cities > 0 && ` · ${overview.cities} ${overview.cities === 1 ? 'cidade' : 'cidades'}`}
+            {' · escalas montadas por mês'}
+          </p>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {visibleSchedules.some((schedule) => schedule.unitId) && (
+            <Button
+              onClick={() => setExportBizneoOpen(true)}
+              variant="outline"
+              size="sm"
+              disabled={!exportDependenciesReady}
+              className="h-9 rounded-[11px] border-[#dbe2eb] bg-white px-[14px] text-[13px] font-extrabold text-[#475569] hover:bg-[#f8fafc]"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar para o Bizneo
+            </Button>
+          )}
+          {permissions.dp?.schedules?.create && (
+            <Button type="button" size="sm" onClick={() => setAddMonthOpen(true)} className="h-9 rounded-[11px] bg-[#db2777] px-[14px] text-[13px] font-extrabold text-white hover:bg-[#be185d]">
+              <Plus className="mr-2 h-4 w-4" />
+              Adicionar mês
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {groupedByYear.map(({ year, months }) => (
-          <section key={year} className="overflow-hidden rounded-xl border bg-card">
-            <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
-              <h2 className="font-semibold">{year}</h2>
-              <span className="text-xs text-muted-foreground">
-                {months.length} {months.length === 1 ? 'mês' : 'meses'}
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        {years.map((year) => {
+          const active = year === effectiveYear;
+          const meta = year === currentYear ? 'atual' : year < currentYear ? 'encerrado' : 'planejamento';
+          return (
+            <button
+              key={year}
+              type="button"
+              onClick={() => setSelectedYear(year)}
+              className={cn(
+                'flex h-[34px] items-center gap-2 rounded-[11px] border px-[15px] text-[13.5px] font-extrabold transition-colors',
+                active
+                  ? 'border-[#0f172a] bg-[#0f172a] text-white'
+                  : 'border-[#e3e9f1] bg-white text-[#475569] hover:bg-[#f8fafc]',
+              )}
+            >
+              {year}
+              <span className={cn('text-[11px] font-extrabold', active ? 'text-[#8a96aa]' : 'text-[#a3aec0]')}>
+                · {meta}
               </span>
-            </div>
-            <div className="divide-y">
-              {months.map(({ period, month, unitCount, shiftCount, allLocked, isEmpty }) => (
-                <div
-                  key={period}
-                  className="group flex cursor-pointer items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/40"
-                  onClick={() => router.push(`/dashboard/dp/schedules/month/${period}`)}
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <CalendarDays className="h-4 w-4 text-primary" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 truncate text-sm font-medium">
-                      {MONTHS[month - 1]}
-                      {allLocked && <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" />}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {isEmpty
-                        ? 'Ainda não iniciado'
-                        : `${unitCount} ${unitCount === 1 ? 'unidade' : 'unidades'} · ${shiftCount} ${shiftCount === 1 ? 'turno' : 'turnos'}`}
-                    </p>
-                  </div>
-
-                  <Badge variant={isEmpty ? 'outline' : 'secondary'} className="shrink-0 text-[10px]">
-                    {isEmpty ? 'Pendente' : allLocked ? 'Trancado' : 'Em edição'}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
+            </button>
+          );
+        })}
+        <div className="ml-auto hidden flex-wrap items-center gap-[14px] md:flex">
+          {([
+            ['Em andamento', 'bg-[#db2777]'],
+            ['Rascunho', 'bg-[#0ea5e9]'],
+            ['Trancada', 'bg-[#94a3b8]'],
+            ['Não iniciada', 'bg-[#d9e0e9]'],
+          ] as const).map(([label, dot]) => (
+            <span key={label} className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#7d8a9d]">
+              <span className={cn('h-2 w-2 rounded-[3px]', dot)} />
+              {label}
+            </span>
+          ))}
+        </div>
       </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {monthCards.map((card) => {
+          const s = toneStyles[card.tone];
+          return (
+            <button
+              key={card.period}
+              type="button"
+              onClick={() => router.push(`/dashboard/dp/schedules/month/${card.period}`)}
+              className={cn(
+                'flex flex-col rounded-[16px] border px-4 pb-[14px] pt-[15px] text-left transition-all hover:-translate-y-0.5 hover:shadow-md',
+                s.card,
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span className={cn('text-[15.5px] font-black tracking-[-0.01em]', card.tone === 'empty' ? 'text-[#a3aec0]' : 'text-[#0f172a]')}>{card.name}</span>
+                {card.allLocked && <Lock className="h-3 w-3 text-[#94a3b8]" />}
+                <span className={cn('ml-auto text-[10.5px] font-extrabold', s.status)}>
+                  {card.statusLabel}
+                </span>
+              </div>
+              <div className="mt-[13px] h-[5px] overflow-hidden rounded-[3px] bg-[#e7ecf2]">
+                <div className={cn('h-full rounded-full', s.bar)} style={{ width: `${card.pct}%` }} />
+              </div>
+              <div className="mt-[9px] flex items-baseline gap-1.5 whitespace-nowrap">
+                <span className={cn('text-[12.5px] font-extrabold tabular-nums', card.tone === 'empty' ? 'text-[#a3aec0]' : 'text-[#334155]')}>
+                  {card.hasData ? `${card.startedCount} de ${totalUnits}` : `0 de ${totalUnits}`}
+                </span>
+                <span className="text-[11.5px] font-bold text-[#a3aec0]">unidades</span>
+                {card.alert && (
+                  <span className="ml-auto rounded-md bg-[#fee2e6] px-[7px] py-0.5 text-[10.5px] font-black text-[#be123c]">
+                    {card.alert}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {attention.length > 0 && (
+        <div className="mt-[26px] rounded-[16px] border border-[#e3e9f1] bg-white px-[18px] py-4">
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Precisa de atenção</p>
+          <div className="mt-3 grid gap-[10px] sm:grid-cols-2 lg:grid-cols-3">
+            {attention.map((a) => (
+              <button
+                key={a.key}
+                type="button"
+                onClick={() => router.push(`/dashboard/dp/schedules/month/${a.period}`)}
+                className={cn(
+                  'flex items-start gap-[9px] rounded-[12px] border px-3 py-[11px] text-left transition-colors',
+                  a.tone === 'err'
+                    ? 'border-[#fecdd6] bg-[#fef2f4] hover:bg-[#ffe8ed]'
+                    : 'border-[#fde68a] bg-[#fffbeb] hover:bg-[#fff7d6]',
+                )}
+              >
+                <AlertTriangle
+                  className={cn(
+                    'mt-0.5 h-3.5 w-3.5 shrink-0',
+                    a.tone === 'err' ? 'text-[#e11d48]' : 'text-[#d97706]',
+                  )}
+                />
+                <span className="min-w-0">
+                  <span
+                    className={cn(
+                      'block text-[12.5px] font-extrabold',
+                      a.tone === 'err' ? 'text-[#e11d48]' : 'text-[#b45309]',
+                    )}
+                  >
+                    {a.title}
+                  </span>
+                  <span className="mt-0.5 block text-[11.5px] font-semibold text-[#7d8a9d]">{a.detail}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <AddScheduleMonthDialog
         open={addMonthOpen}
         onOpenChange={setAddMonthOpen}
@@ -881,6 +1194,8 @@ export function DPSchedulesList() {
         units={units}
         shiftDefinitions={shiftDefinitions}
       />
+      </div>
+      </div>
     </div>
   );
 }

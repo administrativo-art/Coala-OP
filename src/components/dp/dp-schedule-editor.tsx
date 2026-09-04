@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { format, getDaysInMonth, isToday, parseISO, parse } from 'date-fns';
+import { format, getDaysInMonth, isToday, parseISO, parse, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { useDP } from '@/components/dp-context';
@@ -31,6 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
+  DialogClose,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -64,7 +65,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Plus, Pencil, Trash2, AlertTriangle, Users, Filter, Bus, CalendarDays, CalendarOff, Clock3, Loader2, Lock, LockOpen, Sparkles, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertTriangle, CalendarDays, CalendarOff, Clock3, Loader2, Lock, LockOpen, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { BackButton } from '@/components/navigation/back-button';
 import { getUserColor } from '@/lib/utils/user-colors';
 import { useToast } from '@/hooks/use-toast';
@@ -109,10 +110,56 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
+const WEEK_TONES = [
+  { bar: 'border-l-sky-400', bg: 'bg-sky-50', hover: 'hover:bg-sky-100', text: 'text-sky-700' },
+  { bar: 'border-l-violet-400', bg: 'bg-violet-50', hover: 'hover:bg-violet-100', text: 'text-violet-700' },
+  { bar: 'border-l-emerald-400', bg: 'bg-emerald-50', hover: 'hover:bg-emerald-100', text: 'text-emerald-700' },
+  { bar: 'border-l-amber-400', bg: 'bg-amber-50', hover: 'hover:bg-amber-100', text: 'text-amber-700' },
+  { bar: 'border-l-rose-400', bg: 'bg-rose-50', hover: 'hover:bg-rose-100', text: 'text-rose-700' },
+  { bar: 'border-l-cyan-400', bg: 'bg-cyan-50', hover: 'hover:bg-cyan-100', text: 'text-cyan-700' },
+] as const;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
+}
+
+// Semana do mês (1-based) a que um dia pertence — alinhada ao domingo.
+function weekOfMonth(year: number, month: number, day: number) {
+  const firstDow = new Date(year, month - 1, 1).getDay();
+  return Math.floor((day + firstDow - 1) / 7) + 1;
+}
+
+// Anel de "dias consecutivos" no estilo do protótipo: cinza (1–4), âmbar (5–6),
+// vermelho cheio (7+). Mostra a contagem no centro.
+function StreakRing({ count }: { count: number }) {
+  const pct = Math.round((Math.min(count, 7) / 7) * 100);
+  const danger = count >= 7;
+  const warn = count >= 5 && count < 7;
+  const fill = danger
+    ? 'hsl(var(--destructive))'
+    : warn
+      ? '#f59e0b'
+      : 'hsl(var(--muted-foreground) / 0.55)';
+  return (
+    <span
+      className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full"
+      style={{
+        background: danger
+          ? 'hsl(var(--destructive))'
+          : `conic-gradient(${fill} 0 ${pct}%, hsl(var(--muted)) 0)`,
+      }}
+      title={`${count} ${count === 1 ? 'dia consecutivo' : 'dias consecutivos'}`}
+    >
+      <span
+        className="grid h-[16px] w-[16px] place-items-center rounded-full bg-card text-[9.5px] font-black tabular-nums"
+        style={{ color: danger ? 'hsl(var(--destructive))' : warn ? '#b45309' : 'hsl(var(--muted-foreground))' }}
+      >
+        {count}
+      </span>
+    </span>
+  );
 }
 
 function shiftVacationKey(shift: Pick<DPShift, 'scheduleId' | 'id'>) {
@@ -162,10 +209,11 @@ interface ShiftDialogProps {
   /** userId → datas com folga explicitamente registrada */
   dayOffOccupied?: Map<string, Set<string>>;
   vacations: DPVacationRecord[];
+  onDelete?: (shift: DPShift) => void;
 }
 
 function ShiftDialog({
-  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, dayOffOccupied, vacations,
+  scheduleId, shift, defaultDate, defaultUnitId, units, shiftDefinitions, open, onOpenChange, siblingOccupied, dayOffOccupied, vacations, onDelete,
 }: ShiftDialogProps) {
   const { activeUsers } = useAuth();
   const { kiosks } = useKiosks();
@@ -214,10 +262,15 @@ function ShiftDialog({
 
   const selectedUserId = form.watch('userId');
   const selectedDate = form.watch('date');
+  const selectedUnitId = form.watch('unitId');
   const vacationConflict = useMemo(
     () => findApprovedVacationForDate(vacations, selectedUserId, selectedDate),
     [selectedDate, selectedUserId, vacations],
   );
+  const modalDateLabel = selectedDate
+    ? format(parseISO(selectedDate), 'dd/MM')
+    : 'sem data';
+  const modalUnitName = units.find((unit) => unit.id === selectedUnitId)?.name ?? 'Unidade não informada';
 
   function handleDefinitionChange(defId: string) {
     form.setValue('shiftDefinitionId', defId);
@@ -284,68 +337,78 @@ function ShiftDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Editar turno' : 'Adicionar turno'}</DialogTitle>
-          <DialogDescription>
-            Preencha colaborador, unidade, data e faixa de horário do turno.
+      <DialogContent
+        hideClose
+        overlayClassName="!bg-[#0f172a]/[0.42]"
+        className="max-h-[86vh] !max-w-[430px] gap-0 overflow-y-auto !rounded-[18px] border-0 bg-white !p-5 shadow-[0_40px_80px_-30px_rgba(15,23,42,0.6)]"
+      >
+        <DialogHeader className="relative space-y-0 pr-10 text-left">
+          <DialogTitle className="text-[16.5px] font-black leading-tight tracking-[-0.015em] text-[#0f172a]">
+            {isEdit ? 'Editar turno' : 'Novo turno'} · {modalDateLabel}
+          </DialogTitle>
+          <DialogDescription className="mt-1 text-[12.5px] font-semibold leading-[1.45] text-[#7d8a9d]">
+            {modalUnitName} · colaboradora e faixa de horário.
           </DialogDescription>
+          <DialogClose className="absolute -right-0 -top-0 grid h-7 w-7 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#94a3b8] transition-colors hover:border-[#cbd5e1] hover:bg-[#f8fafc] hover:text-[#475569] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9]">
+            <X className="h-[13px] w-[13px]" strokeWidth={2.6} />
+            <span className="sr-only">Fechar</span>
+          </DialogClose>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0">
 
             <FormField control={form.control} name="userId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Colaborador</FormLabel>
+              <FormItem className="mt-[15px] space-y-2">
+                <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Colaboradora</FormLabel>
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                  <SelectContent>
+                  <FormControl><SelectTrigger className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus:ring-2 focus:ring-[#0ea5e9] focus:ring-offset-0"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                  <SelectContent className="rounded-[11px] border-[#e3e9f1] text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
                     {operationalUsers.map(u => (
                       <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <FormMessage />
+                <FormMessage className="text-[11px]" />
               </FormItem>
             )} />
 
             {(!defaultDate || isEdit) && (
               <FormField control={form.control} name="date" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data</FormLabel>
-                  <FormControl><Input type="date" {...field} /></FormControl>
-                  <FormMessage />
+                <FormItem className="mt-[15px] space-y-2">
+                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Data</FormLabel>
+                  <FormControl><Input type="date" className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0" {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />
             )}
 
             {!unitLocked && (
               <FormField control={form.control} name="unitId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Unidade</FormLabel>
+                <FormItem className="mt-[15px] space-y-2">
+                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Unidade</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl>
-                    <SelectContent>
+                    <FormControl><SelectTrigger className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus:ring-2 focus:ring-[#0ea5e9] focus:ring-offset-0"><SelectValue placeholder="Selecione a unidade" /></SelectTrigger></FormControl>
+                    <SelectContent className="rounded-[11px] border-[#e3e9f1] text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
                       {activeOperationalUnits(units).map(u => (
                         <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <FormMessage />
+                  <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />
             )}
 
             <FormField control={form.control} name="shiftDefinitionId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Turno pré-definido (opcional)</FormLabel>
+              <FormItem className="mt-[15px] space-y-2">
+                <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Turno</FormLabel>
                 <Select
                   value={field.value || '__none__'}
                   onValueChange={v => handleDefinitionChange(v === '__none__' ? '' : v)}
                 >
-                  <FormControl><SelectTrigger><SelectValue placeholder="Selecionar turno" /></SelectTrigger></FormControl>
-                  <SelectContent>
+                  <FormControl><SelectTrigger className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus:ring-2 focus:ring-[#0ea5e9] focus:ring-offset-0"><SelectValue placeholder="Selecionar turno" /></SelectTrigger></FormControl>
+                  <SelectContent className="rounded-[11px] border-[#e3e9f1] text-xs shadow-[0_22px_44px_-24px_rgba(15,23,42,0.5)]">
                     <SelectItem value="__none__">— Manual —</SelectItem>
                     {(activeUnitIdForDefs
                       ? shiftDefinitions.filter(d => shiftDefinitionMatchesUnit(d, activeUnitIdForDefs))
@@ -357,23 +420,23 @@ function ShiftDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <FormMessage />
+                <FormMessage className="text-[11px]" />
               </FormItem>
             )} />
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="mt-[15px] grid grid-cols-2 gap-3">
               <FormField control={form.control} name="startTime" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Início</FormLabel>
-                  <FormControl><Input type="time" {...field} /></FormControl>
-                  <FormMessage />
+                <FormItem className="space-y-2">
+                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Início</FormLabel>
+                  <FormControl><Input type="time" className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0" {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />
               <FormField control={form.control} name="endTime" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fim</FormLabel>
-                  <FormControl><Input type="time" {...field} /></FormControl>
-                  <FormMessage />
+                <FormItem className="space-y-2">
+                  <FormLabel className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Fim</FormLabel>
+                  <FormControl><Input type="time" className="h-9 rounded-[9px] border-[#e3e9f1] bg-white px-2.5 text-xs font-bold text-[#334155] focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-0" {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
                 </FormItem>
               )} />
             </div>
@@ -388,11 +451,18 @@ function ShiftDialog({
               </div>
             )}
 
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="submit" disabled={form.formState.isSubmitting || !!vacationConflict}>
-                {form.formState.isSubmitting ? 'Salvando...' : 'Salvar'}
+            <DialogFooter className="!mt-6 !flex !flex-row !items-center !justify-between gap-3 sm:!justify-between sm:!space-x-0">
+              {isEdit && shift && onDelete ? (
+                <Button type="button" variant="outline" onClick={() => onDelete(shift)} className="h-[34px] rounded-[10px] border-[#fbd0da] px-[13px] text-[12.5px] font-extrabold text-[#be123c] hover:border-[#f7a9bc] hover:bg-[#fef2f4] hover:text-[#be123c]">
+                  Remover
+                </Button>
+              ) : <span />}
+              <div className="ml-auto flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-[34px] rounded-[10px] border-[#e6ebf2] px-3.5 text-[12.5px] font-extrabold text-[#475569] hover:bg-[#f8fafc]">Fechar</Button>
+              <Button type="submit" disabled={form.formState.isSubmitting || !!vacationConflict} className="h-[34px] rounded-[10px] bg-[#db2777] px-4 text-[12.5px] font-extrabold text-white hover:bg-[#be185d]">
+                {form.formState.isSubmitting ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Salvar turno'}
               </Button>
+              </div>
             </DialogFooter>
           </form>
         </Form>
@@ -519,9 +589,12 @@ function ShiftCard({
   const accentColor = getUserColor(shift.userId, userColor);
   const hasVisibleConflict = shift.hasConflict || !!vacationConflict;
   const vacationPeriod = vacationConflict ? formatVacationPeriod(vacationConflict) : null;
+  const shiftLabel = shiftDef?.name?.trim() || 'Turno manual';
+  const cardDetails = `${userName} · ${shiftLabel} · ${shift.startTime}–${shift.endTime}${vacationPeriod ? ` · Conflito: férias aprovadas de ${vacationPeriod}` : ''}`;
   return (
     <div
-      role={selectionMode ? 'button' : undefined}
+      role={selectionMode ? 'button' : 'group'}
+      aria-label={cardDetails}
       tabIndex={selectionMode ? 0 : undefined}
       onClick={selectionMode ? () => onSelect?.(shift) : undefined}
       onKeyDown={selectionMode ? (event) => {
@@ -531,7 +604,7 @@ function ShiftCard({
         }
       } : undefined}
       className={cn(
-        'group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors border border-l-[3px]',
+        'group relative flex min-w-0 items-center gap-1.5 rounded-lg border border-l-[3px] px-1.5 py-1 text-[11px] transition-colors',
         hasVisibleConflict
           ? 'bg-destructive/10 border-destructive/20'
           : 'bg-card border-border hover:bg-muted/30',
@@ -539,19 +612,19 @@ function ShiftCard({
         selected && 'ring-2 ring-primary bg-primary/5 border-primary/30'
       )}
       style={hasVisibleConflict ? undefined : { borderLeftColor: accentColor }}
-      title={vacationPeriod ? `Conflito: férias aprovadas de ${vacationPeriod}` : undefined}
+      title={cardDetails}
     >
-      <Avatar className="h-7 w-7 shrink-0">
+      <Avatar className="h-5 w-5 shrink-0">
         <AvatarImage src={userAvatar} />
-        <AvatarFallback className="text-[10px] font-semibold">
+        <AvatarFallback className="text-[9px] font-semibold">
           {initials(userName)}
         </AvatarFallback>
       </Avatar>
 
       <div className="flex-1 min-w-0">
         <p className="font-semibold truncate text-foreground leading-tight">{userName}</p>
-        <p className="text-muted-foreground leading-tight mt-0.5">
-          {shift.startTime}–{shift.endTime}
+        <p className="mt-px whitespace-normal break-words text-[9px] font-bold uppercase leading-[11px] tracking-[0.01em] text-muted-foreground">
+          {shiftLabel}
         </p>
       </div>
 
@@ -575,24 +648,16 @@ function ShiftCard({
           <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
         )}
         {shift.consecutiveDayCount && shift.consecutiveDayCount >= 1 && (
-          <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold
-            ${shift.consecutiveDayCount > 7
-              ? 'bg-destructive/15 text-destructive'
-              : shift.consecutiveDayCount === 7
-                ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
-                : 'bg-muted text-muted-foreground'
-            }`}>
-            {shift.consecutiveDayCount}
-          </span>
+          <StreakRing count={shift.consecutiveDayCount} />
         )}
       </div>
 
       {canEdit && !selectionMode && (
-        <div className="absolute inset-0 hidden group-hover:flex items-center justify-end gap-0.5 pr-1.5 bg-background/90 rounded-lg">
-          <button onClick={() => onEdit(shift)} className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-end gap-0.5 rounded-lg bg-background/90 pr-1.5 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+          <button type="button" aria-label={`Editar turno de ${userName}`} onClick={() => onEdit(shift)} className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <Pencil className="h-3 w-3" />
           </button>
-          <button onClick={() => onDelete(shift)} className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-destructive">
+          <button type="button" aria-label={`Remover turno de ${userName}`} onClick={() => onDelete(shift)} className="flex h-6 w-6 items-center justify-center rounded text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
@@ -616,7 +681,7 @@ function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user, vacationC
   return (
     <div
       className={cn(
-        'rounded border border-dashed px-1.5 py-1 flex items-center gap-1.5 min-w-0',
+        'inline-flex h-6 w-fit max-w-full min-w-0 items-center gap-1 rounded-[7px] border border-dashed px-1.5 py-0 self-start justify-self-start',
         vacationConflict
           ? 'border-destructive/30 bg-destructive/10'
           : 'border-muted-foreground/25 bg-muted/20',
@@ -625,19 +690,42 @@ function GhostShiftBadge({ shift, unitName, consecutiveDayCount, user, vacationC
         ? `${user.username} — conflito com férias aprovadas de ${vacationPeriod}`
         : `${user.username} — ${shift.startTime}–${shift.endTime} (${unitName}) · ${consecutiveDayCount} dias consecutivos`}
     >
-      <Avatar className="w-4 h-4 shrink-0">
+      <Avatar className="h-3.5 w-3.5 shrink-0">
         <AvatarImage src={user.avatarUrl} />
         <AvatarFallback style={{ background: color, fontSize: 6 }} className="text-white">
           {initials(user.username)}
         </AvatarFallback>
       </Avatar>
-      <span className="text-[10px] font-medium text-muted-foreground truncate">{user.username}</span>
-      <span className="text-[10px] text-muted-foreground/60 shrink-0">{shift.startTime}–{shift.endTime}</span>
+      <span className="max-w-20 truncate text-[9.5px] font-semibold text-muted-foreground">{user.username}</span>
+      <span className="shrink-0 text-[9.5px] text-muted-foreground/60">{shift.startTime}–{shift.endTime}</span>
       {vacationConflict && (
-        <span className="rounded bg-destructive/15 px-1 py-0.5 text-[9px] font-bold text-destructive">Férias</span>
+        <span className="rounded bg-destructive/15 px-1 py-0.5 text-[8.5px] font-bold text-destructive">Férias</span>
       )}
-      <span className={`text-[10px] font-bold shrink-0 ${countColor}`}>{consecutiveDayCount}</span>
-      <span className="text-[9px] bg-muted rounded px-1 shrink-0 text-muted-foreground/70 ml-auto">{unitName}</span>
+      <span className={`shrink-0 text-[9.5px] font-bold ${countColor}`}>{consecutiveDayCount}</span>
+      <span className="max-w-24 shrink truncate rounded bg-muted px-1 text-[8.5px] text-muted-foreground/70">{unitName}</span>
+    </div>
+  );
+}
+
+// ─── Last Sunday Badge ────────────────────────────────────────────────────────
+
+function LastSundayBadge({ user, dateLabel }: {
+  user: { username: string; avatarUrl?: string; color?: string };
+  dateLabel: string;
+}) {
+  const color = user.color ?? getUserColor(user.username);
+  return (
+    <div
+      className="inline-flex h-6 w-fit max-w-full min-w-0 items-center gap-1 rounded-[7px] border border-dashed border-muted-foreground/25 bg-muted/20 px-1.5 py-0 self-start justify-self-start"
+      title={`${user.username} — trabalhou no domingo anterior (${dateLabel})`}
+    >
+      <Avatar className="h-3.5 w-3.5 shrink-0">
+        <AvatarImage src={user.avatarUrl} />
+        <AvatarFallback style={{ background: color, fontSize: 6 }} className="text-white">
+          {initials(user.username)}
+        </AvatarFallback>
+      </Avatar>
+      <span className="max-w-24 truncate text-[9.5px] font-semibold text-muted-foreground">{user.username}</span>
     </div>
   );
 }
@@ -1066,9 +1154,12 @@ function UnassignedBadge({ user, statusLabel = 'Sem unidade vinculada' }: {
 interface DPScheduleEditorProps {
   schedule: DPSchedule;
   embedded?: boolean;
+  onBack?: () => void;
+  onPreviousMonth?: () => void;
+  onNextMonth?: () => void;
 }
 
-export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEditorProps) {
+export function DPScheduleEditor({ schedule, embedded = false, onBack, onPreviousMonth, onNextMonth }: DPScheduleEditorProps) {
   const { activeUsers, permissions, updateUser, user, isDefaultAdmin } = useAuth();
   const { kiosks } = useKiosks();
   const {
@@ -1090,9 +1181,8 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
     shifts,
     loading,
     error: shiftsError,
-    updateShiftsBatch,
+    applyShiftsBatch,
     deleteShift: doDelete,
-    deleteShiftsBatch,
   } = useDPShifts(schedule.id);
   const {
     vacations,
@@ -1222,8 +1312,11 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
   const [deleting, setDeleting] = useState(false);
   const [locking, setLocking] = useState(false);
   const [prevExpanded, setPrevExpanded] = useState(false);
+  const [collapsedWeeks, setCollapsedWeeks] = useState<Set<number>>(() => new Set());
   const [bulkSelectionActive, setBulkSelectionActive] = useState(false);
   const [selectedShiftIds, setSelectedShiftIds] = useState<string[]>([]);
+  const [bizneoQueueOpen, setBizneoQueueOpen] = useState(false);
+  const [vtDialogOpen, setVtDialogOpen] = useState(false);
   const [coverageDemands, setCoverageDemands] = useState(() => normalizeDPCoverageDemands(schedule.coverageDemands));
   const [coverageDemandDialog, setCoverageDemandDialog] = useState<{ date: string; unit: DPUnit } | null>(null);
 
@@ -1355,20 +1448,16 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
 
   React.useEffect(() => {
     setSelectedShiftIds((prev) => {
-      const availableIds = new Set(shifts.filter((shift) => shift.type === 'work').map((shift) => shift.id));
+      const availableIds = new Set(shifts.filter(isWorkShift).map((shift) => shift.id));
       const next = prev.filter((id) => availableIds.has(id));
       return next.length === prev.length ? prev : next;
     });
   }, [shifts]);
 
-  function clearSelectedShiftIds() {
-    setSelectedShiftIds([]);
-  }
-
   // Filters
   const [unitFilter, setUnitFilter] = useState<string>('__all__');
-  const [defFilter, setDefFilter] = useState<string>('__all__');
   const [userFilter, setUserFilter] = useState<string>('__all__');
+  const [weekFilter, setWeekFilter] = useState<string>('__all__');
   const [onlyAlerts, setOnlyAlerts] = useState(false);
 
   // Days in this month
@@ -1382,9 +1471,19 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
         dow: date.getDay(),
         dowLabel: DOW_SHORT[date.getDay()],
         isToday: isToday(date),
+        week: weekOfMonth(schedule.year, schedule.month, i + 1),
       };
     });
   }, [schedule.year, schedule.month]);
+
+  const monthWeeks = useMemo(
+    () => Array.from(new Set(days.map((d) => d.week))).sort((a, b) => a - b),
+    [days],
+  );
+  const visibleDays = useMemo(
+    () => (weekFilter === '__all__' ? days : days.filter((d) => String(d.week) === weekFilter)),
+    [days, weekFilter],
+  );
 
   // Per-unit mode flag (must come before activeUnits)
   const isPerUnit = !!schedule.unitId;
@@ -1447,13 +1546,21 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
   const selectedBulkShifts = useMemo(() => {
     const selectedSet = new Set(selectedShiftIds);
     return shifts
-      .filter((shift) => selectedSet.has(shift.id) && shift.type === 'work')
+      .filter((shift) => selectedSet.has(shift.id) && isWorkShift(shift))
       .map((shift) => ({
         shift,
         userName: effectiveUserMap.get(shift.userId)?.username ?? 'Desconhecido',
         unitName: units.find((unit) => unit.id === shift.unitId)?.name ?? shift.unitId,
       }));
   }, [selectedShiftIds, shifts, effectiveUserMap, units]);
+
+  const bulkPeople = useMemo(() => {
+    if (!schedule.unitId) return operationalUsers;
+    const linked = operationalUsers.filter((candidate) => (
+      userMatchesDPUnit(candidate, schedule.unitId, units, kiosks)
+    ));
+    return linked.length > 0 ? linked : operationalUsers;
+  }, [kiosks, operationalUsers, schedule.unitId, units]);
 
   // ── Per-unit mode: sibling schedules (same month/year, different unitId) ──
   const siblingIds = useMemo(() => {
@@ -1479,6 +1586,12 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
   const visibleDayOffShifts = useMemo(
     () => isPerUnit ? [...dayOffShifts, ...siblingDayOffShifts] : dayOffShifts,
     [dayOffShifts, isPerUnit, siblingDayOffShifts],
+  );
+  const bizneoQueueItems = useMemo(
+    () => dayOffShifts
+      .filter((shift) => shift.bizneoSyncStatus !== 'published')
+      .sort((left, right) => left.date.localeCompare(right.date)),
+    [dayOffShifts],
   );
   const dayOffOccupied = useMemo(() => {
     const occupied = new Map<string, Set<string>>();
@@ -1512,6 +1625,16 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
     () => buildApprovedVacationIndex(vacations),
     [vacations],
   );
+  const vacationDatesByUser = useMemo(() => {
+    const datesByUser = new Map<string, Set<string>>();
+    bulkPeople.forEach((candidate) => {
+      const dates = days
+        .filter(({ date }) => !!findApprovedVacationInIndex(approvedVacationIndex, candidate.id, date))
+        .map(({ date }) => date);
+      if (dates.length > 0) datesByUser.set(candidate.id, new Set(dates));
+    });
+    return datesByUser;
+  }, [approvedVacationIndex, bulkPeople, days]);
 
   const vacationConflictByShiftId = useMemo(() => {
     const conflicts = new Map<string, DPVacationRecord>();
@@ -1541,6 +1664,21 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
     [isPerUnit, prevSiblingWorkShifts, prevWorkShifts, siblingWorkShifts, workShifts]
   );
   const consecutiveCountMap = streakState.countByShiftId;
+
+  // lastSundayShiftsByDate[date] = work shifts of THIS unit on that date.
+  // Combines the current schedule with the previous month's own-unit shifts
+  // (already loaded for streak carry-over) so the first Sunday of the month
+  // can still look back across the month boundary.
+  const lastSundayShiftsByDate = useMemo(() => {
+    if (!isPerUnit) return {} as Record<string, DPShift[]>;
+    const idx: Record<string, DPShift[]> = {};
+    for (const s of [...workShifts, ...prevWorkShifts]) {
+      if (!idx[s.date]) idx[s.date] = [];
+      idx[s.date].push(s);
+    }
+    Object.values(idx).forEach((items) => items.sort(compareWorkShiftsByTime));
+    return idx;
+  }, [isPerUnit, workShifts, prevWorkShifts]);
 
   // ghostIndex[date][userId] = { shift, unitName, consecutiveDayCount }[]
   // Shows users from sibling units who are also linked to the current unit.
@@ -1789,11 +1927,7 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
   const shiftIndex = useMemo(() => {
     const idx: Record<string, Record<string, DPShift[]>> = {};
     for (const shift of shiftsWithConsecutive) {
-      if (defFilter !== '__all__' && shift.shiftDefinitionId !== defFilter) continue;
       if (userFilter !== '__all__' && shift.userId !== userFilter) continue;
-      const hasVacationConflict = vacationConflictByShiftId.has(shiftVacationKey(shift));
-      const hasCoverageAlert = (coverageByCellKey.get(`${shift.date}::${shift.unitId}`)?.gaps.length ?? 0) > 0;
-      if (onlyAlerts && !hasCoverageAlert && !shift.hasConflict && !hasVacationConflict && !(shift.consecutiveDayCount && shift.consecutiveDayCount >= 7)) continue;
       if (!idx[shift.date]) idx[shift.date] = {};
       if (!idx[shift.date][shift.unitId]) idx[shift.date][shift.unitId] = [];
       idx[shift.date][shift.unitId].push(shift);
@@ -1802,22 +1936,106 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
       Object.values(byUnit).forEach((items) => items.sort(compareWorkShiftsByTime));
     });
     return idx;
-  }, [coverageByCellKey, shiftsWithConsecutive, defFilter, userFilter, onlyAlerts, vacationConflictByShiftId]);
+  }, [shiftsWithConsecutive, userFilter]);
 
-  const visibleWorkShiftIds = useMemo(() => Array.from(new Set(
-    Object.values(shiftIndex).flatMap((byUnit) => (
-      Object.values(byUnit).flatMap((items) => items.map((shift) => shift.id))
-    )),
-  )), [shiftIndex]);
+  const alertsByCellKey = useMemo(() => {
+    const index = new Map<string, Array<{ key: string; label: string; tone: 'danger' | 'warning' }>>();
+    activeUnits.forEach((unit) => {
+      days.forEach(({ date }) => {
+        const alerts: Array<{ key: string; label: string; tone: 'danger' | 'warning' }> = [];
+        const coverage = coverageByCellKey.get(`${date}::${unit.id}`);
+        if (coverage?.gaps.length) {
+          alerts.push({
+            key: 'coverage',
+            label: coverage.gaps.length === 1 ? 'Cobertura incompleta' : `${coverage.gaps.length} lacunas de cobertura`,
+            tone: 'danger',
+          });
+        } else if (coverage?.hasUnplannedShifts) {
+          alerts.push({ key: 'unplanned', label: 'Equipe escalada sem demanda', tone: 'warning' });
+        }
 
-  const allVisibleShiftsSelected = visibleWorkShiftIds.length > 0
-    && visibleWorkShiftIds.every((id) => selectedShiftIds.includes(id));
+        (shiftIndex[date]?.[unit.id] ?? []).forEach((shift) => {
+          const userName = effectiveUserMap.get(shift.userId)?.username ?? shift.userName ?? 'Colaborador';
+          if (shift.hasConflict) {
+            alerts.push({ key: `conflict:${shift.id}`, label: `${userName}: conflito de escala`, tone: 'danger' });
+          }
+          if (vacationConflictByShiftId.has(shiftVacationKey(shift))) {
+            alerts.push({ key: `vacation:${shift.id}`, label: `${userName}: turno durante férias`, tone: 'danger' });
+          }
+          if ((shift.consecutiveDayCount ?? 0) >= 7) {
+            alerts.push({ key: `streak:${shift.id}`, label: `${userName}: ${shift.consecutiveDayCount} dias seguidos`, tone: 'warning' });
+          }
+        });
 
-  function toggleVisibleShiftSelection() {
-    const visibleIds = new Set(visibleWorkShiftIds);
+        (dayOffIndex[date]?.[unit.id] ?? []).forEach(({ userId, shift }) => {
+          const userName = effectiveUserMap.get(userId)?.username ?? shift?.userName ?? 'Colaborador';
+          if (workDayOffConflictKeys.has(`${userId}::${date}`)) {
+            alerts.push({ key: `day-off:${userId}`, label: `${userName}: turno e folga no mesmo dia`, tone: 'danger' });
+          }
+          if (shift?.bizneoSyncStatus === 'failed' || shift?.bizneoSyncStatus === 'removal_failed') {
+            alerts.push({ key: `bizneo-failed:${shift.id}`, label: `${userName}: falha no Bizneo`, tone: 'danger' });
+          } else if (shift?.bizneoSyncStatus === 'pending' || shift?.bizneoSyncStatus === 'publishing') {
+            alerts.push({ key: `bizneo-pending:${shift.id}`, label: `${userName}: envio ao Bizneo pendente`, tone: 'warning' });
+          }
+        });
+
+        if (alerts.length > 0) index.set(`${date}::${unit.id}`, alerts);
+      });
+    });
+    return index;
+  }, [activeUnits, coverageByCellKey, dayOffIndex, days, effectiveUserMap, shiftIndex, vacationConflictByShiftId, workDayOffConflictKeys]);
+
+  const alertDates = useMemo(
+    () => new Set(Array.from(alertsByCellKey.keys()).map((key) => key.slice(0, 10))),
+    [alertsByCellKey],
+  );
+  const renderDays = useMemo(
+    () => onlyAlerts ? visibleDays.filter(({ date }) => alertDates.has(date)) : visibleDays,
+    [alertDates, onlyAlerts, visibleDays],
+  );
+  const renderDateSet = useMemo(() => new Set(renderDays.map(({ date }) => date)), [renderDays]);
+
+  const visiblePeople = useMemo(() => {
+    const idsByUser = new Map<string, string[]>();
+    Object.entries(shiftIndex).forEach(([date, byUnit]) => {
+      if (!renderDateSet.has(date)) return;
+      Object.values(byUnit).forEach((items) => {
+        items.forEach((shift) => {
+          const ids = idsByUser.get(shift.userId) ?? [];
+          ids.push(shift.id);
+          idsByUser.set(shift.userId, ids);
+        });
+      });
+    });
+    return Array.from(idsByUser.entries())
+      .map(([id, shiftIds]) => ({
+        id,
+        name: effectiveUserMap.get(id)?.username ?? id,
+        shiftIds: Array.from(new Set(shiftIds)),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
+  }, [effectiveUserMap, renderDateSet, shiftIndex]);
+
+  function toggleShiftSelectionGroup(shiftIds: string[]) {
+    const groupIds = new Set(shiftIds);
     setSelectedShiftIds((previous) => {
-      if (allVisibleShiftsSelected) return previous.filter((id) => !visibleIds.has(id));
-      return Array.from(new Set([...previous, ...visibleWorkShiftIds]));
+      const allSelected = shiftIds.every((id) => previous.includes(id));
+      if (allSelected) return previous.filter((id) => !groupIds.has(id));
+      return Array.from(new Set([...previous, ...shiftIds]));
+    });
+  }
+
+  function removeShiftSelectionGroup(shiftIds: string[]) {
+    const groupIds = new Set(shiftIds);
+    setSelectedShiftIds((previous) => previous.filter((id) => !groupIds.has(id)));
+  }
+
+  function toggleWeek(week: number) {
+    setCollapsedWeeks((current) => {
+      const next = new Set(current);
+      if (next.has(week)) next.delete(week);
+      else next.add(week);
+      return next;
     });
   }
 
@@ -1970,37 +2188,67 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
   }
 
   return (
-    <div className="space-y-4">
+    <div className={cn(embedded ? 'flex min-h-0 flex-1 flex-col bg-white text-[#0f172a]' : 'space-y-4')}>
       {/* Header */}
-      <div className="flex items-center gap-3">
-        {!embedded && (
+      <div className={cn(
+        'flex flex-wrap items-center gap-3',
+        embedded && 'shrink-0 border-b border-[#eef1f6] px-[22px] py-[14px]',
+      )}>
+        {embedded && onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Voltar para todos os meses"
+            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] border border-[#e6ebf2] text-[#64748b] outline-none transition hover:bg-[#f8fafc] focus-visible:ring-2 focus-visible:ring-[#db2777]"
+          >
+            <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.4} />
+          </button>
+        ) : !embedded && (
           <BackButton fallbackHref="/dashboard/dp/schedules" ariaLabel="Voltar à página anterior" iconOnly variant="ghost" size="icon" iconClassName="h-4 w-4" />
         )}
         <div className="flex-1 min-w-0">
           {embedded ? (
-            <h2 className="text-lg font-semibold truncate">{scheduleUnit?.name ?? 'Todas as unidades'}</h2>
+            <h1 className="dp-schedule-month-title truncate text-[19px] font-black leading-6 tracking-[-0.02em] text-[#0f172a]">
+              {MONTHS[schedule.month - 1]} de {schedule.year} · {scheduleUnit?.name ?? 'Todas as unidades'}
+            </h1>
           ) : (
             <h1 className="text-xl font-semibold truncate">{schedule.name}</h1>
           )}
-          <p className="text-sm text-muted-foreground">
-            {embedded ? 'Escala da unidade' : `${MONTHS[schedule.month - 1]} ${schedule.year}`}
-          </p>
+          {!embedded && (
+            <p className="text-sm text-muted-foreground">{MONTHS[schedule.month - 1]} {schedule.year}</p>
+          )}
         </div>
+        {embedded && onPreviousMonth && onNextMonth && (
+          <div className="flex items-center overflow-hidden rounded-[10px] border border-[#e6ebf2]">
+            <Button type="button" variant="ghost" size="icon" aria-label="Mês anterior" className="h-8 w-8 rounded-none border-r border-[#eef1f6] text-[#64748b] hover:bg-[#f8fafc]" onClick={onPreviousMonth}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" aria-label="Próximo mês" className="h-8 w-8 rounded-none text-[#64748b] hover:bg-[#f8fafc]" onClick={onNextMonth}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+        {isPerUnit && (
+          <Button type="button" size="sm" variant="outline" onClick={() => setBizneoQueueOpen(true)} className="h-8 rounded-[10px] border-sky-200 bg-sky-50 px-3 text-[12.5px] font-extrabold text-sky-700 hover:bg-sky-100">
+            <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-sky-500" />
+            Bizneo · {bizneoQueueItems.length} pendente{bizneoQueueItems.length === 1 ? '' : 's'}
+          </Button>
+        )}
         {canManageSchedule && (
           schedule.locked ? (
-            <Button size="sm" variant="outline" onClick={handleUnlock} disabled={locking} className="border-amber-500/50 text-amber-600 hover:bg-amber-50">
+            <Button size="sm" variant="outline" onClick={handleUnlock} disabled={locking} className="h-8 rounded-[10px] border-amber-300 px-3 text-[12.5px] font-bold text-amber-600 hover:bg-amber-50">
               <LockOpen className="mr-2 h-4 w-4" />
               {locking ? 'Destrancando...' : 'Destrancar'}
             </Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={handleLock} disabled={locking}>
+            <Button size="sm" variant="outline" onClick={handleLock} disabled={locking} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
               <Lock className="mr-2 h-4 w-4" />
               {locking ? 'Trancando...' : 'Trancar'}
             </Button>
           )
         )}
         {canEdit && !bulkSelectionActive && (
-          <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)}>
+          <Button size="sm" variant="outline" onClick={() => setBulkSelectionActive(true)} className="h-8 rounded-[10px] border-[#e6ebf2] px-3 text-[12.5px] font-bold text-[#475569] hover:bg-[#f8fafc]">
             <Sparkles className="mr-2 h-4 w-4" />
             Editar em lote
           </Button>
@@ -2009,12 +2257,14 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
           <Button
             size="sm"
             onClick={() => setAddDialog({ date: days[0]?.date ?? '', unitId: activeUnits[0]?.id ?? '' })}
+            className="h-8 rounded-[10px] bg-[#db2777] px-[13px] text-[12.5px] font-extrabold text-white hover:bg-[#be185d]"
           >
             <Plus className="mr-2 h-4 w-4" />
             Adicionar turno
           </Button>
         )}
       </div>
+      <div className={cn('space-y-4', embedded && 'min-h-0 flex-1 overflow-y-auto')}>
       {schedule.locked && (
         <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0" />
@@ -2049,50 +2299,19 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
       )}
 
       <div className={cn(
-        'grid items-start gap-4',
-        bulkSelectionActive && 'min-[1180px]:grid-cols-[minmax(0,1fr)_19rem]',
+        'grid items-start',
+        bulkSelectionActive && 'min-[1180px]:grid-cols-[minmax(0,1fr)_314px]',
       )}>
-        <div className="min-w-0 space-y-4">
-        {canEdit && bulkSelectionActive && (
-          <div className="sticky top-2 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/95 px-3 py-2 text-sm text-sky-700 shadow-sm backdrop-blur dark:border-sky-900/40 dark:bg-sky-950/90 dark:text-sky-300">
-          <div className="min-w-0">
-            <p className="font-medium">Seleção de turnos ativa</p>
-            <p className="text-xs opacity-80">Clique nos cards ou selecione todos os turnos que estão visíveis nos filtros.</p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-            <Badge variant="outline">{selectedShiftIds.length} turno(s)</Badge>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={toggleVisibleShiftSelection}
-              disabled={visibleWorkShiftIds.length === 0}
-            >
-              {allVisibleShiftsSelected ? 'Desmarcar visíveis' : 'Selecionar visíveis'}
-            </Button>
-            {selectedShiftIds.length > 0 && (
-              <Button type="button" variant="ghost" size="sm" onClick={clearSelectedShiftIds}>
-                Limpar seleção
-              </Button>
-            )}
-            <Button type="button" variant="ghost" size="sm" onClick={resetBulkSelection}>
-              Cancelar
-            </Button>
-          </div>
-          </div>
-        )}
-
+        <div className={cn('min-w-0 space-y-4', embedded && 'px-[22px] pb-5 pt-[14px]')}>
       {/* Stats boxes */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 gap-[10px] lg:grid-cols-5">
         <Popover>
           <PopoverTrigger asChild>
-            <div className="rounded-xl border bg-card px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors">
-              <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                <Users className="h-3.5 w-3.5" />
+            <div className="cursor-pointer rounded-[13px] border border-[#e3e9f1] bg-white px-3 py-[10px] transition-colors hover:bg-[#f8fafc]">
+              <div className="mb-1 flex items-center gap-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-[#94a3b8]">
                 <span>Pessoas</span>
-                <ChevronRight className="h-3 w-3 ml-auto" />
               </div>
-              <p className="text-lg font-bold">{uniqueCollaborators}</p>
+              <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-[#0f172a]">{uniqueCollaborators}</span><span className="text-[11px] font-bold text-[#a3aec0]">no mês</span></p>
             </div>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2" align="start">
@@ -2111,74 +2330,55 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
             )}
           </PopoverContent>
         </Popover>
-        <div className={`rounded-xl border px-4 py-3 ${conflictCount > 0 ? 'bg-destructive/5 border-destructive/30' : 'bg-card'}`}>
-          <div className={`flex items-center gap-2 text-xs mb-1 ${conflictCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-            <AlertTriangle className="h-3.5 w-3.5" />
-            <span>Conflito{conflictCount !== 1 ? 's' : ''}</span>
-          </div>
-          <p className={`text-lg font-bold ${conflictCount > 0 ? 'text-destructive' : ''}`}>{conflictCount}</p>
-        </div>
-        <div className={`rounded-xl border px-4 py-3 ${coverageAlertCount > 0 ? 'bg-destructive/5 border-destructive/30' : 'bg-card'}`}>
-          <div className={`flex items-center gap-2 text-xs mb-1 ${coverageAlertCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-            <Clock3 className="h-3.5 w-3.5" />
-            <span>Cobertura</span>
-          </div>
-          <p className={`text-lg font-bold ${coverageAlertCount > 0 ? 'text-destructive' : ''}`}>{coverageAlertCount}</p>
-        </div>
-        <div className="rounded-xl border bg-card px-4 py-3">
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <Filter className="h-3.5 w-3.5" />
+        <button
+          type="button"
+          onClick={() => { setUserFilter('__all__'); setOnlyAlerts(false); }}
+          className="rounded-[13px] border border-[#e3e9f1] bg-white px-3 py-[10px] text-left transition-colors hover:bg-[#f8fafc]"
+        >
+          <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-[#94a3b8]">
             <span>Turnos</span>
           </div>
-          <p className="text-lg font-bold">{workShifts.length}</p>
-        </div>
-        <Popover>
-          <PopoverTrigger asChild>
-            <div className="rounded-xl border bg-card px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors">
-              <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                <Bus className="h-3.5 w-3.5" />
-                <span>Vale Transporte</span>
-                <ChevronRight className="h-3 w-3 ml-auto" />
-              </div>
-              <p className="text-lg font-bold">
-                {vtStats.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </p>
-            </div>
-          </PopoverTrigger>
-          <PopoverContent className="w-60 p-2" align="end">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Por colaborador</p>
-            {vtStats.breakdown.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhum colaborador com VT.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {vtStats.breakdown.map(row => (
-                  <div key={row.name} className="flex items-start justify-between gap-2">
-                    <span className="truncate text-xs pt-px">{row.name}</span>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs text-muted-foreground">
-                        {row.days}d · {row.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </p>
-                      {row.siblingTotal > 0 && (
-                        <p className="text-[10px] text-destructive/70 leading-tight font-bold">
-                          total: {(row.total + row.siblingTotal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
+          <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-[#0f172a]">{workShifts.length}</span><span className="text-[11px] font-bold text-[#a3aec0]">em {days.length} dias</span></p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setOnlyAlerts(true)}
+          className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${conflictCount > 0 ? 'border-[#fecdd6] bg-[#fef2f4]' : 'border-[#e3e9f1] bg-white hover:bg-[#f8fafc]'}`}
+        >
+          <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${conflictCount > 0 ? 'text-[#e11d48]' : 'text-[#94a3b8]'}`}>
+            <span>Conflito{conflictCount !== 1 ? 's' : ''}</span>
+          </div>
+          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${conflictCount > 0 ? 'text-[#e11d48]' : 'text-[#0f172a]'}`}>{conflictCount}</span><span className={`text-[11px] font-bold ${conflictCount > 0 ? 'text-[#fb7185]' : 'text-[#a3aec0]'}`}>{conflictCount > 0 ? 'exigem revisão' : 'sem alertas'}</span></p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setOnlyAlerts(true)}
+          className={`rounded-[13px] border px-3 py-[10px] text-left transition-colors ${coverageAlertCount > 0 ? 'border-[#fde68a] bg-[#fffbeb]' : 'border-[#e3e9f1] bg-white hover:bg-[#f8fafc]'}`}
+        >
+          <div className={`mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#94a3b8]'}`}>
+            <span>Cobertura</span>
+          </div>
+          <p className="flex items-baseline gap-1.5"><span className={`text-[20px] font-black tracking-[-0.02em] ${coverageAlertCount > 0 ? 'text-[#d97706]' : 'text-[#0f172a]'}`}>{coverageAlertCount}</span><span className={`text-[11px] font-bold ${coverageAlertCount > 0 ? 'text-[#d6a037]' : 'text-[#a3aec0]'}`}>{coverageAlertCount > 0 ? 'dias com lacuna' : 'sem lacunas'}</span></p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setVtDialogOpen(true)}
+          className="rounded-[13px] border border-[#e3e9f1] bg-white px-3 py-[10px] text-left transition-colors hover:bg-[#f8fafc]"
+        >
+          <div className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-[#94a3b8]">
+            <span>Vale Transporte</span>
+          </div>
+          <p className="flex items-baseline gap-1.5"><span className="text-[20px] font-black tracking-[-0.02em] text-[#0f172a]">{vtStats.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span><span className="text-[11px] font-bold text-[#a3aec0]">{vtStats.breakdown.length} pessoas</span></p>
+        </button>
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Calendar badge (readonly – set at creation) */}
         {schedule.calendarId && (() => {
           const cal = calendars.find(c => c.id === schedule.calendarId);
           return cal ? (
-            <div className="flex items-center gap-1.5 h-8 px-2 rounded-lg border bg-muted/50 text-xs text-muted-foreground">
+            <div className="flex h-[30px] items-center gap-[7px] rounded-[9px] border border-[#e6ebf2] bg-[#f8fafc] px-[11px] text-xs font-bold text-[#64748b]">
               <CalendarDays className="h-3 w-3 shrink-0" />
               {cal.name}
             </div>
@@ -2193,31 +2393,42 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
             </SelectContent>
           </Select>
         )}
-        <Select value={defFilter} onValueChange={setDefFilter}>
-          <SelectTrigger className="h-8 text-xs w-[160px]"><SelectValue placeholder="Todos os turnos" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todos os turnos</SelectItem>
-            {shiftDefinitions.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
         <Select value={userFilter} onValueChange={setUserFilter}>
-          <SelectTrigger className="h-8 text-xs w-[160px]"><SelectValue placeholder="Todos os colaboradores" /></SelectTrigger>
+          <SelectTrigger className="h-[30px] w-[210px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569] [&>span]:whitespace-nowrap"><SelectValue placeholder="Todas as colaboradoras" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">Todos os colaboradores</SelectItem>
+            <SelectItem value="__all__">Todas as colaboradoras</SelectItem>
             {operationalUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.username}</SelectItem>)}
           </SelectContent>
         </Select>
-        <button
-          onClick={() => setOnlyAlerts(v => !v)}
-          className={`h-8 px-3 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1.5
-            ${onlyAlerts
-              ? 'bg-destructive/10 border-destructive/30 text-destructive'
-              : 'border-border text-muted-foreground hover:bg-muted/50'
-            }`}
-        >
-          <AlertTriangle className="h-3 w-3" />
-          Ver apenas alertas
-        </button>
+        <Select value={weekFilter} onValueChange={setWeekFilter}>
+          <SelectTrigger className="h-[30px] w-[120px] rounded-[9px] border-[#e6ebf2] bg-white text-xs font-bold text-[#475569]"><SelectValue placeholder="Mês inteiro" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Mês inteiro</SelectItem>
+            {monthWeeks.map(w => <SelectItem key={w} value={String(w)}>Semana {w}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 md:flex">
+            Dias seguidos
+            <StreakRing count={3} />
+            <StreakRing count={6} />
+            <StreakRing count={7} />
+            <span className="normal-case tracking-normal">1–4 · 5–6 · 7+</span>
+          </span>
+          <button
+            type="button"
+            aria-pressed={onlyAlerts}
+            onClick={() => setOnlyAlerts(v => !v)}
+            className={`flex h-[30px] items-center gap-[7px] rounded-[9px] border px-[11px] text-xs font-extrabold transition-colors
+              ${onlyAlerts
+                ? 'bg-destructive/10 border-destructive/30 text-destructive'
+                : 'border-border text-muted-foreground hover:bg-muted/50'
+              }`}
+          >
+            <AlertTriangle className="h-3 w-3" />
+            Ver apenas alertas
+          </button>
+        </div>
       </div>
 
       {/* Grid */}
@@ -2226,15 +2437,21 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
           <p className="text-sm">Nenhuma unidade cadastrada. Cadastre unidades em Configurações primeiro.</p>
         </div>
       ) : (
-        <div className="overflow-auto rounded-xl border">
+        <div className="overflow-auto rounded-[14px] border border-[#e9edf4]">
           <table className="w-max min-w-full text-sm border-collapse">
             <thead>
               <tr className="bg-muted/40">
                 {/* Sticky day column header */}
-                <th className="sticky left-0 z-20 bg-muted/40 border-b border-r px-3 py-2.5 text-left font-medium text-muted-foreground min-w-[80px] text-xs uppercase tracking-wider">
+                <th className="sticky left-0 z-20 min-w-[88px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">
                   Data
                 </th>
-                {activeUnits.map(unit => (
+                {isPerUnit ? (
+                  <>
+                    <th className="min-w-[600px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Turnos</th>
+                    <th className="w-[360px] min-w-[360px] border-b border-r border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Folgas &amp; férias</th>
+                    <th className="w-44 min-w-44 border-b border-[#e9edf4] bg-[#f6f8fb] px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#94a3b8]">Alertas</th>
+                  </>
+                ) : activeUnits.map(unit => (
                   <th
                     key={unit.id}
                     className="border-b border-r px-4 py-2.5 text-left font-medium text-muted-foreground min-w-[200px] text-xs uppercase tracking-wider last:border-r-0"
@@ -2250,10 +2467,12 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
                 <>
                   <tr>
                     <td
-                      colSpan={activeUnits.length + 1}
+                      colSpan={isPerUnit ? 4 : activeUnits.length + 1}
                       className="sticky left-0 border-b"
                     >
                       <button
+                        type="button"
+                        aria-expanded={prevExpanded}
                         onClick={() => setPrevExpanded(v => !v)}
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 bg-muted/30 hover:bg-muted/50 transition-colors"
                       >
@@ -2289,7 +2508,7 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
                         {activeUnits.map(unit => {
                           const cellShifts = prevShiftIndexWithCount[date]?.[unit.id] ?? [];
                           return (
-                            <td key={unit.id} className="border-r px-2 py-2 align-top last:border-r-0 min-w-[200px]">
+                            <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="border-r px-2 py-2 align-top last:border-r-0 min-w-[200px]">
                               <div className="flex flex-col gap-1">
                                 {cellShifts.map(shift => {
                                   const user = effectiveUserMap.get(shift.userId);
@@ -2318,7 +2537,7 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
                   })}
                   <tr>
                     <td
-                      colSpan={activeUnits.length + 1}
+                      colSpan={isPerUnit ? 4 : activeUnits.length + 1}
                       className="sticky left-0 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground bg-muted/50 border-b"
                     >
                       {MONTHS[schedule.month - 1]} {schedule.year}
@@ -2328,11 +2547,18 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
               )}
 
               {/* ── Current month rows ── */}
-              {days.map(({ day, date, dow, dowLabel, isToday: dayIsToday }) => {
+              {renderDays.map(({ day, date, dow, dowLabel, isToday: dayIsToday, week }, dayIdx) => {
                 const isSunday = dow === 0;
                 const isSaturday = dow === 6;
                 const isWeekend = isSunday || isSaturday;
                 const isHoliday = holidaySet.has(date);
+                const showWeekSeparator = dayIdx === 0 || renderDays[dayIdx - 1].week !== week;
+                const weekDays = days.filter((d) => d.week === week);
+                const weekCollapsed = collapsedWeeks.has(week);
+                const weekTone = WEEK_TONES[(week - 1) % WEEK_TONES.length];
+                const weekLabel = weekDays.length > 0
+                  ? `Semana ${week} · ${weekDays[0].day} a ${weekDays[weekDays.length - 1].day} de ${MONTHS[schedule.month - 1].toLowerCase()}`
+                  : `Semana ${week}`;
 
                 const rowBg = isHoliday
                   ? 'bg-orange-50 dark:bg-orange-900/10'
@@ -2345,8 +2571,34 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
                   : isWeekend ? 'bg-muted/30' : 'bg-background';
 
                 return (
-                  <tr
-                    key={date}
+                  <React.Fragment key={date}>
+                  {showWeekSeparator && (
+                    <tr>
+                      <td
+                        colSpan={isPerUnit ? 4 : activeUnits.length + 1}
+                        className={cn('sticky left-0 border-b border-l-4 p-0', weekTone.bar)}
+                      >
+                        <button
+                          type="button"
+                          aria-expanded={!weekCollapsed}
+                          onClick={() => toggleWeek(week)}
+                          className={cn(
+                            'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[9.5px] font-extrabold uppercase tracking-[0.12em] transition-colors',
+                            weekTone.bg,
+                            weekTone.hover,
+                            weekTone.text,
+                          )}
+                        >
+                          <ChevronRight className={cn('h-3 w-3 shrink-0 transition-transform', !weekCollapsed && 'rotate-90')} strokeWidth={2.6} />
+                          <span>{weekLabel}</span>
+                          <span className="ml-auto text-[9.5px] font-bold normal-case tracking-normal opacity-60">
+                            {weekCollapsed ? 'Recolhida' : `${weekDays.length} ${weekDays.length === 1 ? 'dia' : 'dias'}`}
+                          </span>
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                  {!weekCollapsed && <tr
                     className={`border-b transition-colors last:border-b-0 ${rowBg}`}
                   >
                     {/* Day label cell */}
@@ -2382,10 +2634,6 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
                       const ghosts = isPerUnit
                         ? Object.values(ghostIndex[date] ?? {}).flat()
                         : [];
-                      const displayWorkEntries = [
-                        ...cellShifts.map(shift => ({ kind: 'own' as const, shift })),
-                        ...ghosts.map(ghost => ({ kind: 'ghost' as const, ...ghost })),
-                      ].sort((left, right) => compareWorkShiftsByTime(left.shift, right.shift));
                       const visibleDayOffUserIds = new Set(dayOffEntries.map((entry) => entry.userId));
                       const unassignedUsers = (rosterUserIdsByUnit.get(unit.id) ?? [])
                         .filter((userId) => (
@@ -2405,149 +2653,218 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
                         })
                         .sort((left, right) => left.user.username.localeCompare(right.user.username, 'pt-BR'));
 
-                      return (
-                        <td
-                          key={unit.id}
-                          className="border-r px-2 py-2 align-top last:border-r-0 min-w-[200px]"
-                        >
-                          <div className="flex flex-col gap-1">
-                            {coverageAlert ? (
-                              <CoverageStatus
-                                coverage={coverageAlert}
-                                canEditDemand={canEdit && coverageAlert.mode === 'on_demand'}
-                                onEditDemand={() => setCoverageDemandDialog({ date, unit })}
-                              />
-                            ) : null}
-                            {displayWorkEntries.map((entry) => {
-                              const { shift } = entry;
-                              const user = effectiveUserMap.get(shift.userId);
-                              if (entry.kind === 'ghost') {
-                                if (!user) return null;
-                                return (
-                                  <GhostShiftBadge
-                                    key={`ghost-${shift.id}`}
-                                    shift={shift}
-                                    unitName={entry.unitName}
-                                    consecutiveDayCount={entry.consecutiveDayCount}
-                                    user={user}
-                                    vacationConflict={vacationConflictForShift(shift)}
-                                  />
-                                );
-                              }
-                              const def = shift.shiftDefinitionId ? defMap.get(shift.shiftDefinitionId) : undefined;
-                              return (
-                                <ShiftCard
-                                  key={`own-${shift.id}`}
-                                  shift={shift}
-                                  vacationConflict={vacationConflictForShift(shift)}
-                                  userName={user?.username ?? 'Desconhecido'}
-                                  userAvatar={user?.avatarUrl}
-                                  userColor={user?.color}
-                                  shiftDef={def}
-                                  canEdit={canEdit}
-                                  selectionMode={bulkSelectionActive}
-                                  selected={selectedShiftIds.includes(shift.id)}
-                                  onSelect={(selectedShift) => toggleSelectedShift(selectedShift.id)}
-                                  onEdit={setEditShift}
-                                  onDelete={setDeleteTarget}
-                                />
-                              );
+                      const cellAlerts = alertsByCellKey.get(`${date}::${unit.id}`) ?? [];
+                      const workCards = [...cellShifts].sort(compareWorkShiftsByTime).map((shift) => {
+                        const user = effectiveUserMap.get(shift.userId);
+                        const def = shift.shiftDefinitionId ? defMap.get(shift.shiftDefinitionId) : undefined;
+                        return (
+                          <ShiftCard
+                            key={`own-${shift.id}`}
+                            shift={shift}
+                            vacationConflict={vacationConflictForShift(shift)}
+                            userName={user?.username ?? 'Desconhecido'}
+                            userAvatar={user?.avatarUrl}
+                            userColor={user?.color}
+                            shiftDef={def}
+                            canEdit={canEdit}
+                            selectionMode={bulkSelectionActive}
+                            selected={selectedShiftIds.includes(shift.id)}
+                            onSelect={(selectedShift) => toggleSelectedShift(selectedShift.id)}
+                            onEdit={setEditShift}
+                            onDelete={setDeleteTarget}
+                          />
+                        );
+                      });
+                      const ghostTags = [...ghosts]
+                        .sort((left, right) => compareWorkShiftsByTime(left.shift, right.shift))
+                        .map((ghost) => {
+                          const user = effectiveUserMap.get(ghost.shift.userId);
+                          if (!user) return null;
+                          return (
+                            <GhostShiftBadge
+                              key={`ghost-${ghost.shift.id}`}
+                              shift={ghost.shift}
+                              unitName={ghost.unitName}
+                              consecutiveDayCount={ghost.consecutiveDayCount}
+                              user={user}
+                              vacationConflict={vacationConflictForShift(ghost.shift)}
+                            />
+                          );
+                        });
+                      const priorSundayDate = isSunday
+                        ? format(subDays(parse(date, 'yyyy-MM-dd', new Date()), 7), 'yyyy-MM-dd')
+                        : null;
+                      const priorSundayDateLabel = priorSundayDate
+                        ? format(parse(priorSundayDate, 'yyyy-MM-dd', new Date()), 'dd/MM')
+                        : '';
+                      const lastSundayTags = priorSundayDate
+                        ? (lastSundayShiftsByDate[priorSundayDate] ?? []).map((shift) => {
+                          const user = effectiveUserMap.get(shift.userId);
+                          if (!user) return null;
+                          return (
+                            <LastSundayBadge
+                              key={`last-sunday-${shift.id}`}
+                              user={user}
+                              dateLabel={priorSundayDateLabel}
+                            />
+                          );
+                        })
+                        : [];
+                      const dayOffCards = dayOffEntries.map(({ userId, explicit, shift, sourceUnitId, sourceUnitName }) => {
+                        const user = effectiveUserMap.get(userId);
+                        if (!user) return null;
+                        const shouldRetry = shift?.bizneoSyncStatus === 'failed'
+                          || shift?.bizneoSyncStatus === 'publishing'
+                          || shift?.bizneoSyncStatus === 'pending';
+                        const source = !explicit ? 'predicted' as const : shouldRetry ? 'retry' as const : 'manual' as const;
+                        return (
+                          <DayOffBadge
+                            key={`${date}-${unit.id}-${userId}-${explicit ? 'explicit' : 'predicted'}`}
+                            explicit={explicit}
+                            shift={shift}
+                            user={user}
+                            contextLabel={sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units) ? `Folga em ${sourceUnitName}` : undefined}
+                            canPublish={canPublishDayOff && (explicit || !schedule.locked)}
+                            canRemove={canPublishDayOff && explicit}
+                            publishing={publishingDayOffKey === `${userId}::${date}`}
+                            removing={removingDayOffKey === `${userId}::${date}`}
+                            onPublish={() => void handlePublishDayOff({
+                              scheduleId: shift?.scheduleId,
+                              userId,
+                              unitId: shift?.unitId ?? unit.id,
+                              date,
+                              source,
                             })}
-                            {dayOffEntries.length > 0 && (
-                              <>
-                                {displayWorkEntries.length > 0 && (
-                                  <div className="border-t border-dashed border-muted-foreground/20 my-0.5" />
-                                )}
-                                {dayOffEntries.map(({ userId, explicit, shift, sourceUnitId, sourceUnitName }) => {
-                                  const user = effectiveUserMap.get(userId);
-                                  if (!user) return null;
-                                  const shouldRetry = shift?.bizneoSyncStatus === 'failed'
-                                    || shift?.bizneoSyncStatus === 'publishing'
-                                    || shift?.bizneoSyncStatus === 'pending';
-                                  const source = !explicit
-                                    ? 'predicted' as const
-                                    : shouldRetry
-                                      ? 'retry' as const
-                                      : 'manual' as const;
-                                  return (
-                                    <DayOffBadge
-                                      key={`${date}-${unit.id}-${userId}-${explicit ? 'explicit' : 'predicted'}`}
-                                      explicit={explicit}
-                                      shift={shift}
-                                      user={user}
-                                      contextLabel={
-                                        sourceUnitId && !operationalUnitIdsMatch(sourceUnitId, unit.id, units)
-                                          ? `Folga em ${sourceUnitName}`
-                                          : undefined
-                                      }
-                                      canPublish={canPublishDayOff && (explicit || !schedule.locked)}
-                                      canRemove={canPublishDayOff && explicit}
-                                      publishing={publishingDayOffKey === `${userId}::${date}`}
-                                      removing={removingDayOffKey === `${userId}::${date}`}
-                                      onPublish={() => void handlePublishDayOff({
-                                        scheduleId: shift?.scheduleId,
-                                        userId,
-                                        unitId: shift?.unitId ?? unit.id,
-                                        date,
-                                        source,
-                                      })}
-                                      onRemove={() => {
-                                        if (!shift) return;
-                                        setDayOffRemovalTarget({
-                                          shift,
-                                          userName: user.username,
-                                          unitName: sourceUnitName,
-                                        });
-                                      }}
-                                      conflictsWithWork={workDayOffConflictKeys.has(`${userId}::${date}`)}
-                                    />
-                                  );
-                                })}
-                              </>
-                            )}
-                            {unassignedUsers.length > 0 && (
-                              <>
-                                {(displayWorkEntries.length > 0 || dayOffEntries.length > 0) && (
-                                  <div className="my-0.5 border-t border-dashed border-muted-foreground/20" />
-                                )}
-                                {unassignedUsers.map((candidate) => (
-                                  <UnassignedBadge
-                                    key={`${date}-${unit.id}-${candidate.userId}-unassigned`}
-                                    user={candidate.user}
-                                    statusLabel={candidate.statusLabel}
+                            onRemove={() => {
+                              if (!shift) return;
+                              setDayOffRemovalTarget({ shift, userName: user.username, unitName: sourceUnitName });
+                            }}
+                            conflictsWithWork={workDayOffConflictKeys.has(`${userId}::${date}`)}
+                          />
+                        );
+                      });
+                      const unassignedCards = unassignedUsers.map((candidate) => (
+                        <UnassignedBadge
+                          key={`${date}-${unit.id}-${candidate.userId}-unassigned`}
+                          user={candidate.user}
+                          statusLabel={candidate.statusLabel}
+                        />
+                      ));
+                      const addShiftButton = canEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => setAddDialog({ date, unitId: unit.id })}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/50 px-2 py-1.5 text-xs text-muted-foreground/60 transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary/70"
+                        >
+                          <Plus className="h-3 w-3 shrink-0" />
+                          <span>Adicionar turno</span>
+                        </button>
+                      ) : null;
+                      const addDayOffButton = canPublishDayOff && !schedule.locked ? (
+                        <button
+                          type="button"
+                          onClick={() => setManualDayOffDialog({ date, unitId: unit.id })}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-sky-300/70 px-2 py-1.5 text-xs text-sky-600/80 transition-colors hover:border-sky-500 hover:bg-sky-50 dark:border-sky-800 dark:hover:bg-sky-950/20"
+                        >
+                          <CalendarOff className="h-3 w-3 shrink-0" />
+                          <span>Adicionar folga</span>
+                        </button>
+                      ) : null;
+
+                      return (
+                        <td key={unit.id} colSpan={isPerUnit ? 3 : undefined} className="min-w-[200px] border-r p-0 align-top last:border-r-0">
+                          {isPerUnit ? (
+                            <div className="grid min-h-[52px] grid-cols-[minmax(600px,1fr)_360px_176px] divide-x divide-[#eef1f6]">
+                            <div className="p-2">
+                              <div className="grid max-w-[600px] grid-cols-3 gap-1">
+                                {workCards}
+                                {addShiftButton}
+                              </div>
+                              {(ghostTags.some(Boolean) || lastSundayTags.some(Boolean)) && (
+                                <div className="mt-1.5 flex flex-col gap-1 border-t border-dashed border-[#e3e9f1] pt-1.5">
+                                  {ghostTags.some(Boolean) && (
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-[#a3aec0]">Em outras unidades</span>
+                                      <div className="flex min-w-0 flex-wrap gap-1">{ghostTags}</div>
+                                    </div>
+                                  )}
+                                  {lastSundayTags.some(Boolean) && (
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="shrink-0 pt-1 text-[8.5px] font-extrabold uppercase tracking-[0.08em] text-[#a3aec0]">Domingo passado</span>
+                                      <div className="flex min-w-0 flex-wrap gap-1">{lastSundayTags}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              </div>
+                              <div className="flex flex-col gap-1 p-2">
+                                {dayOffCards}
+                                {unassignedCards}
+                                {addDayOffButton}
+                              </div>
+                              <div className="flex flex-col gap-1 p-2">
+                                {coverageAlert ? (
+                                  <CoverageStatus
+                                    coverage={coverageAlert}
+                                    canEditDemand={canEdit && coverageAlert.mode === 'on_demand'}
+                                    onEditDemand={() => setCoverageDemandDialog({ date, unit })}
                                   />
-                                ))}
-                              </>
-                            )}
-                            {(canEdit || (canPublishDayOff && !schedule.locked)) && (
-                              <div className={cn('grid gap-1', canEdit && canPublishDayOff ? 'grid-cols-2' : 'grid-cols-1')}>
-                                {canEdit && (
-                                  <button
-                                    onClick={() => setAddDialog({ date, unitId: unit.id })}
-                                    className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-colors text-muted-foreground/50 hover:text-primary/70 px-2 py-1.5 text-xs w-full"
-                                  >
-                                    <Plus className="h-3 w-3 shrink-0" />
-                                    <span>Adicionar</span>
-                                  </button>
-                                )}
-                                {canPublishDayOff && !schedule.locked && (
-                                  <button
-                                    onClick={() => setManualDayOffDialog({ date, unitId: unit.id })}
-                                    className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-sky-300/70 hover:border-sky-500 hover:bg-sky-50 transition-colors text-sky-600/80 px-2 py-1.5 text-xs w-full dark:border-sky-800 dark:hover:bg-sky-950/20"
-                                  >
-                                    <CalendarOff className="h-3 w-3 shrink-0" />
-                                    <span>Folga</span>
-                                  </button>
+                                ) : null}
+                                {cellAlerts
+                                  .filter((alert) => alert.key !== 'coverage' && alert.key !== 'unplanned')
+                                  .map((alert) => (
+                                    <div
+                                      key={alert.key}
+                                      className={cn(
+                                        'flex items-start gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] font-medium',
+                                        alert.tone === 'danger'
+                                          ? 'border-destructive/30 bg-destructive/5 text-destructive'
+                                          : 'border-amber-300 bg-amber-50/70 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300',
+                                      )}
+                                    >
+                                      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                                      <span>{alert.label}</span>
+                                    </div>
+                                  ))}
+                                {!coverageAlert && cellAlerts.length === 0 && (
+                                  <p className="px-1 py-2 text-[11px] text-muted-foreground">Sem alertas.</p>
                                 )}
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-1 p-2">
+                              {coverageAlert ? (
+                                <CoverageStatus
+                                  coverage={coverageAlert}
+                                  canEditDemand={canEdit && coverageAlert.mode === 'on_demand'}
+                                  onEditDemand={() => setCoverageDemandDialog({ date, unit })}
+                                />
+                              ) : null}
+                              {workCards}
+                              {dayOffCards}
+                              {unassignedCards}
+                              {(addShiftButton || addDayOffButton) && (
+                                <div className={cn('grid gap-1', addShiftButton && addDayOffButton ? 'grid-cols-2' : 'grid-cols-1')}>
+                                  {addShiftButton}
+                                  {addDayOffButton}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </td>
                       );
                     })}
-                  </tr>
+                  </tr>}
+                  </React.Fragment>
                 );
               })}
+              {renderDays.length === 0 && (
+                <tr>
+                  <td colSpan={isPerUnit ? 4 : activeUnits.length + 1} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    Nenhuma ocorrência encontrada nos filtros atuais.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -2561,15 +2878,122 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
             previousShifts={isPerUnit ? [...prevShifts, ...prevSiblingShifts] : prevShifts}
             siblingShifts={siblingShifts}
             shiftDefinitions={shiftDefinitions}
-            updateShiftsBatch={updateShiftsBatch}
-            deleteShiftsBatch={deleteShiftsBatch}
+            people={bulkPeople.map((u) => ({ id: u.id, name: u.username }))}
+            dayOffDatesByUser={dayOffOccupied}
+            vacationDatesByUser={vacationDatesByUser}
+            visiblePeople={visiblePeople}
+            onTogglePerson={toggleShiftSelectionGroup}
+            onRemoveSelected={removeShiftSelectionGroup}
+            applyShiftsBatch={applyShiftsBatch}
             onApplied={resetBulkSelection}
             onCancel={resetBulkSelection}
           />
         )}
       </div>
+      </div>
 
       {/* Dialogs */}
+      <Dialog open={bizneoQueueOpen} onOpenChange={setBizneoQueueOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Fila do Bizneo · {scheduleUnit?.name ?? 'Unidade'}</DialogTitle>
+            <DialogDescription>
+              Folgas desta escala que ainda precisam de confirmação ou nova tentativa no Bizneo.
+            </DialogDescription>
+          </DialogHeader>
+          {bizneoQueueItems.length === 0 ? (
+            <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+              Nenhuma pendência nesta unidade.
+            </div>
+          ) : (
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+              {bizneoQueueItems.map((shift) => {
+                const userName = effectiveUserMap.get(shift.userId)?.username ?? shift.userName ?? 'Colaborador';
+                const busy = publishingDayOffKey === `${shift.userId}::${shift.date}`
+                  || removingDayOffKey === `${shift.userId}::${shift.date}`;
+                const isRemovalFailure = shift.bizneoSyncStatus === 'removal_failed';
+                return (
+                  <div key={shift.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{userName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(parseISO(shift.date), "dd 'de' MMMM", { locale: ptBR })} · {shift.bizneoSyncStatus ?? 'pendente'}
+                      </p>
+                    </div>
+                    {canPublishDayOff && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isRemovalFailure ? 'destructive' : 'outline'}
+                        disabled={busy}
+                        onClick={() => {
+                          if (isRemovalFailure) {
+                            setBizneoQueueOpen(false);
+                            setDayOffRemovalTarget({
+                              shift,
+                              userName,
+                              unitName: scheduleUnit?.name ?? shift.unitId,
+                            });
+                            return;
+                          }
+                          void handlePublishDayOff({
+                            scheduleId: shift.scheduleId,
+                            userId: shift.userId,
+                            unitId: shift.unitId,
+                            date: shift.date,
+                            source: 'retry',
+                          });
+                        }}
+                      >
+                        {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {isRemovalFailure ? 'Tentar remover' : 'Enviar novamente'}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={vtDialogOpen} onOpenChange={setVtDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Vale-transporte da escala</DialogTitle>
+            <DialogDescription>
+              Valor calculado por dias únicos trabalhados em {MONTHS[schedule.month - 1].toLowerCase()} de {schedule.year}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border">
+            <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+              <span className="text-sm font-medium">Total da unidade</span>
+              <span className="text-lg font-bold">{vtStats.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+            </div>
+            {vtStats.breakdown.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhum colaborador com VT nesta escala.</p>
+            ) : (
+              <div className="max-h-[50vh] divide-y overflow-y-auto">
+                {vtStats.breakdown.map((row) => (
+                  <div key={row.name} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-4 py-3 text-sm">
+                    <span className="truncate font-medium">{row.name}</span>
+                    <span className="text-muted-foreground">{row.days} dia{row.days === 1 ? '' : 's'}</span>
+                    <div className="text-right">
+                      <p className="font-semibold">{row.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                      {row.siblingTotal > 0 && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Outras unidades: {row.siblingTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {coverageDemandDialog ? (
         <CoverageDemandDialog
           scheduleId={schedule.id}
@@ -2626,6 +3050,10 @@ export function DPScheduleEditor({ schedule, embedded = false }: DPScheduleEdito
         siblingOccupied={isPerUnit ? siblingOccupied : undefined}
         dayOffOccupied={dayOffOccupied}
         vacations={vacations}
+        onDelete={(shift) => {
+          setEditShift(null);
+          setDeleteTarget(shift);
+        }}
       />
 
       <AlertDialog

@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { auth, db } from '@/lib/firebase';
 import {
   collection, onSnapshot,
-  doc, query, orderBy, serverTimestamp, writeBatch, increment, getDocs,
+  doc, query, orderBy, getDocs,
 } from 'firebase/firestore';
 import type { DPShift } from '@/types';
+import type { BulkWorkShiftInput } from '@/features/dp/shifts/schemas';
 import { rebalanceGoalsForSchedule } from '@/lib/goals-schedule-rebalance';
 import { authenticatedApiRequest } from '@/lib/authenticated-api-client';
 
@@ -36,23 +37,15 @@ export interface DPShiftsHookResult {
   loading: boolean;
   error: string | null;
   addShift: (data: Omit<DPShift, 'id' | 'createdAt'>) => Promise<void>;
-  addShiftsBatch: (data: Omit<DPShift, 'id' | 'createdAt'>[]) => Promise<void>;
   updateShift: (shift: DPShift) => Promise<void>;
-  updateShiftsBatch: (shifts: DPShift[]) => Promise<void>;
+  applyShiftsBatch: (input: BulkWorkShiftInput) => Promise<void>;
   deleteShift: (shift: Pick<DPShift, 'id' | 'type'> | string) => Promise<void>;
-  deleteShiftsBatch: (shifts: Pick<DPShift, 'id' | 'type'>[]) => Promise<void>;
-  clearAllShifts: () => Promise<void>;
 }
 
 export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
   const [shifts, setShifts] = useState<DPShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const countWorkItems = useCallback(
-    (items: Array<Pick<DPShift, 'type'>>) => items.filter((item) => item.type !== 'day_off').length,
-    []
-  );
 
   useEffect(() => {
     if (!scheduleId) { setShifts([]); setLoading(false); setError(null); return; }
@@ -110,99 +103,42 @@ export function useDPShifts(scheduleId: string | null): DPShiftsHookResult {
     await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
-  const addShiftsBatch = useCallback(async (data: Omit<DPShift, 'id' | 'createdAt'>[]) => {
-    if (!scheduleId || data.length === 0) return;
-    // Firestore permite no máximo 500 operações por batch
-    const chunks = [];
-    for (let i = 0; i < data.length; i += 499) chunks.push(data.slice(i, i + 499));
-    for (const chunk of chunks) {
-      const batch = writeBatch(db);
-      chunk.forEach(item => {
-        const ref = doc(collection(db, 'dp_schedules', scheduleId, 'shifts'));
-        batch.set(ref, { ...item, createdAt: serverTimestamp() });
-      });
-      const workCount = countWorkItems(chunk);
-      if (workCount > 0) {
-        batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(workCount) });
-      }
-      await batch.commit();
-    }
-    await rebalanceGoalsForSchedule(scheduleId);
-  }, [countWorkItems, scheduleId]);
-
   const updateShift = useCallback(async ({ id, ...data }: DPShift) => {
     if (!scheduleId) return;
     await saveWorkShiftRequest(scheduleId, id, 'PATCH', data as DPShift);
     await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
-  const updateShiftsBatch = useCallback(async (items: DPShift[]) => {
-    if (!scheduleId || items.length === 0) return;
-    const chunks = [];
-    for (let i = 0; i < items.length; i += 500) chunks.push(items.slice(i, i + 500));
-    for (const chunk of chunks) {
-      const batch = writeBatch(db);
-      chunk.forEach(({ id, ...data }) => {
-        batch.update(doc(db, 'dp_schedules', scheduleId, 'shifts', id), data as any);
-      });
-      await batch.commit();
-    }
+  const applyShiftsBatch = useCallback(async (input: BulkWorkShiftInput) => {
+    if (!scheduleId || input.shiftIds.length === 0) return;
+    await authenticatedApiRequest(`/api/dp/schedules/${encodeURIComponent(scheduleId)}/shifts/bulk`, {
+      method: 'POST',
+      json: input,
+      getIdToken: async () => auth.currentUser?.getIdToken() ?? null,
+    });
     await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
 
   const deleteShift = useCallback(async (shift: Pick<DPShift, 'id' | 'type'> | string) => {
     if (!scheduleId) return;
-    const batch = writeBatch(db);
     const shiftId = typeof shift === 'string' ? shift : shift.id;
-    batch.delete(doc(db, 'dp_schedules', scheduleId, 'shifts', shiftId));
-    if (typeof shift !== 'string' && shift.type !== 'day_off') {
-      batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(-1) });
-    }
-    await batch.commit();
+    await authenticatedApiRequest(
+      `/api/dp/schedules/${encodeURIComponent(scheduleId)}/shifts/${encodeURIComponent(shiftId)}`,
+      {
+        method: 'DELETE',
+        getIdToken: async () => auth.currentUser?.getIdToken() ?? null,
+      },
+    );
     await rebalanceGoalsForSchedule(scheduleId);
   }, [scheduleId]);
-
-  const deleteShiftsBatch = useCallback(async (items: Pick<DPShift, 'id' | 'type'>[]) => {
-    if (!scheduleId || items.length === 0) return;
-    const chunks = [];
-    for (let i = 0; i < items.length; i += 499) chunks.push(items.slice(i, i + 499));
-    for (const chunk of chunks) {
-      const batch = writeBatch(db);
-      chunk.forEach((shift) => batch.delete(doc(db, 'dp_schedules', scheduleId, 'shifts', shift.id)));
-      const workCount = countWorkItems(chunk as DPShift[]);
-      if (workCount > 0) {
-        batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: increment(-workCount) });
-      }
-      await batch.commit();
-    }
-    await rebalanceGoalsForSchedule(scheduleId);
-  }, [countWorkItems, scheduleId]);
-
-  const clearAllShifts = useCallback(async () => {
-    if (!scheduleId || shifts.length === 0) return;
-    const chunks = [];
-    for (let i = 0; i < shifts.length; i += 499) chunks.push(shifts.slice(i, i + 499));
-    for (const chunk of chunks) {
-      const batch = writeBatch(db);
-      chunk.forEach(s => batch.delete(doc(db, 'dp_schedules', scheduleId, 'shifts', s.id)));
-      if (chunk === chunks[chunks.length - 1]) {
-        batch.update(doc(db, 'dp_schedules', scheduleId), { shiftCount: 0 });
-      }
-      await batch.commit();
-    }
-    await rebalanceGoalsForSchedule(scheduleId);
-  }, [scheduleId, shifts]);
 
   return {
     shifts,
     loading,
     error,
     addShift,
-    addShiftsBatch,
     updateShift,
-    updateShiftsBatch,
+    applyShiftsBatch,
     deleteShift,
-    deleteShiftsBatch,
-    clearAllShifts,
   };
 }
