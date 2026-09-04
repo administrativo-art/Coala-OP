@@ -3422,6 +3422,7 @@ export type DPUnit = {
   externalId?: string;
   pdvFilialId?: string;
   bizneoTaxonId?: number; // ID do taxon (local) no Bizneo
+  coverageMode?: DPCoverageMode;
   operatingHours?: DPOperatingHours;
   auditChecklistThreshold?: number;
   createdAt: Timestamp;
@@ -3432,6 +3433,17 @@ export type DPOperatingHoursDay =
   | { isOpen: true; startTime: string; endTime: string };
 
 export type DPOperatingHours = Record<'0' | '1' | '2' | '3' | '4' | '5' | '6', DPOperatingHoursDay>;
+
+export type DPCoverageMode = 'fixed_hours' | 'on_demand' | 'disabled';
+
+export type DPCoverageDemandWindow = {
+  startTime: string;
+  endTime: string;
+  minimumPeople: number;
+  reason?: string;
+};
+
+export type DPCoverageDemands = Record<string, DPCoverageDemandWindow[]>;
 
 export type DPUnitResponsibilitySource = 'job_role' | 'job_function';
 
@@ -3494,6 +3506,7 @@ export type DPSchedule = {
   calendarId?: string; // optional: linked holiday calendar
   locked?: boolean;    // when true, snapshot is frozen
   snapshot?: DPScheduleSnapshot; // frozen user data at lock time
+  coverageDemands?: DPCoverageDemands; // YYYY-MM-DD → intervalos mínimos para unidades sob demanda
   createdAt: Timestamp;
 };
 

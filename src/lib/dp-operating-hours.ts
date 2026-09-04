@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { DPOperatingHours, DPShift } from '@/types';
+import type { DPCoverageGap, DPDailyCoverage } from '@/lib/dp-coverage-demands';
 
 export const DP_WEEKDAYS = [
   { key: '0', shortLabel: 'Dom', label: 'Domingo' },
@@ -69,31 +70,39 @@ export function formatOperatingHoursSummary(value: DPOperatingHours | undefined)
   }).filter(Boolean).join(' · ');
 }
 
-export type DPCoverageGap = {
-  startTime: string;
-  endTime: string;
-};
-
-export type DPDailyCoverage = {
-  date: string;
-  configured: boolean;
-  isOpen: boolean;
-  startTime?: string;
-  endTime?: string;
-  gaps: DPCoverageGap[];
-};
-
 export function buildDailyUnitCoverage(params: {
   date: string;
   operatingHours?: DPOperatingHours;
   shifts: readonly Pick<DPShift, 'type' | 'date' | 'startTime' | 'endTime'>[];
 }): DPDailyCoverage {
   const { date, operatingHours, shifts } = params;
-  if (!operatingHours) return { date, configured: false, isOpen: false, gaps: [] };
+  if (!operatingHours) {
+    return {
+      date,
+      mode: 'fixed_hours',
+      configured: false,
+      isOpen: false,
+      hasDemand: false,
+      hasUnplannedShifts: false,
+      windows: [],
+      gaps: [],
+    };
+  }
 
   const weekday = String(new Date(`${date}T12:00:00.000Z`).getUTCDay()) as DPWeekdayKey;
   const day = normalizeOperatingHours(operatingHours)[weekday];
-  if (!day.isOpen) return { date, configured: true, isOpen: false, gaps: [] };
+  if (!day.isOpen) {
+    return {
+      date,
+      mode: 'fixed_hours',
+      configured: true,
+      isOpen: false,
+      hasDemand: false,
+      hasUnplannedShifts: false,
+      windows: [],
+      gaps: [],
+    };
+  }
 
   const opening = timeToMinutes(day.startTime);
   const closing = timeToMinutes(day.endTime);
@@ -124,10 +133,14 @@ export function buildDailyUnitCoverage(params: {
 
   return {
     date,
+    mode: 'fixed_hours',
     configured: true,
     isOpen: true,
+    hasDemand: true,
+    hasUnplannedShifts: false,
     startTime: day.startTime,
     endTime: day.endTime,
+    windows: [],
     gaps,
   };
 }

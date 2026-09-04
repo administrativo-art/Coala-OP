@@ -13,6 +13,7 @@ import {
   setOptionalStringPatch,
   hasOwn,
   optionalOperatingHours,
+  optionalCoverageMode,
 } from "@/app/api/dp/_unit-structure";
 
 export const runtime = "nodejs";
@@ -65,6 +66,9 @@ export async function PATCH(request: NextRequest, contextArg: RouteContext) {
     setOptionalNumberPatch(update, body, "bizneoTaxonId");
     if (hasOwn(body, "operatingHours")) {
       update.operatingHours = optionalOperatingHours(body.operatingHours) ?? FieldValue.delete();
+    }
+    if (hasOwn(body, "coverageMode")) {
+      update.coverageMode = optionalCoverageMode(body.coverageMode) ?? FieldValue.delete();
     }
     setOptionalNumberPatch(update, body, "auditChecklistThreshold");
 
