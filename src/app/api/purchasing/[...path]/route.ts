@@ -27,6 +27,7 @@ import {
   purchaseTreatmentSkipsOperationalEntry,
 } from '@/lib/purchasing-item-treatment';
 import { buildPurchaseExpenseComponents } from '@/lib/purchase-financial-expenses';
+import { computeReceiptFinancialUpdate } from '@/lib/purchase-receipt-financials';
 import {
   UNIFORM_STOCK_ID,
   UNIFORM_STOCK_NAME,
@@ -1493,16 +1494,23 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       updatedAt: now,
     });
 
+    const deliveryFee = Number(order.deliveryFee ?? 0);
     const finSnap = await dbAdmin
       .collection('purchase_financials')
       .where('purchaseOrderId', '==', receipt.purchaseOrderId)
       .get();
     finSnap.forEach((d) => {
-      const wasDivergent =
-        receipt.receiptMode === 'future_delivery' &&
-        Math.abs(totalConfirmed - (d.data().amountEstimated ?? 0)) > 0.01;
+      const { status, amountConfirmed } = computeReceiptFinancialUpdate({
+        totalConfirmed,
+        deliveryFee,
+        amountEstimated: Number(d.data().amountEstimated ?? 0),
+        receiptMode: receipt.receiptMode,
+        hasRemaining,
+        hasDivergence,
+      });
       batch.update(d.ref, {
-        status: hasRemaining ? 'forecasted' : wasDivergent || hasDivergence ? 'divergent' : 'confirmed',
+        status,
+        amountConfirmed,
         updatedAt: now,
       });
     });
@@ -1924,16 +1932,23 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       updatedAt: now,
     });
 
+    const deliveryFee = Number(order.deliveryFee ?? 0);
     const finSnap = await dbAdmin
       .collection('purchase_financials')
       .where('purchaseOrderId', '==', receipt.purchaseOrderId)
       .get();
     finSnap.forEach((d) => {
-      const wasDivergent =
-        receipt.receiptMode === 'future_delivery' &&
-        Math.abs(totalConfirmed - (d.data().amountEstimated ?? 0)) > 0.01;
+      const { status, amountConfirmed } = computeReceiptFinancialUpdate({
+        totalConfirmed,
+        deliveryFee,
+        amountEstimated: Number(d.data().amountEstimated ?? 0),
+        receiptMode: receipt.receiptMode,
+        hasRemaining: finalStatus === 'partially_stocked',
+        hasDivergence: false,
+      });
       batch.update(d.ref, {
-        status: finalStatus === 'partially_stocked' ? 'forecasted' : wasDivergent ? 'divergent' : 'confirmed',
+        status,
+        amountConfirmed,
         updatedAt: now,
       });
     });
