@@ -13,6 +13,7 @@ import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { findBizneoUser } from '@/lib/integrations/bizneo-admin';
+import { mergeBizneoEmployee } from '@/lib/hr/merge-bizneo-employee';
 import { findPdvLegalUser } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
 import {
@@ -106,6 +107,7 @@ async function verifyAccessIntegrations(params: {
     if (bizneoUser) {
       const registrationIdBizneo = String(bizneoUser.id);
       await userRef.set({ registrationIdBizneo, updatedAt: params.now }, { merge: true });
+      await mergeBizneoEmployee(hrDbAdmin, params.collaboratorUserId, registrationIdBizneo, params.now);
       bizneoAlert = { id: 'bizneo_id', label: 'Bizneo HR', status: 'resolved', message: `Cadastro localizado e vinculado pelo e-mail (ID ${registrationIdBizneo}).`, checkedAt: params.now, externalId: registrationIdBizneo, source: 'bizneo_api' };
     } else {
       bizneoAlert = { id: 'bizneo_id', label: 'Bizneo HR', status: 'pending', message: 'Colaborador não localizado no Bizneo. Cadastre-o e verifique novamente.', checkedAt: params.now, source: 'bizneo_api' };

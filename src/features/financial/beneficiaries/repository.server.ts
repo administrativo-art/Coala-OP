@@ -67,6 +67,7 @@ async function employeeBeneficiaries(): Promise<BeneficiaryListItem[]> {
   );
   const linkedEmployees = employees.docs.filter((employee) => {
     const data = employee.data();
+    if (data.merged_into) return false;
     const authUid = typeof data.auth_uid === "string" ? data.auth_uid.trim() : "";
     const sourceUserId = typeof data.source_user_id === "string" ? data.source_user_id.trim() : "";
     return linkedEmployeeIds.has(employee.id)
