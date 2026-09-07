@@ -4,13 +4,20 @@ import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { calculateFinancialObligationSummary } from "@/features/financial/obligations/calculations";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
+import { classifyFinancialEmail } from "./parser";
+import { chooseExistingExpenseSuggestion, type InboxExpenseCandidate } from "./expense-suggestions";
 import { chooseProvisionSuggestion, type ProvisionCandidate } from "./provision-suggestions";
 import { getFinancialInboxMessage } from "./repository.server";
 import type { FinancialInboxMessage } from "./types";
 
 const MAX_PROVISION_CANDIDATES = 10;
+const MAX_EXISTING_EXPENSE_CANDIDATES = 500;
+const MAX_MATCHED_PAYMENT_CANDIDATES = 100;
 // Custo de triagem: no máximo 10 leituras por cobrança relevante. Com 300
 // cobranças/mês, o teto esperado é 3.000 leituras/mês, além de reanálises manuais.
+// O cruzamento lê no máximo 501 despesas abertas, 101 pagamentos do mesmo valor,
+// 100 despesas pagas referenciadas e 10 previsões. Com 50 cobranças/mês, o teto
+// é 35.600 leituras/mês, incluindo a análise automática e reanálises manuais.
 
 function money(value: unknown) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -20,6 +27,17 @@ function dateTimestamp(value: string | null, fallback: Date) {
   if (!value) return Timestamp.fromDate(fallback);
   const date = new Date(`${value}T12:00:00-03:00`);
   return Timestamp.fromDate(Number.isNaN(date.getTime()) ? fallback : date);
+}
+
+function isoDateKey(value: unknown) {
+  try {
+    const date = value && typeof (value as { toDate?: unknown }).toDate === "function"
+      ? (value as { toDate: () => Date }).toDate()
+      : value ? new Date(value as string | number | Date) : null;
+    return date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : null;
+  } catch {
+    return null;
+  }
 }
 
 function copyExpenseClassification(provision: Record<string, unknown>) {
@@ -39,29 +57,115 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     throw new Error("Cobrança recebida não encontrada.");
   }
   const checkedAt = new Date().toISOString();
+  const reparsed = classifyFinancialEmail({
+    subject: message.subject,
+    text: message.textContent,
+    senderDomain: message.senderDomain,
+  }).classification;
+  const classification = {
+    ...message.classification,
+    supplierName: message.classification.supplierName || reparsed.supplierName,
+    competence: message.classification.competence || reparsed.competence,
+    dueDate: message.classification.dueDate || reparsed.dueDate,
+    amountCents: message.classification.amountCents ?? reparsed.amountCents,
+    barcode: message.classification.barcode || reparsed.barcode,
+    barcodeMasked: message.classification.barcodeMasked || reparsed.barcodeMasked,
+    links: message.classification.links?.length ? message.classification.links : reparsed.links,
+  };
+
+  let expenseCandidates: InboxExpenseCandidate[] = [];
+  let expenseScanTruncated = false;
+  if (classification.financeLikely && classification.amountCents && classification.dueDate && classification.supplierName) {
+    const [openSnapshot, paymentSnapshot] = await Promise.all([
+      financialDbAdmin.collection("expenses")
+      .where("status", "in", ["pending", "partially_paid"])
+      .limit(MAX_EXISTING_EXPENSE_CANDIDATES + 1)
+      .get(),
+      financialDbAdmin.collection("payments")
+        .where("principalAmountCents", "==", classification.amountCents)
+        .limit(MAX_MATCHED_PAYMENT_CANDIDATES + 1)
+        .get(),
+    ]);
+    expenseScanTruncated = openSnapshot.size > MAX_EXISTING_EXPENSE_CANDIDATES
+      || paymentSnapshot.size > MAX_MATCHED_PAYMENT_CANDIDATES;
+    if (!expenseScanTruncated) {
+      const evidenceByExpenseId = new Map<string, Array<{ transactionId: string; paidAt: string | null }>>();
+      for (const document of paymentSnapshot.docs) {
+        const payment = document.data();
+        const expenseId = String(payment.expenseId ?? "").trim();
+        const transactionId = String(payment.bankTransactionId ?? "").trim();
+        if (!expenseId || !transactionId || payment.status !== "MATCHED" || payment.evidenceSource !== "BANK_STATEMENT") continue;
+        const paidAt = isoDateKey(payment.paidAt);
+        evidenceByExpenseId.set(expenseId, [
+          ...(evidenceByExpenseId.get(expenseId) ?? []),
+          { transactionId, paidAt },
+        ]);
+      }
+      const openById = new Map(openSnapshot.docs.map((document) => [document.id, document]));
+      const missingPaidRefs = [...evidenceByExpenseId.keys()]
+        .filter((expenseId) => !openById.has(expenseId))
+        .map((expenseId) => financialDbAdmin.collection("expenses").doc(expenseId));
+      const paidSnapshots = missingPaidRefs.length ? await financialDbAdmin.getAll(...missingPaidRefs) : [];
+      expenseCandidates = [...openSnapshot.docs, ...paidSnapshots.filter((document) => document.exists)]
+        .map((document) => ({
+          id: document.id,
+          ...document.data(),
+          settlementEvidence: evidenceByExpenseId.get(document.id) ?? null,
+        }));
+    }
+  }
+  const existingExpenseSuggestion = chooseExistingExpenseSuggestion(classification, expenseCandidates);
+  if (expenseScanTruncated) {
+    existingExpenseSuggestion.status = "ambiguous";
+    existingExpenseSuggestion.reasons = ["há mais despesas abertas do que o limite seguro da análise"];
+  }
+
   let candidates: ProvisionCandidate[] = [];
-  if (message.classification.financeLikely && message.classification.competence) {
+  if (existingExpenseSuggestion.status === "not_found" && classification.financeLikely && classification.competence) {
     const snapshot = await financialDbAdmin.collection("expenses")
       .where("provisionType", "==", "forecast")
       .where("status", "==", "provisioned")
-      .where("provisionCompetence", "==", message.classification.competence)
+      .where("provisionCompetence", "==", classification.competence)
       .limit(MAX_PROVISION_CANDIDATES)
       .get();
     candidates = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
   }
-  const suggestion = chooseProvisionSuggestion(message.classification, candidates, checkedAt);
-  const nextStatus = suggestion.status === "suggested" ? "suggestion_available" : message.status;
+  const suggestion = chooseProvisionSuggestion(classification, candidates, checkedAt);
+  const nextStatus = existingExpenseSuggestion.status === "suggested" || suggestion.status === "suggested"
+    ? "suggestion_available"
+    : message.status;
+  const persistedStatus = ["pending_review", "document_pending", "suggestion_available"].includes(message.status)
+    ? nextStatus
+    : message.status;
   await financialDbAdmin.collection("financialInboxMessages").doc(id).set({
+    classification,
+    existingExpenseSuggestion,
     provisionSuggestion: suggestion,
-    status: ["pending_review", "document_pending", "suggestion_available"].includes(message.status)
-      ? nextStatus
-      : message.status,
+    status: persistedStatus,
     updatedAt: checkedAt,
   }, { merge: true });
-  return { ...message, provisionSuggestion: suggestion, status: nextStatus } as FinancialInboxMessage;
+  return {
+    ...message,
+    classification,
+    existingExpenseSuggestion,
+    provisionSuggestion: suggestion,
+    status: persistedStatus,
+  } as FinancialInboxMessage;
 }
 
 export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, expectedWorkspaceId: string) {
+  const analyzedMessage = await getFinancialInboxMessage(id);
+  if (analyzedMessage.workspaceId !== expectedWorkspaceId) throw new Error("Cobrança recebida não encontrada.");
+  if (analyzedMessage.existingExpenseSuggestion?.status === "suggested"
+    && analyzedMessage.existingExpenseSuggestion.expenseId) {
+    return linkInboxChargeToExistingExpense(
+      id,
+      analyzedMessage.existingExpenseSuggestion.expenseId,
+      actor,
+      expectedWorkspaceId,
+      analyzedMessage.existingExpenseSuggestion.installmentNumber,
+    );
+  }
   const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
   const actualRef = financialDbAdmin.collection("expenses").doc(`inbox_${id}`);
   const now = Timestamp.now();
@@ -186,7 +290,30 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
   });
 }
 
-export async function linkInboxChargeToExistingExpense(id: string, expenseId: string, actor: PaymentActor, expectedWorkspaceId: string) {
+function inboxStateForExistingMatch(
+  settlement: FinancialInboxMessage["existingSettlement"],
+  payment: FinancialInboxMessage["existingBankPayment"],
+) {
+  if (settlement) return { status: "reconciled" as const, bankState: "reconciled" as const };
+  if (!payment) return { status: "linked" as const, bankState: "not_prepared" as const };
+  const state = `${payment.schedulingStatus ?? ""} ${payment.bankStatus ?? ""}`.toLowerCase();
+  if (/aguardando[_\s-]*(?:aprova|autoriza)|awaiting[_\s-]*(?:approval|authorization)/.test(state)) {
+    return { status: "awaiting_authorization" as const, bankState: "awaiting_bank_approval" as const };
+  }
+  if (/agendad|scheduled/.test(state)) return { status: "scheduled" as const, bankState: "scheduled" as const };
+  if (/process|execut|paid|pago|conclu/.test(state)) {
+    return { status: "awaiting_statement" as const, bankState: "awaiting_statement" as const };
+  }
+  return { status: "linked" as const, bankState: "not_prepared" as const };
+}
+
+export async function linkInboxChargeToExistingExpense(
+  id: string,
+  expenseId: string,
+  actor: PaymentActor,
+  expectedWorkspaceId: string,
+  installmentNumber: number | null = null,
+) {
   const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
   const expenseRef = financialDbAdmin.collection("expenses").doc(expenseId);
   const now = new Date().toISOString();
@@ -204,7 +331,31 @@ export async function linkInboxChargeToExistingExpense(id: string, expenseId: st
       throw new Error("A cobrança já está vinculada a outra despesa.");
     }
     if (expense.provisionType === "forecast") throw new Error("A cobrança deve ser vinculada à despesa real, não à previsão.");
-    if (expense.financialInboxMessageId && expense.financialInboxMessageId !== id) {
+    const exactSuggestion = installmentNumber == null
+      ? null
+      : chooseExistingExpenseSuggestion(message.classification, [{ id: expenseId, ...expense }]);
+    if (installmentNumber != null && (
+      exactSuggestion?.status !== "suggested"
+      || exactSuggestion.installmentNumber !== installmentNumber
+    )) {
+      throw new Error("A parcela sugerida não corresponde mais à cobrança. Analise novamente.");
+    }
+    const installments = Array.isArray(expense.installments)
+      ? expense.installments as Array<Record<string, unknown>>
+      : [];
+    const installmentIndex = installmentNumber == null
+      ? -1
+      : installments.findIndex((installment, index) => Number(installment.number ?? index + 1) === installmentNumber);
+    if (installmentNumber != null && installmentIndex < 0) throw new Error("A parcela sugerida não existe mais.");
+    const targetInstallment = installmentIndex >= 0 ? installments[installmentIndex] : null;
+    if (message.linkedExpenseId === expenseId
+      && (installmentNumber == null || message.linkedExpenseInstallmentNumber === installmentNumber)) {
+      return { message, expenseId, duplicate: true };
+    }
+    if (targetInstallment?.financialInboxMessageId && targetInstallment.financialInboxMessageId !== id) {
+      throw new Error("A parcela já está vinculada a outra cobrança recebida.");
+    }
+    if (installmentNumber == null && expense.financialInboxMessageId && expense.financialInboxMessageId !== id) {
       throw new Error("A despesa já está vinculada a outra cobrança recebida.");
     }
     const obligationId = String(expense.obligationId || `obl_${expenseId}`);
@@ -216,31 +367,51 @@ export async function linkInboxChargeToExistingExpense(id: string, expenseId: st
       const iso = date.toISOString().slice(0, 10);
       return competence ? iso.slice(0, 7) : iso;
     };
+    const classificationSource = exactSuggestion?.status === "suggested" ? exactSuggestion : null;
     const classification = {
       ...message.classification,
-      amountCents: message.classification.amountCents == null && Number(expense.totalValue) > 0
-        ? Math.round(Number(expense.totalValue) * 100)
+      supplierName: message.classification.supplierName || String(expense.supplier || "") || null,
+      amountCents: message.classification.amountCents == null && Number(classificationSource?.amountCents ?? expense.totalValue) > 0
+        ? Math.round(Number(classificationSource?.amountCents ?? Number(expense.totalValue) * 100))
         : message.classification.amountCents,
-      dueDate: message.classification.dueDate || expenseDateKey(expense.dueDate),
+      dueDate: message.classification.dueDate || classificationSource?.dueDate || expenseDateKey(expense.dueDate),
       competence: message.classification.competence || expenseDateKey(expense.competenceDate, true),
     };
-    transaction.set(expenseRef, { financialInboxMessageId: id, updatedAt: Timestamp.now() }, { merge: true });
+    const existingBankPayment = classificationSource?.existingBankPayment ?? null;
+    const existingSettlement = classificationSource?.existingSettlement ?? null;
+    const inboxState = inboxStateForExistingMatch(existingSettlement, existingBankPayment);
+    if (installmentIndex >= 0) {
+      const nextInstallments = installments.map((installment, index) => index === installmentIndex
+        ? { ...installment, financialInboxMessageId: id, financialInboxLinkedAt: now, financialInboxLinkedBy: actor.uid }
+        : installment);
+      transaction.set(expenseRef, { installments: nextInstallments, updatedAt: Timestamp.now() }, { merge: true });
+    } else {
+      transaction.set(expenseRef, { financialInboxMessageId: id, updatedAt: Timestamp.now() }, { merge: true });
+    }
     transaction.set(messageRef, {
-      status: "linked",
+      status: inboxState.status,
+      bankState: inboxState.bankState,
       linkedExpenseId: expenseId,
+      linkedExpenseInstallmentNumber: installmentNumber,
       linkedProvisionId: expense.reconciledProvisionId || null,
       obligationId,
       classification,
+      existingBankPayment,
+      existingSettlement,
+      ...(exactSuggestion ? { existingExpenseSuggestion: { ...exactSuggestion, status: "linked" } } : {}),
       reviewedAt: now,
       reviewedBy: actor.uid,
       updatedAt: now,
     }, { merge: true });
     transaction.create(messageRef.collection("events").doc(), {
-      type: "CHARGE_LINKED_MANUALLY",
+      type: installmentNumber == null ? "CHARGE_LINKED_MANUALLY" : "CHARGE_LINKED_TO_EXISTING_INSTALLMENT",
       at: now,
       actorId: actor.uid,
       actorEmail: actor.email ?? null,
       expenseId,
+      installmentNumber,
+      bankPaymentTransactionId: existingBankPayment?.transactionId ?? null,
+      statementTransactionId: existingSettlement?.transactionId ?? null,
       obligationId,
     });
     return { message: { ...message, linkedExpenseId: expenseId }, expenseId, duplicate: message.linkedExpenseId === expenseId };

@@ -64,3 +64,15 @@ test("não preserva scripts nem links com protocolos inseguros", () => {
 test("extrai o endereço real de remetentes com nome de exibição", () => {
   assert.equal(extractEmailAddress("Urania | Maximus <urania.silva@grupomse.com>"), "urania.silva@grupomse.com");
 });
+
+test("identifica fornecedor e vencimento no assunto do boleto da Marvi", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Aviso de vencimento de boleto Marvi 07/09/2026",
+    text: "Valor da cobrança: R$ 1.138,84",
+    senderDomain: "marvi.com.br",
+  });
+
+  assert.equal(parsed.classification.supplierName, "Marvi");
+  assert.equal(parsed.classification.dueDate, "2026-09-07");
+  assert.equal(parsed.classification.amountCents, 113884);
+});
