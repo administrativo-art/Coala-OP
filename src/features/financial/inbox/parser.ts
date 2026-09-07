@@ -75,6 +75,8 @@ function isoDate(day: string, month: string, year: string) {
 function extractDueDate(value: string) {
   const labeled = value.match(/(?:venc(?:imento|e(?:\s+em)?)|data\s+de\s+vencimento)\s*[:\-]?\s*(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/i);
   if (labeled) return isoDate(labeled[1], labeled[2], labeled[3]);
+  const contextual = value.match(/(?:vencimento|boleto)[^\n\r]{0,100}?(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/i);
+  if (contextual) return isoDate(contextual[1], contextual[2], contextual[3]);
   return null;
 }
 
@@ -132,6 +134,14 @@ function documentType(value: string): { type: FinancialInboxDocumentType; confid
 
 function supplierName(senderDomain: string | null, value: string) {
   if (senderDomain === "grupomse.com" || /maximus\s+contabilidade/i.test(value)) return "Maximus Contabilidade / Grupo MSE";
+  const labels = String(senderDomain ?? "").toLowerCase().split(".").filter(Boolean);
+  const rootIndex = labels.at(-1) === "br" && ["com", "net", "org"].includes(labels.at(-2) ?? "")
+    ? labels.length - 3
+    : labels.length - 2;
+  const root = labels[rootIndex] ?? "";
+  if (root && !["gmail", "hotmail", "outlook", "yahoo", "resend"].includes(root)) {
+    return root.charAt(0).toUpperCase() + root.slice(1);
+  }
   return null;
 }
 

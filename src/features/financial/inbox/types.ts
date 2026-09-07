@@ -59,6 +59,33 @@ export type FinancialInboxProvisionSuggestion = {
   checkedAt: string | null;
 };
 
+export type FinancialInboxExistingBankPayment = {
+  transactionId: string;
+  bankStatus: string | null;
+  schedulingStatus: string | null;
+  scheduledFor: string | null;
+};
+
+export type FinancialInboxExistingSettlement = {
+  transactionId: string;
+  paidAt: string | null;
+};
+
+export type FinancialInboxExpenseSuggestion = {
+  status: "not_found" | "suggested" | "ambiguous" | "linked";
+  expenseId: string | null;
+  installmentNumber: number | null;
+  installmentTotal: number | null;
+  description: string | null;
+  supplier: string | null;
+  amountCents: number | null;
+  dueDate: string | null;
+  reasons: string[];
+  paymentState: "paid" | "scheduled" | "needs_scheduling" | null;
+  existingBankPayment: FinancialInboxExistingBankPayment | null;
+  existingSettlement: FinancialInboxExistingSettlement | null;
+};
+
 export type FinancialInboxBankState =
   | "not_prepared"
   | "awaiting_authorization"
@@ -100,6 +127,10 @@ export type FinancialInboxMessage = {
   obligationId?: string | null;
   paymentRequestId?: string | null;
   provisionSuggestion?: FinancialInboxProvisionSuggestion | null;
+  existingExpenseSuggestion?: FinancialInboxExpenseSuggestion | null;
+  existingBankPayment?: FinancialInboxExistingBankPayment | null;
+  existingSettlement?: FinancialInboxExistingSettlement | null;
+  linkedExpenseInstallmentNumber?: number | null;
   bankState?: FinancialInboxBankState | null;
   statementTransactionId?: string | null;
   reviewedAt: string | null;
