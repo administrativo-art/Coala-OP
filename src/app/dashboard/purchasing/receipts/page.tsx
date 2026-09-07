@@ -11,6 +11,7 @@ import { usePurchaseReceipts } from '@/hooks/use-purchase-receipts';
 import { usePurchaseOrders } from '@/hooks/use-purchase-orders';
 import { useAuth } from '@/hooks/use-auth';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
+import { isConfirmedOrderAwaitingReceipt } from '@/lib/purchasing-receipt-queue';
 import { type PurchaseReceipt } from '@/types';
 import {
   PurchasingEmptyState,
@@ -66,8 +67,8 @@ export default function ReceiptsPage() {
   const { permissions } = useAuth();
   const { receipts, loading } = usePurchaseReceipts();
   const { orders } = usePurchaseOrders();
-  const purchaseDateById = useMemo(
-    () => new Map(orders.map((order) => [order.id, order.createdAt])),
+  const purchaseOrderById = useMemo(
+    () => new Map(orders.map((order) => [order.id, order])),
     [orders],
   );
   const [search, setSearch] = useState('');
@@ -86,7 +87,9 @@ export default function ReceiptsPage() {
     [period, receipts],
   );
 
-  const waiting = periodReceipts.filter((r) => r.status === 'awaiting_delivery');
+  const waiting = periodReceipts.filter((receipt) =>
+    isConfirmedOrderAwaitingReceipt(purchaseOrderById.get(receipt.purchaseOrderId)),
+  );
   const partial = periodReceipts.filter((r) => r.status === 'partially_stocked');
   const conference = periodReceipts.filter((r) => ['in_conference', 'awaiting_stock', 'in_stock_entry'].includes(r.status));
   const divergence = periodReceipts.filter((r) => r.status === 'stocked_with_divergence');
@@ -102,12 +105,20 @@ export default function ReceiptsPage() {
           receipt,
           cfg,
           isDelayed,
+          isConfirmedOrderAwaitingReceipt: isConfirmedOrderAwaitingReceipt(
+            purchaseOrderById.get(receipt.purchaseOrderId),
+          ),
           searchText: `${receipt.id} ${receipt.purchaseOrderId} ${receipt.supplierName ?? ''} ${receipt.status}`.toLowerCase(),
         };
       })
-      .filter((entry) => filter === 'all' || entry.cfg.bucket === filter || (filter === 'delayed' && entry.isDelayed))
+      .filter((entry) =>
+        filter === 'all' ||
+        (filter === 'waiting' && entry.isConfirmedOrderAwaitingReceipt) ||
+        (filter !== 'waiting' && entry.cfg.bucket === filter) ||
+        (filter === 'delayed' && entry.isDelayed),
+      )
       .filter((entry) => !search.trim() || entry.searchText.includes(search.trim().toLowerCase()));
-  }, [filter, periodReceipts, search]);
+  }, [filter, periodReceipts, purchaseOrderById, search]);
 
   return (
     <PermissionGuard allowed={canView}>
@@ -180,7 +191,11 @@ export default function ReceiptsPage() {
                 { label: 'Tratamento de divergência', tone: 'rose' as const },
                 { label: 'Concluída', tone: 'green' as const },
               ].map((column) => {
-                const columnCards = cards.filter((entry) => entry.cfg.label === column.label);
+                const columnCards = cards.filter((entry) =>
+                  column.label === 'A receber'
+                    ? entry.isConfirmedOrderAwaitingReceipt
+                    : entry.cfg.label === column.label,
+                );
                 return (
                   <PurchasingKanbanColumn key={column.label} label={column.label} tone={column.tone} count={columnCards.length}>
                     {columnCards.map(({ receipt, cfg }) => (
@@ -192,7 +207,7 @@ export default function ReceiptsPage() {
                         title={receipt.supplierName || 'Recebimento de compra'}
                         meta={
                           <span className="flex items-center justify-between gap-2">
-                            <span>Compra {new Date(purchaseDateById.get(receipt.purchaseOrderId) ?? receipt.createdAt).toLocaleDateString('pt-BR')}</span>
+                            <span>Compra {new Date(purchaseOrderById.get(receipt.purchaseOrderId)?.createdAt ?? receipt.createdAt).toLocaleDateString('pt-BR')}</span>
                             {receipt.expectedDate ? <span>Prev. {new Date(receipt.expectedDate).toLocaleDateString('pt-BR')}</span> : null}
                           </span>
                         }

@@ -13,9 +13,11 @@ import { isEmploymentRelationshipType } from '@/lib/hr/employment-relationship';
 import { sendTrackedIntegrationCommunication } from '@/lib/email/integration-communications';
 import { hrDbAdmin } from '@/lib/firebase-rh-admin';
 import { findBizneoUser } from '@/lib/integrations/bizneo-admin';
+import { mergeBizneoEmployee } from '@/lib/hr/merge-bizneo-employee';
 import { findPdvLegalUser } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
 import {
+  canVerifyOnboardingIntegrations,
   pendingPdvOnboardingAlert,
   requiredOnboardingIntegrationsResolved,
   resolvedPdvOnboardingAlert,
@@ -106,6 +108,7 @@ async function verifyAccessIntegrations(params: {
     if (bizneoUser) {
       const registrationIdBizneo = String(bizneoUser.id);
       await userRef.set({ registrationIdBizneo, updatedAt: params.now }, { merge: true });
+      await mergeBizneoEmployee(hrDbAdmin, params.collaboratorUserId, registrationIdBizneo, params.now);
       bizneoAlert = { id: 'bizneo_id', label: 'Bizneo HR', status: 'resolved', message: `Cadastro localizado e vinculado pelo e-mail (ID ${registrationIdBizneo}).`, checkedAt: params.now, externalId: registrationIdBizneo, source: 'bizneo_api' };
     } else {
       bizneoAlert = { id: 'bizneo_id', label: 'Bizneo HR', status: 'pending', message: 'Colaborador não localizado no Bizneo. Cadastre-o e verifique novamente.', checkedAt: params.now, source: 'bizneo_api' };
@@ -1217,7 +1220,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   } else if (action === 'verify_integrations') {
     const collaboratorUserId = asString(process.collaboratorUserId);
     if (!collaboratorUserId) return jsonError('Crie o colaborador antes de verificar os acessos.');
-    if (process.currentStage !== 'integration') return jsonError('Os acessos só podem ser verificados na etapa de integração.', 409);
+    if (!canVerifyOnboardingIntegrations(process)) return jsonError('Os acessos só podem ser verificados na etapa de integração ou após a conclusão.', 409);
     update.integrationAlerts = await verifyAccessIntegrations({ process, collaboratorUserId, now });
   } else if (action === 'set_access_operational_check') {
     if (process.currentStage !== 'integration') {
