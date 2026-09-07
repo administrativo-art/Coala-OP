@@ -1,3 +1,9 @@
+export function canVerifyOnboardingIntegrations(process: { status?: unknown; currentStage?: unknown }) {
+  if (process.status === 'cancelled') return false;
+  return process.currentStage === 'integration'
+    || (process.status === 'completed' && process.currentStage === 'done');
+}
+
 export function requiredOnboardingIntegrationsResolved(value: unknown) {
   if (!Array.isArray(value)) return false;
 
