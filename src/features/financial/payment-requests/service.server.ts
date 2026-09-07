@@ -87,6 +87,12 @@ export async function createInboxBarcodePaymentRequest(input: {
   if (!messageSnapshot.exists) throw new Error("Cobrança recebida não encontrada.");
   const message = messageSnapshot.data() as Record<string, any>;
   if (message.workspaceId !== input.workspaceId) throw new Error("Cobrança recebida não encontrada.");
+  if (message.existingSettlement?.transactionId) {
+    throw new Error("A cobrança já corresponde a um pagamento confirmado no extrato.");
+  }
+  if (message.existingBankPayment?.transactionId) {
+    throw new Error("A parcela já possui um pagamento no Banco Inter. Confira o agendamento existente.");
+  }
   const existing = await findPaymentRequestBySource("financial_inbox", input.inboxMessageId);
   if (existing) return existing;
   if (!message.linkedExpenseId) throw new Error("Vincule a cobrança a uma despesa antes de preparar o pagamento.");

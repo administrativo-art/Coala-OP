@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  CalendarClock,
+  CheckCircle2,
   Download,
   ExternalLink,
   FileText,
@@ -81,6 +83,38 @@ function formatAmount(value: number | null | undefined) {
 
 function senderLabel(message: FinancialInboxMessage) {
   return message.classification.supplierName || message.from;
+}
+
+function installmentLabel(message: FinancialInboxMessage) {
+  const suggestion = message.existingExpenseSuggestion;
+  if (!suggestion?.installmentNumber) return null;
+  return suggestion.installmentTotal
+    ? `Parcela ${suggestion.installmentNumber}/${suggestion.installmentTotal}`
+    : `Parcela ${suggestion.installmentNumber}`;
+}
+
+function bankPaymentLabel(message: FinancialInboxMessage) {
+  const payment = message.existingBankPayment || message.existingExpenseSuggestion?.existingBankPayment;
+  if (!payment) return null;
+  const state = `${payment.schedulingStatus ?? ""} ${payment.bankStatus ?? ""}`.toLowerCase();
+  if (/aguardando[_\s-]*(?:aprova|autoriza)|awaiting[_\s-]*(?:approval|authorization)/.test(state)) {
+    return "Pagamento registrado no Inter e aguardando aprovação";
+  }
+  if (/agendad|scheduled/.test(state)) return "Pagamento agendado no Inter";
+  return "Pagamento já registrado no Inter";
+}
+
+function paymentContextLabel(message: FinancialInboxMessage) {
+  const suggestion = message.existingExpenseSuggestion;
+  if (!suggestion || !["suggested", "linked"].includes(suggestion.status)) return null;
+  if (suggestion.paymentState === "paid") {
+    return suggestion.existingSettlement?.paidAt
+      ? `Pago em ${formatDate(suggestion.existingSettlement.paidAt)}`
+      : "Pago no extrato";
+  }
+  if (suggestion.paymentState === "scheduled") return "Agendamento encontrado";
+  if (suggestion.paymentState === "needs_scheduling") return "Precisa agendar";
+  return null;
 }
 
 export function FinancialInboxPage() {
@@ -174,7 +208,7 @@ export function FinancialInboxPage() {
     setWorking(`analyze:${message.id}`);
     try {
       await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/analyze`, { method: "POST" });
-      toast({ title: "Provisionamentos analisados." });
+      toast({ title: "Despesas e pagamentos analisados." });
       await load();
     } catch (error) {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao analisar provisionamentos." });
@@ -187,7 +221,17 @@ export function FinancialInboxPage() {
     setWorking(`link:${message.id}`);
     try {
       await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/link`, { method: "POST" });
-      toast({ title: "Cobrança vinculada.", description: "A despesa real foi criada e o provisionamento foi conciliado." });
+      const state = message.existingExpenseSuggestion?.paymentState;
+      toast({
+        title: "Cobrança vinculada.",
+        description: state === "paid"
+          ? "O pagamento já confirmado pelo extrato foi preservado."
+          : state === "scheduled"
+            ? "O agendamento existente no Banco Inter foi preservado."
+            : state === "needs_scheduling"
+              ? "A parcela foi vinculada e ainda precisa de agendamento."
+              : "A despesa real foi criada e o provisionamento foi conciliado.",
+      });
       await load();
     } catch (error) {
       toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao vincular a cobrança." });
@@ -253,11 +297,14 @@ export function FinancialInboxPage() {
   }
 
   return (
-    <PageContainer variant="wide" className="space-y-5 pb-10">
+    <PageContainer variant="default" className="space-y-5 pb-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight"><Inbox className="h-6 w-6" />Caixa de cobranças</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Documentos recebidos por e-mail, arquivados para conferência antes de qualquer lançamento.</p>
+          <Link href={FINANCIAL_ROUTES.expenses} className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-3.5 w-3.5" /> Despesas
+          </Link>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight"><Inbox className="h-6 w-6" />Cobranças recebidas</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Confira cobranças identificadas por e-mail contra despesas, pagamentos e agendamentos existentes.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Select value={status} onValueChange={changeStatus}>
@@ -305,6 +352,11 @@ export function FinancialInboxPage() {
                   <Badge variant="outline" className="shrink-0 bg-background text-[10px]">{TYPE_LABEL[message.classification.documentType]}</Badge>
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{formatDateTime(message.receivedAt)}</span><span>{STATUS_LABEL[message.status]}</span></div>
+                {paymentContextLabel(message) ? (
+                  <p className={`mt-2 text-xs font-semibold ${message.existingExpenseSuggestion?.paymentState === "needs_scheduling" ? "text-amber-700" : message.existingExpenseSuggestion?.paymentState === "scheduled" ? "text-blue-700" : "text-emerald-700"}`}>
+                    {paymentContextLabel(message)}
+                  </p>
+                ) : null}
               </button>
             ))}
             <div className="flex items-center justify-between pt-2">
@@ -355,29 +407,68 @@ export function FinancialInboxPage() {
                 <div className="rounded-xl border p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-violet-600" />Vinculação ao provisionamento</p>
-                      {selected.provisionSuggestion?.status === "suggested" ? (
+                      <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-violet-600" />Conferência da despesa</p>
+                      {["suggested", "linked"].includes(selected.existingExpenseSuggestion?.status ?? "") ? (
+                        <div className="mt-2 space-y-2 text-sm">
+                          <div>
+                            <p><strong>{selected.existingExpenseSuggestion?.description || "Despesa encontrada"}</strong></p>
+                            <p className="text-muted-foreground">
+                              {[selected.existingExpenseSuggestion?.supplier, installmentLabel(selected), formatAmount(selected.existingExpenseSuggestion?.amountCents), formatDate(selected.existingExpenseSuggestion?.dueDate)]
+                                .filter(Boolean).join(" · ")}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{selected.existingExpenseSuggestion?.reasons.join(" · ")}</p>
+                          </div>
+                          {selected.existingExpenseSuggestion?.paymentState === "paid" ? (
+                            <div className="flex gap-2 rounded-lg bg-emerald-50 p-3 text-emerald-800">
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>Pagamento confirmado pelo extrato{selected.existingExpenseSuggestion.existingSettlement?.paidAt ? ` em ${formatDate(selected.existingExpenseSuggestion.existingSettlement.paidAt)}` : ""}.</span>
+                            </div>
+                          ) : selected.existingExpenseSuggestion?.paymentState === "scheduled" ? (
+                            <div className="flex gap-2 rounded-lg bg-blue-50 p-3 text-blue-800">
+                              <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>{bankPaymentLabel(selected)}{selected.existingExpenseSuggestion.existingBankPayment?.scheduledFor ? ` para ${formatDate(selected.existingExpenseSuggestion.existingBankPayment.scheduledFor)}` : ""}.</span>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-amber-800">
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>Nenhum pagamento ou agendamento foi encontrado. Depois de confirmar o vínculo, prepare o pagamento.</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : selected.existingExpenseSuggestion?.status === "ambiguous" ? (
+                        <p className="mt-2 text-sm text-amber-700">Há mais de uma despesa ou parcela compatível. Faça a conferência manual antes de vincular.</p>
+                      ) : selected.provisionSuggestion?.status === "suggested" ? (
                         <div className="mt-2 space-y-1 text-sm">
                           <p><strong>{selected.provisionSuggestion.description || "Provisionamento encontrado"}</strong></p>
                           <p className="text-muted-foreground">{formatAmount(selected.provisionSuggestion.provisionedAmountCents)} · {selected.provisionSuggestion.reasons.join(" · ")}</p>
                           {selected.classification.amountCents !== selected.provisionSuggestion.provisionedAmountCents ? <p className="text-amber-700">A diferença será registrada como variação entre provisionado e realizado.</p> : null}
                         </div>
                       ) : selected.provisionSuggestion?.status === "ambiguous" ? (
-                        <p className="mt-2 text-sm text-amber-700">Há mais de um provisionamento compatível. Faça a vinculação manual.</p>
+                        <p className="mt-2 text-sm text-amber-700">Há mais de um provisionamento compatível. Faça a conferência manual.</p>
                       ) : selected.linkedExpenseId ? (
                         <p className="mt-2 text-sm text-emerald-700">Cobrança vinculada à despesa {selected.linkedExpenseId}.</p>
                       ) : (
-                        <p className="mt-2 text-sm text-muted-foreground">Nenhum provisionamento único foi sugerido. Você pode analisar novamente ou tratar manualmente.</p>
+                        <p className="mt-2 text-sm text-muted-foreground">Nenhuma despesa ou previsão única foi encontrada. Você pode analisar novamente ou tratar manualmente.</p>
                       )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {!selected.linkedExpenseId && canAnalyze ? <Button variant="outline" size="sm" onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><RefreshCw className="mr-2 h-4 w-4" />Analisar</Button> : null}
-                      {!selected.linkedExpenseId && selected.provisionSuggestion?.status === "suggested" && canLink ? <Button size="sm" onClick={() => void linkSuggestion(selected)} disabled={working === `link:${selected.id}`}><Link2 className="mr-2 h-4 w-4" />Vincular sugestão</Button> : null}
+                      {!selected.linkedExpenseId && (selected.existingExpenseSuggestion?.status === "suggested" || selected.provisionSuggestion?.status === "suggested") && canLink ? <Button size="sm" onClick={() => void linkSuggestion(selected)} disabled={working === `link:${selected.id}`}><Link2 className="mr-2 h-4 w-4" />Confirmar vínculo</Button> : null}
                     </div>
                   </div>
                 </div>
 
-                {selected.linkedExpenseId && !selected.paymentRequestId ? (
+                {selected.linkedExpenseId && selected.existingSettlement ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-sm">
+                    <span>Pagamento confirmado pelo extrato{selected.existingSettlement.paidAt ? ` em ${formatDate(selected.existingSettlement.paidAt)}` : ""}. Nenhum novo pagamento será criado.</span>
+                    <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+                  </div>
+                ) : selected.linkedExpenseId && selected.existingBankPayment ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm">
+                    <span>{bankPaymentLabel(selected)}{selected.existingBankPayment.scheduledFor ? ` para ${formatDate(selected.existingBankPayment.scheduledFor)}` : ""}. Nenhum novo agendamento será criado.</span>
+                    {permissions.financial?.paymentRequests?.view ? <Button asChild size="sm"><Link href={FINANCIAL_ROUTES.paymentRequests}>Abrir autorizações bancárias</Link></Button> : null}
+                  </div>
+                ) : selected.linkedExpenseId && !selected.paymentRequestId ? (
                   <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
                     <p className="text-sm font-semibold">Preparar pagamento no Banco Inter</p>
                     <p className="mt-1 text-xs text-muted-foreground">{selected.classification.barcodeMasked ? `Linha digitável ${selected.classification.barcodeMasked}. ` : "Cole a linha digitável depois de conferir o documento. "}Preparar não autoriza nem executa o pagamento.</p>
@@ -432,7 +523,7 @@ export function FinancialInboxPage() {
                 ) : null}
 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                  <Button asChild variant="outline"><Link href={FINANCIAL_ROUTES.expenses}>Consultar provisionamentos</Link></Button>
+                  <Button asChild variant="outline"><Link href={FINANCIAL_ROUTES.expenses}>Voltar para despesas</Link></Button>
                   <div className="flex flex-wrap gap-2">
                     {canLink && !selected.linkedExpenseId ? <Button asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(selected.id)}`}>Registrar despesa manualmente</Link></Button> : null}
                     {canDiscard && selected.status === "ignored" ? (
