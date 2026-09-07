@@ -17,6 +17,7 @@ import { mergeBizneoEmployee } from '@/lib/hr/merge-bizneo-employee';
 import { findPdvLegalUser } from '@/lib/integrations/pdv-legal-admin';
 import { logAction } from '@/lib/log-action';
 import {
+  canVerifyOnboardingIntegrations,
   pendingPdvOnboardingAlert,
   requiredOnboardingIntegrationsResolved,
   resolvedPdvOnboardingAlert,
@@ -1219,7 +1220,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   } else if (action === 'verify_integrations') {
     const collaboratorUserId = asString(process.collaboratorUserId);
     if (!collaboratorUserId) return jsonError('Crie o colaborador antes de verificar os acessos.');
-    if (process.currentStage !== 'integration') return jsonError('Os acessos só podem ser verificados na etapa de integração.', 409);
+    if (!canVerifyOnboardingIntegrations(process)) return jsonError('Os acessos só podem ser verificados na etapa de integração ou após a conclusão.', 409);
     update.integrationAlerts = await verifyAccessIntegrations({ process, collaboratorUserId, now });
   } else if (action === 'set_access_operational_check') {
     if (process.currentStage !== 'integration') {
