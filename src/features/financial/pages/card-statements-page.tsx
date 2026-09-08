@@ -312,15 +312,20 @@ export function CardStatementsWorkspace({
     ]).filter(Boolean)),
     [expensesData]
   );
+  const revisionRemovedFingerprintSet = useMemo(
+    () => new Set((importPreview?.revision?.removed || []).map((line) => line.fingerprint)),
+    [importPreview]
+  );
   const importExpenseCandidates = useMemo<CardStatementExpenseCandidate[]>(
     () => (selectedGroup?.lines || []).flatMap((line) => {
       const fingerprints = [
         String((line.expense as any).cardStatementImportFingerprint || ""),
         ...(Array.isArray((line.expense as any).cardStatementImportFingerprints)
-          ? (line.expense as any).cardStatementImportFingerprints.map(String)
-          : []),
+        ? (line.expense as any).cardStatementImportFingerprints.map(String)
+        : []),
       ].filter(Boolean);
-      if (line.reconciled || fingerprints.length > 0 || line.expense.status === "paid") return [];
+      const belongsToRemovedRevision = fingerprints.some((fingerprint) => revisionRemovedFingerprintSet.has(fingerprint));
+      if (line.expense.status === "paid" || (!belongsToRemovedRevision && (line.reconciled || fingerprints.length > 0))) return [];
       return [{
         lineId: line.lineId,
         expenseId: line.expense.id,
@@ -333,7 +338,7 @@ export function CardStatementsWorkspace({
         isForecast: isCardLineForecast(line),
       }];
     }),
-    [selectedGroup]
+    [revisionRemovedFingerprintSet, selectedGroup]
   );
   const importExpenseMatches = useMemo(
     () => matchCardStatementExpenses(importPreview?.transactions || [], importExpenseCandidates),
@@ -343,13 +348,25 @@ export function CardStatementsWorkspace({
     () => new Map(importExpenseMatches.map((match) => [match.lineId, match])),
     [importExpenseMatches]
   );
+  const revisionLineByFingerprint = useMemo(
+    () => new Map((importPreview?.revision?.lines || []).map((line) => [line.fingerprint, line])),
+    [importPreview]
+  );
+  const availableImportLines = useMemo(
+    () => (importPreview?.transactions || []).filter((line) => importPreview?.revision
+      ? revisionLineByFingerprint.get(line.fingerprint)?.status !== "unchanged"
+      : !existingImportFingerprints.has(line.fingerprint)),
+    [existingImportFingerprints, importPreview, revisionLineByFingerprint]
+  );
   const selectedImportLineIdSet = useMemo(() => new Set(selectedImportLineIds), [selectedImportLineIds]);
   const selectedImportLines = useMemo(
-    () => (importPreview?.transactions || []).filter(
-      (line) => selectedImportLineIdSet.has(line.id) && !existingImportFingerprints.has(line.fingerprint)
-    ),
-    [existingImportFingerprints, importPreview, selectedImportLineIdSet]
+    () => availableImportLines.filter((line) => selectedImportLineIdSet.has(line.id)),
+    [availableImportLines, selectedImportLineIdSet]
   );
+  const revisionRemovedCount = importPreview?.revision?.summary.removed || 0;
+  const hasImportChanges = selectedImportLines.length > 0 || revisionRemovedCount > 0;
+  const importBlocked = importPreview?.revision?.blockedReason === "paid_statement";
+  const importNeedsUnavailableReopen = importPreview?.revision?.requiresReopen && !canCloseCardStatements;
 
   useEffect(() => {
     if (!importPreview) {
@@ -359,17 +376,20 @@ export function CardStatementsWorkspace({
     setImportResolutionByLineId((current) => Object.fromEntries(
       importPreview.transactions.map((line) => {
         const match = importExpenseMatchByLineId.get(line.id);
+        const revision = revisionLineByFingerprint.get(line.fingerprint);
         const currentValue = current[line.id];
         const available = match?.candidates.some((candidate) => candidate.lineId === currentValue);
         return [
           line.id,
-          available ? currentValue : match?.confidence === "high" && match.recommendedCandidateId
+          revision?.status === "changed" && revision.previousExpenseId
+            ? `revision:${line.fingerprint}`
+            : available ? currentValue : match?.confidence === "high" && match.recommendedCandidateId
             ? match.recommendedCandidateId
             : "create",
         ];
       })
     ));
-  }, [importExpenseMatchByLineId, importPreview]);
+  }, [importExpenseMatchByLineId, importPreview, revisionLineByFingerprint]);
 
   useEffect(() => {
     if (fixedMonthKey && fixedMonthKey !== monthKey) setMonthKey(fixedMonthKey);
@@ -539,7 +559,9 @@ export function CardStatementsWorkspace({
       const form = new FormData();
       form.set("file", file, file.name);
       form.set("accountId", selectedGroup.card.accountId);
+      form.set("accountName", selectedGroup.card.accountName);
       form.set("paymentMethodId", selectedGroup.card.methodId);
+      form.set("paymentMethodLabel", selectedGroup.card.methodLabel);
       form.set("monthKey", selectedGroup.monthKey);
       const response = await fetch("/api/financial/card-statements/import-preview", {
         method: "POST",
@@ -566,7 +588,7 @@ export function CardStatementsWorkspace({
   }
 
   async function confirmCardStatementImport() {
-    if (!firebaseUser || !selectedGroup || !importPreview || selectedImportLines.length === 0 || !canImportCardStatements) return;
+    if (!firebaseUser || !selectedGroup || !importPreview || !importPreview.revision || !hasImportChanges || importBlocked || importNeedsUnavailableReopen || !canImportCardStatements) return;
     setImportingStatement(true);
     try {
       const importedDueDate = importPreview.dueDate
@@ -582,6 +604,9 @@ export function CardStatementsWorkspace({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          importId: importPreview.revision.importId,
+          fileSha256: importPreview.revision.fileSha256,
+          revisionAction: importPreview.revision.requiresReopen ? "reopen" : "none",
           accountId: selectedGroup.card.accountId,
           accountName: selectedGroup.card.accountName,
           paymentMethodId: selectedGroup.card.methodId,
@@ -594,12 +619,20 @@ export function CardStatementsWorkspace({
           closingDate: format(importedClosingDate, "yyyy-MM-dd"),
           analysis: importPreview.analysis,
           lines: selectedImportLines.map((line) => {
+            const revision = revisionLineByFingerprint.get(line.fingerprint);
             const selectedCandidateId = importResolutionByLineId[line.id] || "create";
             const candidate = importExpenseMatchByLineId.get(line.id)?.candidates
               .find((entry) => entry.lineId === selectedCandidateId);
             return {
               ...line,
-              resolution: candidate
+              resolution: revision?.status === "changed" && revision.previousExpenseId
+                ? {
+                    mode: "existing",
+                    expenseId: revision.previousExpenseId,
+                    candidateLineId: revision.previousLineId || revision.previousExpenseId,
+                    installmentNumber: revision.previousInstallmentNumber ?? null,
+                  }
+                : candidate
                 ? {
                     mode: "existing",
                     expenseId: candidate.expenseId,
@@ -617,6 +650,8 @@ export function CardStatementsWorkspace({
         linked?: number;
         replacedForecasts?: number;
         skipped?: number;
+        removed?: number;
+        reopened?: boolean;
       } | null;
       if (!response.ok) throw new Error(result?.error || "Não foi possível registrar os itens da fatura.");
       setImportDialogOpen(false);
@@ -631,7 +666,9 @@ export function CardStatementsWorkspace({
           result?.created ? `${result.created} nova(s)` : null,
           result?.linked ? `${result.linked} vinculada(s)` : null,
           result?.replacedForecasts ? `${result.replacedForecasts} previsão(ões) substituída(s)` : null,
+          result?.removed ? `${result.removed} removida(s) da versão ativa` : null,
           result?.skipped ? `${result.skipped} já importada(s)` : null,
+          result?.reopened ? "fatura reaberta" : null,
         ].filter(Boolean).join(" · ") || "Itens registrados sem efetivação automática.",
       });
     } catch (error) {
@@ -1084,6 +1121,11 @@ export function CardStatementsWorkspace({
                     {importPreview.dueDate ? ` · vencimento ${format(new Date(`${importPreview.dueDate}T12:00:00`), "dd/MM/yyyy")}` : ""}
                     {importPreview.cardLastDigits ? ` · cartão final ${importPreview.cardLastDigits}` : ""}
                   </p>
+                  {importPreview.revision ? (
+                    <p className="mt-1 text-[10px] font-medium text-violet-700">
+                      Versão {importPreview.revision.version} · arquivo original arquivado
+                    </p>
+                  ) : null}
                 </div>
                 <Button
                   type="button"
@@ -1091,17 +1133,69 @@ export function CardStatementsWorkspace({
                   size="sm"
                   className="h-8 rounded-lg text-xs"
                   onClick={() => {
-                    const available = importPreview.transactions.filter((line) => !existingImportFingerprints.has(line.fingerprint));
                     setSelectedImportLineIds(
-                      selectedImportLines.length === available.length ? [] : available.map((line) => line.id),
+                      selectedImportLines.length === availableImportLines.length ? [] : availableImportLines.map((line) => line.id),
                     );
                   }}
                 >
-                  {selectedImportLines.length === importPreview.transactions.filter((line) => !existingImportFingerprints.has(line.fingerprint)).length
+                  {selectedImportLines.length === availableImportLines.length
                     ? "Desmarcar todas"
                     : "Selecionar todas"}
                 </Button>
               </div>
+
+              {importPreview.revision ? (
+                <div className={cn(
+                  "rounded-xl border px-4 py-3 text-xs",
+                  importPreview.revision.blockedReason === "paid_statement"
+                    ? "border-red-200 bg-red-50 text-red-800"
+                    : importPreview.revision.requiresReopen
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-violet-200 bg-violet-50/70 text-violet-900",
+                )}>
+                  <p className="font-semibold">
+                    {importPreview.revision.exactFileReimport && !importPreview.revision.hasChanges
+                      ? "Este mesmo arquivo já está aplicado. Nenhuma alteração será feita."
+                      : "Comparação com a versão ativa"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                    <span>{importPreview.revision.summary.unchanged} preservado(s)</span>
+                    <span>{importPreview.revision.summary.changed} alterado(s)</span>
+                    <span>{importPreview.revision.summary.added} novo(s)</span>
+                    <span>{importPreview.revision.summary.removed} removido(s)</span>
+                  </div>
+                  {importPreview.revision.requiresReopen ? (
+                    <p className="mt-2 font-medium">
+                      A fatura está fechada e será reaberta ao aplicar esta versão.
+                      {!canCloseCardStatements ? " Seu perfil não possui permissão para reabri-la." : ""}
+                    </p>
+                  ) : null}
+                  {importPreview.revision.blockedReason === "paid_statement" ? (
+                    <p className="mt-2 font-medium">
+                      A fatura já foi paga. A versão ficou arquivada, mas as despesas liquidadas não serão alteradas.
+                      {importPreview.revision.adjustment
+                        ? ` Revisão: ${importPreview.revision.adjustment.kind === "additional_charge" ? "complemento" : importPreview.revision.adjustment.kind === "credit" ? "crédito" : "redistribuição"} de ${formatCurrency(importPreview.revision.adjustment.amount)}.`
+                        : ""}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {importPreview.revision?.removed.length ? (
+                <details className="rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3 text-xs text-rose-900">
+                  <summary className="cursor-pointer font-semibold">
+                    {importPreview.revision.removed.length} item(ns) ausente(s) na nova versão
+                  </summary>
+                  <div className="mt-2 space-y-1">
+                    {importPreview.revision.removed.slice(0, 20).map((line) => (
+                      <p key={line.fingerprint}>{line.description} · {formatCurrency(line.amount)}</p>
+                    ))}
+                    <p className="pt-1 text-rose-700">
+                      Se algum item novo substituir um destes, escolha a despesa anterior no vínculo para preservar o tratamento.
+                    </p>
+                  </div>
+                </details>
+              ) : null}
 
               {importPreview.warnings.length > 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
@@ -1141,7 +1235,10 @@ export function CardStatementsWorkspace({
                 {importPreview.transactions.length === 0 ? (
                   <div className="px-4 py-10 text-center text-sm text-muted-foreground">Nenhuma compra foi identificada no arquivo.</div>
                 ) : importPreview.transactions.map((line) => {
-                  const duplicate = existingImportFingerprints.has(line.fingerprint);
+                  const revision = revisionLineByFingerprint.get(line.fingerprint);
+                  const duplicate = importPreview.revision
+                    ? revision?.status === "unchanged"
+                    : existingImportFingerprints.has(line.fingerprint);
                   const selected = selectedImportLineIdSet.has(line.id) && !duplicate;
                   const match = importExpenseMatchByLineId.get(line.id);
                   const resolution = importResolutionByLineId[line.id] || "create";
@@ -1164,6 +1261,7 @@ export function CardStatementsWorkspace({
                             ? "Já importada nesta fatura"
                             : [
                                 line.supplier,
+                                revision?.status === "changed" ? "alterada na nova versão" : revision?.status === "new" ? "nova na versão" : null,
                                 line.installmentNumber && line.installmentTotal ? `parcela ${line.installmentNumber}/${line.installmentTotal}` : null,
                                 line.confidence === "low" ? "baixa confiança" : line.confidence === "medium" ? "confiança média" : null,
                               ].filter(Boolean).join(" · ")}
@@ -1175,6 +1273,14 @@ export function CardStatementsWorkspace({
                       <span className="min-w-0">
                         {duplicate ? (
                           <span className="text-[10px]">Já vinculada</span>
+                        ) : revision?.status === "changed" && revision.previousExpenseId ? (
+                          <div className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-2 text-[10px] text-violet-800">
+                            <p className="font-semibold">Reaproveitar tratamento anterior</p>
+                            <p className="mt-0.5 truncate">
+                              {revision.previousDescription || "Despesa vinculada"} · {formatCurrency(revision.previousAmount || 0)} → {formatCurrency(line.amount)}
+                            </p>
+                            <p className="mt-0.5">A linha voltará para conferência.</p>
+                          </div>
                         ) : (
                           <>
                             <Select
@@ -1226,11 +1332,17 @@ export function CardStatementsWorkspace({
           <DialogFooter className="shrink-0 border-t bg-muted/20 px-6 py-4">
             <Button variant="outline" disabled={importingStatement} onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
             <Button
-              disabled={importingStatement || selectedImportLines.length === 0 || importPreview?.analysis.status === "blocked"}
+              disabled={importingStatement || !hasImportChanges || importPreview?.analysis.status === "blocked" || importBlocked || importNeedsUnavailableReopen}
               onClick={() => void confirmCardStatementImport()}
             >
               {importingStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-              Adicionar {selectedImportLines.length} como pendente(s)
+              {importBlocked
+                ? "Revisão arquivada — ajuste necessário"
+                : !hasImportChanges
+                  ? "Nenhuma alteração para aplicar"
+                  : importPreview?.revision?.requiresReopen
+                    ? `Reabrir e aplicar versão ${importPreview.revision.version}`
+                    : `Aplicar versão ${importPreview?.revision?.version || ""}`}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -16,6 +16,53 @@ export type CardStatementImportLine = {
   fingerprint: string;
 };
 
+export type CardStatementPreviousImportLine = {
+  fingerprint: string;
+  sourceReference: string;
+  date: string;
+  description: string;
+  supplier: string;
+  amount: number;
+  installmentNumber: number | null;
+  installmentTotal: number | null;
+  expenseId: string;
+  lineId: string;
+};
+
+export type CardStatementRevisionLine = {
+  fingerprint: string;
+  status: "unchanged" | "changed" | "new";
+  previousFingerprint?: string;
+  previousExpenseId?: string;
+  previousLineId?: string;
+  previousInstallmentNumber?: number | null;
+  previousDescription?: string;
+  previousAmount?: number;
+  changes: Array<"date" | "description" | "supplier" | "amount" | "installmentNumber" | "installmentTotal">;
+};
+
+export type CardStatementRevisionDiff = {
+  summary: { unchanged: number; changed: number; added: number; removed: number };
+  lines: CardStatementRevisionLine[];
+  removed: CardStatementPreviousImportLine[];
+  hasChanges: boolean;
+};
+
+export type CardStatementRevisionPreview = CardStatementRevisionDiff & {
+  importId: string;
+  fileSha256: string;
+  version: number;
+  previousImportId: string | null;
+  statementStatus: "open" | "closed" | "paid" | null;
+  exactFileReimport: boolean;
+  requiresReopen: boolean;
+  blockedReason: "paid_statement" | null;
+  adjustment: {
+    kind: "additional_charge" | "credit" | "allocation_revision";
+    amount: number;
+  } | null;
+};
+
 export type CardStatementExcludedEntry = {
   sourceReference: string;
   description: string;
@@ -44,6 +91,7 @@ export type CardStatementImportPreview = {
     promptVersion: string;
     schemaVersion: string | null;
   };
+  revision?: CardStatementRevisionPreview;
 };
 
 export type CardStatementLineInput = {

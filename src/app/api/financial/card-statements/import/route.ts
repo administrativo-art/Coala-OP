@@ -2,9 +2,16 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { buildCardStatementImportFingerprint } from "@/features/financial/lib/card-statement-import";
+import {
+  buildCardStatementImportFingerprint,
+  type CardStatementImportLine,
+  type CardStatementPreviousImportLine,
+  type CardStatementRevisionLine,
+} from "@/features/financial/lib/card-statement-import";
+import { cardStatementImportId } from "@/features/financial/card-statement-import-versioning.server";
 import { requireUser } from "@/lib/auth-server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
+import { reportSystemError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +40,9 @@ const lineSchema = z.object({
 });
 
 const requestSchema = z.object({
+  importId: z.string().min(1).max(100),
+  fileSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  revisionAction: z.enum(["none", "reopen"]),
   accountId: z.string().min(1).max(300),
   accountName: z.string().max(500),
   paymentMethodId: z.string().min(1).max(300),
@@ -51,8 +61,15 @@ const requestSchema = z.object({
     promptVersion: z.string().max(100),
     schemaVersion: z.string().max(100).nullable(),
   }),
-  lines: z.array(lineSchema).min(1).max(200),
+  lines: z.array(lineSchema).max(200),
 });
+
+function errorResponse(error: string, status: number, eventId?: string) {
+  return NextResponse.json({ error, ...(eventId ? { eventId } : {}) }, {
+    status,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -118,6 +135,24 @@ function importedStatementAllocation(
   };
 }
 
+function appliedImportLine(
+  line: z.infer<typeof lineSchema>,
+  allocation: ReturnType<typeof importedStatementAllocation>,
+) {
+  return {
+    fingerprint: line.fingerprint,
+    sourceReference: line.sourceReference,
+    date: line.date,
+    description: line.description,
+    supplier: line.supplier,
+    amount: line.amount,
+    installmentNumber: allocation.installmentNumber,
+    installmentTotal: line.installmentTotal,
+    expenseId: allocation.expenseId,
+    lineId: allocation.lineId,
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const actor = await requireUser(request);
@@ -126,13 +161,16 @@ export async function POST(request: NextRequest) {
       actor.permissions.financial?.cardStatements?.view === true &&
       actor.permissions.financial?.cardStatements?.import === true
     );
-    if (!canImport) return NextResponse.json({ error: "Sem permissão para importar faturas." }, { status: 403 });
+    if (!canImport) return errorResponse("Sem permissão para importar faturas.", 403);
 
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-    if (!parsed.success) return NextResponse.json({ error: "Revise os itens e vínculos da fatura." }, { status: 400 });
+    if (!parsed.success) return errorResponse("Revise os itens e vínculos da fatura.", 400);
     const input = parsed.data;
+    if (input.statementKey !== `${input.accountId}:${input.paymentMethodId}:${input.monthKey}`) {
+      return errorResponse("A fatura, o cartão e a competência não correspondem à prévia.", 409);
+    }
     if (input.analysis.status === "blocked") {
-      return NextResponse.json({ error: "A análise bloqueada não pode ser importada." }, { status: 409 });
+      return errorResponse("A análise bloqueada não pode ser importada.", 409);
     }
 
     const normalizedLines = input.lines.map((line) => {
@@ -156,228 +194,415 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const linkedIds = [...new Set(normalizedLines.flatMap((line) =>
-      line.resolution.mode === "existing" ? [line.resolution.expenseId] : []
-    ))];
-    const linkedSnapshots = linkedIds.length > 0
-      ? await financialDbAdmin.getAll(...linkedIds.map((id) => financialDbAdmin.collection("expenses").doc(id)))
-      : [];
-    const linkedById = new Map(linkedSnapshots.filter((snapshot) => snapshot.exists).map((snapshot) => [snapshot.id, snapshot.data() ?? {}]));
-    const relevantSnapshot = await financialDbAdmin.collection("expenses")
-      .where("cardStatementKey", "==", input.statementKey)
-      .limit(500)
-      .get();
-    const alreadyImported = new Set(
-      relevantSnapshot.docs.flatMap((document) => [...existingFingerprints(document.data())])
-    );
-
-    const now = Timestamp.now();
-    const batch = financialDbAdmin.batch();
-    let created = 0;
-    let linked = 0;
-    let replacedForecasts = 0;
-    let skipped = 0;
-    const importedAllocations: ReturnType<typeof importedStatementAllocation>[] = [];
     const statementId = statementDocumentId(input.statementKey);
+    const statementRef = financialDbAdmin.collection("cardStatements").doc(statementId);
+    const importRef = statementRef.collection("imports").doc(input.importId);
+    const result = await financialDbAdmin.runTransaction(async (transaction) => {
+      const [statementSnapshot, importSnapshot] = await Promise.all([
+        transaction.get(statementRef),
+        transaction.get(importRef),
+      ]);
+      if (!importSnapshot.exists) throw new Error("IMPORT_PREVIEW_NOT_FOUND");
+      const statementData = statementSnapshot.data() ?? {};
+      const importData = importSnapshot.data() ?? {};
+      if (
+        importData.statementKey !== input.statementKey ||
+        importData.fileSha256 !== input.fileSha256 ||
+        importData.accountId !== input.accountId ||
+        importData.paymentMethodId !== input.paymentMethodId ||
+        importData.monthKey !== input.monthKey
+      ) throw new Error("IMPORT_PREVIEW_MISMATCH");
+      const previousImportId = String(importData.previousImportId || importData.diff?.previousImportId || "") || null;
+      const activeImportId = String(statementData.activeImportId || "") || null;
+      const expectedImportId = activeImportId && statementData.activeImportFileSha256 === input.fileSha256
+        ? activeImportId
+        : cardStatementImportId(input.statementKey, input.fileSha256, activeImportId);
+      if (input.importId !== expectedImportId) throw new Error("IMPORT_PREVIEW_MISMATCH");
+      if (previousImportId !== activeImportId && importData.status !== "applied") throw new Error("STALE_IMPORT_PREVIEW");
 
-    for (const line of normalizedLines) {
-      if (alreadyImported.has(line.fingerprint)) {
-        skipped += 1;
-        continue;
+      const storedLines = (Array.isArray(importData.preview?.transactions)
+        ? importData.preview.transactions.map(asRecord)
+        : []) as unknown as CardStatementImportLine[];
+      const storedByFingerprint = new Map(storedLines.map((line) => [String(line.fingerprint || ""), line]));
+      const canonicalFileName = String(importData.fileName || input.fileName);
+      const canonicalAnalysis = asRecord(importData.preview?.analysis);
+      const canonicalOfficialTotal = asNumber(importData.preview?.officialTotal) || input.officialTotal;
+      const canonicalDueDate = String(importData.preview?.dueDate || input.dueDate);
+      const canonicalClosingDate = String(importData.preview?.closingDate || input.closingDate);
+      if (canonicalAnalysis.status === "blocked") throw new Error("BLOCKED_ANALYSIS");
+      const canonicalLines = normalizedLines.map((line) => {
+        const stored = storedByFingerprint.get(line.fingerprint);
+        if (!stored) throw new Error("IMPORT_PREVIEW_MISMATCH");
+        return { ...line, ...stored, resolution: line.resolution } as z.infer<typeof lineSchema>;
+      });
+      if (canonicalLines.length === 0 && !(Number(importData.diff?.summary?.removed) > 0)) {
+        throw new Error("EMPTY_IMPORT");
       }
-      const chargeDate = timestamp(line.date);
-      const competenceDate = timestamp(`${input.monthKey}-01`);
-      const dueDate = timestamp(input.dueDate);
-      const importFields = {
-        cardChargeDate: chargeDate,
-        originalCardChargeDate: line.date,
-        plannedPaymentMethodType: "credit_card",
-        plannedBankAccountId: input.accountId,
-        plannedBankAccountName: input.accountName,
-        plannedPaymentMethodId: input.paymentMethodId,
-        plannedPaymentMethodLabel: input.paymentMethodLabel,
-        cardReconciliationStatus: "pending",
-        cardStatementId: statementId,
-        cardStatementKey: input.statementKey,
-        cardStatementMonthKey: input.monthKey,
-        cardStatementImportFingerprint: line.fingerprint,
-        cardStatementImportFingerprints: FieldValue.arrayUnion(line.fingerprint),
-        cardStatementImportFileName: input.fileName,
-        cardStatementImportSourceReference: line.sourceReference,
-        cardStatementImportConfidence: line.confidence,
-        cardStatementImportReviewNotes: line.reviewNotes,
-        cardStatementImportPromptVersion: input.analysis.promptVersion,
-        cardStatementImportSchemaVersion: input.analysis.schemaVersion,
-        cardStatementImportAnalyzedBy: "financial_copilot",
-        importedFrom: "card_statement",
-        sourceType: "card_statement_import",
-        updatedAt: now,
-        updatedBy: actor.decoded.uid,
-      };
 
-      if (line.resolution.mode === "existing") {
-        const expense = linkedById.get(line.resolution.expenseId);
-        if (!expense) throw new Error("EXPENSE_NOT_FOUND");
-        if (expense.status === "cancelled" || expense.status === "draft" || expense.status === "paid") {
-          throw new Error("EXPENSE_NOT_LINKABLE");
-        }
-        if (existingFingerprints(expense).has(line.fingerprint)) {
+      const revisionLines = (Array.isArray(importData.diff?.lines)
+        ? importData.diff.lines.map(asRecord)
+        : []) as unknown as CardStatementRevisionLine[];
+      const revisionByFingerprint = new Map(revisionLines.map((line) => [String(line.fingerprint || ""), line]));
+      const removedLines = (Array.isArray(importData.diff?.removed)
+        ? importData.diff.removed.map(asRecord)
+        : []) as unknown as CardStatementPreviousImportLine[];
+      if (canonicalLines.length * 2 + removedLines.length > 450) throw new Error("REVISION_TOO_LARGE");
+      const hasRevisionChanges = Boolean(importData.diff?.hasChanges);
+      const canReopen = actor.isDefaultAdmin || actor.permissions.financial?.cardStatements?.close === true;
+      if (statementData.status === "paid" && hasRevisionChanges) throw new Error("PAID_STATEMENT_REVISION");
+      if (statementData.status === "closed" && hasRevisionChanges) {
+        if (input.revisionAction !== "reopen") throw new Error("REOPEN_REQUIRED");
+        if (!canReopen) throw new Error("REOPEN_FORBIDDEN");
+      }
+      const effectiveLinkKeys = new Set<string>();
+      for (const line of canonicalLines) {
+        const revision = revisionByFingerprint.get(line.fingerprint);
+        const expenseId = revision?.status === "changed" && revision.previousExpenseId
+          ? revision.previousExpenseId
+          : line.resolution.mode === "existing" ? line.resolution.expenseId : null;
+        const installmentNumber = revision?.status === "changed"
+          ? revision.previousInstallmentNumber ?? null
+          : line.resolution.mode === "existing" ? line.resolution.installmentNumber : null;
+        if (!expenseId) continue;
+        const key = `${expenseId}:${installmentNumber ?? 0}`;
+        if (effectiveLinkKeys.has(key)) throw new Error("DUPLICATE_LINK");
+        effectiveLinkKeys.add(key);
+      }
+
+      const previousLines = (Array.isArray(importData.previousLines)
+        ? importData.previousLines.map(asRecord)
+        : []) as unknown as CardStatementPreviousImportLine[];
+      const linkedIds = [...new Set(canonicalLines.flatMap((line) => {
+        const revision = revisionByFingerprint.get(line.fingerprint);
+        if (revision?.status === "changed" && revision.previousExpenseId) return [String(revision.previousExpenseId)];
+        return line.resolution.mode === "existing" ? [line.resolution.expenseId] : [];
+      }))];
+      const [relevantSnapshot, ...linkedSnapshots] = await Promise.all([
+        transaction.get(financialDbAdmin.collection("expenses").where("cardStatementKey", "==", input.statementKey).limit(500)),
+        ...linkedIds.map((id) => transaction.get(financialDbAdmin.collection("expenses").doc(id))),
+      ]);
+      const relevantById = new Map(relevantSnapshot.docs.map((snapshot) => [snapshot.id, snapshot.data() ?? {}]));
+      const linkedById = new Map(linkedSnapshots.filter((snapshot) => snapshot.exists).map((snapshot) => [snapshot.id, snapshot.data() ?? {}]));
+      const expenseById = new Map([...relevantById, ...linkedById]);
+      const historicalByFingerprint = new Map<string, { id: string; data: Record<string, unknown> }>();
+      relevantSnapshot.docs.forEach((document) => existingFingerprints(document.data()).forEach((fingerprint) => {
+        historicalByFingerprint.set(fingerprint, { id: document.id, data: document.data() ?? {} });
+      }));
+      const activeFingerprints = new Set(previousLines.map((line) => String(line.fingerprint || "")).filter(Boolean));
+      const activeAppliedByFingerprint = new Map(previousLines.map((line) => [String(line.fingerprint || ""), line]));
+      const allocationByLineId = new Map(
+        (Array.isArray(statementData.allocations) ? statementData.allocations : [])
+          .map(asRecord)
+          .filter((allocation) => typeof allocation.lineId === "string")
+          .map((allocation) => [String(allocation.lineId), allocation]),
+      );
+      const now = Timestamp.now();
+      let created = 0;
+      let linked = 0;
+      let replacedForecasts = 0;
+      let skipped = 0;
+
+      for (const removed of removedLines) {
+        const fingerprint = String(removed.fingerprint || "");
+        activeAppliedByFingerprint.delete(fingerprint);
+        const lineId = String(removed.lineId || "");
+        if (lineId) allocationByLineId.delete(lineId);
+        const expenseId = String(removed.expenseId || "");
+        const expense = expenseById.get(expenseId);
+        if (!expenseId || !expense) continue;
+        if (expense.status === "paid") throw new Error("PAID_LINE_REVISION");
+        const installmentNumber = asNumber(removed.installmentNumber) || null;
+        const installments = Array.isArray(expense.installments) ? expense.installments.map(asRecord) : [];
+        const nextInstallments = installmentNumber
+          ? installments.map((installment, index) => (asNumber(installment.number) || index + 1) === installmentNumber
+            ? { ...installment, cardStatementRevisionStatus: "removed", cardStatementRemovedInImportId: input.importId }
+            : installment)
+          : installments;
+        transaction.set(financialDbAdmin.collection("expenses").doc(expenseId), {
+          ...(installmentNumber ? { installments: nextInstallments } : { cardStatementRevisionStatus: "removed" }),
+          cardStatementRemovedInImportId: input.importId,
+          cardStatementRemovedAt: now,
+          cardStatementRemovedBy: actor.decoded.uid,
+          updatedAt: now,
+        }, { merge: true });
+      }
+
+      for (const originalLine of canonicalLines) {
+        const revision = revisionByFingerprint.get(originalLine.fingerprint) ?? null;
+        if (revision?.status === "unchanged" && activeFingerprints.has(originalLine.fingerprint)) {
           skipped += 1;
           continue;
         }
-        const expenseRef = financialDbAdmin.collection("expenses").doc(line.resolution.expenseId);
-        const isForecast = expense.provisionType === "forecast" && expense.status === "provisioned";
-        if (isForecast) {
-          const actualRef = financialDbAdmin.collection("expenses").doc(`card_actual_${line.fingerprint.replace(/[^a-zA-Z0-9_-]/g, "_")}`);
-          batch.set(actualRef, {
-            ...inheritedExpenseFields(expense),
-            description: line.description || String(expense.description || "Despesa do cartão"),
-            supplier: line.supplier || String(expense.supplier || ""),
-            notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${input.fileName}.`,
-            totalValue: line.amount,
-            competenceDate,
-            dueDate,
-            paymentMethod: "single",
-            installmentNumber: line.installmentNumber,
-            installmentTotal: line.installmentTotal,
-            status: "pending",
-            provisionType: "actual",
-            reconciledProvisionId: expenseRef.id,
-            provisionedValue: asNumber(expense.totalValue),
-            provisionVariance: Number((line.amount - asNumber(expense.totalValue)).toFixed(2)),
-            provisionReconciliationStatus: "reconciled",
-            provisionReconciledAt: now,
-            provisionReconciledBy: actor.decoded.uid,
-            ...importFields,
-            createdAt: now,
-            createdBy: actor.decoded.uid,
-          }, { merge: true });
-          importedAllocations.push(importedStatementAllocation(line, actualRef.id, input.monthKey, expense));
-          batch.set(expenseRef, {
-            status: "reconciled",
-            replacedByExpenseId: actualRef.id,
-            actualValue: line.amount,
-            provisionVariance: Number((line.amount - asNumber(expense.totalValue)).toFixed(2)),
-            provisionReconciliationStatus: "reconciled",
-            provisionReconciledAt: now,
-            provisionReconciledBy: actor.decoded.uid,
-            updatedAt: now,
-          }, { merge: true });
-          replacedForecasts += 1;
+        const effectiveResolution = revision?.status === "changed" && revision.previousExpenseId
+          ? {
+              mode: "existing" as const,
+              expenseId: String(revision.previousExpenseId),
+              candidateLineId: String(revision.previousLineId || revision.previousExpenseId),
+              installmentNumber: asNumber(revision.previousInstallmentNumber) || null,
+            }
+          : originalLine.resolution;
+        const line = { ...originalLine, resolution: effectiveResolution };
+        const chargeDate = timestamp(line.date);
+        const competenceDate = timestamp(`${input.monthKey}-01`);
+        const dueDate = timestamp(canonicalDueDate);
+        const importFields = {
+          cardChargeDate: chargeDate,
+          originalCardChargeDate: line.date,
+          plannedPaymentMethodType: "credit_card",
+          plannedBankAccountId: input.accountId,
+          plannedBankAccountName: input.accountName,
+          plannedPaymentMethodId: input.paymentMethodId,
+          plannedPaymentMethodLabel: input.paymentMethodLabel,
+          cardReconciliationStatus: "pending",
+          cardStatementRevisionStatus: "active",
+          cardStatementId: statementId,
+          cardStatementKey: input.statementKey,
+          cardStatementMonthKey: input.monthKey,
+          cardStatementImportFingerprint: line.fingerprint,
+          cardStatementImportFingerprints: FieldValue.arrayUnion(line.fingerprint),
+          cardStatementPreviousFingerprint: revision?.previousFingerprint || null,
+          cardStatementImportId: input.importId,
+          cardStatementImportFileName: canonicalFileName,
+          cardStatementImportSourceReference: line.sourceReference,
+          cardStatementImportConfidence: line.confidence,
+          cardStatementImportReviewNotes: line.reviewNotes,
+          cardStatementImportPromptVersion: String(canonicalAnalysis.promptVersion || input.analysis.promptVersion),
+          cardStatementImportSchemaVersion: canonicalAnalysis.schemaVersion ?? input.analysis.schemaVersion,
+          cardStatementImportAnalyzedBy: "financial_copilot",
+          importedFrom: "card_statement",
+          sourceType: "card_statement_import",
+          updatedAt: now,
+          updatedBy: actor.decoded.uid,
+        };
+        let allocation: ReturnType<typeof importedStatementAllocation>;
+
+        if (effectiveResolution.mode === "existing") {
+          const expense = linkedById.get(effectiveResolution.expenseId) ?? relevantById.get(effectiveResolution.expenseId);
+          if (!expense) throw new Error("EXPENSE_NOT_FOUND");
+          if (expense.status === "cancelled" || expense.status === "draft" || expense.status === "paid") {
+            throw new Error("EXPENSE_NOT_LINKABLE");
+          }
+          const expenseRef = financialDbAdmin.collection("expenses").doc(effectiveResolution.expenseId);
+          const isForecast = expense.provisionType === "forecast" && expense.status === "provisioned";
+          if (isForecast) {
+            const actualRef = financialDbAdmin.collection("expenses").doc(`card_actual_${line.fingerprint.replace(/[^a-zA-Z0-9_-]/g, "_")}`);
+            transaction.set(actualRef, {
+              ...inheritedExpenseFields(expense),
+              description: line.description || String(expense.description || "Despesa do cartão"),
+              supplier: line.supplier || String(expense.supplier || ""),
+              notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
+              totalValue: line.amount,
+              competenceDate,
+              dueDate,
+              paymentMethod: "single",
+              installmentNumber: line.installmentNumber,
+              installmentTotal: line.installmentTotal,
+              status: "pending",
+              provisionType: "actual",
+              reconciledProvisionId: expenseRef.id,
+              provisionedValue: asNumber(expense.totalValue),
+              provisionVariance: Number((line.amount - asNumber(expense.totalValue)).toFixed(2)),
+              provisionReconciliationStatus: "reconciled",
+              provisionReconciledAt: now,
+              provisionReconciledBy: actor.decoded.uid,
+              ...importFields,
+              createdAt: now,
+              createdBy: actor.decoded.uid,
+            }, { merge: true });
+            allocation = importedStatementAllocation(line, actualRef.id, input.monthKey, expense);
+            transaction.set(expenseRef, {
+              status: "reconciled",
+              replacedByExpenseId: actualRef.id,
+              actualValue: line.amount,
+              provisionVariance: Number((line.amount - asNumber(expense.totalValue)).toFixed(2)),
+              provisionReconciliationStatus: "reconciled",
+              provisionReconciledAt: now,
+              provisionReconciledBy: actor.decoded.uid,
+              updatedAt: now,
+            }, { merge: true });
+            replacedForecasts += 1;
+          } else {
+            const installments = Array.isArray(expense.installments) ? expense.installments.map(asRecord) : [];
+            const targetNumber = effectiveResolution.installmentNumber;
+            const nextInstallments = targetNumber
+              ? installments.map((installment, index) => (asNumber(installment.number) || index + 1) === targetNumber
+                ? { ...installment, value: line.amount, cardReconciliationStatus: "pending", cardStatementRevisionStatus: "active", cardStatementKey: input.statementKey, cardStatementImportFingerprint: line.fingerprint }
+                : installment)
+              : installments;
+            const previousLineValue = targetNumber
+              ? asNumber(installments.find((installment, index) => (asNumber(installment.number) || index + 1) === targetNumber)?.value)
+              : asNumber(expense.totalValue);
+            const totalValue = targetNumber && installments.length > 0
+              ? Number((asNumber(expense.totalValue) - previousLineValue + line.amount).toFixed(2))
+              : line.amount;
+            transaction.set(expenseRef, {
+              ...importFields,
+              cardStatementRegisteredValue: previousLineValue,
+              cardStatementVariance: Number((line.amount - previousLineValue).toFixed(2)),
+              totalValue,
+              competenceDate,
+              dueDate,
+              ...(nextInstallments.length > 0 ? { installments: nextInstallments } : {}),
+            }, { merge: true });
+            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey, expense);
+            linked += 1;
+          }
         } else {
-          const installments = Array.isArray(expense.installments) ? expense.installments.map(asRecord) : [];
-          const targetNumber = line.resolution.installmentNumber;
-          const nextInstallments = targetNumber
-            ? installments.map((installment, index) => (asNumber(installment.number) || index + 1) === targetNumber
-              ? { ...installment, value: line.amount, cardReconciliationStatus: "pending", cardStatementKey: input.statementKey, cardStatementImportFingerprint: line.fingerprint }
-              : installment)
-            : installments;
-          const previousLineValue = targetNumber
-            ? asNumber(installments.find((installment, index) => (asNumber(installment.number) || index + 1) === targetNumber)?.value)
-            : asNumber(expense.totalValue);
-          const totalValue = targetNumber && installments.length > 0
-            ? Number((asNumber(expense.totalValue) - previousLineValue + line.amount).toFixed(2))
-            : line.amount;
-          batch.set(expenseRef, {
-            ...importFields,
-            cardStatementRegisteredValue: previousLineValue,
-            cardStatementVariance: Number((line.amount - previousLineValue).toFixed(2)),
-            totalValue,
-            competenceDate,
-            dueDate,
-            ...(nextInstallments.length > 0 ? { installments: nextInstallments } : {}),
-          }, { merge: true });
-          importedAllocations.push(importedStatementAllocation(line, expenseRef.id, input.monthKey, expense));
-          linked += 1;
+          const historical = historicalByFingerprint.get(line.fingerprint);
+          const expenseRef = financialDbAdmin.collection("expenses").doc(historical?.id || `card_exp_${line.fingerprint.replace(/[^a-zA-Z0-9_-]/g, "_")}`);
+          if (historical) {
+            if (historical.data.status === "paid") throw new Error("EXPENSE_NOT_LINKABLE");
+            transaction.set(expenseRef, {
+              ...importFields,
+              totalValue: line.amount,
+              competenceDate,
+              dueDate,
+              installmentNumber: line.installmentNumber,
+              installmentTotal: line.installmentTotal,
+              cardStatementRemovedInImportId: null,
+              cardStatementRemovedAt: null,
+            }, { merge: true });
+            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey, historical.data);
+            linked += 1;
+          } else {
+            transaction.set(expenseRef, {
+              description: line.description,
+              supplier: line.supplier,
+              notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
+              totalValue: line.amount,
+              competenceDate,
+              dueDate,
+              paymentMethod: "single",
+              installmentNumber: line.installmentNumber,
+              installmentTotal: line.installmentTotal,
+              accountPlan: "",
+              accountId: "",
+              accountPlanId: "",
+              accountPlanName: "",
+              resultCenter: null,
+              resultCenterId: "",
+              resultCenterName: "",
+              isApportioned: false,
+              apportionments: [],
+              hasAccountAllocations: false,
+              accountAllocations: [],
+              hasPersonAllocations: false,
+              personAllocations: [],
+              status: "pending",
+              ...importFields,
+              createdAt: now,
+              createdBy: actor.decoded.uid,
+            }, { merge: true });
+            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey);
+            created += 1;
+          }
         }
-        continue;
+
+        if (revision?.previousFingerprint) activeAppliedByFingerprint.delete(String(revision.previousFingerprint));
+        activeAppliedByFingerprint.set(line.fingerprint, appliedImportLine(line, allocation));
+        if (revision?.previousLineId && revision.previousLineId !== allocation.lineId) {
+          allocationByLineId.delete(String(revision.previousLineId));
+        }
+        allocationByLineId.set(allocation.lineId, allocation);
       }
 
-      const expenseRef = financialDbAdmin.collection("expenses").doc(`card_exp_${line.fingerprint.replace(/[^a-zA-Z0-9_-]/g, "_")}`);
-      batch.set(expenseRef, {
-        description: line.description,
-        supplier: line.supplier,
-        notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${input.fileName}.`,
-        totalValue: line.amount,
-        competenceDate,
-        dueDate,
-        paymentMethod: "single",
-        installmentNumber: line.installmentNumber,
-        installmentTotal: line.installmentTotal,
-        accountPlan: "",
-        accountId: "",
-        accountPlanId: "",
-        accountPlanName: "",
-        resultCenter: null,
-        resultCenterId: "",
-        resultCenterName: "",
-        isApportioned: false,
-        apportionments: [],
-        hasAccountAllocations: false,
-        accountAllocations: [],
-        hasPersonAllocations: false,
-        personAllocations: [],
-        status: "pending",
-        ...importFields,
-        createdAt: now,
-        createdBy: actor.decoded.uid,
+      const selectedFingerprints = new Set(canonicalLines.map((line) => line.fingerprint));
+      const excludedFingerprints = revisionLines
+        .filter((line) => line.status !== "unchanged" && !selectedFingerprints.has(String(line.fingerprint || "")))
+        .map((line) => String(line.fingerprint || ""));
+      const includedTotal = Number(storedLines.reduce((total, line) => total + asNumber(line.amount), 0).toFixed(2));
+      const nextStatus = statementData.status === "closed" && hasRevisionChanges ? "open" : statementData.status === "paid" ? "paid" : "open";
+      transaction.set(statementRef, {
+        key: input.statementKey,
+        monthKey: input.monthKey,
+        accountId: input.accountId,
+        accountName: input.accountName,
+        paymentMethodId: input.paymentMethodId,
+        paymentMethodLabel: input.paymentMethodLabel,
+        closingDate: timestamp(canonicalClosingDate),
+        dueDate: timestamp(canonicalDueDate),
+        ...(canonicalOfficialTotal ? { officialTotal: canonicalOfficialTotal } : {}),
+        status: nextStatus,
+        allocations: [...allocationByLineId.values()],
+        activeImportId: input.importId,
+        activeImportVersion: asNumber(importData.version),
+        activeImportFileSha256: input.fileSha256,
+        lastImportFileName: canonicalFileName,
+        lastImportAnalysis: {
+          source: "financial_copilot",
+          status: canonicalAnalysis.status || input.analysis.status,
+          summary: canonicalAnalysis.summary || input.analysis.summary,
+          detectedFormat: canonicalAnalysis.detectedFormat ?? input.analysis.detectedFormat,
+          includedCount: storedLines.length,
+          appliedCount: activeAppliedByFingerprint.size,
+          includedTotal,
+          excludedCount: asNumber(canonicalAnalysis.excludedCount),
+          promptVersion: canonicalAnalysis.promptVersion || input.analysis.promptVersion,
+          schemaVersion: canonicalAnalysis.schemaVersion ?? input.analysis.schemaVersion,
+        },
+        ...(statementData.status === "closed" && hasRevisionChanges ? {
+          reopenedAt: now,
+          reopenedBy: actor.decoded.uid,
+          reopenReason: "Nova versão da fatura importada",
+        } : {}),
+        lastImportedAt: now,
+        lastImportedBy: actor.decoded.uid,
+        updatedAt: now,
+        updatedBy: actor.decoded.uid,
+        ...(!statementSnapshot.exists ? { createdAt: now, createdBy: actor.decoded.uid } : {}),
       }, { merge: true });
-      importedAllocations.push(importedStatementAllocation(line, expenseRef.id, input.monthKey));
-      created += 1;
-    }
+      transaction.set(importRef, {
+        status: excludedFingerprints.length ? "applied_with_exclusions" : "applied",
+        appliedLines: [...activeAppliedByFingerprint.values()],
+        excludedFingerprints,
+        appliedAt: now,
+        appliedBy: actor.decoded.uid,
+        result: { created, linked, replacedForecasts, skipped, removed: removedLines.length },
+        updatedAt: now,
+      }, { merge: true });
+      if (activeImportId && activeImportId !== input.importId) {
+        transaction.set(statementRef.collection("imports").doc(activeImportId), {
+          status: "superseded",
+          supersededByImportId: input.importId,
+          supersededAt: now,
+          updatedAt: now,
+        }, { merge: true });
+      }
+      transaction.set(statementRef.collection("events").doc(`import_${input.importId}`), {
+        type: "CARD_STATEMENT_VERSION_APPLIED",
+        importId: input.importId,
+        version: asNumber(importData.version),
+        previousImportId: activeImportId,
+        result: { created, linked, replacedForecasts, skipped, removed: removedLines.length },
+        reopened: statementData.status === "closed" && hasRevisionChanges,
+        actorId: actor.decoded.uid,
+        occurredAt: now,
+      }, { merge: true });
+      return { created, linked, replacedForecasts, skipped, removed: removedLines.length, reopened: statementData.status === "closed" && hasRevisionChanges };
+    });
 
-    const statementRef = financialDbAdmin.collection("cardStatements").doc(statementId);
-    const statementSnapshot = await statementRef.get();
-    const statementData = statementSnapshot.data() ?? {};
-    const allocationByLineId = new Map(
-      (Array.isArray(statementData.allocations) ? statementData.allocations : [])
-        .map(asRecord)
-        .filter((allocation) => typeof allocation.lineId === "string")
-        .map((allocation) => [String(allocation.lineId), allocation])
-    );
-    importedAllocations.forEach((allocation) => allocationByLineId.set(allocation.lineId, allocation));
-    const includedTotal = Number(normalizedLines.reduce((total, line) => total + line.amount, 0).toFixed(2));
-    batch.set(statementRef, {
-      key: input.statementKey,
-      monthKey: input.monthKey,
-      accountId: input.accountId,
-      accountName: input.accountName,
-      paymentMethodId: input.paymentMethodId,
-      paymentMethodLabel: input.paymentMethodLabel,
-      closingDate: timestamp(input.closingDate),
-      dueDate: timestamp(input.dueDate),
-      ...(input.officialTotal ? { officialTotal: input.officialTotal } : {}),
-      status: statementData.status === "paid" || statementData.status === "closed" ? statementData.status : "open",
-      allocations: [...allocationByLineId.values()],
-      lastImportFileName: input.fileName,
-      lastImportAnalysis: {
-        source: "financial_copilot",
-        status: input.analysis.status,
-        summary: input.analysis.summary,
-        detectedFormat: input.analysis.detectedFormat,
-        includedCount: normalizedLines.length,
-        includedTotal,
-        excludedCount: input.analysis.excludedCount,
-        promptVersion: input.analysis.promptVersion,
-        schemaVersion: input.analysis.schemaVersion,
-      },
-      lastImportedAt: now,
-      lastImportedBy: actor.decoded.uid,
-      updatedAt: now,
-      updatedBy: actor.decoded.uid,
-      ...(!statementSnapshot.exists ? { createdAt: now, createdBy: actor.decoded.uid } : {}),
-    }, { merge: true });
-    await batch.commit();
-
-    return NextResponse.json({ ok: true, created, linked, replacedForecasts, skipped });
+    return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "FINGERPRINT_MISMATCH" || message === "DUPLICATE_LINE" || message === "DUPLICATE_LINK") {
-      return NextResponse.json({ error: "Os vínculos enviados não correspondem à prévia da fatura." }, { status: 409 });
+      return errorResponse("Os vínculos enviados não correspondem à prévia da fatura.", 409);
     }
-    if (message === "EXPENSE_NOT_FOUND") return NextResponse.json({ error: "Uma despesa vinculada não foi encontrada." }, { status: 409 });
-    if (message === "EXPENSE_NOT_LINKABLE") return NextResponse.json({ error: "Uma despesa vinculada já foi paga, cancelada ou está em rascunho." }, { status: 409 });
-    console.error("[financial/card-statements/import] Falha ao importar fatura", error);
-    return NextResponse.json({ error: "Não foi possível registrar os itens da fatura." }, { status: 500 });
+    if (message === "EXPENSE_NOT_FOUND") return errorResponse("Uma despesa vinculada não foi encontrada.", 409);
+    if (message === "EXPENSE_NOT_LINKABLE") return errorResponse("Uma despesa vinculada já foi paga, cancelada ou está em rascunho.", 409);
+    if (message === "IMPORT_PREVIEW_NOT_FOUND" || message === "IMPORT_PREVIEW_MISMATCH") return errorResponse("A prévia versionada não foi encontrada ou não corresponde ao arquivo analisado.", 409);
+    if (message === "STALE_IMPORT_PREVIEW") return errorResponse("A fatura mudou depois desta análise. Gere uma nova prévia antes de importar.", 409);
+    if (message === "EMPTY_IMPORT") return errorResponse("Selecione ao menos um item ou uma alteração da nova versão.", 409);
+    if (message === "BLOCKED_ANALYSIS") return errorResponse("A análise bloqueada não pode ser importada.", 409);
+    if (message === "REVISION_TOO_LARGE") return errorResponse("A revisão possui alterações demais para uma aplicação atômica. Divida o tratamento em uma fatura menor.", 409);
+    if (message === "PAID_STATEMENT_REVISION" || message === "PAID_LINE_REVISION") return errorResponse("Uma fatura já paga não pode ser alterada. A nova versão ficou registrada para tratamento como ajuste.", 409);
+    if (message === "REOPEN_REQUIRED") return errorResponse("Reabra a fatura fechada para aplicar esta nova versão.", 409);
+    if (message === "REOPEN_FORBIDDEN") return errorResponse("Seu perfil não pode reabrir uma fatura fechada.", 403);
+    const reference = reportSystemError({
+      error,
+      source: "api-financial",
+      operation: "apply-card-statement-import",
+      routeOrJob: "/api/financial/card-statements/import",
+    });
+    return errorResponse("Não foi possível registrar os itens da fatura.", 500, reference.eventId);
   }
 }
