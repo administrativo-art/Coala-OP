@@ -166,6 +166,37 @@ test("exibe a previsão do cartão e remove a previsão substituída pelo gasto 
   assert.equal(reconciledGroups[0]?.provisionedTotal, 0);
 });
 
+test("oculta da versão ativa itens removidos sem apagar a despesa histórica", () => {
+  const groups = buildCardStatementGroups([{
+    id: "historical-charge",
+    description: "Cobrança removida na retificação",
+    totalValue: 90,
+    dueDate: new Date(2026, 7, 3, 12),
+    status: "pending",
+    cardStatementRevisionStatus: "removed",
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1234",
+  }, {
+    id: "installment-charge",
+    description: "Compra parcelada",
+    totalValue: 200,
+    paymentMethod: "installments",
+    installments: [
+      { number: 1, dueDate: new Date(2026, 7, 3, 12), value: 100, cardStatementRevisionStatus: "removed" },
+      { number: 2, dueDate: new Date(2026, 8, 3, 12), value: 100 },
+    ],
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1234",
+  }], [card]);
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]?.monthKey, "2026-09");
+  assert.equal(groups[0]?.lines.length, 1);
+  assert.equal(groups[0]?.lines[0]?.installmentNumber, 2);
+});
+
 test("congela a distribuição contábil das despesas vinculadas ao pagamento único", () => {
   const allocations = buildCardStatementAllocations([{
     lineId: "internet:2026-08",

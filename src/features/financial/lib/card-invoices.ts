@@ -44,6 +44,7 @@ export type CardExpenseEntry = {
     value?: unknown;
     status?: unknown;
     cardReconciliationStatus?: unknown;
+    cardStatementRevisionStatus?: unknown;
   }>;
   plannedPaymentMethodType?: unknown;
   plannedBankAccountId?: unknown;
@@ -51,6 +52,7 @@ export type CardExpenseEntry = {
   plannedPaymentMethodId?: unknown;
   plannedPaymentMethodLabel?: unknown;
   cardReconciliationStatus?: unknown;
+  cardStatementRevisionStatus?: unknown;
   cardStatementId?: unknown;
   cardStatementKey?: unknown;
   cardStatementMonthKey?: unknown;
@@ -303,6 +305,7 @@ export function buildCardStatementGroups(
   for (const expense of expenses) {
     if (expense.plannedPaymentMethodType !== "credit_card") continue;
     if (expense.status === "cancelled" || expense.status === "draft") continue;
+    if (expense.cardStatementRevisionStatus === "removed") continue;
     if (expense.provisionType === "forecast" && (expense.status === "reconciled" || expense.replacedByExpenseId)) {
       continue;
     }
@@ -314,14 +317,17 @@ export function buildCardStatementGroups(
 
     const installmentEntries =
       expense.paymentMethod === "installments" && Array.isArray(expense.installments) && expense.installments.length > 1
-        ? expense.installments.map((installment, index) => ({
-            lineId: `${expense.id}:installment:${Number(installment.number) || index + 1}`,
-            chargeDate: cardDateFromUnknown(installment.dueDate),
-            value: Number(installment.value),
-            reconciled: installment.cardReconciliationStatus === "reconciled",
-            installmentNumber: Number(installment.number) || index + 1,
-            installmentTotal: expense.installments!.length,
-          }))
+        ? expense.installments
+          .map((installment, index) => ({ installment, index }))
+          .filter(({ installment }) => installment.cardStatementRevisionStatus !== "removed")
+          .map(({ installment, index }) => ({
+              lineId: `${expense.id}:installment:${Number(installment.number) || index + 1}`,
+              chargeDate: cardDateFromUnknown(installment.dueDate),
+              value: Number(installment.value),
+              reconciled: installment.cardReconciliationStatus === "reconciled",
+              installmentNumber: Number(installment.number) || index + 1,
+              installmentTotal: expense.installments!.length,
+            }))
         : [{
             lineId: expense.id,
             chargeDate: cardExpenseChargeDate(expense),
