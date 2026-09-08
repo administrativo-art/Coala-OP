@@ -862,6 +862,17 @@ export function CardStatementsWorkspace({
           <p className="mt-1 text-sm text-muted-foreground">Previsão mensal, conferência das cobranças e conciliação do pagamento bancário.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canImportCardStatements && selectedGroup ? (
+            <Button
+              type="button"
+              className="h-10 rounded-xl"
+              disabled={importingStatement}
+              onClick={() => cardStatementFileRef.current?.click()}
+            >
+              {importingStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              {importingStatement ? "Analisando fatura..." : "Importar fatura"}
+            </Button>
+          ) : null}
           <Button variant="outline" className="h-10 rounded-xl bg-white" asChild>
             <Link href={FINANCIAL_ROUTES.importExpenses}><FileSearch className="mr-2 h-4 w-4" />Conferência do extrato</Link>
           </Button>
@@ -1465,7 +1476,7 @@ export function CardStatementsWorkspace({
 
               <div className="space-y-3.5">
                 <Card className="rounded-2xl border-[#e9e5dc] shadow-sm">
-                  <CardContent className="p-[18px]">
+                  <CardContent className="p-[18px] sm:p-[18px]">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-[14.5px] font-extrabold tracking-tight">Reconciliação</CardTitle>
                       <span className={cn(
@@ -1568,7 +1579,7 @@ export function CardStatementsWorkspace({
                 </Card>
 
                 <Card className="rounded-2xl border-[#e9e5dc] shadow-sm">
-                  <CardContent className="p-[18px]">
+                  <CardContent className="p-[18px] sm:p-[18px]">
                     <CardTitle className="text-[14.5px] font-extrabold tracking-tight">Pagamento no extrato</CardTitle>
                     <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
                       {statementStatus === "paid"
