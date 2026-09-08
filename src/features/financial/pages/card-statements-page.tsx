@@ -1476,7 +1476,7 @@ export function CardStatementsWorkspace({
 
               <div className="space-y-3.5">
                 <Card className="rounded-2xl border-[#e9e5dc] shadow-sm">
-                  <CardContent className="p-[18px]">
+                  <CardContent className="p-[18px] sm:p-[18px]">
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-[14.5px] font-extrabold tracking-tight">Reconciliação</CardTitle>
                       <span className={cn(
@@ -1579,7 +1579,7 @@ export function CardStatementsWorkspace({
                 </Card>
 
                 <Card className="rounded-2xl border-[#e9e5dc] shadow-sm">
-                  <CardContent className="p-[18px]">
+                  <CardContent className="p-[18px] sm:p-[18px]">
                     <CardTitle className="text-[14.5px] font-extrabold tracking-tight">Pagamento no extrato</CardTitle>
                     <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
                       {statementStatus === "paid"
