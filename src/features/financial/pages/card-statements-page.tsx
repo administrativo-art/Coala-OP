@@ -862,6 +862,17 @@ export function CardStatementsWorkspace({
           <p className="mt-1 text-sm text-muted-foreground">Previsão mensal, conferência das cobranças e conciliação do pagamento bancário.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canImportCardStatements && selectedGroup ? (
+            <Button
+              type="button"
+              className="h-10 rounded-xl"
+              disabled={importingStatement}
+              onClick={() => cardStatementFileRef.current?.click()}
+            >
+              {importingStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              {importingStatement ? "Analisando fatura..." : "Importar fatura"}
+            </Button>
+          ) : null}
           <Button variant="outline" className="h-10 rounded-xl bg-white" asChild>
             <Link href={FINANCIAL_ROUTES.importExpenses}><FileSearch className="mr-2 h-4 w-4" />Conferência do extrato</Link>
           </Button>
