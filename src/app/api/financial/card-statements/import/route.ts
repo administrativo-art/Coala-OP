@@ -9,6 +9,10 @@ import {
   type CardStatementRevisionLine,
 } from "@/features/financial/lib/card-statement-import";
 import { cardStatementImportId } from "@/features/financial/card-statement-import-versioning.server";
+import {
+  identifyCardStatementFinancialCharge,
+  resolveCardStatementFinancialCharge,
+} from "@/features/financial/lib/expense-description-catalog";
 import { requireUser } from "@/lib/auth-server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { reportSystemError } from "@/lib/observability";
@@ -84,6 +88,73 @@ function timestamp(isoDate: string) {
   return Timestamp.fromDate(new Date(`${isoDate}T12:00:00-03:00`));
 }
 
+type ClassificationOption = { id: string; name: string };
+type FinancialChargeDefaults = {
+  accountPlansByName: Map<string, ClassificationOption>;
+  resultCenter: ClassificationOption | null;
+};
+type FinancialChargeIdentity = NonNullable<ReturnType<typeof resolveCardStatementFinancialCharge>>;
+
+async function loadFinancialChargeDefaults(
+  lines: Array<{ description: string }>,
+  bankAccountId: string,
+): Promise<FinancialChargeDefaults | null> {
+  const requiredPlanNames = [...new Set(lines.flatMap((line) => {
+    const kind = identifyCardStatementFinancialCharge(line.description);
+    if (!kind) return [];
+    return [kind === "card_iof" ? "IOF | tarifas bancárias" : "Juros e multas"];
+  }))];
+  if (!requiredPlanNames.length) return null;
+
+  const [bankAccountSnapshot, ...accountSnapshots] = await Promise.all([
+    financialDbAdmin.collection("bankAccounts").doc(bankAccountId).get(),
+    ...requiredPlanNames.map((name) => financialDbAdmin.collection("accounts").where("name", "==", name).limit(2).get()),
+  ]);
+  const accountPlansByName = new Map<string, ClassificationOption>();
+  accountSnapshots.forEach((snapshot, index) => {
+    const candidates = snapshot.docs.filter((document) => {
+      const data = document.data() ?? {};
+      return data.active !== false && data.isGroup !== true;
+    });
+    if (candidates.length !== 1) return;
+    accountPlansByName.set(requiredPlanNames[index]!, {
+      id: candidates[0]!.id,
+      name: String(candidates[0]!.data().name || requiredPlanNames[index]),
+    });
+  });
+
+  const resultCenterId = String(bankAccountSnapshot.data()?.resultCenterId || "");
+  const resultCenterSnapshot = resultCenterId
+    ? await financialDbAdmin.collection("resultCenters").doc(resultCenterId).get()
+    : null;
+  const resultCenter = resultCenterSnapshot?.exists
+    ? { id: resultCenterSnapshot.id, name: String(resultCenterSnapshot.data()?.name || resultCenterSnapshot.id) }
+    : null;
+  return { accountPlansByName, resultCenter };
+}
+
+function automaticFinancialChargeFields(
+  identity: FinancialChargeIdentity | null,
+  defaults: FinancialChargeDefaults | null,
+) {
+  if (!identity || !defaults) return {};
+  const accountPlan = defaults.accountPlansByName.get(identity.accountPlanName) ?? null;
+  return {
+    ...(accountPlan ? {
+      accountPlan: accountPlan.id,
+      accountId: accountPlan.id,
+      accountPlanId: accountPlan.id,
+      accountPlanName: accountPlan.name,
+    } : {}),
+    ...(defaults.resultCenter ? {
+      resultCenter: defaults.resultCenter.id,
+      resultCenterId: defaults.resultCenter.id,
+      resultCenterName: defaults.resultCenter.name,
+    } : {}),
+    cardStatementAutoClassificationRule: "financial-charge-v1",
+  };
+}
+
 function statementDocumentId(key: string) {
   return key.replaceAll(":", "__").replace(/[^a-zA-Z0-9_-]/g, "_");
 }
@@ -112,6 +183,7 @@ function importedStatementAllocation(
   expenseId: string,
   monthKey: string,
   expense: Record<string, unknown> = {},
+  identity: FinancialChargeIdentity | null = null,
 ) {
   const installmentNumber = line.resolution.mode === "existing"
     ? line.resolution.installmentNumber
@@ -120,8 +192,8 @@ function importedStatementAllocation(
     lineId: installmentNumber ? `${expenseId}:installment:${installmentNumber}` : expenseId,
     expenseId,
     installmentNumber: installmentNumber ?? null,
-    description: line.description,
-    supplier: line.supplier,
+    description: identity?.description || line.description,
+    supplier: identity?.supplier || line.supplier,
     amount: line.amount,
     competenceDate: `${monthKey}-01`,
     accountPlanId: String(expense.accountPlanId || expense.accountId || expense.accountPlan || ""),
@@ -193,6 +265,7 @@ export async function POST(request: NextRequest) {
         linkKeys.add(linkKey);
       }
     }
+    const financialChargeDefaults = await loadFinancialChargeDefaults(normalizedLines, input.accountId);
 
     const statementId = statementDocumentId(input.statementKey);
     const statementRef = financialDbAdmin.collection("cardStatements").doc(statementId);
@@ -342,6 +415,12 @@ export async function POST(request: NextRequest) {
             }
           : originalLine.resolution;
         const line = { ...originalLine, resolution: effectiveResolution };
+        const financialChargeIdentity = resolveCardStatementFinancialCharge({
+          rawDescription: line.description,
+          competence: input.monthKey,
+          financialInstitution: input.accountName || line.supplier || "Instituição financeira",
+        });
+        const financialChargeFields = automaticFinancialChargeFields(financialChargeIdentity, financialChargeDefaults);
         const chargeDate = timestamp(line.date);
         const competenceDate = timestamp(`${input.monthKey}-01`);
         const dueDate = timestamp(canonicalDueDate);
@@ -369,6 +448,7 @@ export async function POST(request: NextRequest) {
           cardStatementImportPromptVersion: String(canonicalAnalysis.promptVersion || input.analysis.promptVersion),
           cardStatementImportSchemaVersion: canonicalAnalysis.schemaVersion ?? input.analysis.schemaVersion,
           cardStatementImportAnalyzedBy: "financial_copilot",
+          rawBankDescription: line.description,
           importedFrom: "card_statement",
           sourceType: "card_statement_import",
           updatedAt: now,
@@ -388,8 +468,8 @@ export async function POST(request: NextRequest) {
             const actualRef = financialDbAdmin.collection("expenses").doc(`card_actual_${line.fingerprint.replace(/[^a-zA-Z0-9_-]/g, "_")}`);
             transaction.set(actualRef, {
               ...inheritedExpenseFields(expense),
-              description: line.description || String(expense.description || "Despesa do cartão"),
-              supplier: line.supplier || String(expense.supplier || ""),
+              description: financialChargeIdentity?.description || line.description || String(expense.description || "Despesa do cartão"),
+              supplier: financialChargeIdentity?.supplier || line.supplier || String(expense.supplier || ""),
               notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
               totalValue: line.amount,
               competenceDate,
@@ -409,7 +489,7 @@ export async function POST(request: NextRequest) {
               createdAt: now,
               createdBy: actor.decoded.uid,
             }, { merge: true });
-            allocation = importedStatementAllocation(line, actualRef.id, input.monthKey, expense);
+            allocation = importedStatementAllocation(line, actualRef.id, input.monthKey, expense, financialChargeIdentity);
             transaction.set(expenseRef, {
               status: "reconciled",
               replacedByExpenseId: actualRef.id,
@@ -444,7 +524,7 @@ export async function POST(request: NextRequest) {
               dueDate,
               ...(nextInstallments.length > 0 ? { installments: nextInstallments } : {}),
             }, { merge: true });
-            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey, expense);
+            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey, expense, financialChargeIdentity);
             linked += 1;
           }
         } else {
@@ -462,12 +542,12 @@ export async function POST(request: NextRequest) {
               cardStatementRemovedInImportId: null,
               cardStatementRemovedAt: null,
             }, { merge: true });
-            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey, historical.data);
+            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey, historical.data, financialChargeIdentity);
             linked += 1;
           } else {
             transaction.set(expenseRef, {
-              description: line.description,
-              supplier: line.supplier,
+              description: financialChargeIdentity?.description || line.description,
+              supplier: financialChargeIdentity?.supplier || line.supplier,
               notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
               totalValue: line.amount,
               competenceDate,
@@ -488,12 +568,13 @@ export async function POST(request: NextRequest) {
               accountAllocations: [],
               hasPersonAllocations: false,
               personAllocations: [],
+              ...financialChargeFields,
               status: "pending",
               ...importFields,
               createdAt: now,
               createdBy: actor.decoded.uid,
             }, { merge: true });
-            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey);
+            allocation = importedStatementAllocation(line, expenseRef.id, input.monthKey, financialChargeFields, financialChargeIdentity);
             created += 1;
           }
         }
