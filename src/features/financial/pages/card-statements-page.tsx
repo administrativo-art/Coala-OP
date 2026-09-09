@@ -15,7 +15,6 @@ import {
   CreditCard,
   FileSearch,
   Loader2,
-  ReceiptText,
   RefreshCw,
   Repeat2,
   Sparkles,
@@ -875,9 +874,6 @@ export function CardStatementsWorkspace({
           ) : null}
           <Button variant="outline" className="h-10 rounded-xl bg-white" asChild>
             <Link href={FINANCIAL_ROUTES.importExpenses}><FileSearch className="mr-2 h-4 w-4" />Conferência do extrato</Link>
-          </Button>
-          <Button variant="outline" className="h-10 rounded-xl bg-white" asChild>
-            <Link href={FINANCIAL_ROUTES.newExpense}><ReceiptText className="mr-2 h-4 w-4" />Nova despesa</Link>
           </Button>
         </div>
       </div> : null}

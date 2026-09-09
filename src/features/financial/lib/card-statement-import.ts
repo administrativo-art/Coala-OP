@@ -273,15 +273,19 @@ export function buildCardStatementImportFingerprint(
 }
 
 export function normalizeCardStatementImportLines(lines: CardStatementLineInput[], context: CardStatementContext) {
-  const uniqueReferences = new Set<string>();
+  const referenceOccurrences = new Map<string, number>();
   const normalized: CardStatementImportLine[] = [];
   for (const [index, line] of lines.entries()) {
     const date = parseIsoDate(line.date);
     const amount = positiveAmount(line.amount);
     const description = displayText(line.description);
-    const sourceReference = displayText(line.sourceReference) || `item-${index + 1}`;
-    if (!date || !amount || !description || uniqueReferences.has(sourceReference)) continue;
-    uniqueReferences.add(sourceReference);
+    const baseSourceReference = displayText(line.sourceReference) || `item-${index + 1}`;
+    if (!date || !amount || !description) continue;
+    const occurrence = (referenceOccurrences.get(baseSourceReference) ?? 0) + 1;
+    referenceOccurrences.set(baseSourceReference, occurrence);
+    const sourceReference = occurrence === 1
+      ? baseSourceReference
+      : `${baseSourceReference} · ocorrência ${occurrence}`;
     const installmentNumber = positiveInteger(line.installmentNumber);
     const installmentTotal = positiveInteger(line.installmentTotal);
     const partial = {

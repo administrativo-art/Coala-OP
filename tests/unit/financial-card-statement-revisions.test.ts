@@ -74,3 +74,16 @@ test("não correlaciona automaticamente revisões ambíguas", () => {
   assert.equal(diff.lines[0]?.status, "new");
   assert.equal(diff.summary.removed, 2);
 });
+
+test("preserva dois tratamentos quando a nova fatura repete duas cobranças idênticas", () => {
+  const diff = diffCardStatementRevision([
+    current({ fingerprint: "new-1", sourceReference: "pdf-item" }),
+    current({ fingerprint: "new-2", sourceReference: "pdf-item · ocorrência 2" }),
+  ], [
+    previous({ fingerprint: "old-1", sourceReference: "old-a", expenseId: "tirirical", lineId: "tirirical" }),
+    previous({ fingerprint: "old-2", sourceReference: "old-b", expenseId: "joao-paulo", lineId: "joao-paulo" }),
+  ]);
+
+  assert.deepEqual(diff.summary, { unchanged: 0, changed: 2, added: 0, removed: 0 });
+  assert.deepEqual(diff.lines.map((line) => line.previousExpenseId), ["tirirical", "joao-paulo"]);
+});

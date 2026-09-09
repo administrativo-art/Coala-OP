@@ -107,6 +107,7 @@ function plainPreview(preview: CardStatementImportPreview) {
 export async function getCachedCardStatementPreview(params: {
   statementKey: string;
   fileSha256: string;
+  promptVersion: string;
 }) {
   const statementId = cardStatementDocumentId(params.statementKey);
   const statementRef = financialDbAdmin.collection("cardStatements").doc(statementId);
@@ -117,7 +118,9 @@ export async function getCachedCardStatementPreview(params: {
     : cardStatementImportId(params.statementKey, params.fileSha256, activeImportId);
   const snapshot = await statementRef.collection("imports").doc(importId).get();
   const preview = snapshot.data()?.preview;
-  return preview && typeof preview === "object" ? preview as CardStatementImportPreview : null;
+  if (!preview || typeof preview !== "object") return null;
+  const cached = preview as CardStatementImportPreview;
+  return cached.analysis?.promptVersion === params.promptVersion ? cached : null;
 }
 
 export async function prepareVersionedCardStatementPreview(params: {

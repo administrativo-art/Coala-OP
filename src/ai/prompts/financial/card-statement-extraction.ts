@@ -12,7 +12,7 @@ export const cardStatementExtractionPrompt = defineAiPrompt<CardStatementExtract
   module: "financial",
   name: "Copiloto de importação de fatura de cartão",
   description: "Analisa faturas de cartão, separa compras de movimentos não importáveis e prepara uma prévia revisável.",
-  version: "financial-card-statement-v2",
+  version: "financial-card-statement-v3",
   schemaVersion: "financial-card-statement-analysis-v1",
   status: "active",
   risk: "high",
