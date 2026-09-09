@@ -13,12 +13,14 @@ import {
   identifyCardStatementFinancialCharge,
   resolveCardStatementFinancialCharge,
 } from "@/features/financial/lib/expense-description-catalog";
+import { cardStatementAllocationIntegrity } from "@/features/financial/lib/card-invoices";
 import { requireUser } from "@/lib/auth-server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { reportSystemError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const CARD_STATEMENT_HISTORY_PREFLIGHT_LIMIT = 241;
 
 const lineSchema = z.object({
   id: z.string().min(1).max(300),
@@ -350,10 +352,17 @@ export async function POST(request: NextRequest) {
         if (revision?.status === "changed" && revision.previousExpenseId) return [String(revision.previousExpenseId)];
         return line.resolution.mode === "existing" ? [line.resolution.expenseId] : [];
       }))];
-      const [relevantSnapshot, ...linkedSnapshots] = await Promise.all([
+      const [relevantSnapshot, cardStatementsSnapshot, ...linkedSnapshots] = await Promise.all([
         transaction.get(financialDbAdmin.collection("expenses").where("cardStatementKey", "==", input.statementKey).limit(500)),
+        transaction.get(financialDbAdmin.collection("cardStatements")
+          .where("accountId", "==", input.accountId)
+          .where("paymentMethodId", "==", input.paymentMethodId)
+          .limit(CARD_STATEMENT_HISTORY_PREFLIGHT_LIMIT)),
         ...linkedIds.map((id) => transaction.get(financialDbAdmin.collection("expenses").doc(id))),
       ]);
+      if (cardStatementsSnapshot.size >= CARD_STATEMENT_HISTORY_PREFLIGHT_LIMIT) {
+        throw new Error("CARD_STATEMENT_HISTORY_PREFLIGHT_LIMIT_REACHED");
+      }
       const relevantById = new Map(relevantSnapshot.docs.map((snapshot) => [snapshot.id, snapshot.data() ?? {}]));
       const linkedById = new Map(linkedSnapshots.filter((snapshot) => snapshot.exists).map((snapshot) => [snapshot.id, snapshot.data() ?? {}]));
       const expenseById = new Map([...relevantById, ...linkedById]);
@@ -369,6 +378,45 @@ export async function POST(request: NextRequest) {
           .filter((allocation) => typeof allocation.lineId === "string")
           .map((allocation) => [String(allocation.lineId), allocation]),
       );
+      const otherStatementLines = new Map<string, string>();
+      const otherStatementFingerprints = new Map<string, string>();
+      cardStatementsSnapshot.docs.forEach((document) => {
+        const other = document.data() ?? {};
+        if (document.id === statementId) return;
+        (Array.isArray(other.allocations) ? other.allocations : []).map(asRecord).forEach((allocation) => {
+          const lineId = String(allocation.lineId || "");
+          const fingerprint = String(allocation.importFingerprint || "");
+          if (lineId) otherStatementLines.set(lineId, String(other.key || document.id));
+          if (fingerprint) otherStatementFingerprints.set(fingerprint, String(other.key || document.id));
+        });
+      });
+      canonicalLines.forEach((originalLine) => {
+        const revision = revisionByFingerprint.get(originalLine.fingerprint) ?? null;
+        const effectiveResolution = revision?.status === "changed" && revision.previousExpenseId
+          ? {
+              mode: "existing" as const,
+              expenseId: String(revision.previousExpenseId),
+              installmentNumber: asNumber(revision.previousInstallmentNumber) || null,
+            }
+          : originalLine.resolution;
+        const existingExpense = effectiveResolution.mode === "existing"
+          ? linkedById.get(effectiveResolution.expenseId) ?? relevantById.get(effectiveResolution.expenseId)
+          : null;
+        const expenseId = effectiveResolution.mode === "existing"
+          ? existingExpense?.provisionType === "forecast" && existingExpense.status === "provisioned"
+            ? `card_actual_${originalLine.fingerprint.replace(/[^a-zA-Z0-9_-]/g, "_")}`
+            : effectiveResolution.expenseId
+          : historicalByFingerprint.get(originalLine.fingerprint)?.id
+            || `card_exp_${originalLine.fingerprint.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+        const installmentNumber = effectiveResolution.mode === "existing"
+          ? effectiveResolution.installmentNumber
+          : originalLine.installmentNumber;
+        const lineId = installmentNumber ? `${expenseId}:installment:${installmentNumber}` : expenseId;
+        if (otherStatementLines.has(lineId)) throw new Error("CARD_STATEMENT_LINE_ALREADY_ASSIGNED");
+        if (otherStatementFingerprints.has(originalLine.fingerprint)) {
+          throw new Error("CARD_STATEMENT_FINGERPRINT_ALREADY_ASSIGNED");
+        }
+      });
       const now = Timestamp.now();
       let created = 0;
       let linked = 0;
@@ -506,7 +554,18 @@ export async function POST(request: NextRequest) {
             const targetNumber = effectiveResolution.installmentNumber;
             const nextInstallments = targetNumber
               ? installments.map((installment, index) => (asNumber(installment.number) || index + 1) === targetNumber
-                ? { ...installment, value: line.amount, cardReconciliationStatus: "pending", cardStatementRevisionStatus: "active", cardStatementKey: input.statementKey, cardStatementImportFingerprint: line.fingerprint }
+                ? {
+                    ...installment,
+                    value: line.amount,
+                    dueDate,
+                    competenceDate,
+                    cardReconciliationStatus: "pending",
+                    cardStatementRevisionStatus: "active",
+                    cardStatementId: statementId,
+                    cardStatementKey: input.statementKey,
+                    cardStatementMonthKey: input.monthKey,
+                    cardStatementImportFingerprint: line.fingerprint,
+                  }
                 : installment)
               : installments;
             const previousLineValue = targetNumber
@@ -592,6 +651,17 @@ export async function POST(request: NextRequest) {
         .filter((line) => line.status !== "unchanged" && !selectedFingerprints.has(String(line.fingerprint || "")))
         .map((line) => String(line.fingerprint || ""));
       const includedTotal = Number(storedLines.reduce((total, line) => total + asNumber(line.amount), 0).toFixed(2));
+      const nextAllocations = [...allocationByLineId.values()];
+      const allocationIntegrity = cardStatementAllocationIntegrity(
+        nextAllocations as Array<{ lineId: string; amount: number; importFingerprint?: string }>,
+        canonicalOfficialTotal || 0,
+      );
+      if (allocationIntegrity.duplicateLineIds.length || allocationIntegrity.duplicateFingerprints.length) {
+        throw new Error("CARD_STATEMENT_DUPLICATE_ALLOCATION");
+      }
+      if (canonicalOfficialTotal && Math.abs(allocationIntegrity.difference) > 0.05) {
+        throw new Error("CARD_STATEMENT_ALLOCATION_TOTAL_MISMATCH");
+      }
       const nextStatus = statementData.status === "closed" && hasRevisionChanges ? "open" : statementData.status === "paid" ? "paid" : "open";
       transaction.set(statementRef, {
         key: input.statementKey,
@@ -604,7 +674,7 @@ export async function POST(request: NextRequest) {
         dueDate: timestamp(canonicalDueDate),
         ...(canonicalOfficialTotal ? { officialTotal: canonicalOfficialTotal } : {}),
         status: nextStatus,
-        allocations: [...allocationByLineId.values()],
+        allocations: nextAllocations,
         activeImportId: input.importId,
         activeImportVersion: asNumber(importData.version),
         activeImportFileSha256: input.fileSha256,
@@ -667,6 +737,18 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "";
     if (message === "FINGERPRINT_MISMATCH" || message === "DUPLICATE_LINE" || message === "DUPLICATE_LINK") {
       return errorResponse("Os vínculos enviados não correspondem à prévia da fatura.", 409);
+    }
+    if (message === "CARD_STATEMENT_LINE_ALREADY_ASSIGNED" || message === "CARD_STATEMENT_FINGERPRINT_ALREADY_ASSIGNED") {
+      return errorResponse("Uma cobrança ou parcela já pertence a outra fatura ativa.", 409);
+    }
+    if (message === "CARD_STATEMENT_ALLOCATION_TOTAL_MISMATCH") {
+      return errorResponse("A soma das alocações não corresponde ao total oficial da fatura.", 409);
+    }
+    if (message === "CARD_STATEMENT_DUPLICATE_ALLOCATION") {
+      return errorResponse("A fatura possui cobranças ou fingerprints duplicados.", 409);
+    }
+    if (message === "CARD_STATEMENT_HISTORY_PREFLIGHT_LIMIT_REACHED") {
+      return errorResponse("O histórico do cartão excedeu o limite seguro de conferência. A importação foi bloqueada.", 409);
     }
     if (message === "EXPENSE_NOT_FOUND") return errorResponse("Uma despesa vinculada não foi encontrada.", 409);
     if (message === "EXPENSE_NOT_LINKABLE") return errorResponse("Uma despesa vinculada já foi paga, cancelada ou está em rascunho.", 409);

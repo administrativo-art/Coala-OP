@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   buildCardStatementAllocations,
   buildCardStatementGroups,
+  buildCardStatementLinesFromAllocations,
+  cardStatementAllocationIntegrity,
   findCardStatementPaymentCandidates,
   resolveCardStatementCycle,
   resolveCardStatementCycleFromMonth,
@@ -113,6 +115,130 @@ test("agrupa despesas recorrentes e parcelas sem transformar a fatura em nova de
   assert.equal(groups[0]?.recurringCount, 1);
   assert.equal(groups[0]?.lines[1]?.installmentNumber, 1);
   assert.equal(groups[1]?.projectedTotal, 500);
+});
+
+test("usa a fatura explícita da parcela e não reaplica o fechamento sobre seu vencimento", () => {
+  const groups = buildCardStatementGroups([{
+    id: "banco-ergonomico",
+    description: "Banco semi-sentado ergonômico - 07/2026 | Mercado Livre",
+    supplier: "Mercado Livre",
+    totalValue: 439,
+    cardChargeDate: new Date(2026, 6, 30, 12),
+    paymentMethod: "installments",
+    installments: [
+      { number: 1, dueDate: new Date(2026, 7, 12, 12), value: 54.88 },
+      {
+        number: 2,
+        dueDate: new Date(2026, 8, 12, 12),
+        value: 54.87,
+        cardStatementKey: "inter:card-1234:2026-08",
+        cardStatementMonthKey: "2026-08",
+      },
+      { number: 3, dueDate: new Date(2026, 9, 12, 12), value: 54.88 },
+    ],
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1234",
+  }], [card]);
+
+  const august = groups.find((group) => group.monthKey === "2026-08");
+  const october = groups.find((group) => group.monthKey === "2026-10");
+  assert.deepEqual(august?.lines.map((line) => line.installmentNumber), [1, 2]);
+  assert.deepEqual(october?.lines.map((line) => line.installmentNumber), [3]);
+  assert.equal(groups.some((group) => group.monthKey === "2026-11"), false);
+});
+
+test("mantém as oito parcelas em oito faturas quando cada parcela tem competência congelada", () => {
+  const installments = Array.from({ length: 8 }, (_, index) => {
+    const month = new Date(Date.UTC(2026, 6 + index, 1));
+    const monthKey = `${month.getUTCFullYear()}-${String(month.getUTCMonth() + 1).padStart(2, "0")}`;
+    return {
+      number: index + 1,
+      dueDate: new Date(Date.UTC(2026, 7 + index, 12, 15)),
+      value: index % 2 === 0 ? 54.88 : 54.87,
+      cardStatementKey: `account:card:${monthKey}`,
+      cardStatementMonthKey: monthKey,
+      cardStatementRevisionStatus: index === 1 ? "active" : "projected",
+    };
+  });
+  const groups = buildCardStatementGroups([{
+    id: "chair",
+    description: "Banco semi-sentado ergonômico - 07/2026 | Mercado Livre",
+    supplier: "Mercado Livre",
+    totalValue: 439,
+    cardChargeDate: new Date("2026-07-30T12:00:00-03:00"),
+    competenceDate: new Date("2026-07-01T12:00:00-03:00"),
+    paymentMethod: "installments",
+    installments,
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "account",
+    plannedPaymentMethodId: "card",
+  }], [{
+    accountId: "account",
+    accountName: "Inter",
+    methodId: "card",
+    methodLabel: "Cartão",
+    closingDay: 5,
+    dueDay: 12,
+  }]);
+
+  assert.deepEqual(groups.map((group) => group.monthKey), [
+    "2026-07", "2026-08", "2026-09", "2026-10",
+    "2026-11", "2026-12", "2027-01", "2027-02",
+  ]);
+  assert.deepEqual(groups.map((group) => group.lines[0]?.installmentNumber), [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test("reconstrói a fatura oficial pelas alocações persistidas", () => {
+  const expenses = [{
+    id: "compra",
+    description: "Compra parcelada",
+    supplier: "Fornecedor",
+    cardChargeDate: new Date(2026, 6, 30, 12),
+    paymentMethod: "installments",
+    installments: [
+      { number: 1, dueDate: new Date(2026, 7, 12, 12), value: 50 },
+      { number: 2, dueDate: new Date(2026, 8, 12, 12), value: 54.87, cardReconciliationStatus: "reconciled" },
+    ],
+  }];
+  const lines = buildCardStatementLinesFromAllocations([{
+    lineId: "compra:installment:2",
+    expenseId: "compra",
+    installmentNumber: 2,
+    description: "Compra parcelada",
+    supplier: "Fornecedor",
+    amount: 54.87,
+    competenceDate: "2026-08-01",
+    accountPlanId: "equipamentos",
+    accountPlanName: "Equipamentos",
+    resultCenterId: "administrativo",
+    resultCenterName: "Administrativo",
+    accountAllocations: [],
+    apportionments: [],
+  }], expenses);
+
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]?.lineId, "compra:installment:2");
+  assert.equal(lines[0]?.installmentNumber, 2);
+  assert.equal(lines[0]?.value, 54.87);
+  assert.equal(lines[0]?.reconciled, true);
+});
+
+test("bloqueia alocações duplicadas ou com soma diferente do total oficial", () => {
+  const valid = cardStatementAllocationIntegrity([
+    { lineId: "expense-1", amount: 100, importFingerprint: "fp-1" },
+    { lineId: "expense-2", amount: 54.87, importFingerprint: "fp-2" },
+  ], 154.87);
+  assert.equal(valid.valid, true);
+
+  const duplicate = cardStatementAllocationIntegrity([
+    { lineId: "expense-1", amount: 100, importFingerprint: "fp-1" },
+    { lineId: "expense-1", amount: 54.87, importFingerprint: "fp-1" },
+  ], 200);
+  assert.equal(duplicate.valid, false);
+  assert.deepEqual(duplicate.duplicateLineIds, ["expense-1"]);
+  assert.deepEqual(duplicate.duplicateFingerprints, ["fp-1"]);
+  assert.equal(duplicate.difference, 45.13);
 });
 
 test("exibe a previsão do cartão e remove a previsão substituída pelo gasto real", () => {

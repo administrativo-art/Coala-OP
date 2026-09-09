@@ -38,6 +38,7 @@ import { useFinancialCollection } from "@/features/financial/hooks/use-financial
 import {
   buildCardStatementGroups,
   buildCardStatementAllocations,
+  buildCardStatementLinesFromAllocations,
   cardStatementLineAuditIssues as cardLineAuditIssues,
   cardStatementLineAuditStatus as getCardLineAuditStatus,
   findCardStatementPaymentCandidates,
@@ -172,7 +173,9 @@ function lineReconciliationUpdate(
               ...installment,
               cardReconciliationStatus: reconciled ? "reconciled" : "pending",
               cardReconciledAt: reconciledAt,
+              cardStatementId: statementKey ? statementDocumentId(statementKey) : null,
               cardStatementKey: statementKey,
+              cardStatementMonthKey: statementMonthKey,
             }
           : installment
       )
@@ -181,7 +184,9 @@ function lineReconciliationUpdate(
           ...installment,
           cardReconciliationStatus: reconciled ? "reconciled" : "pending",
           cardReconciledAt: reconciledAt,
+          cardStatementId: statementKey ? statementDocumentId(statementKey) : null,
           cardStatementKey: statementKey,
+          cardStatementMonthKey: statementMonthKey,
         }))
       : installments;
 
@@ -254,6 +259,10 @@ export function CardStatementsWorkspace({
     () => new Map((statementsData || []).map((statement) => [statement.key || statement.id, statement])),
     [statementsData]
   );
+  const expenseById = useMemo(
+    () => new Map((expensesData || []).map((expense) => [String(expense.id), expense])),
+    [expensesData]
+  );
   const monthGroups = useMemo<CardStatementGroup[]>(() => {
     const generatedByCard = new Map(
       generatedGroups
@@ -275,13 +284,28 @@ export function CardStatementsWorkspace({
         provisionedTotal: 0,
       };
       const statement = statementByKey.get(baseGroup.key);
+      const officialLines = statement?.allocations?.length
+        ? buildCardStatementLinesFromAllocations(statement.allocations, [
+            ...new Set(statement.allocations.map((allocation) => allocation.expenseId)),
+          ].flatMap((expenseId) => {
+            const expense = expenseById.get(expenseId);
+            return expense ? [expense] : [];
+          }))
+        : null;
+      const lines = officialLines ?? baseGroup.lines;
       return {
         ...baseGroup,
+        lines,
+        projectedTotal: lines.reduce((total, line) => total + line.value, 0),
+        reconciledTotal: lines.filter((line) => line.reconciled).reduce((total, line) => total + line.value, 0),
+        recurringCount: lines.filter((line) => line.expense.paymentMethod === "recurring" || line.expense.recurrenceGroupId).length,
+        provisionCount: lines.filter((line) => isCardLineForecast(line)).length,
+        provisionedTotal: lines.filter((line) => isCardLineForecast(line)).reduce((total, line) => total + line.value, 0),
         closingDate: toDate(statement?.closingDate) || baseGroup.closingDate,
         dueDate: toDate(statement?.dueDate) || baseGroup.dueDate,
       };
     });
-  }, [cards, generatedGroups, monthKey, statementByKey]);
+  }, [cards, expenseById, generatedGroups, monthKey, statementByKey]);
   const selectedGroup = monthGroups.find(
     (group) => `${group.card.accountId}:${group.card.methodId}` === selectedCardKey
   ) ?? monthGroups[0] ?? null;

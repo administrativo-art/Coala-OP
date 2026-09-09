@@ -1,3 +1,9 @@
+import {
+  financialDateFromIso,
+  financialDateKey,
+  financialMonthKey,
+} from "@/features/financial/lib/financial-dates";
+
 export type PlannedPaymentMethodType =
   | "credit_card"
   | "debit_card"
@@ -41,10 +47,15 @@ export type CardExpenseEntry = {
   installments?: Array<{
     number?: unknown;
     dueDate?: unknown;
+    competenceDate?: unknown;
     value?: unknown;
     status?: unknown;
     cardReconciliationStatus?: unknown;
     cardStatementRevisionStatus?: unknown;
+    cardStatementId?: unknown;
+    cardStatementKey?: unknown;
+    cardStatementMonthKey?: unknown;
+    cardStatementImportFingerprint?: unknown;
   }>;
   plannedPaymentMethodType?: unknown;
   plannedBankAccountId?: unknown;
@@ -56,6 +67,7 @@ export type CardExpenseEntry = {
   cardStatementId?: unknown;
   cardStatementKey?: unknown;
   cardStatementMonthKey?: unknown;
+  cardStatementImportFingerprint?: unknown;
 };
 
 export type CardStatementCycle = {
@@ -73,6 +85,8 @@ export type CardStatementLine = {
   reconciled: boolean;
   installmentNumber?: number;
   installmentTotal?: number;
+  importFingerprint?: string;
+  sourceReference?: string;
 };
 
 export type CardStatementLineAuditStatus = "pending" | "audited" | "reconciled";
@@ -91,6 +105,8 @@ export type CardStatementAllocation = {
   resultCenterName: string;
   accountAllocations: unknown[];
   apportionments: unknown[];
+  importFingerprint?: string;
+  sourceReference?: string;
 };
 
 export type CardStatementGroup = CardStatementCycle & {
@@ -102,6 +118,25 @@ export type CardStatementGroup = CardStatementCycle & {
   provisionCount: number;
   provisionedTotal: number;
 };
+
+export function cardStatementAllocationIntegrity(
+  allocations: Array<Pick<CardStatementAllocation, "lineId" | "amount" | "importFingerprint">>,
+  officialTotal: number,
+) {
+  const lineIds = allocations.map((allocation) => String(allocation.lineId || "")).filter(Boolean);
+  const fingerprints = allocations.map((allocation) => String(allocation.importFingerprint || "")).filter(Boolean);
+  const allocatedTotal = Number(allocations.reduce((total, allocation) => total + Number(allocation.amount || 0), 0).toFixed(2));
+  const difference = Number((Number(officialTotal || 0) - allocatedTotal).toFixed(2));
+  return {
+    valid: new Set(lineIds).size === lineIds.length
+      && new Set(fingerprints).size === fingerprints.length
+      && Math.abs(difference) <= 0.05,
+    allocatedTotal,
+    difference,
+    duplicateLineIds: lineIds.filter((lineId, index) => lineIds.indexOf(lineId) !== index),
+    duplicateFingerprints: fingerprints.filter((fingerprint, index) => fingerprints.indexOf(fingerprint) !== index),
+  };
+}
 
 export type BankOutflowEntry = {
   id: string;
@@ -124,11 +159,19 @@ function positiveDay(value: unknown, fallback: number) {
 }
 
 function daysInMonth(year: number, monthIndex: number) {
-  return new Date(year, monthIndex + 1, 0).getDate();
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 }
 
 function dateAtDay(year: number, monthIndex: number, day: number) {
-  return new Date(year, monthIndex, Math.min(day, daysInMonth(year, monthIndex)), 12, 0, 0, 0);
+  const monthAnchor = new Date(Date.UTC(year, monthIndex, 1));
+  const normalizedYear = monthAnchor.getUTCFullYear();
+  const normalizedMonthIndex = monthAnchor.getUTCMonth();
+  const normalizedDay = Math.min(day, daysInMonth(normalizedYear, normalizedMonthIndex));
+  return financialDateFromIso([
+    normalizedYear,
+    String(normalizedMonthIndex + 1).padStart(2, "0"),
+    String(normalizedDay).padStart(2, "0"),
+  ].join("-"));
 }
 
 export function cardDateFromUnknown(value: unknown): Date | null {
@@ -182,13 +225,7 @@ export function cardStatementLineAuditStatus(line: CardStatementLine): CardState
 }
 
 function dateKey(value: unknown) {
-  const date = cardDateFromUnknown(value);
-  if (!date) return null;
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
+  return financialDateKey(cardDateFromUnknown(value));
 }
 
 export function buildCardStatementAllocations(lines: CardStatementLine[]): CardStatementAllocation[] {
@@ -210,6 +247,8 @@ export function buildCardStatementAllocations(lines: CardStatementLine[]): CardS
     apportionments: Array.isArray(line.expense.apportionments)
       ? line.expense.apportionments
       : [],
+    ...(line.importFingerprint ? { importFingerprint: line.importFingerprint } : {}),
+    ...(line.sourceReference ? { sourceReference: line.sourceReference } : {}),
   }));
 }
 
@@ -219,21 +258,28 @@ export function resolveCardStatementCycle(
 ): CardStatementCycle {
   const closingDay = positiveDay(card.closingDay, 25);
   const dueDay = positiveDay(card.dueDay, 5);
-  const currentClosingDate = dateAtDay(chargeDate.getFullYear(), chargeDate.getMonth(), closingDay);
+  const chargeDateKey = financialDateKey(chargeDate);
+  if (!chargeDateKey) throw new Error("Data da cobrança inválida.");
+  const chargeYear = Number(chargeDateKey.slice(0, 4));
+  const chargeMonthIndex = Number(chargeDateKey.slice(5, 7)) - 1;
+  const currentClosingDate = dateAtDay(chargeYear, chargeMonthIndex, closingDay);
   const closesInCurrentMonth = chargeDate.getTime() <= currentClosingDate.getTime();
   const closingMonthOffset = closesInCurrentMonth ? 0 : 1;
   const closingDate = dateAtDay(
-    chargeDate.getFullYear(),
-    chargeDate.getMonth() + closingMonthOffset,
+    chargeYear,
+    chargeMonthIndex + closingMonthOffset,
     closingDay
   );
   const dueMonthOffset = dueDay <= closingDay ? 1 : 0;
+  const closingMonthKey = financialMonthKey(closingDate);
+  if (!closingMonthKey) throw new Error("Data de fechamento inválida.");
   const dueDate = dateAtDay(
-    closingDate.getFullYear(),
-    closingDate.getMonth() + dueMonthOffset,
+    Number(closingMonthKey.slice(0, 4)),
+    Number(closingMonthKey.slice(5, 7)) - 1 + dueMonthOffset,
     dueDay
   );
-  const monthKey = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, "0")}`;
+  const monthKey = financialMonthKey(dueDate);
+  if (!monthKey) throw new Error("Data de vencimento inválida.");
 
   return {
     key: `${card.accountId}:${card.methodId}:${monthKey}`,
@@ -272,27 +318,88 @@ export function resolveCardStatementDatesFromDueDate(
   const closingDay = positiveDay(card.closingDay, 25);
   const dueDay = positiveDay(card.dueDay, 5);
   const closingMonthOffset = closingDay > dueDay ? -1 : 0;
+  const dueMonthKey = financialMonthKey(dueDate);
+  if (!dueMonthKey) throw new Error("Data de vencimento inválida.");
+  const dueYear = Number(dueMonthKey.slice(0, 4));
+  const dueMonthIndex = Number(dueMonthKey.slice(5, 7)) - 1;
   return {
-    closingDate: dateAtDay(dueDate.getFullYear(), dueDate.getMonth() + closingMonthOffset, closingDay),
-    dueDate: dateAtDay(dueDate.getFullYear(), dueDate.getMonth(), dueDay),
+    closingDate: dateAtDay(dueYear, dueMonthIndex + closingMonthOffset, closingDay),
+    dueDate: dateAtDay(dueYear, dueMonthIndex, dueDay),
   };
 }
 
-function explicitExpenseCycle(
-  expense: CardExpenseEntry,
+function explicitCardStatementCycle(
+  value: { cardStatementMonthKey?: unknown; cardStatementKey?: unknown },
   card: Pick<CreditCardInstrument, "accountId" | "methodId" | "closingDay" | "dueDay">
 ) {
-  const explicitMonth = String(expense.cardStatementMonthKey ?? "").trim();
+  const explicitMonth = String(value.cardStatementMonthKey ?? "").trim();
   if (/^\d{4}-\d{2}$/.test(explicitMonth)) {
     return resolveCardStatementCycleFromMonth(explicitMonth, card);
   }
 
-  const statementKey = String(expense.cardStatementKey ?? "").trim();
+  const statementKey = String(value.cardStatementKey ?? "").trim();
   const prefix = `${card.accountId}:${card.methodId}:`;
   const statementMonth = statementKey.startsWith(prefix) ? statementKey.slice(prefix.length) : "";
   return /^\d{4}-\d{2}$/.test(statementMonth)
     ? resolveCardStatementCycleFromMonth(statementMonth, card)
     : null;
+}
+
+function installmentCycleFromDueDate(
+  dueDate: Date,
+  card: Pick<CreditCardInstrument, "accountId" | "methodId" | "closingDay" | "dueDay">
+) {
+  const monthKey = financialMonthKey(dueDate);
+  if (!monthKey) return null;
+  return resolveCardStatementCycleFromMonth(monthKey, card);
+}
+
+function installmentByNumber(expense: CardExpenseEntry, installmentNumber: number | null | undefined) {
+  if (!installmentNumber || !Array.isArray(expense.installments)) return null;
+  return expense.installments.find(
+    (installment, index) => (Number(installment.number) || index + 1) === installmentNumber,
+  ) ?? null;
+}
+
+export function buildCardStatementLinesFromAllocations(
+  allocations: CardStatementAllocation[],
+  expenses: CardExpenseEntry[],
+): CardStatementLine[] {
+  const expenseById = new Map(expenses.map((expense) => [expense.id, expense]));
+  return allocations.map((allocation) => {
+    const storedExpense = expenseById.get(allocation.expenseId);
+    const expense: CardExpenseEntry = storedExpense ?? {
+      id: allocation.expenseId,
+      description: allocation.description,
+      supplier: allocation.supplier,
+      competenceDate: allocation.competenceDate,
+      accountPlanId: allocation.accountPlanId,
+      accountPlanName: allocation.accountPlanName,
+      resultCenterId: allocation.resultCenterId,
+      resultCenterName: allocation.resultCenterName,
+      accountAllocations: allocation.accountAllocations,
+      apportionments: allocation.apportionments,
+    };
+    const installment = installmentByNumber(expense, allocation.installmentNumber);
+    const chargeDate = cardExpenseChargeDate(expense)
+      ?? cardDateFromUnknown(allocation.competenceDate)
+      ?? new Date(0);
+    return {
+      lineId: allocation.lineId,
+      expense,
+      chargeDate,
+      value: Number(allocation.amount),
+      reconciled: installment
+        ? installment.cardReconciliationStatus === "reconciled"
+        : expense.cardReconciliationStatus === "reconciled",
+      installmentNumber: allocation.installmentNumber ?? undefined,
+      installmentTotal: allocation.installmentNumber
+        ? Number(expense.installmentTotal) || expense.installments?.length || undefined
+        : undefined,
+      importFingerprint: allocation.importFingerprint,
+      sourceReference: allocation.sourceReference,
+    };
+  }).filter((line) => Number.isFinite(line.value) && line.value > 0);
 }
 
 export function buildCardStatementGroups(
@@ -313,35 +420,43 @@ export function buildCardStatementGroups(
     const methodId = String(expense.plannedPaymentMethodId ?? "");
     const card = cardByKey.get(`${accountId}:${methodId}`);
     if (!card) continue;
-    const storedCycle = explicitExpenseCycle(expense, card);
+    const storedCycle = explicitCardStatementCycle(expense, card);
 
     const installmentEntries =
       expense.paymentMethod === "installments" && Array.isArray(expense.installments) && expense.installments.length > 1
         ? expense.installments
           .map((installment, index) => ({ installment, index }))
           .filter(({ installment }) => installment.cardStatementRevisionStatus !== "removed")
-          .map(({ installment, index }) => ({
+          .map(({ installment, index }) => {
+            const installmentDueDate = cardDateFromUnknown(installment.dueDate);
+            return {
               lineId: `${expense.id}:installment:${Number(installment.number) || index + 1}`,
-              chargeDate: cardDateFromUnknown(installment.dueDate),
+              chargeDate: cardExpenseChargeDate(expense) ?? installmentDueDate,
+              cycle: explicitCardStatementCycle(installment, card)
+                ?? (installmentDueDate ? installmentCycleFromDueDate(installmentDueDate, card) : null),
               value: Number(installment.value),
               reconciled: installment.cardReconciliationStatus === "reconciled",
               installmentNumber: Number(installment.number) || index + 1,
               installmentTotal: expense.installments!.length,
-            }))
+              importFingerprint: String(installment.cardStatementImportFingerprint || "") || undefined,
+              sourceReference: undefined,
+            };
+          })
         : [{
             lineId: expense.id,
             chargeDate: cardExpenseChargeDate(expense),
+            cycle: storedCycle,
             value: Number(expense.totalValue),
             reconciled: expense.cardReconciliationStatus === "reconciled",
             installmentNumber: undefined,
             installmentTotal: undefined,
+            importFingerprint: String(expense.cardStatementImportFingerprint || "") || undefined,
+            sourceReference: undefined,
           }];
 
     for (const entry of installmentEntries) {
       if (!entry.chargeDate || !Number.isFinite(entry.value) || entry.value <= 0) continue;
-      const cycle = installmentEntries.length === 1 && storedCycle
-        ? storedCycle
-        : resolveCardStatementCycle(entry.chargeDate, card);
+      const cycle = entry.cycle ?? resolveCardStatementCycle(entry.chargeDate, card);
       const current = groups.get(cycle.key) ?? {
         ...cycle,
         card,
@@ -360,6 +475,8 @@ export function buildCardStatementGroups(
         reconciled: entry.reconciled,
         installmentNumber: entry.installmentNumber,
         installmentTotal: entry.installmentTotal,
+        importFingerprint: entry.importFingerprint,
+        sourceReference: entry.sourceReference,
       });
       current.projectedTotal += entry.value;
       if (entry.reconciled) current.reconciledTotal += entry.value;
