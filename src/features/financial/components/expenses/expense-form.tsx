@@ -55,6 +55,7 @@ import {
 } from "@/features/financial/lib/expense-provisions";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
+import type { FinancialInboxBillingIdentity } from "@/features/financial/inbox/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -470,6 +471,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const [seriesUpdateScope, setSeriesUpdateScope] = useState<ExpenseSeriesUpdateScope>("single");
   const [pendingSeriesValues, setPendingSeriesValues] = useState<ExpenseFormValues | null>(null);
   const [importTransactionData, setImportTransactionData] = useState<any | null>(null);
+  const [inboxBillingIdentity, setInboxBillingIdentity] = useState<FinancialInboxBillingIdentity | null>(null);
   const [accountPlanOpen, setAccountPlanOpen] = useState(false);
   const [accountPlanSearch, setAccountPlanSearch] = useState("");
   const [descriptionFocused, setDescriptionFocused] = useState(false);
@@ -538,9 +540,20 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         if (cancelled) return;
         const message = payload.message;
         const classification = message?.classification || {};
-        form.setValue("description", String(message?.subject || "Cobrança recebida"), { shouldValidate: true });
+        const creationSuggestion = message?.creationSuggestion || {};
+        const billingIdentity = classification.billingIdentity as FinancialInboxBillingIdentity | null | undefined;
+        setInboxBillingIdentity(billingIdentity ?? null);
+        form.setValue("description", String(creationSuggestion.description || message?.subject || "Cobrança recebida"), { shouldValidate: true });
         form.setValue("supplier", String(classification.supplierName || message?.from || ""), { shouldValidate: true });
-        form.setValue("notes", `Cobrança recebida por e-mail (${message?.id || inboxMessageId}).`, { shouldValidate: true });
+        const identityNotes = [
+          billingIdentity?.customerAccount ? `Conta do cliente: ${billingIdentity.customerAccount}` : null,
+          billingIdentity?.contractNumber ? `Contrato: ${billingIdentity.contractNumber}` : null,
+          billingIdentity?.serviceNumbers?.length ? `Linha(s): ${billingIdentity.serviceNumbers.join(", ")}` : null,
+        ].filter(Boolean);
+        form.setValue("notes", [
+          `Cobrança recebida por e-mail (${message?.id || inboxMessageId}).`,
+          ...identityNotes,
+        ].join("\n"), { shouldValidate: true });
         if (Number.isInteger(classification.amountCents) && classification.amountCents > 0) {
           form.setValue("totalValue", classification.amountCents / 100, { shouldValidate: true });
         }
@@ -1608,6 +1621,11 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           : null,
       rateioFirstMonthMode: values.isApportioned ? values.rateioFirstMonthMode : null,
       installments: installmentsToSave,
+      ...(inboxMessageId ? {
+        originModule: "financial_inbox",
+        financialInboxMessageId: inboxMessageId,
+        ...(inboxBillingIdentity ? { billingIdentity: inboxBillingIdentity } : {}),
+      } : {}),
       recurrenceFirstDueDate:
         values.paymentMethod === "recurring" && values.recurrenceFirstDueDate
           ? Timestamp.fromDate(values.recurrenceFirstDueDate)

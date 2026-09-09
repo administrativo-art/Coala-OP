@@ -30,6 +30,42 @@ export type FinancialInboxAttachment = {
   storagePath: string | null;
   sha256: string | null;
   archiveStatus: "stored" | "skipped_inline" | "skipped_unsafe" | "skipped_size" | "failed";
+  sourceType?: "attachment" | "link";
+  sourceDomain?: string | null;
+  sourceUrl?: string | null;
+  sourceFingerprint?: string | null;
+  extractionStatus?: "not_attempted" | "extracted" | "ocr_extracted" | "needs_ocr" | "empty" | "unsupported" | "failed";
+  extractionMethod?: "pdf_text" | "xml_text" | "plain_text" | "ai_document" | null;
+  extractionVersion?: string | null;
+  extractedTextStoragePath?: string | null;
+  extractedAt?: string | null;
+  pageCount?: number | null;
+  extractedHints?: FinancialInboxDocumentHints | null;
+};
+
+export type FinancialInboxServiceType = "mobile" | "landline" | "internet" | "energy" | "water" | "other";
+
+export type FinancialInboxBillingIdentity = {
+  supplierTaxId: string | null;
+  customerAccount: string | null;
+  contractNumber: string | null;
+  serviceType: FinancialInboxServiceType | null;
+  serviceNumbers: string[];
+};
+
+export type FinancialInboxDocumentHints = {
+  documentText: string | null;
+  supplierName: string | null;
+  supplierTaxId: string | null;
+  competence: string | null;
+  dueDate: string | null;
+  amountCents: number | null;
+  barcode: string | null;
+  customerAccount: string | null;
+  contractNumber: string | null;
+  serviceType: FinancialInboxServiceType | null;
+  serviceNumbers: string[];
+  confidence: "high" | "medium" | "low";
 };
 
 export type FinancialInboxClassification = {
@@ -43,6 +79,7 @@ export type FinancialInboxClassification = {
   barcode: string | null;
   barcodeMasked: string | null;
   links: string[];
+  billingIdentity?: FinancialInboxBillingIdentity | null;
 };
 
 export type FinancialInboxProvisionSuggestion = {
@@ -84,6 +121,38 @@ export type FinancialInboxExpenseSuggestion = {
   paymentState: "paid" | "scheduled" | "needs_scheduling" | null;
   existingBankPayment: FinancialInboxExistingBankPayment | null;
   existingSettlement: FinancialInboxExistingSettlement | null;
+  alternatives?: FinancialInboxExpenseAlternative[];
+};
+
+export type FinancialInboxExpenseAlternative = {
+  expenseId: string;
+  installmentNumber: number | null;
+  installmentTotal: number | null;
+  description: string;
+  supplier: string;
+  amountCents: number;
+  dueDate: string | null;
+  score: number;
+  reasons: string[];
+};
+
+export type FinancialInboxCreationSuggestion = {
+  status: "not_applicable" | "incomplete" | "suggested" | "blocked_by_ambiguity";
+  description: string | null;
+  supplier: string | null;
+  amountCents: number | null;
+  dueDate: string | null;
+  competence: string | null;
+  billingIdentity: FinancialInboxBillingIdentity | null;
+  missingFields: string[];
+  reasons: string[];
+};
+
+export type FinancialInboxLinkResolution = {
+  status: "not_checked" | "not_needed" | "resolved" | "requires_login" | "blocked" | "not_found" | "failed";
+  checkedAt: string | null;
+  sourceDomain: string | null;
+  message: string | null;
 };
 
 export type FinancialInboxBankState =
@@ -128,6 +197,8 @@ export type FinancialInboxMessage = {
   paymentRequestId?: string | null;
   provisionSuggestion?: FinancialInboxProvisionSuggestion | null;
   existingExpenseSuggestion?: FinancialInboxExpenseSuggestion | null;
+  creationSuggestion?: FinancialInboxCreationSuggestion | null;
+  linkResolution?: FinancialInboxLinkResolution | null;
   existingBankPayment?: FinancialInboxExistingBankPayment | null;
   existingSettlement?: FinancialInboxExistingSettlement | null;
   linkedExpenseInstallmentNumber?: number | null;

@@ -262,6 +262,13 @@ export async function ingestFinancialEmail(params: {
       provisionedAmountCents: null,
       checkedAt: null,
     },
+    creationSuggestion: null,
+    linkResolution: {
+      status: parsed.classification.links.length ? "not_checked" : "not_needed",
+      checkedAt: null,
+      sourceDomain: null,
+      message: null,
+    },
     bankState: "not_prepared",
     statementTransactionId: null,
     reviewedAt: null,

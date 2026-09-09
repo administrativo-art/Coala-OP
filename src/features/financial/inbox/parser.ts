@@ -1,6 +1,9 @@
 import type {
+  FinancialInboxBillingIdentity,
   FinancialInboxClassification,
+  FinancialInboxDocumentHints,
   FinancialInboxDocumentType,
+  FinancialInboxServiceType,
 } from "./types";
 
 const MAX_LINKS = 20;
@@ -81,7 +84,7 @@ function extractDueDate(value: string) {
 }
 
 function extractCompetence(value: string) {
-  const match = value.match(/compet[eê]ncia(?:\s+de)?\s*[:\-]?\s*(0?[1-9]|1[0-2])[\/.-](20\d{2})/i);
+  const match = value.match(/(?:compet[eê]ncia|refer[eê]ncia|m[eê]s\s+de\s+refer[eê]ncia)(?:\s+de)?\s*[:\-]?\s*(0?[1-9]|1[0-2])[\/.-](20\d{2})/i);
   if (!match) return null;
   return `${match[2]}-${String(Number(match[1])).padStart(2, "0")}`;
 }
@@ -132,6 +135,74 @@ function documentType(value: string): { type: FinancialInboxDocumentType; confid
   return { type: "other", confidence: "low" };
 }
 
+function digits(value: unknown) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+export function normalizeBrazilianServiceNumber(value: unknown) {
+  const normalized = digits(value);
+  if (normalized.length === 10 || normalized.length === 11) return `+55${normalized}`;
+  if ((normalized.length === 12 || normalized.length === 13) && normalized.startsWith("55")) return `+${normalized}`;
+  return null;
+}
+
+export function extractTelecomServiceNumbers(value: string) {
+  const matches = Array.from(value.matchAll(
+    /(?:n[uú]mero\s+(?:da\s+)?linha|linha(?!\s+digit[aá]vel)|acesso|terminal|celular)\s*(?:n[ºo°.]|n[uú]mero)?\s*[:#\-]?\s*(\+?55\s*)?(\(?\d{2}\)?[\s.-]*\d{4,5}[\s.-]*\d{4})/gi,
+  ));
+  return [...new Set(matches.flatMap((match) => {
+    const normalized = normalizeBrazilianServiceNumber(`${match[1] ?? ""}${match[2] ?? ""}`);
+    return normalized ? [normalized] : [];
+  }))].slice(0, 20);
+}
+
+function labeledIdentifier(value: string, labels: string[]) {
+  const pattern = new RegExp(`(?:${labels.join("|")})\\s*(?:n[ºo°.]|n[uú]mero)?\\s*[:#\\-]?\\s*([A-Z0-9][A-Z0-9.\\/-]{2,39})`, "i");
+  const candidate = value.match(pattern)?.[1]?.replace(/[.,;:]$/, "").trim() || "";
+  return /\d/.test(candidate) ? candidate : null;
+}
+
+function supplierTaxId(value: string) {
+  const match = value.match(/(?:benefici[aá]rio|cedente|fornecedor)[^\n\r]{0,100}?CNPJ\s*[:\-]?\s*(\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2})/i);
+  const normalized = digits(match?.[1]);
+  return normalized.length === 14 ? normalized : null;
+}
+
+function detectServiceType(value: string): FinancialInboxServiceType | null {
+  if (/\b(?:m[oó]vel|celular|linha\s+m[oó]vel)\b/i.test(value)) return "mobile";
+  if (/\b(?:telefone\s+fixo|telefonia\s+fixa)\b/i.test(value)) return "landline";
+  if (/\b(?:internet|banda\s+larga|fibra)\b/i.test(value)) return "internet";
+  if (/\b(?:energia|conta\s+de\s+luz)\b/i.test(value)) return "energy";
+  if (/\b(?:[aá]gua|saneamento)\b/i.test(value)) return "water";
+  return null;
+}
+
+export function extractBillingIdentity(value: string): FinancialInboxBillingIdentity {
+  return {
+    supplierTaxId: supplierTaxId(value),
+    customerAccount: labeledIdentifier(value, ["conta", "c[oó]digo\\s+do\\s+cliente", "n[uú]mero\\s+do\\s+cliente"]),
+    contractNumber: labeledIdentifier(value, ["contrato", "n[uú]mero\\s+do\\s+contrato"]),
+    serviceType: detectServiceType(value),
+    serviceNumbers: extractTelecomServiceNumbers(value),
+  };
+}
+
+export function mergeBillingIdentities(
+  extracted: FinancialInboxBillingIdentity,
+  additions: Array<Partial<FinancialInboxBillingIdentity> | FinancialInboxDocumentHints | null | undefined>,
+): FinancialInboxBillingIdentity {
+  return additions.reduce<FinancialInboxBillingIdentity>((current, hint) => ({
+    supplierTaxId: current.supplierTaxId || hint?.supplierTaxId || null,
+    customerAccount: current.customerAccount || hint?.customerAccount || null,
+    contractNumber: current.contractNumber || hint?.contractNumber || null,
+    serviceType: current.serviceType || hint?.serviceType || null,
+    serviceNumbers: [...new Set([
+      ...current.serviceNumbers,
+      ...(hint?.serviceNumbers ?? []).map(normalizeBrazilianServiceNumber).filter((entry): entry is string => Boolean(entry)),
+    ])].slice(0, 20),
+  }), extracted);
+}
+
 function supplierName(senderDomain: string | null, value: string) {
   if (senderDomain === "grupomse.com" || /maximus\s+contabilidade/i.test(value)) return "Maximus Contabilidade / Grupo MSE";
   const labels = String(senderDomain ?? "").toLowerCase().split(".").filter(Boolean);
@@ -150,11 +221,17 @@ export function classifyFinancialEmail(input: {
   text?: string | null;
   html?: string | null;
   senderDomain?: string | null;
+  documentText?: string | null;
+  documentHints?: FinancialInboxDocumentHints[];
 }): { textContent: string; textPreview: string; classification: FinancialInboxClassification } {
   const textContent = (input.text?.trim() || htmlToPlainText(input.html ?? "")).slice(0, MAX_TEXT_LENGTH);
-  const combined = `${input.subject}\n${textContent}`;
+  const documentText = String(input.documentText ?? "").slice(0, MAX_TEXT_LENGTH);
+  const hints = input.documentHints ?? [];
+  const hintText = hints.map((hint) => hint.documentText || "").join("\n").slice(0, MAX_TEXT_LENGTH);
+  const combined = `${input.subject}\n${textContent}\n${documentText}\n${hintText}`.slice(0, MAX_TEXT_LENGTH * 2);
   const identified = documentType(combined);
-  const barcode = extractPaymentBarcode(combined);
+  const barcode = extractPaymentBarcode(combined) || hints.find((hint) => hint.barcode)?.barcode || null;
+  const billingIdentity = mergeBillingIdentities(extractBillingIdentity(combined), hints);
   return {
     textContent,
     textPreview: textContent.replace(/\s+/g, " ").trim().slice(0, 500),
@@ -162,13 +239,14 @@ export function classifyFinancialEmail(input: {
       documentType: identified.type,
       financeLikely: identified.type !== "other",
       confidence: identified.confidence,
-      supplierName: supplierName(input.senderDomain ?? null, combined),
-      competence: extractCompetence(combined),
-      dueDate: extractDueDate(combined),
-      amountCents: extractAmount(combined),
+      supplierName: hints.find((hint) => hint.supplierName)?.supplierName || supplierName(input.senderDomain ?? null, combined),
+      competence: extractCompetence(combined) || hints.find((hint) => hint.competence)?.competence || null,
+      dueDate: extractDueDate(combined) || hints.find((hint) => hint.dueDate)?.dueDate || null,
+      amountCents: extractAmount(combined) ?? hints.find((hint) => hint.amountCents != null)?.amountCents ?? null,
       barcode,
       barcodeMasked: maskPaymentBarcode(barcode),
       links: extractExternalLinks(input.text ?? "", input.html ?? ""),
+      billingIdentity,
     },
   };
 }

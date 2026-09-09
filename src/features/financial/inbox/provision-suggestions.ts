@@ -1,4 +1,5 @@
-import type { FinancialInboxClassification, FinancialInboxProvisionSuggestion } from "./types";
+import { extractBillingIdentity } from "./parser";
+import type { FinancialInboxBillingIdentity, FinancialInboxClassification, FinancialInboxProvisionSuggestion } from "./types";
 
 export type ProvisionCandidate = {
   id: string;
@@ -8,6 +9,8 @@ export type ProvisionCandidate = {
   provisionCompetence?: string | null;
   totalValue?: number | null;
   dueDate?: unknown;
+  notes?: string | null;
+  billingIdentity?: FinancialInboxBillingIdentity | null;
 };
 
 function normalize(value: unknown) {
@@ -84,6 +87,22 @@ export function scoreProvisionCandidate(
     score += 10;
     reasons.push("mesmo vencimento");
   }
+  const sourceIdentity = classification.billingIdentity;
+  const embeddedIdentity = extractBillingIdentity(`${candidate.description ?? ""}\n${candidate.supplier ?? ""}\n${candidate.notes ?? ""}`);
+  const targetIdentity = candidate.billingIdentity ?? embeddedIdentity;
+  if (sourceIdentity?.serviceNumbers.length && targetIdentity.serviceNumbers.length
+    && sourceIdentity.serviceNumbers.some((number) => targetIdentity.serviceNumbers.includes(number))) {
+    score += 35;
+    reasons.push("mesma linha telefônica");
+  } else if (sourceIdentity?.customerAccount && targetIdentity.customerAccount
+    && normalize(sourceIdentity.customerAccount) === normalize(targetIdentity.customerAccount)) {
+    score += 30;
+    reasons.push("mesma conta do cliente");
+  } else if (sourceIdentity?.contractNumber && targetIdentity.contractNumber
+    && normalize(sourceIdentity.contractNumber) === normalize(targetIdentity.contractNumber)) {
+    score += 30;
+    reasons.push("mesmo contrato");
+  }
   return { score, reasons };
 }
 
@@ -94,6 +113,14 @@ export function chooseProvisionSuggestion(
 ): FinancialInboxProvisionSuggestion {
   const scored = candidates
     .filter((candidate) => candidate.provisionCompetence === classification.competence)
+    .filter((candidate) => {
+      const source = classification.billingIdentity;
+      if (source?.serviceType !== "mobile" && source?.serviceType !== "landline") return true;
+      const target = candidate.billingIdentity
+        ?? extractBillingIdentity(`${candidate.description ?? ""}\n${candidate.supplier ?? ""}\n${candidate.notes ?? ""}`);
+      return Boolean(source.serviceNumbers.length
+        && target.serviceNumbers.some((number) => source.serviceNumbers.includes(number)));
+    })
     .map((candidate) => ({ candidate, ...scoreProvisionCandidate(classification, candidate) }))
     .sort((left, right) => right.score - left.score || left.candidate.id.localeCompare(right.candidate.id));
   const first = scored[0];
