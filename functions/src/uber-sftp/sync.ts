@@ -23,7 +23,6 @@ const FILE_LOOKBACK_DAYS = 35;
 export type UberSftpConfiguration = {
   username: string;
   privateKey: string;
-  privateKeyPassphrase: string;
   hostFingerprintSha256: string;
 };
 
@@ -110,7 +109,6 @@ export async function syncUberTripsFromSftp(configuration: UberSftpConfiguration
       port: UBER_SFTP_PORT,
       username,
       privateKey,
-      ...(configuration.privateKeyPassphrase ? { passphrase: configuration.privateKeyPassphrase } : {}),
       forceIPv4: true,
       readyTimeout: 30_000,
       keepaliveInterval: 10_000,
