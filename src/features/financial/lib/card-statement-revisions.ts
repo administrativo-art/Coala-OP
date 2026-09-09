@@ -49,6 +49,18 @@ function changeFields(next: CardStatementImportLine, previous: CardStatementPrev
   return changes;
 }
 
+function sameChargeIdentity(
+  left: Pick<CardStatementImportLine, "date" | "description" | "supplier" | "amount" | "installmentNumber" | "installmentTotal">,
+  right: Pick<CardStatementPreviousImportLine, "date" | "description" | "supplier" | "amount" | "installmentNumber" | "installmentTotal">,
+) {
+  return left.date === right.date
+    && comparableText(left.description) === comparableText(right.description)
+    && comparableText(left.supplier) === comparableText(right.supplier)
+    && Math.abs(left.amount - right.amount) <= 0.005
+    && (left.installmentNumber ?? null) === (right.installmentNumber ?? null)
+    && (left.installmentTotal ?? null) === (right.installmentTotal ?? null);
+}
+
 function revisionScore(next: CardStatementImportLine, previous: CardStatementPreviousImportLine) {
   if (
     next.installmentNumber && previous.installmentNumber &&
@@ -113,14 +125,22 @@ export function diffCardStatementRevision(
     });
   }
 
-  for (const next of unmatchedNext) {
+  for (const [nextIndex, next] of unmatchedNext.entries()) {
     const ranked = [...unmatchedPrevious.values()]
       .map((previous) => ({ previous, score: revisionScore(next, previous) }))
       .filter((candidate): candidate is { previous: CardStatementPreviousImportLine; score: number } => candidate.score !== null)
-      .sort((left, right) => right.score - left.score);
+      .sort((left, right) => right.score - left.score || left.previous.fingerprint.localeCompare(right.previous.fingerprint));
     const best = ranked[0] ?? null;
     const second = ranked[1] ?? null;
-    const unambiguous = Boolean(best && (!second || best.score - second.score >= 10));
+    const equivalentNextCount = unmatchedNext
+      .slice(nextIndex)
+      .filter((candidate) => sameChargeIdentity(candidate, next))
+      .length;
+    const equivalentPreviousCount = [...unmatchedPrevious.values()]
+      .filter((candidate) => sameChargeIdentity(next, candidate))
+      .length;
+    const balancedDuplicateGroup = equivalentNextCount > 1 && equivalentNextCount === equivalentPreviousCount;
+    const unambiguous = Boolean(best && (!second || best.score - second.score >= 10 || balancedDuplicateGroup));
     if (best && unambiguous) {
       unmatchedPrevious.delete(best.previous.fingerprint);
       lines.push({
