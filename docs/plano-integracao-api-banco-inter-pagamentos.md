@@ -99,6 +99,7 @@ Variáveis propostas:
 - `INTER_PRIVATE_KEY_BASE64`
 - `INTER_ACCOUNT_NUMBER`
 - `INTER_ENVIRONMENT`
+- `INTER_BANKING_STATUS_BASE_URL`, opcional apenas no desenvolvimento local
 - `INTER_WEBHOOK_SECRET`, se a estratégia de validação adotada exigir segredo adicional do Coala
 
 Regras:
@@ -109,6 +110,15 @@ Regras:
 - validar que certificado, chave e credenciais pertencem à mesma integração;
 - separar configuração de homologação e produção;
 - renovar o certificado antes do vencimento com alerta operacional.
+
+O desenvolvimento local não deve receber cópias do certificado e da chave de
+produção. Quando as credenciais locais do ambiente escolhido não existirem, a
+rota autenticada de **consulta manual de status** pode encaminhar somente essa
+leitura para a origem HTTPS explicitamente definida em
+`INTER_BANKING_STATUS_BASE_URL` (em desenvolvimento local, usamos
+`https://op.coalashakes.com`). A aplicação canônica autentica novamente o
+usuário e verifica a permissão `financial.paymentRequests.refresh`. Preparação,
+autorização e envio de pagamentos nunca usam esse encaminhamento.
 
 ## 6. Arquitetura proposta
 
@@ -236,7 +246,32 @@ Ao receber um evento:
 6. somente então atualizar o estado interno;
 7. disparar as consequências do domínio uma única vez.
 
-Também haverá reconciliação periódica para solicitações em `awaiting_bank_approval`, `processing` ou com webhook inconsistente. A consulta informada pelo Inter possui janela máxima de 90 dias; o Coala deverá guardar seu próprio histórico definitivo.
+Também haverá reconciliação periódica para solicitações em `awaiting_bank_approval`, `processing` ou com webhook inconsistente. O job roda a cada cinco minutos; depois que um pagamento futuro é identificado como `scheduled`, a próxima consulta bancária é adiada para 06:00 (America/Belem) da data programada. O extrato é sincronizado a cada quinze minutos, entre 06:00 e 23:59, e conclui a baixa de boletos. A consulta informada pelo Inter possui janela máxima de 90 dias; o Coala deverá guardar seu próprio histórico definitivo.
+
+A fila consulta somente registros cujo `nextBankStatusCheckAt` já venceu, em
+ordem cronológica e com limite de dez por ciclo. Uma falha recebe backoff antes
+de voltar à fila, evitando que um item indisponível bloqueie os seguintes. As
+três consultas iniciais retornam no máximo vinte documentos por ciclo; a
+terceira identifica submissões interrompidas há mais de dez minutos e as envia
+para revisão sem reenviar dinheiro automaticamente. Cada
+item processado ainda gera leituras transacionais e, quando concluído, leituras
+e gravações na origem. O custo operacional deve ser acompanhado pelos painéis
+do Firestore, sem tratar vinte como o custo total da execução.
+
+Estimativa de referência para 30 dias: com as três filas vazias, a cobrança
+mínima de uma leitura por consulta representa cerca de **25.920 leituras/mês**
+(3 consultas × 288 ciclos/dia × 30). Uma única
+solicitação continuamente ativa leva o total básico para aproximadamente
+**43.200 leituras/mês** e acrescenta
+até **8.640 gravações/mês** de reagendamento. Comprovante, conciliação e
+atualização da origem acrescentam operações apenas quando há trabalho. Esses
+números não incluem tráfego da API do Inter nem armazenamento do PDF.
+
+Cada mudança efetiva de estado gera auditoria. Uma resposta idêntica do banco
+não cria outro evento. Como a API de boletos não informa o instante exato em que
+um aprovador agiu, o Coala registra `bankApprovalObservedAt`: o primeiro horário
+em que uma consulta retornou o estado já aprovado/agendado. A interface o exibe
+explicitamente como horário em que a autorização bancária foi **identificada**.
 
 ## 11. Comprovante
 
@@ -257,6 +292,12 @@ O PDF gerado pelo Coala deve se chamar claramente **Comprovante de pagamento con
 - registro de que os dados foram confirmados por consulta à API.
 
 O endpoint e o formato exatos do comprovante oficial precisam ser validados na homologação antes da decisão final.
+
+Quando o extrato confirma um boleto, a solicitação entra numa fila idempotente
+de pós-pagamento. Essa fila gera o PDF auditável, anexa seu caminho à cobrança e
+à despesa e tenta novamente nas execuções seguintes se armazenamento ou
+atualização da origem falharem. Cada tentativa adquire uma trava de dez
+minutos; falhas usam backoff exponencial e não bloqueiam os demais comprovantes.
 
 ## 12. Fluxo do ASO
 

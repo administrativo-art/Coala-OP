@@ -159,6 +159,70 @@ test("distingue dois pagamentos informados da mesma despesa pela chave do pagame
   assert.equal(match?.settlementPrincipalValue, 400);
 });
 
+test("desempata salários de mesmo valor pelo beneficiário do Pix", () => {
+  const dueDate = new Date("2026-09-05T12:00:00-03:00");
+  const match = findUniqueExactExpenseMatch({
+    date: "2026-09-05",
+    amount: -1543.53,
+    description: "Pix enviado — Aliny Rodrigues Da Silva",
+  }, [{
+    expenseId: "salary-aliny",
+    expenseDescription: "Salário - 08/2026 | Aliny Rodrigues da Silva",
+    supplier: "Aliny Rodrigues da Silva",
+    beneficiaryAliases: ["Aliny Rodrigues da Silva Costa"],
+    dueDate,
+    value: 1543.53,
+  }, {
+    expenseId: "salary-sara",
+    expenseDescription: "Salário - 08/2026 | Sara Ferreira Coelho",
+    supplier: "Sara Ferreira Coelho",
+    dueDate,
+    value: 1543.53,
+  }]);
+
+  assert.equal(match?.expenseId, "salary-aliny");
+});
+
+test("desempata valores iguais por CPF ou chave Pix quando o nome não está disponível", () => {
+  const dueDate = new Date("2026-09-05T12:00:00-03:00");
+  const match = findUniqueExactExpenseMatch({
+    date: "2026-09-05",
+    amount: -100,
+    beneficiaryIdentifiers: ["123.456.789-01"],
+  }, [{
+    expenseId: "expense-1",
+    expenseDescription: "Pagamento colaborador 1",
+    beneficiaryIdentifiers: ["12345678901"],
+    dueDate,
+    value: 100,
+  }, {
+    expenseId: "expense-2",
+    expenseDescription: "Pagamento colaborador 2",
+    beneficiaryIdentifiers: ["98765432100"],
+    dueDate,
+    value: 100,
+  }]);
+
+  assert.equal(match?.expenseId, "expense-1");
+});
+
+test("identifica complemento salarial separadamente pelo beneficiário", () => {
+  const match = findUniqueExactExpenseMatch({
+    date: "2026-09-05",
+    amount: -15.95,
+    description: "Pix enviado — Heucilene Oliveira Ribeiro",
+  }, [{
+    candidateKey: "payroll:adjustment:2026-08:employee-heucilene",
+    expenseId: "salary-adjustment-heucilene",
+    expenseDescription: "Complemento salarial - 08/2026 | Heucilene Oliveira Ribeiro",
+    supplier: "Heucilene Oliveira Ribeiro",
+    dueDate: new Date("2026-09-05T12:00:00-03:00"),
+    value: 15.95,
+  }]);
+
+  assert.equal(match?.expenseId, "salary-adjustment-heucilene");
+});
+
 test("sugere principal e encargos quando o pagamento vencido é maior que a despesa", () => {
   const suggestion = findExpenseMatchSuggestion({
     date: "2026-08-20",

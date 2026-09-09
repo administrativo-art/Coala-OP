@@ -15,6 +15,8 @@ export type StatementExpenseMatchCandidate = {
   abatement?: number;
   chargesAccountPlanId?: string;
   chargesAccountPlanName?: string;
+  beneficiaryAliases?: string[];
+  beneficiaryIdentifiers?: string[];
 };
 
 export type StatementExpenseMatchSuggestion = StatementExpenseMatchCandidate & {
@@ -84,7 +86,7 @@ function claimKey(candidate: StatementExpenseMatchCandidate) {
 }
 
 export function findUniqueExactExpenseMatch(
-  entry: { date: string; amount: number },
+  entry: { date: string; amount: number; description?: string; beneficiaryIdentifiers?: string[] },
   candidates: StatementExpenseMatchCandidate[],
   claimedExpenseInstallments = new Set<string>()
 ) {
@@ -97,7 +99,25 @@ export function findUniqueExactExpenseMatch(
       dateDistanceInDays(entryDate, candidate.dueDate) <= 5
     );
   });
-  return exact.length === 1 ? exact[0] : null;
+  if (exact.length === 1) return exact[0];
+  if (exact.length < 2) return null;
+
+  const entryIdentifiers = new Set((entry.beneficiaryIdentifiers || []).map(normalizedIdentity).filter(Boolean));
+  const ranked = exact.map((candidate) => {
+    const aliases = [candidate.supplier, candidate.expenseDescription, ...(candidate.beneficiaryAliases || [])]
+      .filter(Boolean)
+      .join(" ");
+    const matchingIdentifiers = (candidate.beneficiaryIdentifiers || [])
+      .map(normalizedIdentity)
+      .filter((identifier) => identifier && entryIdentifiers.has(identifier)).length;
+    return {
+      candidate,
+      score: descriptionOverlap(entry.description || "", { ...candidate, supplier: aliases }) + matchingIdentifiers * 10,
+    };
+  }).sort((left, right) => right.score - left.score);
+  return ranked[0]!.score > 0 && ranked[0]!.score > (ranked[1]?.score ?? 0)
+    ? ranked[0]!.candidate
+    : null;
 }
 
 function normalizedTokens(value: unknown) {
@@ -112,6 +132,14 @@ function normalizedTokens(value: unknown) {
   );
 }
 
+function normalizedIdentity(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9@+]/g, "");
+}
+
 function descriptionOverlap(entryDescription: string, candidate: StatementExpenseMatchCandidate) {
   const entryTokens = normalizedTokens(entryDescription);
   const candidateTokens = normalizedTokens(`${candidate.supplier || ""} ${candidate.expenseDescription}`);
@@ -120,7 +148,7 @@ function descriptionOverlap(entryDescription: string, candidate: StatementExpens
 }
 
 export function findExpenseMatchSuggestion(
-  entry: { date: string; amount: number; description?: string },
+  entry: { date: string; amount: number; description?: string; beneficiaryIdentifiers?: string[] },
   candidates: StatementExpenseMatchCandidate[],
   claimedExpenseInstallments = new Set<string>(),
 ): StatementExpenseMatchSuggestion | null {

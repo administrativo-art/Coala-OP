@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import {
@@ -15,7 +16,6 @@ import {
 } from "@/features/financial/lib/inter-statement-reconciliation";
 import { inferStatementPaymentMethodFromText } from "@/features/financial/lib/statement-payment-method";
 import { queueMatchedBankPayment } from "@/features/financial/obligations/service.server";
-import { addPaymentEvent } from "@/features/financial/payment-requests/repository.server";
 import { findExpectedBankDebitMatch, type ExpectedBankDebitCandidate } from "@/features/financial/payment-requests/expected-bank-debits";
 
 const TIME_ZONE = "America/Belem";
@@ -235,6 +235,27 @@ function extractBankCharges(value: unknown) {
   return { interest: Number(interest.toFixed(2)), fine: Number(fine.toFixed(2)) };
 }
 
+function extractBankBeneficiaryIdentifiers(value: unknown) {
+  const identifiers = new Set<string>();
+  function visit(current: unknown, depth = 0) {
+    if (!current || typeof current !== "object" || depth > 5) return;
+    for (const [key, entry] of Object.entries(current as Record<string, unknown>)) {
+      const normalizedKey = normalizedText(key);
+      if (
+        typeof entry === "string"
+        && /(CPF|CNPJ|DOCUMENTO|CHAVE.*PIX|PIX.*CHAVE|PIXKEY|CONTA.*DESTINO)/.test(normalizedKey)
+        && entry.trim()
+      ) {
+        identifiers.add(entry.trim());
+      } else if (entry && typeof entry === "object") {
+        visit(entry, depth + 1);
+      }
+    }
+  }
+  visit(value);
+  return [...identifiers];
+}
+
 function buildSessionItem(params: {
   entry: InterStatementEntry;
   transactionId: string;
@@ -331,6 +352,33 @@ function buildSessionItem(params: {
   };
 }
 
+function beneficiaryMatchingFields(source: Record<string, unknown>) {
+  const snapshot = source.beneficiarySnapshot && typeof source.beneficiarySnapshot === "object"
+    ? source.beneficiarySnapshot as Record<string, unknown>
+    : {};
+  const strings = (values: unknown[]) => values.flatMap((value) => (
+    typeof value === "string" || typeof value === "number"
+      ? [String(value).trim()]
+      : []
+  )).filter(Boolean);
+  return {
+    beneficiaryAliases: strings([
+      source.employeeName,
+      source.supplier,
+      source.beneficiaryName,
+      snapshot.name,
+    ]),
+    beneficiaryIdentifiers: strings([
+      source.employeeCpf,
+      source.beneficiaryDocument,
+      source.pixKey,
+      snapshot.document,
+      snapshot.documentHash,
+      snapshot.maskedPaymentDestination,
+    ]),
+  };
+}
+
 async function loadPendingExpenseMatches() {
   const [pendingSnapshot, partialSnapshot, reportedPaymentsSnapshot] = await Promise.all([
     financialDbAdmin.collection("expenses").where("status", "==", "pending").limit(MATCH_QUERY_LIMITS.pendingExpenses).get(),
@@ -357,6 +405,7 @@ async function loadPendingExpenseMatches() {
         dueDate,
         value: outstandingBalance,
         settlementPrincipalValue: outstandingBalance,
+        ...beneficiaryMatchingFields(expense),
       }];
     }
     const installments = Array.isArray(expense.installments)
@@ -380,6 +429,7 @@ async function loadPendingExpenseMatches() {
           installmentNumber: Number(installment.number) || index + 1,
           dueDate,
           value: Number(installment.value) || 0,
+          ...beneficiaryMatchingFields(expense),
         }];
       });
     }
@@ -395,6 +445,7 @@ async function loadPendingExpenseMatches() {
       installmentNumber: typeof expense.installmentNumber === "number" ? expense.installmentNumber : undefined,
       dueDate,
       value,
+      ...beneficiaryMatchingFields(expense),
     }];
   });
 
@@ -425,6 +476,7 @@ async function loadPendingExpenseMatches() {
       abatement: Number(payment.abatement) || 0,
       chargesAccountPlanId: String(payment.chargesAccountPlanId || "") || undefined,
       chargesAccountPlanName: String(payment.chargesAccountPlanName || "") || undefined,
+      ...beneficiaryMatchingFields(payment),
     }];
   });
 
@@ -529,96 +581,193 @@ async function loadExpectedBankDebits() {
   return { candidates: complete ? candidates : [], complete, documentsRead: snapshot.size };
 }
 
+class ExpectedBankDebitReviewError extends Error {}
+
+async function releaseExpectedBankDebitLease(expectedDebitId: string, leaseId: string) {
+  const ref = financialDbAdmin.collection("expectedBankDebits").doc(expectedDebitId);
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.get("reconciliationLeaseId") !== leaseId) return;
+    transaction.set(ref, {
+      reconciliationLeaseId: null,
+      reconciliationLeaseUntil: null,
+      updatedAt: Timestamp.now(),
+    }, { merge: true });
+  });
+}
+
 async function reconcileExpectedBankDebit(params: {
   expected: ExpectedBankDebitCandidate;
   entry: InterStatementEntry;
   transactionId: string;
 }) {
-  const expenseRef = financialDbAdmin.collection("expenses").doc(params.expected.expenseId);
-  const expenseSnapshot = await expenseRef.get();
-  if (!expenseSnapshot.exists) throw new Error("A despesa esperada para o débito bancário não foi encontrada.");
-  const expense = expenseSnapshot.data() || {};
-  const principal = Number(expense.totalValue) || params.expected.amount;
-  const cash = Math.abs(params.entry.amount);
-  const difference = Number((cash - principal).toFixed(2));
-  const bankCharges = extractBankCharges(params.entry.raw);
-  const classifiedCharges = difference > 0 && Math.abs(bankCharges.interest + bankCharges.fine - difference) <= 0.05
-    ? bankCharges
-    : { interest: 0, fine: 0 };
-  const paidAt = Timestamp.fromDate(statementDate(params.entry.date));
-  const now = Timestamp.now();
-  const batch = financialDbAdmin.batch();
-  const match = await queueMatchedBankPayment({
-    batch,
-    expenseId: params.expected.expenseId,
-    expense,
-    bankTransactionId: params.transactionId,
-    principalAmount: principal,
-    cashAmount: cash,
-    interest: classifiedCharges.interest,
-    fine: classifiedCharges.fine,
-    paidAt,
-    actor: { uid: SYSTEM_ACTOR, name: "Conciliação Banco Inter" },
+  const expectedDebitRef = financialDbAdmin.collection("expectedBankDebits").doc(params.expected.id);
+  const leaseId = `statement:${params.transactionId}:${randomUUID()}`;
+  const leaseStartedAt = new Date();
+  const leaseUntil = new Date(leaseStartedAt.getTime() + 10 * 60_000).toISOString();
+  const claimed = await financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(expectedDebitRef);
+    if (!snapshot.exists || !["active", "awaiting_statement"].includes(String(snapshot.get("status") || ""))) {
+      return false;
+    }
+    const activeLease = asDate(snapshot.get("reconciliationLeaseUntil"));
+    if (activeLease && activeLease > leaseStartedAt) return false;
+    transaction.set(expectedDebitRef, {
+      reconciliationLeaseId: leaseId,
+      reconciliationLeaseUntil: leaseUntil,
+      updatedAt: leaseStartedAt.toISOString(),
+    }, { merge: true });
+    return true;
   });
-  const isDivergent = match.summary.reconciliationStatus === "DIVERGENT";
-  const installments = Array.isArray(expense.installments)
-    ? expense.installments.map((installment: Record<string, unknown>) => ({
-        ...installment,
-        ...(match.summary.obligationStatus === "PAID" && installment.status !== "cancelled"
-          ? { status: "paid", paidAt, linkedBankTransactionId: params.transactionId }
-          : {}),
-      }))
-    : expense.installments;
-  batch.set(expenseRef, {
-    ...match.expensePatch,
-    installments,
-    linkedBankTransactionId: params.transactionId,
-    paymentRequestId: params.expected.paymentRequestId,
-    paidAt: match.summary.obligationStatus === "PAID" ? paidAt : expense.paidAt || null,
-  }, { merge: true });
-  batch.set(financialDbAdmin.collection("transactions").doc(params.transactionId), {
-    expenseId: params.expected.expenseId,
-    linkedExpenseId: params.expected.expenseId,
-    paymentRequestId: params.expected.paymentRequestId,
-    auditStatus: "resolved",
-    autoMatched: true,
-    autoMatchConfidence: "expected_bank_debit",
-    bankReconciledAt: now,
-  }, { merge: true });
-  batch.set(financialDbAdmin.collection("bankStatementEvents").doc(params.transactionId), {
-    linkedExpenseId: params.expected.expenseId,
-    reconciliationMode: "expected_bank_debit",
-    updatedAt: now,
-  }, { merge: true });
-  batch.set(financialDbAdmin.collection("expectedBankDebits").doc(params.expected.id), {
-    status: isDivergent ? "divergent" : "matched",
-    statementTransactionId: params.transactionId,
-    matchedAt: now,
-    updatedAt: now,
-  }, { merge: true });
-  batch.set(financialDbAdmin.collection("bankPaymentRequests").doc(params.expected.paymentRequestId), {
-    status: isDivergent ? "awaiting_statement" : "paid",
-    bankStatus: isDivergent ? "STATEMENT_DIVERGENT" : "STATEMENT_MATCHED",
-    statementReconciliationStatus: isDivergent ? "divergent" : "matched",
-    statementTransactionId: params.transactionId,
-    paidAt: paidAt.toDate().toISOString(),
-    sourceCompletedAt: isDivergent ? null : now.toDate().toISOString(),
-    updatedAt: now.toDate().toISOString(),
-  }, { merge: true });
-  batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
-    status: isDivergent ? "divergent" : "reconciled",
-    bankState: isDivergent ? "divergent" : "reconciled",
-    statementTransactionId: params.transactionId,
-    updatedAt: now.toDate().toISOString(),
-  }, { merge: true });
-  await batch.commit();
-  await addPaymentEvent(params.expected.paymentRequestId, isDivergent ? "STATEMENT_DIVERGENCE_FOUND" : "STATEMENT_PAYMENT_MATCHED", "system", {
-    statementTransactionId: params.transactionId,
-    expenseId: params.expected.expenseId,
-    cashAmount: cash,
-    principalAmount: principal,
-  });
-  return { isDivergent };
+  if (!claimed) return { isDivergent: false, skipped: true };
+  try {
+    const expenseRef = financialDbAdmin.collection("expenses").doc(params.expected.expenseId);
+    const paymentRequestRef = financialDbAdmin.collection("bankPaymentRequests").doc(params.expected.paymentRequestId);
+    const [expenseSnapshot, paymentRequestSnapshot, expectedDebitSnapshot] = await Promise.all([
+      expenseRef.get(),
+      paymentRequestRef.get(),
+      expectedDebitRef.get(),
+    ]);
+    if (!expenseSnapshot.exists) {
+      throw new ExpectedBankDebitReviewError("A despesa esperada para o débito bancário não foi encontrada.");
+    }
+    if (!paymentRequestSnapshot.exists) {
+      throw new ExpectedBankDebitReviewError("A solicitação bancária esperada para o débito não foi encontrada.");
+    }
+    if (
+      !expectedDebitSnapshot.exists
+      || expectedDebitSnapshot.get("reconciliationLeaseId") !== leaseId
+      || !expectedDebitSnapshot.updateTime
+    ) {
+      return { isDivergent: false, skipped: true };
+    }
+    const expense = expenseSnapshot.data() || {};
+    const paymentRequest = paymentRequestSnapshot.data() || {};
+    if (
+      paymentRequest.expenseId !== params.expected.expenseId
+      || paymentRequest.sourceType !== "financial_inbox"
+      || paymentRequest.sourceId !== params.expected.financialInboxMessageId
+      || Math.abs((Number(paymentRequest.amount) || 0) - params.expected.amount) > 0.01
+      || !["awaiting_bank_approval", "scheduled", "processing", "awaiting_statement"].includes(String(paymentRequest.status || ""))
+    ) {
+      throw new ExpectedBankDebitReviewError(
+        "A solicitação bancária diverge do débito esperado; a baixa automática foi bloqueada.",
+      );
+    }
+    const principal = Number(expense.totalValue) || params.expected.amount;
+    const cash = Math.abs(params.entry.amount);
+    const difference = Number((cash - principal).toFixed(2));
+    const bankCharges = extractBankCharges(params.entry.raw);
+    const classifiedCharges = difference > 0 && Math.abs(bankCharges.interest + bankCharges.fine - difference) <= 0.05
+      ? bankCharges
+      : { interest: 0, fine: 0 };
+    const paidAt = Timestamp.fromDate(statementDate(params.entry.date));
+    const now = Timestamp.now();
+    const batch = financialDbAdmin.batch();
+    const match = await queueMatchedBankPayment({
+      batch,
+      expenseId: params.expected.expenseId,
+      expense,
+      bankTransactionId: params.transactionId,
+      principalAmount: principal,
+      cashAmount: cash,
+      interest: classifiedCharges.interest,
+      fine: classifiedCharges.fine,
+      paidAt,
+      actor: { uid: SYSTEM_ACTOR, name: "Conciliação Banco Inter" },
+    });
+    const isDivergent = match.summary.reconciliationStatus === "DIVERGENT";
+    const installments = Array.isArray(expense.installments)
+      ? expense.installments.map((installment: Record<string, unknown>) => ({
+          ...installment,
+          ...(match.summary.obligationStatus === "PAID" && installment.status !== "cancelled"
+            ? { status: "paid", paidAt, linkedBankTransactionId: params.transactionId }
+            : {}),
+        }))
+      : expense.installments;
+    batch.set(expenseRef, {
+      ...match.expensePatch,
+      installments,
+      linkedBankTransactionId: params.transactionId,
+      paymentRequestId: params.expected.paymentRequestId,
+      paidAt: match.summary.obligationStatus === "PAID" ? paidAt : expense.paidAt || null,
+    }, { merge: true });
+    batch.set(financialDbAdmin.collection("transactions").doc(params.transactionId), {
+      expenseId: params.expected.expenseId,
+      linkedExpenseId: params.expected.expenseId,
+      paymentRequestId: params.expected.paymentRequestId,
+      auditStatus: "resolved",
+      autoMatched: true,
+      autoMatchConfidence: "expected_bank_debit",
+      bankReconciledAt: now,
+    }, { merge: true });
+    batch.set(financialDbAdmin.collection("bankStatementEvents").doc(params.transactionId), {
+      linkedExpenseId: params.expected.expenseId,
+      reconciliationMode: "expected_bank_debit",
+      reconciliationError: FieldValue.delete(),
+      updatedAt: now,
+    }, { merge: true });
+    batch.update(expectedDebitRef, {
+      status: isDivergent ? "divergent" : "matched",
+      statementTransactionId: params.transactionId,
+      matchedAt: now,
+      reconciliationError: FieldValue.delete(),
+      reconciliationLeaseId: null,
+      reconciliationLeaseUntil: null,
+      updatedAt: now,
+    }, { lastUpdateTime: expectedDebitSnapshot.updateTime });
+    batch.set(paymentRequestRef, {
+      status: isDivergent ? "awaiting_statement" : "paid",
+      bankStatus: isDivergent ? "STATEMENT_DIVERGENT" : "STATEMENT_MATCHED",
+      statementReconciliationStatus: isDivergent ? "divergent" : "matched",
+      statementTransactionId: params.transactionId,
+      paidAt: paidAt.toDate().toISOString(),
+      ...(!isDivergent ? {
+        ...(!paymentRequest.bankApprovalObservedAt ? { bankApprovalObservedAt: now.toDate().toISOString() } : {}),
+        bankLiquidationObservedAt: now.toDate().toISOString(),
+        postPaymentProcessingStatus: "pending",
+        nextPostPaymentAttemptAt: now.toDate().toISOString(),
+      } : {}),
+      sourceCompletedAt: isDivergent ? null : now.toDate().toISOString(),
+      updatedAt: now.toDate().toISOString(),
+    }, { merge: true });
+    batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
+      status: isDivergent ? "divergent" : "reconciled",
+      bankState: isDivergent ? "divergent" : "reconciled",
+      statementTransactionId: params.transactionId,
+      updatedAt: now.toDate().toISOString(),
+    }, { merge: true });
+    batch.set(paymentRequestRef.collection("events").doc(`statement-payment-${params.transactionId}`), {
+      type: isDivergent ? "STATEMENT_DIVERGENCE_FOUND" : "STATEMENT_PAYMENT_MATCHED",
+      at: now.toDate().toISOString(),
+      actorId: "system",
+      actorEmail: null,
+      statementTransactionId: params.transactionId,
+      expenseId: params.expected.expenseId,
+      cashAmount: cash,
+      principalAmount: principal,
+    });
+    await batch.commit();
+    return { isDivergent, skipped: false };
+  } catch (error) {
+    if (error instanceof ExpectedBankDebitReviewError) {
+      const reviewAt = Timestamp.now();
+      await financialDbAdmin.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(expectedDebitRef);
+        if (!snapshot.exists || snapshot.get("reconciliationLeaseId") !== leaseId) return;
+        transaction.set(expectedDebitRef, {
+          status: "review",
+          reconciliationError: "A conciliação do débito esperado exige revisão.",
+          reconciliationLeaseId: null,
+          reconciliationLeaseUntil: null,
+          updatedAt: reviewAt,
+        }, { merge: true });
+      }).catch(() => undefined);
+    } else {
+      await releaseExpectedBankDebitLease(params.expected.id, leaseId).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 async function registerEntry(params: {
@@ -882,7 +1031,7 @@ export async function syncInterStatement(): Promise<SyncResult> {
   let pendingAudit = 0;
 
   for (const entry of entries) {
-    const expectedDebit = findExpectedBankDebitMatch(entry, expectedDebitLoad.candidates, claimedExpectedDebits);
+    let expectedDebit = findExpectedBankDebitMatch(entry, expectedDebitLoad.candidates, claimedExpectedDebits);
     const existingLedger = expectedDebit ? null : findExistingLedgerMatch(entry, existingLedgerCandidates, claimedLedgerTransactions);
     const suggestion = expectedDebit || existingLedger || !canAutoMatchExpense(entry)
       ? null
@@ -890,13 +1039,31 @@ export async function syncInterStatement(): Promise<SyncResult> {
           date: entry.date,
           amount: entry.amount,
           description: entry.description,
+          beneficiaryIdentifiers: extractBankBeneficiaryIdentifiers(entry.raw),
         }, candidates, claimed);
     const alias = aliases.find((candidate) => aliasMatches(entry.description, candidate));
     const result = await registerEntry({ entry, accountId, accountName, alias, existingLedger });
     if (expectedDebit) {
-      await reconcileExpectedBankDebit({ expected: expectedDebit, entry, transactionId: result.transactionId });
-      claimedExpectedDebits.add(expectedDebit.id);
-      autoMatched += 1;
+      const expectedDebitCandidate = expectedDebit;
+      try {
+        const reconciliation = await reconcileExpectedBankDebit({ expected: expectedDebitCandidate, entry, transactionId: result.transactionId });
+        if (reconciliation.skipped) {
+          expectedDebit = null;
+        } else {
+          claimedExpectedDebits.add(expectedDebitCandidate.id);
+          autoMatched += 1;
+        }
+      } catch (error) {
+        const requiresReview = error instanceof ExpectedBankDebitReviewError;
+        await financialDbAdmin.collection("bankStatementEvents").doc(result.transactionId).set({
+          reconciliationMode: requiresReview ? "expected_bank_debit_review" : "expected_bank_debit_retry",
+          reconciliationError: requiresReview
+            ? "A conciliação do débito esperado exige revisão."
+            : "A conciliação automática será tentada novamente.",
+          updatedAt: Timestamp.now(),
+        }, { merge: true }).catch(() => undefined);
+        expectedDebit = null;
+      }
     }
     if (!result.inserted) {
       duplicates += 1;
