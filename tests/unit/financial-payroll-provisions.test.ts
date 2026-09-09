@@ -2,11 +2,37 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  payrollExpenseDocumentId,
+  payrollExpenseIdentityKey,
+  payrollProvisionSeriesKey,
   calculatePayrollFgts,
   calculatePayrollInss2026,
   consultPayrollProvision,
   payrollSalaryProvisionSeriesKey,
 } from "../../src/features/financial/lib/payroll-provisions";
+
+test("identifica cada verba da folha por colaborador, competência e tipo", () => {
+  assert.equal(
+    payrollExpenseIdentityKey("employee-1", "2026-08", "salary"),
+    "payroll:salary:2026-08:employee-1",
+  );
+  assert.equal(
+    payrollExpenseIdentityKey("employee-1", "2026-08", "adjustment"),
+    "payroll:adjustment:2026-08:employee-1",
+  );
+});
+
+test("mantém a reimportação idempotente e separa complemento do salário-base", () => {
+  const firstImport = payrollExpenseDocumentId("employee-1", "2026-08", "salary");
+  const reimport = payrollExpenseDocumentId("employee-1", "2026-08", "salary");
+  const complement = payrollExpenseDocumentId("employee-1", "2026-08", "adjustment");
+
+  assert.equal(firstImport, "salary_202608_employee-1");
+  assert.equal(reimport, firstImport);
+  assert.equal(complement, "adjustment_202608_employee-1");
+  assert.notEqual(complement, firstImport);
+  assert.equal(payrollProvisionSeriesKey("employee-1", "adjustment"), "payroll-adjustment:employee-1");
+});
 
 test("reproduz INSS e FGTS observados nos recibos de julho", () => {
   assert.equal(calculatePayrollInss2026(1_268.60), 95.14);

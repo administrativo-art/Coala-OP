@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { addMonths, addWeeks, format, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { addDoc, doc, getDoc, getDocs, limit, query, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { addDoc, doc, getDoc, getDocs, query, setDoc, Timestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { useFieldArray, useForm } from "react-hook-form";
 import type { FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -49,10 +49,7 @@ import {
   personAllocationDifference,
   personAllocationsAreValid,
 } from "@/features/financial/lib/expense-person-allocations";
-import {
-  consultExpenseProvision,
-  expenseProvisionIdentity,
-} from "@/features/financial/lib/expense-provisions";
+import { expenseProvisionIdentity } from "@/features/financial/lib/expense-provisions";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import type { FinancialInboxBillingIdentity } from "@/features/financial/inbox/types";
@@ -1640,46 +1637,19 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
   async function reconcileProvisionAfterSave(expenseId: string, payload: ReturnType<typeof buildExpensePayload>) {
     if (!firebaseUser || payload.provisionType !== "actual" || !payload.provisionCompetence || !payload.provisionSeriesKey) return "not_applicable";
-    const snapshot = await getDocs(
-      query(
-        financialCollection("expenses"),
-        where("provisionSeriesKey", "==", payload.provisionSeriesKey),
-        where("provisionType", "==", "forecast"),
-        where("provisionCompetence", "==", payload.provisionCompetence),
-        where("status", "==", "provisioned"),
-        limit(11),
-      ),
-    );
-    const related = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
-    const consultation = consultExpenseProvision({ id: expenseId, ...payload }, related);
-    if (consultation.status !== "matched" || !consultation.provision.id) return consultation.status;
-
-    const now = Timestamp.now();
-    const obligationId = String((consultation.provision as any).obligationId || `obl_${consultation.provision.id}`);
-    const batch = writeBatch(financialDb);
-    batch.update(financialDoc("expenses", expenseId), {
-      obligationId,
-      reconciledProvisionId: consultation.provision.id,
-      provisionReconciliationStatus: "reconciled",
-      provisionedValue: consultation.provisionedValue,
-      provisionVariance: consultation.variance,
-      provisionReconciledAt: now,
-      provisionReconciledBy: firebaseUser.uid,
-      updatedAt: now,
+    const response = await fetch(`/api/financial/expenses/${encodeURIComponent(expenseId)}/reconcile-provision`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
     });
-    batch.update(financialDoc("expenses", consultation.provision.id), {
-      obligationId,
-      status: "reconciled",
-      replacedByExpenseId: expenseId,
-      actualValue: consultation.actualValue,
-      provisionVariance: consultation.variance,
-      provisionReconciliationStatus: "reconciled",
-      provisionReconciledAt: now,
-      provisionReconciledBy: firebaseUser.uid,
-      updatedAt: now,
-    });
-    await batch.commit();
-    return "reconciled";
+    const result = await response.json().catch(() => ({})) as {
+      status?: string;
+      error?: string | { message?: string };
+    };
+    if (!response.ok) {
+      const message = typeof result.error === "string" ? result.error : result.error?.message;
+      throw new Error(message || "A despesa foi salva, mas a provisão não pôde ser conciliada.");
+    }
+    return String(result.status || "not_applicable");
   }
 
   function buildRateioPolicy(values: ExpenseFormValues, versionId: string): ExpenseRateioPolicy | null {

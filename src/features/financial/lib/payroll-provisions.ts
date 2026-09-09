@@ -2,9 +2,38 @@ export const PAYROLL_FGTS_LOANS_PROVISION_SERIES_KEY = "payroll-fgts-loans";
 export const PAYROLL_INSS_PROVISION_SERIES_KEY = "payroll-inss-withheld";
 
 export function payrollSalaryProvisionSeriesKey(employeeId: string) {
+  return payrollProvisionSeriesKey(employeeId, "salary");
+}
+
+export function payrollProvisionSeriesKey(employeeId: string, earningType: string) {
   const normalized = String(employeeId ?? "").trim();
-  if (!normalized) throw new Error("O colaborador é obrigatório para a série de salário.");
-  return `payroll-salary:${normalized}`;
+  const normalizedEarningType = String(earningType ?? "").trim().toLocaleLowerCase("pt-BR");
+  if (!normalized) throw new Error("O colaborador é obrigatório para a série da folha.");
+  if (!normalizedEarningType) throw new Error("O tipo de verba é obrigatório para a série da folha.");
+  return `payroll-${normalizedEarningType}:${normalized}`;
+}
+
+export function payrollExpenseIdentityKey(
+  employeeId: string,
+  competence: string,
+  earningType: string,
+) {
+  const normalizedEmployeeId = String(employeeId ?? "").trim();
+  const normalizedEarningType = String(earningType ?? "").trim().toLocaleLowerCase("pt-BR");
+  if (!normalizedEmployeeId) throw new Error("O colaborador é obrigatório para a identidade da folha.");
+  if (!/^\d{4}-\d{2}$/.test(competence)) throw new Error("A competência da folha é inválida.");
+  if (!normalizedEarningType) throw new Error("O tipo de verba é obrigatório para a identidade da folha.");
+  return `payroll:${normalizedEarningType}:${competence}:${normalizedEmployeeId}`;
+}
+
+export function payrollExpenseDocumentId(
+  employeeId: string,
+  competence: string,
+  earningType: string,
+) {
+  const identity = payrollExpenseIdentityKey(employeeId, competence, earningType);
+  const [, normalizedEarningType, normalizedCompetence, normalizedEmployeeId] = identity.split(":");
+  return `${normalizedEarningType}_${normalizedCompetence.replace("-", "")}_${normalizedEmployeeId}`;
 }
 
 const INSS_BANDS_2026 = [

@@ -1,6 +1,5 @@
-import { format } from "date-fns";
-
-import { payrollSalaryProvisionSeriesKey } from "@/features/financial/lib/payroll-provisions";
+import { payrollProvisionSeriesKey } from "@/features/financial/lib/payroll-provisions";
+import { financialMonthKey } from "@/features/financial/lib/financial-dates";
 import { toDate } from "@/features/financial/lib/utils";
 
 export const DAS_PROVISION_SERIES_KEY = "das-simples-nacional";
@@ -18,6 +17,7 @@ type ExpenseProvisionLike = {
   reconciledProvisionId?: string | null;
   employeeId?: string | null;
   employeeUserId?: string | null;
+  payrollEarningType?: string | null;
   personAllocations?: Array<{ employeeId?: string | null }> | null;
 };
 
@@ -60,8 +60,10 @@ function recurringSeries(parts: unknown[]) {
 
 export function expenseCompetenceKey(expense: ExpenseProvisionLike) {
   if (/^\d{4}-\d{2}$/.test(expense.provisionCompetence || "")) return expense.provisionCompetence!;
+  const displayedCompetence = String(expense.description || "").match(/\b(0[1-9]|1[0-2])\/(\d{4})\b/);
+  if (displayedCompetence) return `${displayedCompetence[2]}-${displayedCompetence[1]}`;
   const competence = toDate(expense.competenceDate);
-  return competence ? format(competence, "yyyy-MM") : null;
+  return competence ? financialMonthKey(competence) : null;
 }
 
 export function inferExpenseProvisionSeriesKey(expense: ExpenseProvisionLike) {
@@ -70,7 +72,7 @@ export function inferExpenseProvisionSeriesKey(expense: ExpenseProvisionLike) {
 
   const description = String(expense.description ?? "").trim();
   const normalizedDescription = normalized(description);
-  if (/^sal[aá]rio\s*-/i.test(description)) {
+  if (/^(sal[aá]rio|complemento salarial)\s*-/i.test(description)) {
     const allocationEmployeeIds = Array.from(new Set(
       (expense.personAllocations || [])
         .map((allocation) => String(allocation.employeeId || "").trim())
@@ -78,7 +80,9 @@ export function inferExpenseProvisionSeriesKey(expense: ExpenseProvisionLike) {
     ));
     const employeeId = String(expense.employeeId || expense.employeeUserId || "").trim()
       || (allocationEmployeeIds.length === 1 ? allocationEmployeeIds[0] : "");
-    if (employeeId) return payrollSalaryProvisionSeriesKey(employeeId);
+    const earningType = String(expense.payrollEarningType || "").trim()
+      || (/^complemento salarial\s*-/i.test(description) ? "adjustment" : "salary");
+    if (employeeId) return payrollProvisionSeriesKey(employeeId, earningType);
   }
   if (normalized(expense.accountPlanName) === "das" || normalizedDescription.startsWith("das - unica -")) {
     return DAS_PROVISION_SERIES_KEY;
