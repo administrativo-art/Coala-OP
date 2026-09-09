@@ -13,6 +13,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test:unit": "node --import tsx --test tests/unit/*.test.ts tests/unit/**/*.test.ts",
     "test:integration": "node scripts/test-integration.mjs",
+    "test:e2e": "node scripts/test-e2e.mjs",
+    "test:e2e:playwright": "playwright test",
     "test:skills": "node --import tsx --test tests/unit/agent-skills/*.test.ts",
     "test:security:rules": "node scripts/test-security-rules.mjs",
     "check:rules": "npm run test:security:rules",
@@ -155,6 +157,7 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "4.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^20.14.9",
     "@types/papaparse": "^5.3.14",
     "@types/qrcode": "^1.5.5",
