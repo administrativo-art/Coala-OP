@@ -150,6 +150,10 @@ export interface PurchaseOrderContextType {
   confirmOrder: (orderId: string) => Promise<void>;
   markReceivedElsewhere: (orderId: string, notes?: string) => Promise<void>;
   cancelOrder: (orderId: string, reason: string) => Promise<void>;
+  revertOrderStage: (orderId: string, reason: string) => Promise<{
+    financialSyncPending: boolean;
+    warning?: string;
+  }>;
   fetchOrderItems: (orderId: string) => Promise<PurchaseOrderItem[]>;
 }
 
@@ -288,8 +292,7 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
           receiptId,
           purchaseOrderId: orderId,
           supplierId: order.supplierId,
-          status:
-            order.receiptMode === 'immediate_pickup' ? 'in_stock_entry' : 'awaiting_delivery',
+          status: 'awaiting_delivery',
           receiptMode: order.receiptMode,
           expectedDate: order.paymentDueDate,
           notes: order.notes,
@@ -321,6 +324,54 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
       }
     },
     [firebaseUser],
+  );
+
+  const revertOrderStage = useCallback(
+    async (orderId: string, reason: string) => {
+      if (!firebaseUser) throw new Error('Usuário não autenticado.');
+
+      const token = await firebaseUser.getIdToken();
+      const response = await fetch(`/api/purchasing/orders/${orderId}/revert-stage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Falha ao retroceder a etapa do pedido.');
+      }
+
+      const order = orders.find((entry) => entry.id === orderId);
+      const receiptIds: string[] = Array.isArray(payload.receiptIds)
+        ? payload.receiptIds.filter((receiptId: unknown): receiptId is string => typeof receiptId === 'string')
+        : [];
+      if (order) {
+        await Promise.all(
+          receiptIds.map((receiptId) =>
+            syncPurchaseReceiptTask(firebaseUser, {
+              receiptId,
+              purchaseOrderId: orderId,
+              supplierId: order.supplierId,
+              supplierName: order.supplierName,
+              status: 'cancelled',
+              receiptMode: order.receiptMode,
+              expectedDate: order.estimatedReceiptDate,
+              notes: `Etapa retrocedida: ${reason.trim()}`,
+            }).catch(() => undefined),
+          ),
+        );
+      }
+
+      return {
+        financialSyncPending: payload.financialSyncPending === true,
+        warning: typeof payload.warning === 'string' ? payload.warning : undefined,
+      };
+    },
+    [firebaseUser, orders],
   );
 
   const markReceivedElsewhere = useCallback(
@@ -381,9 +432,10 @@ export function PurchaseOrderProvider({ children }: { children: React.ReactNode 
       confirmOrder,
       markReceivedElsewhere,
       cancelOrder,
+      revertOrderStage,
       fetchOrderItems,
     }),
-    [orders, loading, createPurchase, updateOrder, updateOrderItem, confirmOrder, markReceivedElsewhere, cancelOrder, fetchOrderItems],
+    [orders, loading, createPurchase, updateOrder, updateOrderItem, confirmOrder, markReceivedElsewhere, cancelOrder, revertOrderStage, fetchOrderItems],
   );
 
   return <PurchaseOrderContext.Provider value={value}>{children}</PurchaseOrderContext.Provider>;

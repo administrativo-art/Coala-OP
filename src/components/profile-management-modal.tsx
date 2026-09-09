@@ -869,6 +869,7 @@ export function ProfileManagementModal({ open, onOpenChange, canEdit }: ProfileM
                                 {renderPermissionSwitch("permissions.purchasing.createPurchase" as any, "Criar Pedidos de Compra", "Permite converter cotações em pedidos e criar pedidos diretos.", !purchasingModuleViewWatch)}
                                 {renderPermissionSwitch("permissions.purchasing.receivePurchase" as any, "Receber Compras", "Permite confirmar o recebimento, registrar lotes e dar entrada no estoque.", !purchasingModuleViewWatch)}
                                 {renderPermissionSwitch("permissions.purchasing.cancelPurchase" as any, "Cancelar Pedidos", "Permite cancelar pedidos de compra em aberto.", !purchasingModuleViewWatch)}
+                                {renderPermissionSwitch("permissions.purchasing.revertPurchaseStage" as any, "Retroceder Pedidos", "Permite devolver um pedido confirmado para a etapa de revisão, desfazendo os registros pendentes vinculados.", !purchasingModuleViewWatch, true)}
                                 {renderPermissionSwitch("permissions.purchasing.manageFinancialLink" as any, "Financeiro de Compras", "Permite visualizar contas a pagar e marcar pagamentos de pedidos.", !purchasingModuleViewWatch)}
                                 {renderPermissionSwitch("permissions.purchasing.manageBaseItems" as any, "Gerenciar Insumos (Compras)", "Permite criar e editar insumos base no contexto de compras.", !purchasingModuleViewWatch)}
                               </AccordionContent>

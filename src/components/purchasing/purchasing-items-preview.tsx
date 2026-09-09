@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
 import { useProducts } from '@/hooks/use-products';
@@ -10,6 +10,8 @@ import { useQuotations } from '@/hooks/use-quotations';
 import { type PurchaseOrderItem, type PurchaseReceiptItem, type QuotationItem } from '@/types';
 
 type PurchasingPreviewItem = PurchaseOrderItem | PurchaseReceiptItem | QuotationItem;
+
+const previewCache = new Map<string, PurchasingPreviewItem[]>();
 
 function itemQuantity(item: PurchasingPreviewItem) {
   if ('quantityOrdered' in item) return item.quantityOrdered;
@@ -37,34 +39,101 @@ function fallbackItemName(item: PurchasingPreviewItem) {
   return item.itemName || ('freeText' in item ? item.freeText : '') || item.baseItemId || 'Item da compra';
 }
 
-export function PurchasingItemsPreview({ orderId, quotationId, receiptId }: { orderId?: string; quotationId?: string; receiptId?: string }) {
+function previewKey(orderId?: string, quotationId?: string, receiptId?: string) {
+  if (orderId) return `order:${orderId}`;
+  if (receiptId) return `receipt:${receiptId}`;
+  if (quotationId) return `quotation:${quotationId}`;
+  return '';
+}
+
+export function PurchasingItemsPreview({
+  orderId,
+  quotationId,
+  receiptId,
+  variant = 'card',
+}: {
+  orderId?: string;
+  quotationId?: string;
+  receiptId?: string;
+  variant?: 'card' | 'inline';
+}) {
   const { fetchOrderItems } = usePurchaseOrders();
   const { fetchReceiptItems } = usePurchaseReceipts();
   const { fetchItems: fetchQuotationItems } = useQuotations();
   const { products, getProductFullName } = useProducts();
-  const [items, setItems] = useState<PurchasingPreviewItem[]>([]);
+  const key = previewKey(orderId, quotationId, receiptId);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(variant !== 'inline');
+  const [items, setItems] = useState<PurchasingPreviewItem[]>(() => previewCache.get(key) ?? []);
+  const [resolved, setResolved] = useState(() => previewCache.has(key));
 
   useEffect(() => {
+    if (variant !== 'inline' || shouldLoad) return;
+    const target = rootRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '240px 0px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [shouldLoad, variant]);
+
+  useEffect(() => {
+    const cached = previewCache.get(key);
+    if (cached) {
+      setItems(cached);
+      setResolved(true);
+      return;
+    }
+    setItems([]);
+    setResolved(false);
+    if (!key || !shouldLoad) return;
+
     let cancelled = false;
 
     async function loadItems() {
       try {
         if (orderId) {
           const data = await fetchOrderItems(orderId);
-          if (!cancelled) setItems(data);
+          if (!cancelled) {
+            previewCache.set(key, data);
+            setItems(data);
+            setResolved(true);
+          }
           return;
         }
         if (receiptId) {
           const data = await fetchReceiptItems(receiptId);
-          if (!cancelled) setItems(data);
+          if (!cancelled) {
+            previewCache.set(key, data);
+            setItems(data);
+            setResolved(true);
+          }
           return;
         }
         if (quotationId) {
           const data = await fetchQuotationItems(quotationId);
-          if (!cancelled) setItems(data);
+          if (!cancelled) {
+            previewCache.set(key, data);
+            setItems(data);
+            setResolved(true);
+          }
         }
       } catch {
-        if (!cancelled) setItems([]);
+        if (!cancelled) {
+          setItems([]);
+          setResolved(true);
+        }
       }
     }
 
@@ -72,7 +141,30 @@ export function PurchasingItemsPreview({ orderId, quotationId, receiptId }: { or
     return () => {
       cancelled = true;
     };
-  }, [fetchOrderItems, fetchQuotationItems, fetchReceiptItems, orderId, quotationId, receiptId]);
+  }, [fetchOrderItems, fetchQuotationItems, fetchReceiptItems, key, orderId, quotationId, receiptId, shouldLoad]);
+
+  const getItemName = (item: PurchasingPreviewItem) => {
+    const product = item.productId ? products.find((entry) => entry.id === item.productId) : null;
+    return product ? getProductFullName(product) : fallbackItemName(item);
+  };
+
+  if (variant === 'inline') {
+    const visibleItems = items.slice(0, 2);
+    const remaining = Math.max(items.length - visibleItems.length, 0);
+    return (
+      <div ref={rootRef} className="mt-1 truncate text-xs text-zinc-500">
+        <span className="font-bold text-zinc-400">Itens: </span>
+        {!resolved
+          ? 'carregando…'
+          : items.length === 0
+            ? 'não informados'
+            : visibleItems
+                .map((item) => `${getItemName(item)} (${itemQuantityLabel(item).replace('Quantidade: ', '')})`)
+                .join(' · ')}
+        {resolved && remaining > 0 ? ` · +${remaining} item${remaining > 1 ? 's' : ''}` : ''}
+      </div>
+    );
+  }
 
   if (items.length === 0) return null;
 

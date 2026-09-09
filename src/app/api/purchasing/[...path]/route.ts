@@ -13,6 +13,7 @@ import {
   canFinalizeQuotation,
   canManagePurchaseFinancials,
   canReceivePurchase,
+  canRevertPurchaseStage,
   canViewPurchasing,
 } from '@/lib/purchasing-permissions';
 import {
@@ -28,6 +29,14 @@ import {
 } from '@/lib/purchasing-item-treatment';
 import { buildPurchaseExpenseComponents } from '@/lib/purchase-financial-expenses';
 import { computeReceiptFinancialUpdate } from '@/lib/purchase-receipt-financials';
+import {
+  cancelPurchaseSchema,
+  revertPurchaseStageSchema,
+} from '@/lib/purchasing-action-schemas';
+import {
+  getPurchaseStageReversalBlockReason,
+  purchaseExpenseHasSettlementEvidence,
+} from '@/lib/purchasing-order-reversal';
 import {
   UNIFORM_STOCK_ID,
   UNIFORM_STOCK_NAME,
@@ -46,10 +55,26 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID ?? process.env.WORKSPACE_ID ?? 'coala';
+const MAX_ORDER_ITEMS_PER_OPERATION = 100;
+const MAX_LINKED_RECORDS_PER_ORDER = 4;
+const MAX_EXPENSES_PER_ORDER = 20;
+// Operações de confirmação/retrocesso são manuais e sem polling. Cada execução
+// lê no máximo 101 itens, 5 recebimentos, 5 financeiros e 21 despesas para
+// detectar truncamento antes de qualquer transição de estado.
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
+
+class PurchaseOrderNotFoundError extends Error {}
+
+class PurchaseStageReversionBlockedError extends Error {
+  constructor(readonly publicReason: string) {
+    super('Purchase stage reversion blocked');
+  }
+}
+
+class PurchaseExpensePaidDuringReversionError extends Error {}
 
 // Lançamento só é válido em conta folha e ativa: a DRE lê a posição da própria
 // conta, então grupo/inativa geraria classificação perdida.
@@ -109,6 +134,9 @@ function canPostPath(context: ServerUserContext, path: string[]) {
   }
   if (resource === 'orders' && child === 'cancel') {
     return isAllowed(context, canCancelPurchase);
+  }
+  if (resource === 'orders' && child === 'revert-stage') {
+    return isAllowed(context, canRevertPurchaseStage);
   }
   if (resource === 'orders' && child === 'mark-received-elsewhere') {
     return isAllowed(context, canReceivePurchase);
@@ -452,6 +480,9 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     purchaseFreightAmount: Number(orderData.deliveryFee ?? 0),
     freightPaymentMode: normalizeFreightPaymentMode(Number(orderData.deliveryFee ?? 0), orderData.freightPaymentMode),
     purchaseFinancialStatus: orderData.paymentCondition === 'installments' ? 'installments_pending_audit' : 'pending_audit',
+    cancelledAt: FieldValue.delete(),
+    cancelledBy: FieldValue.delete(),
+    cancelledReason: FieldValue.delete(),
     updatedAt: Timestamp.now(),
   };
 
@@ -829,15 +860,30 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
 
   if (resource === 'orders' && id && child === 'confirm') {
     const orderRef = dbAdmin.collection('purchase_orders').doc(id);
-    const orderSnap = await orderRef.get();
+    const [orderSnap, itemsSnap, existingReceiptsSnap, existingFinancialsSnap] = await Promise.all([
+      orderRef.get(),
+      orderRef.collection('items').limit(MAX_ORDER_ITEMS_PER_OPERATION + 1).get(),
+      dbAdmin.collection('purchase_receipts').where('purchaseOrderId', '==', id).limit(MAX_LINKED_RECORDS_PER_ORDER + 1).get(),
+      dbAdmin.collection('purchase_financials').where('purchaseOrderId', '==', id).limit(MAX_LINKED_RECORDS_PER_ORDER + 1).get(),
+    ]);
     if (!orderSnap.exists) return jsonError('Pedido não encontrado.', 404);
+    if (itemsSnap.size > MAX_ORDER_ITEMS_PER_OPERATION
+      || existingReceiptsSnap.size > MAX_LINKED_RECORDS_PER_ORDER
+      || existingFinancialsSnap.size > MAX_LINKED_RECORDS_PER_ORDER) {
+      return jsonError('O pedido excede o limite seguro para confirmação automática.', 409);
+    }
     const order = orderSnap.data()!;
+    if (order.status !== 'created') {
+      return jsonError('Apenas pedidos em revisão podem ser confirmados.', 409);
+    }
+    if (order.financialReversalStatus === 'pending') {
+      return jsonError('Conclua o retrocesso financeiro pendente antes de confirmar novamente.', 409);
+    }
 
     const batch = dbAdmin.batch();
     
     // Fallback: if totalEstimated is 0 or missing, calculate it from items
     let totalEstimated = order.totalEstimated || 0;
-    const itemsSnap = await orderRef.collection('items').get();
     if (totalEstimated === 0) {
       itemsSnap.forEach(doc => {
         totalEstimated += (doc.data().totalOrdered || 0);
@@ -866,12 +912,30 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     batch.update(orderRef, { 
       status: 'confirmed', 
       totalEstimated,
-      confirmedAt: now, 
-      updatedAt: now 
+      confirmedAt: now,
+      confirmedBy: decoded.uid,
+      financialReversalStatus: FieldValue.delete(),
+      financialReversalError: FieldValue.delete(),
+      updatedAt: now,
     });
 
-    const receiptRef = dbAdmin.collection('purchase_receipts').doc();
-    const financialRef = dbAdmin.collection('purchase_financials').doc();
+    const reusableReceiptDoc = existingReceiptsSnap.docs
+      .filter((document) => document.data().status === 'cancelled' && document.data().revertedAt)
+      .sort((left, right) => String(right.data().updatedAt ?? '').localeCompare(String(left.data().updatedAt ?? '')))[0];
+    const reusableFinancialDoc = existingFinancialsSnap.docs
+      .filter((document) => document.data().status === 'cancelled' && document.data().revertedAt)
+      .sort((left, right) => String(right.data().updatedAt ?? '').localeCompare(String(left.data().updatedAt ?? '')))[0];
+    const receiptRef = reusableReceiptDoc?.ref ?? dbAdmin.collection('purchase_receipts').doc();
+    const financialRef = reusableFinancialDoc?.ref ?? dbAdmin.collection('purchase_financials').doc();
+    const reusableReceiptItemsSnap = reusableReceiptDoc
+      ? await receiptRef.collection('items').limit(MAX_ORDER_ITEMS_PER_OPERATION + 1).get()
+      : null;
+    if (reusableReceiptItemsSnap && reusableReceiptItemsSnap.size > MAX_ORDER_ITEMS_PER_OPERATION) {
+      return jsonError('O recebimento excede o limite seguro para reutilização automática.', 409);
+    }
+    const reusableReceiptItems = new Map(
+      reusableReceiptItemsSnap?.docs.map((document) => [document.data().purchaseOrderItemId, document]) ?? [],
+    );
     
     // Use saved receiptMode or fallback to future_delivery
     const receiptMode = order.receiptMode || (order.paymentCondition === 'immediate' ? 'immediate_pickup' : 'future_delivery');
@@ -888,13 +952,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       expectedDate: order.estimatedReceiptDate || order.paymentDueDate,
       totalEstimated,
       totalConfirmed: 0,
-      createdAt: now,
+      ...(reusableReceiptDoc ? {} : { createdAt: now }),
+      revertedAt: FieldValue.delete(),
+      revertedBy: FieldValue.delete(),
+      revertReason: FieldValue.delete(),
+      cancelledAt: FieldValue.delete(),
+      cancelledBy: FieldValue.delete(),
+      cancelReason: FieldValue.delete(),
       updatedAt: now,
-    });
+    }, { merge: true });
 
     for (const itemDoc of itemsSnap.docs) {
       const item = itemDoc.data();
-      const receiptItemRef = receiptRef.collection('items').doc();
+      const reusableItem = reusableReceiptItems.get(itemDoc.id);
+      const receiptItemRef = reusableItem?.ref ?? receiptRef.collection('items').doc();
       const treatmentFields = purchaseItemTreatmentFields(item);
       const itemDestination = getTreatmentEntryType(treatmentFields.itemTreatment);
       const effectiveUnitPriceOrdered = purchaseLineEffectiveUnitPrice(item);
@@ -917,10 +988,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
         totalOrdered: item.totalOrdered ?? purchaseLineNetTotal(item),
         quantityReceived: 0,
         unitPriceConfirmed: 0,
+        totalConfirmed: 0,
         status: 'pending',
         entryType: itemDestination,
         ...treatmentFields,
-      });
+        revertedAt: FieldValue.delete(),
+        updatedAt: now,
+      }, { merge: true });
+      reusableReceiptItems.delete(itemDoc.id);
+    }
+
+    for (const orphanedItem of reusableReceiptItems.values()) {
+      batch.delete(orphanedItem.ref);
     }
 
     const goodsAmountEstimated = Math.max(totalEstimated - Number(order.deliveryFee ?? 0), 0);
@@ -948,9 +1027,16 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       paymentMethodLabel: order.paymentMethodLabel ?? null,
       dueDate: order.paymentDueDate,
       status: 'confirmed',
-      createdAt: now,
+      ...(reusableFinancialDoc ? {} : { createdAt: now }),
+      paidAt: FieldValue.delete(),
+      revertedAt: FieldValue.delete(),
+      revertedBy: FieldValue.delete(),
+      revertReason: FieldValue.delete(),
+      cancelledAt: FieldValue.delete(),
+      cancelledBy: FieldValue.delete(),
+      cancelReason: FieldValue.delete(),
       updatedAt: now,
-    });
+    }, { merge: true });
 
     await batch.commit();
 
@@ -960,8 +1046,225 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     return NextResponse.json({ ok: true, receiptId: receiptRef.id });
   }
 
+  if (resource === 'orders' && id && child === 'revert-stage') {
+    const parsedReversion = revertPurchaseStageSchema.safeParse(body);
+    if (!parsedReversion.success) {
+      return jsonError(parsedReversion.error.issues[0]?.message ?? 'Informe o motivo do retrocesso.');
+    }
+
+    const orderRef = dbAdmin.collection('purchase_orders').doc(id);
+    const expensesBeforeReversion = await financialDbAdmin
+      .collection('expenses')
+      .where('purchaseOrderId', '==', id)
+      .limit(MAX_EXPENSES_PER_ORDER + 1)
+      .get();
+    if (expensesBeforeReversion.size > MAX_EXPENSES_PER_ORDER) {
+      return jsonError('O pedido excede o limite seguro para retrocesso automático.', 409);
+    }
+    if (expensesBeforeReversion.docs.some((document) => purchaseExpenseHasSettlementEvidence(document.data()))) {
+      return jsonError(
+        'O pedido possui pagamento ou solicitação bancária vinculada. Reverta esse fluxo antes de retroceder a etapa.',
+        409,
+      );
+    }
+    let receiptIds: string[] = [];
+    let auditEvent: {
+      from: 'confirmed';
+      to: 'created';
+      reason: string;
+      at: string;
+      by: string;
+    };
+
+    try {
+      auditEvent = await dbAdmin.runTransaction(async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
+        if (!orderSnap.exists) throw new PurchaseOrderNotFoundError();
+
+        const order = orderSnap.data() as Record<string, any>;
+        if (order.archivedLinkedExpenseId || order.financialExpenseArchivedAt) {
+          throw new PurchaseStageReversionBlockedError(
+            'O vínculo financeiro deste pedido já foi arquivado e não pode ser retrocedido por este fluxo.',
+          );
+        }
+        const [receiptsSnap, purchaseFinancialsSnap] = await Promise.all([
+          transaction.get(dbAdmin.collection('purchase_receipts').where('purchaseOrderId', '==', id).limit(MAX_LINKED_RECORDS_PER_ORDER + 1)),
+          transaction.get(dbAdmin.collection('purchase_financials').where('purchaseOrderId', '==', id).limit(MAX_LINKED_RECORDS_PER_ORDER + 1)),
+        ]);
+        if (receiptsSnap.size > MAX_LINKED_RECORDS_PER_ORDER
+          || purchaseFinancialsSnap.size > MAX_LINKED_RECORDS_PER_ORDER) {
+          throw new PurchaseStageReversionBlockedError(
+            'O pedido excede o limite seguro para retrocesso automático.',
+          );
+        }
+
+        const pendingAudit = order.lastStageReversion as typeof auditEvent | undefined;
+        const isFinancialRetry =
+          order.status === 'created' &&
+          order.financialReversalStatus === 'pending' &&
+          pendingAudit?.from === 'confirmed' &&
+          pendingAudit?.to === 'created';
+
+        if (isFinancialRetry) {
+          receiptIds = receiptsSnap.docs
+            .filter((document) => Boolean(document.data().revertedAt))
+            .map((document) => document.id);
+          return pendingAudit;
+        }
+
+        const blockReason = getPurchaseStageReversalBlockReason({
+          orderStatus: order.status,
+          orderReceivedAt: order.receivedAt,
+          receipts: receiptsSnap.docs.map((document) => document.data()),
+          financials: purchaseFinancialsSnap.docs.map((document) => document.data()),
+        });
+        if (blockReason) throw new PurchaseStageReversionBlockedError(blockReason);
+
+        const activeReceiptDocs = receiptsSnap.docs
+          .filter((document) => document.data().status !== 'cancelled');
+        const receiptItemSnapshots = await Promise.all(
+          activeReceiptDocs.map((receiptDoc) => transaction.get(
+            receiptDoc.ref.collection('items').limit(MAX_ORDER_ITEMS_PER_OPERATION + 1),
+          )),
+        );
+        if (receiptItemSnapshots.some((snapshot) => snapshot.size > MAX_ORDER_ITEMS_PER_OPERATION)) {
+          throw new PurchaseStageReversionBlockedError(
+            'O recebimento excede o limite seguro para retrocesso automático.',
+          );
+        }
+        const receiptItemsByReceiptId = new Map(
+          activeReceiptDocs.map((receiptDoc, index) => [receiptDoc.id, receiptItemSnapshots[index]]),
+        );
+
+        const event = {
+          from: 'confirmed' as const,
+          to: 'created' as const,
+          reason: parsedReversion.data.reason,
+          at: now,
+          by: decoded.uid,
+        };
+        const activeReceiptIds = new Set(activeReceiptDocs.map((document) => document.id));
+        receiptIds = [...activeReceiptIds];
+
+        transaction.update(orderRef, {
+          status: 'created',
+          totalConfirmed: 0,
+          confirmedAt: FieldValue.delete(),
+          confirmedBy: FieldValue.delete(),
+          linkedExpenseId: FieldValue.delete(),
+          linkedFreightExpenseId: FieldValue.delete(),
+          financialReversalStatus: 'pending',
+          financialReversalError: FieldValue.delete(),
+          lastStageReversion: event,
+          stageReversions: FieldValue.arrayUnion(event),
+          updatedAt: now,
+        });
+
+        receiptsSnap.docs.forEach((receiptDoc) => {
+          if (!activeReceiptIds.has(receiptDoc.id)) return;
+          transaction.update(receiptDoc.ref, {
+            status: 'cancelled',
+            revertReason: event.reason,
+            revertedAt: event.at,
+            revertedBy: event.by,
+            updatedAt: now,
+          });
+          receiptItemsByReceiptId.get(receiptDoc.id)?.docs.forEach((itemDoc) => {
+            transaction.update(itemDoc.ref, {
+              status: 'cancelled',
+              revertedAt: event.at,
+              updatedAt: now,
+            });
+          });
+        });
+
+        purchaseFinancialsSnap.docs.forEach((financialDoc) => {
+          if (financialDoc.data().status === 'cancelled') return;
+          transaction.update(financialDoc.ref, {
+            status: 'cancelled',
+            revertReason: event.reason,
+            revertedAt: event.at,
+            revertedBy: event.by,
+            updatedAt: now,
+          });
+        });
+
+        return event;
+      });
+    } catch (error) {
+      if (error instanceof PurchaseOrderNotFoundError) return jsonError('Pedido não encontrado.', 404);
+      if (error instanceof PurchaseStageReversionBlockedError) {
+        return jsonError(error.publicReason, 409);
+      }
+      return jsonError('Falha ao retroceder a etapa do pedido.', 500);
+    }
+
+    try {
+      const expensesSnap = await financialDbAdmin
+        .collection('expenses')
+        .where('purchaseOrderId', '==', id)
+        .limit(MAX_EXPENSES_PER_ORDER + 1)
+        .get();
+      if (expensesSnap.size > MAX_EXPENSES_PER_ORDER) {
+        throw new Error('PURCHASE_EXPENSE_LIMIT_EXCEEDED');
+      }
+      const financialBatch = financialDbAdmin.batch();
+      const reversionNote = `Confirmação do pedido retrocedida em ${new Date(auditEvent.at).toLocaleDateString('pt-BR')}. Motivo: ${auditEvent.reason}`;
+
+      if (expensesSnap.docs.some((document) => purchaseExpenseHasSettlementEvidence(document.data()))) {
+        throw new PurchaseExpensePaidDuringReversionError();
+      }
+
+      expensesSnap.forEach((expenseDoc) => {
+        const expense = expenseDoc.data();
+        const alreadyReverted = expense.purchaseStageRevertedAt === auditEvent.at;
+        financialBatch.update(expenseDoc.ref, {
+          status: 'cancelled',
+          originStatus: 'purchase_confirmation_reverted',
+          cancelledAt: Timestamp.fromDate(new Date(auditEvent.at)),
+          cancelledBy: auditEvent.by,
+          cancelledReason: auditEvent.reason,
+          purchaseStageRevertedAt: auditEvent.at,
+          updatedAt: Timestamp.now(),
+          ...(!alreadyReverted
+            ? { notes: expense.notes ? `${expense.notes}\n\n${reversionNote}` : reversionNote }
+            : {}),
+        });
+      });
+      await financialBatch.commit();
+      await orderRef.set({
+        financialReversalStatus: 'completed',
+        financialReversalError: FieldValue.delete(),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (error) {
+      const financialReversalError =
+        error instanceof PurchaseExpensePaidDuringReversionError
+          ? 'Um pagamento ou uma solicitação bancária foi vinculada durante o retrocesso. Reverta esse fluxo e conclua novamente.'
+          : 'Falha ao cancelar a despesa vinculada. Tente concluir o retrocesso novamente.';
+      await orderRef.set({
+        financialReversalStatus: 'pending',
+        financialReversalError,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      return NextResponse.json({
+        ok: true,
+        receiptIds,
+        financialSyncPending: true,
+        warning: financialReversalError,
+      }, { status: 202 });
+    }
+
+    return NextResponse.json({ ok: true, receiptIds, financialSyncPending: false });
+  }
+
 
   if (resource === 'orders' && id && child === 'cancel') {
+    const parsedCancellation = cancelPurchaseSchema.safeParse(body);
+    if (!parsedCancellation.success) {
+      return jsonError(parsedCancellation.error.issues[0]?.message ?? 'Informe o motivo do cancelamento.');
+    }
+    const cancelReason = parsedCancellation.data.reason;
     const orderRef = dbAdmin.collection('purchase_orders').doc(id);
     const [orderSnap, receiptsSnap, purchaseFinancialsSnap, expensesSnap] = await Promise.all([
       orderRef.get(),
@@ -982,10 +1285,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       );
     }
 
-    const cancellationNote = `Cancelado junto com o pedido de compra em ${new Date().toLocaleDateString('pt-BR')}.`;
+    const cancellationNote = `Cancelado junto com o pedido de compra em ${new Date().toLocaleDateString('pt-BR')}. Motivo: ${cancelReason}`;
     const purchasingBatch = dbAdmin.batch();
     purchasingBatch.update(orderRef, {
       status: 'cancelled',
+      cancelReason,
       cancelledAt: now,
       cancelledBy: decoded.uid,
       updatedAt: now,
@@ -994,6 +1298,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     for (const receiptDoc of receiptsSnap.docs) {
       purchasingBatch.update(receiptDoc.ref, {
         status: 'cancelled',
+        cancelReason,
         cancelledAt: now,
         cancelledBy: decoded.uid,
         updatedAt: now,
@@ -1011,6 +1316,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     purchaseFinancialsSnap.forEach((financialDoc) => {
       purchasingBatch.update(financialDoc.ref, {
         status: 'cancelled',
+        cancelReason,
         cancelledAt: now,
         cancelledBy: decoded.uid,
         updatedAt: now,

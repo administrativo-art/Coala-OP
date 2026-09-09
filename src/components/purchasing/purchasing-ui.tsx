@@ -5,6 +5,7 @@ import { CalendarDays, Columns3, LayoutGrid, Search, ShoppingCart, Table2 } from
 import { type ReactNode } from 'react';
 
 import { Input } from '@/components/ui/input';
+import { PageContainer } from '@/components/layout/page-container';
 import { cn } from '@/lib/utils';
 
 export type PurchasingTone = 'blue' | 'amber' | 'purple' | 'cyan' | 'green' | 'rose' | 'zinc';
@@ -147,11 +148,87 @@ export function PurchasingPageFrame({
   fullWidth?: boolean;
 }) {
   return (
-    <div className="min-h-[calc(100vh-1px)] bg-[#f5f5f6]">
-      <div className={cn('mx-auto w-full px-6 py-7 lg:px-8', fullWidth ? 'max-w-none' : 'max-w-[1500px]')}>
+    <div className="font-purchasing min-h-[calc(100vh-1px)] bg-transparent">
+      <PageContainer variant={fullWidth ? 'fluid' : 'default'} className="py-1">
         {children}
-      </div>
+      </PageContainer>
     </div>
+  );
+}
+
+export type PurchasingFlowStage = {
+  label: string;
+  value: string | number;
+  detail: string;
+  tone: PurchasingTone;
+  href: string;
+  active?: boolean;
+};
+
+export function PurchasingFlowStrip({ stages }: { stages: PurchasingFlowStage[] }) {
+  return (
+    <nav aria-label="Fluxo de compras" className="mb-3 overflow-x-auto rounded-[14px] bg-zinc-950">
+      <div className="flex min-w-[780px] divide-x divide-white/10">
+        {stages.map((stage) => {
+          const toneClass = toneClasses[stage.tone];
+          return (
+            <Link
+              key={`${stage.href}-${stage.label}`}
+              href={stage.href}
+              aria-current={stage.active ? 'page' : undefined}
+              className={cn(
+                'relative min-w-0 flex-1 px-4 pb-4 pt-[17px] text-white transition-colors hover:bg-white/[0.07]',
+                stage.active && 'bg-white/[0.08]',
+              )}
+            >
+              <span className={cn('absolute inset-x-0 top-0 h-[3px]', toneClass.bg)} />
+              <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.1em] text-zinc-300">
+                <span className={cn('h-1.5 w-1.5 rounded-full', toneClass.bg)} />
+                {stage.label}
+              </span>
+              <strong className="mt-2 block text-[22px] font-black leading-none tracking-[-0.04em]">{stage.value}</strong>
+              <span className="mt-1.5 block truncate text-[11px] text-zinc-400">{stage.detail}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+const purchasingModuleTabs = [
+  { label: 'Cotações', href: '/dashboard/purchasing/quotations' },
+  { label: 'Pedidos', href: '/dashboard/purchasing/orders' },
+  { label: 'Recebimentos', href: '/dashboard/purchasing/receipts' },
+  { label: 'Custo efetivo', href: '/dashboard/purchasing/costs' },
+];
+
+export function PurchasingModuleTabs({ active }: { active: 'quotations' | 'orders' | 'receipts' | 'costs' }) {
+  const activeLabel = {
+    quotations: 'Cotações',
+    orders: 'Pedidos',
+    receipts: 'Recebimentos',
+    costs: 'Custo efetivo',
+  }[active];
+
+  return (
+    <nav aria-label="Seções de compras" className="mb-5 flex flex-wrap items-center gap-1">
+      {purchasingModuleTabs.map((tab) => (
+        <Link
+          key={tab.href}
+          href={tab.href}
+          aria-current={tab.label === activeLabel ? 'page' : undefined}
+          className={cn(
+            'inline-flex h-8 items-center rounded-[9px] border px-3 text-[13px] font-semibold transition-colors',
+            tab.label === activeLabel
+              ? 'border-zinc-950 bg-zinc-950 text-white'
+              : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:text-zinc-950',
+          )}
+        >
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
   );
 }
 

@@ -128,7 +128,7 @@ export function NormalizeItemModal({ open, onOpenChange, quotationId, item }: Pr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="font-purchasing sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Normalizar item livre</DialogTitle>
           <DialogDescription>
