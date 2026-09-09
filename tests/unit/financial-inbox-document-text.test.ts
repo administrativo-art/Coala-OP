@@ -35,3 +35,14 @@ test("converte XML financeiro em texto rotulado", async () => {
   assert.equal(extracted.method, "xml_text");
   assert.match(extracted.text, /vencimento: 15\/09\/2026/);
 });
+
+test("decodifica somente uma camada de entidades XML", async () => {
+  const extracted = await extractDeterministicFinancialDocumentText({
+    buffer: Buffer.from("<cobranca><descricao>&lt;fatura&gt; &amp; &amp;lt;segura&amp;gt;</descricao></cobranca>"),
+    filename: "cobranca.xml",
+    contentType: "application/xml",
+  });
+
+  assert.match(extracted.text, /descricao: <fatura> & &lt;segura&gt;/);
+  assert.doesNotMatch(extracted.text, /<segura>/);
+});
