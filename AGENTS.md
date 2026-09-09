@@ -5,6 +5,18 @@
 - Código existente é evidência, não necessariamente padrão. Antes de copiar uma implementação, distinga decisão arquitetural intencional de convenção consolidada, solução local, detalhe histórico ou dívida técnica. Somente decisão e convenção comprovadas viram padrão.
 - Na dúvida, não canonize. Preserve o comportamento existente, registre a incerteza e trate o ponto como não normativo. Solicite decisão apenas quando ela for necessária para prosseguir ou quando a alteração criaria um padrão global difícil de reverter.
 
+## Isolamento do workspace e commits
+
+- Antes de qualquer edição, execute `git status --short` e identifique branch, alterações rastreadas, staged e arquivos não rastreados.
+- Não inicie uma nova tarefa em um checkout que contenha mudanças de outro escopo. Deixe esse checkout intacto e crie uma branch com worktree próprio a partir de uma base limpa, por exemplo: `git worktree add ../Coala-OP-<tarefa> -b <tipo>/<tarefa> main`.
+- Cada tarefa ou agente concorrente deve usar branch e worktree exclusivos. Nunca permita dois trabalhos independentes no mesmo diretório de trabalho.
+- Não desenvolva diretamente na `main`. Exceções exigem solicitação explícita do desenvolvedor e ainda devem resultar em commits atômicos.
+- Nunca use `git add .` ou `git add -A` quando houver mais de um escopo no workspace. Faça staging por caminhos explícitos e, para arquivos compartilhados, por hunk.
+- Antes de cada commit, revise `git diff --cached --name-status` e `git diff --cached`; o commit deve conter uma única intenção reversível e não pode incorporar mudanças alheias por conveniência.
+- Infraestrutura compartilhada por mais de um módulo deve ficar em commit próprio. Código de produto, testes e documentação do mesmo comportamento podem ficar juntos quando formarem uma unidade verificável.
+- Não use `stash`, `reset`, `restore`, troca de branch, limpeza de arquivos ou commit-snapshot para reorganizar mudanças de terceiros sem autorização explícita e uma verificação prévia de arquivos não rastreados e possíveis segredos.
+- Antes de encerrar, execute `git status --short`, informe qualquer mudança staged, unstaged ou não rastreada e não declare o workspace limpo sem evidência.
+
 ## Padrão de construção de módulos
 
 - Valide entrada por schema na fronteira do sistema. Nunca confie em dados enviados pelo cliente.
@@ -48,6 +60,14 @@
 - Mudanças cobertas por teste de integração exigem o respectivo comando verde.
 - A IA não afirma que algo funciona sem ter executado a verificação. Não descreva como resultado aquilo que não rodou.
 - Falhas preexistentes devem ser identificadas como preexistentes; não podem ser omitidas nem atribuídas à mudança sem evidência.
+
+## Política de testes E2E
+
+- Toda mudança que crie ou altere um fluxo crítico de usuário deve criar ou atualizar o E2E correspondente. São críticos: autenticação e autorização, movimentação financeira ou de estoque, transição de etapa, operação destrutiva, processo com múltiplas telas e fluxo cuja falha impeça a operação do negócio.
+- Ajustes exclusivamente visuais, de texto ou de regra isolada não exigem um novo E2E quando o comportamento já estiver protegido no nível adequado. Use teste unitário, de contrato ou de componente nesses casos.
+- Correção de regressão deve deixar um teste permanente no menor nível capaz de reproduzir a falha. Adicione E2E quando a regressão depender da integração entre navegador, rota e persistência.
+- E2E nunca executa contra produção nem usa credenciais reais. Use projeto Firebase com prefixo `demo-`, emuladores locais e dados determinísticos criados pelo próprio teste.
+- Um E2E novo entra no CI primeiro em observação. Ele só vira gate bloqueante depois de permanecer estável e de não depender de tempo arbitrário, ordem de execução ou estado compartilhado.
 
 ## CLI e navegador
 
