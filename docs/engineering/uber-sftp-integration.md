@@ -55,10 +55,9 @@ Segredos do Secret Manager:
 
 ```sh
 firebase functions:secrets:set UBER_SFTP_PRIVATE_KEY --data-file "/caminho/seguro/uber_business_sftp"
-firebase functions:secrets:set UBER_SFTP_PRIVATE_KEY_PASSPHRASE
 ```
 
-O segundo comando pede a senha sem gravá-la no repositório. Nunca usar o arquivo `.pub` como `UBER_SFTP_PRIVATE_KEY`: a Uber recebe a chave pública; o Secret Manager recebe a chave privada correspondente. A documentação oficial do Firebase descreve o armazenamento e o vínculo de segredos: [configuração de ambiente e Secret Manager](https://firebase.google.com/docs/functions/config-env).
+Use uma chave de serviço exclusiva, sem senha, mantida apenas no Secret Manager. Nunca usar o arquivo `.pub` como `UBER_SFTP_PRIVATE_KEY`: a Uber recebe a chave pública; o Secret Manager recebe a chave privada correspondente. A documentação oficial do Firebase descreve o armazenamento e o vínculo de segredos: [configuração de ambiente e Secret Manager](https://firebase.google.com/docs/functions/config-env).
 
 ## Sequência segura de implantação
 

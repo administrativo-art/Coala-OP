@@ -11,7 +11,6 @@ const uberSftpUsername = defineString('UBER_SFTP_USERNAME', { default: '' });
 const uberSftpHostFingerprint = defineString('UBER_SFTP_HOST_FINGERPRINT_SHA256', { default: '' });
 const uberSftpVpcConnector = defineString('UBER_SFTP_VPC_CONNECTOR');
 const uberSftpPrivateKey = defineSecret('UBER_SFTP_PRIVATE_KEY');
-const uberSftpPrivateKeyPassphrase = defineSecret('UBER_SFTP_PRIVATE_KEY_PASSPHRASE');
 
 function reportCandidateError(
   operation: string,
@@ -71,7 +70,7 @@ export const uberSftpDailySync = onSchedule({
   maxInstances: 1,
   vpcConnector: uberSftpVpcConnector,
   vpcConnectorEgressSettings: 'ALL_TRAFFIC',
-  secrets: [uberSftpPrivateKey, uberSftpPrivateKeyPassphrase],
+  secrets: [uberSftpPrivateKey],
 }, async () => {
   if (!uberSftpEnabled.value()) {
     logger.info('Uber SFTP integration disabled by configuration.', { source: 'uber-sftp' });
@@ -80,7 +79,6 @@ export const uberSftpDailySync = onSchedule({
   await syncUberTripsFromSftp({
     username: uberSftpUsername.value(),
     privateKey: uberSftpPrivateKey.value(),
-    privateKeyPassphrase: uberSftpPrivateKeyPassphrase.value(),
     hostFingerprintSha256: uberSftpHostFingerprint.value(),
   });
 });
