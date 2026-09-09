@@ -18,6 +18,7 @@ export const E2E_FINANCIAL_INBOX_IDS = {
   message: "inbox-e2e-vivo-0001",
   expense: "expense-e2e-vivo-0001",
 };
+export const E2E_UBER_EXPENSE_ID = "expense-e2e-uber-0001";
 
 function isoDate(offsetDays = 0) {
   const date = new Date();
@@ -277,6 +278,32 @@ export default async function seedE2E() {
       serviceType: "mobile",
       serviceNumbers: ["+5598999991234"],
     },
+    createdAt: now,
+  });
+  financialBatch.set(financialDb.collection("expenses").doc(E2E_UBER_EXPENSE_ID), {
+    workspaceId: "coala",
+    description: "UBER *TRIP E2E",
+    supplier: "Uber do Brasil",
+    status: "pending",
+    totalValue: 38.7,
+    dueDate: isoDate(1),
+    competenceDate: now,
+    accountId: "account-e2e",
+    resultCenter: "Operação E2E",
+    installments: [{ number: 1, value: 38.7, dueDate: isoDate(1), status: "pending" }],
+    uberCandidate: true,
+    uberProvider: "uber",
+    uberRecognitionStatus: "matched",
+    uberTripDocumentId: "uber-trip-e2e",
+    uberTripId: "trip-e2e-123",
+    uberRequesterName: "Maria Operações",
+    uberRequesterEmail: "maria.operacoes@coala.test",
+    uberService: "UberX",
+    uberRequestDateLocal: isoDate().slice(0, 10),
+    uberTripAmount: 38.7,
+    uberTripAmountCents: 3870,
+    uberTripCurrency: "BRL",
+    uberMatchConfidence: "high",
     createdAt: now,
   });
   financialBatch.set(financialDb.collection("financialInboxMessages").doc(E2E_FINANCIAL_INBOX_IDS.message), {

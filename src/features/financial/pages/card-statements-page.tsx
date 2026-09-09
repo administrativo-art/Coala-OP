@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import {
   buildCardStatementGroups,
@@ -1013,6 +1014,7 @@ export function CardStatementsWorkspace({
                         <p className="truncate text-[10.5px] leading-tight text-muted-foreground">
                           {line.expense.supplier || "Sem favorecido"}{issues.length > 0 ? ` · revisar ${issues.join(", ")}` : ""}
                         </p>
+                        <UberRecognitionStatus record={line.expense} compact />
                       </div>
                       <div className="hidden lg:block">
                         <span className={cn(
@@ -1394,6 +1396,7 @@ export function CardStatementsWorkspace({
                                     {imported ? <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700"><Sparkles className="h-2.5 w-2.5" />Importada</span> : null}
                                   </div>
                                   <p className="mt-1 truncate text-[11px] text-muted-foreground">{line.expense.supplier || "Sem favorecido"} · cobrança em {format(line.chargeDate, "dd/MM/yyyy")}</p>
+                                  <UberRecognitionStatus record={line.expense} compact />
                                   {issues.length > 0 ? (
                                     <p className="mt-1.5 inline-block rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10.5px] font-bold text-amber-700">⚠ Revisar {issues.join(", ")}</p>
                                   ) : null}
