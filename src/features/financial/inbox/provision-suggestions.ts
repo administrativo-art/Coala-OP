@@ -118,8 +118,15 @@ export function chooseProvisionSuggestion(
       if (source?.serviceType !== "mobile" && source?.serviceType !== "landline") return true;
       const target = candidate.billingIdentity
         ?? extractBillingIdentity(`${candidate.description ?? ""}\n${candidate.supplier ?? ""}\n${candidate.notes ?? ""}`);
-      return Boolean(source.serviceNumbers.length
+      const serviceNumberMatches = Boolean(source.serviceNumbers.length
         && target.serviceNumbers.some((number) => source.serviceNumbers.includes(number)));
+      const customerAccountMatches = Boolean(source.customerAccount
+        && target.customerAccount
+        && normalize(source.customerAccount) === normalize(target.customerAccount));
+      const contractNumberMatches = Boolean(source.contractNumber
+        && target.contractNumber
+        && normalize(source.contractNumber) === normalize(target.contractNumber));
+      return serviceNumberMatches || customerAccountMatches || contractNumberMatches;
     })
     .map((candidate) => ({ candidate, ...scoreProvisionCandidate(classification, candidate) }))
     .sort((left, right) => right.score - left.score || left.candidate.id.localeCompare(right.candidate.id));

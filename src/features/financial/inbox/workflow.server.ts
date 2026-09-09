@@ -12,14 +12,14 @@ import { prepareFinancialInboxDocuments } from "./document-processing.server";
 import { getFinancialInboxMessage } from "./repository.server";
 import type { FinancialInboxMessage } from "./types";
 
-const MAX_PROVISION_CANDIDATES = 10;
+const MAX_PROVISION_CANDIDATES = 100;
 const MAX_EXISTING_EXPENSE_CANDIDATES = 500;
 const MAX_MATCHED_PAYMENT_CANDIDATES = 100;
 // Custo de triagem: no máximo 10 leituras por cobrança relevante. Com 300
 // cobranças/mês, o teto esperado é 3.000 leituras/mês, além de reanálises manuais.
 // O cruzamento lê no máximo 501 despesas abertas, 101 pagamentos do mesmo valor,
-// 100 despesas pagas referenciadas e 10 previsões. Com 50 cobranças/mês, o teto
-// é 35.600 leituras/mês, incluindo a análise automática e reanálises manuais.
+// 100 despesas pagas referenciadas e 100 previsões. Com 50 cobranças/mês, o teto
+// é 40.100 leituras/mês, incluindo a análise automática e reanálises manuais.
 
 function money(value: unknown) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -120,7 +120,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
   }
 
   let candidates: ProvisionCandidate[] = [];
-  if (existingExpenseSuggestion.status === "not_found" && classification.financeLikely && classification.competence) {
+  if (existingExpenseSuggestion.status !== "suggested" && classification.financeLikely && classification.competence) {
     const snapshot = await financialDbAdmin.collection("expenses")
       .where("provisionType", "==", "forecast")
       .where("status", "==", "provisioned")

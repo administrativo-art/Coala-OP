@@ -81,7 +81,7 @@ test("não sugere previsão de outra linha telefônica", () => {
   assert.equal(suggestion.status, "not_found");
 });
 
-test("não substitui a linha telefônica por uma conta de cliente igual", () => {
+test("usa a conta de cliente como identidade forte quando a linha não está cadastrada", () => {
   const telecomClassification: FinancialInboxClassification = {
     ...classification,
     documentType: "utility_bill",
@@ -101,5 +101,7 @@ test("não substitui a linha telefônica por uma conta de cliente igual", () => 
     provisionCompetence: "2026-08",
     totalValue: 1200,
   }]);
-  assert.equal(suggestion.status, "not_found");
+  assert.equal(suggestion.status, "suggested");
+  assert.equal(suggestion.provisionExpenseId, "forecast-account-only");
+  assert.match(suggestion.reasons.join(" "), /mesma conta do cliente/);
 });

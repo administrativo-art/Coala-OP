@@ -50,8 +50,8 @@ import {
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import type { CardStatementImportPreview } from "@/features/financial/lib/card-statement-import";
 import {
+  buildCardStatementExpenseCandidates,
   matchCardStatementExpenses,
-  type CardStatementExpenseCandidate,
 } from "@/features/financial/lib/card-statement-expense-matcher";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
@@ -130,7 +130,8 @@ function paymentMethodCards(bankAccounts: any[]): CreditCardInstrument[] {
 
 function monthLabel(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
-  return format(new Date(year, month - 1, 1, 12), "MMMM 'de' yyyy", { locale: ptBR });
+  const label = format(new Date(year, month - 1, 1, 12), "MMMM | yyyy", { locale: ptBR });
+  return label.replace(/^\p{Ll}/u, (letter) => letter.toLocaleUpperCase("pt-BR"));
 }
 
 function changeMonth(monthKey: string, delta: number) {
@@ -368,29 +369,9 @@ export function CardStatementsWorkspace({
     () => new Set((importPreview?.revision?.removed || []).map((line) => line.fingerprint)),
     [importPreview]
   );
-  const importExpenseCandidates = useMemo<CardStatementExpenseCandidate[]>(
-    () => (selectedGroup?.lines || []).flatMap((line) => {
-      const fingerprints = [
-        String((line.expense as any).cardStatementImportFingerprint || ""),
-        ...(Array.isArray((line.expense as any).cardStatementImportFingerprints)
-        ? (line.expense as any).cardStatementImportFingerprints.map(String)
-        : []),
-      ].filter(Boolean);
-      const belongsToRemovedRevision = fingerprints.some((fingerprint) => revisionRemovedFingerprintSet.has(fingerprint));
-      if (line.expense.status === "paid" || (!belongsToRemovedRevision && (line.reconciled || fingerprints.length > 0))) return [];
-      return [{
-        lineId: line.lineId,
-        expenseId: line.expense.id,
-        description: String(line.expense.description || ""),
-        supplier: String(line.expense.supplier || ""),
-        amount: line.value,
-        chargeDate: line.chargeDate,
-        installmentNumber: line.installmentNumber,
-        installmentTotal: line.installmentTotal,
-        isForecast: isCardLineForecast(line),
-      }];
-    }),
-    [revisionRemovedFingerprintSet, selectedGroup]
+  const importExpenseCandidates = useMemo(
+    () => buildCardStatementExpenseCandidates(expensesData || [], revisionRemovedFingerprintSet),
+    [expensesData, revisionRemovedFingerprintSet]
   );
   const importExpenseMatches = useMemo(
     () => matchCardStatementExpenses(importPreview?.transactions || [], importExpenseCandidates),

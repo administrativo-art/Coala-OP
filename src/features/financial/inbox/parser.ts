@@ -109,9 +109,11 @@ export function normalizePaymentBarcode(value: string) {
 
 export function extractPaymentBarcode(value: string) {
   const labeled = value.match(/(?:linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|c[oó]d(?:igo)?\s+barra)\s*[:\-]?\s*([\d.\s-]{44,70})/i);
+  const generic = Array.from(value.matchAll(/(?<!\d)([\d][\d.\s-]{42,68}[\d])(?!\d)/g))
+    .filter((match) => !/chave\s+de\s+acesso\s*[:\-]?\s*$/i.test(value.slice(Math.max(0, (match.index ?? 0) - 40), match.index)));
   const candidates = [
     labeled?.[1],
-    ...Array.from(value.matchAll(/(?<!\d)([\d][\d.\s-]{42,68}[\d])(?!\d)/g), (match) => match[1]),
+    ...generic.map((match) => match[1]),
   ].filter((candidate): candidate is string => Boolean(candidate));
   for (const candidate of candidates) {
     const normalized = normalizePaymentBarcode(candidate);
@@ -129,8 +131,8 @@ function documentType(value: string): { type: FinancialInboxDocumentType; confid
   if (/\bfgts\b/i.test(value)) return { type: "fgts", confidence: "high" };
   if (/\binss\b|\bdarf\b/i.test(value)) return { type: "inss_darf", confidence: "high" };
   if (/honor[aá]rio\s+cont[aá]bil|mensalidade\s+cont[aá]bil/i.test(value)) return { type: "accounting_fee", confidence: "high" };
-  if (/\b(?:das|dare|iss|icms|simples\s+nacional|tributo|imposto)\b/i.test(value)) return { type: "tax", confidence: "medium" };
   if (/\b(?:energia|telefone|telefonia|internet|[aá]gua|fatura\s+vivo)\b/i.test(value)) return { type: "utility_bill", confidence: "medium" };
+  if (/\b(?:das|dare|iss|icms|simples\s+nacional|tributo|imposto)\b/i.test(value)) return { type: "tax", confidence: "medium" };
   if (/\b(?:boleto|cobran[cç]a|fatura|vencimento|pagar)\b/i.test(value)) return { type: "charge", confidence: "medium" };
   return { type: "other", confidence: "low" };
 }
@@ -148,7 +150,7 @@ export function normalizeBrazilianServiceNumber(value: unknown) {
 
 export function extractTelecomServiceNumbers(value: string) {
   const matches = Array.from(value.matchAll(
-    /(?:n[uú]mero\s+(?:da\s+)?linha|linha(?!\s+digit[aá]vel)|acesso|terminal|celular)\s*(?:n[ºo°.]|n[uú]mero)?\s*[:#\-]?\s*(\+?55\s*)?(\(?\d{2}\)?[\s.-]*\d{4,5}[\s.-]*\d{4})/gi,
+    /(?:n[uú]mero\s+(?:da\s+)?linha|linha(?!\s+digit[aá]vel)|telefone\s+principal|telefone|terminal|celular|n[uú]mero\s+de\s+acesso)\s*(?:n[ºo°.]|n[uú]mero)?\s*[:#\-]?\s*(\+?55\s*)?(\(?\d{2}\)?[\s.-]*\d{4,5}[\s.-]*\d{4})(?!\d)/gi,
   ));
   return [...new Set(matches.flatMap((match) => {
     const normalized = normalizeBrazilianServiceNumber(`${match[1] ?? ""}${match[2] ?? ""}`);
@@ -157,9 +159,12 @@ export function extractTelecomServiceNumbers(value: string) {
 }
 
 function labeledIdentifier(value: string, labels: string[]) {
-  const pattern = new RegExp(`(?:${labels.join("|")})\\s*(?:n[ºo°.]|n[uú]mero)?\\s*[:#\\-]?\\s*([A-Z0-9][A-Z0-9.\\/-]{2,39})`, "i");
-  const candidate = value.match(pattern)?.[1]?.replace(/[.,;:]$/, "").trim() || "";
-  return /\d/.test(candidate) ? candidate : null;
+  const pattern = new RegExp(`(?:${labels.join("|")})\\s*(?:n[ºo°.]|n[uú]mero)?\\s*[:#\\-]?\\s*([A-Z0-9][A-Z0-9.\\/-]{2,39})`, "gi");
+  for (const match of value.matchAll(pattern)) {
+    const candidate = match[1]?.replace(/[.,;:]$/, "").trim() || "";
+    if (/\d/.test(candidate)) return candidate;
+  }
+  return null;
 }
 
 function supplierTaxId(value: string) {

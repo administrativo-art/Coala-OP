@@ -108,3 +108,32 @@ test("não confunde telefone de atendimento nem linha digitável com linha cobra
   assert.deepEqual(extractTelecomServiceNumbers(text), []);
   assert.equal(normalizeBrazilianServiceNumber("(98) 99999-1234"), "+5598999991234");
 });
+
+test("extrai telefone principal sem confundir a chave de acesso fiscal", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "A fatura Vivo Móvel da sua empresa chegou",
+    senderDomain: "vivo.com.br",
+    documentText: [
+      "Acesse aqui a Nota Fiscal",
+      "Chave de acesso: 21260902558157000405620040003464881003350381",
+      "Nº da Conta: 0461855379",
+      "Mês de referência: 09/2026",
+      "TELEFONE PRINCIPAL: 98-99907-2739",
+      "Vencimento: 25/09/2026",
+      "Total a Pagar - R$ 39,99",
+    ].join("\n"),
+  });
+
+  assert.equal(parsed.classification.billingIdentity?.customerAccount, "0461855379");
+  assert.deepEqual(parsed.classification.billingIdentity?.serviceNumbers, ["+5598999072739"]);
+  assert.equal(parsed.classification.barcode, null);
+});
+
+test("ignora ocorrência textual de conta e continua até o identificador numérico", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Sua Conta Digital chegou",
+    senderDomain: "vivo.com.br",
+    documentText: "Conta Digital\nNúmero da conta: 0461855379\nFatura Vivo",
+  });
+  assert.equal(parsed.classification.billingIdentity?.customerAccount, "0461855379");
+});
