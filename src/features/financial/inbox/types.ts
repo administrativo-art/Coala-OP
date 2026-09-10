@@ -12,6 +12,25 @@ export type FinancialInboxStatus =
   | "ignored"
   | "error";
 
+export type FinancialInboxStage =
+  | "classify"
+  | "link"
+  | "pay"
+  | "bank"
+  | "done"
+  | "off";
+
+export type FinancialInboxStageSummary = {
+  count: number;
+  amountCents: number;
+};
+
+export type FinancialInboxSummary = {
+  total: FinancialInboxStageSummary;
+  stages: Record<FinancialInboxStage, FinancialInboxStageSummary>;
+  generatedAt: string;
+};
+
 export type FinancialInboxDocumentType =
   | "fgts"
   | "inss_darf"
@@ -94,6 +113,7 @@ export type FinancialInboxProvisionSuggestion = {
   competence: string | null;
   dueDate: string | null;
   provisionedAmountCents: number | null;
+  billingIdentity?: FinancialInboxBillingIdentity | null;
   checkedAt: string | null;
 };
 
@@ -118,6 +138,8 @@ export type FinancialInboxExpenseSuggestion = {
   supplier: string | null;
   amountCents: number | null;
   dueDate: string | null;
+  competence?: string | null;
+  billingIdentity?: FinancialInboxBillingIdentity | null;
   reasons: string[];
   paymentState: "paid" | "scheduled" | "needs_scheduling" | null;
   existingBankPayment: FinancialInboxExistingBankPayment | null;
@@ -133,6 +155,8 @@ export type FinancialInboxExpenseAlternative = {
   supplier: string;
   amountCents: number;
   dueDate: string | null;
+  competence?: string | null;
+  billingIdentity?: FinancialInboxBillingIdentity | null;
   score: number;
   reasons: string[];
 };
