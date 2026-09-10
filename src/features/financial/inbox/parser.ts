@@ -111,10 +111,12 @@ export function normalizePaymentBarcode(value: string) {
 
 export function extractPaymentBarcode(value: string) {
   const labeled = value.match(/(?:linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|c[oó]d(?:igo)?\s+barra)\s*[:\-]?\s*([\d.\s-]{44,70})/i);
+  const formattedBankSlip = value.match(/(?<!\d)(\d{5}\.\d{5}\s+\d{5}\.\d{6}\s+\d{5}\.\d{6}\s+\d\s+\d{14})(?!\d)/);
   const generic = Array.from(value.matchAll(/(?<!\d)([\d][\d.\s-]{42,68}[\d])(?!\d)/g))
     .filter((match) => !/chave\s+de\s+acesso\s*[:\-]?\s*$/i.test(value.slice(Math.max(0, (match.index ?? 0) - 40), match.index)));
   const candidates = [
     labeled?.[1],
+    formattedBankSlip?.[1],
     ...generic.map((match) => match[1]),
   ].filter((candidate): candidate is string => Boolean(candidate));
   for (const candidate of candidates) {
@@ -172,7 +174,21 @@ function labeledIdentifier(value: string, labels: string[]) {
 function supplierTaxId(value: string) {
   const match = value.match(/(?:benefici[aá]rio|cedente|fornecedor)[^\n\r]{0,100}?CNPJ\s*[:\-]?\s*(\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2})/i);
   const normalized = digits(match?.[1]);
-  return normalized.length === 14 ? normalized : null;
+  if (normalized.length === 14) return normalized;
+  const accessKey = value.match(/(?:chave\s+(?:de\s+)?acesso|chave\s+nf-?e)[^\d]{0,20}(\d{44})(?!\d)/i)?.[1];
+  return accessKey ? accessKey.slice(6, 20) : null;
+}
+
+export function extractFinancialDocumentReferences(value: string) {
+  const references = new Set<string>();
+  const patterns = [
+    /(?:NF(?:-?e)?|NFS(?:-?e)?|nota\s+fiscal|pedido|documento)\s*(?:n[ºo°.]|n[uú]mero)?\s*[:#\-]?\s*(\d{3,20})(?!\d)/gi,
+    /(?:^|[_\-\s])(?:NF(?:-?e)?|NFS(?:-?e)?|BOLETO)[_\-\s]+[^\n\r]{0,50}?[_\-\s](\d{3,20})(?=[_.\-\s]|$)/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of value.matchAll(pattern)) references.add(match[1]);
+  }
+  return [...references].slice(0, 20);
 }
 
 function detectServiceType(value: string): FinancialInboxServiceType | null {
@@ -246,6 +262,18 @@ function isLikelyMarketingEmail(input: {
   return !hasBillingEvidence && MARKETING_SUBJECT_TERMS.test(input.subject);
 }
 
+function agreedDocumentHint<T extends string | number>(
+  hints: FinancialInboxDocumentHints[],
+  selector: (hint: FinancialInboxDocumentHints) => T | null | undefined,
+) {
+  const values = hints
+    .filter((hint) => hint.confidence !== "low")
+    .map(selector)
+    .filter((value): value is T => value !== null && value !== undefined);
+  const unique = [...new Set(values)];
+  return unique.length === 1 ? unique[0] : null;
+}
+
 export function classifyFinancialEmail(input: {
   subject: string;
   text?: string | null;
@@ -253,6 +281,7 @@ export function classifyFinancialEmail(input: {
   senderDomain?: string | null;
   documentText?: string | null;
   documentHints?: FinancialInboxDocumentHints[];
+  documentReferences?: string[];
 }): { textContent: string; textPreview: string; classification: FinancialInboxClassification } {
   const textContent = (input.text?.trim() || htmlToPlainText(input.html ?? "")).slice(0, MAX_TEXT_LENGTH);
   const documentText = String(input.documentText ?? "").slice(0, MAX_TEXT_LENGTH);
@@ -260,7 +289,11 @@ export function classifyFinancialEmail(input: {
   const hintText = hints.map((hint) => hint.documentText || "").join("\n").slice(0, MAX_TEXT_LENGTH);
   const combined = `${input.subject}\n${textContent}\n${documentText}\n${hintText}`.slice(0, MAX_TEXT_LENGTH * 2);
   const identified = documentType(combined);
-  const barcode = extractPaymentBarcode(combined) || hints.find((hint) => hint.barcode)?.barcode || null;
+  const barcode = agreedDocumentHint(hints, (hint) => hint.barcode) || extractPaymentBarcode(combined);
+  const documentSupplier = agreedDocumentHint(hints, (hint) => hint.supplierName);
+  const documentCompetence = agreedDocumentHint(hints, (hint) => hint.competence);
+  const documentDueDate = agreedDocumentHint(hints, (hint) => hint.dueDate);
+  const documentAmountCents = agreedDocumentHint(hints, (hint) => hint.amountCents);
   const billingIdentity = mergeBillingIdentities(extractBillingIdentity(combined), hints);
   const marketingLikely = isLikelyMarketingEmail({
     subject: input.subject,
@@ -277,12 +310,16 @@ export function classifyFinancialEmail(input: {
       financeLikely: !marketingLikely && identified.type !== "other",
       marketingLikely,
       confidence: identified.confidence,
-      supplierName: hints.find((hint) => hint.supplierName)?.supplierName || supplierName(input.senderDomain ?? null, combined),
-      competence: extractCompetence(combined) || hints.find((hint) => hint.competence)?.competence || null,
-      dueDate: extractDueDate(combined) || hints.find((hint) => hint.dueDate)?.dueDate || null,
-      amountCents: extractAmount(combined) ?? hints.find((hint) => hint.amountCents != null)?.amountCents ?? null,
+      supplierName: documentSupplier || supplierName(input.senderDomain ?? null, combined),
+      competence: documentCompetence || extractCompetence(combined),
+      dueDate: documentDueDate || extractDueDate(combined),
+      amountCents: documentAmountCents ?? extractAmount(combined),
       barcode,
       barcodeMasked: maskPaymentBarcode(barcode),
+      documentReferences: [...new Set([
+        ...extractFinancialDocumentReferences(combined),
+        ...(input.documentReferences ?? []).flatMap(extractFinancialDocumentReferences),
+      ])].slice(0, 20),
       links: extractExternalLinks(input.text ?? "", input.html ?? ""),
       billingIdentity,
     },

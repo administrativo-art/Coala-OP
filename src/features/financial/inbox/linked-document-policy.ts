@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 
-const DOCUMENT_TERMS = /(?:boleto|fatura|invoice|cobranca|cobran[cç]a|documento|arquivo|download|segunda.?via|conta|pdf|xml)/i;
+const DOCUMENT_TERMS = /(?:boleto|fatura|invoice|cobranca|cobran[cç]a|documento|arquivo|download|segunda.?via|conta|guia|nfse|nota.?fiscal|pdf|xml)/i;
 const REJECTED_TERMS = /(?:unsubscribe|descadastrar|optout|preferencias|privacy|privacidade|marketing|tracking)/i;
 
 function normalizedDomain(value: string) {
@@ -20,6 +20,30 @@ function hostMatches(hostname: string, allowedDomain: string) {
   const host = normalizedDomain(hostname);
   const allowed = normalizedDomain(allowedDomain);
   return Boolean(host && allowed && (host === allowed || host.endsWith(`.${allowed}`)));
+}
+
+/**
+ * Plataformas documentais conhecidas podem entregar boletos e notas em nome de
+ * vários fornecedores. A confiança é limitada ao host e às rotas públicas de
+ * documento, nunca ao domínio inteiro da plataforma.
+ */
+export function isTrustedFinancialDocumentProviderUrl(url: URL) {
+  const hostname = normalizedDomain(url.hostname);
+  const pathname = url.pathname.replace(/\/{2,}/g, "/");
+
+  if (hostMatches(hostname, "superlogica.net")) {
+    return /^\/clients\/areadocliente\/publico\/(?:cobranca\/|espelhonfsepdf\/?$)/i.test(pathname);
+  }
+
+  if (hostname === "app.acessorias.com") {
+    return pathname.toLowerCase() === "/getguia.php";
+  }
+
+  if (hostname === "acessorias.s3.us-east-2.amazonaws.com") {
+    return /^\/econtinuo\/.+\.(?:pdf|xml|png|jpe?g)$/i.test(pathname);
+  }
+
+  return false;
 }
 
 export function configuredFinancialDocumentDomains(value = process.env.FINANCIAL_INBOX_DOCUMENT_DOMAINS ?? "") {
@@ -54,7 +78,8 @@ export function isAllowedFinancialDocumentUrl(
     const hostname = normalizedDomain(url.hostname);
     if (!hostname || hostname === "localhost" || hostname.endsWith(".local") || isIP(hostname)) return false;
     const senderRoot = senderDomain ? registrableDomain(senderDomain) : "";
-    return (senderRoot ? hostMatches(hostname, senderRoot) : false)
+    return isTrustedFinancialDocumentProviderUrl(url)
+      || (senderRoot ? hostMatches(hostname, senderRoot) : false)
       || configuredDomains.some((domain) => hostMatches(hostname, domain));
   } catch {
     return false;

@@ -30,6 +30,7 @@ import {
   financialInboxStageForStatus,
   isFinancialInboxBulkDiscardEligible,
 } from "./presentation";
+import { equivalentSupplier } from "./expense-suggestions";
 import type {
   FinancialInboxBillingIdentity,
   FinancialInboxExpenseAlternative,
@@ -185,6 +186,13 @@ function identityValue(identity: FinancialInboxBillingIdentity | null | undefine
   return identity?.serviceNumbers?.join(", ") || "—";
 }
 
+function maskedTaxId(value: string | null | undefined) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 14) return `**.***.***/****-${digits.slice(-2)}`;
+  if (digits.length === 11) return `***.***.***-${digits.slice(-2)}`;
+  return "—";
+}
+
 function normalizedComparable(value: string) {
   const accentless = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const digits = accentless.replace(/\D/g, "");
@@ -201,12 +209,14 @@ function comparisonRows(message: FinancialInboxMessage): ComparisonRow[] {
   const provision = message.provisionSuggestion;
   const target = expense && ["suggested", "linked"].includes(expense.status) ? expense : provision;
   if (!target || !["suggested", "linked"].includes(target.status)) return [];
+  const supplierMatches = equivalentSupplier(message.classification.supplierName, target.supplier)
+    || Boolean(expense?.reasons.some((reason) => reason === "mesmo CNPJ do fornecedor"));
   const rows: ComparisonRow[] = [
     {
       label: "Fornecedor",
       received: message.classification.supplierName || "—",
       registered: target.supplier || "—",
-      state: "missing",
+      state: supplierMatches ? "same" : "missing",
     },
     {
       label: "Competência",
@@ -229,6 +239,20 @@ function comparisonRows(message: FinancialInboxMessage): ComparisonRow[] {
   ];
   const sourceIdentity = message.classification.billingIdentity;
   const targetIdentity = target.billingIdentity;
+  if (sourceIdentity?.supplierTaxId || targetIdentity?.supplierTaxId) {
+    rows.push({ label: "CNPJ/CPF", received: maskedTaxId(sourceIdentity?.supplierTaxId), registered: maskedTaxId(targetIdentity?.supplierTaxId), state: "missing" });
+  }
+  if (expense?.matchedBarcodeMasked || message.classification.barcodeMasked) {
+    rows.push({ label: "Boleto", received: message.classification.barcodeMasked || "—", registered: expense?.matchedBarcodeMasked || "—", state: "missing" });
+  }
+  if ((message.classification.documentReferences?.length ?? 0) > 0 || (expense?.matchedDocumentReferences?.length ?? 0) > 0) {
+    rows.push({
+      label: "NF / documento",
+      received: message.classification.documentReferences?.join(", ") || "—",
+      registered: expense?.matchedDocumentReferences?.join(", ") || "—",
+      state: "missing",
+    });
+  }
   if (sourceIdentity?.customerAccount || targetIdentity?.customerAccount) {
     rows.push({ label: "Conta do cliente", received: identityValue(sourceIdentity, "account"), registered: identityValue(targetIdentity, "account"), state: "missing" });
   }
@@ -238,7 +262,10 @@ function comparisonRows(message: FinancialInboxMessage): ComparisonRow[] {
   if ((sourceIdentity?.serviceNumbers?.length ?? 0) > 0 || (targetIdentity?.serviceNumbers?.length ?? 0) > 0) {
     rows.push({ label: "Linha / telefone", received: identityValue(sourceIdentity, "phone"), registered: identityValue(targetIdentity, "phone"), state: "missing" });
   }
-  return rows.map((row) => ({ ...row, state: comparisonState(row.received, row.registered) }));
+  return rows.map((row) => ({
+    ...row,
+    state: row.state === "same" ? "same" : comparisonState(row.received, row.registered),
+  }));
 }
 
 function StatusChip({ status }: { status: FinancialInboxStatus }) {

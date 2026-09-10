@@ -92,6 +92,43 @@ test("não escolhe automaticamente quando duas parcelas são equivalentes", () =
   assert.equal(suggestion.status, "ambiguous");
 });
 
+test("linha digitável idêntica identifica o mesmo boleto apesar da variação no nome", () => {
+  const barcode = "23793493079001004992396000130003915620000113884";
+  const suggestion = chooseExistingExpenseSuggestion({
+    ...classification,
+    supplierName: "Nome abreviado sem equivalência textual",
+    barcode,
+    barcodeMasked: null,
+  }, [marviExpense({
+    supplier: "Marvi Alimentos",
+    installments: [{
+      number: 1,
+      value: 1138.84,
+      dueDate: "2026-09-07",
+      status: "pending",
+      bankLine: "23793.49307 90010.049923 96000.130003 9 15620000113884",
+    }],
+  })]);
+
+  assert.equal(suggestion.status, "suggested");
+  assert.equal(suggestion.matchStrength, "document");
+  assert.match(suggestion.reasons.join(" "), /mesmo boleto/);
+  assert.match(suggestion.matchedBarcodeMasked || "", /^23793.*13884$/);
+});
+
+test("número da NF reforça valor e vencimento quando o boleto não foi extraído", () => {
+  const suggestion = chooseExistingExpenseSuggestion({
+    ...classification,
+    supplierName: "Nome comercial diferente",
+    documentReferences: ["872460"],
+  }, [marviExpense()]);
+
+  assert.equal(suggestion.status, "suggested");
+  assert.equal(suggestion.matchStrength, "document");
+  assert.deepEqual(suggestion.matchedDocumentReferences, ["872460"]);
+  assert.match(suggestion.reasons.join(" "), /mesmo documento\/NF 872460/);
+});
+
 test("telefonia exige a mesma linha para sugerir automaticamente", () => {
   const telecomClassification: FinancialInboxClassification = {
     ...classification,

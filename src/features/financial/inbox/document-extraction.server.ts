@@ -206,7 +206,7 @@ export async function extractFinancialDocument(params: {
       senderDomain: params.senderDomain,
     });
     if (useAi) {
-      const hints = await extractWithAi({ ...params, deterministicText: text });
+      const hints = await extractWithAi({ ...params, deterministicText: text }).catch(() => null);
       if (hints) {
         const combinedText = [text, hints.documentText].filter(Boolean).join("\n\n").slice(0, MAX_EXTRACTED_TEXT);
         return { status: "ocr_extracted", method: "ai_document", text: combinedText, pageCount, hints };

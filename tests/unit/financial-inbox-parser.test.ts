@@ -5,6 +5,7 @@ import {
   classifyFinancialEmail,
   extractEmailAddress,
   extractExternalLinks,
+  extractFinancialDocumentReferences,
   extractPaymentBarcode,
   extractTelecomServiceNumbers,
   htmlToPlainText,
@@ -34,6 +35,40 @@ test("extrai e mascara linha digitável sem confundir outros números", () => {
   assert.equal(extractPaymentBarcode(`Telefone 98999999999. Linha digitável: ${code}`), "34191790010104351004791020150008895190000003999");
   assert.equal(parsed.classification.barcode, "34191790010104351004791020150008895190000003999");
   assert.match(parsed.classification.barcodeMasked || "", /^34191.*03999$/);
+});
+
+test("extrai linha digitável quando o PDF inclui o código do banco antes do boleto", () => {
+  const text = "237-2   23793.49307 90010.049923 96000.130003 9 15620000113884";
+  assert.equal(
+    extractPaymentBarcode(text),
+    "23793493079001004992396000130003915620000113884",
+  );
+});
+
+test("dados estruturados concordantes do boleto prevalecem sobre encargos citados no e-mail", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Seu boleto vencerá em breve",
+    text: "Após o vencimento haverá mora diária de R$ 5,71.",
+    documentText: "Valor do documento: R$ 285,60. Vencimento: 25/09/2026.",
+    documentHints: [{
+      documentText: null,
+      supplierName: "Bizneo Solutions do Brasil Ltda",
+      supplierTaxId: "46164085000144",
+      competence: null,
+      dueDate: "2026-09-25",
+      amountCents: 28560,
+      barcode: "48190000030000515057880058150147115800000028560",
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "other",
+      serviceNumbers: [],
+      confidence: "high",
+    }],
+  });
+
+  assert.equal(parsed.classification.amountCents, 28560);
+  assert.equal(parsed.classification.dueDate, "2026-09-25");
+  assert.equal(parsed.classification.barcode, "48190000030000515057880058150147115800000028560");
 });
 
 test("classifica INSS-DARF e extrai valor brasileiro somente como sugestão", () => {
@@ -77,6 +112,26 @@ test("identifica fornecedor e vencimento no assunto do boleto da Marvi", () => {
   assert.equal(parsed.classification.supplierName, "Marvi");
   assert.equal(parsed.classification.dueDate, "2026-09-07");
   assert.equal(parsed.classification.amountCents, 113884);
+});
+
+test("extrai referências de NF do texto e do nome do anexo", () => {
+  assert.deepEqual(extractFinancialDocumentReferences("Compra referente à NF-e 872460"), ["872460"]);
+  const parsed = classifyFinancialEmail({
+    subject: "Aviso de vencimento de boleto",
+    text: "Valor: R$ 1.138,84. Vencimento: 07/09/2026.",
+    senderDomain: "marvi.com.br",
+    documentReferences: ["BOLETO_COALA_SHAKES_CD_872460.PDF"],
+  });
+  assert.deepEqual(parsed.classification.documentReferences, ["872460"]);
+});
+
+test("obtém o CNPJ do fornecedor na chave de acesso da NF-e", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "NF-e 872460",
+    text: "Chave de acesso 35260853408654000115550010008724601319021139",
+    senderDomain: "marvi.com.br",
+  });
+  assert.equal(parsed.classification.billingIdentity?.supplierTaxId, "53408654000115");
 });
 
 test("extrai identidade da linha móvel do documento anexado", () => {

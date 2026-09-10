@@ -43,12 +43,17 @@ function safeFileName(value: string) {
 function contentTypeFrom(response: Response, buffer: Buffer, url: string) {
   const declared = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   if (buffer.subarray(0, 5).toString("ascii") === "%PDF-") return "application/pdf";
-  if (declared === "application/pdf" || /\/pdf$/i.test(new URL(url).pathname)) return "application/pdf";
-  if (declared.includes("xml") || /\.xml$/i.test(new URL(url).pathname)) return "application/xml";
-  if (declared.startsWith("image/")) return declared;
-  if (declared === "text/plain" || declared === "text/csv") return declared;
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (["GIF87a", "GIF89a"].includes(buffer.subarray(0, 6).toString("ascii"))) return "image/gif";
+  if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  const textualPrefix = buffer.subarray(0, 512).toString("utf8").trimStart();
+  if ((declared.includes("xml") || /\.xml$/i.test(new URL(url).pathname)) && /^<\?xml\b|^<[A-Za-z_][\w:.-]*/.test(textualPrefix)) {
+    return "application/xml";
+  }
+  if ((declared === "text/plain" || declared === "text/csv") && !buffer.includes(0)) return declared;
   if (declared === "text/html" || declared === "application/xhtml+xml") return "text/html";
-  return declared || "application/octet-stream";
+  return "application/octet-stream";
 }
 
 function filenameFrom(response: Response, url: string, contentType: string) {
@@ -174,18 +179,6 @@ function documentCandidateLinks(message: FinancialInboxMessage) {
 
 export async function archiveFinancialInboxLinkedDocuments(message: FinancialInboxMessage) {
   const checkedAt = new Date().toISOString();
-  const storedLinkedSource = message.attachments.find((attachment) => attachment.archiveStatus === "stored" && attachment.sourceType === "link");
-  if (storedLinkedSource) {
-    return {
-      attachments: message.attachments,
-      resolution: {
-        status: "resolved",
-        checkedAt,
-        sourceDomain: storedLinkedSource.sourceDomain ?? null,
-        message: "O documento indicado pelo link está arquivado.",
-      } satisfies FinancialInboxLinkResolution,
-    };
-  }
   const storedSource = message.attachments.some((attachment) => attachment.archiveStatus === "stored" && attachment.sourceType !== "link");
   if (storedSource || message.classification.links.length === 0) {
     return {
@@ -212,14 +205,18 @@ export async function archiveFinancialInboxLinkedDocuments(message: FinancialInb
   }
 
   let last: ResolvedResponse | null = null;
+  const attachments = [...message.attachments];
+  let storedLinkedDocuments = attachments.filter(
+    (attachment) => attachment.archiveStatus === "stored" && attachment.sourceType === "link",
+  ).length;
   for (const link of links) {
     const fingerprint = createHash("sha256").update(link).digest("hex");
-    if (message.attachments.some((attachment) => attachment.sourceFingerprint === fingerprint)) continue;
+    if (attachments.some((attachment) => attachment.sourceFingerprint === fingerprint)) continue;
     const resolved = await resolveUrl(link, message.senderDomain);
     last = resolved;
     if (resolved.kind !== "document") continue;
     const hash = createHash("sha256").update(resolved.buffer).digest("hex");
-    if (message.attachments.some((attachment) => attachment.sha256 === hash)) continue;
+    if (attachments.some((attachment) => attachment.sha256 === hash)) continue;
     const id = `link_${fingerprint.slice(0, 24)}`;
     const storagePath = `financial-inbox/${safeId(message.workspaceId)}/${safeId(message.id)}/linked/${id}-${resolved.filename}`;
     await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(storagePath).save(resolved.buffer, {
@@ -245,13 +242,23 @@ export async function archiveFinancialInboxLinkedDocuments(message: FinancialInb
       sourceFingerprint: fingerprint,
       extractionStatus: "not_attempted",
     };
+    attachments.push(attachment);
+    storedLinkedDocuments += 1;
+  }
+
+  if (storedLinkedDocuments > 0) {
+    const storedLinkedSource = attachments.findLast(
+      (attachment) => attachment.archiveStatus === "stored" && attachment.sourceType === "link",
+    );
     return {
-      attachments: [...message.attachments, attachment],
+      attachments,
       resolution: {
         status: "resolved",
         checkedAt,
-        sourceDomain: attachment.sourceDomain ?? null,
-        message: "O documento indicado pelo link foi arquivado com segurança.",
+        sourceDomain: storedLinkedSource?.sourceDomain ?? null,
+        message: storedLinkedDocuments === 1
+          ? "O documento indicado pelo link foi arquivado com segurança."
+          : `${storedLinkedDocuments} documentos indicados pelos links foram arquivados com segurança.`,
       } satisfies FinancialInboxLinkResolution,
     };
   }
