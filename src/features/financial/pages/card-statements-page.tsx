@@ -50,7 +50,10 @@ import {
   type CreditCardInstrument,
 } from "@/features/financial/lib/card-invoices";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
-import type { CardStatementImportPreview } from "@/features/financial/lib/card-statement-import";
+import {
+  cardStatementCreditTotal,
+  type CardStatementImportPreview,
+} from "@/features/financial/lib/card-statement-import";
 import {
   buildCardStatementExpenseCandidates,
   matchCardStatementExpenses,
@@ -71,6 +74,15 @@ type StatementDocument = {
   linkedBankTransactionId?: string;
   linkedBankTransactionIds?: string[];
   allocations?: CardStatementAllocation[];
+  grossChargesTotal?: number;
+  creditTotal?: number;
+  credits?: Array<{
+    sourceReference?: string;
+    description?: string;
+    amount?: number;
+    kind?: "credit" | "refund";
+    reason?: string;
+  }>;
   settlements?: Array<{
     transactionId: string;
     amount: number;
@@ -311,9 +323,11 @@ export function CardStatementsWorkspace({
   ) ?? monthGroups[0] ?? null;
   const selectedStatement = selectedGroup ? statementByKey.get(selectedGroup.key) ?? null : null;
   const officialTotal = Number(selectedStatement?.officialTotal || 0);
-  const postedTotal = selectedGroup?.lines
+  const statementCreditTotal = Math.max(0, Number(selectedStatement?.creditTotal || 0));
+  const postedGrossTotal = selectedGroup?.lines
     .filter((line) => !isCardLineForecast(line))
     .reduce((total, line) => total + line.value, 0) ?? 0;
+  const postedTotal = Math.max(0, Number((postedGrossTotal - statementCreditTotal).toFixed(2)));
   const difference = officialTotal > 0 && selectedGroup
     ? Number((officialTotal - postedTotal).toFixed(2))
     : null;
@@ -423,6 +437,7 @@ export function CardStatementsWorkspace({
   );
   const revisionRemovedCount = importPreview?.revision?.summary.removed || 0;
   const hasImportChanges = selectedImportLines.length > 0 || revisionRemovedCount > 0;
+  const importCreditTotal = cardStatementCreditTotal(importPreview?.excludedEntries);
   const importBlocked = importPreview?.revision?.blockedReason === "paid_statement";
   const importNeedsUnavailableReopen = importPreview?.revision?.requiresReopen && !canCloseCardStatements;
 
@@ -764,9 +779,10 @@ export function CardStatementsWorkspace({
   const statementStatus = selectedStatement?.status || "open";
   const selectedGroupLineCount = selectedGroup?.lines.length || 0;
   const valuesBalanced = difference !== null && Math.abs(difference) <= 0.05;
-  const reconciledTotal = selectedGroup?.lines
+  const reconciledGrossTotal = selectedGroup?.lines
     .filter((line) => line.reconciled)
     .reduce((total, line) => total + line.value, 0) || 0;
+  const reconciledTotal = Math.max(0, Number((reconciledGrossTotal - statementCreditTotal).toFixed(2)));
   const postedProgress = officialTotal > 0
     ? Math.min(100, Math.round((postedTotal / officialTotal) * 100))
     : 0;
@@ -1513,6 +1529,10 @@ export function CardStatementsWorkspace({
                         />
                       </div>
                       <div className="mt-2 flex items-baseline justify-between gap-3">
+                        <span className="text-[11.5px] text-muted-foreground">Créditos e estornos</span>
+                        <span className="font-mono text-[13.5px] font-extrabold text-emerald-700">− {formatCurrency(statementCreditTotal)}</span>
+                      </div>
+                      <div className="mt-2 flex items-baseline justify-between gap-3">
                         <span className="text-[11.5px] text-muted-foreground">Total oficial da fatura</span>
                         <span className="font-mono text-[13.5px] font-extrabold">{formatCurrency(officialTotal)}</span>
                       </div>
@@ -1683,6 +1703,7 @@ export function CardStatementsWorkspace({
                   {importPreview.analysis.detectedFormat ? <span>Formato: {importPreview.analysis.detectedFormat}</span> : null}
                   <span>Compras: {importPreview.transactions.length}</span>
                   <span>Soma das compras: {formatCurrency(importPreview.analysis.includedTotal)}</span>
+                  {importCreditTotal > 0 ? <span>Créditos/estornos: − {formatCurrency(importCreditTotal)}</span> : null}
                   <span>Excluídos: {importPreview.analysis.excludedCount}</span>
                 </div>
               </div>
@@ -1889,8 +1910,13 @@ export function CardStatementsWorkspace({
               {importPreview.excludedEntries.length > 0 ? (
                 <details className="rounded-[13px] border border-[#e9e5dc] bg-[#fbfaf7] px-[15px] py-3 text-xs">
                   <summary className="cursor-pointer text-[11.5px] font-extrabold text-muted-foreground">
-                    {importPreview.excludedEntries.length} movimento(s) não serão importados
+                    {importPreview.excludedEntries.length} movimento(s) separados das despesas
                   </summary>
+                  {importCreditTotal > 0 ? (
+                    <p className="mt-2 text-[10.5px] font-semibold text-emerald-700">
+                      Créditos e estornos reduzirão o total da fatura em {formatCurrency(importCreditTotal)}.
+                    </p>
+                  ) : null}
                   <div className="mt-2.5 space-y-1.5">
                     {importPreview.excludedEntries.map((entry) => (
                       <div key={entry.sourceReference} className="flex items-start justify-between gap-3 rounded-lg border border-[#f0ece3] bg-white px-3 py-2">

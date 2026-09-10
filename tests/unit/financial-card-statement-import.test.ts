@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  cardStatementCreditTotal,
   inspectCardStatementCsv,
   normalizeCardStatementImportLines,
   parseCardStatementCsv,
@@ -10,6 +11,15 @@ import {
 } from "../../src/features/financial/lib/card-statement-import";
 
 const context = { accountId: "inter", paymentMethodId: "card-1127", monthKey: "2026-08" };
+
+test("soma apenas créditos e estornos que reduzem a fatura", () => {
+  assert.equal(cardStatementCreditTotal([
+    { kind: "credit", amount: 275.52 },
+    { kind: "refund", amount: 117.99 },
+    { kind: "payment", amount: 2350.65 },
+    { kind: "summary", amount: 6531.35 },
+  ]), 393.51);
+});
 
 test("interpreta CSV de fatura com valores brasileiros", () => {
   const parsed = parseCardStatementCsv(
