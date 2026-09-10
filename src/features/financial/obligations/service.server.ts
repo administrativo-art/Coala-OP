@@ -3,6 +3,7 @@ import { FieldValue, Timestamp, type WriteBatch } from "firebase-admin/firestore
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { consultExpenseProvision } from "@/features/financial/lib/expense-provisions";
+import { planPaymentRequestStatementSettlement } from "@/features/financial/payment-requests/statement-settlement";
 import { calculateFinancialObligationSummary, moneyToCents } from "./calculations";
 import type { RegisterReportedPaymentInput } from "./schemas";
 import type {
@@ -113,6 +114,7 @@ export async function queueMatchedBankPayment(params: {
   chargesAccountPlanId?: string | null;
   chargesAccountPlanName?: string | null;
   chargeExpenseId?: string | null;
+  settlePaymentRequest?: boolean;
 }): Promise<MatchedBankPaymentResult> {
   const actualAmountCents = params.expense.provisionType === "forecast"
     ? null
@@ -358,6 +360,41 @@ export async function queueMatchedBankPayment(params: {
     actor: actorPayload,
     occurredAt: now,
   }, { merge: true });
+
+  if (summary.obligationStatus === "PAID" && params.settlePaymentRequest !== false) {
+    const storedPaymentRequestId = String(params.expense.paymentRequestId || "").trim();
+    const paymentRequestSnapshots = storedPaymentRequestId
+      ? [await financialDbAdmin.collection("bankPaymentRequests").doc(storedPaymentRequestId).get()]
+      : (await financialDbAdmin.collection("bankPaymentRequests")
+          .where("expenseId", "==", params.expenseId)
+          .limit(2)
+          .get()).docs;
+    const paymentRequests = paymentRequestSnapshots.filter((document) => document.exists);
+    if (paymentRequests.length > 1) {
+      throw new Error("Há mais de uma solicitação bancária para a mesma despesa.");
+    }
+    const paymentRequestSnapshot = paymentRequests[0];
+    if (paymentRequestSnapshot) {
+      const request = { id: paymentRequestSnapshot.id, ...paymentRequestSnapshot.data() } as import("@/features/financial/payment-requests/types").BankPaymentRequest;
+      const observedAt = now.toDate().toISOString();
+      const settlement = planPaymentRequestStatementSettlement({
+        request,
+        expenseId: params.expenseId,
+        bankTransactionId: params.bankTransactionId,
+        cashAmount: cashAmountCents / 100,
+        paidAt: params.paidAt.toDate().toISOString(),
+        observedAt,
+      });
+      if (settlement) {
+        params.batch.set(paymentRequestSnapshot.ref, settlement.patch, { merge: true });
+        params.batch.set(
+          paymentRequestSnapshot.ref.collection("events").doc(`statement-payment-${safeKey(params.bankTransactionId)}`),
+          settlement.event,
+          { merge: true },
+        );
+      }
+    }
+  }
   const expensePatch = {
     obligationId,
     status: summary.obligationStatus === "PAID" ? "paid" : summary.obligationStatus === "PARTIALLY_PAID" ? "partially_paid" : "pending",

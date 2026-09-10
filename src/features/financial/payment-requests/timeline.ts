@@ -144,5 +144,11 @@ export function buildPaymentTimeline(
           ? "fail" as const
           : "pending" as const,
     }] : []),
+    ...(item.beneficiaryVerificationStatus === "divergent" ? [{
+      title: "Conferência cadastral do favorecido",
+      meta: item.beneficiaryVerificationWarning
+        ?? "O documento retornado pelo banco divergiu do cadastro; a liquidação no extrato foi preservada.",
+      state: "fail" as const,
+    }] : []),
   ];
 }

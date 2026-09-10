@@ -236,8 +236,7 @@ if (APPLY) {
 }
 
 if (APPLY_BANK) {
-  for (const { expense, transaction, alreadyLinked } of bankPlan) {
-    if (alreadyLinked) continue;
+  for (const { expense, transaction } of bankPlan) {
     const paidAt = transaction.date instanceof Timestamp
       ? transaction.date
       : Timestamp.fromDate(new Date(transaction.date));
@@ -330,7 +329,7 @@ if (bankPlan.length) {
 }
 console.log(JSON.stringify({
   provisionsApplied: APPLY ? plan.length : 0,
-  bankPaymentsApplied: APPLY_BANK ? bankPlan.filter((row) => !row.alreadyLinked).length : 0,
+  bankPaymentsApplied: APPLY_BANK ? bankPlan.length : 0,
   bankPaymentsAlreadyLinked: bankPlan.filter((row) => row.alreadyLinked).length,
   verification,
 }, null, 2));

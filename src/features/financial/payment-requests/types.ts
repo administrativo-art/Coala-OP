@@ -39,6 +39,7 @@ type BankPaymentRequestBase = {
   endToEndId?: string;
   statementReconciliationStatus?: "not_expected" | "expected" | "matched" | "divergent";
   statementTransactionId?: string;
+  bankReconciliationDivergenceField?: "amount" | "beneficiary_source" | "receiver" | null;
   proofStoragePath?: string;
   postPaymentProcessingStatus?: "pending" | "completed";
   postPaymentProcessingAttemptCount?: number;
@@ -55,6 +56,9 @@ type BankPaymentRequestBase = {
   bankLiquidationObservedAt?: string;
   nextBankStatusCheckAt?: string | null;
   bankStatusPollFailureCount?: number;
+  beneficiaryVerificationStatus?: "verified" | "divergent" | "unavailable";
+  beneficiaryVerificationWarning?: string | null;
+  beneficiaryVerificationObservedAt?: string | null;
   paidAt?: string;
   createdAt: string;
   createdBy: string;

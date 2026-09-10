@@ -8,6 +8,7 @@ import {
   maskBrazilianDocument,
   maskPaymentDestination,
   normalizeBrazilianDocument,
+  pixDocumentKeyMatchesHolder,
   toIsoString,
 } from "./normalization";
 import { paymentBeneficiaryReferenceSchema } from "./schemas";
@@ -34,13 +35,17 @@ async function resolveEmployee(sourceId: string): Promise<ResolvedPaymentBenefic
   const pixKey = fieldText(pix.data());
   if (document.length !== 11) throw new Error("O CPF do colaborador está incompleto.");
   if (!pixKey) throw new Error("O colaborador não possui chave Pix cadastrada.");
+  const pixKeyType = inferPixKeyType(pixKey);
+  if (!pixDocumentKeyMatchesHolder({ pixKey, pixKeyType, holderDocument: document })) {
+    throw new Error("A chave Pix documental não pertence ao CPF do colaborador.");
+  }
   return {
     sourceType: "employee",
     sourceId,
     name: String(employee.get("name") ?? employee.get("email") ?? "Colaborador"),
     document,
     paymentMethod: "pix_key",
-    pixKeyType: inferPixKeyType(pixKey),
+    pixKeyType,
     pixKey,
     validated: true,
     sourceUpdatedAt: toIsoString(pix.get("updated_at") ?? employee.get("synced_at")) ?? new Date(0).toISOString(),
@@ -60,13 +65,17 @@ async function resolveEntity(sourceId: string): Promise<ResolvedPaymentBeneficia
   if (!paymentData.pixKey) {
     throw new Error("A pessoa ou empresa não possui chave Pix cadastrada.");
   }
+  const pixKeyType = profile.get("pixKeyType") ?? inferPixKeyType(paymentData.pixKey);
+  if (!pixDocumentKeyMatchesHolder({ pixKey: paymentData.pixKey, pixKeyType, holderDocument: entityDocument })) {
+    throw new Error("A chave Pix documental não pertence ao CPF/CNPJ do favorecido.");
+  }
   return {
     sourceType: "entity",
     sourceId,
     name: String(entity.get("name") ?? entity.get("razao_social") ?? "Favorecido"),
     document: entityDocument,
     paymentMethod: "pix_key",
-    pixKeyType: profile.get("pixKeyType") ?? undefined,
+    pixKeyType,
     pixKey: paymentData.pixKey,
     validated: true,
     sourceUpdatedAt: String(profile.get("updatedAt") ?? new Date(0).toISOString()),
