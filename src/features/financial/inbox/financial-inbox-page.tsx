@@ -70,6 +70,7 @@ const STATUS_LABEL: Record<FinancialInboxStatus, string> = {
   reconciled: "Conciliada",
   divergent: "Divergente",
   ignored: "Ignorada",
+  archived: "Arquivada",
   error: "Erro",
 };
 
@@ -85,6 +86,7 @@ const STATUS_TONE: Record<FinancialInboxStatus, string> = {
   reconciled: "border-emerald-200 bg-emerald-50 text-emerald-800",
   divergent: "border-orange-200 bg-orange-50 text-orange-800",
   ignored: "border-stone-200 bg-stone-50 text-stone-600",
+  archived: "border-stone-300 bg-stone-100 text-stone-700",
   error: "border-red-200 bg-red-50 text-red-800",
 };
 
@@ -106,6 +108,7 @@ const STAGE_OPTIONS: Array<{ value: FinancialInboxStage | "all"; label: string }
   { value: "bank", label: "No banco" },
   { value: "done", label: "Concluídas" },
   { value: "off", label: "Descartadas" },
+  { value: "archive", label: "Arquivadas" },
 ];
 
 const EMPTY_SUMMARY: FinancialInboxSummary = {
@@ -117,6 +120,7 @@ const EMPTY_SUMMARY: FinancialInboxSummary = {
     bank: { count: 0, amountCents: 0 },
     done: { count: 0, amountCents: 0 },
     off: { count: 0, amountCents: 0 },
+    archive: { count: 0, amountCents: 0 },
   },
   generatedAt: "",
 };
@@ -414,6 +418,19 @@ export function FinancialInboxPage() {
     }
   }
 
+  async function restoreArchived(message: FinancialInboxMessage) {
+    setWorking(`restore:${message.id}`);
+    try {
+      await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/restore`, { method: "POST" });
+      toast({ title: "Cobrança restaurada.", description: "O status tratado original e toda a trilha foram preservados." });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao restaurar a cobrança." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function analyze(message: FinancialInboxMessage) {
     setWorking(`analyze:${message.id}`);
     try {
@@ -649,6 +666,7 @@ export function FinancialInboxPage() {
                         {financialInboxStageForStatus(selected.status) === "bank" ? <><p className="font-bold">Acompanhar a situação no banco</p><p className="text-sm text-muted-foreground">A conciliação só ocorre depois da liquidação encontrada no extrato.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "done" ? <><p className="font-bold">Cobrança conciliada</p><p className="text-sm text-muted-foreground">O vínculo e a liquidação foram preservados para auditoria.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "off" ? <><p className="font-bold">Mensagem descartada</p><p className="text-sm text-muted-foreground">Nenhum efeito financeiro foi produzido.</p></> : null}
+                        {financialInboxStageForStatus(selected.status) === "archive" ? <><p className="font-bold">Mensagem arquivada pela política de retenção</p><p className="text-sm text-muted-foreground">Fora da caixa operacional; a trilha e os vínculos continuam preservados.</p></> : null}
                       </div>
                       <div className="shrink-0">
                         {financialInboxStageForStatus(selected.status) === "classify" && canAnalyze ? <Button onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><Sparkles className="mr-2 h-4 w-4" />Analisar cobrança</Button> : null}
@@ -657,6 +675,7 @@ export function FinancialInboxPage() {
                         {financialInboxStageForStatus(selected.status) === "pay" && canPreparePayment && !selected.paymentRequestId ? <Button onClick={() => setConfirmation({ kind: "payment", message: selected })}><ShieldCheck className="mr-2 h-4 w-4" />Preparar pagamento</Button> : null}
                         {financialInboxStageForStatus(selected.status) === "bank" && permissions.financial?.paymentRequests?.view ? <Button asChild><Link href={FINANCIAL_ROUTES.paymentRequests}><Landmark className="mr-2 h-4 w-4" />Abrir no banco</Link></Button> : null}
                         {financialInboxStageForStatus(selected.status) === "off" && canDiscard ? <Button variant="outline" onClick={() => void review(selected, "pending_review")} disabled={working === `review:${selected.id}`}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</Button> : null}
+                        {financialInboxStageForStatus(selected.status) === "archive" && canDiscard ? <Button variant="outline" onClick={() => void restoreArchived(selected)} disabled={working === `restore:${selected.id}`}>{working === `restore:${selected.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}Restaurar</Button> : null}
                       </div>
                     </div>
                   </section>

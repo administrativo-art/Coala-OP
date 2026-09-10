@@ -6,6 +6,11 @@ import {
   isFinancialInboxBulkDiscardEligible,
   matchesFinancialInboxSearch,
 } from "./presentation";
+import {
+  financialInboxSearchLookupToken,
+  FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
+  FINANCIAL_INBOX_SEARCH_STATE_ID,
+} from "./search-index";
 import type {
   FinancialInboxMessage,
   FinancialInboxStage,
@@ -17,10 +22,11 @@ import { serializeFinancialValue } from "@/features/financial/lib/server-access"
 
 const COLLECTION = "financialInboxMessages";
 const SEARCH_SCAN_LIMIT = 500;
-const LIST_STATUSES = new Set<FinancialInboxStatus>([
+const ACTIVE_STATUSES: FinancialInboxStatus[] = [
   "pending_review", "document_pending", "suggestion_available", "under_review", "linked",
   "awaiting_authorization", "scheduled", "awaiting_statement", "reconciled", "divergent", "ignored", "error",
-]);
+];
+const FILTER_STATUSES = new Set<FinancialInboxStatus>([...ACTIVE_STATUSES, "archived"]);
 
 export class FinancialInboxReviewError extends Error {
   constructor(readonly code: "EMPTY_SELECTION" | "NOT_FOUND" | "STATE_CONFLICT") {
@@ -76,6 +82,7 @@ function scopedInboxQuery(workspaceId: string, status: FinancialInboxStatus | nu
   let query: FirebaseFirestore.Query = financialDbAdmin.collection(COLLECTION).where("workspaceId", "==", workspaceId);
   if (status) query = query.where("status", "==", status);
   else if (stage) query = query.where("status", "in", FINANCIAL_INBOX_STAGE_STATUSES[stage]);
+  else query = query.where("status", "in", ACTIVE_STATUSES);
   return query;
 }
 
@@ -96,11 +103,77 @@ async function summarizeFinancialInbox(workspaceId: string): Promise<FinancialIn
     }] as const;
   }));
   const stages = Object.fromEntries(entries) as FinancialInboxSummary["stages"];
-  const total = entries.reduce((result, [, value]) => ({
+  const total = entries.filter(([stage]) => stage !== "archive").reduce((result, [, value]) => ({
     count: result.count + value.count,
     amountCents: result.amountCents + value.amountCents,
   }), { count: 0, amountCents: 0 });
   return { total, stages, generatedAt: new Date().toISOString() };
+}
+
+async function financialInboxSearchIndexReady() {
+  const snapshot = await financialDbAdmin.collection("financialSystemState").doc(FINANCIAL_INBOX_SEARCH_STATE_ID).get();
+  return snapshot.exists
+    && snapshot.get("version") === FINANCIAL_INBOX_SEARCH_INDEX_VERSION
+    && snapshot.get("complete") === true;
+}
+
+async function listIndexedFinancialInboxSearch(params: {
+  query: FirebaseFirestore.Query;
+  search: string;
+  pageSize: number;
+  cursor: string | null;
+}) {
+  const lookupToken = financialInboxSearchLookupToken(params.search);
+  if (!lookupToken) return { messages: [], nextCursor: null, searchTruncated: false, searchIndexed: true };
+  const baseQuery = params.query
+    .where("searchTerms", "array-contains", lookupToken)
+    .orderBy("receivedAt", "desc")
+    .orderBy(FieldPath.documentId(), "desc");
+  let scanCursor = decodeCursor(params.cursor);
+  let scanned = 0;
+  let reachedEnd = false;
+  const matches: Array<{ document: FirebaseFirestore.QueryDocumentSnapshot; message: FinancialInboxMessage }> = [];
+  while (matches.length <= params.pageSize && scanned < SEARCH_SCAN_LIMIT) {
+    const candidateLimit = Math.min(100, SEARCH_SCAN_LIMIT - scanned);
+    let candidateQuery = baseQuery.limit(candidateLimit);
+    if (scanCursor) candidateQuery = candidateQuery.startAfter(scanCursor.receivedAt, scanCursor.id);
+    const snapshot = await candidateQuery.get();
+    if (snapshot.empty) {
+      reachedEnd = true;
+      break;
+    }
+    for (const document of snapshot.docs) {
+      scanCursor = { receivedAt: String(document.get("receivedAt")), id: document.id };
+      scanned += 1;
+      const message = {
+        id: document.id,
+        ...serializeFinancialValue(document.data()) as Omit<FinancialInboxMessage, "id">,
+      };
+      if (matchesFinancialInboxSearch(message, params.search)) matches.push({ document, message });
+      if (matches.length > params.pageSize || scanned >= SEARCH_SCAN_LIMIT) break;
+    }
+    if (matches.length > params.pageSize || scanned >= SEARCH_SCAN_LIMIT) break;
+    if (snapshot.size < candidateLimit) {
+      reachedEnd = true;
+      break;
+    }
+  }
+  const visible = matches.slice(0, params.pageSize);
+  const lastVisible = visible.at(-1)?.document;
+  const hasMore = matches.length > params.pageSize || !reachedEnd;
+  const nextCursor = hasMore
+    ? lastVisible
+      ? encodeCursor(String(lastVisible.get("receivedAt")), lastVisible.id)
+      : scanCursor
+        ? encodeCursor(scanCursor.receivedAt, scanCursor.id)
+        : null
+    : null;
+  return {
+    messages: visible.map((match) => match.message),
+    nextCursor,
+    searchTruncated: false,
+    searchIndexed: true,
+  };
 }
 
 export async function listFinancialInboxMessages(params: {
@@ -112,15 +185,27 @@ export async function listFinancialInboxMessages(params: {
   cursor?: string | null;
 }) {
   const pageSize = Math.max(1, Math.min(50, params.limit || 25));
-  const status = params.status && LIST_STATUSES.has(params.status as FinancialInboxStatus)
+  const status = params.status && FILTER_STATUSES.has(params.status as FinancialInboxStatus)
     ? params.status as FinancialInboxStatus
     : null;
   const stage = status ? null : stageFrom(params.stage);
   const search = String(params.search ?? "").trim().slice(0, 120);
   const summaryPromise = summarizeFinancialInbox(params.workspaceId);
   let query = scopedInboxQuery(params.workspaceId, status, stage);
-  query = query.orderBy("receivedAt", "desc").orderBy(FieldPath.documentId(), "desc");
   if (search) {
+    const indexReady = await financialInboxSearchIndexReady().catch(() => false);
+    if (indexReady) {
+      try {
+        return {
+          ...await listIndexedFinancialInboxSearch({ query, search, pageSize, cursor: params.cursor ?? null }),
+          summary: await summaryPromise,
+        };
+      } catch {
+        // Durante a construção inicial do índice composto, a busca limitada
+        // continua disponível até o Firestore liberar o índice novo.
+      }
+    }
+    query = query.orderBy("receivedAt", "desc").orderBy(FieldPath.documentId(), "desc");
     const snapshot = await query.limit(SEARCH_SCAN_LIMIT + 1).get();
     const searchKey = `${stage ?? status ?? "all"}:${search.toLocaleLowerCase("pt-BR")}`;
     const offset = decodeSearchCursor(params.cursor ?? null, searchKey);
@@ -136,9 +221,11 @@ export async function listFinancialInboxMessages(params: {
       messages,
       nextCursor: nextOffset < matched.length ? encodeSearchCursor(searchKey, nextOffset) : null,
       searchTruncated: snapshot.size > SEARCH_SCAN_LIMIT,
+      searchIndexed: false,
       summary: await summaryPromise,
     };
   }
+  query = query.orderBy("receivedAt", "desc").orderBy(FieldPath.documentId(), "desc");
   const cursor = decodeCursor(params.cursor ?? null);
   if (cursor) query = query.startAfter(cursor.receivedAt, cursor.id);
   const snapshot = await query.limit(pageSize + 1).get();
@@ -152,6 +239,7 @@ export async function listFinancialInboxMessages(params: {
     })),
     nextCursor: hasMore && last ? encodeCursor(String(last.get("receivedAt")), last.id) : null,
     searchTruncated: false,
+    searchIndexed: null,
     summary: await summaryPromise,
   };
 }
@@ -170,6 +258,44 @@ export async function reviewFinancialInboxMessage(params: {
   actorEmail?: string | null;
 }) {
   await reviewFinancialInboxMessages({ ...params, ids: [params.id] });
+  return getFinancialInboxMessage(params.id);
+}
+
+export async function restoreArchivedFinancialInboxMessage(params: {
+  id: string;
+  workspaceId: string;
+  actorId: string;
+  actorEmail?: string | null;
+}) {
+  const reference = financialDbAdmin.collection(COLLECTION).doc(params.id);
+  const now = new Date().toISOString();
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists || snapshot.get("workspaceId") !== params.workspaceId) {
+      throw new FinancialInboxReviewError("NOT_FOUND");
+    }
+    if (snapshot.get("status") !== "archived" || !["ignored", "reconciled"].includes(snapshot.get("archivedFromStatus"))) {
+      throw new FinancialInboxReviewError("STATE_CONFLICT");
+    }
+    const restoredStatus = snapshot.get("archivedFromStatus") as "ignored" | "reconciled";
+    transaction.set(reference, {
+      status: restoredStatus,
+      archivedAt: null,
+      archivedBy: null,
+      archivedFromStatus: null,
+      retentionClass: null,
+      purgeEligibleAt: null,
+      retentionPolicyVersion: null,
+      updatedAt: now,
+    }, { merge: true });
+    transaction.create(reference.collection("events").doc(), {
+      type: "MESSAGE_RESTORED_FROM_ARCHIVE",
+      at: now,
+      actorId: params.actorId,
+      actorEmail: params.actorEmail ?? null,
+      restoredStatus,
+    });
+  });
   return getFinancialInboxMessage(params.id);
 }
 

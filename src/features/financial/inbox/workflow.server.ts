@@ -11,6 +11,10 @@ import { chooseProvisionSuggestion, type ProvisionCandidate } from "./provision-
 import { chooseCreationSuggestion } from "./creation-suggestions";
 import { prepareFinancialInboxDocuments } from "./document-processing.server";
 import { getFinancialInboxMessage } from "./repository.server";
+import {
+  buildFinancialInboxSearchTerms,
+  FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
+} from "./search-index";
 import type { FinancialInboxMessage } from "./types";
 
 const MAX_PROVISION_CANDIDATES = 100;
@@ -154,6 +158,9 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
   const batch = financialDbAdmin.batch();
   batch.set(messageRef, {
     classification,
+    searchTerms: buildFinancialInboxSearchTerms({ ...message, classification }),
+    searchIndexVersion: FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
+    searchIndexedAt: checkedAt,
     attachments: documents.attachments,
     archiveWarnings: [...new Set([...(message.archiveWarnings ?? []), ...documents.warnings])],
     linkResolution: documents.linkResolution,
@@ -450,6 +457,12 @@ export async function linkInboxChargeToExistingExpense(
       linkedProvisionId: expense.reconciledProvisionId || null,
       obligationId,
       classification: { ...classification, billingIdentity },
+      searchTerms: buildFinancialInboxSearchTerms({
+        ...message,
+        classification: { ...classification, billingIdentity },
+      }),
+      searchIndexVersion: FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
+      searchIndexedAt: now,
       existingBankPayment,
       existingSettlement,
       ...(classificationSource ? {

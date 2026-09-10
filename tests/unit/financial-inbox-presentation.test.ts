@@ -72,6 +72,7 @@ test("organiza todos os estados nas etapas operacionais sem misturar banco e con
     reconciled: "done",
     divergent: "link",
     ignored: "off",
+    archived: "archive",
     error: "classify",
   };
 

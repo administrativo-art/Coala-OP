@@ -10,6 +10,7 @@ export type FinancialInboxStatus =
   | "reconciled"
   | "divergent"
   | "ignored"
+  | "archived"
   | "error";
 
 export type FinancialInboxStage =
@@ -18,7 +19,13 @@ export type FinancialInboxStage =
   | "pay"
   | "bank"
   | "done"
-  | "off";
+  | "off"
+  | "archive";
+
+export type FinancialInboxRetentionClass =
+  | "non_financial"
+  | "financial_standard"
+  | "tax_or_payroll";
 
 export type FinancialInboxStageSummary = {
   count: number;
@@ -231,6 +238,15 @@ export type FinancialInboxMessage = {
   statementTransactionId?: string | null;
   reviewedAt: string | null;
   reviewedBy: string | null;
+  searchTerms?: string[];
+  searchIndexVersion?: number;
+  searchIndexedAt?: string | null;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archivedFromStatus?: "ignored" | "reconciled" | null;
+  retentionClass?: FinancialInboxRetentionClass | null;
+  purgeEligibleAt?: string | null;
+  retentionPolicyVersion?: number | null;
   createdAt: string;
   updatedAt: string;
 };
