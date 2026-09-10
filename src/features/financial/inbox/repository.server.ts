@@ -3,6 +3,7 @@ import { AggregateField, FieldPath } from "firebase-admin/firestore";
 import {
   FINANCIAL_INBOX_STAGES,
   FINANCIAL_INBOX_STAGE_STATUSES,
+  financialInboxStageForStatus,
   isFinancialInboxBulkDiscardEligible,
   matchesFinancialInboxSearch,
 } from "./presentation";
@@ -22,6 +23,7 @@ import { serializeFinancialValue } from "@/features/financial/lib/server-access"
 
 const COLLECTION = "financialInboxMessages";
 const SEARCH_SCAN_LIMIT = 500;
+const SUMMARY_FALLBACK_LIMIT = 500;
 const ACTIVE_STATUSES: FinancialInboxStatus[] = [
   "pending_review", "document_pending", "suggestion_available", "under_review", "linked",
   "awaiting_authorization", "scheduled", "awaiting_statement", "reconciled", "divergent", "ignored", "error",
@@ -86,28 +88,64 @@ function scopedInboxQuery(workspaceId: string, status: FinancialInboxStatus | nu
   return query;
 }
 
-async function summarizeFinancialInbox(workspaceId: string): Promise<FinancialInboxSummary> {
-  const entries = await Promise.all(FINANCIAL_INBOX_STAGES.map(async (stage) => {
-    const snapshot = await financialDbAdmin.collection(COLLECTION)
-      .where("workspaceId", "==", workspaceId)
-      .where("status", "in", FINANCIAL_INBOX_STAGE_STATUSES[stage])
-      .aggregate({
-        count: AggregateField.count(),
-        amountCents: AggregateField.sum("classification.amountCents"),
-      })
-      .get();
-    const data = snapshot.data();
-    return [stage, {
-      count: Number(data.count || 0),
-      amountCents: Number(data.amountCents || 0),
-    }] as const;
-  }));
-  const stages = Object.fromEntries(entries) as FinancialInboxSummary["stages"];
-  const total = entries.filter(([stage]) => stage !== "archive").reduce((result, [, value]) => ({
-    count: result.count + value.count,
-    amountCents: result.amountCents + value.amountCents,
+async function summarizeFinancialInboxFromDocuments(workspaceId: string): Promise<FinancialInboxSummary> {
+  const snapshot = await financialDbAdmin.collection(COLLECTION)
+    .where("workspaceId", "==", workspaceId)
+    .where("status", "in", [...ACTIVE_STATUSES, "archived"])
+    .limit(SUMMARY_FALLBACK_LIMIT + 1)
+    .get();
+  if (snapshot.size > SUMMARY_FALLBACK_LIMIT) {
+    throw new Error("FINANCIAL_INBOX_SUMMARY_FALLBACK_LIMIT_EXCEEDED");
+  }
+  const stages = Object.fromEntries(FINANCIAL_INBOX_STAGES.map((stage) => [
+    stage,
+    { count: 0, amountCents: 0 },
+  ])) as FinancialInboxSummary["stages"];
+  snapshot.docs.forEach((document) => {
+    const status = document.get("status") as FinancialInboxStatus;
+    if (!FILTER_STATUSES.has(status)) return;
+    const stage = financialInboxStageForStatus(status);
+    stages[stage].count += 1;
+    stages[stage].amountCents += Number(document.get("classification.amountCents") || 0);
+  });
+  const total = FINANCIAL_INBOX_STAGES.filter((stage) => stage !== "archive").reduce((result, stage) => ({
+    count: result.count + stages[stage].count,
+    amountCents: result.amountCents + stages[stage].amountCents,
   }), { count: 0, amountCents: 0 });
   return { total, stages, generatedAt: new Date().toISOString() };
+}
+
+function isMissingFirestoreIndex(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && Number(error.code) === 9;
+}
+
+async function summarizeFinancialInbox(workspaceId: string): Promise<FinancialInboxSummary> {
+  try {
+    const entries = await Promise.all(FINANCIAL_INBOX_STAGES.map(async (stage) => {
+      const snapshot = await financialDbAdmin.collection(COLLECTION)
+        .where("workspaceId", "==", workspaceId)
+        .where("status", "in", FINANCIAL_INBOX_STAGE_STATUSES[stage])
+        .aggregate({
+          count: AggregateField.count(),
+          amountCents: AggregateField.sum("classification.amountCents"),
+        })
+        .get();
+      const data = snapshot.data();
+      return [stage, {
+        count: Number(data.count || 0),
+        amountCents: Number(data.amountCents || 0),
+      }] as const;
+    }));
+    const stages = Object.fromEntries(entries) as FinancialInboxSummary["stages"];
+    const total = entries.filter(([stage]) => stage !== "archive").reduce((result, [, value]) => ({
+      count: result.count + value.count,
+      amountCents: result.amountCents + value.amountCents,
+    }), { count: 0, amountCents: 0 });
+    return { total, stages, generatedAt: new Date().toISOString() };
+  } catch (error) {
+    if (!isMissingFirestoreIndex(error)) throw error;
+    return summarizeFinancialInboxFromDocuments(workspaceId);
+  }
 }
 
 async function financialInboxSearchIndexReady() {

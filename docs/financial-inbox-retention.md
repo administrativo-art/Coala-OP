@@ -28,6 +28,7 @@ O endpoint usa `INTER_RECONCILIATION_SECRET`, aceita no máximo 400 registros po
 - Manutenção diária sem itens elegíveis: uma leitura do estado e a leitura mínima da consulta de retenção, aproximadamente 60 leituras por mês.
 - Execução diária no teto de 200 arquivamentos: até 400 leituras e 400 escritas na execução, porque cada candidato é relido na transação e gera a atualização da mensagem e um evento de auditoria.
 - Busca: é acionada somente na página, possui debounce de 350 ms, usa `workspaceId`, status e termo indexado, e examina no máximo 500 candidatos por solicitação. No cenário conservador de 2 buscas/hora × 5 usuários × 8 horas/dia × 22 dias, o teto é 880.000 leituras de candidatos por mês; termos seletivos retornam substancialmente menos documentos.
+- Durante a criação do índice agregado do resumo, um fallback consulta no máximo 501 mensagens do workspace para manter a caixa disponível. Ele só é usado quando o Firestore responde `FAILED_PRECONDITION`; acima de 500 mensagens falha de forma explícita em vez de exibir um total parcial.
 - Não existe polling, listener global nem leitura sem limite. O job roda uma vez por dia e todos os lotes possuem limite e cursor/estado persistido.
 
 ## Permissões

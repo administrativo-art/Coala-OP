@@ -326,6 +326,15 @@
       ]
     },
     {
+      "collectionGroup": "financialInboxMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "classification.amountCents", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "cashDepositReconciliationRuns",
       "queryScope": "COLLECTION",
       "fields": [
