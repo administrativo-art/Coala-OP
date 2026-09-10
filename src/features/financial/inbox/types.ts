@@ -105,6 +105,7 @@ export type FinancialInboxClassification = {
   amountCents: number | null;
   barcode: string | null;
   barcodeMasked: string | null;
+  documentReferences?: string[];
   links: string[];
   billingIdentity?: FinancialInboxBillingIdentity | null;
 };
@@ -151,6 +152,9 @@ export type FinancialInboxExpenseSuggestion = {
   paymentState: "paid" | "scheduled" | "needs_scheduling" | null;
   existingBankPayment: FinancialInboxExistingBankPayment | null;
   existingSettlement: FinancialInboxExistingSettlement | null;
+  matchedBarcodeMasked?: string | null;
+  matchedDocumentReferences?: string[];
+  matchStrength?: "document" | "identity" | "attributes" | null;
   alternatives?: FinancialInboxExpenseAlternative[];
 };
 
@@ -166,6 +170,9 @@ export type FinancialInboxExpenseAlternative = {
   billingIdentity?: FinancialInboxBillingIdentity | null;
   score: number;
   reasons: string[];
+  matchedBarcodeMasked?: string | null;
+  matchedDocumentReferences?: string[];
+  matchStrength?: "document" | "identity" | "attributes" | null;
 };
 
 export type FinancialInboxCreationSuggestion = {

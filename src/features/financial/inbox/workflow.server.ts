@@ -71,6 +71,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     senderDomain: message.senderDomain,
     documentText: documents.documentText,
     documentHints: documents.hints,
+    documentReferences: message.attachments.map((attachment) => attachment.filename),
   }).classification;
   const classification = {
     ...reparsed,

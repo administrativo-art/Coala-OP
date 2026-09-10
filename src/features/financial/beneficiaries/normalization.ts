@@ -17,6 +17,18 @@ export function inferPixKeyType(value: string): PixKeyType {
   return "random";
 }
 
+export function pixDocumentKeyMatchesHolder(input: {
+  pixKey: string;
+  pixKeyType?: PixKeyType;
+  holderDocument: string;
+}) {
+  const keyType = input.pixKeyType ?? inferPixKeyType(input.pixKey);
+  if (keyType !== "cpf" && keyType !== "cnpj") return true;
+  const keyDocument = normalizeBrazilianDocument(input.pixKey);
+  const holderDocument = normalizeBrazilianDocument(input.holderDocument);
+  return Boolean(keyDocument && holderDocument && keyDocument === holderDocument);
+}
+
 export function maskBrazilianDocument(value: unknown) {
   const digits = normalizeBrazilianDocument(value);
   if (digits.length === 11) return `***.***.***-${digits.slice(-2)}`;

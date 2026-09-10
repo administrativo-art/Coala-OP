@@ -38,6 +38,8 @@ Por revisão humana:
 - 1 atualização do registro;
 - 1 escrita de evento.
 
+Na conciliação bancária, uma obrigação quitada faz uma leitura pontual da solicitação associada. Para registros históricos sem `paymentRequestId`, o fallback é uma consulta única limitada a dois resultados por despesa conciliada; não há polling adicional, e novos pedidos gravam o ponteiro na despesa de forma transacional.
+
 A listagem usa `workspaceId`, status opcional, ordenação e `limit(25)`, com cursor. Considerando três usuários, seis aberturas/atualizações por dia e uma página por abertura: `25 × 6 × 3 × 30 = 13.500` leituras mensais. Não há atualização automática em segundo plano. Uma segunda página custa outras 25 leituras apenas quando solicitada.
 
 No teto defensivo, 50 cobranças analisáveis por mês representam até 35.600 leituras para cruzamento. O armazenamento depende dos documentos: a 5 MB por mensagem, o crescimento seria de cerca de 500 MB por mês, além de um arquivo lateral de texto limitado a 80 KB por documento analisado. Não há polling, listener novo nem leitura de coleção sem limite.
@@ -53,7 +55,8 @@ No teto defensivo, 50 cobranças analisáveis por mês representam até 35.600 l
 - PDFs com camada textual, XML, CSV e TXT são lidos deterministicamente; imagens e PDFs escaneados usam análise visual somente quando a chave da OpenAI está configurada;
 - cobranças de telefonia móvel ou fixa só recebem sugestão automática quando o número da linha extraído também coincide com a despesa ou previsão;
 - no fallback visual, o arquivo temporário enviado à OpenAI usa `store: false` na resposta e é removido da Files API em melhor esforço após a análise;
-- links só são consultados por HTTPS quando pertencem ao mesmo domínio-base do remetente ou à lista explícita de domínios permitidos;
+- links só são consultados por HTTPS quando pertencem ao mesmo domínio-base do remetente, à lista explícita de domínios permitidos ou a uma rota documental pública e restrita de um provedor conhecido;
+- o cadastro de provedor confiável não libera o domínio inteiro: Superlógica e Acessórias são limitadas às rotas públicas de cobrança/nota/guia, e o conteúdo baixado precisa confirmar por assinatura binária que é um tipo documental permitido;
 - cada redirecionamento é revalidado, endereços locais/privados são bloqueados, a resposta é limitada a 15 MB e apenas PDF, XML, texto e imagens são arquivados;
 - páginas que exigem login, senha, CAPTCHA ou sessão ficam como `Documento pendente`; o sistema não manipula credenciais do portal;
 - parâmetros e tokens do link não são persistidos nos metadados do documento arquivado;
@@ -68,3 +71,18 @@ No teto defensivo, 50 cobranças analisáveis por mês representam até 35.600 l
 4. Ativar no Google a regra do alias `cobrancas@coalashakes.com`.
 5. Ativar a regra legada com a lista autenticada de fornecedores.
 6. Em rollback, desativar as regras do Google; a entrega original permanece intacta.
+
+## Fila de implementação — vinculação automática opt-in
+
+Status: planejada, ainda não ativada.
+
+- Permitir que o usuário escolha entre `Automático`, `Confirmar sugestão` e `Somente manual`.
+- No modo automático, vincular somente quando existir um único candidato e houver identidade documental forte:
+  - mesma linha digitável/código de barras; ou
+  - mesmo CNPJ, número da NF/documento, parcela, valor e vencimento.
+- Tratar um novo e-mail com o mesmo fingerprint documental como lembrete da cobrança já vinculada, sem criar outra obrigação.
+- Registrar regra, evidências, confiança, usuário/política responsável e data em evento auditável.
+- Oferecer desfazer vínculo sem apagar o e-mail, a despesa ou o histórico.
+- A vinculação automática nunca cria pagamento, nunca autoriza e nunca envia instrução ao banco.
+- Ambiguidade, divergência ou ausência de identidade documental forte sempre volta para confirmação humana ou criação manual.
+- Antes da ativação, cobrir por testes concorrência, reprocessamento, lembretes, parcelas, boleto reutilizado indevidamente e rollback.

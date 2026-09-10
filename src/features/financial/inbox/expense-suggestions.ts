@@ -6,7 +6,12 @@ import type {
   FinancialInboxExistingBankPayment,
   FinancialInboxExistingSettlement,
 } from "./types";
-import { extractBillingIdentity } from "./parser";
+import {
+  extractBillingIdentity,
+  extractFinancialDocumentReferences,
+  maskPaymentBarcode,
+  normalizePaymentBarcode,
+} from "./parser";
 
 export type InboxExpenseCandidate = {
   id: string;
@@ -103,6 +108,9 @@ function emptySuggestion(
     existingBankPayment: null,
     existingSettlement: null,
     alternatives,
+    matchedBarcodeMasked: null,
+    matchedDocumentReferences: [],
+    matchStrength: null,
   };
 }
 
@@ -181,13 +189,33 @@ function scoredInstallments(
         || null;
       const amountMatches = classification.amountCents != null && Math.abs(amountCents - classification.amountCents) <= 1;
       const dueDateMatches = Boolean(classification.dueDate && dueDate === classification.dueDate);
+      const sourceBarcode = normalizePaymentBarcode(classification.barcode ?? "");
+      const candidateBarcode = normalizePaymentBarcode(String(
+        installment.bankLine ?? installment.barcode ?? installment.digitableLine ?? "",
+      ));
+      const sameBarcode = Boolean(sourceBarcode && candidateBarcode && sourceBarcode === candidateBarcode);
+      const sourceDocumentReferences = classification.documentReferences ?? [];
+      const candidateDocumentReferences = extractFinancialDocumentReferences([
+        candidate.description,
+        candidate.notes,
+        candidateRecord.sourceReference,
+        installment.documentNumber,
+      ].filter(Boolean).join("\n"));
+      const matchedDocumentReferences = sourceDocumentReferences.filter((reference) => (
+        candidateDocumentReferences.includes(reference)
+      ));
+      const sameDocumentReference = matchedDocumentReferences.length > 0;
       const reasons = [
+        ...(sameBarcode ? ["mesmo boleto (linha digitável)"] : []),
+        ...(sameDocumentReference ? [`mesmo documento/NF ${matchedDocumentReferences.join(", ")}`] : []),
         ...(amountMatches ? ["mesmo valor"] : []),
         ...(dueDateMatches ? ["mesmo vencimento"] : []),
         ...(supplierMatches ? ["mesmo favorecido"] : []),
         ...identity.reasons,
       ];
-      const score = (amountMatches ? 35 : 0)
+      const score = (sameBarcode ? 120 : 0)
+        + (sameDocumentReference ? 55 : 0)
+        + (amountMatches ? 35 : 0)
         + (dueDateMatches ? 30 : 0)
         + (supplierMatches ? 20 : 0)
         + (identity.exact ? 35 : 0);
@@ -207,11 +235,20 @@ function scoredInstallments(
           billingIdentity: normalizedIdentity(candidate),
           score,
           reasons,
+          matchedBarcodeMasked: sameBarcode ? maskPaymentBarcode(candidateBarcode) : null,
+          matchedDocumentReferences,
+          matchStrength: sameBarcode || sameDocumentReference
+            ? "document"
+            : identity.exact
+              ? "identity"
+              : "attributes",
         },
-        autoMatch: amountMatches
+        autoMatch: sameBarcode || (
+          amountMatches
           && dueDateMatches
-          && supplierMatches
-          && (!identity.telecomServiceNumberRequired || identity.sameServiceNumber),
+          && (supplierMatches || identity.exact || sameDocumentReference)
+          && (!identity.telecomServiceNumberRequired || identity.sameServiceNumber)
+        ),
         bankPayment,
         settlement,
       }];
@@ -247,6 +284,9 @@ export function chooseExistingExpenseSuggestion(
     paymentState: match.settlement ? "paid" : match.bankPayment ? "scheduled" : "needs_scheduling",
     existingBankPayment: match.bankPayment,
     existingSettlement: match.settlement,
+    matchedBarcodeMasked: match.alternative.matchedBarcodeMasked ?? null,
+    matchedDocumentReferences: match.alternative.matchedDocumentReferences ?? [],
+    matchStrength: match.alternative.matchStrength ?? null,
     alternatives,
   };
 }

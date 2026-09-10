@@ -34,7 +34,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { PageContainer } from "@/components/layout/page-container";
+import { BackButton } from "@/components/navigation/back-button";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import type { BankPaymentRequest, BankPaymentRequestStatus } from "./types";
 import {
   buildPaymentTimeline,
@@ -83,6 +85,18 @@ const STATUS_GROUP: Record<BankPaymentRequestStatus, StageGroup> = {
 };
 
 const GROUP_ORDER: Record<StageGroup, number> = { you: 0, risk: 1, bank: 2, done: 3 };
+
+function requiresBeneficiaryReview(item: BankPaymentRequest) {
+  return item.status === "paid" && item.beneficiaryVerificationStatus === "divergent";
+}
+
+function stageGroup(item: BankPaymentRequest): StageGroup {
+  return requiresBeneficiaryReview(item) ? "risk" : STATUS_GROUP[item.status];
+}
+
+function statusLabel(item: BankPaymentRequest) {
+  return requiresBeneficiaryReview(item) ? "Pago · revisar favorecido" : STATUS_LABEL[item.status];
+}
 
 const GROUP_META: Record<
   StageGroup,
@@ -388,7 +402,7 @@ export function PaymentRequestsPage() {
   /* --- derivados --- */
 
   const groupItems = useCallback(
-    (group: StageGroup) => items.filter((item) => STATUS_GROUP[item.status] === group),
+    (group: StageGroup) => items.filter((item) => stageGroup(item) === group),
     [items],
   );
 
@@ -396,17 +410,17 @@ export function PaymentRequestsPage() {
 
   const paidLast7d = useMemo(
     () =>
-      groupItems("done").filter((item) => isWithinPastFinancialDays(
+      items.filter((item) => item.status === "paid" && isWithinPastFinancialDays(
         item.paidAt ?? item.bankLiquidationObservedAt ?? item.updatedAt,
         7,
       )),
-    [groupItems],
+    [items],
   );
 
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase();
     return items
-      .filter((item) => tab === "all" || STATUS_GROUP[item.status] === tab)
+      .filter((item) => tab === "all" || stageGroup(item) === tab)
       .filter((item) => {
         if (!term) return true;
         return (
@@ -418,7 +432,7 @@ export function PaymentRequestsPage() {
         );
       })
       .sort((a, b) => {
-        const byGroup = GROUP_ORDER[STATUS_GROUP[a.status]] - GROUP_ORDER[STATUS_GROUP[b.status]];
+        const byGroup = GROUP_ORDER[stageGroup(a)] - GROUP_ORDER[stageGroup(b)];
         if (byGroup !== 0) return byGroup;
         return (dueInfo(a).days ?? 9999) - (dueInfo(b).days ?? 9999);
       });
@@ -465,10 +479,13 @@ export function PaymentRequestsPage() {
             Autorização, aprovação bancária, conciliação e comprovantes Pix.
           </p>
         </div>
-        <Button variant="outline" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
-          Atualizar lista
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <BackButton fallbackHref={FINANCIAL_ROUTES.expenses} label="Voltar às despesas" />
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
+            Atualizar lista
+          </Button>
+        </div>
       </div>
 
       {/* KPIs por estágio */}
@@ -722,9 +739,10 @@ export function PaymentRequestsPage() {
 /*  Linha                                                                       */
 /* -------------------------------------------------------------------------- */
 
-function StatusChip({ status, className }: { status: BankPaymentRequestStatus; className?: string }) {
-  const group = STATUS_GROUP[status];
+function StatusChip({ item, className }: { item: BankPaymentRequest; className?: string }) {
+  const group = stageGroup(item);
   const meta = GROUP_META[group];
+  const label = statusLabel(item);
   return (
     <span
       className={cn(
@@ -732,10 +750,10 @@ function StatusChip({ status, className }: { status: BankPaymentRequestStatus; c
         meta.chip,
         className,
       )}
-      title={STATUS_LABEL[status]}
+      title={label}
     >
       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", meta.dot)} />
-      <span className="truncate">{STATUS_LABEL[status]}</span>
+      <span className="truncate">{label}</span>
     </span>
   );
 }
@@ -759,7 +777,7 @@ function RequestRow({
   onToggle: () => void;
   onAction: (kind: RowActionKind) => void;
 }) {
-  const group = STATUS_GROUP[item.status];
+  const group = stageGroup(item);
   const due = dueInfo(item);
   const overdue = due.days !== null && due.days < 0 && group !== "done";
   const soon = due.days !== null && due.days >= 0 && due.days <= 3 && group !== "done";
@@ -810,7 +828,7 @@ function RequestRow({
           {/* meta empilhada no mobile */}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] lg:hidden">
             <span className="font-mono font-bold">{formatCurrency(item.amount)}</span>
-            <StatusChip status={item.status} />
+            <StatusChip item={item} />
           </div>
         </div>
 
@@ -862,7 +880,7 @@ function RequestRow({
 
         {/* situação */}
         <div className="hidden min-w-0 lg:block">
-          <StatusChip status={item.status} />
+          <StatusChip item={item} />
         </div>
 
         {/* próxima ação */}
@@ -956,7 +974,7 @@ function DetailDrawer({
     <div className="flex h-full flex-col">
       {/* topo */}
       <div className="border-b p-6 pr-12">
-        <StatusChip status={item.status} />
+        <StatusChip item={item} />
         <h2 className="mt-3 text-lg font-bold leading-tight tracking-tight">{item.description}</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           {sourceLabel(item.sourceType)} · {partyName(item)}
@@ -1047,6 +1065,15 @@ function DetailDrawer({
           <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3.5">
             <p className="text-[11.5px] font-bold text-rose-700">Último erro do banco</p>
             <p className="mt-1 text-xs leading-relaxed text-rose-900/80">{item.lastError.safeMessage}</p>
+          </div>
+        ) : null}
+        {item.beneficiaryVerificationStatus === "divergent" ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5">
+            <p className="text-[11.5px] font-bold text-amber-800">Pagamento confirmado · favorecido em revisão</p>
+            <p className="mt-1 text-xs leading-relaxed text-amber-950/80">
+              {item.beneficiaryVerificationWarning
+                ?? "O extrato confirmou a liquidação, mas o documento retornado pelo banco divergiu do cadastro."}
+            </p>
           </div>
         ) : null}
       </div>

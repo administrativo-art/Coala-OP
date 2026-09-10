@@ -17,6 +17,8 @@ import {
 import { inferStatementPaymentMethodFromText } from "@/features/financial/lib/statement-payment-method";
 import { queueMatchedBankPayment } from "@/features/financial/obligations/service.server";
 import { findExpectedBankDebitMatch, type ExpectedBankDebitCandidate } from "@/features/financial/payment-requests/expected-bank-debits";
+import { planPaymentRequestStatementSettlement } from "@/features/financial/payment-requests/statement-settlement";
+import type { BankPaymentRequest } from "@/features/financial/payment-requests/types";
 
 const TIME_ZONE = "America/Belem";
 const SYSTEM_ACTOR = "system:inter-statement";
@@ -642,13 +644,21 @@ async function reconcileExpectedBankDebit(params: {
       return { isDivergent: false, skipped: true };
     }
     const expense = expenseSnapshot.data() || {};
-    const paymentRequest = paymentRequestSnapshot.data() || {};
+    const paymentRequest = {
+      id: paymentRequestSnapshot.id,
+      ...(paymentRequestSnapshot.data() || {}),
+    } as BankPaymentRequest;
+    const paymentRequestStatusAllowed = [
+      "awaiting_bank_approval", "scheduled", "processing", "awaiting_statement",
+    ].includes(paymentRequest.status)
+      || (paymentRequest.status === "failed"
+        && paymentRequest.lastError?.code === "BANK_RECONCILIATION_DIVERGENCE");
     if (
       paymentRequest.expenseId !== params.expected.expenseId
       || paymentRequest.sourceType !== "financial_inbox"
       || paymentRequest.sourceId !== params.expected.financialInboxMessageId
       || Math.abs((Number(paymentRequest.amount) || 0) - params.expected.amount) > 0.01
-      || !["awaiting_bank_approval", "scheduled", "processing", "awaiting_statement"].includes(String(paymentRequest.status || ""))
+      || !paymentRequestStatusAllowed
     ) {
       throw new ExpectedBankDebitReviewError(
         "A solicitação bancária diverge do débito esperado; a baixa automática foi bloqueada.",
@@ -675,8 +685,20 @@ async function reconcileExpectedBankDebit(params: {
       fine: classifiedCharges.fine,
       paidAt,
       actor: { uid: SYSTEM_ACTOR, name: "Conciliação Banco Inter" },
+      settlePaymentRequest: false,
     });
     const isDivergent = match.summary.reconciliationStatus === "DIVERGENT";
+    const statementSettlement = isDivergent ? null : planPaymentRequestStatementSettlement({
+      request: paymentRequest,
+      expenseId: params.expected.expenseId,
+      bankTransactionId: params.transactionId,
+      cashAmount: cash,
+      paidAt: paidAt.toDate().toISOString(),
+      observedAt: now.toDate().toISOString(),
+    });
+    if (!isDivergent && !statementSettlement) {
+      throw new ExpectedBankDebitReviewError("A solicitação bancária não aceita a baixa pelo extrato.");
+    }
     const installments = Array.isArray(expense.installments)
       ? expense.installments.map((installment: Record<string, unknown>) => ({
           ...installment,
@@ -716,20 +738,18 @@ async function reconcileExpectedBankDebit(params: {
       reconciliationLeaseUntil: null,
       updatedAt: now,
     }, { lastUpdateTime: expectedDebitSnapshot.updateTime });
-    batch.set(paymentRequestRef, {
-      status: isDivergent ? "awaiting_statement" : "paid",
-      bankStatus: isDivergent ? "STATEMENT_DIVERGENT" : "STATEMENT_MATCHED",
-      statementReconciliationStatus: isDivergent ? "divergent" : "matched",
+    batch.set(paymentRequestRef, isDivergent ? {
+      status: "awaiting_statement",
+      bankStatus: "STATEMENT_DIVERGENT",
+      statementReconciliationStatus: "divergent",
       statementTransactionId: params.transactionId,
       paidAt: paidAt.toDate().toISOString(),
-      ...(!isDivergent ? {
-        ...(!paymentRequest.bankApprovalObservedAt ? { bankApprovalObservedAt: now.toDate().toISOString() } : {}),
-        bankLiquidationObservedAt: now.toDate().toISOString(),
-        postPaymentProcessingStatus: "pending",
-        nextPostPaymentAttemptAt: now.toDate().toISOString(),
-      } : {}),
-      sourceCompletedAt: isDivergent ? null : now.toDate().toISOString(),
+      sourceCompletedAt: null,
       updatedAt: now.toDate().toISOString(),
+    } : {
+      ...statementSettlement!.patch,
+      bankStatus: "STATEMENT_MATCHED",
+      sourceCompletedAt: now.toDate().toISOString(),
     }, { merge: true });
     batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
       status: isDivergent ? "divergent" : "reconciled",
@@ -737,14 +757,17 @@ async function reconcileExpectedBankDebit(params: {
       statementTransactionId: params.transactionId,
       updatedAt: now.toDate().toISOString(),
     }, { merge: true });
-    batch.set(paymentRequestRef.collection("events").doc(`statement-payment-${params.transactionId}`), {
-      type: isDivergent ? "STATEMENT_DIVERGENCE_FOUND" : "STATEMENT_PAYMENT_MATCHED",
+    batch.set(paymentRequestRef.collection("events").doc(`statement-payment-${params.transactionId}`), isDivergent ? {
+      type: "STATEMENT_DIVERGENCE_FOUND",
       at: now.toDate().toISOString(),
       actorId: "system",
       actorEmail: null,
       statementTransactionId: params.transactionId,
       expenseId: params.expected.expenseId,
       cashAmount: cash,
+      principalAmount: principal,
+    } : {
+      ...statementSettlement!.event,
       principalAmount: principal,
     });
     await batch.commit();

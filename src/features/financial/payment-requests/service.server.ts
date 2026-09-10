@@ -38,6 +38,18 @@ export async function createPaymentRequest(input: {
       || (existing.scheduledFor ?? null) !== (input.scheduledFor ?? null)) {
       throw new Error("A solicitação bancária existente diverge dos dados aprovados. Faça a conferência antes de continuar.");
     }
+    if (existing.expenseId) {
+      const expenseRef = financialDbAdmin.collection("expenses").doc(existing.expenseId);
+      const expense = await expenseRef.get();
+      if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
+      if (linkedRequestId && linkedRequestId !== existing.id) {
+        throw new Error("A despesa já possui outra solicitação bancária.");
+      }
+      if (!linkedRequestId) {
+        await expenseRef.set({ paymentRequestId: existing.id, updatedAt: new Date().toISOString() }, { merge: true });
+      }
+    }
     return existing;
   }
   const beneficiary = await resolvePaymentBeneficiary(input.beneficiaryReference);
@@ -60,8 +72,30 @@ export async function createPaymentRequest(input: {
     createdBy: actor.uid,
     updatedAt: now,
   };
-  await ref.create(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "id")));
-  await addPaymentEvent(ref.id, "PAYMENT_REQUEST_CREATED", actor, { status, sourceType: input.sourceType, sourceId: input.sourceId, amount: request.amount });
+  const eventRef = ref.collection("events").doc(randomUUID());
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    if (input.expenseId) {
+      const expenseRef = financialDbAdmin.collection("expenses").doc(input.expenseId);
+      const expense = await transaction.get(expenseRef);
+      if (!expense.exists) throw new Error("A despesa vinculada à solicitação não foi encontrada.");
+      const linkedRequestId = String(expense.get("paymentRequestId") || "").trim();
+      if (linkedRequestId && linkedRequestId !== ref.id) {
+        throw new Error("A despesa já possui outra solicitação bancária.");
+      }
+      transaction.set(expenseRef, { paymentRequestId: ref.id, updatedAt: now }, { merge: true });
+    }
+    transaction.create(ref, Object.fromEntries(Object.entries(request).filter(([key]) => key !== "id")));
+    transaction.create(eventRef, {
+      type: "PAYMENT_REQUEST_CREATED",
+      at: now,
+      actorId: actor.uid,
+      actorEmail: actor.email ?? null,
+      status,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      amount: request.amount,
+    });
+  });
   return request;
 }
 
@@ -858,12 +892,18 @@ async function blockBankReconciliationDivergence(params: {
     const snapshot = await transaction.get(requestRef);
     if (!snapshot.exists || snapshot.get("status") === "paid") return;
     const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    const sameDivergenceAlreadyRecorded = current.status === "failed"
+      && current.statementReconciliationStatus === "divergent"
+      && current.lastError?.code === "BANK_RECONCILIATION_DIVERGENCE"
+      && (current.bankStatus ?? null) === (params.rawBankStatus ?? null);
+    if (sameDivergenceAlreadyRecorded) return;
     transaction.set(requestRef, {
       status: "failed",
       bankStatus: params.rawBankStatus ?? null,
       bankStatusPollFailureCount: 0,
       nextBankStatusCheckAt: null,
       statementReconciliationStatus: "divergent",
+      bankReconciliationDivergenceField: params.field,
       lastError: {
         code: "BANK_RECONCILIATION_DIVERGENCE",
         safeMessage: params.safeMessage,
