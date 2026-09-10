@@ -410,7 +410,7 @@ export function CreateDirectPurchaseModal({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[920px] max-h-[92vh] overflow-y-auto rounded-[18px] border-zinc-200 bg-[#f6f6f7] p-0">
+      <DialogContent className="font-purchasing max-h-[92vh] !max-w-[920px] overflow-y-auto rounded-[18px] border-zinc-200 bg-[#f6f6f7] p-0">
         <div className="border-b border-zinc-200 bg-[#f6f6f7] px-8 pb-5 pt-7">
           <DialogHeader>
             <DialogTitle className="text-[1.75rem] font-black leading-none tracking-[-0.045em] text-zinc-950">

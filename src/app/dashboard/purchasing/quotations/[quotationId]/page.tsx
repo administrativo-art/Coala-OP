@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
 import { BackButton } from '@/components/navigation/back-button';
-import { Button } from '@/components/ui/button';
 import { PermissionGuard } from '@/components/permission-guard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { QuotationWorkspace } from '@/components/purchasing/quotation-workspace';
+import { PurchasingModuleNavigation } from '@/components/purchasing/purchasing-module-navigation';
+import { PurchasingPageFrame } from '@/components/purchasing/purchasing-ui';
 import { useAuth } from '@/hooks/use-auth';
 import { useQuotations } from '@/hooks/use-quotations';
 import { canViewPurchasing } from '@/lib/purchasing-permissions';
@@ -15,12 +16,12 @@ import { type Quotation } from '@/types';
 
 export default function QuotationPage() {
   const params = useParams<{ quotationId: string }>();
-  const router = useRouter();
   const { permissions, firebaseUser } = useAuth();
-  const { quotations, loading } = useQuotations();
+  const { quotations } = useQuotations();
   const canView = canViewPurchasing(permissions);
   const [fallbackQuotation, setFallbackQuotation] = useState<Quotation | null>(null);
   const [fallbackLoading, setFallbackLoading] = useState(false);
+  const [fallbackResolved, setFallbackResolved] = useState(false);
 
   const providerQuotation = useMemo(
     () => quotations.find((q) => q.id === params.quotationId),
@@ -31,7 +32,15 @@ export default function QuotationPage() {
     let cancelled = false;
 
     async function fetchQuotationFallback() {
-      if (loading || providerQuotation || !firebaseUser || !params.quotationId) return;
+      if (providerQuotation) {
+        setFallbackQuotation(null);
+        setFallbackLoading(false);
+        setFallbackResolved(true);
+        return;
+      }
+      if (!firebaseUser || !params.quotationId) return;
+
+      setFallbackResolved(false);
       setFallbackLoading(true);
       try {
         const token = await firebaseUser.getIdToken();
@@ -51,7 +60,10 @@ export default function QuotationPage() {
         console.error('Error fetching quotation via API fallback:', error);
         if (!cancelled) setFallbackQuotation(null);
       } finally {
-        if (!cancelled) setFallbackLoading(false);
+        if (!cancelled) {
+          setFallbackLoading(false);
+          setFallbackResolved(true);
+        }
       }
     }
 
@@ -59,35 +71,38 @@ export default function QuotationPage() {
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser, loading, params.quotationId, providerQuotation]);
+  }, [firebaseUser, params.quotationId, providerQuotation]);
 
   const quotation = providerQuotation ?? fallbackQuotation;
 
-  if (loading || fallbackLoading) {
+  if (!quotation && (!fallbackResolved || fallbackLoading)) {
     return (
-      <div className="container max-w-[1600px] py-8 space-y-6">
+      <PurchasingPageFrame>
+        <PurchasingModuleNavigation activeTab="quotations" activeStage="quotations" />
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
-      </div>
+      </PurchasingPageFrame>
     );
   }
 
   if (!quotation) {
     return (
-      <div className="container max-w-4xl py-8 space-y-4">
+      <PurchasingPageFrame>
+        <PurchasingModuleNavigation activeTab="quotations" activeStage="quotations" />
         <p className="text-muted-foreground">Cotação não encontrada.</p>
-        <BackButton fallbackHref="/dashboard/purchasing" label="Voltar para cotações" />
-      </div>
+        <BackButton fallbackHref="/dashboard/purchasing/quotations" label="Voltar para cotações" />
+      </PurchasingPageFrame>
     );
   }
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-[1600px] py-8 space-y-6">
-      <BackButton fallbackHref="/dashboard/purchasing" label="Cotações" variant="ghost" size="sm" className="-ml-2" />
+      <PurchasingPageFrame>
+        <PurchasingModuleNavigation activeTab="quotations" activeStage="quotations" />
+        <BackButton fallbackHref="/dashboard/purchasing/quotations" label="Cotações" variant="ghost" size="sm" className="-ml-2 mb-3" />
 
         <QuotationWorkspace quotation={quotation} />
-      </div>
+      </PurchasingPageFrame>
     </PermissionGuard>
   );
 }

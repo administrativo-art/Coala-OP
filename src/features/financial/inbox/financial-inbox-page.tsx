@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import type { FinancialInboxMessage, FinancialInboxStatus } from "./types";
+import type { FinancialInboxExpenseAlternative } from "./types";
 import { PageContainer } from "@/components/layout/page-container";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
@@ -240,6 +241,28 @@ export function FinancialInboxPage() {
     }
   }
 
+  async function linkAlternative(message: FinancialInboxMessage, alternative: FinancialInboxExpenseAlternative) {
+    setWorking(`link:${message.id}:${alternative.expenseId}:${alternative.installmentNumber ?? "expense"}`);
+    try {
+      await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/link`, {
+        method: "POST",
+        body: JSON.stringify({
+          expenseId: alternative.expenseId,
+          installmentNumber: alternative.installmentNumber,
+        }),
+      });
+      toast({
+        title: "Cobrança vinculada.",
+        description: "A escolha manual e os identificadores da cobrança foram registrados na despesa.",
+      });
+      await load();
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao vincular a cobrança." });
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function preparePayment(message: FinancialInboxMessage) {
     const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "America/Belem", year: "numeric", month: "2-digit", day: "2-digit",
@@ -399,6 +422,24 @@ export function FinancialInboxPage() {
                   <div><p className="text-xs text-muted-foreground">Valor encontrado</p><p className="mt-1 font-mono text-sm font-semibold">{formatAmount(selected.classification.amountCents)}</p></div>
                 </div>
 
+                {selected.classification.billingIdentity && (
+                  selected.classification.billingIdentity.customerAccount
+                  || selected.classification.billingIdentity.contractNumber
+                  || selected.classification.billingIdentity.serviceNumbers.length > 0
+                  || selected.classification.billingIdentity.supplierTaxId
+                ) ? (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4">
+                    <p className="text-sm font-semibold">Identificação da cobrança</p>
+                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                      {selected.classification.billingIdentity.customerAccount ? <span><strong>Conta:</strong> {selected.classification.billingIdentity.customerAccount}</span> : null}
+                      {selected.classification.billingIdentity.contractNumber ? <span><strong>Contrato:</strong> {selected.classification.billingIdentity.contractNumber}</span> : null}
+                      {selected.classification.billingIdentity.serviceNumbers.map((number) => <span key={number}><strong>Linha:</strong> {number}</span>)}
+                      {selected.classification.billingIdentity.supplierTaxId ? <span><strong>CNPJ do fornecedor:</strong> {selected.classification.billingIdentity.supplierTaxId}</span> : null}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">Em telefonia móvel ou fixa, o número da linha também precisa coincidir para permitir uma sugestão automática.</p>
+                  </div>
+                ) : null}
+
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conteúdo do e-mail</p>
                   <p className="max-h-56 overflow-auto whitespace-pre-wrap text-sm leading-6">{selected.textContent || "O e-mail não possui conteúdo textual."}</p>
@@ -418,7 +459,12 @@ export function FinancialInboxPage() {
                             </p>
                             <p className="text-xs text-muted-foreground">{selected.existingExpenseSuggestion?.reasons.join(" · ")}</p>
                           </div>
-                          {selected.existingExpenseSuggestion?.paymentState === "paid" ? (
+                          {selected.existingExpenseSuggestion?.status === "linked" && selected.linkedExpenseId ? (
+                            <div className="flex gap-2 rounded-lg bg-emerald-50 p-3 text-emerald-800">
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>Cobrança vinculada à despesa {selected.linkedExpenseId}.</span>
+                            </div>
+                          ) : selected.existingExpenseSuggestion?.paymentState === "paid" ? (
                             <div className="flex gap-2 rounded-lg bg-emerald-50 p-3 text-emerald-800">
                               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                               <span>Pagamento confirmado pelo extrato{selected.existingExpenseSuggestion.existingSettlement?.paidAt ? ` em ${formatDate(selected.existingExpenseSuggestion.existingSettlement.paidAt)}` : ""}.</span>
@@ -447,9 +493,39 @@ export function FinancialInboxPage() {
                         <p className="mt-2 text-sm text-amber-700">Há mais de um provisionamento compatível. Faça a conferência manual.</p>
                       ) : selected.linkedExpenseId ? (
                         <p className="mt-2 text-sm text-emerald-700">Cobrança vinculada à despesa {selected.linkedExpenseId}.</p>
+                      ) : selected.creationSuggestion?.status === "suggested" ? (
+                        <div className="mt-2 space-y-1 text-sm">
+                          <p><strong>Nova despesa sugerida</strong></p>
+                          <p className="text-muted-foreground">Nenhuma despesa ou previsão compatível foi encontrada. Os dados extraídos podem preencher um novo cadastro para sua confirmação.</p>
+                        </div>
+                      ) : selected.creationSuggestion?.status === "incomplete" ? (
+                        <p className="mt-2 text-sm text-amber-700">Para sugerir uma nova despesa, ainda falta confirmar: {selected.creationSuggestion.missingFields.join(", ")}.</p>
                       ) : (
                         <p className="mt-2 text-sm text-muted-foreground">Nenhuma despesa ou previsão única foi encontrada. Você pode analisar novamente ou tratar manualmente.</p>
                       )}
+                      {!selected.linkedExpenseId
+                        && selected.existingExpenseSuggestion?.status !== "suggested"
+                        && (selected.existingExpenseSuggestion?.alternatives?.length ?? 0) > 0 ? (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Possíveis despesas — confirmação manual</p>
+                          {selected.existingExpenseSuggestion!.alternatives!.map((alternative) => {
+                            const alternativeWorking = `link:${selected.id}:${alternative.expenseId}:${alternative.installmentNumber ?? "expense"}`;
+                            return (
+                              <div key={`${alternative.expenseId}:${alternative.installmentNumber ?? "expense"}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                                <div>
+                                  <p className="font-medium">{alternative.description}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {[alternative.supplier, alternative.installmentNumber ? `Parcela ${alternative.installmentNumber}/${alternative.installmentTotal}` : null, formatAmount(alternative.amountCents), formatDate(alternative.dueDate)]
+                                      .filter(Boolean).join(" · ")}
+                                  </p>
+                                  <p className="mt-1 text-xs text-muted-foreground">{alternative.reasons.join(" · ")}</p>
+                                </div>
+                                {canLink ? <Button size="sm" variant="outline" onClick={() => void linkAlternative(selected, alternative)} disabled={working === alternativeWorking}><Link2 className="mr-2 h-4 w-4" />Vincular esta</Button> : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {!selected.linkedExpenseId && canAnalyze ? <Button variant="outline" size="sm" onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><RefreshCw className="mr-2 h-4 w-4" />Analisar</Button> : null}
@@ -497,19 +573,31 @@ export function FinancialInboxPage() {
                   <p className="text-sm font-semibold">Documentos arquivados</p>
                   <div className="flex flex-wrap gap-2">
                     {selected.attachments.filter((attachment) => attachment.storagePath).map((attachment) => (
-                      <Button key={attachment.id} variant="outline" size="sm" onClick={() => void openFile(selected, attachment.id)} disabled={working === `file:${attachment.id}`}>
-                        {working === `file:${attachment.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}{attachment.filename}
-                      </Button>
+                      <div key={attachment.id} className="flex items-center gap-1">
+                        <Button variant="outline" size="sm" onClick={() => void openFile(selected, attachment.id)} disabled={working === `file:${attachment.id}`}>
+                          {working === `file:${attachment.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}{attachment.filename}
+                        </Button>
+                        {attachment.extractionStatus === "ocr_extracted" ? <Badge variant="outline" className="bg-violet-50 text-[10px]">OCR analisado</Badge>
+                          : attachment.extractionStatus === "extracted" ? <Badge variant="outline" className="bg-emerald-50 text-[10px]">Texto analisado</Badge>
+                            : attachment.extractionStatus === "needs_ocr" ? <Badge variant="outline" className="bg-amber-50 text-[10px]">OCR pendente</Badge>
+                              : attachment.extractionStatus === "failed" ? <Badge variant="outline" className="bg-red-50 text-[10px]">Falha na leitura</Badge>
+                                : null}
+                      </div>
                     ))}
                     {selected.rawStoragePath ? <Button variant="ghost" size="sm" onClick={() => void openFile(selected, "raw")} disabled={working === "file:raw"}><Download className="mr-2 h-4 w-4" />E-mail original (.eml)</Button> : null}
                     {!selected.rawStoragePath && !selected.attachments.some((attachment) => attachment.storagePath) ? <p className="text-sm text-muted-foreground">Nenhum anexo foi arquivado.</p> : null}
                   </div>
+                  {selected.linkResolution?.message ? (
+                    <p className={`text-xs ${selected.linkResolution.status === "resolved" ? "text-emerald-700" : selected.linkResolution.status === "requires_login" ? "text-amber-700" : "text-muted-foreground"}`}>
+                      {selected.linkResolution.message}
+                    </p>
+                  ) : null}
                 </div>
 
                 {selected.classification.links.length > 0 ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm font-semibold"><ExternalLink className="h-4 w-4" />Links enviados pelo fornecedor</div>
-                    <p className="text-xs text-muted-foreground">Links externos não são baixados automaticamente. Confira o domínio antes de abrir.</p>
+                    <p className="text-xs text-muted-foreground">Links documentais HTTPS permitidos são consultados durante a análise. Confira o domínio antes de abrir manualmente.</p>
                     <div className="grid gap-2">
                       {selected.classification.links.map((link) => (
                         <a key={link} href={link} target="_blank" rel="noopener noreferrer" className="truncate rounded-lg border px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">{link}</a>
@@ -525,7 +613,7 @@ export function FinancialInboxPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                   <Button asChild variant="outline"><Link href={FINANCIAL_ROUTES.expenses}>Voltar para despesas</Link></Button>
                   <div className="flex flex-wrap gap-2">
-                    {canLink && !selected.linkedExpenseId ? <Button asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(selected.id)}`}>Registrar despesa manualmente</Link></Button> : null}
+                    {canLink && !selected.linkedExpenseId && selected.creationSuggestion?.status !== "blocked_by_ambiguity" ? <Button asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(selected.id)}`}>{selected.creationSuggestion?.status === "suggested" ? "Criar despesa preenchida" : "Registrar despesa manualmente"}</Link></Button> : null}
                     {canDiscard && selected.status === "ignored" ? (
                       <Button variant="outline" onClick={() => void review(selected, "pending_review")} disabled={working === `review:${selected.id}`}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</Button>
                     ) : canDiscard && !selected.linkedExpenseId && !selected.paymentRequestId ? (

@@ -90,6 +90,30 @@ test("identifica a série da provisão salarial pelo colaborador individualizado
   });
 });
 
+test("preserva a competência explícita do salário apesar de um timestamp legado em UTC", () => {
+  assert.deepEqual(expenseProvisionIdentity({
+    description: "Salário - 08/2026 | Heucilene Oliveira Ribeiro",
+    competenceDate: new Date("2026-08-01T00:00:00.000Z"),
+    employeeId: "employee-heucilene",
+  }), {
+    provisionSeriesKey: "payroll-salary:employee-heucilene",
+    provisionType: "actual",
+    provisionCompetence: "2026-08",
+  });
+});
+
+test("mantém complemento salarial em uma série distinta do salário-base", () => {
+  assert.deepEqual(expenseProvisionIdentity({
+    description: "Complemento salarial - 08/2026 | Heucilene Oliveira Ribeiro",
+    employeeId: "employee-heucilene",
+    payrollEarningType: "adjustment",
+  }), {
+    provisionSeriesKey: "payroll-adjustment:employee-heucilene",
+    provisionType: "actual",
+    provisionCompetence: "2026-08",
+  });
+});
+
 test("concilia previsão e real pela mesma série e competência", () => {
   const forecast = {
     id: "forecast",

@@ -20,6 +20,8 @@ export type CardStatementExpenseMatch = {
   candidates: Array<CardStatementExpenseCandidate & { score: number; valueDifference: number }>;
 };
 
+type CardStatementExpenseSource = Record<string, unknown> & { id?: unknown };
+
 const IGNORED_WORDS = new Set([
   "a", "ao", "aos", "as", "da", "das", "de", "do", "dos", "e", "em", "no", "nos", "na", "nas",
   "br", "bra", "brasil", "ltda", "sa", "sao", "pagamento", "compra", "cartao", "credito",
@@ -32,6 +34,94 @@ function normalizedText(value: unknown) {
     .toLocaleLowerCase("pt-BR")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function dateFromUnknown(value: unknown) {
+  const parsed = value && typeof (value as { toDate?: unknown }).toDate === "function"
+    ? (value as { toDate: () => Date }).toDate()
+    : value instanceof Date
+      ? value
+      : typeof value === "string" || typeof value === "number"
+        ? new Date(value)
+        : null;
+  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+}
+
+function fingerprints(source: CardStatementExpenseSource) {
+  return [
+    typeof source.cardStatementImportFingerprint === "string" ? source.cardStatementImportFingerprint : "",
+    ...(Array.isArray(source.cardStatementImportFingerprints)
+      ? source.cardStatementImportFingerprints.filter((entry): entry is string => typeof entry === "string")
+      : []),
+  ].filter(Boolean);
+}
+
+function hasActiveImportLink(source: CardStatementExpenseSource, revisionRemovedFingerprints: Set<string>) {
+  const entries = fingerprints(source);
+  return entries.length > 0 && !entries.some((fingerprint) => revisionRemovedFingerprints.has(fingerprint));
+}
+
+export function buildCardStatementExpenseCandidates(
+  expenses: CardStatementExpenseSource[],
+  revisionRemovedFingerprints = new Set<string>(),
+) {
+  return expenses.flatMap((expense): CardStatementExpenseCandidate[] => {
+    const expenseId = String(expense.id ?? "").trim();
+    const status = String(expense.status ?? "");
+    if (!expenseId || ["cancelled", "draft", "paid"].includes(status)) return [];
+    const installments = Array.isArray(expense.installments)
+      ? expense.installments.filter((entry): entry is CardStatementExpenseSource => Boolean(entry && typeof entry === "object" && !Array.isArray(entry)))
+      : [];
+    const isForecast = expense.provisionType === "forecast" && status === "provisioned";
+    const description = String(expense.description ?? "");
+    const supplier = String(expense.supplier ?? "");
+    const rootDate = dateFromUnknown(
+      expense.originalCardChargeDate
+      ?? expense.cardChargeDate
+      ?? expense.transactionDate
+      ?? expense.competenceDate
+      ?? expense.dueDate,
+    );
+
+    if (installments.length === 0) {
+      if (hasActiveImportLink(expense, revisionRemovedFingerprints)
+        || expense.cardReconciliationStatus === "reconciled") return [];
+      const amount = Number(expense.totalValue ?? 0);
+      const chargeDate = rootDate;
+      return amount > 0 && chargeDate ? [{
+        lineId: expenseId,
+        expenseId,
+        description,
+        supplier,
+        amount,
+        chargeDate,
+        installmentNumber: typeof expense.installmentNumber === "number" ? expense.installmentNumber : undefined,
+        installmentTotal: typeof expense.installmentTotal === "number" ? expense.installmentTotal : undefined,
+        isForecast,
+      }] : [];
+    }
+
+    return installments.flatMap((installment, index): CardStatementExpenseCandidate[] => {
+      if (["paid", "cancelled"].includes(String(installment.status ?? ""))) return [];
+      if (hasActiveImportLink(installment, revisionRemovedFingerprints)
+        || installment.cardReconciliationStatus === "reconciled") return [];
+      const amount = Number(installment.value ?? 0);
+      const chargeDate = rootDate ?? dateFromUnknown(installment.dueDate);
+      if (amount <= 0 || !chargeDate) return [];
+      const installmentNumber = Number(installment.number) || index + 1;
+      return [{
+        lineId: `${expenseId}:installment:${installmentNumber}`,
+        expenseId,
+        description,
+        supplier,
+        amount,
+        chargeDate,
+        installmentNumber,
+        installmentTotal: installments.length,
+        isForecast,
+      }];
+    });
+  });
 }
 
 function tokens(value: unknown) {

@@ -40,15 +40,26 @@ type BankPaymentRequestBase = {
   statementReconciliationStatus?: "not_expected" | "expected" | "matched" | "divergent";
   statementTransactionId?: string;
   proofStoragePath?: string;
+  postPaymentProcessingStatus?: "pending" | "completed";
+  postPaymentProcessingAttemptCount?: number;
+  postPaymentProcessingLeaseId?: string | null;
+  postPaymentProcessingLeaseUntil?: string | null;
+  nextPostPaymentAttemptAt?: string | null;
   sourceCompletedAt?: string;
   authorizedBy?: string;
   authorizedAt?: string;
+  submissionStartedAt?: string;
   submittedAt?: string;
+  bankApprovalObservedAt?: string;
+  bankSchedulingObservedAt?: string;
+  bankLiquidationObservedAt?: string;
+  nextBankStatusCheckAt?: string | null;
+  bankStatusPollFailureCount?: number;
   paidAt?: string;
   createdAt: string;
   createdBy: string;
   updatedAt: string;
-  lastError?: { code: string; safeMessage: string; occurredAt: string };
+  lastError?: { code: string; safeMessage: string; occurredAt: string } | null;
 };
 
 export type PixBankPaymentRequest = BankPaymentRequestBase & {

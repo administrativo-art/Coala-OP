@@ -1,6 +1,30 @@
 {
   "indexes": [
     {
+      "collectionGroup": "bankPaymentRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "nextBankStatusCheckAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bankPaymentRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "postPaymentProcessingStatus", "order": "ASCENDING" },
+        { "fieldPath": "nextPostPaymentAttemptAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bankPaymentRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "submissionStartedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "cashClosures",
       "queryScope": "COLLECTION",
       "fields": [

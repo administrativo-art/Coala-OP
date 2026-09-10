@@ -18,6 +18,12 @@ Este catálogo é a fonte canônica para descrições de despesas e movimentaç�
 | FGTS sem consignado | `FGTS - MM/AAAA \| FGTS` |
 | Carrinho do Shopping | `Compra do carrinho - Shopping do Automóvel` |
 | GPT/Codex | `GPT/Codex \| Favorecido` |
+| Corrida por aplicativo | `Corrida por aplicativo - DD/MM/AAAA \| Favorecido - Passageiro` |
+| Encargos do crédito rotativo | `Encargos do crédito rotativo - MM/AAAA \| Instituição` |
+| Encargos do saldo financiado | `Encargos do saldo financiado - MM/AAAA \| Instituição` |
+| IOF do cartão | `IOF do cartão - MM/AAAA \| Instituição` |
+| Juros de mora do cartão | `Juros de mora do cartão - MM/AAAA \| Instituição` |
+| Multa por atraso do cartão | `Multa por atraso do cartão - MM/AAAA \| Instituição` |
 
 ## Regras complementares
 
@@ -28,6 +34,10 @@ Este catálogo é a fonte canônica para descrições de despesas e movimentaç�
 - FGTS é custo do empregador e integra a DRE. Consignado é desconto do colaborador, fica em conta patrimonial e não cria nova despesa na DRE.
 - Quando a Heucilene estiver vinculada à folha ou a encargos, os valores são rateados igualmente entre João Paulo, Tirirical e Shopping do Automóvel, com ajuste de centavos para fechar o total.
 - Provisões usam a mesma descrição canônica do documento real. A distinção é interna, por `provisionType`, estado de conciliação, série e competência; não haverá prefixo visível no título.
+- Encargos, juros, multa e IOF da fatura usam a competência da fatura, não a data isolada impressa na linha. O texto original da instituição permanece em `rawBankDescription`.
+- `IOF do cartão` usa o plano `IOF | tarifas bancárias`. Os demais encargos do rotativo, saldo financiado, juros de mora e multa por atraso usam `Juros e multas`.
+- Encargos financeiros do cartão usam o centro de resultado padrão da conta bancária emissora; não herdam automaticamente o centro das compras que originaram o saldo.
+- Corridas por aplicativo usam a pessoa identificada no relatório do fornecedor. A política de rateio da pessoa prevalece sobre inferências pelo endereço de origem ou destino.
 - O sistema e o assistente nunca autorizam o pagamento bancário. A autorização final continua exclusiva do usuário no aplicativo do Banco Inter.
 
 ## Implementação

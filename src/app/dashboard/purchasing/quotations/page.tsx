@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useState } from 'react';
-import { BarChart3, CheckCircle2, FileText, Plus, Send } from 'lucide-react';
+import { BarChart3, Plus, Search } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PermissionGuard } from '@/components/permission-guard';
 import { CreateQuotationModal } from '@/components/purchasing/create-quotation-modal';
-import { PurchasingItemsPreview } from '@/components/purchasing/purchasing-items-preview';
+import { PurchasingModuleNavigation } from '@/components/purchasing/purchasing-module-navigation';
 import { useQuotations } from '@/hooks/use-quotations';
 import { useEntities } from '@/hooks/use-entities';
 import { useAuth } from '@/hooks/use-auth';
@@ -17,41 +18,31 @@ import { type Quotation } from '@/types';
 import {
   PurchasingEmptyState,
   PurchasingFilterChip,
-  PurchasingHeader,
-  PurchasingKanbanCard,
-  PurchasingKanbanColumn,
-  PurchasingMetricCard,
   PurchasingPageFrame,
-  PurchasingPeriodControl,
-  PurchasingPipelineCard,
   PurchasingStatusBadge,
-  PurchasingToolbar,
-  createDefaultPurchasingPeriod,
-  isDateInPurchasingPeriod,
-  purchasingAgeLabel,
-  purchasingYearOptions,
   type PurchasingTone,
 } from '@/components/purchasing/purchasing-ui';
 
-const statusConfig: Record<Quotation['status'], { label: string; tone: PurchasingTone; progress: number; bucket: 'open' | 'approval' | 'quote' | 'done' }> = {
-  draft: { label: 'Solicit.', tone: 'blue', progress: 1, bucket: 'open' },
-  quoted: { label: 'Finalizada', tone: 'green', progress: 3, bucket: 'done' },
-  partially_converted: { label: 'Cotação', tone: 'purple', progress: 3, bucket: 'quote' },
-  converted: { label: 'Convertida', tone: 'green', progress: 4, bucket: 'done' },
-  archived: { label: 'Arquivada', tone: 'zinc', progress: 8, bucket: 'done' },
-  expired: { label: 'Expirada', tone: 'rose', progress: 2, bucket: 'approval' },
-  cancelled: { label: 'Cancelada', tone: 'rose', progress: 1, bucket: 'done' },
-};
+type QuotationBucket = 'open' | 'active' | 'done' | 'attention';
 
-const fallbackStatusConfig: { label: string; tone: PurchasingTone; progress: number; bucket: 'open' | 'approval' | 'quote' | 'done' } = {
-  label: 'Cotação',
-  tone: 'zinc',
-  progress: 1,
-  bucket: 'open',
+const statusConfig: Record<Quotation['status'], { label: string; tone: PurchasingTone; bucket: QuotationBucket }> = {
+  draft: { label: 'Aberta', tone: 'blue', bucket: 'open' },
+  quoted: { label: 'Finalizada', tone: 'purple', bucket: 'active' },
+  partially_converted: { label: 'Em conversão', tone: 'purple', bucket: 'active' },
+  converted: { label: 'Convertida', tone: 'green', bucket: 'done' },
+  archived: { label: 'Arquivada', tone: 'zinc', bucket: 'done' },
+  expired: { label: 'Expirada', tone: 'rose', bucket: 'attention' },
+  cancelled: { label: 'Cancelada', tone: 'rose', bucket: 'attention' },
 };
 
 function quotationCode(id: string) {
-  return `CMP-${id.slice(-8).toUpperCase()}`;
+  return `COT-${id.slice(-8).toUpperCase()}`;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return 'Sem data';
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString('pt-BR') : 'Sem data';
 }
 
 export default function QuotationsPage() {
@@ -60,201 +51,132 @@ export default function QuotationsPage() {
   const { entities } = useEntities();
   const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'open' | 'approval' | 'quote' | 'done'>('all');
-  const [view, setView] = useState<'cards' | 'table' | 'kanban'>('kanban');
-  const [period, setPeriod] = useState(createDefaultPurchasingPeriod);
+  const [filter, setFilter] = useState<'all' | QuotationBucket>('all');
   const canView = canViewPurchasing(permissions);
   const canCreate = canCreateQuotation(permissions);
 
-  const supplierName = (supplierId: string) => {
-    const supplier = entities.find((e) => e.id === supplierId);
-    return supplier?.fantasyName ?? supplier?.name ?? 'Fornecedor a definir';
-  };
-
-  const periodYears = useMemo(
-    () => purchasingYearOptions(quotations.map((quotation) => quotation.createdAt)),
-    [quotations],
+  const entityNames = useMemo(
+    () => new Map(entities.map((entity) => [entity.id, entity.fantasyName ?? entity.name])),
+    [entities],
   );
 
-  const periodQuotations = useMemo(
-    () => quotations.filter((quotation) => isDateInPurchasingPeriod(quotation.createdAt, period)),
-    [period, quotations],
-  );
+  const rows = useMemo(() => quotations.map((quotation) => {
+    const supplier = entityNames.get(quotation.supplierId) ?? 'Fornecedor a definir';
+    const config = statusConfig[quotation.status];
+    return {
+      quotation,
+      supplier,
+      config,
+      searchText: `${quotation.id} ${supplier} ${quotation.status} ${quotation.mode}`.toLowerCase(),
+    };
+  }), [entityNames, quotations]);
 
-  const counts = useMemo(() => {
-    const open = periodQuotations.filter((q) => q.status === 'draft').length;
-    const quote = periodQuotations.filter((q) => q.status === 'partially_converted').length;
-    const quoted = periodQuotations.filter((q) => q.status === 'quoted').length;
-    const converted = periodQuotations.filter((q) => q.status === 'converted').length;
-    const archived = periodQuotations.filter((q) => q.status === 'archived').length;
-    const expired = periodQuotations.filter((q) => q.status === 'expired').length;
-    const cancelled = periodQuotations.filter((q) => q.status === 'cancelled').length;
-    const done = quoted + converted + archived + expired + cancelled;
-    const attention = expired + cancelled;
-    return { open, quote, done, attention, quoted, converted, archived, expired, cancelled };
-  }, [periodQuotations]);
+  const counts = useMemo(() => ({
+    open: rows.filter((row) => row.config.bucket === 'open').length,
+    active: rows.filter((row) => row.config.bucket === 'active').length,
+    done: rows.filter((row) => row.config.bucket === 'done').length,
+    attention: rows.filter((row) => row.config.bucket === 'attention').length,
+  }), [rows]);
 
-  const cards = useMemo(() => {
-    return periodQuotations
-      .map((quotation) => {
-        const cfg = statusConfig[quotation.status] ?? fallbackStatusConfig;
-        const supplier = supplierName(quotation.supplierId);
-        return {
-          quotation,
-          cfg,
-          supplier,
-          searchText: `${quotation.id} ${supplier} ${quotation.status} ${quotation.mode}`.toLowerCase(),
-        };
-      })
-      .filter((entry) => filter === 'all' || entry.cfg.bucket === filter)
-      .filter((entry) => !search.trim() || entry.searchText.includes(search.trim().toLowerCase()));
-  }, [filter, periodQuotations, search, entities]);
+  const visibleRows = rows
+    .filter((row) => filter === 'all' || row.config.bucket === filter)
+    .filter((row) => !search.trim() || row.searchText.includes(search.trim().toLowerCase()));
 
   return (
     <PermissionGuard allowed={canView}>
       <PurchasingPageFrame>
-        <PurchasingHeader
-          crumb={['Coala', 'Compras', 'Solicitações de cotação']}
-          title="Solicitações de cotação"
-          description="Cotações em andamento e comparativos por fornecedor antes de virar pedido."
-          actions={
-            <>
-              <Button variant="outline" asChild className="h-11 rounded-[10px] border-zinc-200 bg-white shadow-none">
-                <Link href="/dashboard/purchasing/quotations/compare">
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                  Comparativo
-                </Link>
-              </Button>
-              {canCreate && (
-                <Button onClick={() => setCreateOpen(true)} className="h-11 rounded-[10px] bg-violet-600 px-5 font-bold text-white hover:bg-violet-700">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nova cotação
-                </Button>
-              )}
-            </>
-          }
-        />
+        <PurchasingModuleNavigation activeTab="quotations" activeStage="quotations" />
 
-        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <PurchasingMetricCard active label="Total de cotações" value={periodQuotations.length} detail={`${counts.open + counts.quote} ativas`} tone="purple" icon={<Send className="h-5 w-5" />} />
-          <PurchasingMetricCard label="Abertas" value={counts.open} detail="aguardando itens" tone="blue" icon={<FileText className="h-5 w-5" />} />
-          <PurchasingMetricCard label="Em cotação" value={counts.quote} detail="comparativos abertos" tone="purple" icon={<BarChart3 className="h-5 w-5" />} />
-          <PurchasingMetricCard
-            label="Concluídas"
-            value={counts.done}
-            detail="encerradas no período"
-            tone="green"
-            icon={<CheckCircle2 className="h-5 w-5" />}
-            foot={
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                <span>Convertidas {counts.converted}</span>
-                <span>Finalizadas {counts.quoted}</span>
-                <span>Arquivadas {counts.archived}</span>
-                <span>Canceladas {counts.cancelled}</span>
-                <span>Expiradas {counts.expired}</span>
-              </div>
-            }
-          />
+        <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-[27px] font-black leading-none tracking-[-0.05em] text-zinc-950">Cotações</h1>
+            <p className="mt-1.5 text-[13.5px] text-zinc-600">Preços informados por fornecedor. Nada aqui movimenta estoque ou financeiro.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild className="h-[38px] rounded-[9px] border-zinc-200 bg-white px-4 text-[13px] font-bold shadow-none">
+              <Link href="/dashboard/purchasing/quotations/compare">
+                <BarChart3 className="mr-2 h-3.5 w-3.5" />
+                Comparativo
+              </Link>
+            </Button>
+            {canCreate ? (
+              <Button onClick={() => setCreateOpen(true)} className="h-[38px] rounded-[9px] bg-violet-600 px-4 text-[13px] font-extrabold text-white hover:bg-violet-700">
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                Nova cotação
+              </Button>
+            ) : null}
+          </div>
         </div>
 
-        <PurchasingToolbar
-          search={search}
-          onSearchChange={setSearch}
-          resultLabel={`${cards.length} de ${periodQuotations.length} cotações`}
-          view={view}
-          onViewChange={setView}
-          periodControl={<PurchasingPeriodControl value={period} onChange={setPeriod} years={periodYears} />}
-        >
-          <PurchasingFilterChip active={filter === 'all'} label="Todos" count={periodQuotations.length} onClick={() => setFilter('all')} />
-          <PurchasingFilterChip active={filter === 'open'} label="Aberta" count={counts.open} tone="blue" onClick={() => setFilter('open')} />
-          <PurchasingFilterChip active={filter === 'quote'} label="Em cotação" count={counts.quote} tone="purple" onClick={() => setFilter('quote')} />
-          <PurchasingFilterChip active={filter === 'done'} label="Concluída" count={counts.done} tone="green" onClick={() => setFilter('done')} />
-          <PurchasingFilterChip active={filter === 'approval'} label="Atenção" count={counts.attention} tone="rose" onClick={() => setFilter('approval')} />
-        </PurchasingToolbar>
+        <div className="mb-3 rounded-[12px] border border-zinc-200 bg-white p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por código, fornecedor ou modo..."
+                className="h-9 rounded-[9px] border-zinc-200 bg-zinc-50 pl-9 text-sm shadow-none"
+              />
+            </div>
+            <span className="text-xs text-zinc-500">{visibleRows.length} de {rows.length} cotações</span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <PurchasingFilterChip active={filter === 'all'} label="Todas" count={rows.length} onClick={() => setFilter('all')} />
+            <PurchasingFilterChip active={filter === 'open'} label="Abertas" count={counts.open} tone="blue" onClick={() => setFilter('open')} />
+            <PurchasingFilterChip active={filter === 'active'} label="Em cotação" count={counts.active} tone="purple" onClick={() => setFilter('active')} />
+            <PurchasingFilterChip active={filter === 'done'} label="Convertidas" count={counts.done} tone="green" onClick={() => setFilter('done')} />
+            <PurchasingFilterChip active={filter === 'attention'} label="Atenção" count={counts.attention} tone="rose" onClick={() => setFilter('attention')} />
+          </div>
+        </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-[250px] rounded-[16px]" />)}
-          </div>
-        ) : cards.length === 0 ? (
-          <PurchasingEmptyState label="Nenhuma cotação encontrada." />
-        ) : view === 'table' ? (
           <div className="overflow-hidden rounded-[14px] border border-zinc-200 bg-white">
-            <div className="grid grid-cols-[120px_1.5fr_150px_130px_130px_40px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-zinc-500">
-              <span>Código</span><span>Fornecedor</span><span>Status</span><span>Modo</span><span>Data</span><span />
-            </div>
-            <div className="divide-y divide-zinc-100">
-              {cards.map(({ quotation, cfg, supplier }) => (
-                <Link key={quotation.id} href={`/dashboard/purchasing/quotations/${quotation.id}`} className="grid grid-cols-[120px_1.5fr_150px_130px_130px_40px] items-center gap-4 px-4 py-3 text-sm hover:bg-zinc-50">
-                  <span className="font-mono text-xs font-black text-zinc-600">{quotationCode(quotation.id)}</span>
-                  <span className="font-bold text-zinc-950">{supplier}</span>
-                  <span><PurchasingStatusBadge label={cfg.label} tone={cfg.tone} /></span>
-                  <span className="text-zinc-500">{quotation.mode === 'remote' ? 'Remota' : 'In loco'}</span>
-                  <span className="text-zinc-500">{quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString('pt-BR') : '-'}</span>
-                  <span className="text-right text-zinc-400">›</span>
-                </Link>
-              ))}
-            </div>
+            {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="m-4 h-12 rounded-lg" />)}
           </div>
-        ) : view === 'kanban' ? (
-          <div className="overflow-x-auto pb-3">
-            <div className="grid min-w-[980px] grid-cols-4 gap-3">
-              {[
-                { label: 'Solicitação aberta', bucket: 'open' as const, tone: 'blue' as const },
-                { label: 'Em cotação', bucket: 'quote' as const, tone: 'purple' as const },
-                { label: 'Atenção', bucket: 'approval' as const, tone: 'rose' as const },
-                { label: 'Concluída', bucket: 'done' as const, tone: 'green' as const },
-              ].map((column) => {
-                const columnCards = cards.filter((entry) => entry.cfg.bucket === column.bucket);
-                return (
-                  <PurchasingKanbanColumn key={column.label} label={column.label} tone={column.tone} count={columnCards.length}>
-                    {columnCards.map(({ quotation, cfg, supplier }) => (
-                      <PurchasingKanbanCard
-                        key={quotation.id}
-                        href={`/dashboard/purchasing/quotations/${quotation.id}`}
-                        tone={cfg.tone}
-                        code={quotationCode(quotation.id)}
-                        title={supplier}
-                        meta={new Date(quotation.createdAt).toLocaleDateString('pt-BR')}
-                        badges={<PurchasingStatusBadge label={cfg.label} tone={cfg.tone} />}
-                        footerLeft={quotation.mode === 'remote' ? 'Remota' : 'In loco'}
-                        amount={quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString('pt-BR') : 'Sem data'}
-                      >
-                        <PurchasingItemsPreview quotationId={quotation.id} />
-                      </PurchasingKanbanCard>
-                    ))}
-                  </PurchasingKanbanColumn>
-                );
-              })}
-            </div>
-          </div>
+        ) : visibleRows.length === 0 ? (
+          <PurchasingEmptyState label="Nenhuma cotação encontrada." />
         ) : (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-            {cards.map(({ quotation, cfg, supplier }) => (
-              <PurchasingPipelineCard
-                key={quotation.id}
-                href={`/dashboard/purchasing/quotations/${quotation.id}`}
-                tone={cfg.tone}
-                code={quotationCode(quotation.id)}
-                title={supplier}
-                badges={
-                  <>
-                    <PurchasingStatusBadge label={cfg.label} tone={cfg.tone} />
-                    <PurchasingStatusBadge label={quotation.mode === 'remote' ? 'Remota' : 'In loco'} tone="zinc" />
-                  </>
-                }
-                progress={cfg.progress}
-                lines={[
-                  { label: quotation.mode === 'remote' ? 'Compra remota' : 'Cotação em loja' },
-                  { label: quotation.validUntil ? `Cotada em ${new Date(quotation.validUntil).toLocaleDateString('pt-BR')}` : 'Sem data da cotação' },
-                  { label: quotation.notes || 'Sem observação' },
-                ]}
-                footerLeft={<span>{supplier}</span>}
-                age={purchasingAgeLabel(quotation.createdAt)}
-              />
-            ))}
+          <div className="overflow-x-auto rounded-[14px] border border-zinc-200 bg-white">
+            <div className="min-w-[820px]">
+              <div className="grid grid-cols-[132px_minmax(250px,1.6fr)_150px_120px_150px_32px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.1em] text-zinc-500">
+                <span>Código</span><span>Fornecedor</span><span>Situação</span><span>Modo</span><span>Validade</span><span />
+              </div>
+              <div className="divide-y divide-zinc-100">
+                {visibleRows.map(({ quotation, supplier, config }) => (
+                  <Link
+                    key={quotation.id}
+                    href={`/dashboard/purchasing/quotations/${quotation.id}`}
+                    className="grid grid-cols-[132px_minmax(250px,1.6fr)_150px_120px_150px_32px] items-center gap-4 px-4 py-3.5 transition-colors hover:bg-zinc-50"
+                  >
+                    <div>
+                      <div className="font-mono text-[11.5px] font-extrabold text-zinc-700">{quotationCode(quotation.id)}</div>
+                      <div className="mt-1 text-[10.5px] text-zinc-500">{formatDate(quotation.createdAt)}</div>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-extrabold tracking-[-0.02em] text-zinc-950">{supplier}</div>
+                      <p className="mt-1 truncate text-xs text-zinc-500">{quotation.notes || 'Sem observações registradas'}</p>
+                    </div>
+                    <span><PurchasingStatusBadge label={config.label} tone={config.tone} /></span>
+                    <span className="text-xs font-semibold text-zinc-600">{quotation.mode === 'remote' ? 'Remota' : 'In loco'}</span>
+                    <span className="text-xs text-zinc-500">{formatDate(quotation.validUntil)}</span>
+                    <span className="text-right text-lg text-zinc-300">›</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
         )}
+
+        <div className="mt-3 flex flex-col gap-3 rounded-[14px] border border-zinc-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-black tracking-[-0.02em] text-zinc-950">Comparação por item</h2>
+            <p className="mt-1 text-xs text-zinc-500">Compare os preços normalizados das cotações finalizadas e monte a compra.</p>
+          </div>
+          <Button asChild className="h-9 rounded-[9px] bg-zinc-950 px-4 text-xs font-extrabold text-white hover:bg-zinc-800">
+            <Link href="/dashboard/purchasing/quotations/compare">Abrir comparativo</Link>
+          </Button>
+        </div>
       </PurchasingPageFrame>
 
       <CreateQuotationModal open={createOpen} onOpenChange={setCreateOpen} />

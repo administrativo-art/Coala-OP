@@ -57,3 +57,51 @@ test("ignora provisões de outra competência", () => {
   }]);
   assert.equal(suggestion.status, "not_found");
 });
+
+test("não sugere previsão de outra linha telefônica", () => {
+  const telecomClassification: FinancialInboxClassification = {
+    ...classification,
+    documentType: "utility_bill",
+    supplierName: "Vivo",
+    billingIdentity: {
+      supplierTaxId: null,
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "mobile",
+      serviceNumbers: ["+5598999991234"],
+    },
+  };
+  const suggestion = chooseProvisionSuggestion(telecomClassification, [{
+    id: "forecast-wrong-line",
+    description: "Vivo móvel · Linha (98) 98888-4321",
+    supplier: "Vivo",
+    provisionCompetence: "2026-08",
+    totalValue: 1200,
+  }]);
+  assert.equal(suggestion.status, "not_found");
+});
+
+test("usa a conta de cliente como identidade forte quando a linha não está cadastrada", () => {
+  const telecomClassification: FinancialInboxClassification = {
+    ...classification,
+    documentType: "utility_bill",
+    supplierName: "Vivo",
+    billingIdentity: {
+      supplierTaxId: null,
+      customerAccount: "123456",
+      contractNumber: null,
+      serviceType: "mobile",
+      serviceNumbers: [],
+    },
+  };
+  const suggestion = chooseProvisionSuggestion(telecomClassification, [{
+    id: "forecast-account-only",
+    description: "Vivo móvel · Conta 123456",
+    supplier: "Vivo",
+    provisionCompetence: "2026-08",
+    totalValue: 1200,
+  }]);
+  assert.equal(suggestion.status, "suggested");
+  assert.equal(suggestion.provisionExpenseId, "forecast-account-only");
+  assert.match(suggestion.reasons.join(" "), /mesma conta do cliente/);
+});

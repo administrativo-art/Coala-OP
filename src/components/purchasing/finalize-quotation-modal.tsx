@@ -92,7 +92,7 @@ export function FinalizeQuotationModal({ open, onOpenChange, items, getProductNa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg flex flex-col gap-0 p-0 max-h-[85vh]">
+      <DialogContent className="font-purchasing flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-lg">
         <DialogHeader className="p-6 pb-4 shrink-0">
           <DialogTitle>Finalizar cotação</DialogTitle>
           <DialogDescription>

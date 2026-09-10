@@ -15,7 +15,6 @@ import {
   CreditCard,
   FileSearch,
   Loader2,
-  ReceiptText,
   RefreshCw,
   Repeat2,
   Sparkles,
@@ -34,10 +33,12 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import {
   buildCardStatementGroups,
   buildCardStatementAllocations,
+  buildCardStatementLinesFromAllocations,
   cardStatementLineAuditIssues as cardLineAuditIssues,
   cardStatementLineAuditStatus as getCardLineAuditStatus,
   findCardStatementPaymentCandidates,
@@ -51,8 +52,8 @@ import {
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import type { CardStatementImportPreview } from "@/features/financial/lib/card-statement-import";
 import {
+  buildCardStatementExpenseCandidates,
   matchCardStatementExpenses,
-  type CardStatementExpenseCandidate,
 } from "@/features/financial/lib/card-statement-expense-matcher";
 import { financialCollection, financialDoc } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
@@ -131,7 +132,8 @@ function paymentMethodCards(bankAccounts: any[]): CreditCardInstrument[] {
 
 function monthLabel(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
-  return format(new Date(year, month - 1, 1, 12), "MMMM 'de' yyyy", { locale: ptBR });
+  const label = format(new Date(year, month - 1, 1, 12), "MMMM | yyyy", { locale: ptBR });
+  return label.replace(/^\p{Ll}/u, (letter) => letter.toLocaleUpperCase("pt-BR"));
 }
 
 function changeMonth(monthKey: string, delta: number) {
@@ -171,7 +173,9 @@ function lineReconciliationUpdate(
               ...installment,
               cardReconciliationStatus: reconciled ? "reconciled" : "pending",
               cardReconciledAt: reconciledAt,
+              cardStatementId: statementKey ? statementDocumentId(statementKey) : null,
               cardStatementKey: statementKey,
+              cardStatementMonthKey: statementMonthKey,
             }
           : installment
       )
@@ -180,7 +184,9 @@ function lineReconciliationUpdate(
           ...installment,
           cardReconciliationStatus: reconciled ? "reconciled" : "pending",
           cardReconciledAt: reconciledAt,
+          cardStatementId: statementKey ? statementDocumentId(statementKey) : null,
           cardStatementKey: statementKey,
+          cardStatementMonthKey: statementMonthKey,
         }))
       : installments;
 
@@ -253,6 +259,10 @@ export function CardStatementsWorkspace({
     () => new Map((statementsData || []).map((statement) => [statement.key || statement.id, statement])),
     [statementsData]
   );
+  const expenseById = useMemo(
+    () => new Map((expensesData || []).map((expense) => [String(expense.id), expense])),
+    [expensesData]
+  );
   const monthGroups = useMemo<CardStatementGroup[]>(() => {
     const generatedByCard = new Map(
       generatedGroups
@@ -274,13 +284,28 @@ export function CardStatementsWorkspace({
         provisionedTotal: 0,
       };
       const statement = statementByKey.get(baseGroup.key);
+      const officialLines = statement?.allocations?.length
+        ? buildCardStatementLinesFromAllocations(statement.allocations, [
+            ...new Set(statement.allocations.map((allocation) => allocation.expenseId)),
+          ].flatMap((expenseId) => {
+            const expense = expenseById.get(expenseId);
+            return expense ? [expense] : [];
+          }))
+        : null;
+      const lines = officialLines ?? baseGroup.lines;
       return {
         ...baseGroup,
+        lines,
+        projectedTotal: lines.reduce((total, line) => total + line.value, 0),
+        reconciledTotal: lines.filter((line) => line.reconciled).reduce((total, line) => total + line.value, 0),
+        recurringCount: lines.filter((line) => line.expense.paymentMethod === "recurring" || line.expense.recurrenceGroupId).length,
+        provisionCount: lines.filter((line) => isCardLineForecast(line)).length,
+        provisionedTotal: lines.filter((line) => isCardLineForecast(line)).reduce((total, line) => total + line.value, 0),
         closingDate: toDate(statement?.closingDate) || baseGroup.closingDate,
         dueDate: toDate(statement?.dueDate) || baseGroup.dueDate,
       };
     });
-  }, [cards, generatedGroups, monthKey, statementByKey]);
+  }, [cards, expenseById, generatedGroups, monthKey, statementByKey]);
   const selectedGroup = monthGroups.find(
     (group) => `${group.card.accountId}:${group.card.methodId}` === selectedCardKey
   ) ?? monthGroups[0] ?? null;
@@ -369,29 +394,9 @@ export function CardStatementsWorkspace({
     () => new Set((importPreview?.revision?.removed || []).map((line) => line.fingerprint)),
     [importPreview]
   );
-  const importExpenseCandidates = useMemo<CardStatementExpenseCandidate[]>(
-    () => (selectedGroup?.lines || []).flatMap((line) => {
-      const fingerprints = [
-        String((line.expense as any).cardStatementImportFingerprint || ""),
-        ...(Array.isArray((line.expense as any).cardStatementImportFingerprints)
-        ? (line.expense as any).cardStatementImportFingerprints.map(String)
-        : []),
-      ].filter(Boolean);
-      const belongsToRemovedRevision = fingerprints.some((fingerprint) => revisionRemovedFingerprintSet.has(fingerprint));
-      if (line.expense.status === "paid" || (!belongsToRemovedRevision && (line.reconciled || fingerprints.length > 0))) return [];
-      return [{
-        lineId: line.lineId,
-        expenseId: line.expense.id,
-        description: String(line.expense.description || ""),
-        supplier: String(line.expense.supplier || ""),
-        amount: line.value,
-        chargeDate: line.chargeDate,
-        installmentNumber: line.installmentNumber,
-        installmentTotal: line.installmentTotal,
-        isForecast: isCardLineForecast(line),
-      }];
-    }),
-    [revisionRemovedFingerprintSet, selectedGroup]
+  const importExpenseCandidates = useMemo(
+    () => buildCardStatementExpenseCandidates(expensesData || [], revisionRemovedFingerprintSet),
+    [expensesData, revisionRemovedFingerprintSet]
   );
   const importExpenseMatches = useMemo(
     () => matchCardStatementExpenses(importPreview?.transactions || [], importExpenseCandidates),
@@ -876,9 +881,6 @@ export function CardStatementsWorkspace({
           <Button variant="outline" className="h-10 rounded-xl bg-white" asChild>
             <Link href={FINANCIAL_ROUTES.importExpenses}><FileSearch className="mr-2 h-4 w-4" />Conferência do extrato</Link>
           </Button>
-          <Button variant="outline" className="h-10 rounded-xl bg-white" asChild>
-            <Link href={FINANCIAL_ROUTES.newExpense}><ReceiptText className="mr-2 h-4 w-4" />Nova despesa</Link>
-          </Button>
         </div>
       </div> : null}
 
@@ -1036,6 +1038,7 @@ export function CardStatementsWorkspace({
                         <p className="truncate text-[10.5px] leading-tight text-muted-foreground">
                           {line.expense.supplier || "Sem favorecido"}{issues.length > 0 ? ` · revisar ${issues.join(", ")}` : ""}
                         </p>
+                        <UberRecognitionStatus record={line.expense} compact />
                       </div>
                       <div className="hidden lg:block">
                         <span className={cn(
@@ -1417,6 +1420,7 @@ export function CardStatementsWorkspace({
                                     {imported ? <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700"><Sparkles className="h-2.5 w-2.5" />Importada</span> : null}
                                   </div>
                                   <p className="mt-1 truncate text-[11px] text-muted-foreground">{line.expense.supplier || "Sem favorecido"} · cobrança em {format(line.chargeDate, "dd/MM/yyyy")}</p>
+                                  <UberRecognitionStatus record={line.expense} compact />
                                   {issues.length > 0 ? (
                                     <p className="mt-1.5 inline-block rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10.5px] font-bold text-amber-700">⚠ Revisar {issues.join(", ")}</p>
                                   ) : null}

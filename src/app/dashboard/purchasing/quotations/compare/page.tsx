@@ -10,6 +10,8 @@ import { BackButton } from '@/components/navigation/back-button';
 import { Button } from '@/components/ui/button';
 import { PermissionGuard } from '@/components/permission-guard';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PurchasingModuleNavigation } from '@/components/purchasing/purchasing-module-navigation';
+import { PurchasingPageFrame } from '@/components/purchasing/purchasing-ui';
 import {
   Select,
   SelectContent,
@@ -110,15 +112,15 @@ export default function QuotationComparePage() {
 
   return (
     <PermissionGuard allowed={canView}>
-      <div className="container max-w-[1600px] py-8 space-y-6">
-      <div className="flex items-center gap-3">
-        <BackButton fallbackHref="/dashboard/purchasing/quotations" label="Cotações" variant="ghost" size="sm" className="-ml-2" />
-      </div>
+      <PurchasingPageFrame>
+      <PurchasingModuleNavigation activeTab="quotations" activeStage="quotations" />
+      <div className="space-y-6">
+      <BackButton fallbackHref="/dashboard/purchasing/quotations" label="Cotações" variant="ghost" size="sm" className="-ml-2" />
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Comparativo de Cotações</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-[27px] font-black leading-none tracking-[-0.05em] text-zinc-950">Comparativo de cotações</h1>
+          <p className="mt-1.5 text-[13.5px] text-zinc-600">
             Menores preços por insumo em cotações finalizadas e ainda ativas.
           </p>
         </div>
@@ -153,7 +155,7 @@ export default function QuotationComparePage() {
           Nenhum item normalizado em cotação ativa.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
+        <div className="overflow-x-auto rounded-[14px] border border-zinc-200 bg-white">
           <Table>
             <TableHeader>
               <TableRow>
@@ -191,6 +193,7 @@ export default function QuotationComparePage() {
         </div>
       )}
       </div>
+      </PurchasingPageFrame>
     </PermissionGuard>
   );
 }

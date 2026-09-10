@@ -888,11 +888,11 @@ export function ReceiptWorkspace({ receipt }: Props) {
   return (
     <div className="space-y-6">
       {/* Header card */}
-      <div className="rounded-2xl border bg-card p-6 space-y-5">
+      <div className="space-y-5 rounded-[14px] border bg-card p-6">
         <div className="flex flex-col lg:flex-row lg:items-start gap-4">
           <div className="flex-1 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-3xl font-bold">
+              <h1 className="text-[25px] font-black leading-tight tracking-[-0.04em]">
                 {receipt.supplierName}
               </h1>
               <Badge variant={receipt.status === 'cancelled' ? 'destructive' : isDone ? 'default' : 'secondary'}>

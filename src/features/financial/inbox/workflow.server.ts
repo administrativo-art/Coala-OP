@@ -3,21 +3,24 @@ import { Timestamp } from "firebase-admin/firestore";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { calculateFinancialObligationSummary } from "@/features/financial/obligations/calculations";
+import { buildFinancialDescription } from "@/features/financial/lib/expense-description-catalog";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
-import { classifyFinancialEmail } from "./parser";
-import { chooseExistingExpenseSuggestion, type InboxExpenseCandidate } from "./expense-suggestions";
+import { classifyFinancialEmail, mergeBillingIdentities } from "./parser";
+import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
 import { chooseProvisionSuggestion, type ProvisionCandidate } from "./provision-suggestions";
+import { chooseCreationSuggestion } from "./creation-suggestions";
+import { prepareFinancialInboxDocuments } from "./document-processing.server";
 import { getFinancialInboxMessage } from "./repository.server";
 import type { FinancialInboxMessage } from "./types";
 
-const MAX_PROVISION_CANDIDATES = 10;
+const MAX_PROVISION_CANDIDATES = 100;
 const MAX_EXISTING_EXPENSE_CANDIDATES = 500;
 const MAX_MATCHED_PAYMENT_CANDIDATES = 100;
 // Custo de triagem: no máximo 10 leituras por cobrança relevante. Com 300
 // cobranças/mês, o teto esperado é 3.000 leituras/mês, além de reanálises manuais.
 // O cruzamento lê no máximo 501 despesas abertas, 101 pagamentos do mesmo valor,
-// 100 despesas pagas referenciadas e 10 previsões. Com 50 cobranças/mês, o teto
-// é 35.600 leituras/mês, incluindo a análise automática e reanálises manuais.
+// 100 despesas pagas referenciadas e 100 previsões. Com 50 cobranças/mês, o teto
+// é 40.100 leituras/mês, incluindo a análise automática e reanálises manuais.
 
 function money(value: unknown) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -57,19 +60,16 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     throw new Error("Cobrança recebida não encontrada.");
   }
   const checkedAt = new Date().toISOString();
+  const documents = await prepareFinancialInboxDocuments(message);
   const reparsed = classifyFinancialEmail({
     subject: message.subject,
     text: message.textContent,
     senderDomain: message.senderDomain,
+    documentText: documents.documentText,
+    documentHints: documents.hints,
   }).classification;
   const classification = {
-    ...message.classification,
-    supplierName: message.classification.supplierName || reparsed.supplierName,
-    competence: message.classification.competence || reparsed.competence,
-    dueDate: message.classification.dueDate || reparsed.dueDate,
-    amountCents: message.classification.amountCents ?? reparsed.amountCents,
-    barcode: message.classification.barcode || reparsed.barcode,
-    barcodeMasked: message.classification.barcodeMasked || reparsed.barcodeMasked,
+    ...reparsed,
     links: message.classification.links?.length ? message.classification.links : reparsed.links,
   };
 
@@ -121,7 +121,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
   }
 
   let candidates: ProvisionCandidate[] = [];
-  if (existingExpenseSuggestion.status === "not_found" && classification.financeLikely && classification.competence) {
+  if (existingExpenseSuggestion.status !== "suggested" && classification.financeLikely && classification.competence) {
     const snapshot = await financialDbAdmin.collection("expenses")
       .where("provisionType", "==", "forecast")
       .where("status", "==", "provisioned")
@@ -131,24 +131,55 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     candidates = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
   }
   const suggestion = chooseProvisionSuggestion(classification, candidates, checkedAt);
-  const nextStatus = existingExpenseSuggestion.status === "suggested" || suggestion.status === "suggested"
-    ? "suggestion_available"
-    : message.status;
+  const creationSuggestion = chooseCreationSuggestion({
+    subject: message.subject,
+    classification,
+    existingExpenseSuggestion,
+    provisionSuggestion: suggestion,
+  });
+  const nextStatus = classification.marketingLikely
+    ? "ignored"
+    : existingExpenseSuggestion.status === "suggested"
+      || suggestion.status === "suggested"
+      || creationSuggestion.status === "suggested"
+      ? "suggestion_available"
+      : message.status === "document_pending"
+        && documents.attachments.some((attachment) => ["extracted", "ocr_extracted"].includes(attachment.extractionStatus ?? ""))
+        ? "pending_review"
+        : message.status;
   const persistedStatus = ["pending_review", "document_pending", "suggestion_available"].includes(message.status)
     ? nextStatus
     : message.status;
-  await financialDbAdmin.collection("financialInboxMessages").doc(id).set({
+  const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
+  const batch = financialDbAdmin.batch();
+  batch.set(messageRef, {
     classification,
+    attachments: documents.attachments,
+    archiveWarnings: [...new Set([...(message.archiveWarnings ?? []), ...documents.warnings])],
+    linkResolution: documents.linkResolution,
     existingExpenseSuggestion,
     provisionSuggestion: suggestion,
+    creationSuggestion,
     status: persistedStatus,
     updatedAt: checkedAt,
   }, { merge: true });
+  if (persistedStatus === "ignored" && message.status !== "ignored" && classification.marketingLikely) {
+    batch.set(messageRef.collection("events").doc("auto-marketing-v1"), {
+      type: "MESSAGE_AUTO_IGNORED_MARKETING",
+      at: checkedAt,
+      actorId: "system:financial-inbox",
+    }, { merge: true });
+  }
+  await batch.commit();
   return {
     ...message,
     classification,
+    attachments: documents.attachments,
+    archiveWarnings: [...new Set([...(message.archiveWarnings ?? []), ...documents.warnings])],
+    linkResolution: documents.linkResolution,
     existingExpenseSuggestion,
     provisionSuggestion: suggestion,
+    creationSuggestion,
     status: persistedStatus,
   } as FinancialInboxMessage;
 }
@@ -204,8 +235,14 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       message.classification.competence ? `${message.classification.competence}-01` : null,
       dueDate.toDate(),
     );
-    const description = String(provision.description || message.subject).trim();
     const supplier = message.classification.supplierName || String(provision.supplier || "");
+    const description = message.classification.billingIdentity?.serviceType === "mobile"
+      && message.classification.competence
+      ? buildFinancialDescription("mobile_phone_bill", {
+        competence: message.classification.competence,
+        beneficiary: supplier,
+      })
+      : String(provision.description || message.subject).trim();
     const actual = {
       ...copyExpenseClassification(provision),
       workspaceId: WORKSPACE_ID,
@@ -228,6 +265,7 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       provisionReconciledBy: actor.uid,
       originModule: "financial_inbox",
       financialInboxMessageId: id,
+      billingIdentity: message.classification.billingIdentity ?? null,
       status: "pending",
       createdAt: now,
       createdBy: actor.uid,
@@ -331,15 +369,18 @@ export async function linkInboxChargeToExistingExpense(
       throw new Error("A cobrança já está vinculada a outra despesa.");
     }
     if (expense.provisionType === "forecast") throw new Error("A cobrança deve ser vinculada à despesa real, não à previsão.");
-    const exactSuggestion = installmentNumber == null
-      ? null
-      : chooseExistingExpenseSuggestion(message.classification, [{ id: expenseId, ...expense }]);
-    if (installmentNumber != null && (
-      exactSuggestion?.status !== "suggested"
-      || exactSuggestion.installmentNumber !== installmentNumber
-    )) {
-      throw new Error("A parcela sugerida não corresponde mais à cobrança. Analise novamente.");
+    const reevaluatedSuggestion = chooseExistingExpenseSuggestion(message.classification, [{ id: expenseId, ...expense }]);
+    const selectedAlternative = reevaluatedSuggestion.alternatives?.find((alternative) => (
+      alternative.expenseId === expenseId
+      && alternative.installmentNumber === installmentNumber
+    )) ?? null;
+    if (installmentNumber != null && !selectedAlternative) {
+      throw new Error("A parcela selecionada não corresponde mais à cobrança. Analise novamente.");
     }
+    const exactSuggestion = reevaluatedSuggestion.status === "suggested"
+      && reevaluatedSuggestion.installmentNumber === installmentNumber
+      ? reevaluatedSuggestion
+      : null;
     const installments = Array.isArray(expense.installments)
       ? expense.installments as Array<Record<string, unknown>>
       : [];
@@ -367,7 +408,7 @@ export async function linkInboxChargeToExistingExpense(
       const iso = date.toISOString().slice(0, 10);
       return competence ? iso.slice(0, 7) : iso;
     };
-    const classificationSource = exactSuggestion?.status === "suggested" ? exactSuggestion : null;
+    const classificationSource = exactSuggestion?.status === "suggested" ? exactSuggestion : selectedAlternative;
     const classification = {
       ...message.classification,
       supplierName: message.classification.supplierName || String(expense.supplier || "") || null,
@@ -377,16 +418,29 @@ export async function linkInboxChargeToExistingExpense(
       dueDate: message.classification.dueDate || classificationSource?.dueDate || expenseDateKey(expense.dueDate),
       competence: message.classification.competence || expenseDateKey(expense.competenceDate, true),
     };
-    const existingBankPayment = classificationSource?.existingBankPayment ?? null;
-    const existingSettlement = classificationSource?.existingSettlement ?? null;
+    const directSettlementId = String(targetInstallment?.linkedBankTransactionId ?? "").trim();
+    const existingSettlement = exactSuggestion?.existingSettlement
+      ?? (directSettlementId ? { transactionId: directSettlementId, paidAt: isoDateKey(targetInstallment?.paidAt) } : null);
+    const existingBankPayment = exactSuggestion?.existingBankPayment
+      ?? (existingSettlement || !targetInstallment ? null : existingPayment(targetInstallment));
     const inboxState = inboxStateForExistingMatch(existingSettlement, existingBankPayment);
+    const billingIdentity = mergeBillingIdentities(
+      (expense.billingIdentity as FinancialInboxMessage["classification"]["billingIdentity"]) ?? {
+        supplierTaxId: null,
+        customerAccount: null,
+        contractNumber: null,
+        serviceType: null,
+        serviceNumbers: [],
+      },
+      [message.classification.billingIdentity],
+    );
     if (installmentIndex >= 0) {
       const nextInstallments = installments.map((installment, index) => index === installmentIndex
         ? { ...installment, financialInboxMessageId: id, financialInboxLinkedAt: now, financialInboxLinkedBy: actor.uid }
         : installment);
-      transaction.set(expenseRef, { installments: nextInstallments, updatedAt: Timestamp.now() }, { merge: true });
+      transaction.set(expenseRef, { installments: nextInstallments, billingIdentity, updatedAt: Timestamp.now() }, { merge: true });
     } else {
-      transaction.set(expenseRef, { financialInboxMessageId: id, updatedAt: Timestamp.now() }, { merge: true });
+      transaction.set(expenseRef, { financialInboxMessageId: id, billingIdentity, updatedAt: Timestamp.now() }, { merge: true });
     }
     transaction.set(messageRef, {
       status: inboxState.status,
@@ -395,10 +449,26 @@ export async function linkInboxChargeToExistingExpense(
       linkedExpenseInstallmentNumber: installmentNumber,
       linkedProvisionId: expense.reconciledProvisionId || null,
       obligationId,
-      classification,
+      classification: { ...classification, billingIdentity },
       existingBankPayment,
       existingSettlement,
-      ...(exactSuggestion ? { existingExpenseSuggestion: { ...exactSuggestion, status: "linked" } } : {}),
+      ...(classificationSource ? {
+        existingExpenseSuggestion: {
+          ...message.existingExpenseSuggestion,
+          status: "linked",
+          expenseId,
+          installmentNumber,
+          installmentTotal: classificationSource.installmentTotal,
+          description: classificationSource.description,
+          supplier: classificationSource.supplier,
+          amountCents: classificationSource.amountCents,
+          dueDate: classificationSource.dueDate,
+          reasons: classificationSource.reasons,
+          paymentState: existingSettlement ? "paid" : existingBankPayment ? "scheduled" : "needs_scheduling",
+          existingBankPayment,
+          existingSettlement,
+        },
+      } : {}),
       reviewedAt: now,
       reviewedBy: actor.uid,
       updatedAt: now,

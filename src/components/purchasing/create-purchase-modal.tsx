@@ -203,7 +203,7 @@ export function CreatePurchaseModal({ open, onOpenChange, quotation, items }: Pr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0">
+      <DialogContent className="font-purchasing flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-2xl">
         <DialogHeader className="p-6 pb-4 shrink-0">
           <DialogTitle>Criar compra</DialogTitle>
           <DialogDescription>

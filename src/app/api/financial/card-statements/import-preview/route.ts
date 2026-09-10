@@ -51,7 +51,11 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileSha256 = cardStatementImportFileHash(buffer);
     const statementKey = `${accountId}:${paymentMethodId}:${monthKey}`;
-    const cached = await getCachedCardStatementPreview({ statementKey, fileSha256 });
+    const cached = await getCachedCardStatementPreview({
+      statementKey,
+      fileSha256,
+      promptVersion: CARD_STATEMENT_IMPORT_PROMPT_METADATA.version,
+    });
     const analyzedPreview = cached ?? await extractCardStatementImportPreview({
       file: new File([buffer], file.name, { type: file.type }),
       accountId,

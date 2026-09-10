@@ -221,9 +221,11 @@ export async function ingestFinancialEmail(params: {
 
   const now = new Date().toISOString();
   const hasStoredDocument = attachments.some((attachment) => attachment.archiveStatus === "stored");
-  const status: FinancialInboxMessage["status"] = !hasStoredDocument && parsed.classification.links.length > 0
-    ? "document_pending"
-    : "pending_review";
+  const status: FinancialInboxMessage["status"] = parsed.classification.marketingLikely
+    ? "ignored"
+    : !hasStoredDocument && parsed.classification.links.length > 0
+      ? "document_pending"
+      : "pending_review";
   const message: Omit<FinancialInboxMessage, "id"> = {
     workspaceId: WORKSPACE_ID,
     provider: "resend",
@@ -262,6 +264,13 @@ export async function ingestFinancialEmail(params: {
       provisionedAmountCents: null,
       checkedAt: null,
     },
+    creationSuggestion: null,
+    linkResolution: {
+      status: parsed.classification.links.length ? "not_checked" : "not_needed",
+      checkedAt: null,
+      sourceDomain: null,
+      message: null,
+    },
     bankState: "not_prepared",
     statementTransactionId: null,
     reviewedAt: null,
@@ -279,18 +288,27 @@ export async function ingestFinancialEmail(params: {
       actorId: "system:resend",
       providerEventId: params.eventId,
     });
+    if (parsed.classification.marketingLikely) {
+      batch.create(reference.collection("events").doc("auto-marketing-v1"), {
+        type: "MESSAGE_AUTO_IGNORED_MARKETING",
+        at: now,
+        actorId: "system:resend",
+      });
+    }
     await batch.commit();
   } catch (error) {
     if (!isAlreadyExists(error)) throw error;
     return { id: documentId, duplicate: true };
   }
-  await analyzeFinancialInboxMessage(documentId).catch(async (error: unknown) => {
-    await reference.collection("events").doc().create({
-      type: "PROVISION_ANALYSIS_FAILED",
-      at: new Date().toISOString(),
-      actorId: "system:resend",
-      safeMessage: error instanceof Error ? error.message.slice(0, 240) : "Falha não identificada.",
+  if (!parsed.classification.marketingLikely) {
+    await analyzeFinancialInboxMessage(documentId).catch(async (error: unknown) => {
+      await reference.collection("events").doc().create({
+        type: "PROVISION_ANALYSIS_FAILED",
+        at: new Date().toISOString(),
+        actorId: "system:resend",
+        safeMessage: error instanceof Error ? error.message.slice(0, 240) : "Falha não identificada.",
+      });
     });
-  });
+  }
   return { id: documentId, duplicate: false, status };
 }

@@ -5,7 +5,10 @@ import { linkInboxChargeToExistingExpense, linkSuggestedInboxCharge } from "@/fe
 import { requireUser } from "@/lib/auth-server";
 
 export const runtime = "nodejs";
-const schema = z.object({ expenseId: z.string().trim().min(1).max(180).optional() });
+const schema = z.object({
+  expenseId: z.string().trim().min(1).max(180).optional(),
+  installmentNumber: z.number().int().positive().nullable().optional(),
+});
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -28,7 +31,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       name: actor.userDoc.username ?? null,
     };
     const result = input.expenseId
-      ? await linkInboxChargeToExistingExpense(id, input.expenseId, paymentActor, actor.workspace_id)
+      ? await linkInboxChargeToExistingExpense(id, input.expenseId, paymentActor, actor.workspace_id, input.installmentNumber ?? null)
       : await linkSuggestedInboxCharge(id, paymentActor, actor.workspace_id);
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

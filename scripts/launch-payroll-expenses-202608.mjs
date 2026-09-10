@@ -1,11 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
-import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
-import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 
-const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "smart-converter-752gf";
-const FIN_DATABASE = "coala-financeiro";
-const COMPETENCE = Timestamp.fromDate(new Date("2026-08-01T00:00:00.000Z"));
-const DUE_DATE = Timestamp.fromDate(new Date("2026-09-05T00:00:00.000Z"));
+import { reconcileExpenseProvisionOnServer } from "../src/features/financial/expense-provision-reconciliation.server.ts";
+import { payrollExpenseDocumentId } from "../src/features/financial/lib/payroll-provisions.ts";
+import { financialDbAdmin } from "../src/lib/firebase-financial-admin.ts";
+
+const COMPETENCE_KEY = "2026-08";
+const COMPETENCE = Timestamp.fromDate(new Date("2026-08-01T12:00:00-03:00"));
+const DUE_DATE = Timestamp.fromDate(new Date("2026-09-05T12:00:00-03:00"));
 const ACCOUNT_ID = "vuLqBaYv6ZgSALpLQiy9"; // Salários (Folha de pagamento > Pessoal)
 const ACCOUNT_NAME = "Salários";
 const RESULT_CENTERS = {
@@ -18,17 +19,9 @@ const SOURCE_NOTE = "Lançado a partir do holerite de Agosto/2026 (Folha Mensal,
 const APPLY = process.argv.includes("--apply");
 const ROLLBACK = process.argv.includes("--rollback");
 
-if (APPLY && ROLLBACK) throw new Error("Use apenas --apply ou --rollback.");
-
-function credential() {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) return cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT));
-  const path = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  if (path && existsSync(path)) return cert(JSON.parse(readFileSync(path, "utf8")));
-  return applicationDefault();
+if (ROLLBACK) {
+  throw new Error("Rollback destrutivo desativado: salários conciliados devem preservar o histórico.");
 }
-
-const app = getApps()[0] ?? initializeApp({ credential: credential(), projectId: PROJECT_ID });
-const finDb = getFirestore(app, FIN_DATABASE);
 
 function description(name) {
   return `Salário - 08/2026 | ${name}`;
@@ -63,6 +56,12 @@ function expenseDoc(emp) {
     supplier: emp.name,
     employeeId: emp.employeeId,
     employeeName: emp.name,
+    payrollEarningType: "salary",
+    payrollIdentityKey: `payroll:salary:${COMPETENCE_KEY}:${emp.employeeId}`,
+    provisionType: "actual",
+    provisionCompetence: COMPETENCE_KEY,
+    provisionSeriesKey: `payroll-salary:${emp.employeeId}`,
+    provisionSource: "payslip",
     accountPlan: ACCOUNT_ID,
     accountId: ACCOUNT_ID,
     accountPlanName: ACCOUNT_NAME,
@@ -91,39 +90,17 @@ function expenseDoc(emp) {
 }
 
 function docId(emp) {
-  return `salary_202608_${emp.employeeId}`;
+  return payrollExpenseDocumentId(emp.employeeId, COMPETENCE_KEY, "salary");
 }
 
 async function readExisting() {
-  const refs = EMPLOYEES.map((emp) => finDb.collection("expenses").doc(docId(emp)));
-  const snaps = await finDb.getAll(...refs);
+  const refs = EMPLOYEES.map((emp) => financialDbAdmin.collection("expenses").doc(docId(emp)));
+  const snaps = await financialDbAdmin.getAll(...refs);
   return snaps;
-}
-
-if (ROLLBACK) {
-  const snaps = await readExisting();
-  const batch = finDb.batch();
-  let count = 0;
-  snaps.forEach((snap) => {
-    if (snap.exists && snap.get("createdBy") === CREATED_BY) {
-      batch.delete(snap.ref);
-      count += 1;
-    }
-  });
-  if (count === 0) {
-    console.log("Nada para reverter (nenhum documento criado por este script encontrado).");
-    process.exit(0);
-  }
-  await batch.commit();
-  console.log(`Rollback concluído: ${count} despesa(s) removida(s).`);
-  process.exit(0);
 }
 
 const existing = await readExisting();
 const alreadyPresent = existing.filter((snap) => snap.exists);
-if (alreadyPresent.length > 0) {
-  throw new Error(`${alreadyPresent.length} despesa(s) já existem com esse id (evitando duplicar): ${alreadyPresent.map((s) => s.id).join(", ")}`);
-}
 
 const totalNet = EMPLOYEES.reduce((sum, emp) => sum + emp.net, 0);
 
@@ -133,6 +110,7 @@ console.log(JSON.stringify({
   vencimento: "2026-09-05",
   contaContabil: `${ACCOUNT_NAME} (${ACCOUNT_ID})`,
   totalLiquido: Math.round(totalNet * 100) / 100,
+  existingCount: alreadyPresent.length,
   lancamentos: EMPLOYEES.map((emp) => ({
     id: docId(emp),
     colaborador: emp.name,
@@ -146,14 +124,22 @@ if (!APPLY) {
   process.exit(0);
 }
 
-const batch = finDb.batch();
-EMPLOYEES.forEach((emp) => {
-  batch.create(finDb.collection("expenses").doc(docId(emp)), expenseDoc(emp));
-});
-await batch.commit();
+for (const emp of EMPLOYEES) {
+  await reconcileExpenseProvisionOnServer(docId(emp), {
+    uid: CREATED_BY,
+    name: "Importador de holerites",
+  }, {
+    identity: {
+      provisionSeriesKey: `payroll-salary:${emp.employeeId}`,
+      provisionCompetence: COMPETENCE_KEY,
+      provisionType: "actual",
+    },
+    createIfMissing: expenseDoc(emp),
+  });
+}
 
 const verifySnaps = await readExisting();
 const missing = verifySnaps.filter((snap) => !snap.exists);
 if (missing.length > 0) throw new Error(`Falha na verificação: ${missing.length} despesa(s) não foram criadas.`);
 
-console.log(`8 despesas de salário (competência 08/2026) criadas com sucesso em financeiro/expenses. Total líquido: R$ ${totalNet.toFixed(2)}.`);
+console.log(`8 despesas de salário (competência 08/2026) garantidas sem duplicação. Total líquido: R$ ${totalNet.toFixed(2)}.`);

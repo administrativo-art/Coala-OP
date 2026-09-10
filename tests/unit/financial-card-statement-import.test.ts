@@ -28,8 +28,32 @@ test("preserva duas cobranças iguais como ocorrências distintas", () => {
     { date: "2026-07-14", description: "Loja", amount: "10,00" },
   ], context);
   assert.equal(lines.length, 2);
+  assert.equal(lines[0]?.sourceReference, "item-1");
+  assert.equal(lines[1]?.sourceReference, "item-2");
   assert.match(lines[0]!.fingerprint, /^card-/);
   assert.notEqual(lines[0]!.fingerprint, lines[1]!.fingerprint);
+});
+
+test("enumera referências idênticas extraídas de PDF sem perder cobranças", () => {
+  const lines = normalizeCardStatementImportLines([
+    {
+      sourceReference: "06 de ago. 2026 Vindi *Tartuservicelt - R$ 189,47",
+      date: "2026-08-06",
+      description: "Vindi *Tartuservicelt",
+      amount: 189.47,
+    },
+    {
+      sourceReference: "06 de ago. 2026 Vindi *Tartuservicelt - R$ 189,47",
+      date: "2026-08-06",
+      description: "Vindi *Tartuservicelt",
+      amount: 189.47,
+    },
+  ], { ...context, monthKey: "2026-09" });
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]?.sourceReference, "06 de ago. 2026 Vindi *Tartuservicelt - R$ 189,47");
+  assert.equal(lines[1]?.sourceReference, "06 de ago. 2026 Vindi *Tartuservicelt - R$ 189,47 · ocorrência 2");
+  assert.notEqual(lines[0]?.fingerprint, lines[1]?.fingerprint);
 });
 
 const interCsv = [
