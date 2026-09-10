@@ -5,6 +5,7 @@ import {
   maskBrazilianDocument,
   maskPaymentDestination,
   normalizeBrazilianDocument,
+  pixDocumentKeyMatchesHolder,
 } from "../../../src/features/financial/beneficiaries/normalization";
 
 test("normaliza e mascara CPF/CNPJ sem revelar o documento", () => {
@@ -26,4 +27,22 @@ test("mascara destino sem devolver o valor integral", () => {
   assert.equal(masked, "fi***@example.com");
   assert.equal(masked.includes(email), false);
   assert.equal(maskPaymentDestination("12345678901"), "*******8901");
+});
+
+test("chave Pix documental precisa pertencer ao CPF ou CNPJ cadastrado", () => {
+  assert.equal(pixDocumentKeyMatchesHolder({
+    pixKey: "123.456.789-01",
+    pixKeyType: "cpf",
+    holderDocument: "12345678901",
+  }), true);
+  assert.equal(pixDocumentKeyMatchesHolder({
+    pixKey: "987.654.321-00",
+    pixKeyType: "cpf",
+    holderDocument: "12345678901",
+  }), false);
+  assert.equal(pixDocumentKeyMatchesHolder({
+    pixKey: "financeiro@example.com",
+    pixKeyType: "email",
+    holderDocument: "12345678901",
+  }), true);
 });

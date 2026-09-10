@@ -26,3 +26,44 @@ test("bloqueia protocolo, credencial, domínio e redes privadas não autorizados
 test("ignora links de marketing mesmo no domínio permitido", () => {
   assert.equal(isLikelyFinancialDocumentUrl("https://vivo.com.br/unsubscribe?campaign=conta"), false);
 });
+
+test("reconhece rotas públicas de provedores documentais independentemente do remetente", () => {
+  assert.equal(isAllowedFinancialDocumentUrl(
+    "https://cliente.superlogica.net/clients/areadocliente/publico/cobranca/c/documento",
+    "bizneo.com",
+    [],
+  ), true);
+  assert.equal(isAllowedFinancialDocumentUrl(
+    "https://cliente.superlogica.net/clients/areadocliente/publico/espelhonfsepdf?id=123",
+    "bizneo.com",
+    [],
+  ), true);
+  assert.equal(isAllowedFinancialDocumentUrl(
+    "https://cliente.superlogica.net/clients/areadocliente",
+    "bizneo.com",
+    [],
+  ), false);
+  assert.equal(isAllowedFinancialDocumentUrl(
+    "https://cliente.superlogica.net/financeiro/atual/publico/confirmarleituraemail/hash/123",
+    "bizneo.com",
+    [],
+  ), false);
+});
+
+test("permite somente as rotas documentais da Acessórias", () => {
+  assert.equal(isAllowedFinancialDocumentUrl(
+    "https://app.acessorias.com/getguia.php?documento=123",
+    "example.com",
+    [],
+  ), true);
+  assert.equal(isAllowedFinancialDocumentUrl(
+    "https://acessorias.s3.us-east-2.amazonaws.com/eContinuo/empresa/guia.pdf",
+    "example.com",
+    [],
+  ), true);
+  assert.equal(isAllowedFinancialDocumentUrl(
+    "https://acessorias.s3.us-east-2.amazonaws.com/anexos/assinatura.png",
+    "example.com",
+    [],
+  ), false);
+});

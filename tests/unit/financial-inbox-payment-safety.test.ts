@@ -7,6 +7,7 @@ const ingestion = readFileSync("src/features/financial/inbox/ingest.server.ts", 
 const paymentService = readFileSync("src/features/financial/payment-requests/service.server.ts", "utf8");
 const documentExtraction = readFileSync("src/features/financial/inbox/document-extraction.server.ts", "utf8");
 const statementSync = readFileSync("src/features/financial/inter-statement-sync.server.ts", "utf8");
+const statementSettlement = readFileSync("src/features/financial/payment-requests/statement-settlement.ts", "utf8");
 const reconciliationJob = readFileSync("src/app/api/jobs/inter/reconcile/route.ts", "utf8");
 
 test("cruzamento automático consulta apenas conjuntos financeiros filtrados e limitados", () => {
@@ -53,7 +54,8 @@ test("extração por IA não retém a resposta e remove o PDF temporário", () =
 });
 
 test("boleto conciliado deixa comprovante pendente e o job conclui o pós-pagamento", () => {
-  assert.match(statementSync, /postPaymentProcessingStatus: "pending"/);
+  assert.match(statementSync, /planPaymentRequestStatementSettlement/);
+  assert.match(statementSettlement, /postPaymentProcessingStatus: postPaymentCompleted \? "completed" as const : "pending" as const/);
   assert.match(reconciliationJob, /where\("postPaymentProcessingStatus", "==", "pending"\)/);
   assert.match(reconciliationJob, /where\("nextPostPaymentAttemptAt", "<=", nowIso\)/);
   assert.match(reconciliationJob, /where\("submissionStartedAt", "<=", staleSubmissionBefore\.toISOString\(\)\)/);
