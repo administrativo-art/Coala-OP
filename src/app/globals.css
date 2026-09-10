@@ -3,6 +3,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .font-purchasing {
+    font-family: 'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+  }
+
+  body:has(.font-purchasing) :where([data-radix-popper-content-wrapper], [role='dialog'], [role='alertdialog']) {
+    font-family: 'Inter Tight Variable', 'Inter Tight', Inter, system-ui, sans-serif;
+  }
+}
+
 @layer base {
   body {
     background: var(--bg);

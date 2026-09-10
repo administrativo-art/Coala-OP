@@ -637,7 +637,7 @@ export function ManageOrderItemsModal({ orderId, initialItems, initialItemId = n
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-[min(96vw,760px)] overflow-y-auto sm:max-w-none">
+      <DialogContent className="font-purchasing max-h-[92vh] w-[min(96vw,760px)] overflow-y-auto sm:max-w-none">
         <DialogHeader>
           <DialogTitle>{singleItemMode ? 'Editar insumo do pedido' : 'Gerenciar itens do pedido'}</DialogTitle>
         </DialogHeader>

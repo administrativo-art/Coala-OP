@@ -91,3 +91,50 @@ test("não escolhe automaticamente quando duas parcelas são equivalentes", () =
   }]);
   assert.equal(suggestion.status, "ambiguous");
 });
+
+test("telefonia exige a mesma linha para sugerir automaticamente", () => {
+  const telecomClassification: FinancialInboxClassification = {
+    ...classification,
+    documentType: "utility_bill",
+    supplierName: "Vivo",
+    billingIdentity: {
+      supplierTaxId: null,
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "mobile",
+      serviceNumbers: ["+5598999991234"],
+    },
+  };
+  const correct = marviExpense({
+    id: "vivo-correct",
+    supplier: "Telefônica Brasil S.A.",
+    description: "Telefonia móvel · Linha (98) 99999-1234",
+  });
+  const wrong = marviExpense({
+    id: "vivo-wrong",
+    supplier: "Vivo",
+    description: "Telefonia móvel · Linha (98) 98888-4321",
+  });
+
+  const exact = chooseExistingExpenseSuggestion(telecomClassification, [correct]);
+  assert.equal(exact.status, "suggested");
+  assert.match(exact.reasons.join(" "), /linha telefônica/);
+
+  const rejected = chooseExistingExpenseSuggestion(telecomClassification, [wrong]);
+  assert.equal(rejected.status, "not_found");
+  assert.equal(rejected.alternatives?.[0]?.expenseId, "vivo-wrong");
+
+  const accountOnly = chooseExistingExpenseSuggestion({
+    ...telecomClassification,
+    billingIdentity: {
+      ...telecomClassification.billingIdentity!,
+      customerAccount: "123456",
+      serviceNumbers: [],
+    },
+  }, [marviExpense({
+    id: "vivo-account-only",
+    supplier: "Vivo",
+    description: "Telefonia móvel · Conta 123456",
+  })]);
+  assert.equal(accountOnly.status, "not_found");
+});

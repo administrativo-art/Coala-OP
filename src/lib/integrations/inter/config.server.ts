@@ -130,6 +130,34 @@ export function isInterConfigured(environmentOverride?: InterEnvironment) {
     .every((suffix) => Boolean(process.env[credentialVariable(environment, suffix)]?.trim()));
 }
 
+export function resolveInterBankingStatusProxyUrl(input: {
+  nodeEnvironment?: string;
+  credentialsConfigured: boolean;
+  configuredUrl?: string;
+}) {
+  if (input.nodeEnvironment === "production" || input.credentialsConfigured) return null;
+  const raw = input.configuredUrl?.trim();
+  if (!raw) return null;
+  const parsed = new URL(raw);
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new Error("A URL remota de consulta do Banco Inter deve usar HTTPS e não pode conter credenciais.");
+  }
+  return parsed.origin;
+}
+
+/**
+ * O desenvolvimento local não recebe certificados bancários. Somente a
+ * consulta manual de status pode ser encaminhada à aplicação canônica, que
+ * repete autenticação e autorização antes de acessar o Inter.
+ */
+export function getInterBankingStatusProxyUrl() {
+  return resolveInterBankingStatusProxyUrl({
+    nodeEnvironment: process.env.NODE_ENV,
+    credentialsConfigured: isInterConfigured(),
+    configuredUrl: process.env.INTER_BANKING_STATUS_BASE_URL,
+  });
+}
+
 export function interCobrancaReadiness() {
   const environment = getInterCobrancaEnvironment();
   const credentialsConfigured = isInterConfigured(environment);

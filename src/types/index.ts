@@ -768,6 +768,7 @@ export type PermissionSet = {
     createPurchase: boolean;
     receivePurchase: boolean;
     cancelPurchase: boolean;
+    revertPurchaseStage: boolean;
     manageFinancialLink: boolean;
     manageBaseItems: boolean;
   };
@@ -2457,6 +2458,22 @@ export type PurchaseOrder = {
   receivedAt?: string;
   cancelledAt?: string;
   cancelReason?: string;
+  financialReversalStatus?: 'pending' | 'completed';
+  financialReversalError?: string;
+  lastStageReversion?: {
+    from: 'confirmed';
+    to: 'created';
+    reason: string;
+    at: string;
+    by: string;
+  };
+  stageReversions?: Array<{
+    from: 'confirmed';
+    to: 'created';
+    reason: string;
+    at: string;
+    by: string;
+  }>;
 };
 
 export type PurchaseOrderItem = {
@@ -2880,6 +2897,7 @@ export const defaultGuestPermissions: PermissionSet = {
       createPurchase: false,
       receivePurchase: false,
       cancelPurchase: false,
+      revertPurchaseStage: false,
       manageFinancialLink: false,
       manageBaseItems: false,
     },
@@ -2990,6 +3008,7 @@ export const defaultAdminPermissions: PermissionSet = {
       createPurchase: true,
       receivePurchase: true,
       cancelPurchase: true,
+      revertPurchaseStage: true,
       manageFinancialLink: true,
       manageBaseItems: true,
     },

@@ -11,6 +11,10 @@ import { getInterPixStatus, mapInterPixStatus, submitInterPix } from "@/lib/inte
 import { maskPaymentBarcode, normalizePaymentBarcode } from "@/features/financial/inbox/parser";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { addPaymentEvent, findPaymentRequestBySource, getPaymentRequest, paymentRequestRef, transitionPaymentRequest } from "./repository.server";
+import {
+  paymentSubmissionRequiresManualReconciliation,
+  planBankStatusObservation,
+} from "./bank-status-observation";
 import { paymentReceiverMatchesSnapshot } from "./reconciliation";
 import type { BankPaymentRequest, BankPaymentRequestStatus, LegacyBankPaymentSourceType, PaymentActor, PaymentLegalEntitySnapshot, PixBankPaymentRequest } from "./types";
 
@@ -180,8 +184,34 @@ export async function authorizePaymentRequest(id: string, actor: PaymentActor) {
 }
 
 export async function submitPaymentRequest(id: string, actor: PaymentActor | "system") {
-  const pending = await transitionPaymentRequest(id, ["ready_to_submit", "failed"], "submitting", { lastError: null });
-  await addPaymentEvent(id, "INTER_SUBMISSION_STARTED", actor);
+  const requestRef = paymentRequestRef(id);
+  const submissionStartedAt = new Date().toISOString();
+  const submissionEventId = randomUUID();
+  const pending = await financialDbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
+    const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (!["ready_to_submit", "failed"].includes(current.status)) {
+      throw new Error(`A solicitação está em ${current.status} e não pode ser enviada ao banco.`);
+    }
+    if (paymentSubmissionRequiresManualReconciliation(current)) {
+      throw new Error("A solicitação possui divergência bancária e exige revisão manual; o reenvio foi bloqueado.");
+    }
+    const patch = {
+      status: "submitting" as const,
+      lastError: null,
+      submissionStartedAt,
+      updatedAt: submissionStartedAt,
+    };
+    transaction.set(requestRef, patch, { merge: true });
+    transaction.set(requestRef.collection("events").doc(submissionEventId), {
+      type: "INTER_SUBMISSION_STARTED",
+      at: submissionStartedAt,
+      actorId: actor === "system" ? "system" : actor.uid,
+      actorEmail: actor === "system" ? null : actor.email ?? null,
+    });
+    return { ...current, ...patch } as BankPaymentRequest;
+  });
   try {
     if (pending.paymentRail === "barcode") {
       if (!pending.barcodeSnapshot) throw new Error("Os dados da linha digitável não estão disponíveis.");
@@ -217,44 +247,71 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         : mapInterBarcodeStatus(result.statusPagamento, pending.barcodeSnapshot.scheduledFor);
       const next = mapped === "paid" ? "awaiting_statement" as const : mapped;
       const submittedAt = new Date().toISOString();
-      const request = await transitionPaymentRequest(id, ["submitting"], next, {
+      const observation = planBankStatusObservation({
+        current: pending,
+        nextStatus: next,
+        rawBankStatus: result.statusPagamento,
+        observedAt: submittedAt,
+        scheduledFor: pending.barcodeSnapshot.scheduledFor,
+      });
+      const requestPatch = {
+        status: next,
+        updatedAt: submittedAt,
         interRequestId,
         submittedAt,
-        bankStatus: result.statusPagamento ?? null,
-        statementReconciliationStatus: "expected",
-      });
+        ...observation.patch,
+        statementReconciliationStatus: "expected" as const,
+      };
+      const requestRef = paymentRequestRef(id);
       const expectedDebitRef = financialDbAdmin.collection("expectedBankDebits").doc(`request_${id}`);
       const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(pending.sourceId);
       const expectedStatus = next === "awaiting_statement" ? "awaiting_statement" : "active";
-      const batch = financialDbAdmin.batch();
-      batch.set(expectedDebitRef, {
-        workspaceId: WORKSPACE_ID,
-        status: expectedStatus,
-        paymentRequestId: id,
-        financialInboxMessageId: pending.sourceId,
-        expenseId: pending.expenseId,
-        amountCents: Math.round(pending.amount * 100),
-        expectedDate: pending.barcodeSnapshot.scheduledFor,
-        dueDate: pending.barcodeSnapshot.dueDate,
-        bankTransactionCode: interRequestId,
-        barcodeLastDigits: pending.barcodeSnapshot.code.slice(-8),
-        createdAt: submittedAt,
-        updatedAt: submittedAt,
-      }, { merge: true });
-      batch.set(messageRef, {
-        status: next === "scheduled" ? "scheduled" : next === "awaiting_statement" ? "awaiting_statement" : "linked",
-        bankState: next,
-        updatedAt: submittedAt,
-      }, { merge: true });
-      batch.create(messageRef.collection("events").doc(), {
-        type: "INTER_BARCODE_PAYMENT_ACCEPTED", at: submittedAt,
-        actorId: actor === "system" ? "system" : actor.uid,
-        interRequestId, bankStatus: result.statusPagamento ?? null, scheduledFor: pending.barcodeSnapshot.scheduledFor,
-      });
-      await batch.commit();
-      await addPaymentEvent(id, approvalRequired ? "BANK_APPROVAL_REQUIRED" : "INTER_SUBMISSION_ACCEPTED", actor, {
-        interRequestId, bankStatus: result.statusPagamento ?? null, scheduledFor: pending.barcodeSnapshot.scheduledFor,
-        recoveredFromBankPreflight: Boolean(recovered),
+      const requestEventId = randomUUID();
+      const messageEventId = randomUUID();
+      const request = await financialDbAdmin.runTransaction(async (transaction) => {
+        const currentSnapshot = await transaction.get(requestRef);
+        if (!currentSnapshot.exists || currentSnapshot.get("status") !== "submitting") {
+          throw new Error("A solicitação mudou enquanto o Banco Inter processava o envio.");
+        }
+        transaction.set(requestRef, requestPatch, { merge: true });
+        transaction.set(expectedDebitRef, {
+          workspaceId: WORKSPACE_ID,
+          status: expectedStatus,
+          paymentRequestId: id,
+          financialInboxMessageId: pending.sourceId,
+          expenseId: pending.expenseId,
+          amountCents: Math.round(pending.amount * 100),
+          expectedDate: pending.barcodeSnapshot.scheduledFor,
+          dueDate: pending.barcodeSnapshot.dueDate,
+          bankTransactionCode: interRequestId,
+          barcodeLastDigits: pending.barcodeSnapshot.code.slice(-8),
+          createdAt: submittedAt,
+          updatedAt: submittedAt,
+        }, { merge: true });
+        transaction.set(messageRef, {
+          status: next === "scheduled" ? "scheduled" : next === "awaiting_statement" ? "awaiting_statement" : "linked",
+          bankState: next,
+          updatedAt: submittedAt,
+        }, { merge: true });
+        transaction.set(messageRef.collection("events").doc(messageEventId), {
+          type: "INTER_BARCODE_PAYMENT_ACCEPTED",
+          at: submittedAt,
+          actorId: actor === "system" ? "system" : actor.uid,
+          interRequestId,
+          bankStatus: result.statusPagamento ?? null,
+          scheduledFor: pending.barcodeSnapshot.scheduledFor,
+        });
+        transaction.set(requestRef.collection("events").doc(requestEventId), {
+          type: approvalRequired ? "BANK_APPROVAL_REQUIRED" : "INTER_SUBMISSION_ACCEPTED",
+          at: submittedAt,
+          actorId: actor === "system" ? "system" : actor.uid,
+          actorEmail: actor === "system" ? null : actor.email ?? null,
+          interRequestId,
+          bankStatus: result.statusPagamento ?? null,
+          scheduledFor: pending.barcodeSnapshot.scheduledFor,
+          recoveredFromBankPreflight: Boolean(recovered),
+        });
+        return { ...pending, ...requestPatch } as BankPaymentRequest;
       });
       return request;
     }
@@ -290,8 +347,39 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
       : result.dataPagamento && result.dataPagamento > todayInBelem()
         ? "scheduled"
         : "processing";
-    const request = await transitionPaymentRequest(id, ["submitting"], next, { interRequestId, submittedAt: new Date().toISOString(), bankStatus: result.tipoRetorno ?? null });
-    await addPaymentEvent(id, approval ? "BANK_APPROVAL_REQUIRED" : "INTER_SUBMISSION_ACCEPTED", actor, { interRequestId, bankReturnType: result.tipoRetorno ?? null });
+    const submittedAt = new Date().toISOString();
+    const observation = planBankStatusObservation({
+      current: pending,
+      nextStatus: next,
+      rawBankStatus: result.tipoRetorno,
+      observedAt: submittedAt,
+      scheduledFor: result.dataPagamento ?? pending.scheduledFor,
+    });
+    const requestPatch = {
+      status: next,
+      updatedAt: submittedAt,
+      interRequestId,
+      submittedAt,
+      ...observation.patch,
+    };
+    const requestRef = paymentRequestRef(id);
+    const eventId = randomUUID();
+    const request = await financialDbAdmin.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(requestRef);
+      if (!snapshot.exists || snapshot.get("status") !== "submitting") {
+        throw new Error("A solicitação mudou enquanto o Banco Inter processava o envio.");
+      }
+      transaction.set(requestRef, requestPatch, { merge: true });
+      transaction.set(requestRef.collection("events").doc(eventId), {
+        type: approval ? "BANK_APPROVAL_REQUIRED" : "INTER_SUBMISSION_ACCEPTED",
+        at: submittedAt,
+        actorId: actor === "system" ? "system" : actor.uid,
+        actorEmail: actor === "system" ? null : actor.email ?? null,
+        interRequestId,
+        bankReturnType: result.tipoRetorno ?? null,
+      });
+      return { ...pending, ...requestPatch } as BankPaymentRequest;
+    });
     return request;
   } catch (error) {
     const lastError = safeInterPaymentError(error);
@@ -381,58 +469,466 @@ async function completeSource(request: BankPaymentRequest) {
   }
 }
 
+async function attachFinancialInboxProof(request: BankPaymentRequest) {
+  if (request.sourceType !== "financial_inbox" || !request.proofStoragePath) return;
+  const now = new Date().toISOString();
+  const batch = financialDbAdmin.batch();
+  batch.set(financialDbAdmin.collection("financialInboxMessages").doc(request.sourceId), {
+    paymentProofStoragePath: request.proofStoragePath,
+    updatedAt: now,
+  }, { merge: true });
+  if (request.expenseId) {
+    batch.set(financialDbAdmin.collection("expenses").doc(request.expenseId), {
+      paymentProofStoragePath: request.proofStoragePath,
+      updatedAt: now,
+    }, { merge: true });
+  }
+  await batch.commit();
+}
+
+// O endpoint tem timeout operacional de cinco minutos. A trava dura o dobro
+// para que uma nova execução não assuma o trabalho antes da anterior terminar.
+const POST_PAYMENT_LEASE_MS = 10 * 60_000;
+
+async function claimPostPaymentProcessing(id: string) {
+  const leaseId = randomUUID();
+  const now = new Date();
+  const leaseUntil = new Date(now.getTime() + POST_PAYMENT_LEASE_MS).toISOString();
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const ref = paymentRequestRef(id);
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
+    const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (current.status !== "paid" || current.postPaymentProcessingStatus === "completed") return null;
+    const currentLease = current.postPaymentProcessingLeaseUntil
+      ? new Date(current.postPaymentProcessingLeaseUntil)
+      : null;
+    if (currentLease && !Number.isNaN(currentLease.getTime()) && currentLease > now) return null;
+    const attemptCount = (current.postPaymentProcessingAttemptCount ?? 0) + 1;
+    const patch = {
+      postPaymentProcessingStatus: "pending" as const,
+      postPaymentProcessingAttemptCount: attemptCount,
+      postPaymentProcessingLeaseId: leaseId,
+      postPaymentProcessingLeaseUntil: leaseUntil,
+      nextPostPaymentAttemptAt: leaseUntil,
+      updatedAt: now.toISOString(),
+    };
+    transaction.set(ref, patch, { merge: true });
+    return { leaseId, request: { ...current, ...patch } as BankPaymentRequest };
+  });
+}
+
+async function releasePostPaymentProcessingAfterFailure(
+  id: string,
+  leaseId: string,
+  attemptCount: number,
+  error: unknown,
+) {
+  const now = new Date();
+  const delayMinutes = Math.min(360, 5 * (2 ** Math.min(Math.max(attemptCount - 1, 0), 6)));
+  const nextAttemptAt = new Date(now.getTime() + delayMinutes * 60_000).toISOString();
+  const safeError = safeInterPaymentError(error, now.toISOString());
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    const ref = paymentRequestRef(id);
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.get("postPaymentProcessingLeaseId") !== leaseId) return;
+    transaction.set(ref, {
+      postPaymentProcessingStatus: "pending",
+      postPaymentProcessingLeaseId: null,
+      postPaymentProcessingLeaseUntil: null,
+      nextPostPaymentAttemptAt: nextAttemptAt,
+      lastPostPaymentError: safeError,
+      updatedAt: now.toISOString(),
+    }, { merge: true });
+  });
+}
+
+async function completePostPaymentProcessingLease(
+  current: BankPaymentRequest,
+  leaseId: string,
+) {
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const ref = paymentRequestRef(current.id);
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.get("postPaymentProcessingLeaseId") !== leaseId) {
+      throw new Error("A trava do pós-pagamento expirou antes da conclusão.");
+    }
+    const updatedAt = new Date().toISOString();
+    const patch = {
+      postPaymentProcessingStatus: "completed" as const,
+      postPaymentProcessingLeaseId: null,
+      postPaymentProcessingLeaseUntil: null,
+      nextPostPaymentAttemptAt: null,
+      lastPostPaymentError: null,
+      updatedAt,
+    };
+    transaction.set(ref, patch, { merge: true });
+    return { ...current, ...patch } as BankPaymentRequest;
+  });
+}
+
+async function persistPostPaymentStep(params: {
+  current: BankPaymentRequest;
+  leaseId: string;
+  patch: Record<string, unknown>;
+  eventId: string;
+  eventType: string;
+  eventData?: Record<string, unknown>;
+}) {
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const ref = paymentRequestRef(params.current.id);
+    const snapshot = await transaction.get(ref);
+    if (
+      !snapshot.exists
+      || snapshot.get("status") !== "paid"
+      || snapshot.get("postPaymentProcessingLeaseId") !== params.leaseId
+    ) {
+      throw new Error("A trava do pós-pagamento não está mais válida.");
+    }
+    const updatedAt = new Date().toISOString();
+    transaction.set(ref, { ...params.patch, updatedAt }, { merge: true });
+    transaction.set(ref.collection("events").doc(params.eventId), {
+      type: params.eventType,
+      at: updatedAt,
+      actorId: "system",
+      actorEmail: null,
+      ...params.eventData,
+    }, { merge: true });
+    return {
+      ...params.current,
+      ...snapshot.data(),
+      ...params.patch,
+      updatedAt,
+    } as BankPaymentRequest;
+  });
+}
+
+async function finishPaidPaymentRequest(request: BankPaymentRequest) {
+  if (
+    request.postPaymentProcessingStatus === "completed"
+    && request.proofStoragePath
+    && request.sourceCompletedAt
+  ) return request;
+  const claim = await claimPostPaymentProcessing(request.id);
+  if (!claim) return request;
+  let current = claim.request;
+  try {
+    if (!current.proofStoragePath) {
+      const proofStoragePath = await createAndStoreConfirmedPaymentProof(current);
+      current = await persistPostPaymentStep({
+        current,
+        leaseId: claim.leaseId,
+        patch: { proofStoragePath },
+        eventId: "post-payment-proof-stored-v1",
+        eventType: "PAYMENT_PROOF_STORED",
+        eventData: { proofStoragePath },
+      });
+    }
+    if (current.sourceType === "financial_inbox") {
+      await attachFinancialInboxProof(current);
+    } else if (!current.sourceCompletedAt) {
+      await completeSource(current);
+    }
+    if (!current.sourceCompletedAt) {
+      const sourceCompletedAt = new Date().toISOString();
+      current = await persistPostPaymentStep({
+        current,
+        leaseId: claim.leaseId,
+        patch: { sourceCompletedAt },
+        eventId: "post-payment-source-completed-v1",
+        eventType: "SOURCE_COMPLETED_AFTER_PAYMENT",
+        eventData: {
+          sourceType: current.sourceType,
+          sourceId: current.sourceId,
+        },
+      });
+    }
+    current = await completePostPaymentProcessingLease(current, claim.leaseId);
+    return current;
+  } catch (error) {
+    await releasePostPaymentProcessingAfterFailure(
+      current.id,
+      claim.leaseId,
+      current.postPaymentProcessingAttemptCount ?? 1,
+      error,
+    );
+    throw error;
+  }
+}
+
+export async function deferBankStatusRefreshAfterFailure(id: string, now = new Date()) {
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    const ref = paymentRequestRef(id);
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) return;
+    const status = snapshot.get("status") as BankPaymentRequestStatus;
+    if (!["awaiting_bank_approval", "scheduled", "processing"].includes(status)) return;
+    const failureCount = (Number(snapshot.get("bankStatusPollFailureCount")) || 0) + 1;
+    const delayMinutes = Math.min(60, 5 * (2 ** Math.min(failureCount, 3)));
+    transaction.set(ref, {
+      bankStatusPollFailureCount: failureCount,
+      nextBankStatusCheckAt: new Date(now.getTime() + delayMinutes * 60_000).toISOString(),
+      updatedAt: now.toISOString(),
+    }, { merge: true });
+  });
+}
+
+export async function markStalePaymentSubmissionForReview(
+  id: string,
+  staleBefore: Date,
+) {
+  const eventId = randomUUID();
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const ref = paymentRequestRef(id);
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists || snapshot.get("status") !== "submitting") return null;
+    const startedAt = new Date(String(snapshot.get("submissionStartedAt") || snapshot.get("updatedAt") || ""));
+    if (Number.isNaN(startedAt.getTime()) || startedAt > staleBefore) return null;
+    const occurredAt = new Date().toISOString();
+    const lastError = {
+      code: "INTER_SUBMISSION_RESULT_UNKNOWN",
+      safeMessage: "O envio ao banco foi interrompido antes da confirmação interna. Revise a solicitação; um novo envio usará a mesma chave idempotente ou recuperará o boleto no Inter.",
+      occurredAt,
+    };
+    transaction.set(ref, {
+      status: "failed",
+      lastError,
+      updatedAt: occurredAt,
+    }, { merge: true });
+    transaction.set(ref.collection("events").doc(eventId), {
+      type: "INTER_SUBMISSION_RESULT_UNKNOWN",
+      at: occurredAt,
+      actorId: "system",
+      actorEmail: null,
+    });
+    return { id, status: "failed" as const };
+  });
+}
+
+async function persistBarcodeBankObservation(params: {
+  id: string;
+  nextStatus: BankPaymentRequestStatus;
+  rawBankStatus?: string | null;
+  scheduledFor: string;
+  bankAuthentication?: string | null;
+  bankNsu?: string | null;
+  actor: PaymentActor | "system";
+  observedAt: string;
+}) {
+  const eventId = randomUUID();
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const requestRef = paymentRequestRef(params.id);
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
+    const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (
+      current.paymentRail !== "barcode"
+      || current.sourceType !== "financial_inbox"
+      || !["awaiting_bank_approval", "scheduled", "processing", "failed"].includes(current.status)
+    ) return current;
+    const observation = planBankStatusObservation({
+      current,
+      nextStatus: params.nextStatus,
+      rawBankStatus: params.rawBankStatus,
+      observedAt: params.observedAt,
+      scheduledFor: params.scheduledFor,
+    });
+    if (!observation.changed) return current;
+    const patch = {
+      status: params.nextStatus,
+      updatedAt: params.observedAt,
+      bankStatusPollFailureCount: 0,
+      ...observation.patch,
+      ...(params.nextStatus === "awaiting_statement" ? { statementReconciliationStatus: "expected" as const } : {}),
+    };
+    transaction.set(requestRef, patch, { merge: true });
+    if (observation.statusChanged || observation.bankStatusChanged) {
+      transaction.set(financialDbAdmin.collection("expectedBankDebits").doc(`request_${params.id}`), {
+        status: params.nextStatus === "awaiting_statement"
+          ? "awaiting_statement"
+          : ["rejected", "approval_expired"].includes(params.nextStatus)
+            ? "cancelled"
+            : "active",
+        bankStatus: params.rawBankStatus ?? null,
+        bankAuthentication: params.bankAuthentication ?? null,
+        bankNsu: params.bankNsu ?? null,
+        updatedAt: params.observedAt,
+      }, { merge: true });
+      transaction.set(financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId), {
+        status: params.nextStatus === "scheduled"
+          ? "scheduled"
+          : params.nextStatus === "awaiting_statement"
+            ? "awaiting_statement"
+            : "linked",
+        bankState: params.nextStatus,
+        updatedAt: params.observedAt,
+      }, { merge: true });
+    }
+    if (observation.shouldWriteAuditEvent) {
+      transaction.set(requestRef.collection("events").doc(eventId), {
+        type: observation.approvalObserved ? "BANK_APPROVAL_OBSERVED" : "BANK_STATUS_RECONCILED",
+        at: params.observedAt,
+        actorId: params.actor === "system" ? "system" : params.actor.uid,
+        actorEmail: params.actor === "system" ? null : params.actor.email ?? null,
+        bankStatus: params.rawBankStatus ?? null,
+        status: params.nextStatus,
+        observedAt: params.observedAt,
+        ...(observation.schedulingObserved ? { scheduledFor: params.scheduledFor } : {}),
+      });
+    }
+    return { ...current, ...patch } as BankPaymentRequest;
+  });
+}
+
+async function persistPixBankObservation(params: {
+  id: string;
+  nextStatus: BankPaymentRequestStatus;
+  rawBankStatus: string;
+  scheduledFor?: string | null;
+  endToEndId?: string | null;
+  paidAt?: string | null;
+  actor: PaymentActor | "system";
+  observedAt: string;
+}) {
+  const eventId = randomUUID();
+  return financialDbAdmin.runTransaction(async (transaction) => {
+    const requestRef = paymentRequestRef(params.id);
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists) throw new Error("Solicitação de pagamento não encontrada.");
+    const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    if (
+      current.paymentRail === "barcode"
+      || !["awaiting_bank_approval", "scheduled", "processing", "failed", "rejected", "approval_expired"].includes(current.status)
+    ) return current;
+    const observation = planBankStatusObservation({
+      current,
+      nextStatus: params.nextStatus,
+      rawBankStatus: params.rawBankStatus,
+      observedAt: params.observedAt,
+      scheduledFor: params.scheduledFor,
+    });
+    const patch: Record<string, unknown> = { ...observation.patch };
+    if ((current.bankStatusPollFailureCount ?? 0) !== 0) patch.bankStatusPollFailureCount = 0;
+    if ((current.endToEndId ?? null) !== (params.endToEndId ?? null)) {
+      patch.endToEndId = params.endToEndId ?? null;
+    }
+    if (params.nextStatus === "paid") {
+      patch.paidAt = params.paidAt ?? params.observedAt;
+      patch.postPaymentProcessingStatus = "pending";
+      patch.nextPostPaymentAttemptAt = params.observedAt;
+    }
+    if (!observation.changed && Object.keys(patch).length === 0) return current;
+    const updatedAt = params.observedAt;
+    transaction.set(requestRef, {
+      status: params.nextStatus,
+      updatedAt,
+      ...patch,
+    }, { merge: true });
+    if (observation.shouldWriteAuditEvent) {
+      transaction.set(requestRef.collection("events").doc(eventId), {
+        type: observation.approvalObserved ? "BANK_APPROVAL_OBSERVED" : "BANK_STATUS_RECONCILED",
+        at: updatedAt,
+        actorId: params.actor === "system" ? "system" : params.actor.uid,
+        actorEmail: params.actor === "system" ? null : params.actor.email ?? null,
+        bankStatus: params.rawBankStatus,
+        status: params.nextStatus,
+        observedAt: updatedAt,
+      });
+    }
+    return {
+      ...current,
+      status: params.nextStatus,
+      updatedAt,
+      ...patch,
+    } as BankPaymentRequest;
+  });
+}
+
+async function blockBankReconciliationDivergence(params: {
+  id: string;
+  actor: PaymentActor | "system";
+  field: "amount" | "beneficiary_source" | "receiver";
+  rawBankStatus?: string | null;
+  safeMessage: string;
+}) {
+  const eventId = randomUUID();
+  const observedAt = new Date().toISOString();
+  await financialDbAdmin.runTransaction(async (transaction) => {
+    const requestRef = paymentRequestRef(params.id);
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists || snapshot.get("status") === "paid") return;
+    const current = { id: snapshot.id, ...snapshot.data() } as BankPaymentRequest;
+    transaction.set(requestRef, {
+      status: "failed",
+      bankStatus: params.rawBankStatus ?? null,
+      bankStatusPollFailureCount: 0,
+      nextBankStatusCheckAt: null,
+      statementReconciliationStatus: "divergent",
+      lastError: {
+        code: "BANK_RECONCILIATION_DIVERGENCE",
+        safeMessage: params.safeMessage,
+        occurredAt: observedAt,
+      },
+      updatedAt: observedAt,
+    }, { merge: true });
+    if (current.sourceType === "financial_inbox") {
+      transaction.set(financialDbAdmin.collection("expectedBankDebits").doc(`request_${params.id}`), {
+        status: "divergent",
+        bankStatus: params.rawBankStatus ?? null,
+        updatedAt: observedAt,
+      }, { merge: true });
+      transaction.set(financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId), {
+        status: "divergent",
+        bankState: "divergent",
+        updatedAt: observedAt,
+      }, { merge: true });
+    }
+    transaction.set(requestRef.collection("events").doc(eventId), {
+      type: "BANK_RECONCILIATION_DIVERGENCE",
+      at: observedAt,
+      actorId: params.actor === "system" ? "system" : params.actor.uid,
+      actorEmail: params.actor === "system" ? null : params.actor.email ?? null,
+      field: params.field,
+      bankStatus: params.rawBankStatus ?? null,
+    });
+  });
+}
+
 export async function refreshPaymentRequest(id: string, actor: PaymentActor | "system") {
   let current = await getPaymentRequest(id);
   if (current.paymentRail === "barcode") {
-    if (current.status === "awaiting_statement" || current.status === "paid") return current;
+    if (current.status === "paid") return finishPaidPaymentRequest(current);
+    if (current.status === "awaiting_statement") return current;
     if (!current.interRequestId || !current.barcodeSnapshot) throw new Error("A solicitação ainda não foi enviada ao Banco Inter.");
     const bank = await getInterBarcodePayment(current.interRequestId);
     if (!bank) throw new Error("O Banco Inter ainda não retornou este pagamento.");
     const nextBank = mapInterBarcodeStatus(bank.statusPagamento, current.barcodeSnapshot.scheduledFor);
     if (bank.valorPago != null && Math.abs(Number(bank.valorPago) - current.amount) > 0.01) {
-      await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "amount", bankStatus: bank.statusPagamento ?? null });
-      await transitionPaymentRequest(id, ["awaiting_bank_approval", "scheduled", "processing", "failed"], "failed", {
-        bankStatus: bank.statusPagamento ?? null,
-        statementReconciliationStatus: "divergent",
+      const safeMessage = "O valor retornado pelo banco diverge da cobrança. A baixa foi bloqueada.";
+      await blockBankReconciliationDivergence({
+        id,
+        actor,
+        field: "amount",
+        rawBankStatus: bank.statusPagamento,
+        safeMessage,
       });
-      throw new Error("O valor retornado pelo banco diverge da cobrança. A baixa foi bloqueada.");
+      throw new Error(safeMessage);
     }
     const next = nextBank === "paid" ? "awaiting_statement" as const : nextBank;
-    const updatedAt = new Date().toISOString();
-    const updated = await transitionPaymentRequest(id, ["awaiting_bank_approval", "scheduled", "processing", "failed"], next, {
-      bankStatus: bank.statusPagamento ?? null,
-      ...(next === "awaiting_statement" ? { statementReconciliationStatus: "expected" } : {}),
-    });
-    const batch = financialDbAdmin.batch();
-    batch.set(financialDbAdmin.collection("expectedBankDebits").doc(`request_${id}`), {
-      status: next === "awaiting_statement" ? "awaiting_statement" : ["rejected", "approval_expired"].includes(next) ? "cancelled" : "active",
-      bankStatus: bank.statusPagamento ?? null,
+    const observedAt = new Date().toISOString();
+    return persistBarcodeBankObservation({
+      id,
+      nextStatus: next,
+      rawBankStatus: bank.statusPagamento,
+      scheduledFor: current.barcodeSnapshot.scheduledFor,
       bankAuthentication: bank.autenticacao ? String(bank.autenticacao) : null,
       bankNsu: bank.nsu ?? null,
-      updatedAt,
-    }, { merge: true });
-    batch.set(financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId), {
-      status: next === "scheduled" ? "scheduled" : next === "awaiting_statement" ? "awaiting_statement" : "linked",
-      bankState: next,
-      updatedAt,
-    }, { merge: true });
-    await batch.commit();
-    await addPaymentEvent(id, "BANK_STATUS_RECONCILED", actor, { bankStatus: bank.statusPagamento ?? null, status: next });
-    return updated;
+      actor,
+      observedAt,
+    });
   }
   if (current.status === "paid") {
-    if (!current.proofStoragePath) {
-      const proofStoragePath = await createAndStoreConfirmedPaymentProof(current);
-      current = await transitionPaymentRequest(id, ["paid"], "paid", { proofStoragePath });
-      await addPaymentEvent(id, "PAYMENT_PROOF_STORED", "system", { proofStoragePath });
-    }
-    if (!current.sourceCompletedAt) {
-      await completeSource(current);
-      const sourceCompletedAt = new Date().toISOString();
-      current = await transitionPaymentRequest(id, ["paid"], "paid", { sourceCompletedAt });
-      await addPaymentEvent(id, "SOURCE_COMPLETED_AFTER_PAYMENT", "system", { sourceType: current.sourceType, sourceId: current.sourceId });
-    }
-    return current;
+    return finishPaidPaymentRequest(current);
   }
   if (!current.interRequestId) throw new Error("A solicitação ainda não foi enviada ao Banco Inter.");
   if (!current.beneficiaryReference || !current.beneficiarySnapshot) throw new Error("Os dados do favorecido não estão disponíveis.");
@@ -441,18 +937,34 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
   const rawStatus = String(transaction.status ?? "");
   const next = mapInterPixStatus(rawStatus, current.scheduledFor);
   if (Number(transaction.valor ?? 0).toFixed(2) !== Number(current.amount).toFixed(2)) {
-    await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "amount", bankStatus: rawStatus });
-    throw new Error("O valor confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.");
+    const safeMessage = "O valor confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.";
+    await blockBankReconciliationDivergence({ id, actor, field: "amount", rawBankStatus: rawStatus, safeMessage });
+    throw new Error(safeMessage);
   }
   if (!current.beneficiarySnapshot.documentHash) {
     const beneficiary = await resolvePaymentBeneficiary(current.beneficiaryReference);
     if (beneficiary.sourceUpdatedAt !== current.beneficiarySnapshot.sourceUpdatedAt) {
-      await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "beneficiary_source", bankStatus: rawStatus });
-      throw new Error("Os dados do favorecido mudaram após o envio. O pagamento exige conferência manual antes da baixa.");
+      const safeMessage = "Os dados do favorecido mudaram após o envio. O pagamento exige conferência manual antes da baixa.";
+      await blockBankReconciliationDivergence({
+        id,
+        actor,
+        field: "beneficiary_source",
+        rawBankStatus: rawStatus,
+        safeMessage,
+      });
+      throw new Error(safeMessage);
     }
     const refreshedSnapshot = createBeneficiarySnapshot(beneficiary, current.beneficiarySnapshot.resolvedAt);
     if (!refreshedSnapshot.documentHash) {
-      throw new Error("Não foi possível validar com segurança o documento do favorecido confirmado pelo banco.");
+      const safeMessage = "Não foi possível validar com segurança o documento do favorecido confirmado pelo banco.";
+      await blockBankReconciliationDivergence({
+        id,
+        actor,
+        field: "beneficiary_source",
+        rawBankStatus: rawStatus,
+        safeMessage,
+      });
+      throw new Error(safeMessage);
     }
     current = {
       ...current,
@@ -469,21 +981,21 @@ export async function refreshPaymentRequest(id: string, actor: PaymentActor | "s
     snapshotDocument: current.beneficiarySnapshot.document,
     snapshotDocumentHash: current.beneficiarySnapshot.documentHash,
   })) {
-    await addPaymentEvent(id, "BANK_RECONCILIATION_DIVERGENCE", actor, { field: "receiver", bankStatus: rawStatus });
-    throw new Error("O favorecido confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.");
+    const safeMessage = "O favorecido confirmado pelo banco diverge da solicitação. O pagamento não foi baixado.";
+    await blockBankReconciliationDivergence({ id, actor, field: "receiver", rawBankStatus: rawStatus, safeMessage });
+    throw new Error(safeMessage);
   }
-  const patch: Record<string, unknown> = { bankStatus: rawStatus, endToEndId: transaction.endToEnd ?? null };
-  if (next === "paid") patch.paidAt = transaction.dataHoraMovimento ?? new Date().toISOString();
-  let updated = await transitionPaymentRequest(id, ["awaiting_bank_approval", "scheduled", "processing", "failed", "rejected", "approval_expired"], next, patch);
-  await addPaymentEvent(id, "BANK_STATUS_RECONCILED", actor, { bankStatus: rawStatus, status: next });
-  if (next === "paid" && !updated.proofStoragePath) {
-    const proofStoragePath = await createAndStoreConfirmedPaymentProof(updated);
-    updated = await transitionPaymentRequest(id, ["paid"], "paid", { proofStoragePath });
-    await addPaymentEvent(id, "PAYMENT_PROOF_STORED", "system", { proofStoragePath });
-    await completeSource(updated);
-    const sourceCompletedAt = new Date().toISOString();
-    updated = await transitionPaymentRequest(id, ["paid"], "paid", { sourceCompletedAt });
-    await addPaymentEvent(id, "SOURCE_COMPLETED_AFTER_PAYMENT", "system", { sourceType: updated.sourceType, sourceId: updated.sourceId });
-  }
+  const observedAt = new Date().toISOString();
+  let updated = await persistPixBankObservation({
+    id,
+    nextStatus: next,
+    rawBankStatus: rawStatus,
+    scheduledFor: current.scheduledFor,
+    endToEndId: transaction.endToEnd,
+    paidAt: transaction.dataHoraMovimento,
+    actor,
+    observedAt,
+  });
+  if (next === "paid") updated = await finishPaidPaymentRequest(updated);
   return updated;
 }

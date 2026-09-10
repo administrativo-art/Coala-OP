@@ -32,6 +32,7 @@ import {
 import { KpiFlowStrip } from "@/features/financial/components/expenses/kpi-flow-strip";
 import { ExpenseFinancialSummary } from "@/features/financial/components/expenses/expense-financial-summary";
 import { ExpenseCompetencePicker } from "@/features/financial/components/expenses/expense-competence-picker";
+import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FinancialImportPage } from "@/features/financial/pages/import-page";
 import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
@@ -1356,6 +1357,7 @@ export function ExpensesPage() {
                                                 <p className="mt-1 text-[9.5px] font-medium text-sky-700">
                                                   {matchedExisting ? "Correspondência encontrada" : "Importada da fatura"}
                                                 </p>
+                                                <UberRecognitionStatus record={expense} compact />
                                               </td>
                                               <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
                                                 {chargeDate ? format(chargeDate, "dd/MM/yyyy") : "—"}
@@ -1457,6 +1459,7 @@ export function ExpensesPage() {
                                     </span>
                                   )}
                                 </div>
+                                <UberRecognitionStatus record={expense} compact />
                               </div>
                             </div>
                           </td>
@@ -1514,6 +1517,7 @@ export function ExpensesPage() {
                               <div className="grid gap-4 rounded-2xl border border-border/70 bg-background p-4 md:grid-cols-[minmax(0,1fr)_auto]">
                                 <div className="grid gap-4 sm:grid-cols-3">
                                   <ExpenseFinancialSummary expense={expense} />
+                                  <UberRecognitionStatus record={expense} />
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fornecedor</p>
                                     <p className="mt-1 text-sm font-medium">{expense.supplier || "—"}</p>
@@ -1881,6 +1885,7 @@ export function ExpensesPage() {
                                           {toDate(expense.cardChargeDate) ? format(toDate(expense.cardChargeDate)!, "dd/MM/yyyy") : "Data pendente"}
                                           {` · ${auditLabel}`}
                                         </p>
+                                        <UberRecognitionStatus record={expense} compact />
                                       </div>
                                       <p className="shrink-0 font-mono text-xs font-semibold">{formatCurrency(Number(expense.totalValue) || 0)}</p>
                                     </div>
@@ -1927,6 +1932,7 @@ export function ExpensesPage() {
                         <span className="text-border">·</span>
                         <span>{due ? `Venc. ${format(due, "dd/MM/yyyy")}` : "Sem vencimento"}</span>
                       </div>
+                      <UberRecognitionStatus record={expense} compact />
 
                       {expense.originModule === "purchasing" && (
                         <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -30,6 +30,8 @@ import { CurrencyInput } from '@/components/ui/currency-input';
 import { AccountPlanTreeSelect } from '@/components/purchasing/account-plan-tree-select';
 import { ResultCenterSelect } from '@/components/purchasing/result-center-select';
 import { PermissionGuard } from '@/components/permission-guard';
+import { PurchasingModuleNavigation } from '@/components/purchasing/purchasing-module-navigation';
+import { PurchasingPageFrame } from '@/components/purchasing/purchasing-ui';
 import {
   Select,
   SelectContent,
@@ -282,7 +284,8 @@ export default function ConfirmPurchasePage() {
 
   if (isLoading) {
     return (
-      <div className="container max-w-[1600px] py-8 space-y-6">
+      <PurchasingPageFrame>
+        <PurchasingModuleNavigation activeTab="quotations" activeStage="quotations" />
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-32 w-full" />
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2.4fr)_minmax(340px,1fr)] gap-6">
@@ -291,22 +294,25 @@ export default function ConfirmPurchasePage() {
           </div>
           <div><Skeleton className="h-80 w-full" /></div>
         </div>
-      </div>
+      </PurchasingPageFrame>
     );
   }
 
   if (!quotation) {
     return (
-      <div className="container max-w-3xl py-8 space-y-4">
+      <PurchasingPageFrame>
+        <PurchasingModuleNavigation activeTab="quotations" activeStage="quotations" />
         <p className="text-muted-foreground">Cotação não encontrada.</p>
-        <BackButton fallbackHref="/dashboard/purchasing" />
-      </div>
+        <BackButton fallbackHref="/dashboard/purchasing/quotations" />
+      </PurchasingPageFrame>
     );
   }
 
   return (
     <PermissionGuard allowed={canView && canCreate}>
-      <div className="container max-w-[1600px] py-8 space-y-6">
+      <PurchasingPageFrame>
+        <PurchasingModuleNavigation activeTab="quotations" activeStage="quotations" />
+        <div className="space-y-6">
 
         {/* Back */}
         <BackButton
@@ -728,7 +734,8 @@ export default function ConfirmPurchasePage() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </PurchasingPageFrame>
     </PermissionGuard>
   );
 }

@@ -49,3 +49,7 @@ export function canCancelPurchase(permissions?: PermissionSet | null) {
     canReceivePurchase(permissions),
   );
 }
+
+export function canRevertPurchaseStage(permissions?: PermissionSet | null) {
+  return Boolean(permissions?.purchasing?.revertPurchaseStage);
+}

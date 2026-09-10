@@ -173,7 +173,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
           installmentNumbers.add(Number(installments[0]?.number) || 1);
         }
         const nextInstallments = installments.map((installment, index) => installmentNumbers.has(Number(installment.number) || index + 1)
-          ? { ...installment, status: "paid", paidAt, cardReconciliationStatus: "reconciled", cardStatementKey: statement.key || null, linkedBankTransactionId: transactionId }
+          ? {
+              ...installment,
+              status: "paid",
+              paidAt,
+              cardReconciliationStatus: "reconciled",
+              cardStatementId: statementId,
+              cardStatementKey: statement.key || null,
+              cardStatementMonthKey: statement.monthKey || null,
+              linkedBankTransactionId: transactionId,
+            }
           : installment);
         const paidPrincipalCents = nextInstallments.length > 0
           ? nextInstallments.filter((installment) => ["paid", "cancelled"].includes(String(installment.status))).reduce((total, installment) => total + (installment.status === "paid" ? moneyToCents(installment.value) : 0), 0)

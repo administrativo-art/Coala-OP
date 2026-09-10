@@ -6,7 +6,9 @@ import {
   extractEmailAddress,
   extractExternalLinks,
   extractPaymentBarcode,
+  extractTelecomServiceNumbers,
   htmlToPlainText,
+  normalizeBrazilianServiceNumber,
 } from "../../src/features/financial/inbox/parser";
 
 test("classifica guia de FGTS da Maximus com competência e vencimento", () => {
@@ -75,4 +77,81 @@ test("identifica fornecedor e vencimento no assunto do boleto da Marvi", () => {
   assert.equal(parsed.classification.supplierName, "Marvi");
   assert.equal(parsed.classification.dueDate, "2026-09-07");
   assert.equal(parsed.classification.amountCents, 113884);
+});
+
+test("extrai identidade da linha móvel do documento anexado", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "A fatura Vivo Móvel da sua empresa chegou",
+    text: "Consulte a sua fatura.",
+    documentText: [
+      "VIVO / TELEFÔNICA BRASIL S.A.",
+      "Competência: 08/2026",
+      "Vencimento: 15/09/2026",
+      "Valor total: R$ 249,90",
+      "Conta: 00192837",
+      "Número da linha: (98) 99999-1234",
+    ].join("\n"),
+    senderDomain: "vivo.com.br",
+  });
+
+  assert.equal(parsed.classification.documentType, "utility_bill");
+  assert.equal(parsed.classification.amountCents, 24990);
+  assert.equal(parsed.classification.dueDate, "2026-09-15");
+  assert.equal(parsed.classification.competence, "2026-08");
+  assert.equal(parsed.classification.billingIdentity?.serviceType, "mobile");
+  assert.equal(parsed.classification.billingIdentity?.customerAccount, "00192837");
+  assert.deepEqual(parsed.classification.billingIdentity?.serviceNumbers, ["+5598999991234"]);
+});
+
+test("não confunde telefone de atendimento nem linha digitável com linha cobrada", () => {
+  const text = "Telefone de atendimento: (11) 4002-8922. Linha digitável: 34191.79001 01043.510047 91020.150008 8 95190000003999";
+  assert.deepEqual(extractTelecomServiceNumbers(text), []);
+  assert.equal(normalizeBrazilianServiceNumber("(98) 99999-1234"), "+5598999991234");
+});
+
+test("extrai telefone principal sem confundir a chave de acesso fiscal", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "A fatura Vivo Móvel da sua empresa chegou",
+    senderDomain: "vivo.com.br",
+    documentText: [
+      "Acesse aqui a Nota Fiscal",
+      "Chave de acesso: 21260902558157000405620040003464881003350381",
+      "Nº da Conta: 0461855379",
+      "Mês de referência: 09/2026",
+      "TELEFONE PRINCIPAL: 98-99907-2739",
+      "Vencimento: 25/09/2026",
+      "Total a Pagar - R$ 39,99",
+    ].join("\n"),
+  });
+
+  assert.equal(parsed.classification.billingIdentity?.customerAccount, "0461855379");
+  assert.deepEqual(parsed.classification.billingIdentity?.serviceNumbers, ["+5598999072739"]);
+  assert.equal(parsed.classification.barcode, null);
+});
+
+test("ignora ocorrência textual de conta e continua até o identificador numérico", () => {
+  const parsed = classifyFinancialEmail({
+    subject: "Sua Conta Digital chegou",
+    senderDomain: "vivo.com.br",
+    documentText: "Conta Digital\nNúmero da conta: 0461855379\nFatura Vivo",
+  });
+  assert.equal(parsed.classification.billingIdentity?.customerAccount, "0461855379");
+});
+
+test("separa campanha comercial da Vivo de uma cobrança", () => {
+  const promotion = classifyFinancialEmail({
+    subject: "Internet Fibra de 700 MEGA + WIFI 6 por apenas R$ 99,99/mês",
+    text: "Contrate agora e tenha a melhor internet do Brasil.",
+    senderDomain: "vivo.com.br",
+  });
+  const billing = classifyFinancialEmail({
+    subject: "A fatura Vivo Móvel da sua empresa chegou",
+    text: "Vencimento: 25/09/2026. Total a pagar: R$ 39,99.",
+    senderDomain: "vivo.com.br",
+  });
+
+  assert.equal(promotion.classification.marketingLikely, true);
+  assert.equal(promotion.classification.financeLikely, false);
+  assert.equal(billing.classification.marketingLikely, false);
+  assert.equal(billing.classification.financeLikely, true);
 });

@@ -84,7 +84,7 @@ export function CreateQuotationModal({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[620px] overflow-hidden rounded-[18px] border-zinc-200 bg-[#f6f6f7] p-0">
+      <DialogContent className="font-purchasing !max-w-[620px] overflow-hidden rounded-[18px] border-zinc-200 bg-[#f6f6f7] p-0">
         <div className="border-b border-zinc-200 bg-[#f6f6f7] px-8 pb-5 pt-7">
           <DialogHeader>
             <div className="flex items-start gap-3">

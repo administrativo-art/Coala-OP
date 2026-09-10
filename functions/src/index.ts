@@ -24,6 +24,11 @@ export { interCobrancaReconciliation } from './inter-cobranca-jobs.js';
 export { interPaymentReconciliation } from './inter-payment-jobs.js';
 export { interStatementSync } from './inter-statement-jobs.js';
 export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-job.js';
+export {
+  uberExpenseCandidateWritten,
+  uberSftpDailySync,
+  uberTransactionCandidateWritten,
+} from './uber-sftp/jobs.js';
 
 setGlobalOptions({ maxInstances: 10 });
 

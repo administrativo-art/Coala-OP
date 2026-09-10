@@ -12,6 +12,9 @@ const systemDocumentTemplateAssets = [
   ...documentPdfRuntimeAssets,
 ];
 const nextConfig = {
+  // O E2E usa um diretório separado para não disputar o lock/cache com o
+  // servidor de desenvolvimento que o time pode manter aberto na porta 3000.
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   transpilePackages: ['@react-pdf/renderer'],
   // `npm run verify` executa o lint antes do build. Evita repetir a mesma
   // análise no Next e inundar o log do CI com a dívida legada em warnings.
