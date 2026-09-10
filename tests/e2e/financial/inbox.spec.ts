@@ -11,7 +11,7 @@ test("confirma uma sugestão de vínculo identificada pela linha telefônica", a
 
   await page.goto("/dashboard/financial/expenses/inbox");
   await expect(page.getByRole("heading", { name: "Caixa de cobranças" })).toBeVisible();
-  await expect(page.getByText("+5598999991234", { exact: false })).toBeVisible();
+  await expect(page.getByText("+5598999991234", { exact: false }).first()).toBeVisible();
   await expect(page.getByText("mesma linha telefônica", { exact: false })).toBeVisible();
 
   await page.getByRole("button", { name: "Vincular sugestão" }).click();
