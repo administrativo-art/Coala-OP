@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { addDoc, doc, getDoc, increment, Timestamp, updateDoc } from "firebase/firestore";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -55,6 +56,10 @@ import {
   getImportAuditSourceBalance,
   groupImportAuditItems,
 } from "@/features/financial/lib/import-audit-list";
+import {
+  buildImportAuditLinkPresentation,
+  getImportAuditSourceDescription,
+} from "@/features/financial/lib/import-audit-link-presentation";
 import {
   inferStatementPaymentMethodFromText,
   isBoletoPaymentText,
@@ -210,8 +215,12 @@ function formatSessionNameDate(value: Date) {
 }
 
 function getTransactionPrimaryDescription(item: ImportSessionItem) {
-  const description = item.financialDraft.description || item.suggestedExpenseDescription || item.expenseDraft.description || item.rawDescription;
-  return description.replace(/\s+/g, " ").trim();
+  return getImportAuditSourceDescription({
+    rawDescription: item.rawDescription,
+    financialDescription: item.financialDraft.description,
+    suggestedExpenseDescription: item.suggestedExpenseDescription,
+    draftDescription: item.expenseDraft.description,
+  });
 }
 
 function isCardStatementSettlementItem(item: ImportSessionItem) {
@@ -1686,6 +1695,10 @@ export function FinancialImportPage({
         .filter((expense) => expense.status !== "draft" && expense.status !== "cancelled")
         .sort((left, right) => (toDate(right.createdAt)?.getTime() || 0) - (toDate(left.createdAt)?.getTime() || 0)),
     [expenses]
+  );
+  const linkableExpensesById = useMemo(
+    () => new Map(linkableExpenses.map((expense) => [expense.id, expense])),
+    [linkableExpenses]
   );
   const purchaseCandidates = useMemo<PurchaseCandidate[]>(() => {
     const financialByOrderId = new Map<string, PurchaseFinancial>(
@@ -4630,6 +4643,22 @@ export function FinancialImportPage({
                       const kindLabel = getTransactionKindLabel(item);
                       const statusMeta = IMPORT_ITEM_STATUS_META[item.status];
                       const sourceBalance = getImportAuditSourceBalance(item);
+                      const purchaseCandidate = item.expenseDraft.purchaseOrderId
+                        ? purchaseCandidatesByOrderId.get(item.expenseDraft.purchaseOrderId)
+                        : null;
+                      const linkPresentation = buildImportAuditLinkPresentation({
+                        amount: item.amount,
+                        movementKind: item.financialDraft.movementKind,
+                        isCardStatementSettlement: isCardStatementSettlementItem(item),
+                        expenseMode: item.expenseDraft.mode,
+                        linkedExpenseId: item.expenseDraft.linkedExpenseId,
+                        effectuationExpenseIds: item.effectuation?.expenseIds,
+                        draftDescription: item.expenseDraft.description,
+                        suggestedExpenseDescription: item.suggestedExpenseDescription,
+                        splitExpenseCount: item.expenseDraft.splitExpenses.length,
+                        purchaseLabel: purchaseCandidate?.label,
+                        expensesById: linkableExpensesById,
+                      });
 
                       return (
                         <div
@@ -4638,7 +4667,7 @@ export function FinancialImportPage({
                           tabIndex={0}
                           onClick={() => setExpandedItemId(isDetailOpen ? null : item.id)}
                           onKeyDown={(event) => {
-                            if ((event.target as HTMLElement).closest("button")) return;
+                            if ((event.target as HTMLElement).closest("button, a")) return;
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
                               setExpandedItemId(isDetailOpen ? null : item.id);
@@ -4671,19 +4700,40 @@ export function FinancialImportPage({
                           <div className="min-w-0 space-y-1">
                             <div className="flex min-w-0 items-center gap-1.5">
                               <p className="truncate font-sans text-[13px] font-semibold leading-tight">{primaryDescription}</p>
-                              {item.expenseDraft.mode === "existing" && item.expenseDraft.linkedExpenseId ? (
-                                <Badge
-                                  variant="outline"
-                                  className="shrink-0 rounded-full border-emerald-200 bg-emerald-50 px-1.5 py-0 text-[8.5px] font-semibold text-emerald-700"
-                                >
-                                  Vinculada
-                                </Badge>
-                              ) : null}
                               <Badge className={cn("shrink-0 rounded-md px-1.5 py-0 text-[8.5px] lg:hidden", getTransactionKindClassName(item))}>
                                 {kindLabel}
                               </Badge>
                             </div>
-                            <p className="truncate text-[10.5px] leading-tight text-muted-foreground">{item.rawDescription}</p>
+                            {linkPresentation.action === "expense" && linkPresentation.expenseId ? (
+                              <Link
+                                href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(linkPresentation.expenseId)}`}
+                                onClick={(event) => event.stopPropagation()}
+                                className="flex min-w-0 items-center gap-1 truncate text-[10.5px] font-medium leading-tight text-emerald-700 hover:text-emerald-800 hover:underline"
+                                title={`Abrir ${linkPresentation.label}`}
+                              >
+                                <span className="truncate">{linkPresentation.label}</span>
+                                {linkPresentation.meta ? <span className="shrink-0 font-normal text-muted-foreground">· {linkPresentation.meta}</span> : null}
+                              </Link>
+                            ) : linkPresentation.action === "details" ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setExpandedItemId(item.id);
+                                }}
+                                className={cn(
+                                  "flex min-w-0 items-center gap-1 truncate text-left text-[10.5px] font-medium leading-tight hover:underline",
+                                  linkPresentation.tone === "linked" ? "text-emerald-700" : "text-amber-700"
+                                )}
+                              >
+                                <span className="truncate">{linkPresentation.label}</span>
+                                {linkPresentation.meta ? <span className="shrink-0">· {linkPresentation.meta}</span> : null}
+                              </button>
+                            ) : (
+                              <p className="truncate text-[10.5px] leading-tight text-muted-foreground">
+                                {linkPresentation.label}
+                              </p>
+                            )}
                             <Badge
                               variant="outline"
                               className={cn("rounded-full px-1.5 py-0 text-[8.5px] font-semibold lg:hidden", statusMeta.className)}
