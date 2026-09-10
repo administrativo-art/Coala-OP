@@ -14,12 +14,10 @@ import { ptBR } from "date-fns/locale";
 import {
   AlertCircle,
   Check,
-  CheckCircle2,
   CreditCard,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  ChevronUp,
   Trash2,
   ChevronsUpDown,
   FileUp,
@@ -1784,8 +1782,6 @@ export function FinancialImportPage({
   const [reopenItemId, setReopenItemId] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState("");
   const [closeStatementDialogOpen, setCloseStatementDialogOpen] = useState(false);
-  const [sessionsSidebarOpen, setSessionsSidebarOpen] = useState(true);
-  const [generalSummaryOpen, setGeneralSummaryOpen] = useState(false);
   const [sessionLedgerView, setSessionLedgerView] = useState("checking_account");
   const visibleOpenSessions = useMemo(
     () =>
@@ -1822,6 +1818,18 @@ export function FinancialImportPage({
     else url.searchParams.set("ledger", view);
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
+
+  const handleSelectSession = useCallback(
+    (session: ImportSession) => {
+      setSelectedSessionId(session.id);
+      setCurrentSession(session);
+      setExpandedItemId(null);
+      selectSessionLedgerView("checking_account");
+      setIsSessionDirty(false);
+      replaceSessionUrl(session.id);
+    },
+    [replaceSessionUrl, selectSessionLedgerView]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3973,6 +3981,138 @@ export function FinancialImportPage({
     }
   }
 
+  // ── Redesign auditoria do extrato: competência, contas do mês, stepper e conciliação ──
+  const openSessionsByMonth = useMemo(() => {
+    const map = new Map<string, ImportSession[]>();
+    for (const session of openSessions) {
+      const key = getSessionMonthKey(session) ?? "";
+      const bucket = map.get(key);
+      if (bucket) bucket.push(session);
+      else map.set(key, [session]);
+    }
+    return map;
+  }, [openSessions]);
+
+  const availableMonthKeys = useMemo(
+    () => [...openSessionsByMonth.keys()].sort((left, right) => left.localeCompare(right)),
+    [openSessionsByMonth]
+  );
+  const activeMonthKey =
+    selectedSessionMonthKey ?? availableMonthKeys[availableMonthKeys.length - 1] ?? null;
+  const activeMonthIndex = activeMonthKey ? availableMonthKeys.indexOf(activeMonthKey) : -1;
+  const monthSessions = useMemo(
+    () => (activeMonthKey ? openSessionsByMonth.get(activeMonthKey) ?? [] : []),
+    [activeMonthKey, openSessionsByMonth]
+  );
+  const activeMonthLabel = (() => {
+    if (!activeMonthKey) return selectedSession ? getSessionPeriodLabel(selectedSession) : "—";
+    const [year, month] = activeMonthKey.split("-").map(Number);
+    if (!year || !month) {
+      return selectedSession ? getSessionPeriodLabel(selectedSession) : activeMonthKey;
+    }
+    const label = format(new Date(year, month - 1, 1), "LLLL | yyyy", { locale: ptBR });
+    return `${label.charAt(0).toLocaleUpperCase("pt-BR")}${label.slice(1)}`;
+  })();
+  const activeMonthMovementCount = monthSessions.reduce(
+    (total, session) => total + session.items.length,
+    0
+  );
+  const activeMonthMeta = `${monthSessions.length} ${
+    monthSessions.length === 1 ? "conta" : "contas"
+  } · ${activeMonthMovementCount} ${activeMonthMovementCount === 1 ? "movimentação" : "movimentações"}`;
+  const goToAdjacentMonth = (delta: number) => {
+    const nextKey = availableMonthKeys[activeMonthIndex + delta];
+    if (!nextKey) return;
+    const first = (openSessionsByMonth.get(nextKey) ?? [])[0];
+    if (first) handleSelectSession(first);
+  };
+
+  const statementProgress = selectedSession
+    ? getImportAuditProgress(selectedSession.summary)
+    : { total: 0, treated: 0, percentage: 0 };
+  const statementFinancials = selectedSession
+    ? getSessionFinancialSummary(selectedSession)
+    : { entries: 0, exits: 0, balance: 0 };
+  const statementUnitName = selectedSessionAccount?.resultCenterId
+    ? unitNameById[selectedSessionAccount.resultCenterId] ?? ""
+    : "";
+  const canCloseStatement =
+    selectedSessionCounts.all > 0 &&
+    selectedSessionCounts.pending === 0 &&
+    selectedSessionCounts.audited === 0;
+
+  const statementSteps = selectedSession
+    ? [
+        {
+          label: "Importar",
+          meta:
+            selectedSession.originLabel || IMPORT_SESSION_ORIGIN_LABELS[selectedSession.origin],
+          done: true,
+        },
+        {
+          label: "Auditar",
+          meta:
+            selectedSessionCounts.pending === 0
+              ? "cadastros completos"
+              : `${selectedSessionCounts.pending} pendente${
+                  selectedSessionCounts.pending === 1 ? "" : "s"
+                }`,
+          done: selectedSessionCounts.pending === 0,
+        },
+        {
+          label: "Efetivar",
+          meta:
+            selectedSessionCounts.audited === 0
+              ? "nada na fila"
+              : `${selectedSessionCounts.audited} aguardando`,
+          done: selectedSessionCounts.audited === 0,
+        },
+        {
+          label: "Fechar",
+          meta: canCloseStatement ? "liberado" : "bloqueado",
+          done: false,
+        },
+        {
+          label: "Cartões",
+          meta: selectedSessionCards.length
+            ? `${selectedSessionCards.length} fatura${
+                selectedSessionCards.length === 1 ? "" : "s"
+              } vinculada${selectedSessionCards.length === 1 ? "" : "s"}`
+            : "nenhum cartão",
+          done: selectedSessionCards.length === 0,
+        },
+      ]
+    : [];
+  const statementCurrentStepIndex = statementSteps.findIndex((step) => !step.done);
+
+  const statementCloseChecklist = selectedSession
+    ? [
+        {
+          label: "Movimentações auditadas",
+          meta:
+            selectedSessionCounts.pending === 0
+              ? "Nenhum item com cadastro incompleto."
+              : `${selectedSessionCounts.pending} item(ns) exigem auditoria.`,
+          ok: selectedSessionCounts.pending === 0,
+        },
+        {
+          label: "Fila de efetivação vazia",
+          meta:
+            selectedSessionCounts.audited === 0
+              ? "Todos os auditados já foram efetivados."
+              : `${selectedSessionCounts.audited} item(ns) aguardando efetivação.`,
+          ok: selectedSessionCounts.audited === 0,
+        },
+        {
+          label: "Fatura do cartão conferida",
+          meta: selectedSessionCards.length
+            ? `${selectedSessionCards.length} cartão(ões) vinculado(s) — confira na aba do cartão.`
+            : "Nenhum cartão vinculado a esta conta.",
+          ok: selectedSessionCards.length === 0,
+        },
+      ]
+    : [];
+
   if (!canViewAudits) {
     return (
       <FinancialAccessGuard
@@ -3994,15 +4134,60 @@ export function FinancialImportPage({
               Concilie pagamentos com despesas provisionadas. OFX, CSV e Pix-API.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="rounded-xl" disabled={isProcessing}>
+          <div className="flex flex-wrap items-end gap-2">
+            {canImportAudits ? (
+              <>
+                <Select value={fileType} onValueChange={(value) => setFileType(value as "ofx" | "csv")}>
+                  <SelectTrigger className="h-9 w-[92px] rounded-xl text-xs font-semibold uppercase">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ofx">OFX</SelectItem>
+                    <SelectItem value="csv">CSV</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={statementAccountId || "none"}
+                  onValueChange={(value) => setStatementAccountId(value === "none" ? "" : value)}
+                >
+                  <SelectTrigger className="h-9 w-[240px] rounded-xl text-xs">
+                    <SelectValue placeholder="Conta do extrato" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Conta do extrato…</SelectItem>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {getAccountOptionLabel(account, unitNameById)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            ) : null}
+            <Button variant="outline" size="sm" className="h-9 rounded-xl" disabled={isProcessing}>
               <RotateCcw className="mr-2 h-4 w-4" />
               Sincronizar bancos
             </Button>
-            {canImportAudits ? <Button size="sm" className="rounded-xl" onClick={() => fileRef.current?.click()} disabled={isProcessing}>
-              <Upload className="mr-2 h-4 w-4" />
-              Importar arquivo
-            </Button> : null}
+            {canImportAudits ? (
+              <Button
+                size="sm"
+                className="h-9 rounded-xl"
+                onClick={() => {
+                  if (!statementAccountId) {
+                    toast({
+                      variant: "destructive",
+                      title: "Selecione a conta vinculada ao extrato antes de importar.",
+                    });
+                    return;
+                  }
+                  fileRef.current?.click();
+                }}
+                disabled={isProcessing}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Importar extrato
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -4023,292 +4208,197 @@ export function FinancialImportPage({
       />
 
       {selectedSession ? (
-        <Card className="h-[min(720px,calc(100vh-215px))] min-h-[590px] overflow-hidden rounded-[30px] border-border/70 bg-white shadow-sm">
-          <div
-            className="grid h-full min-h-0 min-w-0"
-            style={{
-              gridTemplateColumns: `${sessionsSidebarOpen ? "320px" : "40px"} minmax(0, 1fr)`,
-            }}
-          >
-            <div className="flex min-h-0 flex-col border-r bg-white">
-              <div className="border-b px-4 py-3">
-                {sessionsSidebarOpen ? (
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Sessões</p>
-                    <div className="flex items-center">
-                      <button
-                        type="button"
-                        onClick={() => setSessionsSidebarOpen(false)}
-                        className="grid h-7 w-7 place-items-center rounded-lg border bg-white text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary"
-                        title="Recolher sessões"
-                        aria-label="Recolher sessões"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setSessionsSidebarOpen(true)}
-                    className="grid h-7 w-7 place-items-center rounded-lg border bg-white text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary"
-                    title="Expandir sessões"
-                    aria-label="Expandir sessões"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                )}
+        <div className="space-y-3">
+          {/* Competência + contas bancárias do mês */}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+            <div className="flex shrink-0 flex-col justify-between rounded-2xl border border-border/70 bg-card p-3.5 lg:w-[188px]">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Competência
+              </p>
+              <div className="mt-2">
+                <p className="text-[15px] font-bold leading-tight tracking-tight">{activeMonthLabel}</p>
+                <p className="mt-0.5 text-[10.5px] text-muted-foreground">{activeMonthMeta}</p>
               </div>
-              <div className={cn("min-h-0 flex-1 space-y-3 overflow-y-auto p-3", !sessionsSidebarOpen && "hidden")}>
-                <div className="space-y-2">
-                  {fileType === "csv" && (
-                    <Select value={bankProfile} onValueChange={setBankProfile}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(CSV_BANK_PROFILES).map(([value, profile]) => (
-                          <SelectItem key={value} value={value}>
-                            {profile.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <Select value={statementAccountId || "none"} onValueChange={(value) => setStatementAccountId(value === "none" ? "" : value)}>
-                    <SelectTrigger className="h-auto min-h-12 bg-white px-3 py-2 text-left text-[11px] leading-snug [&>span]:line-clamp-2 [&>span]:whitespace-normal">
-                      <SelectValue placeholder="Conta do extrato" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {getAccountOptionLabel(account, unitNameById)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {showImportControls && canImportAudits ? (
-                <button
+              <div className="mt-3 flex gap-1.5">
+                <Button
                   type="button"
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setIsDragging(true);
-                  }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    setIsDragging(false);
-                    const file = event.dataTransfer.files?.[0];
-                    if (file) void processFile(file);
-                  }}
-                  onClick={() => fileRef.current?.click()}
-                  className={cn(
-                    "w-full rounded-2xl border border-dashed px-4 py-3 text-left transition-colors",
-                    isDragging ? "border-primary bg-primary/5" : "border-border bg-background/80 hover:border-primary/40 hover:bg-background"
-                  )}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 flex-1 rounded-lg px-0"
+                  disabled={activeMonthIndex <= 0}
+                  aria-label="Competência anterior"
+                  onClick={() => goToAdjacentMonth(-1)}
                 >
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Upload className="h-4 w-4 text-muted-foreground" />
-                    Arrastar OFX/CSV
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">ou clique para escolher</p>
-                </button>
-                ) : null}
-
-                <div className="space-y-2">
-                  {visibleOpenSessions.map((session) => {
-                    const isSelected = session.id === selectedSession.id;
-                    const periodLabel = getSessionPeriodLabel(session);
-                    const sessionFinancialSummary = getSessionFinancialSummary(session);
-                    const sessionAccount = accounts.find((account) => account.id === session.statementAccountId);
-                    const sessionCreditCards = (canViewCardStatements ? sessionAccount?.paymentMethods || [] : []).filter(
-                      (method) => method.type === "credit_card"
-                    );
-                    const sessionUnitName = sessionAccount?.resultCenterId
-                      ? unitNameById[sessionAccount.resultCenterId] ?? ""
-                      : "";
-                    const sessionAccountName = sessionAccount?.name || session.statementAccountName || session.displayName;
-                    const sessionProgress = getImportAuditProgress(session.summary);
-
-                    return (
-                      <div
-                        key={session.id}
-                        className={cn(
-                          "overflow-hidden rounded-2xl border transition-colors",
-                          isSelected
-                            ? "border-primary/40 bg-white shadow-sm ring-1 ring-primary/10"
-                            : "border-transparent bg-white hover:border-primary/30"
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedSessionId(session.id);
-                            setCurrentSession(session);
-                            setExpandedItemId(null);
-                            if (!isSelected) setGeneralSummaryOpen(false);
-                            if (!isSelected) selectSessionLedgerView("checking_account");
-                            setIsSessionDirty(false);
-                            replaceSessionUrl(session.id);
-                          }}
-                          className="w-full px-3 py-3 text-left"
-                        >
-                        <div className="flex items-start gap-2">
-                          <span
-                            className={cn(
-                              "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold",
-                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                            )}
-                          >
-                            {visibleOpenSessions.findIndex((entry) => entry.id === session.id) + 1}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold">{periodLabel}</p>
-                            <p className="mt-1 break-words text-[11px] font-medium leading-snug text-foreground">
-                              {sessionAccountName}
-                            </p>
-                            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[10px]">
-                              <div>
-                                <p className="uppercase tracking-[0.1em] text-muted-foreground">Agência</p>
-                                <p className="mt-0.5 font-mono font-medium text-foreground">{sessionAccount?.agency || "—"}</p>
-                              </div>
-                              <div>
-                                <p className="uppercase tracking-[0.1em] text-muted-foreground">Conta corrente</p>
-                                <p className="mt-0.5 break-all font-mono font-medium text-foreground">{sessionAccount?.accountNumber || "—"}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-3 space-y-1.5">
-                          <div className="flex items-center justify-between gap-3 text-[10.5px]">
-                            <span className="font-medium text-foreground">Conciliação</span>
-                            <span className={cn("font-mono font-semibold", isSelected ? "text-primary" : "text-muted-foreground")}>
-                              {sessionProgress.percentage}%
-                            </span>
-                          </div>
-                          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className={cn(
-                                "h-full rounded-full transition-[width] duration-300",
-                                sessionProgress.percentage === 100 ? "bg-emerald-500" : "bg-primary"
-                              )}
-                              style={{ width: `${sessionProgress.percentage}%` }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-[10.5px] text-muted-foreground">
-                              {sessionProgress.treated} de {sessionProgress.total} tratados
-                            </p>
-                            {session.summary.pending === 0 ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" /> : null}
-                          </div>
-                        </div>
-                        </button>
-                        {isSelected && sessionCreditCards.length > 0 ? (
-                          <div className="grid grid-cols-2 gap-2 border-t bg-white p-2.5">
-                              <button
-                                type="button"
-                                onClick={() => selectSessionLedgerView("checking_account")}
-                                className={cn(
-                                  "flex min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[10.5px] font-semibold shadow-sm transition-all",
-                                  !selectedLedgerCard
-                                    ? "border-primary/60 bg-primary/[0.08] text-primary ring-1 ring-primary/15"
-                                    : "border-border bg-white text-muted-foreground hover:border-primary/40 hover:bg-primary/[0.035] hover:text-foreground"
-                                )}
-                              >
-                                <Landmark className="h-3.5 w-3.5 shrink-0" />
-                                Conta corrente
-                              </button>
-                              {sessionCreditCards.map((method) => {
-                                const view = `credit_card:${method.id}`;
-                                const active = sessionLedgerView === view;
-                                return (
-                                  <button
-                                    key={method.id}
-                                    type="button"
-                                    onClick={() => selectSessionLedgerView(view)}
-                                    className={cn(
-                                      "flex min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[10.5px] font-semibold shadow-sm transition-all",
-                                      active
-                                        ? "border-primary/60 bg-primary/[0.08] text-primary ring-1 ring-primary/15"
-                                        : "border-border bg-white text-muted-foreground hover:border-primary/40 hover:bg-primary/[0.035] hover:text-foreground"
-                                    )}
-                                  >
-                                    <CreditCard className="h-3.5 w-3.5 shrink-0" />
-                                    <span className="truncate">Cartão{method.lastDigits ? ` •••• ${method.lastDigits}` : " de crédito"}</span>
-                                  </button>
-                                );
-                              })}
-                          </div>
-                        ) : null}
-                        {isSelected ? (
-                          <button
-                            type="button"
-                            onClick={() => setGeneralSummaryOpen((current) => !current)}
-                            className="flex w-full items-center justify-between border-t px-3 py-2 text-[10.5px] font-medium text-muted-foreground hover:bg-muted/30 hover:text-foreground"
-                            aria-expanded={generalSummaryOpen}
-                          >
-                            <span>Resumo geral</span>
-                            {generalSummaryOpen
-                              ? <ChevronUp className="h-3.5 w-3.5" />
-                              : <ChevronDown className="h-3.5 w-3.5" />}
-                          </button>
-                        ) : null}
-                        {isSelected && generalSummaryOpen ? (
-                          <div className="border-t bg-muted/20 p-3">
-                            <div className="rounded-xl border bg-background p-3 shadow-sm">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                                  Resumo geral
-                                </p>
-                                <Badge variant="secondary" className="rounded-full text-[9.5px]">
-                                  {session.items.length} itens
-                                </Badge>
-                              </div>
-                              <div className="mt-2 space-y-2 rounded-lg bg-muted/50 px-2.5 py-2 text-[10.5px]">
-                                <div>
-                                  <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Unidade</p>
-                                  <p className="mt-0.5 break-words font-medium leading-snug text-foreground">{sessionUnitName || "Não vinculada"}</p>
-                                </div>
-                              </div>
-                              <div className="mt-2 grid grid-cols-2 gap-2 text-[10.5px]">
-                                <div className="rounded-lg bg-emerald-50 px-2 py-2">
-                                  <p className="text-emerald-700/70">Entradas</p>
-                                  <p className="mt-0.5 truncate font-mono font-semibold text-emerald-700">
-                                    {formatCurrency(sessionFinancialSummary.entries)}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg bg-rose-50 px-2 py-2">
-                                  <p className="text-rose-700/70">Saídas</p>
-                                  <p className="mt-0.5 truncate font-mono font-semibold text-rose-700">
-                                    {formatCurrency(sessionFinancialSummary.exits)}
-                                  </p>
-                                </div>
-                                <div className="col-span-2 flex items-center justify-between rounded-lg bg-muted/60 px-2 py-2">
-                                  <span className="text-muted-foreground">Saldo do período</span>
-                                  <span className={cn(
-                                    "font-mono font-semibold",
-                                    sessionFinancialSummary.balance >= 0 ? "text-emerald-700" : "text-rose-700"
-                                  )}>
-                                    {sessionFinancialSummary.balance >= 0 ? "+" : "−"}
-                                    {formatCurrency(Math.abs(sessionFinancialSummary.balance))}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 flex-1 rounded-lg px-0"
+                  disabled={activeMonthIndex < 0 || activeMonthIndex >= availableMonthKeys.length - 1}
+                  aria-label="Próxima competência"
+                  onClick={() => goToAdjacentMonth(1)}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
               </div>
             </div>
 
+            <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {monthSessions.map((session) => {
+                const account = accounts.find((entry) => entry.id === session.statementAccountId);
+                const isActive = session.id === selectedSession.id;
+                const progress = getImportAuditProgress(session.summary);
+                const financials = getSessionFinancialSummary(session);
+                const ready = progress.percentage === 100;
+                const meta = [
+                  account?.agency ? `AG ${account.agency}` : null,
+                  account?.accountNumber ? `CC ${account.accountNumber}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => handleSelectSession(session)}
+                    className={cn(
+                      "flex flex-col rounded-2xl border bg-card p-4 text-left transition-shadow",
+                      isActive
+                        ? "border-primary shadow-md ring-1 ring-primary/20"
+                        : "border-border/70 shadow-sm hover:border-primary/40"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={cn(
+                            "grid h-8 w-8 shrink-0 place-items-center rounded-xl",
+                            isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <Landmark className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-bold tracking-tight">
+                            {account?.name || session.statementAccountName || session.displayName}
+                          </p>
+                          <p className="truncate font-mono text-[10px] text-muted-foreground">
+                            {meta || session.displayName}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "shrink-0 rounded-full px-2 py-0 text-[9px] font-semibold",
+                          ready
+                            ? "border-sky-200 bg-sky-50 text-sky-700"
+                            : "border-amber-200 bg-amber-50 text-amber-700"
+                        )}
+                      >
+                        {ready ? "Pronto para fechar" : "Em auditoria"}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 flex items-end justify-between gap-2">
+                      <div>
+                        <p className="text-[8.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Saldo do período
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-0.5 font-mono text-[17px] font-bold tracking-tight",
+                            financials.balance < 0 ? "text-rose-600" : "text-foreground"
+                          )}
+                        >
+                          {financials.balance < 0 ? "− " : "+ "}
+                          {formatCurrency(Math.abs(financials.balance))}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-muted-foreground">
+                          {session.items.length}{" "}
+                          {session.items.length === 1 ? "movimentação" : "movimentações"}
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-0.5 text-[10px] font-semibold",
+                            ready ? "text-emerald-600" : "text-amber-600"
+                          )}
+                        >
+                          {progress.treated}/{progress.total} tratadas
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          ready ? "bg-emerald-500" : "bg-primary"
+                        )}
+                        style={{ width: `${progress.percentage}%` }}
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Stepper do fluxo de auditoria */}
+          {statementSteps.length > 0 ? (
+            <div className="flex items-center gap-1.5 overflow-x-auto rounded-2xl border border-border/70 bg-card px-4 py-3">
+              {statementSteps.map((step, index) => {
+                const isCurrent = index === statementCurrentStepIndex;
+                return (
+                  <Fragment key={step.label}>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span
+                        className={cn(
+                          "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white",
+                          step.done
+                            ? "bg-emerald-500"
+                            : isCurrent
+                            ? "bg-primary"
+                            : "bg-muted-foreground/40"
+                        )}
+                      >
+                        {step.done ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <p
+                          className={cn(
+                            "text-[12px] font-bold leading-tight tracking-tight",
+                            step.done || isCurrent ? "text-foreground" : "text-muted-foreground"
+                          )}
+                        >
+                          {step.label}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-[10px] leading-tight",
+                            isCurrent ? "text-primary" : "text-muted-foreground"
+                          )}
+                        >
+                          {step.meta}
+                        </p>
+                      </div>
+                    </div>
+                    {index < statementSteps.length - 1 ? (
+                      <span className="h-px min-w-[14px] flex-1 bg-border" />
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </div>
+          ) : null}
+
             {selectedLedgerCard ? (
-              <div data-testid="card-statement-pane" className="min-h-0 min-w-0 overflow-hidden bg-white">
+              <Card
+                data-testid="card-statement-pane"
+                className="h-[min(680px,calc(100vh-320px))] min-h-[520px] overflow-hidden rounded-2xl border-border/70 bg-white shadow-sm"
+              >
                 <CardStatementsWorkspace
                   embedded
                   fixedMonthKey={selectedSessionMonthKey || undefined}
@@ -4316,10 +4406,14 @@ export function FinancialImportPage({
                   paymentMethodId={selectedLedgerCard.id}
                   returnTo={cardWorkspaceReturnTo}
                 />
-              </div>
+              </Card>
             ) : (
               <>
-            <div data-testid="transactions-pane" className="flex min-h-0 min-w-0 flex-col bg-white">
+              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_348px]">
+            <div
+              data-testid="transactions-pane"
+              className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
+            >
               <div className="space-y-2 border-b px-4 py-3">
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -4510,7 +4604,7 @@ export function FinancialImportPage({
                 </div>
               )}
 
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="max-h-[calc(100vh-360px)] min-h-[260px] flex-1 overflow-y-auto">
                 {selectedSessionGroups.length === 0 ? (
                   <div className="grid min-h-32 place-items-center px-6 text-center text-xs text-muted-foreground">
                     Nenhuma movimentação corresponde aos filtros selecionados.
@@ -4639,20 +4733,172 @@ export function FinancialImportPage({
                 ))}
               </div>
 
-              <div className="flex items-center justify-between border-t bg-muted/20 px-4 py-2.5 text-xs">
-                <span className="text-muted-foreground">{selectedSessionItems.length} transações</span>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t bg-muted/20 px-4 py-3 sm:grid-cols-4">
+                <div>
+                  <p className="text-[8.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Entradas
+                  </p>
+                  <p className="mt-0.5 font-mono text-[13px] font-bold tracking-tight text-emerald-600">
+                    {formatCurrency(statementFinancials.entries)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[8.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Saídas
+                  </p>
+                  <p className="mt-0.5 font-mono text-[13px] font-bold tracking-tight text-rose-600">
+                    {formatCurrency(statementFinancials.exits)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[8.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Saldo do período
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 font-mono text-[13px] font-bold tracking-tight",
+                      statementFinancials.balance < 0 ? "text-rose-600" : "text-foreground"
+                    )}
+                  >
+                    {statementFinancials.balance < 0 ? "− " : "+ "}
+                    {formatCurrency(Math.abs(statementFinancials.balance))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[8.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Tratadas
+                  </p>
+                  <p className="mt-0.5 font-mono text-[13px] font-bold tracking-tight">
+                    {statementProgress.treated} de {statementProgress.total}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Trilho: Conciliação + Cartões desta conta */}
+            <div className="flex flex-col gap-3.5 xl:sticky xl:top-4">
+              <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[14px] font-bold tracking-tight">Conciliação</h3>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "rounded-full px-2 py-0 text-[9px] font-semibold",
+                      statementProgress.percentage === 100
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700"
+                    )}
+                  >
+                    {statementProgress.percentage === 100
+                      ? "Pronto para fechar"
+                      : `${statementProgress.percentage}% conciliado`}
+                  </Badge>
+                </div>
+
+                <div className="mt-3.5">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[11px] text-muted-foreground">Tratadas</span>
+                    <span className="font-mono text-[13px] font-bold">
+                      {statementProgress.treated} de {statementProgress.total}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn(
+                        "h-full",
+                        statementProgress.percentage === 100 ? "bg-emerald-500" : "bg-primary"
+                      )}
+                      style={{ width: `${statementProgress.percentage}%` }}
+                    />
+                    <div
+                      className="h-full bg-[repeating-linear-gradient(135deg,#f6cfe4,#f6cfe4_4px,#f0eae4_4px,#f0eae4_8px)]"
+                      style={{ width: `${100 - statementProgress.percentage}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <span className="text-[11px] text-muted-foreground">Pendentes de tratamento</span>
+                    <span className="font-mono text-[13px] font-bold text-amber-600">
+                      {statementProgress.total - statementProgress.treated}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-3.5 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-emerald-50 px-2.5 py-2 dark:bg-emerald-950/30">
+                    <p className="text-[9.5px] font-semibold text-emerald-700/80 dark:text-emerald-400/80">
+                      Entradas
+                    </p>
+                    <p className="mt-0.5 font-mono text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
+                      {formatCurrency(statementFinancials.entries)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-rose-50 px-2.5 py-2 dark:bg-rose-950/30">
+                    <p className="text-[9.5px] font-semibold text-rose-700/80 dark:text-rose-400/80">
+                      Saídas
+                    </p>
+                    <p className="mt-0.5 font-mono text-[12px] font-bold text-rose-700 dark:text-rose-400">
+                      {formatCurrency(statementFinancials.exits)}
+                    </p>
+                  </div>
+                  <div className="col-span-2 flex items-center justify-between rounded-xl bg-muted/60 px-2.5 py-2">
+                    <span className="text-[11px] text-muted-foreground">Saldo do período</span>
+                    <span
+                      className={cn(
+                        "font-mono text-[12px] font-bold",
+                        statementFinancials.balance < 0 ? "text-rose-600" : "text-emerald-600"
+                      )}
+                    >
+                      {statementFinancials.balance < 0 ? "− " : "+ "}
+                      {formatCurrency(Math.abs(statementFinancials.balance))}
+                    </span>
+                  </div>
+                  <div className="col-span-2 flex items-center justify-between px-0.5">
+                    <span className="text-[10.5px] text-muted-foreground">Unidade</span>
+                    <span className="text-[10.5px] font-semibold text-foreground">
+                      {statementUnitName || "Não vinculada"}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-4 text-[8.5px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Para fechar o extrato
+                </p>
+                <div className="mt-2 flex flex-col">
+                  {statementCloseChecklist.map((entry) => (
+                    <div
+                      key={entry.label}
+                      className="flex items-start gap-2 border-b border-border/50 py-2 last:border-b-0"
+                    >
+                      <span
+                        className={cn(
+                          "mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-bold text-white",
+                          entry.ok ? "bg-emerald-500" : "bg-amber-500"
+                        )}
+                      >
+                        {entry.ok ? <Check className="h-3 w-3" /> : "!"}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={cn(
+                            "text-[12px] font-semibold",
+                            entry.ok ? "text-foreground/80" : "text-foreground"
+                          )}
+                        >
+                          {entry.label}
+                        </p>
+                        <p className="mt-0.5 text-[10.5px] text-muted-foreground">{entry.meta}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 <Button
-                  size="sm"
-                  className="h-8 rounded-xl text-[11px]"
+                  type="button"
+                  className="mt-4 h-11 w-full rounded-xl text-[13px] font-bold"
                   onClick={() => setCloseStatementDialogOpen(true)}
-                  disabled={
-                    !canManageAudits ||
-                    isProcessing ||
-                    selectedSessionCounts.pending > 0 ||
-                    selectedSessionCounts.audited > 0
-                  }
+                  disabled={!canManageAudits || isProcessing || !canCloseStatement}
                   title={
-                    selectedSessionCounts.pending > 0 || selectedSessionCounts.audited > 0
+                    !canCloseStatement
                       ? "Efetive ou ignore todos os itens antes de fechar."
                       : "Consolidar e fechar este extrato."
                   }
@@ -4660,7 +4906,45 @@ export function FinancialImportPage({
                   Fechar extrato
                 </Button>
               </div>
+
+              <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
+                <h3 className="text-[14px] font-bold tracking-tight">Cartões desta conta</h3>
+                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                  {selectedSessionCards.length
+                    ? "O pagamento da fatura aparece no extrato e é conciliado sem criar despesa nova."
+                    : "Nenhum cartão de crédito vinculado a esta conta neste período."}
+                </p>
+                {selectedSessionCards.length ? (
+                  <div className="mt-3 flex flex-col gap-2">
+                    {selectedSessionCards.map((method) => {
+                      const view = `credit_card:${method.id}`;
+                      return (
+                        <button
+                          key={method.id}
+                          type="button"
+                          onClick={() => selectSessionLedgerView(view)}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                            sessionLedgerView === view
+                              ? "border-primary/60 bg-primary/[0.06]"
+                              : "border-border bg-muted/40 hover:border-primary/40"
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <CreditCard className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span className="truncate text-[12px] font-bold">
+                              Cartão{method.lastDigits ? ` •••• ${method.lastDigits}` : " de crédito"}
+                            </span>
+                          </div>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             </div>
+              </div>
 
             <Sheet
               open={Boolean(selectedDetailItem && selectedValidation)}
@@ -6847,8 +7131,7 @@ export function FinancialImportPage({
             </Sheet>
               </>
             )}
-          </div>
-        </Card>
+        </div>
       ) : statementAccountId && visibleOpenSessions.length === 0 ? (
         <Card className="mx-auto max-w-[1120px] rounded-2xl border-border/70 shadow-sm">
           <CardHeader>
