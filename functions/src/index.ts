@@ -24,6 +24,7 @@ export { interCobrancaReconciliation } from './inter-cobranca-jobs.js';
 export { interPaymentReconciliation } from './inter-payment-jobs.js';
 export { interStatementSync } from './inter-statement-jobs.js';
 export { cashDepositDailyReconciliation } from './cash-deposit-reconciliation-job.js';
+export { financialInboxMaintenance } from './financial-inbox-jobs.js';
 export {
   uberExpenseCandidateWritten,
   uberSftpDailySync,

@@ -29,6 +29,7 @@
     "validate:hours-bank": "node --import tsx scripts/validate-hours-bank-pilot.mts",
     "validate:cash-closure": "node --conditions=react-server --import tsx scripts/validate-cash-closure.mts",
     "preflight:cash-counting-sessions": "node --conditions=react-server --import tsx scripts/preflight-cash-counting-sessions.mts",
+    "preflight:financial-inbox": "node --import tsx scripts/preflight-financial-inbox-maintenance.mts",
     "documents:build-base": "node --import tsx scripts/build-ct-document-base.mts",
     "documents:build-uniform-previews": "node --import tsx scripts/build-uniform-template-previews.mts",
     "documents:prepare-contract-v3": "node --import tsx scripts/prepare-probation-contract-v3.mts",
