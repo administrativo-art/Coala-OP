@@ -241,6 +241,18 @@ test("bloqueia alocações duplicadas ou com soma diferente do total oficial", (
   assert.equal(duplicate.difference, 45.13);
 });
 
+test("desconta créditos e estornos ao conferir o total oficial", () => {
+  const result = cardStatementAllocationIntegrity([
+    { lineId: "charges", amount: 6531.35, importFingerprint: "fp-charges" },
+  ], 6137.84, 393.51);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.grossAllocatedTotal, 6531.35);
+  assert.equal(result.creditTotal, 393.51);
+  assert.equal(result.allocatedTotal, 6137.84);
+  assert.equal(result.difference, 0);
+});
+
 test("exibe a previsão do cartão e remove a previsão substituída pelo gasto real", () => {
   const groups = buildCardStatementGroups([
     {

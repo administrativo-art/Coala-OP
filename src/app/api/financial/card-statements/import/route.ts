@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import {
   buildCardStatementImportFingerprint,
+  cardStatementCreditTotal,
+  type CardStatementExcludedEntry,
   type CardStatementImportLine,
   type CardStatementPreviousImportLine,
   type CardStatementRevisionLine,
@@ -301,6 +303,13 @@ export async function POST(request: NextRequest) {
       const storedByFingerprint = new Map(storedLines.map((line) => [String(line.fingerprint || ""), line]));
       const canonicalFileName = String(importData.fileName || input.fileName);
       const canonicalAnalysis = asRecord(importData.preview?.analysis);
+      const canonicalExcludedEntries = (Array.isArray(importData.preview?.excludedEntries)
+        ? importData.preview.excludedEntries.map(asRecord)
+        : []) as unknown as CardStatementExcludedEntry[];
+      const canonicalCredits = canonicalExcludedEntries.filter((entry) =>
+        (entry.kind === "credit" || entry.kind === "refund") && asNumber(entry.amount) > 0
+      );
+      const canonicalCreditTotal = cardStatementCreditTotal(canonicalCredits);
       const canonicalOfficialTotal = asNumber(importData.preview?.officialTotal) || input.officialTotal;
       const canonicalDueDate = String(importData.preview?.dueDate || input.dueDate);
       const canonicalClosingDate = String(importData.preview?.closingDate || input.closingDate);
@@ -655,6 +664,7 @@ export async function POST(request: NextRequest) {
       const allocationIntegrity = cardStatementAllocationIntegrity(
         nextAllocations as Array<{ lineId: string; amount: number; importFingerprint?: string }>,
         canonicalOfficialTotal || 0,
+        canonicalCreditTotal,
       );
       if (allocationIntegrity.duplicateLineIds.length || allocationIntegrity.duplicateFingerprints.length) {
         throw new Error("CARD_STATEMENT_DUPLICATE_ALLOCATION");
@@ -675,6 +685,9 @@ export async function POST(request: NextRequest) {
         ...(canonicalOfficialTotal ? { officialTotal: canonicalOfficialTotal } : {}),
         status: nextStatus,
         allocations: nextAllocations,
+        grossChargesTotal: allocationIntegrity.grossAllocatedTotal,
+        creditTotal: canonicalCreditTotal,
+        credits: canonicalCredits,
         activeImportId: input.importId,
         activeImportVersion: asNumber(importData.version),
         activeImportFileSha256: input.fileSha256,
@@ -687,6 +700,9 @@ export async function POST(request: NextRequest) {
           includedCount: storedLines.length,
           appliedCount: activeAppliedByFingerprint.size,
           includedTotal,
+          grossIncludedTotal: includedTotal,
+          creditTotal: canonicalCreditTotal,
+          netIncludedTotal: Number((includedTotal - canonicalCreditTotal).toFixed(2)),
           excludedCount: asNumber(canonicalAnalysis.excludedCount),
           promptVersion: canonicalAnalysis.promptVersion || input.analysis.promptVersion,
           schemaVersion: canonicalAnalysis.schemaVersion ?? input.analysis.schemaVersion,

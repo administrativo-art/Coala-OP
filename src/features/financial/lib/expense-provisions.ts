@@ -91,13 +91,18 @@ export function inferExpenseProvisionSeriesKey(expense: ExpenseProvisionLike) {
   const internet = description.match(/^Internet\s*-\s*(.+?)\s*\|\s*(.+)$/i);
   if (internet) return recurringSeries(["internet", internet[1], internet[2]]);
 
-  const accounting = description.match(/^Honor[aá]rio cont[aá]bil\s*-\s*(.+?)\s*\|\s*(.+)$/i);
+  const accounting = description.match(
+    /^Honor[aá]rio cont[aá]bil\s*-\s*(.+?)\s*\|\s*(.+?)(?:\s*\|\s*\d{2}\/\d{4})?$/i,
+  );
   if (accounting) return recurringSeries(["honorario-contabil", accounting[1], accounting[2]]);
 
   const rent = description.match(/^Aluguel\s*-\s*(.+?)\s*\|\s*(.+)$/i);
   if (rent) return recurringSeries(["aluguel", rent[1], rent[2]]);
 
   if (normalizedDescription === "sistema rh - bizneo") return "recurring:sistema-rh:bizneo";
+
+  const hrConsulting = description.match(/^Consultoria de RH(?:\s*-\s*\d{2}\/\d{4})?\s*\|\s*(.+)$/i);
+  if (hrConsulting) return recurringSeries(["consultoria-rh", hrConsulting[1]]);
 
   const dental = description.match(/^Plano odontol[oó]gico\s*-\s*Odontoprev\s*\|\s*(.+)$/i);
   if (dental) return recurringSeries(["plano-odontologico", "odontoprev", dental[1]]);
