@@ -14,6 +14,8 @@ export type InboxExpenseCandidate = {
   supplier?: string | null;
   totalValue?: number | null;
   dueDate?: unknown;
+  competenceDate?: unknown;
+  provisionCompetence?: string | null;
   status?: unknown;
   installments?: Array<Record<string, unknown>> | null;
   settlementEvidence?: FinancialInboxExistingSettlement[] | null;
@@ -174,6 +176,9 @@ function scoredInstallments(
       if (String(installment.status ?? "") === "cancelled") return [];
       const amountCents = Math.round(Number(installment.value ?? 0) * 100);
       const dueDate = dateKey(installment.dueDate ?? candidate.dueDate);
+      const competence = candidate.provisionCompetence
+        || dateKey(candidate.competenceDate)?.slice(0, 7)
+        || null;
       const amountMatches = classification.amountCents != null && Math.abs(amountCents - classification.amountCents) <= 1;
       const dueDateMatches = Boolean(classification.dueDate && dueDate === classification.dueDate);
       const reasons = [
@@ -198,6 +203,8 @@ function scoredInstallments(
           supplier: String(candidate.supplier ?? "").trim(),
           amountCents,
           dueDate,
+          competence,
+          billingIdentity: normalizedIdentity(candidate),
           score,
           reasons,
         },
@@ -234,6 +241,8 @@ export function chooseExistingExpenseSuggestion(
     supplier: match.alternative.supplier,
     amountCents: match.alternative.amountCents,
     dueDate: match.alternative.dueDate,
+    competence: match.alternative.competence,
+    billingIdentity: match.alternative.billingIdentity,
     reasons: match.alternative.reasons,
     paymentState: match.settlement ? "paid" : match.bankPayment ? "scheduled" : "needs_scheduling",
     existingBankPayment: match.bankPayment,

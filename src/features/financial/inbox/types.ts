@@ -10,7 +10,33 @@ export type FinancialInboxStatus =
   | "reconciled"
   | "divergent"
   | "ignored"
+  | "archived"
   | "error";
+
+export type FinancialInboxStage =
+  | "classify"
+  | "link"
+  | "pay"
+  | "bank"
+  | "done"
+  | "off"
+  | "archive";
+
+export type FinancialInboxRetentionClass =
+  | "non_financial"
+  | "financial_standard"
+  | "tax_or_payroll";
+
+export type FinancialInboxStageSummary = {
+  count: number;
+  amountCents: number;
+};
+
+export type FinancialInboxSummary = {
+  total: FinancialInboxStageSummary;
+  stages: Record<FinancialInboxStage, FinancialInboxStageSummary>;
+  generatedAt: string;
+};
 
 export type FinancialInboxDocumentType =
   | "fgts"
@@ -94,6 +120,7 @@ export type FinancialInboxProvisionSuggestion = {
   competence: string | null;
   dueDate: string | null;
   provisionedAmountCents: number | null;
+  billingIdentity?: FinancialInboxBillingIdentity | null;
   checkedAt: string | null;
 };
 
@@ -118,6 +145,8 @@ export type FinancialInboxExpenseSuggestion = {
   supplier: string | null;
   amountCents: number | null;
   dueDate: string | null;
+  competence?: string | null;
+  billingIdentity?: FinancialInboxBillingIdentity | null;
   reasons: string[];
   paymentState: "paid" | "scheduled" | "needs_scheduling" | null;
   existingBankPayment: FinancialInboxExistingBankPayment | null;
@@ -133,6 +162,8 @@ export type FinancialInboxExpenseAlternative = {
   supplier: string;
   amountCents: number;
   dueDate: string | null;
+  competence?: string | null;
+  billingIdentity?: FinancialInboxBillingIdentity | null;
   score: number;
   reasons: string[];
 };
@@ -207,6 +238,15 @@ export type FinancialInboxMessage = {
   statementTransactionId?: string | null;
   reviewedAt: string | null;
   reviewedBy: string | null;
+  searchTerms?: string[];
+  searchIndexVersion?: number;
+  searchIndexedAt?: string | null;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archivedFromStatus?: "ignored" | "reconciled" | null;
+  retentionClass?: FinancialInboxRetentionClass | null;
+  purgeEligibleAt?: string | null;
+  retentionPolicyVersion?: number | null;
   createdAt: string;
   updatedAt: string;
 };

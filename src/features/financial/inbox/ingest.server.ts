@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { getStorage } from "firebase-admin/storage";
 
 import { classifyFinancialEmail, extractEmailAddress } from "./parser";
+import {
+  buildFinancialInboxSearchTerms,
+  FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
+} from "./search-index";
 import type { FinancialInboxAttachment, FinancialInboxMessage } from "./types";
 import { analyzeFinancialInboxMessage } from "./workflow.server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
@@ -275,9 +279,19 @@ export async function ingestFinancialEmail(params: {
     statementTransactionId: null,
     reviewedAt: null,
     reviewedBy: null,
+    searchTerms: [],
+    searchIndexVersion: FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
+    searchIndexedAt: now,
+    archivedAt: null,
+    archivedBy: null,
+    archivedFromStatus: null,
+    retentionClass: null,
+    purgeEligibleAt: null,
+    retentionPolicyVersion: null,
     createdAt: now,
     updatedAt: now,
   };
+  message.searchTerms = buildFinancialInboxSearchTerms(message);
 
   try {
     const batch = financialDbAdmin.batch();

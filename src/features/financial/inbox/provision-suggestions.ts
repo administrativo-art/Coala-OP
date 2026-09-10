@@ -146,6 +146,10 @@ export function chooseProvisionSuggestion(
     competence: classification.competence,
     dueDate: first ? dateKey(first.candidate.dueDate) : null,
     provisionedAmountCents: first ? Math.round((Number(first.candidate.totalValue) || 0) * 100) : null,
+    billingIdentity: first
+      ? first.candidate.billingIdentity
+        ?? extractBillingIdentity(`${first.candidate.description ?? ""}\n${first.candidate.supplier ?? ""}\n${first.candidate.notes ?? ""}`)
+      : null,
     checkedAt,
   };
 }

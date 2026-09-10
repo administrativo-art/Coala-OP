@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
     const result = await listFinancialInboxMessages({
       workspaceId: actor.workspace_id,
       status: request.nextUrl.searchParams.get("status"),
+      stage: request.nextUrl.searchParams.get("stage"),
+      search: request.nextUrl.searchParams.get("q"),
       cursor: request.nextUrl.searchParams.get("cursor"),
       limit: Number(request.nextUrl.searchParams.get("limit") || 25),
     });
