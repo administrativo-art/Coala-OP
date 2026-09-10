@@ -1,10 +1,9 @@
-import { defineSecret, defineString } from 'firebase-functions/params';
+import { defineSecret } from 'firebase-functions/params';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 const reconciliationSecret = defineSecret('INTER_RECONCILIATION_SECRET');
-const maintenanceUrl = defineString('FINANCIAL_INBOX_MAINTENANCE_URL', {
-  default: 'https://op.coalashakes.com/api/jobs/financial-inbox/maintenance',
-});
+const maintenanceUrl = process.env.FINANCIAL_INBOX_MAINTENANCE_URL?.trim()
+  || 'https://op.coalashakes.com/api/jobs/financial-inbox/maintenance';
 
 /**
  * Indexa mensagens legadas e arquiva cobranças tratadas há mais de seis meses.
@@ -19,7 +18,7 @@ export const financialInboxMaintenance = onSchedule({
   maxInstances: 1,
   secrets: [reconciliationSecret],
 }, async () => {
-  const response = await fetch(maintenanceUrl.value(), {
+  const response = await fetch(maintenanceUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${reconciliationSecret.value()}`,
