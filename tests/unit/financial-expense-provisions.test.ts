@@ -17,6 +17,10 @@ test("infere séries recorrentes pela descrição canônica", () => {
     "recurring:honorario-contabil:administrativo:maximus",
   );
   assert.equal(
+    inferExpenseProvisionSeriesKey({ description: "Honorário contábil - Tirirical | Maximus | 08/2026" }),
+    "recurring:honorario-contabil:tirirical:maximus",
+  );
+  assert.equal(
     inferExpenseProvisionSeriesKey({ description: "GPT/Codex | Tiago Brasil" }),
     "recurring:gpt-codex:tiago-brasil",
   );
@@ -27,6 +31,10 @@ test("infere séries recorrentes pela descrição canônica", () => {
   assert.equal(
     inferExpenseProvisionSeriesKey({ description: "Sistema PDV - Shopping do Automóvel | PDV Legal" }),
     "recurring:sistema-pdv:shopping-do-automovel:pdv-legal",
+  );
+  assert.equal(
+    inferExpenseProvisionSeriesKey({ description: "Consultoria de RH - 08/2026 | Isabela Dominici Silva" }),
+    "recurring:consultoria-rh:isabela-dominici-silva",
   );
   assert.equal(
     inferExpenseProvisionSeriesKey({ description: "Implantação do Sistema PDV - Shopping do Automóvel | PDV Legal" }),
