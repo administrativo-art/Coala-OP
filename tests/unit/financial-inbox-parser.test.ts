@@ -137,3 +137,21 @@ test("ignora ocorrência textual de conta e continua até o identificador numér
   });
   assert.equal(parsed.classification.billingIdentity?.customerAccount, "0461855379");
 });
+
+test("separa campanha comercial da Vivo de uma cobrança", () => {
+  const promotion = classifyFinancialEmail({
+    subject: "Internet Fibra de 700 MEGA + WIFI 6 por apenas R$ 99,99/mês",
+    text: "Contrate agora e tenha a melhor internet do Brasil.",
+    senderDomain: "vivo.com.br",
+  });
+  const billing = classifyFinancialEmail({
+    subject: "A fatura Vivo Móvel da sua empresa chegou",
+    text: "Vencimento: 25/09/2026. Total a pagar: R$ 39,99.",
+    senderDomain: "vivo.com.br",
+  });
+
+  assert.equal(promotion.classification.marketingLikely, true);
+  assert.equal(promotion.classification.financeLikely, false);
+  assert.equal(billing.classification.marketingLikely, false);
+  assert.equal(billing.classification.financeLikely, true);
+});

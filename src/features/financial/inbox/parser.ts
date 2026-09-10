@@ -8,6 +8,8 @@ import type {
 
 const MAX_LINKS = 20;
 const MAX_TEXT_LENGTH = 80_000;
+const BILLING_SUBJECT_TERMS = /(?:boleto|fatura|cobran[cç]a|conta\s+(?:digital|mensal)|vencimento|nota\s+fiscal|guia|recibo|demonstrativo)/i;
+const MARKETING_SUBJECT_TERMS = /(?:\b(?:oferta|promo[cç][aã]o|ganhe|benef[ií]cios?|assine|contrate|carrinho|produtividade)\b|por\s+apenas|faltou\s+pouco|volte\s+aqui|ainda\s+d[aá]\s+tempo|tenha\s+a\s+melhor|gerencie\s+os\s+dados|microsoft\s*365.*(?:nuvem|arquivos|clique)|plano\s+standard)/i;
 
 function decodeBasicEntities(value: string) {
   return value
@@ -221,6 +223,29 @@ function supplierName(senderDomain: string | null, value: string) {
   return null;
 }
 
+function isLikelyMarketingEmail(input: {
+  subject: string;
+  combined: string;
+  documentText: string;
+  hints: FinancialInboxDocumentHints[];
+  barcode: string | null;
+}) {
+  if (BILLING_SUBJECT_TERMS.test(input.subject)) return false;
+  const hasBillingEvidence = Boolean(
+    input.barcode
+    || extractDueDate(input.combined)
+    || extractCompetence(input.combined)
+    || input.hints.some((hint) => (
+      hint.barcode
+      || hint.dueDate
+      || hint.competence
+      || (hint.amountCents != null && Boolean(hint.customerAccount || hint.contractNumber || hint.serviceNumbers.length))
+    ))
+    || /(?:total\s+a\s+pagar|valor\s+da\s+fatura|linha\s+digit[aá]vel|data\s+de\s+vencimento)/i.test(input.documentText)
+  );
+  return !hasBillingEvidence && MARKETING_SUBJECT_TERMS.test(input.subject);
+}
+
 export function classifyFinancialEmail(input: {
   subject: string;
   text?: string | null;
@@ -237,12 +262,20 @@ export function classifyFinancialEmail(input: {
   const identified = documentType(combined);
   const barcode = extractPaymentBarcode(combined) || hints.find((hint) => hint.barcode)?.barcode || null;
   const billingIdentity = mergeBillingIdentities(extractBillingIdentity(combined), hints);
+  const marketingLikely = isLikelyMarketingEmail({
+    subject: input.subject,
+    combined,
+    documentText,
+    hints,
+    barcode,
+  });
   return {
     textContent,
     textPreview: textContent.replace(/\s+/g, " ").trim().slice(0, 500),
     classification: {
       documentType: identified.type,
-      financeLikely: identified.type !== "other",
+      financeLikely: !marketingLikely && identified.type !== "other",
+      marketingLikely,
       confidence: identified.confidence,
       supplierName: hints.find((hint) => hint.supplierName)?.supplierName || supplierName(input.senderDomain ?? null, combined),
       competence: extractCompetence(combined) || hints.find((hint) => hint.competence)?.competence || null,

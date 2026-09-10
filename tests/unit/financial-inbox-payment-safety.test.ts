@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflow = readFileSync("src/features/financial/inbox/workflow.server.ts", "utf8");
+const ingestion = readFileSync("src/features/financial/inbox/ingest.server.ts", "utf8");
 const paymentService = readFileSync("src/features/financial/payment-requests/service.server.ts", "utf8");
 const documentExtraction = readFileSync("src/features/financial/inbox/document-extraction.server.ts", "utf8");
 const statementSync = readFileSync("src/features/financial/inter-statement-sync.server.ts", "utf8");
@@ -34,6 +35,13 @@ test("análise usa documentos arquivados e persiste identidade antes do cruzamen
   const matchingQuery = workflow.indexOf('where("status", "in", ["pending", "partially_paid"])');
   assert.ok(documentPreparation >= 0 && documentPreparation < matchingQuery);
   assert.match(workflow, /billingIdentity: message\.classification\.billingIdentity/);
+});
+
+test("campanha comercial é ignorada com auditoria e não dispara análise financeira", () => {
+  assert.match(ingestion, /parsed\.classification\.marketingLikely\s*\? "ignored"/);
+  assert.match(ingestion, /MESSAGE_AUTO_IGNORED_MARKETING/);
+  assert.match(ingestion, /if \(!parsed\.classification\.marketingLikely\) \{\s*await analyzeFinancialInboxMessage/);
+  assert.match(workflow, /classification\.marketingLikely\s*\? "ignored"/);
 });
 
 test("extração por IA não retém a resposta e remove o PDF temporário", () => {

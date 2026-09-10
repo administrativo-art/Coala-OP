@@ -71,6 +71,7 @@ export type FinancialInboxDocumentHints = {
 export type FinancialInboxClassification = {
   documentType: FinancialInboxDocumentType;
   financeLikely: boolean;
+  marketingLikely?: boolean;
   confidence: "high" | "medium" | "low";
   supplierName: string | null;
   competence: string | null;

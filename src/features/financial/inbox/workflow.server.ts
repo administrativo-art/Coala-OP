@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { calculateFinancialObligationSummary } from "@/features/financial/obligations/calculations";
+import { buildFinancialDescription } from "@/features/financial/lib/expense-description-catalog";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
 import { classifyFinancialEmail, mergeBillingIdentities } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
@@ -136,18 +137,22 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     existingExpenseSuggestion,
     provisionSuggestion: suggestion,
   });
-  const nextStatus = existingExpenseSuggestion.status === "suggested"
-    || suggestion.status === "suggested"
-    || creationSuggestion.status === "suggested"
-    ? "suggestion_available"
-    : message.status === "document_pending"
-      && documents.attachments.some((attachment) => ["extracted", "ocr_extracted"].includes(attachment.extractionStatus ?? ""))
-      ? "pending_review"
-      : message.status;
+  const nextStatus = classification.marketingLikely
+    ? "ignored"
+    : existingExpenseSuggestion.status === "suggested"
+      || suggestion.status === "suggested"
+      || creationSuggestion.status === "suggested"
+      ? "suggestion_available"
+      : message.status === "document_pending"
+        && documents.attachments.some((attachment) => ["extracted", "ocr_extracted"].includes(attachment.extractionStatus ?? ""))
+        ? "pending_review"
+        : message.status;
   const persistedStatus = ["pending_review", "document_pending", "suggestion_available"].includes(message.status)
     ? nextStatus
     : message.status;
-  await financialDbAdmin.collection("financialInboxMessages").doc(id).set({
+  const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
+  const batch = financialDbAdmin.batch();
+  batch.set(messageRef, {
     classification,
     attachments: documents.attachments,
     archiveWarnings: [...new Set([...(message.archiveWarnings ?? []), ...documents.warnings])],
@@ -158,6 +163,14 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     status: persistedStatus,
     updatedAt: checkedAt,
   }, { merge: true });
+  if (persistedStatus === "ignored" && message.status !== "ignored" && classification.marketingLikely) {
+    batch.set(messageRef.collection("events").doc("auto-marketing-v1"), {
+      type: "MESSAGE_AUTO_IGNORED_MARKETING",
+      at: checkedAt,
+      actorId: "system:financial-inbox",
+    }, { merge: true });
+  }
+  await batch.commit();
   return {
     ...message,
     classification,
@@ -222,8 +235,14 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       message.classification.competence ? `${message.classification.competence}-01` : null,
       dueDate.toDate(),
     );
-    const description = String(provision.description || message.subject).trim();
     const supplier = message.classification.supplierName || String(provision.supplier || "");
+    const description = message.classification.billingIdentity?.serviceType === "mobile"
+      && message.classification.competence
+      ? buildFinancialDescription("mobile_phone_bill", {
+        competence: message.classification.competence,
+        beneficiary: supplier,
+      })
+      : String(provision.description || message.subject).trim();
     const actual = {
       ...copyExpenseClassification(provision),
       workspaceId: WORKSPACE_ID,

@@ -1,5 +1,6 @@
 export type FinancialDescriptionKind =
   | "internet"
+  | "mobile_phone_bill"
   | "hr_system"
   | "dental_plan"
   | "rent"
@@ -31,6 +32,7 @@ export type CardStatementFinancialChargeKind = Extract<FinancialDescriptionKind,
 
 export const FINANCIAL_DESCRIPTION_PATTERNS = {
   internet: "Internet - {unidade} | {favorecido}",
+  mobile_phone_bill: "Conta de celular - {MM/AAAA} | {favorecido}",
   hr_system: "Sistema RH - Bizneo",
   dental_plan: "Plano odontológico - Odontoprev | {vinculado}",
   rent: "Aluguel - {unidade} | {favorecido}",
@@ -115,6 +117,8 @@ export function buildFinancialDescription(
   switch (kind) {
     case "internet":
       return `Internet - ${canonicalFinancialUnit(requiredText(params.unit, "Unidade"))} | ${requiredText(params.beneficiary, "Favorecido")}`;
+    case "mobile_phone_bill":
+      return `Conta de celular - ${displayFinancialMonth(requiredText(params.competence, "Competência"))} | ${requiredText(params.beneficiary, "Favorecido")}`;
     case "hr_system":
       return "Sistema RH - Bizneo";
     case "dental_plan":

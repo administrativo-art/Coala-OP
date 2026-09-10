@@ -23,6 +23,10 @@ test("monta os padrões financeiros aprovados", () => {
     "Internet - Tirirical | TVN",
   );
   assert.equal(
+    buildFinancialDescription("mobile_phone_bill", { competence: "2026-09", beneficiary: "Vivo" }),
+    "Conta de celular - 09/2026 | Vivo",
+  );
+  assert.equal(
     buildFinancialDescription("salary", { competence: "2026-07", employee: "Aliny Rodrigues" }),
     "Salário - 07/2026 | Aliny Rodrigues",
   );
