@@ -82,5 +82,7 @@ test("manutenção é seca por padrão, transacional e não apaga documentos", (
   assert.doesNotMatch(source, /\.delete\(/);
   assert.match(scheduled, /schedule: '20 2 \* \* \*'/);
   assert.match(scheduled, /timeZone: 'America\/Belem'/);
+  assert.match(scheduled, /process\.env\.FINANCIAL_INBOX_MAINTENANCE_URL\?\.trim\(\)/);
+  assert.doesNotMatch(scheduled, /defineString\('FINANCIAL_INBOX_MAINTENANCE_URL'/);
   assert.match(scheduled, /body: JSON\.stringify\(\{ mode: 'execute', batchSize: 300 \}\)/);
 });
