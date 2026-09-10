@@ -85,4 +85,17 @@ test("Firestore e repositório usam o índice de termos com fallback durante o r
   assert.ok(searchIndex);
   assert.match(repository, /where\("searchTerms", "array-contains", lookupToken\)/);
   assert.match(repository, /Durante a construção inicial do índice composto/);
+  assert.match(repository, /const SUMMARY_FALLBACK_LIMIT = 500/);
+  assert.match(repository, /limit\(SUMMARY_FALLBACK_LIMIT \+ 1\)/);
+  assert.match(repository, /isMissingFirestoreIndex/);
+});
+
+test("resumo possui índice para somar valores por workspace e status", () => {
+  const indexes = JSON.parse(readFileSync("firestore.financial.indexes.json", "utf8")) as {
+    indexes: Array<{ collectionGroup: string; fields: Array<{ fieldPath: string; order?: string }> }>;
+  };
+  const summaryIndex = indexes.indexes.find((index) => index.collectionGroup === "financialInboxMessages"
+    && index.fields.map((field) => field.fieldPath).join("|")
+      === "status|workspaceId|classification.amountCents");
+  assert.ok(summaryIndex);
 });

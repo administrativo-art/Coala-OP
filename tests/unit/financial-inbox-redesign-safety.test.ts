@@ -5,6 +5,7 @@ import test from "node:test";
 const page = readFileSync("src/features/financial/inbox/financial-inbox-page.tsx", "utf8");
 const repository = readFileSync("src/features/financial/inbox/repository.server.ts", "utf8");
 const bulkRoute = readFileSync("src/app/api/financial/inbox/bulk-review/route.ts", "utf8");
+const listRoute = readFileSync("src/app/api/financial/inbox/route.ts", "utf8");
 
 test("preparação de pagamento declara que autorização, agendamento e execução são etapas posteriores", () => {
   assert.match(page, /Preparar não autoriza, agenda nem executa pagamento\./);
@@ -32,4 +33,10 @@ test("links externos exigem HTTPS e confirmação do domínio", () => {
   assert.match(page, /parsed\.protocol !== "https:"/);
   assert.match(page, /Abrir site externo\?/);
   assert.match(page, /Confirme o domínio antes de continuar\./);
+});
+
+test("listagem usa o contrato seguro de erros sem expor a falha interna do Firestore", () => {
+  assert.match(listRoute, /withApiErrorHandling/);
+  assert.match(listRoute, /FINANCIAL_INBOX_LIST_FORBIDDEN/);
+  assert.doesNotMatch(listRoute, /error instanceof Error \? error\.message/);
 });
