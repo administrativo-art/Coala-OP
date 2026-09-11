@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { deleteDoc, Timestamp, updateDoc } from "firebase/firestore";
+import {
+  deleteDoc,
+  limit as firestoreLimit,
+  orderBy,
+  query as firestoreQuery,
+  Timestamp,
+  updateDoc,
+} from "firebase/firestore";
 import { addMonths, format, startOfDay, addDays, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -66,11 +73,13 @@ import {
 } from "@/features/financial/lib/expense-list";
 import {
   cardExpenseAuditIssues,
+  cardExpenseIsActiveStatementLine,
   PLANNED_PAYMENT_METHOD_LABELS,
   type PlannedPaymentMethodType,
 } from "@/features/financial/lib/card-invoices";
 import {
   groupExpensesByCardStatement,
+  type ExpenseCardStatementDocument,
   type ExpenseCardStatementListEntry,
 } from "@/features/financial/lib/expense-card-statement-groups";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
@@ -122,6 +131,15 @@ const STATUS_LABELS: Record<string, string> = {
   provisioned: "Provisionado",
   reconciled: "Previsão conciliada",
 };
+
+function unmatchedCardStatementRecordLabel(expense: any) {
+  if (expense.status === "cancelled") return "Cancelado";
+  if (expense.provisionType === "forecast" && (expense.status === "reconciled" || expense.replacedByExpenseId)) {
+    return "Provisão substituída";
+  }
+  if (expense.cardStatementRevisionStatus === "removed") return "Removido da versão ativa";
+  return "Requer conciliação";
+}
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "border-slate-300 bg-slate-50 text-slate-700 dark:bg-slate-950/30 dark:text-slate-400 dark:border-slate-800",
@@ -446,7 +464,19 @@ export function ExpensesPage() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: expensesData, loading, refresh: refreshExpenses } = useFinancialCollection<any>(financialCollection("expenses"));
+  const canViewCardStatements = permissions.financial?.cardStatements?.view === true;
+  const recentCardStatementsQuery = useMemo(
+    () => canViewCardStatements
+      ? firestoreQuery(
+          financialCollection<ExpenseCardStatementDocument>("cardStatements"),
+          orderBy("monthKey", "desc"),
+          firestoreLimit(120),
+        )
+      : null,
+    [canViewCardStatements],
+  );
+  const { data: expensesData, loading: expensesLoading, refresh: refreshExpenses } = useFinancialCollection<any>(financialCollection("expenses"));
+  const { data: cardStatementsData, loading: cardStatementsLoading } = useFinancialCollection<ExpenseCardStatementDocument>(recentCardStatementsQuery);
   const { data: transactionsData } = useFinancialCollection<any>(financialCollection("transactions"));
   const { data: accountPlans } = useFinancialCollection<any>(financialCollection("accounts"));
   const { data: resultCenters, loading: resultCentersLoading } = useFinancialCollection<any>(financialCollection("resultCenters"));
@@ -477,6 +507,7 @@ export function ExpensesPage() {
   const canViewExpenses = permissions.financial?.expenses?.view === true;
   const canViewInbox = permissions.financial?.inbox?.view === true;
   const canViewPaymentRequests = permissions.financial?.paymentRequests?.view === true;
+  const loading = expensesLoading || (canViewCardStatements && cardStatementsLoading);
   const currentView = canAccessAudits && (!canViewExpenses || searchParams.get("view") === "audits") ? "audits" : "expenses";
   const searchParamsKey = searchParams.toString();
 
@@ -691,8 +722,11 @@ export function ExpensesPage() {
     );
   }, [accountPlanFilter, accountPlanMap, competenceMonth, consolidatedExpenses, dateFrom, dateTo, financialUnitFilter, originFilter, paymentTypeFilter, resultCenterNameById, search, supplierFilter]);
   const scopedDisplayEntries = useMemo(
-    () => groupExpensesByCardStatement(scopedExpenses),
-    [scopedExpenses]
+    () => groupExpensesByCardStatement(scopedExpenses, {
+      statements: cardStatementsData || [],
+      allExpenses: expenses,
+    }),
+    [cardStatementsData, expenses, scopedExpenses]
   );
   const unitCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -709,7 +743,10 @@ export function ExpensesPage() {
   }, [resultCenterNameById, resultCenterNameByUnitName, scopedDisplayEntries, units]);
 
   const filteredDisplayEntries = useMemo(() => {
-    const entries = groupExpensesByCardStatement(filtered);
+    const entries = groupExpensesByCardStatement(filtered, {
+      statements: cardStatementsData || [],
+      allExpenses: expenses,
+    });
     return entries.sort((left, right) => {
       const leftComparable = left.kind === "expense"
         ? left.expense
@@ -731,7 +768,7 @@ export function ExpensesPage() {
         ? compareExpensesByValue(leftComparable, rightComparable, expenseSort.direction)
         : compareExpensesByDueDateDirection(leftComparable, rightComparable, expenseSort.direction);
     });
-  }, [expenseSort, filtered]);
+  }, [cardStatementsData, expenseSort, expenses, filtered]);
   const scopedDisplayEntryCount = scopedDisplayEntries.length;
   const filteredCountLabel = `${filteredDisplayEntries.length} de ${scopedDisplayEntryCount}`;
   const activeCompetenceLabel = competenceMonth !== "all"
@@ -1251,11 +1288,11 @@ export function ExpensesPage() {
                         ? `${statement.auditCounts.pending} pendente${statement.auditCounts.pending === 1 ? "" : "s"} de auditoria`
                         : statement.auditCounts.historical > 0
                           ? `${statement.auditCounts.historical} histórica${statement.auditCounts.historical === 1 ? "" : "s"} · fora do início da DRE`
-                        : statement.auditCounts.reconciled === statement.expenses.length
-                          ? `${statement.expenses.length} conferida${statement.expenses.length === 1 ? "" : "s"}`
+                        : statement.auditCounts.reconciled === statement.lineCount
+                          ? `${statement.lineCount} conferida${statement.lineCount === 1 ? "" : "s"}`
                           : `${statement.auditCounts.audited} auditada${statement.auditCounts.audited === 1 ? "" : "s"} · ${statement.auditCounts.reconciled} conferida${statement.auditCounts.reconciled === 1 ? "" : "s"}`;
-                      const firstExpense = statement.expenses[0];
-                      const statementHref = `${FINANCIAL_ROUTES.cardStatements}?month=${encodeURIComponent(statement.monthKey)}&accountId=${encodeURIComponent(String(firstExpense?.plannedBankAccountId || ""))}&paymentMethodId=${encodeURIComponent(String(firstExpense?.plannedPaymentMethodId || ""))}`;
+                      const unmatchedActiveCount = statement.unmatchedExpenses.filter(cardExpenseIsActiveStatementLine).length;
+                      const statementHref = `${FINANCIAL_ROUTES.cardStatements}?month=${encodeURIComponent(statement.monthKey)}&accountId=${encodeURIComponent(statement.accountId)}&paymentMethodId=${encodeURIComponent(statement.paymentMethodId)}`;
 
                       return (
                         <Fragment key={`card-statement-${statement.key}`}>
@@ -1277,10 +1314,15 @@ export function ExpensesPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <p>{statement.expenses.length} {statement.expenses.length === 1 ? "compra" : "compras"}</p>
+                              <p>{statement.lineCount} {statement.lineCount === 1 ? "lançamento" : "lançamentos"}</p>
                               <p className={cn("mt-1 text-xs", statement.auditCounts.pending > 0 ? "text-amber-700" : "text-muted-foreground")}>
                                 {auditSummary}
                               </p>
+                              {statement.unmatchedExpenses.length > 0 ? (
+                                <p className={cn("mt-1 text-xs", unmatchedActiveCount > 0 ? "text-amber-700" : "text-muted-foreground")}>
+                                  {statement.unmatchedExpenses.length} fora da composição oficial
+                                </p>
+                              ) : null}
                             </td>
                             <td className="px-4 py-3">
                               <p className="line-clamp-2 leading-5">{unitLabel}</p>
@@ -1311,7 +1353,7 @@ export function ExpensesPage() {
                                 <div className="overflow-hidden rounded-xl border bg-background">
                                   <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/25 px-4 py-3">
                                     <div>
-                                      <p className="text-sm font-semibold">Compras desta fatura</p>
+                                      <p className="text-sm font-semibold">Lançamentos oficiais desta fatura</p>
                                       <p className="mt-0.5 text-xs text-muted-foreground">
                                         A fatura é a obrigação de pagamento; cada compra permanece como despesa individual na DRE.
                                       </p>
@@ -1337,13 +1379,10 @@ export function ExpensesPage() {
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y">
-                                        {statement.expenses.map((expense) => {
+                                        {statement.lines.map((line) => {
+                                          const expense = line.expense;
                                           const issues = cardExpenseAuditIssues(expense);
-                                          const auditStatus = expense.cardReconciliationStatus === "reconciled"
-                                            ? "reconciled"
-                                            : expense.cardStatementAuditDisposition === "waived_before_dre_start"
-                                              ? "historical"
-                                            : issues.length === 0 ? "audited" : "pending";
+                                          const auditStatus = line.auditStatus;
                                           const auditMeta = auditStatus === "reconciled"
                                             ? { label: "Conferida", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
                                             : auditStatus === "historical"
@@ -1356,10 +1395,13 @@ export function ExpensesPage() {
                                           const matchedExisting = Boolean(expense.reconciledProvisionId || expense.cardStatementRegisteredValue != null);
                                           const chargeDate = toDate(expense.cardChargeDate);
                                           return (
-                                            <tr key={expense.id} className="align-top hover:bg-muted/15">
+                                            <tr key={line.lineId} className="align-top hover:bg-muted/15">
                                               <td className="px-3 py-3">
                                                 <p className="max-w-[300px] font-medium">{expense.description || "Compra sem descrição"}</p>
                                                 <p className="mt-0.5 text-[10.5px] text-muted-foreground">{expense.supplier || "Favorecido pendente"}</p>
+                                                {line.installmentNumber ? (
+                                                  <p className="mt-1 text-[9.5px] text-muted-foreground">Parcela {line.installmentNumber}</p>
+                                                ) : null}
                                                 <p className="mt-1 text-[9.5px] font-medium text-sky-700">
                                                   {matchedExisting ? "Correspondência encontrada" : "Importada da fatura"}
                                                 </p>
@@ -1370,7 +1412,7 @@ export function ExpensesPage() {
                                               </td>
                                               <td className={cn("px-3 py-3", planName === "Pendente" && "text-amber-700")}>{planName}</td>
                                               <td className="px-3 py-3">{getExpenseUnitLabel(expense, resultCenterNameById)}</td>
-                                              <td className="whitespace-nowrap px-3 py-3 text-right font-mono font-semibold">{formatCurrency(Number(expense.totalValue) || 0)}</td>
+                                              <td className="whitespace-nowrap px-3 py-3 text-right font-mono font-semibold">{formatCurrency(line.amount)}</td>
                                               <td className="px-3 py-3 text-center">
                                                 <span className={cn("inline-flex rounded-full border px-2 py-1 text-[10px] font-medium", auditMeta.className)} title={issues.length ? `Revisar: ${issues.join(", ")}` : undefined}>
                                                   {auditMeta.label}
@@ -1380,8 +1422,39 @@ export function ExpensesPage() {
                                           );
                                         })}
                                       </tbody>
+                                      {statement.creditTotal > 0 ? (
+                                        <tfoot className="border-t bg-emerald-50/60">
+                                          <tr>
+                                            <td colSpan={4} className="px-3 py-2.5 text-right font-medium text-emerald-700">Créditos e estornos</td>
+                                            <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold text-emerald-700">− {formatCurrency(statement.creditTotal)}</td>
+                                            <td />
+                                          </tr>
+                                        </tfoot>
+                                      ) : null}
                                     </table>
                                   </div>
+                                  {statement.unmatchedExpenses.length > 0 ? (
+                                    <div className={cn("border-t px-4 py-3", unmatchedActiveCount > 0 ? "border-amber-200 bg-amber-50/70" : "bg-muted/20")}>
+                                      <p className="text-xs font-semibold">
+                                        {statement.unmatchedExpenses.length} registro{statement.unmatchedExpenses.length === 1 ? "" : "s"} fora da composição oficial
+                                      </p>
+                                      <p className="mt-1 text-[11px] text-muted-foreground">
+                                        {unmatchedActiveCount > 0
+                                          ? `${unmatchedActiveCount} registro${unmatchedActiveCount === 1 ? " precisa" : "s precisam"} de conciliação. Nenhum deles altera o total oficial.`
+                                          : "São cancelamentos ou provisões já substituídas. Permanecem visíveis para rastreabilidade, sem alterar o total oficial."}
+                                      </p>
+                                      <div className="mt-2 space-y-1.5">
+                                        {statement.unmatchedExpenses.map((expense) => (
+                                          <div key={`unmatched-${expense.id}`} className="flex items-start justify-between gap-3 text-[11px]">
+                                            <span className="min-w-0 truncate">
+                                              {expense.description || "Registro sem descrição"} · {unmatchedCardStatementRecordLabel(expense)}
+                                            </span>
+                                            <span className="shrink-0 font-mono">{formatCurrency(Number(expense.totalValue) || 0)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : null}
                                 </div>
                               </td>
                             </tr>
@@ -1843,6 +1916,7 @@ export function ExpensesPage() {
                     const isExpanded = expandedCardStatementKey === statement.key;
                     const pendingAudit = statement.auditCounts.pending;
                     const historicalCount = statement.auditCounts.historical;
+                    const unmatchedActiveCount = statement.unmatchedExpenses.filter(cardExpenseIsActiveStatementLine).length;
                     return (
                       <div key={`mobile-card-statement-${statement.key}`} className="border-b border-sky-100 bg-sky-50/20">
                         <button
@@ -1858,13 +1932,18 @@ export function ExpensesPage() {
                               <div className="min-w-0">
                                 <p className="text-sm font-semibold leading-5">{statement.title}</p>
                                 <p className={cn("mt-1 text-[10.5px]", pendingAudit > 0 ? "text-amber-700" : "text-muted-foreground")}>
-                                  {statement.expenses.length} {statement.expenses.length === 1 ? "compra" : "compras"}
+                                  {statement.lineCount} {statement.lineCount === 1 ? "lançamento" : "lançamentos"}
                                   {pendingAudit > 0
                                     ? ` · ${pendingAudit} pendente${pendingAudit === 1 ? "" : "s"} de auditoria`
                                     : historicalCount > 0
                                       ? " · histórico anterior à DRE"
                                       : " · auditoria concluída"}
                                 </p>
+                                {statement.unmatchedExpenses.length > 0 ? (
+                                  <p className={cn("mt-1 text-[10px]", unmatchedActiveCount > 0 ? "text-amber-700" : "text-muted-foreground")}>
+                                    {statement.unmatchedExpenses.length} fora da composição oficial
+                                  </p>
+                                ) : null}
                               </div>
                             </div>
                             <div className="shrink-0 text-right">
@@ -1882,28 +1961,57 @@ export function ExpensesPage() {
                         {isExpanded ? (
                           <div className="border-t bg-background px-3 py-2">
                             <div className="divide-y rounded-lg border">
-                              {statement.expenses.map((expense) => {
-                                const issues = cardExpenseAuditIssues(expense);
-                                const auditLabel = expense.cardReconciliationStatus === "reconciled"
+                              {statement.lines.map((line) => {
+                                const expense = line.expense;
+                                const auditLabel = line.auditStatus === "reconciled"
                                   ? "Conferida"
-                                  : issues.length === 0 ? "Auditada" : "Pendente";
+                                  : line.auditStatus === "historical"
+                                    ? "Histórico"
+                                    : line.auditStatus === "audited" ? "Auditada" : "Pendente";
                                 return (
-                                  <div key={expense.id} className="px-3 py-2.5">
+                                  <div key={line.lineId} className="px-3 py-2.5">
                                     <div className="flex items-start justify-between gap-3">
                                       <div className="min-w-0">
                                         <p className="text-xs font-medium leading-4">{expense.description || "Compra sem descrição"}</p>
                                         <p className="mt-0.5 text-[10px] text-muted-foreground">
                                           {toDate(expense.cardChargeDate) ? format(toDate(expense.cardChargeDate)!, "dd/MM/yyyy") : "Data pendente"}
                                           {` · ${auditLabel}`}
+                                          {line.installmentNumber ? ` · parcela ${line.installmentNumber}` : ""}
                                         </p>
                                         <UberRecognitionStatus record={expense} compact />
                                       </div>
-                                      <p className="shrink-0 font-mono text-xs font-semibold">{formatCurrency(Number(expense.totalValue) || 0)}</p>
+                                      <p className="shrink-0 font-mono text-xs font-semibold">{formatCurrency(line.amount)}</p>
                                     </div>
                                   </div>
                                 );
                               })}
+                              {statement.creditTotal > 0 ? (
+                                <div className="flex items-center justify-between gap-3 bg-emerald-50/60 px-3 py-2.5 text-[10px] font-medium text-emerald-700">
+                                  <span>Créditos e estornos</span>
+                                  <span className="font-mono font-semibold">− {formatCurrency(statement.creditTotal)}</span>
+                                </div>
+                              ) : null}
                             </div>
+                            {statement.unmatchedExpenses.length > 0 ? (
+                              <div className={cn("mt-2 rounded-lg border px-3 py-2.5", unmatchedActiveCount > 0 ? "border-amber-200 bg-amber-50/70" : "bg-muted/20")}>
+                                <p className="text-[11px] font-semibold">Registros fora da composição oficial</p>
+                                <p className="mt-1 text-[10px] text-muted-foreground">
+                                  {unmatchedActiveCount > 0
+                                    ? `${unmatchedActiveCount} precisa${unmatchedActiveCount === 1 ? "" : "m"} de conciliação.`
+                                    : "Cancelados ou substituídos, mantidos somente para rastreabilidade."}
+                                </p>
+                                <div className="mt-2 space-y-1">
+                                  {statement.unmatchedExpenses.map((expense) => (
+                                    <div key={`mobile-unmatched-${expense.id}`} className="flex items-start justify-between gap-2 text-[10px]">
+                                      <span className="min-w-0 truncate">
+                                        {expense.description || "Registro sem descrição"} · {unmatchedCardStatementRecordLabel(expense)}
+                                      </span>
+                                      <span className="shrink-0 font-mono">{formatCurrency(Number(expense.totalValue) || 0)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
