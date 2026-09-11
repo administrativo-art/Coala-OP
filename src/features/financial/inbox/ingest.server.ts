@@ -7,6 +7,11 @@ import {
   FINANCIAL_INBOX_SEARCH_INDEX_VERSION,
 } from "./search-index";
 import type { FinancialInboxAttachment, FinancialInboxMessage } from "./types";
+import {
+  discardedFinancialInboxResolution,
+  FINANCIAL_INBOX_RESOLUTION_VERSION,
+  pendingFinancialInboxResolution,
+} from "./resolution-contract";
 import { analyzeFinancialInboxMessage } from "./workflow.server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { adminApp } from "@/lib/firebase-admin";
@@ -277,6 +282,15 @@ export async function ingestFinancialEmail(params: {
     },
     bankState: "not_prepared",
     statementTransactionId: null,
+    resolution: parsed.classification.marketingLikely
+      ? discardedFinancialInboxResolution({
+          mode: "automatic",
+          at: now,
+          by: "system:resend",
+          reasons: ["mensagem classificada como conteúdo não financeiro"],
+        })
+      : pendingFinancialInboxResolution(),
+    resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
     reviewedAt: null,
     reviewedBy: null,
     searchTerms: [],

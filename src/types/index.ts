@@ -3613,7 +3613,15 @@ export type DPVacationWorkflowStep = {
 };
 
 export type DPVacationLegalCheck = {
-  code: 'date_range' | 'notice_lead_time' | 'calendar_review' | 'cycle_review';
+  code:
+    | 'date_range'
+    | 'notice_lead_time'
+    | 'calendar_review'
+    | 'cycle_review'
+    | 'concessive_period'
+    | 'employee_agreement'
+    | 'entitlement'
+    | 'allowance_deadline';
   label: string;
   status: 'ok' | 'warning' | 'blocked' | 'manual_review';
   message: string;
@@ -3678,6 +3686,12 @@ export type DPVacationWorkflow = {
     noticeDeadline: string | null;
     paymentDeadline: string | null;
     noticeLeadDays: number | null;
+    noticeReferenceAt?: string | null;
+    noticeCompliance?: 'pending' | 'compliant' | 'exception';
+    noticeExceptionReason?: string | null;
+    noticeExceptionAt?: string | null;
+    noticeExceptionBy?: string | null;
+    noticeAcknowledgedAt?: string | null;
     checks: DPVacationLegalCheck[];
   };
   notice: {
@@ -3737,6 +3751,8 @@ export type DPVacationWorkflow = {
       paymentDate?: string | null;
     } | null;
     reviewNotes?: string | null;
+    reviewOverrideReason?: string | null;
+    identityMismatches?: string[];
     correctionReason?: string | null;
     approvedAt?: string | null;
     approvedBy?: string | null;
@@ -3781,12 +3797,44 @@ export type DPVacationRecord = {
   startDate?: string; // YYYY-MM-DD
   endDate?: string;
   days: number;
+  /** Quantidade de faltas injustificadas no período aquisitivo. */
+  unjustifiedAbsences?: number;
+  /** Direito calculado no servidor conforme as faltas registradas. */
+  entitledDays?: number;
+  /** Calendário de feriados usado na validação legal. */
+  calendarId?: string;
+  /** Dia do repouso semanal: 0=domingo ... 6=sábado. */
+  weeklyRestDay?: number;
+  /** Concordância registrada quando o gozo é fracionado. */
+  employeeAgreedToSplit?: boolean;
+  /** Data em que o abono pecuniário foi solicitado. */
+  allowanceRequestedAt?: string;
+  thirteenthAdvanceRequested?: boolean;
   status: DPVacationStatus;
   paymentDate?: string;
   returnDate?: string;
   warnings: string[];
   workflow?: DPVacationWorkflow;
+  cancellation?: {
+    reason: string;
+    cancelledAt: string;
+    cancelledBy: string;
+    source: 'hr' | 'termination';
+  };
   createdAt: Timestamp;
+  updatedAt?: Timestamp | string;
+};
+
+export type DPVacationEvent = {
+  id: string;
+  vacationId: string;
+  type: string;
+  message: string;
+  at: string;
+  actorId: string;
+  actorEmail?: string | null;
+  actorName: string;
+  data?: Record<string, unknown>;
 };
 
 // ─── New task motor — Etapa 8 (task_projects / task_statuses / tasks) ──────────

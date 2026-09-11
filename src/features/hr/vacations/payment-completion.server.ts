@@ -12,6 +12,7 @@ import { AppError, reportSystemError } from '@/lib/observability';
 import type { DPVacationSignatureParticipant, DPVacationWorkflow } from '@/types';
 
 import { downloadVacationAutentiqueSignedPdf } from './autentique-signed-pdf.server';
+import { saveImmutableVacationPdf } from './immutable-pdf.server';
 import { vacationReceiptSignatureMessage } from './emails';
 
 function conflict(code: string, safeMessage: string) {
@@ -59,7 +60,10 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
   if (!snapshot.exists) throw notFound();
   const vacation = snapshot.data() ?? {};
   const workflow = vacation.workflow as DPVacationWorkflow | undefined;
-  if (!workflow || workflow.payment.status !== 'paid') {
+  if (!workflow || workflow.status !== 'active') {
+    throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+  }
+  if (workflow.payment.status !== 'paid') {
     throw conflict('DP_VACATION_PAYMENT_NOT_CONFIRMED', 'O pagamento ainda não foi confirmado.');
   }
   if (workflow.receipt.status !== 'approved' || !workflow.receipt.reviewedValues) {
@@ -104,6 +108,7 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
       const fresh = await transaction.get(vacationRef);
       if (!fresh.exists) throw notFound();
       const freshWorkflow = fresh.get('workflow') as DPVacationWorkflow;
+      if (freshWorkflow.status !== 'active') return;
       transaction.update(vacationRef, {
         workflow: {
           ...freshWorkflow,
@@ -133,6 +138,9 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
     const fresh = await transaction.get(vacationRef);
     if (!fresh.exists) throw notFound();
     const freshWorkflow = fresh.get('workflow') as DPVacationWorkflow;
+    if (freshWorkflow.status !== 'active') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
     if (freshWorkflow.payment.status !== 'paid') throw conflict('DP_VACATION_PAYMENT_NOT_CONFIRMED', 'O pagamento ainda não foi confirmado.');
     if (freshWorkflow.receipt.status !== 'approved' || !freshWorkflow.receipt.reviewedValues) {
       throw conflict('DP_VACATION_RECEIPT_NOT_APPROVED', 'O recibo precisa estar aprovado pelo RH.');
@@ -237,7 +245,7 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
       const fresh = await transaction.get(vacationRef);
       if (!fresh.exists) throw notFound();
       const freshWorkflow = fresh.get('workflow') as DPVacationWorkflow;
-      if (freshWorkflow.receiptSignature.signatureRequestId !== requestId) return;
+      if (freshWorkflow.status !== 'active' || freshWorkflow.receiptSignature.signatureRequestId !== requestId) return;
       transaction.update(vacationRef, {
         workflow: {
           ...freshWorkflow,
@@ -274,7 +282,7 @@ async function ensureVacationReceiptSignatureSent(vacationId: string) {
       const failedSnapshot = await transaction.get(vacationRef);
       if (!failedSnapshot.exists) return;
       const failedWorkflow = failedSnapshot.get('workflow') as DPVacationWorkflow | undefined;
-      if (!failedWorkflow || failedWorkflow.receiptSignature.signatureRequestId !== requestId) return;
+      if (!failedWorkflow || failedWorkflow.status !== 'active' || failedWorkflow.receiptSignature.signatureRequestId !== requestId) return;
       transaction.update(vacationRef, {
         workflow: {
           ...failedWorkflow,
@@ -315,6 +323,7 @@ export async function completeVacationPayment(params: {
     if (!workflow || workflow.payment.paymentRequestId !== params.paymentRequestId) {
       throw conflict('DP_VACATION_PAYMENT_REQUEST_MISMATCH', 'O pagamento confirmado não pertence a estas férias.');
     }
+    if (workflow.status !== 'active') return;
     const alreadyPaid = workflow.payment.status === 'paid';
     const nextWorkflow: DPVacationWorkflow = {
       ...workflow,
@@ -376,6 +385,7 @@ export async function retryVacationReceiptSignature(vacationId: string) {
   const snapshot = await vacationRef.get();
   if (!snapshot.exists) throw notFound();
   const workflow = snapshot.get('workflow') as DPVacationWorkflow | undefined;
+  if (workflow?.status !== 'active') throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
   const pendingParticipantIds = workflow?.receiptSignature.participants
     ?.filter((participant) => participant.status !== 'signed')
     .map((participant) => participant.providerSignatureId)
@@ -387,6 +397,7 @@ export async function retryVacationReceiptSignature(vacationId: string) {
       const fresh = await transaction.get(vacationRef);
       if (!fresh.exists) throw notFound();
       const freshWorkflow = fresh.get('workflow') as DPVacationWorkflow;
+      if (freshWorkflow.status !== 'active') return;
       transaction.update(vacationRef, {
         workflow: {
           ...freshWorkflow,
@@ -430,6 +441,11 @@ export async function syncVacationReceiptSignatureRequest(params: {
   if (!request.exists || request.get('vacationId') !== params.vacationId || request.get('purpose') !== 'vacation_receipt') return null;
   const participants = participantsFromRequest(request.get('participants'));
   const vacationRef = dbAdmin.collection('dp_vacations').doc(params.vacationId);
+  const vacationBeforeSync = await vacationRef.get();
+  if (!vacationBeforeSync.exists) throw notFound();
+  if ((vacationBeforeSync.get('workflow') as DPVacationWorkflow | undefined)?.status !== 'active') {
+    return { signed: false, inactive: true };
+  }
   const signedUrl = typeof request.get('signedFileUrl') === 'string' ? String(request.get('signedFileUrl')) : '';
   if (request.get('status') !== 'signed' || !signedUrl) {
     const updatedAt = new Date().toISOString();
@@ -440,7 +456,7 @@ export async function syncVacationReceiptSignatureRequest(params: {
       const snapshot = await transaction.get(vacationRef);
       if (!snapshot.exists) throw notFound();
       const workflow = snapshot.get('workflow') as DPVacationWorkflow;
-      if (workflow.receiptSignature.signatureRequestId !== params.signatureRequestId) return;
+      if (workflow.status !== 'active' || workflow.receiptSignature.signatureRequestId !== params.signatureRequestId) return;
       transaction.update(vacationRef, {
         workflow: {
           ...workflow,
@@ -461,13 +477,14 @@ export async function syncVacationReceiptSignatureRequest(params: {
   }
   const buffer = await downloadVacationAutentiqueSignedPdf(signedUrl);
   const signedHashSha256 = createHash('sha256').update(buffer).digest('hex');
-  const signedStoragePath = `hr/vacations/${params.vacationId}/receipt/signed/${params.signatureRequestId}.pdf`;
-  await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(signedStoragePath).save(buffer, {
-    resumable: false,
+  const signedStoragePath = `hr/vacations/${params.vacationId}/receipt/signed/${params.signatureRequestId}-${signedHashSha256}.pdf`;
+  await saveImmutableVacationPdf({
+    storagePath: signedStoragePath,
+    buffer,
     metadata: {
-      contentType: 'application/pdf',
-      cacheControl: 'private, max-age=0, no-store',
-      metadata: { vacationId: params.vacationId, signatureRequestId: params.signatureRequestId, signedHashSha256 },
+      vacationId: params.vacationId,
+      signatureRequestId: params.signatureRequestId,
+      documentKind: 'vacation_receipt_signed',
     },
   });
   const signedAt = typeof request.get('signedAt') === 'string' ? String(request.get('signedAt')) : new Date().toISOString();
@@ -475,7 +492,7 @@ export async function syncVacationReceiptSignatureRequest(params: {
     const snapshot = await transaction.get(vacationRef);
     if (!snapshot.exists) throw notFound();
     const workflow = snapshot.get('workflow') as DPVacationWorkflow;
-    if (workflow.receiptSignature.signatureRequestId !== params.signatureRequestId) return;
+    if (workflow.status !== 'active' || workflow.receiptSignature.signatureRequestId !== params.signatureRequestId) return;
     if (workflow.receiptSignature.status === 'signed' && workflow.receiptSignature.signedHashSha256 === signedHashSha256) return;
     transaction.update(vacationRef, {
       workflow: {

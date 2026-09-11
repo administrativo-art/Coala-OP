@@ -179,11 +179,74 @@ export async function applyUserTerminationEffects(params: {
     const startDate = stringValue(vacation.get("startDate"));
     const status = stringValue(vacation.get("status"));
     if (!startDate || startDate <= effectiveDate || status === "REJECTED") return;
+    const workflow = vacation.get("workflow") as Record<string, any> | null | undefined;
+    const payment = workflow?.payment as Record<string, unknown> | undefined;
+    const paymentStatus = stringValue(payment?.status);
+    const hasFinancialMovement = Boolean(stringValue(payment?.paymentRequestId))
+      || paymentStatus === "preparing"
+      || paymentStatus === "paid";
+    const eventRef = params.db.collection("dp_vacationEvents").doc();
+    if (hasFinancialMovement) {
+      mainWrites.push((batch) => batch.update(vacation.ref, {
+        warnings: FieldValue.arrayUnion("Desligamento registrado: revisar e reverter a movimentação financeira antes de cancelar as férias."),
+        terminationReview: {
+          status: "financial_reversal_required",
+          effectiveDate,
+          requestedAt: appliedAt,
+        },
+        updatedAt: appliedAt,
+      }));
+      mainWrites.push((batch) => batch.create(eventRef, {
+        vacationId: vacation.id,
+        type: "VACATION_TERMINATION_REVIEW_REQUIRED",
+        message: "O desligamento exige revisão das férias porque já existe movimentação financeira.",
+        at: appliedAt,
+        actorId: "system:user-termination",
+        actorEmail: null,
+        actorName: "Sistema",
+        data: { userId: params.userId, effectiveDate, paymentStatus, paymentRequestId: payment?.paymentRequestId ?? null },
+      }));
+      addCount(counts, "futureVacationsRequiringFinancialReview");
+      return;
+    }
+    const cancelledWorkflow = workflow ? {
+      ...workflow,
+      status: "cancelled",
+      steps: Array.isArray(workflow.steps)
+        ? workflow.steps.map((step: Record<string, unknown>) => (
+            step.status === "completed" ? step : { ...step, status: "cancelled", note: "Cancelada devido ao desligamento." }
+          ))
+        : [],
+      accountant: workflow.accountant ? {
+        ...workflow.accountant,
+        tokenHash: null,
+        tokenExpiresAt: appliedAt,
+      } : workflow.accountant,
+      updatedAt: appliedAt,
+    } : workflow;
     mainWrites.push((batch) => batch.update(vacation.ref, {
       status: "REJECTED",
+      ...(cancelledWorkflow ? { workflow: cancelledWorkflow } : {}),
       warnings: FieldValue.arrayUnion("Cancelada automaticamente devido ao desligamento."),
+      cancellation: {
+        reason: "Cancelada automaticamente devido ao desligamento.",
+        cancelledAt: appliedAt,
+        cancelledBy: "system:user-termination",
+        source: "termination",
+      },
       cancelledByTermination: true,
       cancelledAt: appliedAt,
+      updatedAt: appliedAt,
+    }));
+    mainWrites.push((batch) => batch.create(eventRef, {
+      vacationId: vacation.id,
+      type: "VACATION_CANCELLED_BY_TERMINATION",
+      message: "Férias futuras canceladas automaticamente devido ao desligamento.",
+      at: appliedAt,
+      actorId: "system:user-termination",
+      actorEmail: null,
+      actorName: "Sistema",
+      data: { userId: params.userId, effectiveDate },
     }));
     addCount(counts, "futureVacationsCancelled");
   });
@@ -425,6 +488,7 @@ export async function applyUserTerminationEffects(params: {
     { type: "goal_leadership", count: counts.activeLeadershipRecipientsRemoved ?? 0, label: "Definir liderança substituta nas metas ativas." },
     { type: "purchase_session", count: counts.openPurchaseSessionsRelinked ?? 0, label: "Reatribuir as sessões de compra ainda abertas." },
     { type: "signature_decision", count: counts.signatureRequestsAwaitingDecision ?? 0, label: "Decidir formalmente sobre solicitações de assinatura em andamento." },
+    { type: "vacation_financial_reversal", count: counts.futureVacationsRequiringFinancialReview ?? 0, label: "Reverter a movimentação financeira antes de cancelar as férias futuras." },
     { type: "uniform_return", count: pendingUniformPieces, label: "Registrar a devolução dos uniformes em posse." },
   ].filter((item) => item.count > 0);
 

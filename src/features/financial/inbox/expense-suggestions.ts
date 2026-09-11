@@ -24,6 +24,11 @@ export type InboxExpenseCandidate = {
   status?: unknown;
   installments?: Array<Record<string, unknown>> | null;
   settlementEvidence?: FinancialInboxExistingSettlement[] | null;
+  bankPaymentEvidence?: Array<{
+    installmentNumber: number | null;
+    code: string;
+    payment: FinancialInboxExistingBankPayment;
+  }> | null;
   notes?: string | null;
   billingIdentity?: FinancialInboxBillingIdentity | null;
 };
@@ -111,6 +116,9 @@ function emptySuggestion(
     matchedBarcodeMasked: null,
     matchedDocumentReferences: [],
     matchStrength: null,
+    automaticLinkEligible: false,
+    automaticLinkPolicyVersion: 1,
+    automaticLinkReasons: [],
   };
 }
 
@@ -139,10 +147,12 @@ function billingIdentityMatch(
   const target = normalizedIdentity(candidate);
   const reasons: string[] = [];
   let exact = false;
+  let sameSupplierTaxId = false;
   let sameServiceNumber = false;
   if (source?.supplierTaxId && target.supplierTaxId && source.supplierTaxId === target.supplierTaxId) {
     reasons.push("mesmo CNPJ do fornecedor");
     exact = true;
+    sameSupplierTaxId = true;
   }
   if (source?.customerAccount && target.customerAccount && normalize(source.customerAccount) === normalize(target.customerAccount)) {
     reasons.push("mesma conta do cliente");
@@ -158,12 +168,14 @@ function billingIdentityMatch(
     sameServiceNumber = true;
   }
   const telecom = source?.serviceType === "mobile" || source?.serviceType === "landline";
-  return { exact, telecomServiceNumberRequired: telecom, sameServiceNumber, reasons };
+  return { exact, sameSupplierTaxId, telecomServiceNumberRequired: telecom, sameServiceNumber, reasons };
 }
 
 type ScoredInstallment = {
   alternative: FinancialInboxExpenseAlternative;
-  autoMatch: boolean;
+  suggestionMatch: boolean;
+  strongAutomaticMatch: boolean;
+  automaticReasons: string[];
   bankPayment: FinancialInboxExistingBankPayment | null;
   settlement: FinancialInboxExistingSettlement | null;
 };
@@ -184,14 +196,24 @@ function scoredInstallments(
       if (String(installment.status ?? "") === "cancelled") return [];
       const amountCents = Math.round(Number(installment.value ?? 0) * 100);
       const dueDate = dateKey(installment.dueDate ?? candidate.dueDate);
+      const candidateInstallmentNumber = installment.number == null ? null : Number(installment.number) || index + 1;
       const competence = candidate.provisionCompetence
         || dateKey(candidate.competenceDate)?.slice(0, 7)
         || null;
       const amountMatches = classification.amountCents != null && Math.abs(amountCents - classification.amountCents) <= 1;
       const dueDateMatches = Boolean(classification.dueDate && dueDate === classification.dueDate);
       const sourceBarcode = normalizePaymentBarcode(classification.barcode ?? "");
+      const barcodeEvidence = candidate.bankPaymentEvidence?.find((entry) => (
+        normalizePaymentBarcode(entry.code) === sourceBarcode
+        && (entry.installmentNumber === candidateInstallmentNumber
+          || (entry.installmentNumber == null && installments.length === 1))
+      )) ?? null;
       const candidateBarcode = normalizePaymentBarcode(String(
-        installment.bankLine ?? installment.barcode ?? installment.digitableLine ?? "",
+        installment.bankLine
+          ?? installment.barcode
+          ?? installment.digitableLine
+          ?? barcodeEvidence?.code
+          ?? "",
       ));
       const sameBarcode = Boolean(sourceBarcode && candidateBarcode && sourceBarcode === candidateBarcode);
       const sourceDocumentReferences = classification.documentReferences ?? [];
@@ -205,11 +227,16 @@ function scoredInstallments(
         candidateDocumentReferences.includes(reference)
       ));
       const sameDocumentReference = matchedDocumentReferences.length > 0;
+      const sameInstallment = classification.installmentNumber != null
+        && candidateInstallmentNumber != null
+        && classification.installmentNumber === candidateInstallmentNumber
+        && (classification.installmentTotal == null || classification.installmentTotal === installments.length);
       const reasons = [
         ...(sameBarcode ? ["mesmo boleto (linha digitável)"] : []),
         ...(sameDocumentReference ? [`mesmo documento/NF ${matchedDocumentReferences.join(", ")}`] : []),
         ...(amountMatches ? ["mesmo valor"] : []),
         ...(dueDateMatches ? ["mesmo vencimento"] : []),
+        ...(sameInstallment ? [`mesma parcela ${classification.installmentNumber}/${classification.installmentTotal ?? installments.length}`] : []),
         ...(supplierMatches ? ["mesmo favorecido"] : []),
         ...identity.reasons,
       ];
@@ -221,11 +248,18 @@ function scoredInstallments(
         + (identity.exact ? 35 : 0);
       if (score < 50) return [];
       const settlement = existingSettlement(installment, candidate);
-      const bankPayment = settlement ? null : existingPayment(installment);
+      const bankPayment = settlement ? null : existingPayment(installment) ?? barcodeEvidence?.payment ?? null;
+      const strongAutomaticMatch = sameBarcode || (
+        identity.sameSupplierTaxId
+        && sameDocumentReference
+        && sameInstallment
+        && amountMatches
+        && dueDateMatches
+      );
       return [{
         alternative: {
           expenseId: candidate.id,
-          installmentNumber: installment.number == null ? null : Number(installment.number) || index + 1,
+          installmentNumber: candidateInstallmentNumber,
           installmentTotal: installments.length,
           description: String(candidate.description ?? "Despesa").trim(),
           supplier: String(candidate.supplier ?? "").trim(),
@@ -243,12 +277,18 @@ function scoredInstallments(
               ? "identity"
               : "attributes",
         },
-        autoMatch: sameBarcode || (
+        suggestionMatch: sameBarcode || (
           amountMatches
           && dueDateMatches
           && (supplierMatches || identity.exact || sameDocumentReference)
           && (!identity.telecomServiceNumberRequired || identity.sameServiceNumber)
         ),
+        strongAutomaticMatch,
+        automaticReasons: strongAutomaticMatch
+          ? sameBarcode
+            ? ["linha digitável/código de barras idêntico"]
+            : ["CNPJ, NF/documento, parcela, valor e vencimento idênticos"]
+          : [],
         bankPayment,
         settlement,
       }];
@@ -261,11 +301,13 @@ export function chooseExistingExpenseSuggestion(
   classification: FinancialInboxClassification,
   candidates: InboxExpenseCandidate[],
 ): FinancialInboxExpenseSuggestion {
-  if (!classification.amountCents || !classification.dueDate || !classification.supplierName) {
+  if (!classification.barcode
+    && (!classification.amountCents || !classification.dueDate || !classification.supplierName)) {
     return emptySuggestion();
   }
   const scored = scoredInstallments(classification, candidates);
-  const matches = scored.filter((entry) => entry.autoMatch);
+  const matches = scored.filter((entry) => entry.suggestionMatch);
+  const strongAutomaticMatches = scored.filter((entry) => entry.strongAutomaticMatch);
   const alternatives = scored.slice(0, 5).map((entry) => entry.alternative);
   if (matches.length !== 1) return emptySuggestion(matches.length > 1 ? "ambiguous" : "not_found", alternatives);
   const match = matches[0];
@@ -287,6 +329,13 @@ export function chooseExistingExpenseSuggestion(
     matchedBarcodeMasked: match.alternative.matchedBarcodeMasked ?? null,
     matchedDocumentReferences: match.alternative.matchedDocumentReferences ?? [],
     matchStrength: match.alternative.matchStrength ?? null,
+    automaticLinkEligible: strongAutomaticMatches.length === 1
+      && strongAutomaticMatches[0].alternative.expenseId === match.alternative.expenseId
+      && strongAutomaticMatches[0].alternative.installmentNumber === match.alternative.installmentNumber,
+    automaticLinkPolicyVersion: 1,
+    automaticLinkReasons: strongAutomaticMatches.length === 1
+      ? strongAutomaticMatches[0].automaticReasons
+      : [],
     alternatives,
   };
 }

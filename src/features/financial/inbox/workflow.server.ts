@@ -10,6 +10,19 @@ import { classifyFinancialEmail, mergeBillingIdentities } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
 import { chooseProvisionSuggestion, type ProvisionCandidate } from "./provision-suggestions";
 import { chooseCreationSuggestion } from "./creation-suggestions";
+import { shouldAutomaticallyIdentifyInboxCharge } from "./automation-policy";
+import {
+  defaultFinancialInboxAutomationSettings,
+  getFinancialInboxAutomationSettings,
+} from "./automation-settings.server";
+import {
+  automaticReminderResolutionPatch,
+  discardedFinancialInboxResolution,
+  FINANCIAL_INBOX_RESOLUTION_VERSION,
+  identifiedFinancialInboxResolution,
+  pendingFinancialInboxResolution,
+  resolutionForDisplay,
+} from "./resolution-contract";
 import { prepareFinancialInboxDocuments } from "./document-processing.server";
 import { getFinancialInboxMessage } from "./repository.server";
 import {
@@ -21,11 +34,15 @@ import type { FinancialInboxMessage } from "./types";
 const MAX_PROVISION_CANDIDATES = 100;
 const MAX_EXISTING_EXPENSE_CANDIDATES = 500;
 const MAX_MATCHED_PAYMENT_CANDIDATES = 100;
+const MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES = 10;
 // Custo de triagem: no máximo 10 leituras por cobrança relevante. Com 300
 // cobranças/mês, o teto esperado é 3.000 leituras/mês, além de reanálises manuais.
 // O cruzamento lê no máximo 501 despesas abertas, 101 pagamentos do mesmo valor,
-// 100 despesas pagas referenciadas e 100 previsões. Com 50 cobranças/mês, o teto
-// é 40.100 leituras/mês, incluindo a análise automática e reanálises manuais.
+// 11 solicitações pelo código de barras, 110 despesas referenciadas e 100 previsões.
+// Com 50 cobranças/mês, o teto é 41.150 leituras/mês, incluindo análise automática
+// e reanálises manuais.
+// Um candidato documental forte acrescenta 1 leitura pontual da configuração
+// opt-in do workspace antes de qualquer identificação automática.
 
 function money(value: unknown) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -81,22 +98,39 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
 
   let expenseCandidates: InboxExpenseCandidate[] = [];
   let expenseScanTruncated = false;
-  if (classification.financeLikely && classification.amountCents && classification.dueDate && classification.supplierName) {
-    const [openSnapshot, paymentSnapshot] = await Promise.all([
+  if (classification.financeLikely && (
+    Boolean(classification.barcode)
+    || Boolean(classification.amountCents && classification.dueDate && classification.supplierName)
+  )) {
+    const [openSnapshot, paymentSnapshot, barcodePaymentSnapshot] = await Promise.all([
       financialDbAdmin.collection("expenses")
       .where("status", "in", ["pending", "partially_paid"])
       .limit(MAX_EXISTING_EXPENSE_CANDIDATES + 1)
       .get(),
-      financialDbAdmin.collection("payments")
-        .where("principalAmountCents", "==", classification.amountCents)
-        .limit(MAX_MATCHED_PAYMENT_CANDIDATES + 1)
-        .get(),
+      classification.amountCents
+        ? financialDbAdmin.collection("payments")
+          .where("principalAmountCents", "==", classification.amountCents)
+          .limit(MAX_MATCHED_PAYMENT_CANDIDATES + 1)
+          .get()
+        : Promise.resolve(null),
+      classification.barcode
+        ? financialDbAdmin.collection("bankPaymentRequests")
+          .where("barcodeSnapshot.code", "==", classification.barcode)
+          .limit(MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES + 1)
+          .get()
+        : Promise.resolve(null),
     ]);
     expenseScanTruncated = openSnapshot.size > MAX_EXISTING_EXPENSE_CANDIDATES
-      || paymentSnapshot.size > MAX_MATCHED_PAYMENT_CANDIDATES;
+      || Boolean(paymentSnapshot && paymentSnapshot.size > MAX_MATCHED_PAYMENT_CANDIDATES)
+      || Boolean(barcodePaymentSnapshot && barcodePaymentSnapshot.size > MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES);
     if (!expenseScanTruncated) {
       const evidenceByExpenseId = new Map<string, Array<{ transactionId: string; paidAt: string | null }>>();
-      for (const document of paymentSnapshot.docs) {
+      const barcodeEvidenceByExpenseId = new Map<string, Array<{
+        code: string;
+        installmentNumber: number | null;
+        payment: { transactionId: string; bankStatus: string | null; schedulingStatus: string | null; scheduledFor: string | null };
+      }>>();
+      for (const document of paymentSnapshot?.docs ?? []) {
         const payment = document.data();
         const expenseId = String(payment.expenseId ?? "").trim();
         const transactionId = String(payment.bankTransactionId ?? "").trim();
@@ -107,8 +141,36 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
           { transactionId, paidAt },
         ]);
       }
+      for (const document of barcodePaymentSnapshot?.docs ?? []) {
+        const payment = document.data();
+        const expenseId = String(payment.expenseId ?? "").trim();
+        const code = String(payment.barcodeSnapshot?.code ?? "").trim();
+        const status = String(payment.status ?? "").trim();
+        if (!expenseId || !code || /^(?:cancelled|rejected|failed|approval_expired)$/.test(status)) continue;
+        barcodeEvidenceByExpenseId.set(expenseId, [
+          ...(barcodeEvidenceByExpenseId.get(expenseId) ?? []),
+          {
+            code,
+            installmentNumber: Number.isInteger(Number(payment.installmentNumber))
+              && Number(payment.installmentNumber) > 0
+              ? Number(payment.installmentNumber)
+              : null,
+            payment: {
+              transactionId: String(payment.interRequestId ?? document.id),
+              bankStatus: typeof payment.bankStatus === "string" ? payment.bankStatus : null,
+              schedulingStatus: status || null,
+              scheduledFor: typeof payment.barcodeSnapshot?.scheduledFor === "string"
+                ? payment.barcodeSnapshot.scheduledFor
+                : null,
+            },
+          },
+        ]);
+      }
       const openById = new Map(openSnapshot.docs.map((document) => [document.id, document]));
-      const missingPaidRefs = [...evidenceByExpenseId.keys()]
+      const missingPaidRefs = [...new Set([
+        ...evidenceByExpenseId.keys(),
+        ...barcodeEvidenceByExpenseId.keys(),
+      ])]
         .filter((expenseId) => !openById.has(expenseId))
         .map((expenseId) => financialDbAdmin.collection("expenses").doc(expenseId));
       const paidSnapshots = missingPaidRefs.length ? await financialDbAdmin.getAll(...missingPaidRefs) : [];
@@ -117,6 +179,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
           id: document.id,
           ...document.data(),
           settlementEvidence: evidenceByExpenseId.get(document.id) ?? null,
+          bankPaymentEvidence: barcodeEvidenceByExpenseId.get(document.id) ?? null,
         }));
     }
   }
@@ -143,8 +206,34 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     existingExpenseSuggestion,
     provisionSuggestion: suggestion,
   });
+  const analysisCanResolve = ["pending_review", "document_pending", "suggestion_available"].includes(message.status);
+  const automationSettings = analysisCanResolve && existingExpenseSuggestion.automaticLinkEligible === true
+    ? await getFinancialInboxAutomationSettings(message.workspaceId)
+    : defaultFinancialInboxAutomationSettings();
+  const automaticIdentificationAllowed = shouldAutomaticallyIdentifyInboxCharge({
+    settings: automationSettings,
+    suggestion: existingExpenseSuggestion,
+  });
+  const automaticReminder = classification.marketingLikely || !analysisCanResolve
+    ? null
+    : automaticIdentificationAllowed
+      ? automaticReminderResolutionPatch({ suggestion: existingExpenseSuggestion, at: checkedAt })
+      : null;
+  const nextResolution = automaticReminder?.resolution
+    ?? (classification.marketingLikely && analysisCanResolve
+      ? discardedFinancialInboxResolution({
+          mode: "automatic",
+          at: checkedAt,
+          by: "system:financial-inbox",
+          reasons: ["mensagem classificada como conteúdo não financeiro"],
+        })
+      : analysisCanResolve
+        ? pendingFinancialInboxResolution()
+        : resolutionForDisplay(message));
   const nextStatus = classification.marketingLikely
     ? "ignored"
+    : automaticReminder
+      ? automaticReminder.status
     : existingExpenseSuggestion.status === "suggested"
       || suggestion.status === "suggested"
       || creationSuggestion.status === "suggested"
@@ -170,6 +259,11 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     provisionSuggestion: suggestion,
     creationSuggestion,
     status: persistedStatus,
+    resolution: nextResolution,
+    resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
+    ...(automaticReminder ? {
+      bankState: automaticReminder.bankState,
+    } : {}),
     updatedAt: checkedAt,
   }, { merge: true });
   if (persistedStatus === "ignored" && message.status !== "ignored" && classification.marketingLikely) {
@@ -177,6 +271,20 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
       type: "MESSAGE_AUTO_IGNORED_MARKETING",
       at: checkedAt,
       actorId: "system:financial-inbox",
+    }, { merge: true });
+  }
+  if (automaticReminder) {
+    batch.set(messageRef.collection("events").doc("automatic-reminder-identification-v1"), {
+      type: "CHARGE_IDENTIFIED_AS_EXISTING",
+      at: checkedAt,
+      actorId: "system:financial-inbox",
+      expenseId: automaticReminder.resolution.targetId,
+      installmentNumber: automaticReminder.resolution.installmentNumber,
+      financialState: automaticReminder.resolution.financialState,
+      reasons: automaticReminder.resolution.reasons,
+      automationMode: automationSettings.mode,
+      automationPolicyVersion: automationSettings.policyVersion,
+      resolutionOnly: true,
     }, { merge: true });
   }
   await batch.commit();
@@ -190,6 +298,10 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     provisionSuggestion: suggestion,
     creationSuggestion,
     status: persistedStatus,
+    resolution: nextResolution,
+    ...(automaticReminder ? {
+      bankState: automaticReminder.bankState,
+    } : {}),
   } as FinancialInboxMessage;
 }
 
@@ -320,6 +432,18 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       linkedExpenseId: actualRef.id,
       linkedProvisionId: provisionId,
       obligationId,
+      resolution: identifiedFinancialInboxResolution({
+        kind: "new_charge",
+        targetType: "expense",
+        targetId: actualRef.id,
+        financialState: "open",
+        mode: "manual",
+        confidence: message.provisionSuggestion?.confidence ?? null,
+        reasons: message.provisionSuggestion?.reasons ?? [],
+        at: nowIso,
+        by: actor.uid,
+      }),
+      resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
       "provisionSuggestion.status": "linked",
       reviewedAt: nowIso,
       reviewedBy: actor.uid,
@@ -364,6 +488,7 @@ export async function linkInboxChargeToExistingExpense(
   actor: PaymentActor,
   expectedWorkspaceId: string,
   installmentNumber: number | null = null,
+  resolutionOnly = false,
 ) {
   const messageRef = financialDbAdmin.collection("financialInboxMessages").doc(id);
   const expenseRef = financialDbAdmin.collection("expenses").doc(expenseId);
@@ -381,6 +506,18 @@ export async function linkInboxChargeToExistingExpense(
     if (message.linkedExpenseId && message.linkedExpenseId !== expenseId) {
       throw new Error("A cobrança já está vinculada a outra despesa.");
     }
+    if (resolutionOnly
+      && message.resolution?.status === "identified"
+      && message.resolution.targetId
+      && message.resolution.targetId !== expenseId) {
+      throw new Error("A cobrança já foi identificada com outro lançamento.");
+    }
+    if (resolutionOnly
+      && message.resolution?.status === "identified"
+      && message.resolution.targetId === expenseId
+      && message.resolution.installmentNumber === installmentNumber) {
+      return { message, expenseId, duplicate: true };
+    }
     if (expense.provisionType === "forecast") throw new Error("A cobrança deve ser vinculada à despesa real, não à previsão.");
     const reevaluatedSuggestion = chooseExistingExpenseSuggestion(message.classification, [{ id: expenseId, ...expense }]);
     const selectedAlternative = reevaluatedSuggestion.alternatives?.find((alternative) => (
@@ -394,6 +531,9 @@ export async function linkInboxChargeToExistingExpense(
       && reevaluatedSuggestion.installmentNumber === installmentNumber
       ? reevaluatedSuggestion
       : null;
+    if (resolutionOnly && !exactSuggestion && !selectedAlternative) {
+      throw new Error("A despesa selecionada não corresponde mais à cobrança. Analise novamente.");
+    }
     const installments = Array.isArray(expense.installments)
       ? expense.installments as Array<Record<string, unknown>>
       : [];
@@ -402,14 +542,15 @@ export async function linkInboxChargeToExistingExpense(
       : installments.findIndex((installment, index) => Number(installment.number ?? index + 1) === installmentNumber);
     if (installmentNumber != null && installmentIndex < 0) throw new Error("A parcela sugerida não existe mais.");
     const targetInstallment = installmentIndex >= 0 ? installments[installmentIndex] : null;
-    if (message.linkedExpenseId === expenseId
+    if (!resolutionOnly
+      && message.linkedExpenseId === expenseId
       && (installmentNumber == null || message.linkedExpenseInstallmentNumber === installmentNumber)) {
       return { message, expenseId, duplicate: true };
     }
-    if (targetInstallment?.financialInboxMessageId && targetInstallment.financialInboxMessageId !== id) {
+    if (!resolutionOnly && targetInstallment?.financialInboxMessageId && targetInstallment.financialInboxMessageId !== id) {
       throw new Error("A parcela já está vinculada a outra cobrança recebida.");
     }
-    if (installmentNumber == null && expense.financialInboxMessageId && expense.financialInboxMessageId !== id) {
+    if (!resolutionOnly && installmentNumber == null && expense.financialInboxMessageId && expense.financialInboxMessageId !== id) {
       throw new Error("A despesa já está vinculada a outra cobrança recebida.");
     }
     const obligationId = String(expense.obligationId || `obl_${expenseId}`);
@@ -447,21 +588,51 @@ export async function linkInboxChargeToExistingExpense(
       },
       [message.classification.billingIdentity],
     );
-    if (installmentIndex >= 0) {
+    if (!resolutionOnly && installmentIndex >= 0) {
       const nextInstallments = installments.map((installment, index) => index === installmentIndex
         ? { ...installment, financialInboxMessageId: id, financialInboxLinkedAt: now, financialInboxLinkedBy: actor.uid }
         : installment);
       transaction.set(expenseRef, { installments: nextInstallments, billingIdentity, updatedAt: Timestamp.now() }, { merge: true });
-    } else {
+    } else if (!resolutionOnly) {
       transaction.set(expenseRef, { financialInboxMessageId: id, billingIdentity, updatedAt: Timestamp.now() }, { merge: true });
     }
+    const isNewCharge = !resolutionOnly && (
+      expense.financialInboxMessageId === id
+      || String(expense.originModule ?? "") === "financial_inbox"
+      || Boolean(expense.reconciledProvisionId)
+    );
+    const financialState = existingSettlement
+      ? "reconciled" as const
+      : existingBankPayment
+        ? inboxState.status === "scheduled" || inboxState.status === "awaiting_statement"
+          ? "scheduled" as const
+          : "payment_prepared" as const
+        : "open" as const;
+    const resolution = identifiedFinancialInboxResolution({
+      kind: isNewCharge ? "new_charge" : "reminder",
+      targetType: "expense",
+      targetId: expenseId,
+      installmentNumber,
+      financialState,
+      mode: "manual",
+      confidence: classificationSource?.matchStrength === "document" || classificationSource?.matchStrength === "identity"
+        ? "high"
+        : "medium",
+      reasons: classificationSource?.reasons ?? [],
+      at: now,
+      by: actor.uid,
+    });
     transaction.set(messageRef, {
-      status: inboxState.status,
+      status: resolutionOnly ? "identified" : inboxState.status,
       bankState: inboxState.bankState,
-      linkedExpenseId: expenseId,
-      linkedExpenseInstallmentNumber: installmentNumber,
+      ...(resolutionOnly ? {} : {
+        linkedExpenseId: expenseId,
+        linkedExpenseInstallmentNumber: installmentNumber,
+      }),
       linkedProvisionId: expense.reconciledProvisionId || null,
       obligationId,
+      resolution,
+      resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
       classification: { ...classification, billingIdentity },
       searchTerms: buildFinancialInboxSearchTerms({
         ...message,
@@ -493,7 +664,11 @@ export async function linkInboxChargeToExistingExpense(
       updatedAt: now,
     }, { merge: true });
     transaction.create(messageRef.collection("events").doc(), {
-      type: installmentNumber == null ? "CHARGE_LINKED_MANUALLY" : "CHARGE_LINKED_TO_EXISTING_INSTALLMENT",
+      type: resolutionOnly
+        ? "CHARGE_IDENTIFIED_AS_EXISTING"
+        : installmentNumber == null
+          ? "CHARGE_LINKED_MANUALLY"
+          : "CHARGE_LINKED_TO_EXISTING_INSTALLMENT",
       at: now,
       actorId: actor.uid,
       actorEmail: actor.email ?? null,
@@ -502,7 +677,19 @@ export async function linkInboxChargeToExistingExpense(
       bankPaymentTransactionId: existingBankPayment?.transactionId ?? null,
       statementTransactionId: existingSettlement?.transactionId ?? null,
       obligationId,
+      resolutionOnly,
     });
-    return { message: { ...message, linkedExpenseId: expenseId }, expenseId, duplicate: message.linkedExpenseId === expenseId };
+    return {
+      message: {
+        ...message,
+        status: resolutionOnly ? "identified" as const : inboxState.status,
+        resolution,
+        ...(resolutionOnly ? {} : { linkedExpenseId: expenseId }),
+      },
+      expenseId,
+      duplicate: resolutionOnly
+        ? message.resolution?.targetId === expenseId
+        : message.linkedExpenseId === expenseId,
+    };
   });
 }

@@ -40,7 +40,7 @@ function toDate(ts: unknown): Date | undefined {
   if (!ts) return undefined;
   if (ts instanceof Date) return ts;
   if (typeof (ts as any).toDate === 'function') return (ts as any).toDate();
-  if (typeof ts === 'string') return new Date(ts);
+  if (typeof ts === 'string') return /^\d{4}-\d{2}-\d{2}$/.test(ts) ? parseISO(ts) : new Date(ts);
   return undefined;
 }
 

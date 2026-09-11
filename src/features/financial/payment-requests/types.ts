@@ -28,6 +28,7 @@ type BankPaymentRequestBase = {
   id: string;
   sourceId: string;
   expenseId?: string;
+  installmentNumber?: number | null;
   legalEntitySnapshot?: PaymentLegalEntitySnapshot;
   amount: number;
   description: string;

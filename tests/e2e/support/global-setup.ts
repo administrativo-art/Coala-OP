@@ -17,14 +17,26 @@ export const E2E_ORDER_IDS = {
 export const E2E_FINANCIAL_INBOX_IDS = {
   message: "inbox-e2e-vivo-0001",
   expense: "expense-e2e-vivo-0001",
+  automaticMessage: "inbox-e2e-automatic-0002",
+  automaticExpense: "expense-e2e-automatic-0002",
 };
+export const E2E_FINANCIAL_INBOX_BARCODE = "23793493079001004992396000130003915620000113884";
 export const E2E_UBER_EXPENSE_ID = "expense-e2e-uber-0001";
+export const E2E_VACATION = {
+  employeeId: "employee-vacation-e2e",
+  vacationId: "vacation-e2e-planned-0001",
+  calendarId: "calendar-vacation-e2e",
+};
 
 function isoDate(offsetDays = 0) {
   const date = new Date();
   date.setHours(12, 0, 0, 0);
   date.setDate(date.getDate() + offsetDays);
   return date.toISOString();
+}
+
+function dateOnly(offsetDays = 0) {
+  return isoDate(offsetDays).slice(0, 10);
 }
 
 export default async function seedE2E() {
@@ -55,7 +67,7 @@ export default async function seedE2E() {
     isDefaultAdmin: true,
   });
 
-  const now = isoDate();
+  const now = new Date().toISOString();
   const batch = mainDb.batch();
   batch.set(mainDb.collection("profiles").doc("admin"), {
     name: "Administrador",
@@ -81,6 +93,45 @@ export default async function seedE2E() {
       lastConfirmedAt: now,
       nextReviewAt: isoDate(180),
     },
+  });
+  const vacationStart = dateOnly(45);
+  const vacationEnd = dateOnly(58);
+  const vacationYear = Number(vacationStart.slice(0, 4));
+  const weeklyRestDay = (new Date(`${vacationStart}T12:00:00Z`).getUTCDay() + 3) % 7;
+  batch.set(mainDb.collection("users").doc(E2E_VACATION.employeeId), {
+    username: "Colaboradora Férias E2E",
+    email: "ferias.e2e@coala.test",
+    profileId: "user",
+    assignedKioskIds: [],
+    unitIds: [],
+    isActive: true,
+    admissionDate: "2024-01-01",
+    createdAt: now,
+  });
+  batch.set(mainDb.collection("dp_calendars").doc(E2E_VACATION.calendarId), {
+    name: `Calendário E2E ${vacationYear}`,
+    year: vacationYear,
+    holidayCount: 0,
+    createdAt: now,
+  });
+  batch.set(mainDb.collection("dp_vacations").doc(E2E_VACATION.vacationId), {
+    userId: E2E_VACATION.employeeId,
+    cycleId: `${vacationYear - 1}-${vacationYear}`,
+    recordType: "gozo",
+    startDate: vacationStart,
+    endDate: vacationEnd,
+    returnDate: dateOnly(59),
+    days: 14,
+    unjustifiedAbsences: 0,
+    entitledDays: 30,
+    calendarId: E2E_VACATION.calendarId,
+    weeklyRestDay,
+    employeeAgreedToSplit: false,
+    thirteenthAdvanceRequested: false,
+    status: "PLANNED",
+    warnings: [],
+    createdAt: now,
+    updatedAt: now,
   });
   batch.set(mainDb.collection("entities").doc("supplier-e2e"), {
     type: "pessoa_juridica",
@@ -280,6 +331,22 @@ export default async function seedE2E() {
     },
     createdAt: now,
   });
+  financialBatch.set(financialDb.collection("expenses").doc(E2E_FINANCIAL_INBOX_IDS.automaticExpense), {
+    workspaceId: "coala",
+    description: "Cobrança automática documental E2E",
+    supplier: "Fornecedor Automatizado",
+    status: "pending",
+    totalValue: 77.31,
+    dueDate: "2026-09-30",
+    installments: [{
+      number: 1,
+      value: 77.31,
+      dueDate: "2026-09-30",
+      status: "pending",
+      bankLine: E2E_FINANCIAL_INBOX_BARCODE,
+    }],
+    createdAt: now,
+  });
   financialBatch.set(financialDb.collection("expenses").doc(E2E_UBER_EXPENSE_ID), {
     workspaceId: "coala",
     description: "UBER *TRIP E2E",
@@ -386,10 +453,98 @@ export default async function seedE2E() {
     linkResolution: { status: "not_needed", checkedAt: now, sourceDomain: null, message: "O documento chegou anexado ao e-mail." },
     bankState: "not_prepared",
     statementTransactionId: null,
+    resolution: {
+      status: "pending",
+      kind: null,
+      targetType: null,
+      targetId: null,
+      installmentNumber: null,
+      financialState: null,
+      mode: null,
+      confidence: null,
+      reasons: [],
+      resolvedAt: null,
+      resolvedBy: null,
+    },
+    resolutionContractVersion: 1,
     reviewedAt: null,
     reviewedBy: null,
     createdAt: now,
     updatedAt: now,
+  });
+  financialBatch.set(financialDb.collection("financialInboxMessages").doc(E2E_FINANCIAL_INBOX_IDS.automaticMessage), {
+    workspaceId: "coala",
+    provider: "resend",
+    providerEmailId: "email-e2e-automatic",
+    providerEventId: "event-e2e-automatic",
+    messageId: null,
+    status: "pending_review",
+    from: "Fornecedor Automatizado <cobranca@billing.example>",
+    fromAddress: "cobranca@billing.example",
+    senderDomain: "billing.example",
+    to: ["financeiro@coala.test"],
+    originalRecipients: [],
+    subject: "Cobrança automática documental E2E",
+    receivedAt: "2026-09-10T12:00:00.000Z",
+    textPreview: `Valor total R$ 77,31. Vencimento 30/09/2026. Linha digitável ${E2E_FINANCIAL_INBOX_BARCODE}`,
+    textContent: `Boleto. Valor total: R$ 77,31. Vencimento: 30/09/2026. Linha digitável: ${E2E_FINANCIAL_INBOX_BARCODE}`,
+    classification: {
+      documentType: "charge",
+      financeLikely: true,
+      confidence: "high",
+      supplierName: "Fornecedor Automatizado",
+      competence: null,
+      dueDate: "2026-09-30",
+      amountCents: 7731,
+      barcode: E2E_FINANCIAL_INBOX_BARCODE,
+      barcodeMasked: "23793••••••••••••••••••••••••••••••13884",
+      links: [],
+      billingIdentity: {
+        supplierTaxId: null,
+        customerAccount: null,
+        contractNumber: null,
+        serviceType: "other",
+        serviceNumbers: [],
+      },
+    },
+    attachments: [],
+    rawStoragePath: null,
+    rawSha256: null,
+    archiveWarnings: [],
+    linkedExpenseId: null,
+    linkedProvisionId: null,
+    obligationId: null,
+    paymentRequestId: null,
+    existingExpenseSuggestion: null,
+    provisionSuggestion: null,
+    creationSuggestion: null,
+    linkResolution: { status: "not_needed", checkedAt: now, sourceDomain: null, message: null },
+    bankState: "not_prepared",
+    statementTransactionId: null,
+    resolution: {
+      status: "pending",
+      kind: null,
+      targetType: null,
+      targetId: null,
+      installmentNumber: null,
+      financialState: null,
+      mode: null,
+      confidence: null,
+      reasons: [],
+      resolvedAt: null,
+      resolvedBy: null,
+    },
+    resolutionContractVersion: 1,
+    reviewedAt: null,
+    reviewedBy: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  financialBatch.set(financialDb.collection("financialInboxSettings").doc("coala"), {
+    mode: "manual",
+    policyVersion: 1,
+    updatedAt: now,
+    updatedBy: E2E_USER.uid,
   });
   await financialBatch.commit();
 }

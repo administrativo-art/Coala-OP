@@ -53,6 +53,7 @@ test("arquiva somente tratado há pelo menos seis meses", () => {
   assert.equal(financialInboxRetentionPlan(treated({ status: "linked" }), now), null);
   assert.equal(financialInboxRetentionPlan(treated({ updatedAt: "2026-04-01T12:00:00.000Z" }), now), null);
   assert.equal(financialInboxRetentionPlan(treated(), now)?.archivedFromStatus, "reconciled");
+  assert.equal(financialInboxRetentionPlan(treated({ status: "identified" }), now)?.archivedFromStatus, "identified");
 });
 
 test("aplica um, seis e dez anos conforme a categoria", () => {
@@ -77,6 +78,9 @@ test("manutenção é seca por padrão, transacional e não apaga documentos", (
   const source = readFileSync("src/features/financial/inbox/maintenance.server.ts", "utf8");
   const scheduled = readFileSync("functions/src/financial-inbox-jobs.ts", "utf8");
   assert.match(source, /const dryRun = params\.dryRun !== false/);
+  assert.match(source, /backfillResolutionContract/);
+  assert.match(source, /resolutionContractVersion/);
+  assert.match(source, /resolutionForDisplay\(message\)/);
   assert.match(source, /runTransaction\(async \(transaction\) =>/);
   assert.match(source, /MESSAGE_ARCHIVED_BY_RETENTION/);
   assert.doesNotMatch(source, /\.delete\(/);

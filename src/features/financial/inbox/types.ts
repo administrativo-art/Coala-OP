@@ -3,6 +3,7 @@ export type FinancialInboxStatus =
   | "document_pending"
   | "suggestion_available"
   | "under_review"
+  | "identified"
   | "linked"
   | "awaiting_authorization"
   | "scheduled"
@@ -26,6 +27,51 @@ export type FinancialInboxRetentionClass =
   | "non_financial"
   | "financial_standard"
   | "tax_or_payroll";
+
+export type FinancialInboxView = "work" | "identified";
+
+export type FinancialInboxAutomationMode = "manual" | "document_identity";
+
+export type FinancialInboxAutomationSettings = {
+  mode: FinancialInboxAutomationMode;
+  policyVersion: number;
+  updatedAt: string | null;
+  updatedBy: string | null;
+};
+
+export type FinancialInboxResolutionStatus =
+  | "pending"
+  | "identified"
+  | "discarded"
+  | "archived";
+
+export type FinancialInboxResolutionKind =
+  | "new_charge"
+  | "reminder"
+  | "duplicate"
+  | "forecast_confirmation"
+  | "non_financial";
+
+export type FinancialInboxFinancialState =
+  | "forecast"
+  | "open"
+  | "payment_prepared"
+  | "scheduled"
+  | "reconciled";
+
+export type FinancialInboxResolution = {
+  status: FinancialInboxResolutionStatus;
+  kind: FinancialInboxResolutionKind | null;
+  targetType: "expense" | "forecast" | "inbox_message" | null;
+  targetId: string | null;
+  installmentNumber: number | null;
+  financialState: FinancialInboxFinancialState | null;
+  mode: "automatic" | "manual" | null;
+  confidence: "high" | "medium" | "low" | null;
+  reasons: string[];
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+};
 
 export type FinancialInboxStageSummary = {
   count: number;
@@ -106,6 +152,8 @@ export type FinancialInboxClassification = {
   barcode: string | null;
   barcodeMasked: string | null;
   documentReferences?: string[];
+  installmentNumber?: number | null;
+  installmentTotal?: number | null;
   links: string[];
   billingIdentity?: FinancialInboxBillingIdentity | null;
 };
@@ -155,6 +203,9 @@ export type FinancialInboxExpenseSuggestion = {
   matchedBarcodeMasked?: string | null;
   matchedDocumentReferences?: string[];
   matchStrength?: "document" | "identity" | "attributes" | null;
+  automaticLinkEligible?: boolean;
+  automaticLinkPolicyVersion?: number | null;
+  automaticLinkReasons?: string[];
   alternatives?: FinancialInboxExpenseAlternative[];
 };
 
@@ -243,6 +294,8 @@ export type FinancialInboxMessage = {
   linkedExpenseInstallmentNumber?: number | null;
   bankState?: FinancialInboxBankState | null;
   statementTransactionId?: string | null;
+  resolution?: FinancialInboxResolution | null;
+  resolutionContractVersion?: number;
   reviewedAt: string | null;
   reviewedBy: string | null;
   searchTerms?: string[];
@@ -250,7 +303,7 @@ export type FinancialInboxMessage = {
   searchIndexedAt?: string | null;
   archivedAt?: string | null;
   archivedBy?: string | null;
-  archivedFromStatus?: "ignored" | "reconciled" | null;
+  archivedFromStatus?: "ignored" | "identified" | "reconciled" | null;
   retentionClass?: FinancialInboxRetentionClass | null;
   purgeEligibleAt?: string | null;
   retentionPolicyVersion?: number | null;

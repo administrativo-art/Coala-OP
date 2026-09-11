@@ -6,7 +6,8 @@ const maintenanceUrl = process.env.FINANCIAL_INBOX_MAINTENANCE_URL?.trim()
   || 'https://op.coalashakes.com/api/jobs/financial-inbox/maintenance';
 
 /**
- * Indexa mensagens legadas e arquiva cobranças tratadas há mais de seis meses.
+ * Indexa mensagens legadas, aplica o contrato de resolução e arquiva cobranças
+ * tratadas há mais de seis meses.
  * O job preserva documentos, vínculos e eventos; não executa expurgo definitivo.
  */
 export const financialInboxMaintenance = onSchedule({
@@ -32,6 +33,7 @@ export const financialInboxMaintenance = onSchedule({
   }
   const result = await response.json() as {
     searchIndex?: { scanned?: number; indexed?: number; complete?: boolean };
+    resolutionContract?: { scanned?: number; updated?: number; complete?: boolean };
     retention?: { eligible?: number; archived?: number };
   };
   console.log('[financialInboxMaintenance] Concluída.', result);

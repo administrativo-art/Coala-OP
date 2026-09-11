@@ -1,5 +1,7 @@
 import { isIP } from "node:net";
 
+import { trustedFinancialDocumentProvider } from "./trusted-document-providers";
+
 const DOCUMENT_TERMS = /(?:boleto|fatura|invoice|cobranca|cobran[cç]a|documento|arquivo|download|segunda.?via|conta|guia|nfse|nota.?fiscal|pdf|xml)/i;
 const REJECTED_TERMS = /(?:unsubscribe|descadastrar|optout|preferencias|privacy|privacidade|marketing|tracking)/i;
 
@@ -28,22 +30,7 @@ function hostMatches(hostname: string, allowedDomain: string) {
  * documento, nunca ao domínio inteiro da plataforma.
  */
 export function isTrustedFinancialDocumentProviderUrl(url: URL) {
-  const hostname = normalizedDomain(url.hostname);
-  const pathname = url.pathname.replace(/\/{2,}/g, "/");
-
-  if (hostMatches(hostname, "superlogica.net")) {
-    return /^\/clients\/areadocliente\/publico\/(?:cobranca\/|espelhonfsepdf\/?$)/i.test(pathname);
-  }
-
-  if (hostname === "app.acessorias.com") {
-    return pathname.toLowerCase() === "/getguia.php";
-  }
-
-  if (hostname === "acessorias.s3.us-east-2.amazonaws.com") {
-    return /^\/econtinuo\/.+\.(?:pdf|xml|png|jpe?g)$/i.test(pathname);
-  }
-
-  return false;
+  return trustedFinancialDocumentProvider(url) !== null;
 }
 
 export function configuredFinancialDocumentDomains(value = process.env.FINANCIAL_INBOX_DOCUMENT_DOMAINS ?? "") {
