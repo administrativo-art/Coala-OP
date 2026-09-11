@@ -41,6 +41,7 @@ import { useEntities } from "@/hooks/use-entities";
 import { useKiosks } from "@/hooks/use-kiosks";
 import { useToast } from "@/hooks/use-toast";
 import { expenseDescriptionFormSchema } from "@/features/financial/lib/schemas";
+import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { distributeEqualRateioPercentages } from "@/features/financial/lib/expense-rateio";
 import {
   calculateSplitPercentagesFromValues,
@@ -2859,7 +2860,9 @@ export function FinancialImportPage({
           if (item.expenseDraft.mode === "split") {
             for (const split of item.expenseDraft.splitExpenses) {
               const originalDueDate = Timestamp.fromDate(new Date(`${split.dueDate}T12:00:00`));
+              const competenceDate = Timestamp.fromDate(new Date(`${split.competenceDate}T12:00:00`));
               const createdExpense = await addDoc(financialCollection("expenses"), {
+                ...financialExpenseAccountingFields({ competenceDate }),
                 accountPlan: split.accountPlanId,
                 accountId: split.accountPlanId,
                 accountPlanName: split.accountPlanName,
@@ -2867,7 +2870,7 @@ export function FinancialImportPage({
                 supplier: split.supplier || "",
                 notes: item.expenseDraft.notes || item.rawDescription,
                 totalValue: Number(split.value) || 0,
-                competenceDate: Timestamp.fromDate(new Date(`${split.competenceDate}T12:00:00`)),
+                competenceDate,
                 dueDate: originalDueDate,
                 paymentMethod: "single",
                 installmentType: null,
@@ -2904,7 +2907,9 @@ export function FinancialImportPage({
             expenseId = splitExpenseIds[0] || "";
           } else if (item.expenseDraft.mode === "new") {
             const originalDueDate = Timestamp.fromDate(new Date(`${item.expenseDraft.dueDate}T12:00:00`));
+            const competenceDate = Timestamp.fromDate(new Date(`${item.expenseDraft.competenceDate}T12:00:00`));
             const expensePayload = {
+              ...financialExpenseAccountingFields({ competenceDate }),
               accountPlan: item.expenseDraft.accountPlanId,
               accountId: item.expenseDraft.accountPlanId,
               accountPlanName: item.expenseDraft.accountPlanName,
@@ -2912,7 +2917,7 @@ export function FinancialImportPage({
               supplier: item.expenseDraft.supplier || "",
               notes: item.expenseDraft.notes || "",
               totalValue: Math.abs(item.amount),
-              competenceDate: Timestamp.fromDate(new Date(`${item.expenseDraft.competenceDate}T12:00:00`)),
+              competenceDate,
               dueDate: originalDueDate,
               paymentMethod: "single",
               installmentType: null,

@@ -3,6 +3,7 @@ import { FieldValue, Timestamp, type WriteBatch } from "firebase-admin/firestore
 
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { consultExpenseProvision } from "@/features/financial/lib/expense-provisions";
+import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { planPaymentRequestStatementSettlement } from "@/features/financial/payment-requests/statement-settlement";
 import { calculateFinancialObligationSummary, moneyToCents } from "./calculations";
 import type { RegisterReportedPaymentInput } from "./schemas";
@@ -807,6 +808,7 @@ export async function registerReportedPayment(
     }
     if (manualChargeExpenseId) {
       transaction.set(financialDbAdmin.collection("expenses").doc(manualChargeExpenseId), {
+        ...financialExpenseAccountingFields({ competenceDate: paidAt }),
         description: `Juros e multa | ${expense.description || "Despesa"}`,
         accountPlan: input.chargesAccountPlanId,
         accountId: input.chargesAccountPlanId,

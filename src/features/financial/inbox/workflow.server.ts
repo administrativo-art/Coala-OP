@@ -4,6 +4,7 @@ import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { WORKSPACE_ID } from "@/lib/workspace";
 import { calculateFinancialObligationSummary } from "@/features/financial/obligations/calculations";
 import { buildFinancialDescription } from "@/features/financial/lib/expense-description-catalog";
+import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
 import { classifyFinancialEmail, mergeBillingIdentities } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
@@ -253,6 +254,10 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       : String(provision.description || message.subject).trim();
     const actual = {
       ...copyExpenseClassification(provision),
+      ...financialExpenseAccountingFields({
+        competenceMonth: message.classification.competence,
+        competenceDate,
+      }),
       workspaceId: WORKSPACE_ID,
       description,
       supplier,
