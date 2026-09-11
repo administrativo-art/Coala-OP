@@ -54,6 +54,8 @@ test("mantém a fonte da DRE filtrada, paginada e sem leitura direta no cliente"
   assert.match(serverSource, /\.limit\(Math\.min\(SALES_PAGE_SIZE, remaining\)\)/);
   assert.match(serverSource, /MAX_REPORTS_PER_PERIOD/);
   assert.doesNotMatch(pageSource, /\b(?:getDocs|onSnapshot)\s*\(/);
+  assert.match(pageSource, /\.filter\(\(key\) => key >= FINANCIAL_DRE_START_MONTH_KEY\)/);
+  assert.match(pageSource, /min=\{FINANCIAL_DRE_START_MONTH_KEY\}/);
   assert.ok(indexes.indexes.some((index) => (
     index.collectionGroup === "salesReports"
     && ["year", "month", "kioskId", "__name__"].every((field) => (

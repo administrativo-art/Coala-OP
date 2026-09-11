@@ -73,6 +73,7 @@ function statementTitle(paymentMethodLabel: string, monthKey: string) {
 
 function expenseAuditStatus(expense: GroupableCardExpense): CardStatementLineAuditStatus {
   if (expense.cardReconciliationStatus === "reconciled") return "reconciled";
+  if (expense.cardStatementAuditDisposition === "waived_before_dre_start") return "historical";
   return cardExpenseAuditIssues(expense).length === 0 ? "audited" : "pending";
 }
 
@@ -94,7 +95,7 @@ function finishGroup<T extends GroupableCardExpense>(
     .map((expense) => cardDateFromUnknown(expense.dueDate))
     .filter((date): date is Date => date !== null)
     .sort((left, right) => left.getTime() - right.getTime());
-  const auditCounts = { pending: 0, audited: 0, reconciled: 0 };
+  const auditCounts = { pending: 0, audited: 0, historical: 0, reconciled: 0 };
   expenses.forEach((expense) => {
     auditCounts[expenseAuditStatus(expense)] += 1;
   });

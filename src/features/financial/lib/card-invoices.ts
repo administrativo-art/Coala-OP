@@ -56,6 +56,7 @@ export type CardExpenseEntry = {
     cardStatementKey?: unknown;
     cardStatementMonthKey?: unknown;
     cardStatementImportFingerprint?: unknown;
+    cardStatementAuditDisposition?: unknown;
   }>;
   plannedPaymentMethodType?: unknown;
   plannedBankAccountId?: unknown;
@@ -68,6 +69,7 @@ export type CardExpenseEntry = {
   cardStatementKey?: unknown;
   cardStatementMonthKey?: unknown;
   cardStatementImportFingerprint?: unknown;
+  cardStatementAuditDisposition?: unknown;
 };
 
 export type CardStatementCycle = {
@@ -89,7 +91,7 @@ export type CardStatementLine = {
   sourceReference?: string;
 };
 
-export type CardStatementLineAuditStatus = "pending" | "audited" | "reconciled";
+export type CardStatementLineAuditStatus = "pending" | "audited" | "historical" | "reconciled";
 
 export type CardStatementAllocation = {
   lineId: string;
@@ -118,6 +120,15 @@ export type CardStatementGroup = CardStatementCycle & {
   provisionCount: number;
   provisionedTotal: number;
 };
+
+export function canRegisterCardStatementAsHistorical(
+  statementMonthKey: string,
+  dreStartMonthKey: string,
+) {
+  return /^\d{4}-\d{2}$/.test(statementMonthKey)
+    && /^\d{4}-\d{2}$/.test(dreStartMonthKey)
+    && statementMonthKey < dreStartMonthKey;
+}
 
 export function cardStatementAllocationIntegrity(
   allocations: Array<Pick<CardStatementAllocation, "lineId" | "amount" | "importFingerprint">>,
@@ -221,11 +232,21 @@ export function cardExpenseAuditIssues(expense: CardExpenseEntry) {
 }
 
 export function cardStatementLineAuditIssues(line: CardStatementLine) {
+  const installment = installmentByNumber(line.expense, line.installmentNumber ?? null);
+  const auditDisposition = installment
+    ? installment?.cardStatementAuditDisposition
+    : line.expense.cardStatementAuditDisposition;
+  if (auditDisposition === "waived_before_dre_start") return [];
   return cardExpenseAuditIssues(line.expense);
 }
 
 export function cardStatementLineAuditStatus(line: CardStatementLine): CardStatementLineAuditStatus {
   if (line.reconciled) return "reconciled";
+  const installment = installmentByNumber(line.expense, line.installmentNumber ?? null);
+  const auditDisposition = installment
+    ? installment?.cardStatementAuditDisposition
+    : line.expense.cardStatementAuditDisposition;
+  if (auditDisposition === "waived_before_dre_start") return "historical";
   return cardStatementLineAuditIssues(line).length === 0 ? "audited" : "pending";
 }
 

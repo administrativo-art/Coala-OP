@@ -1249,6 +1249,8 @@ export function ExpensesPage() {
                           : `${statementUnits.length} unidades`;
                       const auditSummary = statement.auditCounts.pending > 0
                         ? `${statement.auditCounts.pending} pendente${statement.auditCounts.pending === 1 ? "" : "s"} de auditoria`
+                        : statement.auditCounts.historical > 0
+                          ? `${statement.auditCounts.historical} histórica${statement.auditCounts.historical === 1 ? "" : "s"} · fora do início da DRE`
                         : statement.auditCounts.reconciled === statement.expenses.length
                           ? `${statement.expenses.length} conferida${statement.expenses.length === 1 ? "" : "s"}`
                           : `${statement.auditCounts.audited} auditada${statement.auditCounts.audited === 1 ? "" : "s"} · ${statement.auditCounts.reconciled} conferida${statement.auditCounts.reconciled === 1 ? "" : "s"}`;
@@ -1339,9 +1341,13 @@ export function ExpensesPage() {
                                           const issues = cardExpenseAuditIssues(expense);
                                           const auditStatus = expense.cardReconciliationStatus === "reconciled"
                                             ? "reconciled"
+                                            : expense.cardStatementAuditDisposition === "waived_before_dre_start"
+                                              ? "historical"
                                             : issues.length === 0 ? "audited" : "pending";
                                           const auditMeta = auditStatus === "reconciled"
                                             ? { label: "Conferida", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
+                                            : auditStatus === "historical"
+                                              ? { label: "Histórico", className: "border-stone-200 bg-stone-100 text-stone-700" }
                                             : auditStatus === "audited"
                                               ? { label: "Auditada", className: "border-sky-200 bg-sky-50 text-sky-700" }
                                               : { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" };
@@ -1836,6 +1842,7 @@ export function ExpensesPage() {
                     const statement = row.statement;
                     const isExpanded = expandedCardStatementKey === statement.key;
                     const pendingAudit = statement.auditCounts.pending;
+                    const historicalCount = statement.auditCounts.historical;
                     return (
                       <div key={`mobile-card-statement-${statement.key}`} className="border-b border-sky-100 bg-sky-50/20">
                         <button
@@ -1852,7 +1859,11 @@ export function ExpensesPage() {
                                 <p className="text-sm font-semibold leading-5">{statement.title}</p>
                                 <p className={cn("mt-1 text-[10.5px]", pendingAudit > 0 ? "text-amber-700" : "text-muted-foreground")}>
                                   {statement.expenses.length} {statement.expenses.length === 1 ? "compra" : "compras"}
-                                  {pendingAudit > 0 ? ` · ${pendingAudit} pendente${pendingAudit === 1 ? "" : "s"} de auditoria` : " · auditoria concluída"}
+                                  {pendingAudit > 0
+                                    ? ` · ${pendingAudit} pendente${pendingAudit === 1 ? "" : "s"} de auditoria`
+                                    : historicalCount > 0
+                                      ? " · histórico anterior à DRE"
+                                      : " · auditoria concluída"}
                                 </p>
                               </div>
                             </div>

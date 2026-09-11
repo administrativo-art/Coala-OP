@@ -6,6 +6,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, Download, LayoutDashboard, Ta
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
+import { FINANCIAL_DRE_START_MONTH_KEY } from "@/features/financial/lib/constants";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency, toDate } from "@/features/financial/lib/utils";
 import { expenseAccountAllocationsForResultCenter } from "@/features/financial/lib/expense-account-allocations";
@@ -42,7 +43,8 @@ function KpiCard({ label, value, sub, color = "" }: { label: string; value: stri
 function dreMonthKeysEndingAt(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
   const end = new Date(year, month - 1, 1);
-  return Array.from({ length: 6 }, (_, index) => format(subMonths(end, 5 - index), "yyyy-MM"));
+  return Array.from({ length: 6 }, (_, index) => format(subMonths(end, 5 - index), "yyyy-MM"))
+    .filter((key) => key >= FINANCIAL_DRE_START_MONTH_KEY);
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -52,7 +54,10 @@ export function DrePage() {
   const api = useAuthenticatedApi();
   const { kiosks } = useKiosks();
 
-  const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), "yyyy-MM"));
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const currentMonth = format(new Date(), "yyyy-MM");
+    return currentMonth < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : currentMonth;
+  });
   const [unitFilter, setUnitFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"dashboard" | "classic" | "people">("dashboard");
   const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
@@ -194,6 +199,7 @@ export function DrePage() {
   }
 
   function getExpensesByDrePos(pos: string | null, monthKey: string): number {
+    if (monthKey < FINANCIAL_DRE_START_MONTH_KEY) return 0;
     return (expenses || []).reduce((sum: number, exp: any) => {
       if (["draft", "cancelled", "reconciled"].includes(exp.status)) return sum;
       const d = toDate(exp.competenceDate) || toDate(exp.dueDate) || toDate(exp.paidAt);
@@ -245,7 +251,8 @@ export function DrePage() {
   const chartMonthKeys = useMemo(() => {
     const [y, m] = selectedMonth.split("-").map(Number);
     const end = new Date(y, m - 1, 1);
-    return Array.from({ length: 6 }, (_, i) => format(subMonths(end, 5 - i), "yyyy-MM"));
+    return Array.from({ length: 6 }, (_, i) => format(subMonths(end, 5 - i), "yyyy-MM"))
+      .filter((key) => key >= FINANCIAL_DRE_START_MONTH_KEY);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
 
@@ -329,7 +336,8 @@ export function DrePage() {
 
   function navigateMonth(delta: number) {
     const [y, m] = selectedMonth.split("-").map(Number);
-    setSelectedMonth(format(addMonths(new Date(y, m - 1, 1), delta), "yyyy-MM"));
+    const target = format(addMonths(new Date(y, m - 1, 1), delta), "yyyy-MM");
+    setSelectedMonth(target < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : target);
   }
 
   const selectedMonthLabel = useMemo(() => {
@@ -415,13 +423,14 @@ export function DrePage() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Month nav */}
           <div className="flex items-center gap-1 rounded-xl border bg-background px-1 shadow-sm">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigateMonth(-1)}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigateMonth(-1)} disabled={selectedMonth <= FINANCIAL_DRE_START_MONTH_KEY}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <input
               type="month"
+              min={FINANCIAL_DRE_START_MONTH_KEY}
               value={selectedMonth}
-              onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
+              onChange={(e) => e.target.value && setSelectedMonth(e.target.value < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : e.target.value)}
               className="w-36 bg-transparent py-1.5 text-center text-sm font-medium focus:outline-none"
             />
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => navigateMonth(1)} disabled={isFutureMonth}>
