@@ -3,6 +3,8 @@ import { AggregateField, FieldPath } from "firebase-admin/firestore";
 import {
   FINANCIAL_INBOX_STAGES,
   FINANCIAL_INBOX_STAGE_STATUSES,
+  FINANCIAL_INBOX_IDENTIFIED_STATUSES,
+  FINANCIAL_INBOX_WORK_STATUSES,
   financialInboxStageForStatus,
   isFinancialInboxBulkDiscardEligible,
   matchesFinancialInboxSearch,
@@ -14,21 +16,38 @@ import {
 } from "./search-index";
 import type {
   FinancialInboxMessage,
+  FinancialInboxFinancialState,
+  FinancialInboxResolutionKind,
   FinancialInboxStage,
   FinancialInboxStatus,
   FinancialInboxSummary,
+  FinancialInboxView,
 } from "./types";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { serializeFinancialValue } from "@/features/financial/lib/server-access";
+import {
+  discardedFinancialInboxResolution,
+  FINANCIAL_INBOX_RESOLUTION_VERSION,
+  pendingFinancialInboxResolution,
+} from "./resolution-contract";
 
 const COLLECTION = "financialInboxMessages";
 const SEARCH_SCAN_LIMIT = 500;
 const SUMMARY_FALLBACK_LIMIT = 500;
+// Cada abertura, troca de aba ou filtro lê no máximo pageSize + 1 mensagens
+// (26 no cliente atual), além dos agregados já existentes. Não há polling.
+// A busca sem índice mantém o fallback legado limitado a 501 documentos.
 const ACTIVE_STATUSES: FinancialInboxStatus[] = [
-  "pending_review", "document_pending", "suggestion_available", "under_review", "linked",
+  "pending_review", "document_pending", "suggestion_available", "under_review", "identified", "linked",
   "awaiting_authorization", "scheduled", "awaiting_statement", "reconciled", "divergent", "ignored", "error",
 ];
 const FILTER_STATUSES = new Set<FinancialInboxStatus>([...ACTIVE_STATUSES, "archived"]);
+const RESOLUTION_KINDS = new Set<FinancialInboxResolutionKind>([
+  "new_charge", "reminder", "duplicate", "forecast_confirmation", "non_financial",
+]);
+const FINANCIAL_STATES = new Set<FinancialInboxFinancialState>([
+  "forecast", "open", "payment_prepared", "scheduled", "reconciled",
+]);
 
 export class FinancialInboxReviewError extends Error {
   constructor(readonly code: "EMPTY_SELECTION" | "NOT_FOUND" | "STATE_CONFLICT") {
@@ -80,11 +99,40 @@ function stageFrom(value: string | null | undefined): FinancialInboxStage | null
   return FINANCIAL_INBOX_STAGES.includes(value as FinancialInboxStage) ? value as FinancialInboxStage : null;
 }
 
-function scopedInboxQuery(workspaceId: string, status: FinancialInboxStatus | null, stage: FinancialInboxStage | null) {
-  let query: FirebaseFirestore.Query = financialDbAdmin.collection(COLLECTION).where("workspaceId", "==", workspaceId);
-  if (status) query = query.where("status", "==", status);
-  else if (stage) query = query.where("status", "in", FINANCIAL_INBOX_STAGE_STATUSES[stage]);
-  else query = query.where("status", "in", ACTIVE_STATUSES);
+function viewFrom(value: string | null | undefined): FinancialInboxView {
+  return value === "identified" ? "identified" : "work";
+}
+
+function resolutionKindFrom(value: string | null | undefined): FinancialInboxResolutionKind | null {
+  return RESOLUTION_KINDS.has(value as FinancialInboxResolutionKind) ? value as FinancialInboxResolutionKind : null;
+}
+
+function financialStateFrom(value: string | null | undefined): FinancialInboxFinancialState | null {
+  return FINANCIAL_STATES.has(value as FinancialInboxFinancialState) ? value as FinancialInboxFinancialState : null;
+}
+
+function scopedInboxQuery(params: {
+  workspaceId: string;
+  status: FinancialInboxStatus | null;
+  stage: FinancialInboxStage | null;
+  view: FinancialInboxView;
+  resolutionKind: FinancialInboxResolutionKind | null;
+  financialState: FinancialInboxFinancialState | null;
+}) {
+  let query: FirebaseFirestore.Query = financialDbAdmin.collection(COLLECTION).where("workspaceId", "==", params.workspaceId);
+  if (params.status) query = query.where("status", "==", params.status);
+  else if (params.resolutionKind) {
+    query = query
+      .where("resolution.status", "==", "identified")
+      .where("resolution.kind", "==", params.resolutionKind);
+  } else if (params.financialState) {
+    query = query
+      .where("resolution.status", "==", "identified")
+      .where("resolution.financialState", "==", params.financialState);
+  } else if (params.stage) query = query.where("status", "in", FINANCIAL_INBOX_STAGE_STATUSES[params.stage]);
+  else query = query.where("status", "in", params.view === "identified"
+    ? FINANCIAL_INBOX_IDENTIFIED_STATUSES
+    : FINANCIAL_INBOX_WORK_STATUSES);
   return query;
 }
 
@@ -216,8 +264,11 @@ async function listIndexedFinancialInboxSearch(params: {
 
 export async function listFinancialInboxMessages(params: {
   workspaceId: string;
+  view?: string | null;
   status?: string | null;
   stage?: string | null;
+  resolutionKind?: string | null;
+  financialState?: string | null;
   search?: string | null;
   limit?: number;
   cursor?: string | null;
@@ -227,9 +278,19 @@ export async function listFinancialInboxMessages(params: {
     ? params.status as FinancialInboxStatus
     : null;
   const stage = status ? null : stageFrom(params.stage);
+  const view = viewFrom(params.view);
+  const resolutionKind = status || stage ? null : resolutionKindFrom(params.resolutionKind);
+  const financialState = status || stage || resolutionKind ? null : financialStateFrom(params.financialState);
   const search = String(params.search ?? "").trim().slice(0, 120);
   const summaryPromise = summarizeFinancialInbox(params.workspaceId);
-  let query = scopedInboxQuery(params.workspaceId, status, stage);
+  let query = scopedInboxQuery({
+    workspaceId: params.workspaceId,
+    status,
+    stage,
+    view,
+    resolutionKind,
+    financialState,
+  });
   if (search) {
     const indexReady = await financialInboxSearchIndexReady().catch(() => false);
     if (indexReady) {
@@ -245,7 +306,7 @@ export async function listFinancialInboxMessages(params: {
     }
     query = query.orderBy("receivedAt", "desc").orderBy(FieldPath.documentId(), "desc");
     const snapshot = await query.limit(SEARCH_SCAN_LIMIT + 1).get();
-    const searchKey = `${stage ?? status ?? "all"}:${search.toLocaleLowerCase("pt-BR")}`;
+    const searchKey = `${view}:${stage ?? status ?? resolutionKind ?? financialState ?? "all"}:${search.toLocaleLowerCase("pt-BR")}`;
     const offset = decodeSearchCursor(params.cursor ?? null, searchKey);
     const matched = snapshot.docs.slice(0, SEARCH_SCAN_LIMIT)
       .map((document) => ({
@@ -312,12 +373,14 @@ export async function restoreArchivedFinancialInboxMessage(params: {
     if (!snapshot.exists || snapshot.get("workspaceId") !== params.workspaceId) {
       throw new FinancialInboxReviewError("NOT_FOUND");
     }
-    if (snapshot.get("status") !== "archived" || !["ignored", "reconciled"].includes(snapshot.get("archivedFromStatus"))) {
+    if (snapshot.get("status") !== "archived" || !["ignored", "identified", "reconciled"].includes(snapshot.get("archivedFromStatus"))) {
       throw new FinancialInboxReviewError("STATE_CONFLICT");
     }
-    const restoredStatus = snapshot.get("archivedFromStatus") as "ignored" | "reconciled";
+    const restoredStatus = snapshot.get("archivedFromStatus") as "ignored" | "identified" | "reconciled";
     transaction.set(reference, {
       status: restoredStatus,
+      "resolution.status": restoredStatus === "ignored" ? "discarded" : "identified",
+      resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
       archivedAt: null,
       archivedBy: null,
       archivedFromStatus: null,
@@ -369,6 +432,15 @@ export async function reviewFinancialInboxMessages(params: {
     snapshots.forEach((snapshot, index) => {
       transaction.set(references[index], {
         status: params.status,
+        resolution: params.status === "ignored"
+          ? discardedFinancialInboxResolution({
+              mode: "manual",
+              at: now,
+              by: params.actorId,
+              reasons: ["mensagem descartada após revisão"],
+            })
+          : pendingFinancialInboxResolution(),
+        resolutionContractVersion: FINANCIAL_INBOX_RESOLUTION_VERSION,
         reviewedAt: now,
         reviewedBy: params.actorId,
         updatedAt: now,

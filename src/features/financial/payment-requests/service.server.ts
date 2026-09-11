@@ -131,6 +131,9 @@ export async function createInboxBarcodePaymentRequest(input: {
   if (message.existingBankPayment?.transactionId) {
     throw new Error("A parcela já possui um pagamento no Banco Inter. Confira o agendamento existente.");
   }
+  if (message.status !== "linked") {
+    throw new Error("Somente a cobrança principal vinculada pode preparar um pagamento.");
+  }
   const existing = await findPaymentRequestBySource("financial_inbox", input.inboxMessageId);
   if (existing) return existing;
   if (!message.linkedExpenseId) throw new Error("Vincule a cobrança a uma despesa antes de preparar o pagamento.");
@@ -180,6 +183,8 @@ export async function createInboxBarcodePaymentRequest(input: {
     status: "awaiting_authorization",
     bankState: "awaiting_authorization",
     paymentRequestId: ref.id,
+    "resolution.status": "identified",
+    "resolution.financialState": "payment_prepared",
     updatedAt: now,
   }, { merge: true });
   batch.create(messageRef.collection("events").doc(), {
@@ -325,6 +330,10 @@ export async function submitPaymentRequest(id: string, actor: PaymentActor | "sy
         transaction.set(messageRef, {
           status: next === "scheduled" ? "scheduled" : next === "awaiting_statement" ? "awaiting_statement" : "linked",
           bankState: next,
+          "resolution.status": "identified",
+          "resolution.financialState": next === "scheduled" || next === "awaiting_statement"
+            ? "scheduled"
+            : "payment_prepared",
           updatedAt: submittedAt,
         }, { merge: true });
         transaction.set(messageRef.collection("events").doc(messageEventId), {
@@ -795,6 +804,10 @@ async function persistBarcodeBankObservation(params: {
             ? "awaiting_statement"
             : "linked",
         bankState: params.nextStatus,
+        "resolution.status": "identified",
+        "resolution.financialState": params.nextStatus === "scheduled" || params.nextStatus === "awaiting_statement"
+          ? "scheduled"
+          : "payment_prepared",
         updatedAt: params.observedAt,
       }, { merge: true });
     }
@@ -920,6 +933,8 @@ async function blockBankReconciliationDivergence(params: {
       transaction.set(financialDbAdmin.collection("financialInboxMessages").doc(current.sourceId), {
         status: "divergent",
         bankState: "divergent",
+        "resolution.status": "identified",
+        "resolution.financialState": "scheduled",
         updatedAt: observedAt,
       }, { merge: true });
     }

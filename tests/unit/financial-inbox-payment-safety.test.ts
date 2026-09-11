@@ -29,6 +29,18 @@ test("pagamento por boleto não pode ser recriado quando já há extrato ou regi
   const requestCreation = paymentService.indexOf("const request: BankPaymentRequest");
   assert.ok(settlementGuard >= 0 && settlementGuard < requestCreation);
   assert.ok(schedulingGuard >= 0 && schedulingGuard < requestCreation);
+  assert.match(paymentService, /message\.status !== "linked"/);
+  assert.match(paymentService, /Somente a cobrança principal vinculada pode preparar um pagamento/);
+});
+
+test("lembrete identificado não recebe vínculo financeiro principal", () => {
+  assert.match(workflow, /automaticReminderResolutionPatch/);
+  assert.match(workflow, /analysisCanResolve/);
+  assert.match(workflow, /classification\.marketingLikely \|\| !analysisCanResolve/);
+  assert.match(workflow, /: resolutionForDisplay\(message\)/);
+  assert.match(workflow, /\? automaticReminder\.status/);
+  assert.doesNotMatch(workflow, /automaticReminder[\s\S]{0,240}linkedExpenseId/);
+  assert.match(workflow, /resolutionOnly \? \{\} : \{\s*linkedExpenseId: expenseId/);
 });
 
 test("análise usa documentos arquivados e persiste identidade antes do cruzamento", () => {

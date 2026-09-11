@@ -65,6 +65,7 @@ test("organiza todos os estados nas etapas operacionais sem misturar banco e con
     document_pending: "classify",
     suggestion_available: "link",
     under_review: "classify",
+    identified: "done",
     linked: "pay",
     awaiting_authorization: "bank",
     scheduled: "bank",
