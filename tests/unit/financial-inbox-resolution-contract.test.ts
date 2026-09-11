@@ -28,15 +28,18 @@ function suggestion(overrides: Partial<FinancialInboxExpenseSuggestion> = {}): F
     },
     existingSettlement: null,
     matchStrength: "document",
+    automaticLinkEligible: true,
+    automaticLinkPolicyVersion: 1,
+    automaticLinkReasons: ["CNPJ, NF/documento, parcela, valor e vencimento idênticos"],
     alternatives: [],
     ...overrides,
   };
 }
 
-test("identifica automaticamente apenas correspondência documental ou de identidade", () => {
+test("identifica automaticamente apenas correspondência aprovada pela política documental", () => {
   assert.equal(isStrongAutomaticExpenseMatch(suggestion()), true);
-  assert.equal(isStrongAutomaticExpenseMatch(suggestion({ matchStrength: "identity" })), true);
-  assert.equal(isStrongAutomaticExpenseMatch(suggestion({ matchStrength: "attributes" })), false);
+  assert.equal(isStrongAutomaticExpenseMatch(suggestion({ automaticLinkEligible: false })), false);
+  assert.equal(isStrongAutomaticExpenseMatch(suggestion({ automaticLinkPolicyVersion: null })), false);
   assert.equal(isStrongAutomaticExpenseMatch(suggestion({ status: "ambiguous", expenseId: null })), false);
 });
 

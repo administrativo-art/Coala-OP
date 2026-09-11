@@ -191,6 +191,23 @@ export function extractFinancialDocumentReferences(value: string) {
   return [...references].slice(0, 20);
 }
 
+export function extractFinancialInstallmentReference(value: string) {
+  const match = value.match(
+    /(?:parcela|parcelamento)\s*(?:n[ºo°.]|n[uú]mero)?\s*[:#\-]?\s*(\d{1,3})\s*(?:\/|de)\s*(\d{1,3})(?!\d)/i,
+  );
+  if (!match) return { installmentNumber: null, installmentTotal: null };
+  const installmentNumber = Number(match[1]);
+  const installmentTotal = Number(match[2]);
+  if (!Number.isInteger(installmentNumber)
+    || !Number.isInteger(installmentTotal)
+    || installmentNumber < 1
+    || installmentTotal < installmentNumber
+    || installmentTotal > 999) {
+    return { installmentNumber: null, installmentTotal: null };
+  }
+  return { installmentNumber, installmentTotal };
+}
+
 function detectServiceType(value: string): FinancialInboxServiceType | null {
   if (/\b(?:m[oó]vel|celular|linha\s+m[oó]vel)\b/i.test(value)) return "mobile";
   if (/\b(?:telefone\s+fixo|telefonia\s+fixa)\b/i.test(value)) return "landline";
@@ -295,6 +312,7 @@ export function classifyFinancialEmail(input: {
   const documentDueDate = agreedDocumentHint(hints, (hint) => hint.dueDate);
   const documentAmountCents = agreedDocumentHint(hints, (hint) => hint.amountCents);
   const billingIdentity = mergeBillingIdentities(extractBillingIdentity(combined), hints);
+  const installment = extractFinancialInstallmentReference(combined);
   const marketingLikely = isLikelyMarketingEmail({
     subject: input.subject,
     combined,
@@ -320,6 +338,8 @@ export function classifyFinancialEmail(input: {
         ...extractFinancialDocumentReferences(combined),
         ...(input.documentReferences ?? []).flatMap(extractFinancialDocumentReferences),
       ])].slice(0, 20),
+      installmentNumber: installment.installmentNumber,
+      installmentTotal: installment.installmentTotal,
       links: extractExternalLinks(input.text ?? "", input.html ?? ""),
       billingIdentity,
     },

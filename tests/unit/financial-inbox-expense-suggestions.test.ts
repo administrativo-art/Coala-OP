@@ -112,8 +112,62 @@ test("linha digitável idêntica identifica o mesmo boleto apesar da variação 
 
   assert.equal(suggestion.status, "suggested");
   assert.equal(suggestion.matchStrength, "document");
+  assert.equal(suggestion.automaticLinkEligible, true);
+  assert.deepEqual(suggestion.automaticLinkReasons, ["linha digitável/código de barras idêntico"]);
   assert.match(suggestion.reasons.join(" "), /mesmo boleto/);
   assert.match(suggestion.matchedBarcodeMasked || "", /^23793.*13884$/);
+});
+
+test("linha digitável idêntica basta mesmo quando o e-mail não informa valor, vencimento ou fornecedor", () => {
+  const barcode = "23793493079001004992396000130003915620000113884";
+  const suggestion = chooseExistingExpenseSuggestion({
+    ...classification,
+    supplierName: null,
+    dueDate: null,
+    amountCents: null,
+    barcode,
+  }, [marviExpense({
+    installments: [{
+      number: 1,
+      value: 1138.84,
+      dueDate: "2026-09-07",
+      status: "pending",
+      bankLine: barcode,
+    }],
+  })]);
+
+  assert.equal(suggestion.status, "suggested");
+  assert.equal(suggestion.expenseId, "expense-nfe-872460-marvi-20260817");
+  assert.equal(suggestion.automaticLinkEligible, true);
+});
+
+test("boleto bancário já registrado aponta somente para sua parcela", () => {
+  const barcode = "23793493079001004992396000130003915620000113884";
+  const barcodeOnly = {
+    ...classification,
+    supplierName: null,
+    dueDate: null,
+    amountCents: null,
+    barcode,
+  };
+  const payment = {
+    transactionId: "inter-request-1",
+    bankStatus: null,
+    schedulingStatus: "awaiting_approval",
+    scheduledFor: "2026-09-07",
+  };
+  const exact = chooseExistingExpenseSuggestion(barcodeOnly, [marviExpense({
+    bankPaymentEvidence: [{ installmentNumber: 1, code: barcode, payment }],
+  })]);
+  assert.equal(exact.status, "suggested");
+  assert.equal(exact.installmentNumber, 1);
+  assert.equal(exact.automaticLinkEligible, true);
+
+  const legacyWithoutInstallment = chooseExistingExpenseSuggestion(barcodeOnly, [marviExpense({
+    bankPaymentEvidence: [{ installmentNumber: null, code: barcode, payment }],
+  })]);
+  assert.equal(legacyWithoutInstallment.status, "not_found");
+  assert.equal(legacyWithoutInstallment.automaticLinkEligible, false);
 });
 
 test("número da NF reforça valor e vencimento quando o boleto não foi extraído", () => {
@@ -125,8 +179,60 @@ test("número da NF reforça valor e vencimento quando o boleto não foi extraí
 
   assert.equal(suggestion.status, "suggested");
   assert.equal(suggestion.matchStrength, "document");
+  assert.equal(suggestion.automaticLinkEligible, false);
   assert.deepEqual(suggestion.matchedDocumentReferences, ["872460"]);
   assert.match(suggestion.reasons.join(" "), /mesmo documento\/NF 872460/);
+});
+
+test("libera automação composta somente com CNPJ, documento, parcela, valor e vencimento", () => {
+  const strong = chooseExistingExpenseSuggestion({
+    ...classification,
+    documentReferences: ["872460"],
+    installmentNumber: 1,
+    installmentTotal: 3,
+    billingIdentity: {
+      supplierTaxId: "53408654000115",
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "other",
+      serviceNumbers: [],
+    },
+  }, [marviExpense({
+    billingIdentity: {
+      supplierTaxId: "53408654000115",
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "other",
+      serviceNumbers: [],
+    },
+  })]);
+  assert.equal(strong.status, "suggested");
+  assert.equal(strong.automaticLinkEligible, true);
+  assert.deepEqual(strong.automaticLinkReasons, ["CNPJ, NF/documento, parcela, valor e vencimento idênticos"]);
+
+  const wrongInstallment = chooseExistingExpenseSuggestion({
+    ...classification,
+    documentReferences: ["872460"],
+    installmentNumber: 2,
+    installmentTotal: 3,
+    billingIdentity: {
+      supplierTaxId: "53408654000115",
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "other",
+      serviceNumbers: [],
+    },
+  }, [marviExpense({
+    billingIdentity: {
+      supplierTaxId: "53408654000115",
+      customerAccount: null,
+      contractNumber: null,
+      serviceType: "other",
+      serviceNumbers: [],
+    },
+  })]);
+  assert.equal(wrongInstallment.status, "suggested");
+  assert.equal(wrongInstallment.automaticLinkEligible, false);
 });
 
 test("telefonia exige a mesma linha para sugerir automaticamente", () => {

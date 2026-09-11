@@ -30,6 +30,15 @@ export type FinancialInboxRetentionClass =
 
 export type FinancialInboxView = "work" | "identified";
 
+export type FinancialInboxAutomationMode = "manual" | "document_identity";
+
+export type FinancialInboxAutomationSettings = {
+  mode: FinancialInboxAutomationMode;
+  policyVersion: number;
+  updatedAt: string | null;
+  updatedBy: string | null;
+};
+
 export type FinancialInboxResolutionStatus =
   | "pending"
   | "identified"
@@ -143,6 +152,8 @@ export type FinancialInboxClassification = {
   barcode: string | null;
   barcodeMasked: string | null;
   documentReferences?: string[];
+  installmentNumber?: number | null;
+  installmentTotal?: number | null;
   links: string[];
   billingIdentity?: FinancialInboxBillingIdentity | null;
 };
@@ -192,6 +203,9 @@ export type FinancialInboxExpenseSuggestion = {
   matchedBarcodeMasked?: string | null;
   matchedDocumentReferences?: string[];
   matchStrength?: "document" | "identity" | "attributes" | null;
+  automaticLinkEligible?: boolean;
+  automaticLinkPolicyVersion?: number | null;
+  automaticLinkReasons?: string[];
   alternatives?: FinancialInboxExpenseAlternative[];
 };
 

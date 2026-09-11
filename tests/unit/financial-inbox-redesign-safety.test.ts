@@ -7,6 +7,7 @@ const repository = readFileSync("src/features/financial/inbox/repository.server.
 const bulkRoute = readFileSync("src/app/api/financial/inbox/bulk-review/route.ts", "utf8");
 const listRoute = readFileSync("src/app/api/financial/inbox/route.ts", "utf8");
 const linkRoute = readFileSync("src/app/api/financial/inbox/[id]/link/route.ts", "utf8");
+const settingsRoute = readFileSync("src/app/api/financial/inbox/settings/route.ts", "utf8");
 
 test("preparação de pagamento declara que autorização, agendamento e execução são etapas posteriores", () => {
   assert.match(page, /Preparar não autoriza, agenda nem executa pagamento\./);
@@ -40,10 +41,19 @@ test("descarte em lote é limitado, validado e auditado dentro de uma transaçã
   assert.match(repository, /batchSize: ids\.length/);
 });
 
-test("links externos exigem HTTPS e confirmação do domínio", () => {
-  assert.match(page, /parsed\.protocol !== "https:"/);
-  assert.match(page, /Abrir site externo\?/);
-  assert.match(page, /Confirme o domínio antes de continuar\./);
+test("links externos ficam limitados a provedores e rotas verificados", () => {
+  assert.match(page, /trustedFinancialDocumentProvider/);
+  assert.match(page, /Destino não verificado — abertura bloqueada/);
+  assert.match(page, /Abrir documento externo verificado\?/);
+  assert.match(page, /Essa validação não substitui a conferência do conteúdo/);
+});
+
+test("automação é opt-in, auditada e reutiliza a permissão de vinculação", () => {
+  assert.match(page, /Vinculação automática por identidade documental/);
+  assert.match(page, /mode: enabled \? "document_identity" : "manual"/);
+  assert.match(settingsRoute, /inbox\?\.link/);
+  assert.match(settingsRoute, /updateFinancialInboxAutomationSettings/);
+  assert.doesNotMatch(settingsRoute, /error instanceof Error \? error\.message/);
 });
 
 test("listagem usa o contrato seguro de erros sem expor a falha interna do Firestore", () => {

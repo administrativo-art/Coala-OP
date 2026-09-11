@@ -10,6 +10,11 @@ import { classifyFinancialEmail, mergeBillingIdentities } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
 import { chooseProvisionSuggestion, type ProvisionCandidate } from "./provision-suggestions";
 import { chooseCreationSuggestion } from "./creation-suggestions";
+import { shouldAutomaticallyIdentifyInboxCharge } from "./automation-policy";
+import {
+  defaultFinancialInboxAutomationSettings,
+  getFinancialInboxAutomationSettings,
+} from "./automation-settings.server";
 import {
   automaticReminderResolutionPatch,
   discardedFinancialInboxResolution,
@@ -29,11 +34,15 @@ import type { FinancialInboxMessage } from "./types";
 const MAX_PROVISION_CANDIDATES = 100;
 const MAX_EXISTING_EXPENSE_CANDIDATES = 500;
 const MAX_MATCHED_PAYMENT_CANDIDATES = 100;
+const MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES = 10;
 // Custo de triagem: no máximo 10 leituras por cobrança relevante. Com 300
 // cobranças/mês, o teto esperado é 3.000 leituras/mês, além de reanálises manuais.
 // O cruzamento lê no máximo 501 despesas abertas, 101 pagamentos do mesmo valor,
-// 100 despesas pagas referenciadas e 100 previsões. Com 50 cobranças/mês, o teto
-// é 40.100 leituras/mês, incluindo a análise automática e reanálises manuais.
+// 11 solicitações pelo código de barras, 110 despesas referenciadas e 100 previsões.
+// Com 50 cobranças/mês, o teto é 41.150 leituras/mês, incluindo análise automática
+// e reanálises manuais.
+// Um candidato documental forte acrescenta 1 leitura pontual da configuração
+// opt-in do workspace antes de qualquer identificação automática.
 
 function money(value: unknown) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -89,22 +98,39 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
 
   let expenseCandidates: InboxExpenseCandidate[] = [];
   let expenseScanTruncated = false;
-  if (classification.financeLikely && classification.amountCents && classification.dueDate && classification.supplierName) {
-    const [openSnapshot, paymentSnapshot] = await Promise.all([
+  if (classification.financeLikely && (
+    Boolean(classification.barcode)
+    || Boolean(classification.amountCents && classification.dueDate && classification.supplierName)
+  )) {
+    const [openSnapshot, paymentSnapshot, barcodePaymentSnapshot] = await Promise.all([
       financialDbAdmin.collection("expenses")
       .where("status", "in", ["pending", "partially_paid"])
       .limit(MAX_EXISTING_EXPENSE_CANDIDATES + 1)
       .get(),
-      financialDbAdmin.collection("payments")
-        .where("principalAmountCents", "==", classification.amountCents)
-        .limit(MAX_MATCHED_PAYMENT_CANDIDATES + 1)
-        .get(),
+      classification.amountCents
+        ? financialDbAdmin.collection("payments")
+          .where("principalAmountCents", "==", classification.amountCents)
+          .limit(MAX_MATCHED_PAYMENT_CANDIDATES + 1)
+          .get()
+        : Promise.resolve(null),
+      classification.barcode
+        ? financialDbAdmin.collection("bankPaymentRequests")
+          .where("barcodeSnapshot.code", "==", classification.barcode)
+          .limit(MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES + 1)
+          .get()
+        : Promise.resolve(null),
     ]);
     expenseScanTruncated = openSnapshot.size > MAX_EXISTING_EXPENSE_CANDIDATES
-      || paymentSnapshot.size > MAX_MATCHED_PAYMENT_CANDIDATES;
+      || Boolean(paymentSnapshot && paymentSnapshot.size > MAX_MATCHED_PAYMENT_CANDIDATES)
+      || Boolean(barcodePaymentSnapshot && barcodePaymentSnapshot.size > MAX_MATCHED_BARCODE_PAYMENT_CANDIDATES);
     if (!expenseScanTruncated) {
       const evidenceByExpenseId = new Map<string, Array<{ transactionId: string; paidAt: string | null }>>();
-      for (const document of paymentSnapshot.docs) {
+      const barcodeEvidenceByExpenseId = new Map<string, Array<{
+        code: string;
+        installmentNumber: number | null;
+        payment: { transactionId: string; bankStatus: string | null; schedulingStatus: string | null; scheduledFor: string | null };
+      }>>();
+      for (const document of paymentSnapshot?.docs ?? []) {
         const payment = document.data();
         const expenseId = String(payment.expenseId ?? "").trim();
         const transactionId = String(payment.bankTransactionId ?? "").trim();
@@ -115,8 +141,36 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
           { transactionId, paidAt },
         ]);
       }
+      for (const document of barcodePaymentSnapshot?.docs ?? []) {
+        const payment = document.data();
+        const expenseId = String(payment.expenseId ?? "").trim();
+        const code = String(payment.barcodeSnapshot?.code ?? "").trim();
+        const status = String(payment.status ?? "").trim();
+        if (!expenseId || !code || /^(?:cancelled|rejected|failed|approval_expired)$/.test(status)) continue;
+        barcodeEvidenceByExpenseId.set(expenseId, [
+          ...(barcodeEvidenceByExpenseId.get(expenseId) ?? []),
+          {
+            code,
+            installmentNumber: Number.isInteger(Number(payment.installmentNumber))
+              && Number(payment.installmentNumber) > 0
+              ? Number(payment.installmentNumber)
+              : null,
+            payment: {
+              transactionId: String(payment.interRequestId ?? document.id),
+              bankStatus: typeof payment.bankStatus === "string" ? payment.bankStatus : null,
+              schedulingStatus: status || null,
+              scheduledFor: typeof payment.barcodeSnapshot?.scheduledFor === "string"
+                ? payment.barcodeSnapshot.scheduledFor
+                : null,
+            },
+          },
+        ]);
+      }
       const openById = new Map(openSnapshot.docs.map((document) => [document.id, document]));
-      const missingPaidRefs = [...evidenceByExpenseId.keys()]
+      const missingPaidRefs = [...new Set([
+        ...evidenceByExpenseId.keys(),
+        ...barcodeEvidenceByExpenseId.keys(),
+      ])]
         .filter((expenseId) => !openById.has(expenseId))
         .map((expenseId) => financialDbAdmin.collection("expenses").doc(expenseId));
       const paidSnapshots = missingPaidRefs.length ? await financialDbAdmin.getAll(...missingPaidRefs) : [];
@@ -125,6 +179,7 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
           id: document.id,
           ...document.data(),
           settlementEvidence: evidenceByExpenseId.get(document.id) ?? null,
+          bankPaymentEvidence: barcodeEvidenceByExpenseId.get(document.id) ?? null,
         }));
     }
   }
@@ -152,9 +207,18 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
     provisionSuggestion: suggestion,
   });
   const analysisCanResolve = ["pending_review", "document_pending", "suggestion_available"].includes(message.status);
+  const automationSettings = analysisCanResolve && existingExpenseSuggestion.automaticLinkEligible === true
+    ? await getFinancialInboxAutomationSettings(message.workspaceId)
+    : defaultFinancialInboxAutomationSettings();
+  const automaticIdentificationAllowed = shouldAutomaticallyIdentifyInboxCharge({
+    settings: automationSettings,
+    suggestion: existingExpenseSuggestion,
+  });
   const automaticReminder = classification.marketingLikely || !analysisCanResolve
     ? null
-    : automaticReminderResolutionPatch({ suggestion: existingExpenseSuggestion, at: checkedAt });
+    : automaticIdentificationAllowed
+      ? automaticReminderResolutionPatch({ suggestion: existingExpenseSuggestion, at: checkedAt })
+      : null;
   const nextResolution = automaticReminder?.resolution
     ?? (classification.marketingLikely && analysisCanResolve
       ? discardedFinancialInboxResolution({
@@ -218,6 +282,8 @@ export async function analyzeFinancialInboxMessage(id: string, expectedWorkspace
       installmentNumber: automaticReminder.resolution.installmentNumber,
       financialState: automaticReminder.resolution.financialState,
       reasons: automaticReminder.resolution.reasons,
+      automationMode: automationSettings.mode,
+      automationPolicyVersion: automationSettings.policyVersion,
       resolutionOnly: true,
     }, { merge: true });
   }

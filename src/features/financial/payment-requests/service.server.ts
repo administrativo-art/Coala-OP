@@ -159,6 +159,9 @@ export async function createInboxBarcodePaymentRequest(input: {
     sourceType: "financial_inbox",
     sourceId: input.inboxMessageId,
     expenseId: String(message.linkedExpenseId),
+    installmentNumber: Number(message.linkedExpenseInstallmentNumber) > 0
+      ? Number(message.linkedExpenseInstallmentNumber)
+      : null,
     paymentRail: "barcode",
     barcodeSnapshot: {
       type: "barcode",

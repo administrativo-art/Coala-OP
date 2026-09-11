@@ -49,7 +49,8 @@ export function isStrongAutomaticExpenseMatch(
 ) {
   return suggestion?.status === "suggested"
     && Boolean(suggestion.expenseId)
-    && ["document", "identity"].includes(suggestion.matchStrength ?? "");
+    && suggestion.automaticLinkEligible === true
+    && suggestion.automaticLinkPolicyVersion === 1;
 }
 
 function bankStateForSuggestion(
@@ -120,7 +121,7 @@ export function automaticReminderResolutionPatch(params: {
     financialState: financialStateForExpenseSuggestion(params.suggestion),
     mode: "automatic",
     confidence: "high",
-    reasons: [...params.suggestion.reasons],
+    reasons: [...(params.suggestion.automaticLinkReasons ?? params.suggestion.reasons)],
     at: params.at,
     by: "system:financial-inbox",
   });

@@ -7,6 +7,7 @@ import {
   isPrivateNetworkAddress,
   safeFinancialDocumentSourceUrl,
 } from "../../src/features/financial/inbox/linked-document-policy";
+import { trustedFinancialDocumentProvider } from "../../src/features/financial/inbox/trusted-document-providers";
 
 test("aceita documento HTTPS do mesmo domínio-base do remetente", () => {
   assert.equal(isAllowedFinancialDocumentUrl("https://documentos.vivo.com.br/faturas/123.pdf?token=secret", "vivo.com.br", []), true);
@@ -66,4 +67,15 @@ test("permite somente as rotas documentais da Acessórias", () => {
     "example.com",
     [],
   ), false);
+});
+
+test("reconhece os links de cobrança da Bizneo/Superlógica e da Maximus sem confiar no remetente", () => {
+  const bizneoBillingUrl = "https://assina103042.superlogica.net/clients/areadocliente/publico/cobranca/c/-12345-token-sintetico-financeiro@example.com";
+  assert.equal(isAllowedFinancialDocumentUrl(bizneoBillingUrl, "remetente-desconhecido.example", []), true);
+  assert.equal(trustedFinancialDocumentProvider(bizneoBillingUrl)?.key, "superlogica");
+
+  const maximusDocumentUrl = "https://documentos.grupomse.com/guia/FGTS-2026-08";
+  assert.equal(isAllowedFinancialDocumentUrl(maximusDocumentUrl, "remetente-desconhecido.example", []), true);
+  assert.equal(trustedFinancialDocumentProvider(maximusDocumentUrl)?.key, "maximus");
+  assert.equal(trustedFinancialDocumentProvider("https://documentos.grupomse.com/login"), null);
 });

@@ -433,6 +433,10 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
           workspaceId: "coala-shakes",
           status: "pending_review",
         }),
+        setDoc(doc(db, "financialInboxSettings/coala-shakes"), {
+          mode: "manual",
+          policyVersion: 1,
+        }),
         setDoc(doc(db, "bankPaymentRequests/request-1"), {
           status: "awaiting_financial_authorization",
           amount: 1000,
@@ -478,6 +482,11 @@ test("Financeiro separa edição de despesa do registro de pagamento", async () 
     // O botão Registrar pagamento usa uma API autenticada. O cliente não pode
     // marcar a despesa como paga sem criar obrigação, vínculo e histórico.
     await assertFails(getDoc(doc(payer.firestore(), "financialInboxMessages/message-1")));
+    await assertFails(getDoc(doc(payer.firestore(), "financialInboxSettings/coala-shakes")));
+    await assertFails(setDoc(doc(payer.firestore(), "financialInboxSettings/coala-shakes"), {
+      mode: "document_identity",
+      policyVersion: 1,
+    }));
     await assertFails(getDoc(doc(payer.firestore(), "bankPaymentRequests/request-1")));
     await assertFails(getDoc(doc(payer.firestore(), "expectedBankDebits/debit-1")));
     await assertFails(setDoc(doc(payer.firestore(), "expectedBankDebits/forged"), {
