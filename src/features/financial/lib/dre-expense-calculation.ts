@@ -32,8 +32,18 @@ export type DreExpenseContractIssue = {
   differenceCents?: number;
 };
 
+export type DreExpenseLineDetail = {
+  expenseId: string;
+  description: string | null;
+  supplier: string | null;
+  accountPlanId: string;
+  accountPlanName: string;
+  amount: number;
+};
+
 export type DreExpenseCalculation = {
   totalsByPosition: Record<string, number>;
+  detailsByPosition: Record<string, DreExpenseLineDetail[]>;
   issues: DreExpenseContractIssue[];
 };
 
@@ -59,6 +69,7 @@ export function calculateDreExpenses(input: {
   resultCenterNames?: ResultCenterNameMap;
 }): DreExpenseCalculation {
   const totalsInCents: Record<string, number> = {};
+  const detailsByPosition = new Map<string, DreExpenseLineDetail[]>();
   const issues = new Map<string, DreExpenseContractIssue>();
   const resultCenterNames = input.resultCenterNames ?? {};
   const knownResultCenters = new Set([
@@ -122,13 +133,34 @@ export function calculateDreExpenses(input: {
       const account = input.accounts[allocation.accountPlanId];
       if (!account?.isDreAccount) continue;
       const position = account.drePosition ?? "null";
-      totalsInCents[position] = (totalsInCents[position] || 0) + cents(allocation.amount);
+      const amountInCents = cents(allocation.amount);
+      totalsInCents[position] = (totalsInCents[position] || 0) + amountInCents;
+      if (amountInCents === 0) continue;
+      const details = detailsByPosition.get(position) ?? [];
+      details.push({
+        expenseId: expense.id,
+        description: expense.description ?? null,
+        supplier: expense.supplier ?? null,
+        accountPlanId: allocation.accountPlanId,
+        accountPlanName: account.name || allocation.accountPlanName || allocation.accountPlanId,
+        amount: amountInCents / 100,
+      });
+      detailsByPosition.set(position, details);
     }
   }
 
   return {
     totalsByPosition: Object.fromEntries(
       Object.entries(totalsInCents).map(([position, total]) => [position, total / 100]),
+    ),
+    detailsByPosition: Object.fromEntries(
+      [...detailsByPosition.entries()].map(([position, details]) => [position, details.sort((left, right) => (
+        (left.description || left.supplier || left.expenseId).localeCompare(
+          right.description || right.supplier || right.expenseId,
+          "pt-BR",
+        )
+        || left.accountPlanName.localeCompare(right.accountPlanName, "pt-BR")
+      ))]),
     ),
     issues: [...issues.values()],
   };

@@ -60,6 +60,43 @@ test("DRE soma salário líquido e adiantamento na mesma competência, independe
   assert.deepEqual(result.issues, []);
 });
 
+test("DRE preserva as despesas que compõem cada linha e o valor da unidade", () => {
+  const expense = normalizeFinancialExpenseForDre("shared-rent", {
+    status: "paid",
+    competenceMonth: "2026-08",
+    description: "Aluguel do quiosque",
+    supplier: "Imobiliária Exemplo",
+    accountPlan: "occupancy",
+    totalValue: 1_000,
+    isApportioned: true,
+    apportionments: [
+      { resultCenter: "center-jp", percentage: 60 },
+      { resultCenter: "center-other", percentage: 40 },
+    ],
+  });
+
+  const result = calculateDreExpenses({
+    expenses: [expense],
+    accounts,
+    monthKey: "2026-08",
+    resultCenter: "Quiosque João Paulo",
+    resultCenterNames: {
+      "center-jp": "Quiosque João Paulo",
+      "center-other": "Outro quiosque",
+    },
+  });
+
+  assert.equal(result.totalsByPosition.ocupacao, 600);
+  assert.deepEqual(result.detailsByPosition.ocupacao, [{
+    expenseId: "shared-rent",
+    description: "Aluguel do quiosque",
+    supplier: "Imobiliária Exemplo",
+    accountPlanId: "occupancy",
+    accountPlanName: "Ocupação",
+    amount: 600,
+  }]);
+});
+
 test("DRE exclui título sem competência mesmo que tenha vencimento e pagamento", () => {
   const expense = normalizeFinancialExpenseForDre("without-competence", {
     status: "paid",
@@ -76,7 +113,11 @@ test("DRE exclui título sem competência mesmo que tenha vencimento e pagamento
     accounts,
     monthKey: "2026-08",
     resultCenterNames: { "center-jp": "Quiosque João Paulo" },
-  }).totalsByPosition, {});
+  }), {
+    totalsByPosition: {},
+    detailsByPosition: {},
+    issues: [],
+  });
 });
 
 test("expõe apropriação que não fecha o valor total em vez de omitir a diferença silenciosamente", () => {

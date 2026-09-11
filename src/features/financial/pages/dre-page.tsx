@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, LayoutDashboard, RefreshCw, Table2, UsersRound } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, ExternalLink, LayoutDashboard, RefreshCw, Table2, UsersRound } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
-import { FINANCIAL_DRE_START_MONTH_KEY } from "@/features/financial/lib/constants";
+import { FINANCIAL_DRE_START_MONTH_KEY, FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
 import { financialCollection } from "@/features/financial/lib/repositories";
 import { formatCurrency } from "@/features/financial/lib/utils";
 import { expenseAccountAllocationsForResultCenter } from "@/features/financial/lib/expense-account-allocations";
@@ -15,7 +16,10 @@ import {
   financialExpenseParticipatesInDre,
   type FinancialExpenseDreDocument,
 } from "@/features/financial/lib/expense-accounting-contract";
-import { calculateDreExpenses } from "@/features/financial/lib/dre-expense-calculation";
+import {
+  calculateDreExpenses,
+  type DreExpenseContractIssue,
+} from "@/features/financial/lib/dre-expense-calculation";
 import { buildDrePersonAnalysis, type DrePersonAccountMeta } from "@/features/financial/lib/dre-person-analysis";
 import { DrePeopleView } from "@/features/financial/components/dre/dre-people-view";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
@@ -53,6 +57,30 @@ function dreMonthKeysEndingAt(monthKey: string) {
     .filter((key) => key >= FINANCIAL_DRE_START_MONTH_KEY);
 }
 
+function expenseIssueLabel(issue: DreExpenseContractIssue) {
+  switch (issue.code) {
+    case "missing_account":
+      return "Plano de contas não informado";
+    case "unknown_account":
+      return "Plano de contas vinculado não foi encontrado";
+    case "account_allocation_mismatch": {
+      const difference = issue.differenceCents ?? 0;
+      const amount = formatCurrency(Math.abs(difference) / 100);
+      return difference >= 0
+        ? `Rateio por plano de contas incompleto: faltam ${amount}`
+        : `Rateio por plano de contas excede o total em ${amount}`;
+    }
+    case "invalid_person_allocations":
+      return "Rateio por colaborador inválido";
+    case "missing_result_center":
+      return "Centro de resultado não informado";
+    case "unknown_result_center":
+      return "Centro de resultado vinculado não foi encontrado";
+    case "apportionment_mismatch":
+      return "Rateio por centro de resultado não soma 100%";
+  }
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export function DrePage() {
@@ -66,8 +94,12 @@ export function DrePage() {
   });
   const [unitFilter, setUnitFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"dashboard" | "classic" | "people">("dashboard");
+  const [expandedDreRows, setExpandedDreRows] = useState<Record<string, boolean>>({});
   const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
   const canExportPersonnelCosts = canViewPersonnelCosts && permissions.financial?.personnelCosts?.export === true;
+  const canViewExpenseDetails = permissions.financial?.expenses?.view === true;
+  const canEditExpenses = permissions.financial?.expenses?.create === true
+    && permissions.financial?.expenses?.edit === true;
 
   useEffect(() => {
     if (!canViewPersonnelCosts && viewMode === "people") setViewMode("dashboard");
@@ -196,7 +228,7 @@ export function DrePage() {
 
   function getDreMetrics(monthKey: string) {
     const expenseCalculation = monthKey < FINANCIAL_DRE_START_MONTH_KEY
-      ? { totalsByPosition: {}, issues: [] }
+      ? { totalsByPosition: {}, detailsByPosition: {}, issues: [] }
       : calculateDreExpenses({
           expenses,
           accounts: Object.fromEntries((accounts || []).map((account: any) => [account.id, {
@@ -237,7 +269,32 @@ export function DrePage() {
     const margContPct = recLiq > 0 ? margContr / recLiq : 0;
     const pe = margContPct > 0 ? totalFixos / margContPct : 0;
 
-    return { revBruta, impostos, recLiq, cmv, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, totalFixos, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe, margContPct, expenseIssues: expenseCalculation.issues };
+    return {
+      revBruta,
+      impostos,
+      recLiq,
+      cmv,
+      custVar,
+      margBruta,
+      margContr,
+      pessoal,
+      despOp,
+      ocupacao,
+      semCategoria,
+      totalFixos,
+      resOp,
+      recFin,
+      despFin,
+      recNaoOp,
+      despNaoOp,
+      lair,
+      irCsll,
+      lucroLiq,
+      pe,
+      margContPct,
+      expenseDetailsByPosition: expenseCalculation.detailsByPosition,
+      expenseIssues: expenseCalculation.issues,
+    };
   }
 
   // ── per-month data ───────────────────────────────────────────────────────────
@@ -272,6 +329,34 @@ export function DrePage() {
     [accounts, selectedMonth, closureRevenueByUnitMonth, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId]
   );
   const expenseContractIssues = metrics.expenseIssues;
+  const expenseContractIssueGroups = useMemo(() => {
+    const expensesById = new Map(expenses.map((expense) => [expense.id, expense]));
+    const personnelAccountIds = new Set(
+      (accounts || [])
+        .filter((account: any) => account.dre_position === "pessoal")
+        .map((account: any) => String(account.id)),
+    );
+    const groups = new Map<string, {
+      expense: FinancialExpenseDreDocument | null;
+      issues: DreExpenseContractIssue[];
+    }>();
+    expenseContractIssues.forEach((issue) => {
+      const current = groups.get(issue.expenseId) ?? {
+        expense: expensesById.get(issue.expenseId) ?? null,
+        issues: [],
+      };
+      current.issues.push(issue);
+      groups.set(issue.expenseId, current);
+    });
+    return [...groups.entries()].map(([expenseId, group]) => ({
+      expenseId,
+      ...group,
+      isPersonnelExpense: group.expense
+        ? expenseAccountAllocationsForResultCenter(group.expense)
+            .some((allocation) => personnelAccountIds.has(allocation.accountPlanId))
+        : false,
+    }));
+  }, [accounts, expenseContractIssues, expenses]);
 
   const accountNameById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -481,7 +566,59 @@ export function DrePage() {
 
       {sourceError && <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
       {!sourceError && missingSimulationIds.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> {missingSimulationIds.length} ficha(s) referenciada(s) pelas vendas não foram encontradas. A exportação foi bloqueada; exemplos: {missingSimulationIds.slice(0, 5).join(", ")}.</span></div>}
-      {!sourceError && expenseContractIssues.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Despesas pendentes de integridade.</strong> {expenseContractIssues.length} inconsistência(s) contábil(is) impedem considerar a DRE fechada. A exportação foi bloqueada; revise as tarefas financeiras antes de concluir o demonstrativo.</span></div>}
+      {!sourceError && expenseContractIssues.length > 0 && (
+        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p>
+              <strong>Despesas pendentes de integridade.</strong>{" "}
+              {expenseContractIssueGroups.length === 1
+                ? "1 despesa tem"
+                : `${expenseContractIssueGroups.length} despesas têm`}{" "}
+              {expenseContractIssues.length === 1
+                ? "1 inconsistência contábil"
+                : `${expenseContractIssues.length} inconsistências contábeis`}{" "}
+              e {expenseContractIssueGroups.length === 1 ? "impede" : "impedem"} considerar a DRE fechada.
+            </p>
+            <div className="mt-3 max-h-56 divide-y divide-amber-200 overflow-y-auto rounded-lg border border-amber-200 bg-white/60">
+              {expenseContractIssueGroups.map(({ expenseId, expense, issues, isPersonnelExpense }) => {
+                const canIdentifyExpense = canViewExpenseDetails
+                  && (!isPersonnelExpense || canViewPersonnelCosts);
+                const title = canIdentifyExpense
+                  ? expense?.description || expense?.supplier || `Despesa ${expenseId}`
+                  : `Despesa ${expenseId}`;
+                const showSupplier = Boolean(
+                  canIdentifyExpense
+                  && expense?.description
+                  && expense.supplier
+                  && expense.supplier !== expense.description,
+                );
+                return (
+                  <div key={expenseId} className="flex items-start justify-between gap-4 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-amber-950">{title}</p>
+                      {showSupplier ? <p className="truncate text-xs text-amber-900/75">{expense?.supplier}</p> : null}
+                      <p className="mt-0.5 text-xs text-amber-900">
+                        {issues.map(expenseIssueLabel).join(" · ")}
+                      </p>
+                    </div>
+                    {canIdentifyExpense && canEditExpenses ? (
+                      <Button asChild variant="outline" size="sm" className="h-8 shrink-0 border-amber-300 bg-white/70">
+                        <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(expenseId)}`}>
+                          Corrigir <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-amber-900">
+              A exportação foi bloqueada até que essas despesas sejam corrigidas.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── DASHBOARD ───────────────────────────────────────────────────────── */}
       {viewMode === "dashboard" && (
@@ -608,7 +745,7 @@ export function DrePage() {
 
               type Row =
                 | { type: "section"; label: string }
-                | { type: "line"; label: string; value: number; negative?: boolean; muted?: boolean }
+                | { type: "line"; label: string; value: number; negative?: boolean; muted?: boolean; detailsKey?: string }
                 | { type: "subtotal"; label: string; value: number; variant: "blue" | "violet" | "green" | "rose" | "slate" }
                 | { type: "kpi"; label: string; value: string }
                 | { type: "divider" };
@@ -616,7 +753,7 @@ export function DrePage() {
               const rows: Row[] = [
                 { type: "section", label: "RECEITA" },
                 { type: "line", label: "Receita Bruta", value: revBruta },
-                { type: "line", label: "(-) Impostos e deduções", value: impostos, negative: true },
+                { type: "line", label: "(-) Impostos e deduções", value: impostos, negative: true, detailsKey: "impostos_deducoes" },
                 { type: "subtotal", label: "= RECEITA LÍQUIDA", value: recLiq, variant: "blue" },
                 { type: "divider" },
                 { type: "section", label: "CUSTO DE MERCADORIA VENDIDA" },
@@ -625,28 +762,28 @@ export function DrePage() {
                 { type: "kpi", label: "Margem Bruta %", value: pct(margBruta, recLiq) },
                 { type: "divider" },
                 { type: "section", label: "CUSTOS VARIÁVEIS" },
-                { type: "line", label: "(-) Insumos e fretes de aquisição", value: custVar, negative: true },
+                { type: "line", label: "(-) Insumos e fretes de aquisição", value: custVar, negative: true, detailsKey: "custos_variaveis" },
                 { type: "subtotal", label: "= MARGEM DE CONTRIBUIÇÃO", value: margContr, variant: "violet" },
                 { type: "kpi", label: "Margem de Contribuição %", value: pct(margContr, recLiq) },
                 { type: "kpi", label: "Ponto de Equilíbrio", value: formatCurrency(pe) },
                 { type: "divider" },
                 { type: "section", label: "DESPESAS OPERACIONAIS" },
-                { type: "line", label: "(-) Pessoal", value: pessoal, negative: true },
-                { type: "line", label: "(-) Despesas operacionais", value: despOp, negative: true },
-                { type: "line", label: "(-) Ocupação", value: ocupacao, negative: true },
-                ...(semCategoria > 0 ? [{ type: "line" as const, label: "(-) Não classificado", value: semCategoria, negative: true, muted: true }] : []),
+                { type: "line", label: "(-) Pessoal", value: pessoal, negative: true, detailsKey: "pessoal" },
+                { type: "line", label: "(-) Despesas operacionais", value: despOp, negative: true, detailsKey: "despesas_operacionais" },
+                { type: "line", label: "(-) Ocupação", value: ocupacao, negative: true, detailsKey: "ocupacao" },
+                ...(semCategoria > 0 ? [{ type: "line" as const, label: "(-) Não classificado", value: semCategoria, negative: true, muted: true, detailsKey: "null" }] : []),
                 { type: "subtotal", label: "= EBIT (Resultado Operacional)", value: resOp, variant: resOp >= 0 ? "green" : "rose" },
                 { type: "kpi", label: "Margem Operacional %", value: pct(resOp, recLiq) },
                 { type: "divider" },
                 { type: "section", label: "RESULTADO FINANCEIRO" },
-                ...(recFin > 0 ? [{ type: "line" as const, label: "(+) Receita financeira", value: recFin }] : []),
-                { type: "line", label: "(-) Despesas financeiras", value: despFin, negative: true },
-                ...(recNaoOp > 0 ? [{ type: "line" as const, label: "(+) Receita não operacional", value: recNaoOp }] : []),
-                ...(despNaoOp > 0 ? [{ type: "line" as const, label: "(-) Despesa não operacional", value: despNaoOp, negative: true }] : []),
+                ...(recFin > 0 ? [{ type: "line" as const, label: "(+) Receita financeira", value: recFin, detailsKey: "receita_financeira" }] : []),
+                { type: "line", label: "(-) Despesas financeiras", value: despFin, negative: true, detailsKey: "despesas_financeiras" },
+                ...(recNaoOp > 0 ? [{ type: "line" as const, label: "(+) Receita não operacional", value: recNaoOp, detailsKey: "receita_nao_operacional" }] : []),
+                ...(despNaoOp > 0 ? [{ type: "line" as const, label: "(-) Despesa não operacional", value: despNaoOp, negative: true, detailsKey: "despesa_nao_operacional" }] : []),
                 { type: "subtotal", label: "= LAIR", value: lair, variant: lair >= 0 ? "slate" : "rose" },
                 { type: "divider" },
                 { type: "section", label: "IR / CSLL" },
-                { type: "line", label: "(-) IR / CSLL", value: irCsll, negative: true },
+                { type: "line", label: "(-) IR / CSLL", value: irCsll, negative: true, detailsKey: "impostos_resultado" },
                 { type: "subtotal", label: "= LUCRO LÍQUIDO", value: lucroLiq, variant: lucroLiq >= 0 ? "green" : "rose" },
                 { type: "kpi", label: "Margem Líquida %", value: pct(lucroLiq, recLiq) },
               ];
@@ -700,15 +837,116 @@ export function DrePage() {
                         );
                       }
                       // line
-                      const valColor = row.negative ? "text-rose-600" : "text-emerald-600";
+                      const detailsKey = row.detailsKey;
+                      const details = detailsKey ? metrics.expenseDetailsByPosition[detailsKey] ?? [] : [];
+                      const detailsByExpense = new Map<string, {
+                        expenseId: string;
+                        description: string | null;
+                        supplier: string | null;
+                        accountPlanNames: string[];
+                        amount: number;
+                      }>();
+                      details.forEach((detail) => {
+                        const current = detailsByExpense.get(detail.expenseId) ?? {
+                          expenseId: detail.expenseId,
+                          description: detail.description,
+                          supplier: detail.supplier,
+                          accountPlanNames: [],
+                          amount: 0,
+                        };
+                        if (!current.accountPlanNames.includes(detail.accountPlanName)) {
+                          current.accountPlanNames.push(detail.accountPlanName);
+                        }
+                        current.amount = Number((current.amount + detail.amount).toFixed(2));
+                        detailsByExpense.set(detail.expenseId, current);
+                      });
+                      const expenseDetails = [...detailsByExpense.values()];
+                      const canExpandDetails = expenseDetails.length > 0
+                        && canViewExpenseDetails
+                        && (detailsKey !== "pessoal" || canViewPersonnelCosts);
+                      const isExpanded = Boolean(detailsKey && expandedDreRows[detailsKey] && canExpandDetails);
+                      const detailRegionId = detailsKey ? `dre-expense-details-${detailsKey}` : undefined;
                       return (
-                        <tr key={i} className={`border-b border-border/40 transition-colors hover:bg-muted/20 ${row.muted ? "opacity-60" : ""}`}>
-                          <td className="px-6 py-2.5 pl-10 text-muted-foreground">{row.label}</td>
-                          <td className={`px-6 py-2.5 text-right font-mono font-medium ${row.negative ? "text-rose-600" : "text-emerald-600"}`}>
-                            {row.negative ? `(${formatCurrency(row.value)})` : formatCurrency(row.value)}
-                          </td>
-                          <td className="px-6 py-2.5 text-right text-muted-foreground">{pct(row.value, recLiq)}</td>
-                        </tr>
+                        <Fragment key={i}>
+                          <tr className={`border-b border-border/40 transition-colors hover:bg-muted/20 ${row.muted ? "opacity-60" : ""}`}>
+                            <td className="p-0 text-muted-foreground">
+                              {canExpandDetails && detailsKey ? (
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center gap-2 px-6 py-2.5 pl-10 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                                  aria-expanded={isExpanded}
+                                  aria-controls={detailRegionId}
+                                  onClick={() => setExpandedDreRows((current) => ({
+                                    ...current,
+                                    [detailsKey]: !current[detailsKey],
+                                  }))}
+                                >
+                                  <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                  <span>{row.label}</span>
+                                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                    {expenseDetails.length} {expenseDetails.length === 1 ? "despesa" : "despesas"}
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className="px-6 py-2.5 pl-10">{row.label}</div>
+                              )}
+                            </td>
+                            <td className={`px-6 py-2.5 text-right font-mono font-medium ${row.negative ? "text-rose-600" : "text-emerald-600"}`}>
+                              {row.negative ? `(${formatCurrency(row.value)})` : formatCurrency(row.value)}
+                            </td>
+                            <td className="px-6 py-2.5 text-right text-muted-foreground">{pct(row.value, recLiq)}</td>
+                          </tr>
+                          {isExpanded ? (
+                            <tr className="border-b border-border/40 bg-muted/10">
+                              <td colSpan={3} className="px-6 py-4 pl-10">
+                                <div
+                                  id={detailRegionId}
+                                  role="region"
+                                  aria-label={`Lançamentos de ${row.label}`}
+                                  className="overflow-hidden rounded-lg border bg-background"
+                                >
+                                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b bg-muted/30 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid-cols-[minmax(0,1fr)_minmax(140px,0.5fr)_auto]">
+                                    <span>Despesa</span>
+                                    <span className="hidden sm:block">Plano de contas</span>
+                                    <span className="text-right">Valor nesta linha</span>
+                                  </div>
+                                  <div className="divide-y divide-border/60">
+                                    {expenseDetails.map((detail) => {
+                                      const title = detail.description || detail.supplier || `Despesa ${detail.expenseId}`;
+                                      const showSupplier = Boolean(detail.description && detail.supplier && detail.supplier !== detail.description);
+                                      return (
+                                        <div
+                                          key={detail.expenseId}
+                                          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(140px,0.5fr)_auto]"
+                                        >
+                                          <div className="min-w-0">
+                                            <p className="truncate font-medium text-foreground">{title}</p>
+                                            <p className="truncate text-xs text-muted-foreground">
+                                              {showSupplier ? `${detail.supplier} · ` : ""}ID {detail.expenseId}
+                                            </p>
+                                            <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">{detail.accountPlanNames.join(" · ")}</p>
+                                          </div>
+                                          <span className="hidden truncate text-xs text-muted-foreground sm:block">{detail.accountPlanNames.join(" · ")}</span>
+                                          <div className="flex items-center justify-end gap-2">
+                                            <span className="whitespace-nowrap font-mono text-xs font-semibold">{formatCurrency(detail.amount)}</span>
+                                            {canEditExpenses ? (
+                                              <Button asChild variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Abrir despesa">
+                                                <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(detail.expenseId)}`}>
+                                                  <ExternalLink className="h-3.5 w-3.5" />
+                                                  <span className="sr-only">Abrir {title}</span>
+                                                </Link>
+                                              </Button>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
                       );
                     })}
                   </tbody>
