@@ -5,7 +5,10 @@ import {
   buildCardStatementAllocations,
   buildCardStatementGroups,
   buildCardStatementLinesFromAllocations,
+  canRegisterCardStatementAsHistorical,
   cardStatementAllocationIntegrity,
+  cardStatementLineAuditIssues,
+  cardStatementLineAuditStatus,
   findCardStatementPaymentCandidates,
   resolveCardStatementCycle,
   resolveCardStatementCycleFromMonth,
@@ -251,6 +254,35 @@ test("desconta créditos e estornos ao conferir o total oficial", () => {
   assert.equal(result.creditTotal, 393.51);
   assert.equal(result.allocatedTotal, 6137.84);
   assert.equal(result.difference, 0);
+});
+
+test("permite registro histórico somente antes do início da DRE", () => {
+  assert.equal(canRegisterCardStatementAsHistorical("2026-07", "2026-08"), true);
+  assert.equal(canRegisterCardStatementAsHistorical("2026-08", "2026-08"), false);
+  assert.equal(canRegisterCardStatementAsHistorical("2026-09", "2026-08"), false);
+  assert.equal(canRegisterCardStatementAsHistorical("competencia-invalida", "2026-08"), false);
+});
+
+test("identifica linha histórica anterior à DRE sem tratá-la como auditada", () => {
+  const line = {
+    lineId: "historical-line",
+    expense: {
+      id: "historical-expense",
+      description: "Compra preservada da fatura anterior",
+      supplier: "Fornecedor",
+      competenceDate: new Date("2026-07-01T12:00:00-03:00"),
+      cardStatementAuditDisposition: "waived_before_dre_start",
+    },
+    chargeDate: new Date("2026-07-18T12:00:00-03:00"),
+    value: 100,
+    reconciled: false,
+    installmentNumber: 3,
+    installmentTotal: 12,
+  };
+
+  assert.deepEqual(cardStatementLineAuditIssues(line), []);
+  assert.equal(cardStatementLineAuditStatus(line), "historical");
+  assert.equal(cardStatementLineAuditStatus({ ...line, reconciled: true }), "reconciled");
 });
 
 test("exibe a previsão do cartão e remove a previsão substituída pelo gasto real", () => {

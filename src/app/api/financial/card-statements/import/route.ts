@@ -15,7 +15,11 @@ import {
   identifyCardStatementFinancialCharge,
   resolveCardStatementFinancialCharge,
 } from "@/features/financial/lib/expense-description-catalog";
-import { cardStatementAllocationIntegrity } from "@/features/financial/lib/card-invoices";
+import {
+  canRegisterCardStatementAsHistorical,
+  cardStatementAllocationIntegrity,
+} from "@/features/financial/lib/card-invoices";
+import { FINANCIAL_DRE_START_MONTH_KEY } from "@/features/financial/lib/constants";
 import { requireUser } from "@/lib/auth-server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { reportSystemError } from "@/lib/observability";
@@ -51,6 +55,7 @@ const requestSchema = z.object({
   importId: z.string().min(1).max(100),
   fileSha256: z.string().regex(/^[a-f0-9]{64}$/),
   revisionAction: z.enum(["none", "reopen"]),
+  registrationMode: z.enum(["standard", "historical_before_dre"]).default("standard"),
   accountId: z.string().min(1).max(300),
   accountName: z.string().max(500),
   paymentMethodId: z.string().min(1).max(300),
@@ -242,8 +247,16 @@ export async function POST(request: NextRequest) {
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return errorResponse("Revise os itens e vínculos da fatura.", 400);
     const input = parsed.data;
+    const historicalRegistration = input.registrationMode === "historical_before_dre";
+    const canClose = actor.isDefaultAdmin || actor.permissions.financial?.cardStatements?.close === true;
     if (input.statementKey !== `${input.accountId}:${input.paymentMethodId}:${input.monthKey}`) {
       return errorResponse("A fatura, o cartão e a competência não correspondem à prévia.", 409);
+    }
+    if (historicalRegistration && !canRegisterCardStatementAsHistorical(input.monthKey, FINANCIAL_DRE_START_MONTH_KEY)) {
+      return errorResponse("Somente competências anteriores ao início da DRE podem ser registradas como histórico.", 409);
+    }
+    if (historicalRegistration && !canClose) {
+      return errorResponse("Sem permissão para dispensar a auditoria e fechar esta fatura histórica.", 403);
     }
     if (input.analysis.status === "blocked") {
       return errorResponse("A análise bloqueada não pode ser importada.", 409);
@@ -321,6 +334,12 @@ export async function POST(request: NextRequest) {
       });
       if (canonicalLines.length === 0 && !(Number(importData.diff?.summary?.removed) > 0)) {
         throw new Error("EMPTY_IMPORT");
+      }
+      if (
+        historicalRegistration
+        && (activeImportId || statementData.status === "closed" || statementData.status === "paid" || canonicalLines.length !== storedLines.length)
+      ) {
+        throw new Error("HISTORICAL_REGISTRATION_REQUIRES_COMPLETE_FIRST_VERSION");
       }
 
       const revisionLines = (Array.isArray(importData.diff?.lines)
@@ -489,7 +508,11 @@ export async function POST(request: NextRequest) {
           plannedBankAccountName: input.accountName,
           plannedPaymentMethodId: input.paymentMethodId,
           plannedPaymentMethodLabel: input.paymentMethodLabel,
-          cardReconciliationStatus: "pending",
+          cardReconciliationStatus: historicalRegistration ? "not_required" : "pending",
+          cardStatementAuditDisposition: historicalRegistration ? "waived_before_dre_start" : null,
+          cardStatementAuditWaivedAt: historicalRegistration ? now : null,
+          cardStatementAuditWaivedBy: historicalRegistration ? actor.decoded.uid : null,
+          dreStartMonthKey: historicalRegistration ? FINANCIAL_DRE_START_MONTH_KEY : null,
           cardStatementRevisionStatus: "active",
           cardStatementId: statementId,
           cardStatementKey: input.statementKey,
@@ -527,7 +550,9 @@ export async function POST(request: NextRequest) {
               ...inheritedExpenseFields(expense),
               description: financialChargeIdentity?.description || line.description || String(expense.description || "Despesa do cartão"),
               supplier: financialChargeIdentity?.supplier || line.supplier || String(expense.supplier || ""),
-              notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
+              notes: historicalRegistration
+                ? `Histórico anterior à DRE, sem conferência contábil. Fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`
+                : `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
               totalValue: line.amount,
               competenceDate,
               dueDate,
@@ -568,7 +593,9 @@ export async function POST(request: NextRequest) {
                     value: line.amount,
                     dueDate,
                     competenceDate,
-                    cardReconciliationStatus: "pending",
+                    cardReconciliationStatus: historicalRegistration ? "not_required" : "pending",
+                    cardStatementAuditDisposition: historicalRegistration ? "waived_before_dre_start" : null,
+                    dreStartMonthKey: historicalRegistration ? FINANCIAL_DRE_START_MONTH_KEY : null,
                     cardStatementRevisionStatus: "active",
                     cardStatementId: statementId,
                     cardStatementKey: input.statementKey,
@@ -616,7 +643,9 @@ export async function POST(request: NextRequest) {
             transaction.set(expenseRef, {
               description: financialChargeIdentity?.description || line.description,
               supplier: financialChargeIdentity?.supplier || line.supplier,
-              notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
+              notes: historicalRegistration
+                ? `Histórico anterior à DRE, sem conferência contábil. Fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`
+                : `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
               totalValue: line.amount,
               competenceDate,
               dueDate,
@@ -672,7 +701,9 @@ export async function POST(request: NextRequest) {
       if (canonicalOfficialTotal && Math.abs(allocationIntegrity.difference) > 0.05) {
         throw new Error("CARD_STATEMENT_ALLOCATION_TOTAL_MISMATCH");
       }
-      const nextStatus = statementData.status === "closed" && hasRevisionChanges ? "open" : statementData.status === "paid" ? "paid" : "open";
+      const nextStatus = historicalRegistration
+        ? "closed"
+        : statementData.status === "closed" && hasRevisionChanges ? "open" : statementData.status === "paid" ? "paid" : "open";
       transaction.set(statementRef, {
         key: input.statementKey,
         monthKey: input.monthKey,
@@ -684,6 +715,16 @@ export async function POST(request: NextRequest) {
         dueDate: timestamp(canonicalDueDate),
         ...(canonicalOfficialTotal ? { officialTotal: canonicalOfficialTotal } : {}),
         status: nextStatus,
+        registrationMode: input.registrationMode,
+        auditDisposition: historicalRegistration ? "waived_before_dre_start" : null,
+        dreStartMonthKey: historicalRegistration ? FINANCIAL_DRE_START_MONTH_KEY : null,
+        ...(historicalRegistration ? {
+          auditWaivedAt: now,
+          auditWaivedBy: actor.decoded.uid,
+          auditWaivedLineCount: nextAllocations.length,
+          closedAt: now,
+          closedBy: actor.decoded.uid,
+        } : {}),
         allocations: nextAllocations,
         grossChargesTotal: allocationIntegrity.grossAllocatedTotal,
         creditTotal: canonicalCreditTotal,
@@ -720,6 +761,7 @@ export async function POST(request: NextRequest) {
       }, { merge: true });
       transaction.set(importRef, {
         status: excludedFingerprints.length ? "applied_with_exclusions" : "applied",
+        registrationMode: input.registrationMode,
         appliedLines: [...activeAppliedByFingerprint.values()],
         excludedFingerprints,
         appliedAt: now,
@@ -742,10 +784,20 @@ export async function POST(request: NextRequest) {
         previousImportId: activeImportId,
         result: { created, linked, replacedForecasts, skipped, removed: removedLines.length },
         reopened: statementData.status === "closed" && hasRevisionChanges,
+        registrationMode: input.registrationMode,
+        dreStartMonthKey: historicalRegistration ? FINANCIAL_DRE_START_MONTH_KEY : null,
         actorId: actor.decoded.uid,
         occurredAt: now,
       }, { merge: true });
-      return { created, linked, replacedForecasts, skipped, removed: removedLines.length, reopened: statementData.status === "closed" && hasRevisionChanges };
+      return {
+        created,
+        linked,
+        replacedForecasts,
+        skipped,
+        removed: removedLines.length,
+        reopened: statementData.status === "closed" && hasRevisionChanges,
+        historical: historicalRegistration,
+      };
     });
 
     return NextResponse.json({ ok: true, ...result });
@@ -771,6 +823,9 @@ export async function POST(request: NextRequest) {
     if (message === "IMPORT_PREVIEW_NOT_FOUND" || message === "IMPORT_PREVIEW_MISMATCH") return errorResponse("A prévia versionada não foi encontrada ou não corresponde ao arquivo analisado.", 409);
     if (message === "STALE_IMPORT_PREVIEW") return errorResponse("A fatura mudou depois desta análise. Gere uma nova prévia antes de importar.", 409);
     if (message === "EMPTY_IMPORT") return errorResponse("Selecione ao menos um item ou uma alteração da nova versão.", 409);
+    if (message === "HISTORICAL_REGISTRATION_REQUIRES_COMPLETE_FIRST_VERSION") {
+      return errorResponse("O registro histórico exige a primeira versão completa da fatura.", 409);
+    }
     if (message === "BLOCKED_ANALYSIS") return errorResponse("A análise bloqueada não pode ser importada.", 409);
     if (message === "REVISION_TOO_LARGE") return errorResponse("A revisão possui alterações demais para uma aplicação atômica. Divida o tratamento em uma fatura menor.", 409);
     if (message === "PAID_STATEMENT_REVISION" || message === "PAID_LINE_REVISION") return errorResponse("Uma fatura já paga não pode ser alterada. A nova versão ficou registrada para tratamento como ajuste.", 409);

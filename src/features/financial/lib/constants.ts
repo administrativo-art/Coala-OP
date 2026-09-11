@@ -36,3 +36,8 @@ export const FINANCIAL_ROUTES = {
   settings: "/dashboard/financial/settings",
   paymentRequests: "/dashboard/financial/expenses/authorizations",
 } as const;
+
+// Marco operacional definido para a série contábil. Competências anteriores
+// podem ser preservadas apenas como histórico de abertura, sem entrar na fila
+// de auditoria da DRE iniciada em agosto de 2026.
+export const FINANCIAL_DRE_START_MONTH_KEY = "2026-08";
