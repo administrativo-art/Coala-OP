@@ -6,6 +6,7 @@ import {
   extractEmailAddress,
   extractExternalLinks,
   extractFinancialDocumentReferences,
+  extractFinancialInstallmentReference,
   extractPaymentBarcode,
   extractTelecomServiceNumbers,
   htmlToPlainText,
@@ -123,6 +124,21 @@ test("extrai referências de NF do texto e do nome do anexo", () => {
     documentReferences: ["BOLETO_COALA_SHAKES_CD_872460.PDF"],
   });
   assert.deepEqual(parsed.classification.documentReferences, ["872460"]);
+});
+
+test("extrai a parcela documental sem inferir números soltos", () => {
+  assert.deepEqual(extractFinancialInstallmentReference("Parcela 01 de 08"), {
+    installmentNumber: 1,
+    installmentTotal: 8,
+  });
+  assert.deepEqual(extractFinancialInstallmentReference("parcela: 3/3"), {
+    installmentNumber: 3,
+    installmentTotal: 3,
+  });
+  assert.deepEqual(extractFinancialInstallmentReference("NF 872460 vencimento 07/09/2026"), {
+    installmentNumber: null,
+    installmentTotal: null,
+  });
 });
 
 test("obtém o CNPJ do fornecedor na chave de acesso da NF-e", () => {

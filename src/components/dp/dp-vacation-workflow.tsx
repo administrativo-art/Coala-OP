@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -9,6 +9,7 @@ import {
   Clock3,
   FileCheck2,
   FileText,
+  History,
   ExternalLink,
   Landmark,
   Loader2,
@@ -29,7 +30,9 @@ import {
   VACATION_WORKFLOW_STAGE_META,
   vacationWorkflowForRecord,
 } from '@/lib/dp-vacation-workflow';
+import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import type {
+  DPVacationEvent,
   DPVacationRecord,
   DPVacationWorkflow,
   DPVacationWorkflowStep,
@@ -46,7 +49,7 @@ type Props = {
   onGenerateNotice: (record: DPVacationRecord) => void;
   onValidateNotice: (record: DPVacationRecord) => void;
   onOpenNotice: (record: DPVacationRecord) => void;
-  onSendNotice: (record: DPVacationRecord) => void;
+  onSendNotice: (record: DPVacationRecord, complianceOverrideReason?: string) => void;
   onSyncNotice: (record: DPVacationRecord) => void;
   noticeBusy: 'generate' | 'validate' | 'open' | 'send' | 'sync' | null;
   workflowBusy: string | null;
@@ -56,13 +59,15 @@ type Props = {
     values?: { grossAmount: number; discountAmount: number; netAmount: number; paymentDate?: string | null };
     notes?: string;
     reason?: string;
+    overrideReason?: string;
   }) => void;
   onPreparePayment: (record: DPVacationRecord) => void;
   onSyncPayment: (record: DPVacationRecord) => void;
   onRetryReceiptSignature: (record: DPVacationRecord) => void;
   onSyncReceiptSignature: (record: DPVacationRecord) => void;
   onFinalizeWorkflow: (record: DPVacationRecord) => void;
-  onOpenWorkflowAsset: (record: DPVacationRecord, kind: 'receipt-original' | 'receipt-signed') => void;
+  onCancel: (record: DPVacationRecord) => void;
+  onOpenWorkflowAsset: (record: DPVacationRecord, kind: 'receipt-original' | 'receipt-signed' | 'payment-proof') => void;
 };
 
 const TERMINAL_STEP_STATUSES = new Set(['completed', 'cancelled']);
@@ -140,6 +145,16 @@ function stepClasses(step: DPVacationWorkflowStep) {
 }
 
 function nextAction(workflow: DPVacationWorkflow) {
+  if (workflow.status === 'cancelled') return {
+    owner: 'RH',
+    title: 'Trilha cancelada',
+    description: 'O registro foi encerrado formalmente; consulte o motivo no histórico auditável.',
+  };
+  if (workflow.status === 'completed') return {
+    owner: 'RH',
+    title: 'Trilha concluída',
+    description: 'Aviso, recibo, pagamento e assinaturas foram conferidos e encerrados.',
+  };
   const step = workflow.steps.find((candidate) => candidate.id === workflow.currentStage)
     ?? workflow.steps.find((candidate) => !TERMINAL_STEP_STATUSES.has(candidate.status));
   if (!step) return { owner: 'RH', title: 'Trilha concluída', description: 'Todos os marcos foram concluídos.' };
@@ -257,6 +272,81 @@ function EmptyWorkflow() {
   );
 }
 
+function VacationAuditTimeline({ vacationId, version }: { vacationId: string; version: string }) {
+  const api = useAuthenticatedApi();
+  const [events, setEvents] = useState<DPVacationEvent[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (nextCursor?: string | null) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const search = new URLSearchParams({ limit: '20' });
+      if (nextCursor) search.set('cursor', nextCursor);
+      const payload = await api<{ events: DPVacationEvent[]; nextCursor: string | null }>(
+        `/api/dp/vacations/${encodeURIComponent(vacationId)}/events?${search}`,
+        { fallbackError: 'Não foi possível carregar o histórico das férias.' },
+      );
+      setEvents((current) => nextCursor ? [...current, ...payload.events] : payload.events);
+      setCursor(payload.nextCursor);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar o histórico.');
+    } finally {
+      setLoading(false);
+    }
+  }, [api, vacationId]);
+
+  useEffect(() => {
+    setEvents([]);
+    setCursor(null);
+    void load(null);
+  }, [load, version]);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-2">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5">
+        <div>
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-slate-600" />
+            <p className="text-[13px] font-black">Histórico auditável</p>
+          </div>
+          <p className="mt-1 text-[11px] font-semibold text-slate-500">Ações humanas e automáticas, em ordem cronológica.</p>
+        </div>
+        <Badge variant="outline" className="rounded-full text-[9px] font-black">{events.length} evento(s)</Badge>
+      </div>
+      {error ? <p className="px-4 py-3 text-[10.5px] font-semibold text-rose-700">{error}</p> : null}
+      <div className="divide-y divide-slate-100 px-4">
+        {events.map((event) => (
+          <div key={event.id} className="grid gap-1 py-3 sm:grid-cols-[1fr_auto] sm:gap-4">
+            <div>
+              <p className="text-[11px] font-black text-slate-900">{event.message}</p>
+              <p className="mt-0.5 text-[9.5px] font-semibold text-slate-500">
+                {event.actorName}{typeof event.data?.reason === 'string' ? ` · Motivo: ${event.data.reason}` : ''}
+              </p>
+            </div>
+            <time className="font-mono text-[9.5px] font-semibold text-slate-500">
+              {new Date(event.at).toLocaleString('pt-BR', { timeZone: 'America/Belem' })}
+            </time>
+          </div>
+        ))}
+        {!loading && events.length === 0 && !error ? (
+          <p className="py-4 text-center text-[10.5px] font-semibold text-slate-500">Nenhum evento registrado.</p>
+        ) : null}
+      </div>
+      {loading || cursor ? (
+        <div className="border-t border-slate-100 px-4 py-3">
+          <Button variant="outline" size="sm" className="rounded-xl" disabled={loading || !cursor} onClick={() => void load(cursor)}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
+            {loading ? 'Carregando histórico' : 'Carregar eventos anteriores'}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function DPVacationWorkflowPanel({
   records,
   selectedId,
@@ -279,6 +369,7 @@ export function DPVacationWorkflowPanel({
   onRetryReceiptSignature,
   onSyncReceiptSignature,
   onFinalizeWorkflow,
+  onCancel,
   onOpenWorkflowAsset,
 }: Props) {
   const record = records.find((candidate) => candidate.id === selectedId) ?? records[0] ?? null;
@@ -298,6 +389,8 @@ export function DPVacationWorkflowPanel({
   });
   const [receiptNotes, setReceiptNotes] = useState('');
   const [correctionReason, setCorrectionReason] = useState('');
+  const [receiptOverrideReason, setReceiptOverrideReason] = useState('');
+  const [noticeExceptionReason, setNoticeExceptionReason] = useState('');
 
   useEffect(() => {
     const reviewed = workflow?.receipt.reviewedValues;
@@ -310,6 +403,8 @@ export function DPVacationWorkflowPanel({
     });
     setReceiptNotes(workflow?.receipt.reviewNotes ?? '');
     setCorrectionReason(workflow?.receipt.correctionReason ?? '');
+    setReceiptOverrideReason('');
+    setNoticeExceptionReason(workflow?.legalAnalysis.noticeExceptionReason ?? '');
   }, [
     record?.id,
     workflow?.receipt.originalDocumentId,
@@ -334,7 +429,31 @@ export function DPVacationWorkflowPanel({
   const receiptSigned = workflow.receiptSignature.status === 'signed';
   const receiptValuesValid = [receiptValues.grossAmount, receiptValues.discountAmount, receiptValues.netAmount]
     .every((value) => value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0)
-    && Number(receiptValues.netAmount) > 0;
+    && Number(receiptValues.netAmount) > 0
+    && Math.abs(
+      Number(receiptValues.grossAmount)
+      - Number(receiptValues.discountAmount)
+      - Number(receiptValues.netAmount),
+    ) <= 0.01;
+  const receiptNeedsOverride = Boolean(
+    workflow.receipt.analysis?.issues.length
+    || workflow.receipt.analysis?.documentTypeCode !== 'VACATION_RECEIPT'
+    || workflow.receipt.analysis?.employeeMatchStatus !== 'MATCH'
+    || !analysis?.employeeName
+    || !analysis?.cnpj
+    || !analysis?.acquisitionPeriodStart
+    || !analysis?.acquisitionPeriodEnd
+    || !analysis?.vacationStartDate
+    || analysis.vacationStartDate !== record.startDate
+    || !analysis?.vacationEndDate
+    || analysis.vacationEndDate !== record.endDate
+    || analysis?.numberOfDays == null
+    || Number(analysis.numberOfDays) !== Number(record.days)
+    || analysis?.amountGross == null
+    || analysis?.amountDiscounts == null
+    || analysis?.amountNet == null
+    || analysis?.signatureDetected === false,
+  );
 
   return (
     <section className="space-y-4 text-slate-950">
@@ -367,6 +486,11 @@ export function DPVacationWorkflowPanel({
             {canEdit && ['not_generated', 'failed'].includes(workflow.notice.status) ? (
               <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onEdit(record)}>
                 Editar período
+              </Button>
+            ) : null}
+            {canApprove && workflow.status === 'active' && record.status === 'APPROVED' && !workflow.payment.paymentRequestId ? (
+              <Button variant="outline" size="sm" className="rounded-xl border-rose-200 text-rose-700" onClick={() => onCancel(record)}>
+                Cancelar formalmente
               </Button>
             ) : null}
           </div>
@@ -414,7 +538,7 @@ export function DPVacationWorkflowPanel({
               <p className="text-[13px] font-black">Análise inicial do agendamento</p>
             </div>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              O alerta de 30 dias é informativo e não impede a continuidade.
+              Impedimentos legais bloqueiam a aprovação. Exceção de antecedência exige justificativa formal no envio.
             </p>
           </div>
           <div className="grid gap-2 p-4 sm:grid-cols-2">
@@ -487,15 +611,25 @@ export function DPVacationWorkflowPanel({
                 </Button>
               ) : null}
               {canApprove && notice.status === 'validated' ? (
-                <Button
-                  size="sm"
-                  className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]"
-                  disabled={noticeBusy !== null}
-                  onClick={() => onSendNotice(record)}
-                >
-                  {noticeBusy === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
-                  Enviar para assinatura
-                </Button>
+                <div className="flex flex-1 flex-wrap items-center gap-2">
+                  {(workflow.legalAnalysis.noticeLeadDays ?? -1) < 30 ? (
+                    <Input
+                      className="min-w-[260px] flex-1"
+                      placeholder="Justificativa obrigatória para envio fora dos 30 dias"
+                      value={noticeExceptionReason}
+                      onChange={(event) => setNoticeExceptionReason(event.target.value)}
+                    />
+                  ) : null}
+                  <Button
+                    size="sm"
+                    className="rounded-xl bg-[#df2f78] hover:bg-[#c82569]"
+                    disabled={noticeBusy !== null || ((workflow.legalAnalysis.noticeLeadDays ?? -1) < 30 && noticeExceptionReason.trim().length < 10)}
+                    onClick={() => onSendNotice(record, noticeExceptionReason.trim() || undefined)}
+                  >
+                    {noticeBusy === 'send' ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />}
+                    Enviar para assinatura
+                  </Button>
+                </div>
               ) : null}
               {['sent', 'signed'].includes(notice.status) ? (
                 <Button
@@ -670,6 +804,14 @@ export function DPVacationWorkflowPanel({
                     <label className="space-y-1 text-[10px] font-bold text-slate-600">Data indicada<Input type="date" value={receiptValues.paymentDate} onChange={(event) => setReceiptValues((current) => ({ ...current, paymentDate: event.target.value }))} /></label>
                   </div>
                   <Textarea className="mt-2 min-h-16" placeholder="Observação da auditoria (opcional)" value={receiptNotes} onChange={(event) => setReceiptNotes(event.target.value)} />
+                  <Textarea
+                    className="mt-2 min-h-16"
+                    placeholder={receiptNeedsOverride
+                      ? 'Justificativa obrigatória para aprovar divergências documentais'
+                      : 'Justificativa de exceção (somente se necessária)'}
+                    value={receiptOverrideReason}
+                    onChange={(event) => setReceiptOverrideReason(event.target.value)}
+                  />
                 </div>
               </div>
               <div className="grid gap-2 lg:grid-cols-[1fr_auto_auto]">
@@ -693,7 +835,9 @@ export function DPVacationWorkflowPanel({
                 </Button>
                 <Button
                   className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                  disabled={workflowBusy !== null || !receiptValuesValid}
+                  disabled={workflowBusy !== null
+                    || !receiptValuesValid
+                    || (receiptNeedsOverride && receiptOverrideReason.trim().length < 10)}
                   onClick={() => onReviewReceipt(record, {
                     decision: 'approved',
                     values: {
@@ -703,6 +847,7 @@ export function DPVacationWorkflowPanel({
                       paymentDate: receiptValues.paymentDate || null,
                     },
                     notes: receiptNotes.trim() || undefined,
+                    overrideReason: receiptOverrideReason.trim() || undefined,
                   })}
                 >
                   {workflowBusy === 'approve-receipt' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -765,6 +910,18 @@ export function DPVacationWorkflowPanel({
                 </div>
               </div>
               {workflow.payment.lastError ? <p className="mt-2 text-[10px] font-semibold text-rose-700">{workflow.payment.lastError}</p> : null}
+              {workflow.payment.proofStoragePath ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 rounded-xl"
+                  disabled={workflowBusy !== null}
+                  onClick={() => onOpenWorkflowAsset(record, 'payment-proof')}
+                >
+                  {workflowBusy === 'open-payment-proof' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                  Abrir comprovante do pagamento
+                </Button>
+              ) : null}
             </div>
           ) : null}
           {!paymentPaid ? (
@@ -858,6 +1015,7 @@ export function DPVacationWorkflowPanel({
             </div>
           ) : null}
         </div>
+        <VacationAuditTimeline vacationId={record.id} version={workflow.updatedAt} />
       </div>
     </section>
   );

@@ -754,6 +754,8 @@ async function reconcileExpectedBankDebit(params: {
     batch.set(financialDbAdmin.collection("financialInboxMessages").doc(params.expected.financialInboxMessageId), {
       status: isDivergent ? "divergent" : "reconciled",
       bankState: isDivergent ? "divergent" : "reconciled",
+      "resolution.status": "identified",
+      "resolution.financialState": isDivergent ? "scheduled" : "reconciled",
       statementTransactionId: params.transactionId,
       updatedAt: now.toDate().toISOString(),
     }, { merge: true });

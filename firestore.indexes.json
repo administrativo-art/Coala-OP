@@ -2,6 +2,32 @@
 {
   "indexes": [
     {
+      "collectionGroup": "dp_vacations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workflow.status", "order": "ASCENDING" },
+        { "fieldPath": "startDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "dp_vacations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "dp_vacationEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vacationId", "order": "ASCENDING" },
+        { "fieldPath": "at", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "stockAuditSessions",
       "queryScope": "COLLECTION",
       "fields": [

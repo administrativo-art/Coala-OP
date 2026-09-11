@@ -62,7 +62,7 @@ export async function getVacationReceiptPortal(token: string) {
   const vacation = snapshot.data();
   const workflow = vacation.workflow as DPVacationWorkflow | undefined;
   const expiresAt = workflow?.accountant.tokenExpiresAt ?? null;
-  if (!workflow || !expiresAt || expiresAt <= new Date().toISOString()) {
+  if (!workflow || workflow.status !== 'active' || !expiresAt || expiresAt <= new Date().toISOString()) {
     throw publicError('Este link expirou. Solicite um novo acesso ao RH.', 410);
   }
   const userSnapshot = await dbAdmin.collection('users').doc(String(vacation.userId ?? '')).get();
@@ -114,7 +114,7 @@ export async function uploadVacationReceipt(params: {
     const currentSnapshot = await transaction.get(vacationRef);
     if (!currentSnapshot.exists) throw publicError('Link inválido.', 404);
     const workflow = currentSnapshot.get('workflow') as DPVacationWorkflow | undefined;
-    if (!workflow || workflow.accountant.tokenHash !== hashToken(params.token)) {
+    if (!workflow || workflow.status !== 'active' || workflow.accountant.tokenHash !== hashToken(params.token)) {
       throw publicError('Link inválido.', 404);
     }
     if (!workflow.accountant.tokenExpiresAt || workflow.accountant.tokenExpiresAt <= now) {
@@ -142,8 +142,14 @@ export async function uploadVacationReceipt(params: {
     const currentSnapshot = await transaction.get(vacationRef);
     if (!currentSnapshot.exists) throw publicError('Link inválido.', 404);
     const workflow = currentSnapshot.get('workflow') as DPVacationWorkflow;
+    if (workflow.status !== 'active') throw publicError('Esta solicitação foi encerrada pelo RH.', 410);
     if (!['sent', 'correction_requested', 'receipt_received'].includes(workflow.accountant.status)) {
       throw publicError('A etapa mudou durante o envio. Atualize a página.', 409);
+    }
+    if (workflow.receipt.originalDocumentId
+      && workflow.receipt.originalDocumentId !== versionId
+      && workflow.receipt.status !== 'correction_requested') {
+      throw publicError('Outro recibo foi recebido primeiro. Atualize a página antes de tentar novamente.', 409);
     }
     const stepsAfterAccountant = stepPatch(workflow, 'accountant', {
       status: 'completed',
@@ -232,7 +238,7 @@ export async function uploadVacationReceipt(params: {
       const currentSnapshot = await transaction.get(vacationRef);
       if (!currentSnapshot.exists) return;
       const workflow = currentSnapshot.get('workflow') as DPVacationWorkflow;
-      if (workflow.receipt.originalDocumentId !== versionId || workflow.receipt.status !== 'processing') return;
+      if (workflow.status !== 'active' || workflow.receipt.originalDocumentId !== versionId || workflow.receipt.status !== 'processing') return;
       transaction.update(vacationRef, {
         workflow: {
           ...workflow,
@@ -295,7 +301,7 @@ export async function uploadVacationReceipt(params: {
     const currentSnapshot = await transaction.get(vacationRef);
     if (!currentSnapshot.exists) return;
     const workflow = currentSnapshot.get('workflow') as DPVacationWorkflow;
-    if (workflow.receipt.originalDocumentId !== versionId || workflow.receipt.status !== 'processing') return;
+    if (workflow.status !== 'active' || workflow.receipt.originalDocumentId !== versionId || workflow.receipt.status !== 'processing') return;
     transaction.update(vacationRef, {
       workflow: {
         ...workflow,

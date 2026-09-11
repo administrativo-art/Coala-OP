@@ -34,7 +34,7 @@ function toDate(ts: unknown): Date | undefined {
   if (!ts) return undefined;
   if (ts instanceof Date) return ts;
   if (typeof (ts as any).toDate === 'function') return (ts as any).toDate();
-  if (typeof ts === 'string') return new Date(ts);
+  if (typeof ts === 'string') return /^\d{4}-\d{2}-\d{2}$/.test(ts) ? parseISO(ts) : new Date(ts);
   return undefined;
 }
 
@@ -323,7 +323,7 @@ function RecordRow({ record, concessiveEnd }: { record: DPVacationRecord; conces
 
 function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string }) {
   const { addVacation } = useDP();
-  const { permissions } = useAuth();
+  const { calendars } = useDPBootstrap();
   const { toast } = useToast();
   const [mode, setMode] = useState<'none' | 'gozo' | 'venda'>('none');
   const [saving, setSaving] = useState(false);
@@ -331,11 +331,19 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
   // gozo fields
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const [calendarId, setCalendarId] = useState('');
+  const [weeklyRestDay, setWeeklyRestDay] = useState('0');
+  const [unjustifiedAbsences, setUnjustifiedAbsences] = useState('0');
+  const [employeeAgreedToSplit, setEmployeeAgreedToSplit] = useState(false);
+  const [thirteenthAdvanceRequested, setThirteenthAdvanceRequested] = useState(false);
   // venda fields
   const [vendaDays, setVendaDays] = useState('10');
+  const [allowanceRequestedAt, setAllowanceRequestedAt] = useState('');
 
   function reset() {
     setMode('none'); setStart(''); setEnd(''); setVendaDays('10');
+    setCalendarId(''); setWeeklyRestDay('0'); setUnjustifiedAbsences('0');
+    setEmployeeAgreedToSplit(false); setThirteenthAdvanceRequested(false); setAllowanceRequestedAt('');
   }
 
   async function save(recordType: 'gozo' | 'venda') {
@@ -345,16 +353,22 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
         toast({ title: 'Informe início e fim válidos.', variant: 'destructive' });
         return;
       }
+      if (!calendarId) {
+        toast({ title: 'Selecione o calendário aplicável.', variant: 'destructive' });
+        return;
+      }
       days = differenceInCalendarDays(parseISO(end), parseISO(start)) + 1;
     } else {
       days = Math.min(10, Math.max(1, Number(vendaDays) || 0));
       if (!days) { toast({ title: 'Informe os dias.', variant: 'destructive' }); return; }
+      if (!allowanceRequestedAt) {
+        toast({ title: 'Informe a data do pedido do abono.', variant: 'destructive' });
+        return;
+      }
     }
     setSaving(true);
     try {
-      const status: DPVacationStatus = recordType === 'venda' && permissions.dp?.vacation?.approve
-        ? 'APPROVED'
-        : 'PLANNED';
+      const status: DPVacationStatus = 'PLANNED';
       await addVacation({
         userId,
         cycleId,
@@ -363,6 +377,12 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
         status,
         startDate: recordType === 'gozo' ? start : undefined,
         endDate: recordType === 'gozo' ? end : undefined,
+        calendarId: recordType === 'gozo' ? calendarId : undefined,
+        weeklyRestDay: Number(weeklyRestDay),
+        unjustifiedAbsences: Number(unjustifiedAbsences),
+        employeeAgreedToSplit,
+        allowanceRequestedAt: recordType === 'venda' ? allowanceRequestedAt : undefined,
+        thirteenthAdvanceRequested,
         warnings: [],
       });
       toast({ title: recordType === 'gozo' ? 'Gozo registrado.' : 'Venda registrada.' });
@@ -409,10 +429,26 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
               <input type="date" value={end} onChange={e => setEnd(e.target.value)} className={inputCls} />
             </label>
           </div>
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className={labelCls}>Calendário aplicável</span>
+              <select value={calendarId} onChange={e => setCalendarId(e.target.value)} className={inputCls}>
+                <option value="">Selecione</option>
+                {calendars.map(calendar => <option key={calendar.id} value={calendar.id}>{calendar.name} · {calendar.year}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className={labelCls}>Descanso semanal</span>
+              <select value={weeklyRestDay} onChange={e => setWeeklyRestDay(e.target.value)} className={inputCls}>
+                {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((label, index) => (
+                  <option key={label} value={index}>{label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <p className="mb-2.5 text-[10.5px] font-semibold text-muted-foreground">
             O pagamento será preparado pela trilha depois do recebimento e da aprovação do recibo do contador.
           </p>
-          <FormActions onCancel={reset} onSave={() => save('gozo')} saving={saving} />
         </div>
       )}
 
@@ -427,8 +463,31 @@ function RegisterForms({ cycleId, userId }: { cycleId: string; userId: string })
                 onChange={e => setVendaDays(e.target.value)} className={inputCls}
               />
             </label>
+            <label className="mt-2 block">
+              <span className={labelCls}>Data do pedido do abono</span>
+              <input type="date" value={allowanceRequestedAt} onChange={e => setAllowanceRequestedAt(e.target.value)} className={inputCls} />
+            </label>
           </div>
-          <FormActions onCancel={reset} onSave={() => save('venda')} saving={saving} />
+        </div>
+      )}
+
+      {mode !== 'none' && (
+        <div className="mt-2">
+          <div className="mb-3 space-y-2 rounded-lg border p-2.5">
+            <label className="block">
+              <span className={labelCls}>Faltas injustificadas no ciclo</span>
+              <input type="number" min={0} max={100} value={unjustifiedAbsences} onChange={e => setUnjustifiedAbsences(e.target.value)} className={inputCls} />
+            </label>
+            <label className="flex items-center gap-2 text-[10.5px] font-semibold">
+              <input type="checkbox" checked={employeeAgreedToSplit} onChange={e => setEmployeeAgreedToSplit(e.target.checked)} />
+              Colaborador concordou com o fracionamento
+            </label>
+            <label className="flex items-center gap-2 text-[10.5px] font-semibold">
+              <input type="checkbox" checked={thirteenthAdvanceRequested} onChange={e => setThirteenthAdvanceRequested(e.target.checked)} />
+              Adiantamento da 1ª parcela do 13º solicitado
+            </label>
+          </div>
+          <FormActions onCancel={reset} onSave={() => save(mode)} saving={saving} />
         </div>
       )}
     </div>

@@ -10,10 +10,18 @@ export const FINANCIAL_INBOX_STAGE_STATUSES: Record<FinancialInboxStage, Financi
   link: ["suggestion_available", "divergent"],
   pay: ["linked"],
   bank: ["awaiting_authorization", "scheduled", "awaiting_statement"],
-  done: ["reconciled"],
+  done: ["identified", "reconciled"],
   off: ["ignored"],
   archive: ["archived"],
 };
+
+export const FINANCIAL_INBOX_WORK_STAGES: FinancialInboxStage[] = ["classify", "link", "pay", "bank"];
+export const FINANCIAL_INBOX_IDENTIFIED_STAGES: FinancialInboxStage[] = ["pay", "bank", "done"];
+
+export const FINANCIAL_INBOX_WORK_STATUSES = FINANCIAL_INBOX_WORK_STAGES
+  .flatMap((stage) => FINANCIAL_INBOX_STAGE_STATUSES[stage]);
+export const FINANCIAL_INBOX_IDENTIFIED_STATUSES = FINANCIAL_INBOX_IDENTIFIED_STAGES
+  .flatMap((stage) => FINANCIAL_INBOX_STAGE_STATUSES[stage]);
 
 export const FINANCIAL_INBOX_STAGES = Object.keys(FINANCIAL_INBOX_STAGE_STATUSES) as FinancialInboxStage[];
 

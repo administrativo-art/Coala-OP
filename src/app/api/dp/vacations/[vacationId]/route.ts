@@ -49,7 +49,7 @@ export const PATCH = withApiErrorHandling({
     return NextResponse.json({ vacation: await validateVacationNotice(request, id) });
   }
   if (input.action === 'send_notice') {
-    return NextResponse.json({ vacation: await sendVacationNotice(request, id) });
+    return NextResponse.json({ vacation: await sendVacationNotice(request, id, input) });
   }
   if (input.action === 'sync_notice') {
     return NextResponse.json({ vacation: await syncVacationNotice(request, id) });

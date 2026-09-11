@@ -40,12 +40,12 @@ export function financialInboxRetentionCutoff(now: Date) {
 }
 
 export function financialInboxRetentionPlan(message: FinancialInboxMessage, now: Date) {
-  if (!["ignored", "reconciled"].includes(message.status)) return null;
+  if (!["ignored", "identified", "reconciled"].includes(message.status)) return null;
   const anchor = new Date(message.updatedAt);
   if (Number.isNaN(anchor.getTime()) || anchor > financialInboxRetentionCutoff(now)) return null;
   const retentionClass = retentionClassFor(message);
   return {
-    archivedFromStatus: message.status as "ignored" | "reconciled",
+    archivedFromStatus: message.status as "ignored" | "identified" | "reconciled",
     retentionClass,
     anchorAt: anchor.toISOString(),
     purgeEligibleAt: addUtcMonths(anchor, retentionYears(retentionClass) * 12).toISOString(),

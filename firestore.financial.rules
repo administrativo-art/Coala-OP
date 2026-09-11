@@ -465,6 +465,14 @@ service cloud.firestore {
       }
     }
 
+    // Preferência e auditoria da automação são acessadas somente pela API.
+    match /financialInboxSettings/{workspaceId} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
     match /cashClosures/{closureId} {
       allow read: if canViewCashClosures() && canAccessKiosk(resource.data.kioskId);
       allow create, update, delete: if false;

@@ -13,6 +13,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  History,
   Inbox,
   Landmark,
   Link2,
@@ -30,19 +31,26 @@ import {
   financialInboxStageForStatus,
   isFinancialInboxBulkDiscardEligible,
 } from "./presentation";
+import { resolutionForDisplay } from "./resolution-contract";
 import { equivalentSupplier } from "./expense-suggestions";
+import { trustedFinancialDocumentProvider } from "./trusted-document-providers";
 import type {
+  FinancialInboxAutomationSettings,
   FinancialInboxBillingIdentity,
   FinancialInboxExpenseAlternative,
   FinancialInboxMessage,
+  FinancialInboxFinancialState,
+  FinancialInboxResolutionKind,
   FinancialInboxStage,
   FinancialInboxStatus,
   FinancialInboxSummary,
+  FinancialInboxView,
 } from "./types";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -64,6 +72,7 @@ const STATUS_LABEL: Record<FinancialInboxStatus, string> = {
   document_pending: "Documento pendente",
   suggestion_available: "Sugestão disponível",
   under_review: "Em análise",
+  identified: "Identificada",
   linked: "Vinculada",
   awaiting_authorization: "Aguardando autorização",
   scheduled: "Agendada",
@@ -80,6 +89,7 @@ const STATUS_TONE: Record<FinancialInboxStatus, string> = {
   document_pending: "border-amber-200 bg-amber-50 text-amber-800",
   suggestion_available: "border-violet-200 bg-violet-50 text-violet-800",
   under_review: "border-sky-200 bg-sky-50 text-sky-800",
+  identified: "border-emerald-200 bg-emerald-50 text-emerald-800",
   linked: "border-blue-200 bg-blue-50 text-blue-800",
   awaiting_authorization: "border-blue-200 bg-blue-50 text-blue-800",
   scheduled: "border-blue-200 bg-blue-50 text-blue-800",
@@ -101,16 +111,41 @@ const TYPE_LABEL: Record<FinancialInboxMessage["classification"]["documentType"]
   other: "A classificar",
 };
 
-const STAGE_OPTIONS: Array<{ value: FinancialInboxStage | "all"; label: string }> = [
+const WORK_STAGE_OPTIONS: Array<{ value: FinancialInboxStage | "all"; label: string }> = [
   { value: "all", label: "Todas" },
   { value: "classify", label: "Classificar" },
-  { value: "link", label: "Vincular" },
+  { value: "link", label: "Confirmar" },
   { value: "pay", label: "Preparar" },
   { value: "bank", label: "No banco" },
-  { value: "done", label: "Concluídas" },
+];
+
+type AuditFilter = "all" | "reminder" | "new_charge" | "scheduled" | "reconciled" | "off" | "archive";
+
+const AUDIT_FILTER_OPTIONS: Array<{ value: AuditFilter; label: string }> = [
+  { value: "all", label: "Todas" },
+  { value: "reminder", label: "Lembretes" },
+  { value: "new_charge", label: "Novas cobranças" },
+  { value: "scheduled", label: "Agendadas" },
+  { value: "reconciled", label: "Conciliadas" },
   { value: "off", label: "Descartadas" },
   { value: "archive", label: "Arquivadas" },
 ];
+
+const RESOLUTION_KIND_LABEL: Record<FinancialInboxResolutionKind, string> = {
+  new_charge: "Nova cobrança",
+  reminder: "Lembrete",
+  duplicate: "Duplicata",
+  forecast_confirmation: "Confirmação de previsão",
+  non_financial: "Não financeira",
+};
+
+const FINANCIAL_STATE_LABEL: Record<FinancialInboxFinancialState, string> = {
+  forecast: "Somente prevista",
+  open: "Despesa aberta",
+  payment_prepared: "Pagamento preparado",
+  scheduled: "Pagamento agendado",
+  reconciled: "Pagamento conciliado",
+};
 
 const EMPTY_SUMMARY: FinancialInboxSummary = {
   total: { count: 0, amountCents: 0 },
@@ -128,9 +163,10 @@ const EMPTY_SUMMARY: FinancialInboxSummary = {
 
 type Confirmation =
   | { kind: "discard"; ids: string[] }
-  | { kind: "link"; message: FinancialInboxMessage; alternative?: FinancialInboxExpenseAlternative }
+  | { kind: "link"; message: FinancialInboxMessage; alternative?: FinancialInboxExpenseAlternative; resolutionOnly?: boolean }
+  | { kind: "create"; message: FinancialInboxMessage }
   | { kind: "payment"; message: FinancialInboxMessage }
-  | { kind: "external"; url: string; domain: string };
+  | { kind: "external"; url: string; domain: string; provider: string };
 
 type ComparisonRow = {
   label: string;
@@ -253,6 +289,18 @@ function comparisonRows(message: FinancialInboxMessage): ComparisonRow[] {
       state: "missing",
     });
   }
+  if (message.classification.installmentNumber != null || expense?.installmentNumber != null) {
+    rows.push({
+      label: "Parcela",
+      received: message.classification.installmentNumber == null
+        ? "—"
+        : `${message.classification.installmentNumber}/${message.classification.installmentTotal ?? "?"}`,
+      registered: expense?.installmentNumber == null
+        ? "—"
+        : `${expense.installmentNumber}/${expense.installmentTotal ?? "?"}`,
+      state: "missing",
+    });
+  }
   if (sourceIdentity?.customerAccount || targetIdentity?.customerAccount) {
     rows.push({ label: "Conta do cliente", received: identityValue(sourceIdentity, "account"), registered: identityValue(targetIdentity, "account"), state: "missing" });
   }
@@ -270,6 +318,17 @@ function comparisonRows(message: FinancialInboxMessage): ComparisonRow[] {
 
 function StatusChip({ status }: { status: FinancialInboxStatus }) {
   return <Badge variant="outline" className={cn("whitespace-nowrap text-[10px] font-semibold", STATUS_TONE[status])}>{STATUS_LABEL[status]}</Badge>;
+}
+
+function ResolutionChips({ message }: { message: FinancialInboxMessage }) {
+  const resolution = resolutionForDisplay(message);
+  if (resolution.status !== "identified") return null;
+  return (
+    <>
+      {resolution.kind ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] font-semibold text-emerald-800">{RESOLUTION_KIND_LABEL[resolution.kind]}</Badge> : null}
+      {resolution.financialState ? <Badge variant="outline" className="bg-background text-[10px]">{FINANCIAL_STATE_LABEL[resolution.financialState]}</Badge> : null}
+    </>
+  );
 }
 
 function SummaryCard(props: {
@@ -309,7 +368,9 @@ export function FinancialInboxPage() {
   const [summary, setSummary] = useState<FinancialInboxSummary>(EMPTY_SUMMARY);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<FinancialInboxView>("work");
   const [stage, setStage] = useState<FinancialInboxStage | "all">("all");
+  const [auditFilter, setAuditFilter] = useState<AuditFilter>("all");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
@@ -323,9 +384,18 @@ export function FinancialInboxPage() {
   const [paymentDateMode, setPaymentDateMode] = useState<"today" | "due" | "custom">("due");
   const [customPaymentDate, setCustomPaymentDate] = useState("");
   const [manualBarcode, setManualBarcode] = useState("");
+  const [automationSettings, setAutomationSettings] = useState<FinancialInboxAutomationSettings>({
+    mode: "manual",
+    policyVersion: 1,
+    updatedAt: null,
+    updatedBy: null,
+  });
+  const [automationSettingsLoading, setAutomationSettingsLoading] = useState(true);
+  const [automationSettingsSaving, setAutomationSettingsSaving] = useState(false);
 
   const canAnalyze = permissions.financial?.inbox?.analyze === true;
-  const canLink = permissions.financial?.inbox?.link === true
+  const canIdentify = permissions.financial?.inbox?.link === true;
+  const canLink = canIdentify
     && permissions.financial?.expenses?.create === true
     && permissions.financial?.expenses?.edit === true;
   const canDiscard = permissions.financial?.inbox?.discard === true;
@@ -338,6 +408,15 @@ export function FinancialInboxPage() {
     [messages, selectedIds],
   );
   const selectedComparison = useMemo(() => selected ? comparisonRows(selected) : [], [selected]);
+  const selectedResolution = useMemo(() => selected ? resolutionForDisplay(selected) : null, [selected]);
+  const workSummary = useMemo(() => ["classify", "link", "pay", "bank"].reduce((total, key) => ({
+    count: total.count + summary.stages[key as FinancialInboxStage].count,
+    amountCents: total.amountCents + summary.stages[key as FinancialInboxStage].amountCents,
+  }), { count: 0, amountCents: 0 }), [summary]);
+  const identifiedSummary = useMemo(() => ["pay", "bank", "done"].reduce((total, key) => ({
+    count: total.count + summary.stages[key as FinancialInboxStage].count,
+    amountCents: total.amountCents + summary.stages[key as FinancialInboxStage].amountCents,
+  }), { count: 0, amountCents: 0 }), [summary]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -374,8 +453,13 @@ export function FinancialInboxPage() {
     if (!firebaseUser) return;
     setLoading(true);
     try {
-      const query = new URLSearchParams({ limit: "25" });
-      if (stage !== "all") query.set("stage", stage);
+      const query = new URLSearchParams({ limit: "25", view });
+      if (view === "work" && stage !== "all") query.set("stage", stage);
+      if (view === "identified") {
+        if (auditFilter === "reminder" || auditFilter === "new_charge") query.set("kind", auditFilter);
+        if (auditFilter === "scheduled" || auditFilter === "reconciled") query.set("financialState", auditFilter);
+        if (auditFilter === "off" || auditFilter === "archive") query.set("stage", auditFilter);
+      }
       if (search) query.set("q", search);
       if (cursor) query.set("cursor", cursor);
       const payload = await api(`/api/financial/inbox?${query.toString()}`);
@@ -392,12 +476,63 @@ export function FinancialInboxPage() {
     } finally {
       setLoading(false);
     }
-  }, [api, cursor, firebaseUser, search, stage, toast]);
+  }, [api, auditFilter, cursor, firebaseUser, search, stage, toast, view]);
+
+  const loadAutomationSettings = useCallback(async () => {
+    if (!firebaseUser) return;
+    setAutomationSettingsLoading(true);
+    try {
+      const payload = await api("/api/financial/inbox/settings");
+      setAutomationSettings(payload.settings as FinancialInboxAutomationSettings);
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao carregar a vinculação automática." });
+    } finally {
+      setAutomationSettingsLoading(false);
+    }
+  }, [api, firebaseUser, toast]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadAutomationSettings(); }, [loadAutomationSettings]);
+
+  async function updateAutomationMode(enabled: boolean) {
+    setAutomationSettingsSaving(true);
+    try {
+      const payload = await api("/api/financial/inbox/settings", {
+        method: "PUT",
+        body: JSON.stringify({ mode: enabled ? "document_identity" : "manual" }),
+      });
+      setAutomationSettings(payload.settings as FinancialInboxAutomationSettings);
+      toast({
+        title: enabled ? "Vinculação automática ativada." : "Vinculação automática desativada.",
+        description: enabled
+          ? "Será usada apenas com identidade documental forte e um único candidato."
+          : "As próximas correspondências voltarão a exigir confirmação manual.",
+      });
+    } catch (error) {
+      toast({ variant: "destructive", title: error instanceof Error ? error.message : "Falha ao alterar a vinculação automática." });
+    } finally {
+      setAutomationSettingsSaving(false);
+    }
+  }
 
   function changeStage(nextStage: FinancialInboxStage | "all") {
     setStage(nextStage);
+    setCursor(null);
+    setCursorStack([]);
+    setNextCursor(null);
+  }
+
+  function changeView(nextView: FinancialInboxView) {
+    setView(nextView);
+    setStage("all");
+    setAuditFilter("all");
+    setCursor(null);
+    setCursorStack([]);
+    setNextCursor(null);
+  }
+
+  function changeAuditFilter(nextFilter: AuditFilter) {
+    setAuditFilter(nextFilter);
     setCursor(null);
     setCursorStack([]);
     setNextCursor(null);
@@ -471,17 +606,29 @@ export function FinancialInboxPage() {
     }
   }
 
-  async function linkSuggestion(message: FinancialInboxMessage, alternative?: FinancialInboxExpenseAlternative) {
+  async function linkSuggestion(
+    message: FinancialInboxMessage,
+    alternative?: FinancialInboxExpenseAlternative,
+    resolutionOnly = false,
+  ) {
     const key = alternative ? `${alternative.expenseId}:${alternative.installmentNumber ?? "expense"}` : "suggestion";
     setWorking(`link:${message.id}:${key}`);
     try {
       await api(`/api/financial/inbox/${encodeURIComponent(message.id)}/link`, {
         method: "POST",
-        ...(alternative ? { body: JSON.stringify({ expenseId: alternative.expenseId, installmentNumber: alternative.installmentNumber }) } : {}),
+        ...(alternative || resolutionOnly ? {
+          body: JSON.stringify({
+            expenseId: alternative?.expenseId ?? message.existingExpenseSuggestion?.expenseId,
+            installmentNumber: alternative?.installmentNumber ?? message.existingExpenseSuggestion?.installmentNumber ?? null,
+            resolutionOnly,
+          }),
+        } : {}),
       });
       toast({
-        title: "Cobrança vinculada.",
-        description: alternative
+        title: resolutionOnly ? "Cobrança identificada." : "Cobrança vinculada.",
+        description: resolutionOnly
+          ? "Registrada como lembrete de uma despesa existente, sem alterar a despesa ou o pagamento."
+          : alternative
           ? "A escolha manual e os identificadores da cobrança foram registrados."
           : message.existingExpenseSuggestion?.paymentState === "paid"
             ? "O pagamento confirmado no extrato foi preservado."
@@ -558,8 +705,16 @@ export function FinancialInboxPage() {
   function openExternalConfirmation(url: string) {
     try {
       const parsed = new URL(url);
-      if (parsed.protocol !== "https:") throw new Error();
-      setConfirmation({ kind: "external", url, domain: parsed.hostname });
+      const provider = trustedFinancialDocumentProvider(parsed);
+      if (!provider) {
+        toast({
+          variant: "destructive",
+          title: "Link externo bloqueado.",
+          description: "O domínio ou a rota ainda não pertence à lista de provedores documentais verificados.",
+        });
+        return;
+      }
+      setConfirmation({ kind: "external", url, domain: parsed.hostname, provider: provider.name });
     } catch {
       toast({ variant: "destructive", title: "Esse link não é HTTPS ou não é válido." });
     }
@@ -574,7 +729,7 @@ export function FinancialInboxPage() {
     }
     setConfirmation(null);
     if (action.kind === "discard") void discardMany(action.ids);
-    if (action.kind === "link") void linkSuggestion(action.message, action.alternative);
+    if (action.kind === "link") void linkSuggestion(action.message, action.alternative, action.resolutionOnly === true);
     if (action.kind === "external") window.open(action.url, "_blank", "noopener,noreferrer");
   }
 
@@ -589,8 +744,8 @@ export function FinancialInboxPage() {
           <Link href={FINANCIAL_ROUTES.expenses} className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3.5 w-3.5" /> Despesas
           </Link>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight"><Inbox className="h-6 w-6" />Caixa de cobranças</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Analise, vincule e prepare cobranças recebidas sem misturar e-mail, obrigação e pagamento.</p>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">{view === "work" ? <Inbox className="h-6 w-6" /> : <History className="h-6 w-6" />}{view === "work" ? "Caixa de cobranças" : "Cobranças identificadas"}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{view === "work" ? "Analise, confirme e prepare somente o que ainda exige ação." : "Audite a origem, a identificação e a situação financeira de cada cobrança tratada."}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {lastLoadedAt ? <span className="text-xs text-muted-foreground">Lista atualizada às {formatDateTime(lastLoadedAt).split(" ").at(-1)}</span> : null}
@@ -600,15 +755,47 @@ export function FinancialInboxPage() {
 
       <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
-        <div><strong>Entrada protegida.</strong> Receber ou analisar não cria despesa, não autoriza pagamento e não envia nada ao banco. O e-mail original permanece arquivado.</div>
+        <div><strong>{view === "work" ? "Entrada protegida." : "Trilha preservada."}</strong> {view === "work" ? "Receber ou analisar não cria despesa, não autoriza pagamento e não envia nada ao banco." : "Uma identificação registra a relação com o lançamento sem alterar a despesa ou executar pagamento."} O e-mail original permanece arquivado.</div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard title="Para classificar" count={summary.stages.classify.count} amountCents={summary.stages.classify.amountCents} icon={<CircleDot className="h-5 w-5 text-amber-600" />} detail="revisão ou documento" active={stage === "classify"} onClick={() => changeStage("classify")} />
-        <SummaryCard title="Para vincular" count={summary.stages.link.count} amountCents={summary.stages.link.amountCents} icon={<Link2 className="h-5 w-5 text-violet-600" />} detail="sugestão disponível" active={stage === "link"} onClick={() => changeStage("link")} />
-        <SummaryCard title="Para preparar" count={summary.stages.pay.count} amountCents={summary.stages.pay.amountCents} icon={<Banknote className="h-5 w-5 text-blue-600" />} detail="despesa já vinculada" active={stage === "pay"} onClick={() => changeStage("pay")} />
-        <SummaryCard title="No banco" count={summary.stages.bank.count} amountCents={summary.stages.bank.amountCents} icon={<Landmark className="h-5 w-5 text-cyan-600" />} detail={`${summary.stages.done.count} conciliadas à parte`} active={stage === "bank"} onClick={() => changeStage("bank")} />
+      {view === "work" ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-violet-700" />
+            <div>
+              <p className="text-sm font-bold">Vinculação automática por identidade documental</p>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                Opt-in: identifica sem clique somente um candidato com a mesma linha digitável/código de barras; ou com CNPJ, NF/documento, parcela, valor e vencimento idênticos. Não cria despesa, não prepara e não executa pagamento.
+              </p>
+              {automationSettings.updatedAt ? <p className="mt-1 text-[11px] text-muted-foreground">Última alteração em {formatDateTime(automationSettings.updatedAt)}.</p> : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-xs font-semibold">{automationSettings.mode === "document_identity" ? "Automática" : "Manual"}</span>
+            <Switch
+              aria-label="Ativar vinculação automática por identidade documental"
+              checked={automationSettings.mode === "document_identity"}
+              onCheckedChange={(checked) => void updateAutomationMode(checked)}
+              disabled={!canIdentify || automationSettingsLoading || automationSettingsSaving}
+            />
+            {automationSettingsSaving ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="inline-flex w-full max-w-2xl rounded-xl border bg-muted/40 p-1" role="tablist" aria-label="Visão das cobranças">
+        <button type="button" role="tab" aria-selected={view === "work"} onClick={() => changeView("work")} className={cn("flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition", view === "work" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}><Inbox className="h-4 w-4" />Caixa de cobranças <span className="text-xs opacity-60">{workSummary.count}</span></button>
+        <button type="button" role="tab" aria-selected={view === "identified"} onClick={() => changeView("identified")} className={cn("flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition", view === "identified" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}><History className="h-4 w-4" />Cobranças identificadas <span className="text-xs opacity-60">{identifiedSummary.count}</span></button>
       </div>
+
+      {view === "work" ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard title="Para classificar" count={summary.stages.classify.count} amountCents={summary.stages.classify.amountCents} icon={<CircleDot className="h-5 w-5 text-amber-600" />} detail="revisão ou documento" active={stage === "classify"} onClick={() => changeStage("classify")} />
+          <SummaryCard title="Para confirmar" count={summary.stages.link.count} amountCents={summary.stages.link.amountCents} icon={<Link2 className="h-5 w-5 text-violet-600" />} detail="correspondência a conferir" active={stage === "link"} onClick={() => changeStage("link")} />
+          <SummaryCard title="Para preparar" count={summary.stages.pay.count} amountCents={summary.stages.pay.amountCents} icon={<Banknote className="h-5 w-5 text-blue-600" />} detail="despesa principal vinculada" active={stage === "pay"} onClick={() => changeStage("pay")} />
+          <SummaryCard title="No banco" count={summary.stages.bank.count} amountCents={summary.stages.bank.amountCents} icon={<Landmark className="h-5 w-5 text-cyan-600" />} detail="acompanhamento bancário" active={stage === "bank"} onClick={() => changeStage("bank")} />
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border bg-card shadow-sm">
         <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between">
@@ -616,13 +803,13 @@ export function FinancialInboxPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="pl-9" placeholder="Buscar fornecedor, assunto, valor, conta ou telefone..." aria-label="Buscar cobranças" />
           </div>
-          <div className="flex max-w-full gap-1 overflow-x-auto pb-1 lg:pb-0" role="tablist" aria-label="Etapa da cobrança">
-            {STAGE_OPTIONS.map((option) => {
-              const count = option.value === "all" ? summary.total.count : summary.stages[option.value].count;
-              return (
-                <button key={option.value} type="button" role="tab" aria-selected={stage === option.value} onClick={() => changeStage(option.value)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground transition", stage === option.value ? "bg-foreground text-background" : "hover:bg-muted hover:text-foreground")}>{option.label} <span className="ml-1 opacity-70">{count}</span></button>
-              );
-            })}
+          <div className="flex max-w-full gap-1 overflow-x-auto pb-1 lg:pb-0" role="tablist" aria-label={view === "work" ? "Etapa da cobrança" : "Filtro de auditoria"}>
+            {view === "work" ? WORK_STAGE_OPTIONS.map((option) => {
+              const count = option.value === "all" ? workSummary.count : summary.stages[option.value].count;
+              return <button key={option.value} type="button" role="tab" aria-selected={stage === option.value} onClick={() => changeStage(option.value)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground transition", stage === option.value ? "bg-foreground text-background" : "hover:bg-muted hover:text-foreground")}>{option.label} <span className="ml-1 opacity-70">{count}</span></button>;
+            }) : AUDIT_FILTER_OPTIONS.map((option) => (
+              <button key={option.value} type="button" role="tab" aria-selected={auditFilter === option.value} onClick={() => changeAuditFilter(option.value)} className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground transition", auditFilter === option.value ? "bg-foreground text-background" : "hover:bg-muted hover:text-foreground")}>{option.label}{option.value === "all" ? <span className="ml-1 opacity-70">{identifiedSummary.count}</span> : null}</button>
+            ))}
           </div>
         </div>
 
@@ -633,7 +820,7 @@ export function FinancialInboxPage() {
         {loading ? (
           <div className="flex h-72 items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
         ) : messages.length === 0 ? (
-          <div className="flex min-h-72 flex-col items-center justify-center gap-2 p-8 text-center"><Inbox className="h-9 w-9 text-muted-foreground" /><p className="font-semibold">Nenhuma cobrança encontrada</p><p className="max-w-md text-sm text-muted-foreground">Ajuste a etapa ou a busca. Receber mensagens continua sendo uma operação sem efeito financeiro.</p></div>
+          <div className="flex min-h-72 flex-col items-center justify-center gap-2 p-8 text-center">{view === "work" ? <Inbox className="h-9 w-9 text-muted-foreground" /> : <History className="h-9 w-9 text-muted-foreground" />}<p className="font-semibold">Nenhuma cobrança encontrada</p><p className="max-w-md text-sm text-muted-foreground">Ajuste o filtro ou a busca. Receber mensagens continua sendo uma operação sem efeito financeiro.</p></div>
         ) : (
           <div className="grid min-h-[640px] lg:grid-cols-[minmax(330px,0.76fr)_minmax(0,1.24fr)]">
             <div className="border-b lg:border-b-0 lg:border-r">
@@ -656,11 +843,11 @@ export function FinancialInboxPage() {
                       }}
                       className={cn("group flex cursor-pointer gap-3 p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", selectedId === message.id ? "bg-violet-50/70" : "hover:bg-muted/40")}
                     >
-                      <Checkbox checked={checked} disabled={!discardEligible} aria-label={`Selecionar ${message.subject} para descarte`} onClick={(event) => event.stopPropagation()} onCheckedChange={(value) => toggleSelected(message, value === true)} className="mt-1" />
+                      {view === "work" ? <Checkbox checked={checked} disabled={!discardEligible} aria-label={`Selecionar ${message.subject} para descarte`} onClick={(event) => event.stopPropagation()} onCheckedChange={(value) => toggleSelected(message, value === true)} className="mt-1" /> : null}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2"><p className="truncate text-sm font-bold">{senderLabel(message)}</p><span className="font-mono text-xs font-semibold">{formatAmount(message.classification.amountCents)}</span></div>
                         <p className="mt-1 line-clamp-2 text-sm leading-5">{message.subject}</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2"><StatusChip status={message.status} /><Badge variant="outline" className="bg-background text-[10px]">{TYPE_LABEL[message.classification.documentType]}</Badge><span className="ml-auto text-[11px] text-muted-foreground">{formatDateTime(message.receivedAt)}</span></div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2"><StatusChip status={message.status} /><ResolutionChips message={message} /><Badge variant="outline" className="bg-background text-[10px]">{TYPE_LABEL[message.classification.documentType]}</Badge><span className="ml-auto text-[11px] text-muted-foreground">{formatDateTime(message.receivedAt)}</span></div>
                       </div>
                     </div>
                   );
@@ -676,7 +863,7 @@ export function FinancialInboxPage() {
               <div className="min-w-0">
                 <div className="border-b p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0"><div className="mb-2 flex flex-wrap gap-2"><StatusChip status={selected.status} /><Badge variant="outline">{TYPE_LABEL[selected.classification.documentType]}</Badge></div><h2 className="text-xl font-bold tracking-tight">{selected.subject}</h2><p className="mt-1 break-all text-sm text-muted-foreground">{selected.from}</p></div>
+                    <div className="min-w-0"><div className="mb-2 flex flex-wrap gap-2"><StatusChip status={selected.status} /><ResolutionChips message={selected} /><Badge variant="outline">{TYPE_LABEL[selected.classification.documentType]}</Badge></div><h2 className="text-xl font-bold tracking-tight">{selected.subject}</h2><p className="mt-1 break-all text-sm text-muted-foreground">{selected.from}</p></div>
                     <p className="font-mono text-xl font-bold">{formatAmount(selected.classification.amountCents)}</p>
                   </div>
                   <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-muted-foreground">Competência</p><p className="font-semibold">{formatCompetence(selected.classification.competence)}</p></div><div><p className="text-xs text-muted-foreground">Vencimento</p><p className="font-semibold">{formatDate(selected.classification.dueDate)}</p></div><div><p className="text-xs text-muted-foreground">Recebimento</p><p className="font-semibold">{formatDateTime(selected.receivedAt)}</p></div></div>
@@ -684,23 +871,24 @@ export function FinancialInboxPage() {
 
                 <div className="space-y-5 p-5">
                   <section className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Próxima decisão</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">{selectedResolution?.status === "identified" ? "Resultado do tratamento" : "Próxima decisão"}</p>
                     <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         {financialInboxStageForStatus(selected.status) === "classify" ? <><p className="font-bold">Analisar documentos e localizar o lançamento</p><p className="text-sm text-muted-foreground">A análise atualiza sugestões; não cria nem altera despesas.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "link" ? <><p className="font-bold">Confirmar a despesa ou previsão correspondente</p><p className="text-sm text-muted-foreground">Confira divergências antes de registrar o vínculo.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "pay" ? <><p className="font-bold">Preparar solicitação para autorização</p><p className="text-sm text-muted-foreground">Preparar não agenda, autoriza ou executa o pagamento.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "bank" ? <><p className="font-bold">Acompanhar a situação no banco</p><p className="text-sm text-muted-foreground">A conciliação só ocorre depois da liquidação encontrada no extrato.</p></> : null}
-                        {financialInboxStageForStatus(selected.status) === "done" ? <><p className="font-bold">Cobrança conciliada</p><p className="text-sm text-muted-foreground">O vínculo e a liquidação foram preservados para auditoria.</p></> : null}
+                        {selected.status === "identified" ? <><p className="font-bold">Cobrança já registrada no financeiro</p><p className="text-sm text-muted-foreground">O e-mail foi preservado como evidência; nenhuma despesa ou solicitação de pagamento foi criada.</p></> : null}
+                        {selected.status !== "identified" && financialInboxStageForStatus(selected.status) === "done" ? <><p className="font-bold">Cobrança conciliada</p><p className="text-sm text-muted-foreground">O vínculo e a liquidação foram preservados para auditoria.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "off" ? <><p className="font-bold">Mensagem descartada</p><p className="text-sm text-muted-foreground">Nenhum efeito financeiro foi produzido.</p></> : null}
                         {financialInboxStageForStatus(selected.status) === "archive" ? <><p className="font-bold">Mensagem arquivada pela política de retenção</p><p className="text-sm text-muted-foreground">Fora da caixa operacional; a trilha e os vínculos continuam preservados.</p></> : null}
                       </div>
                       <div className="shrink-0">
-                        {financialInboxStageForStatus(selected.status) === "classify" && canAnalyze ? <Button onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><Sparkles className="mr-2 h-4 w-4" />Analisar cobrança</Button> : null}
-                        {financialInboxStageForStatus(selected.status) === "link" && canLink && selected.existingExpenseSuggestion?.status === "suggested" ? <Button onClick={() => setConfirmation({ kind: "link", message: selected })}><Link2 className="mr-2 h-4 w-4" />Vincular sugestão</Button> : null}
-                        {financialInboxStageForStatus(selected.status) === "link" && canLink && selected.provisionSuggestion?.status === "suggested" ? <Button onClick={() => setConfirmation({ kind: "link", message: selected })}><Link2 className="mr-2 h-4 w-4" />Substituir previsão</Button> : null}
-                        {financialInboxStageForStatus(selected.status) === "pay" && canPreparePayment && !selected.paymentRequestId ? <Button onClick={() => setConfirmation({ kind: "payment", message: selected })}><ShieldCheck className="mr-2 h-4 w-4" />Preparar pagamento</Button> : null}
-                        {financialInboxStageForStatus(selected.status) === "bank" && permissions.financial?.paymentRequests?.view ? <Button asChild><Link href={FINANCIAL_ROUTES.paymentRequests}><Landmark className="mr-2 h-4 w-4" />Abrir no banco</Link></Button> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "classify" && canAnalyze ? <Button onClick={() => void analyze(selected)} disabled={working === `analyze:${selected.id}`}><Sparkles className="mr-2 h-4 w-4" />Analisar cobrança</Button> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canIdentify && selected.existingExpenseSuggestion?.status === "suggested" ? <Button onClick={() => setConfirmation({ kind: "link", message: selected, resolutionOnly: true })}><CheckCircle2 className="mr-2 h-4 w-4" />Confirmar como já registrada</Button> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "link" && canLink && selected.provisionSuggestion?.status === "suggested" ? <Button onClick={() => setConfirmation({ kind: "link", message: selected })}><Link2 className="mr-2 h-4 w-4" />Substituir previsão</Button> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "pay" && canPreparePayment && !selected.paymentRequestId ? <Button onClick={() => setConfirmation({ kind: "payment", message: selected })}><ShieldCheck className="mr-2 h-4 w-4" />Preparar pagamento</Button> : null}
+                        {view === "work" && financialInboxStageForStatus(selected.status) === "bank" && permissions.financial?.paymentRequests?.view ? <Button asChild><Link href={FINANCIAL_ROUTES.paymentRequests}><Landmark className="mr-2 h-4 w-4" />Abrir no banco</Link></Button> : null}
                         {financialInboxStageForStatus(selected.status) === "off" && canDiscard ? <Button variant="outline" onClick={() => void review(selected, "pending_review")} disabled={working === `review:${selected.id}`}><RotateCcw className="mr-2 h-4 w-4" />Reabrir</Button> : null}
                         {financialInboxStageForStatus(selected.status) === "archive" && canDiscard ? <Button variant="outline" onClick={() => void restoreArchived(selected)} disabled={working === `restore:${selected.id}`}>{working === `restore:${selected.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}Restaurar</Button> : null}
                       </div>
@@ -709,7 +897,7 @@ export function FinancialInboxPage() {
 
                   {selectedComparison.length > 0 ? (
                     <section className="overflow-hidden rounded-2xl border">
-                      <div className="border-b bg-muted/30 px-4 py-3"><h3 className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-violet-600" />Comparação com o cadastro</h3><p className="mt-1 text-xs text-muted-foreground">O vínculo continua dependendo da sua confirmação.</p></div>
+                      <div className="border-b bg-muted/30 px-4 py-3"><h3 className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-violet-600" />Comparação com o cadastro</h3><p className="mt-1 text-xs text-muted-foreground">{selectedResolution?.status === "identified" ? "Evidências usadas para identificar a cobrança." : "A correspondência continua dependendo da sua confirmação."}</p></div>
                       <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm"><thead className="text-left text-[11px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Campo</th><th className="px-4 py-3">No e-mail</th><th className="px-4 py-3">No sistema</th><th className="px-4 py-3">Conferência</th></tr></thead><tbody className="divide-y">{selectedComparison.map((row) => <tr key={row.label}><td className="px-4 py-3 font-medium">{row.label}</td><td className="px-4 py-3">{row.received}</td><td className="px-4 py-3">{row.registered}</td><td className="px-4 py-3">{row.state === "same" ? <span className="inline-flex items-center gap-1 font-semibold text-emerald-700"><Check className="h-4 w-4" />Confere</span> : row.state === "different" ? <span className="inline-flex items-center gap-1 font-semibold text-orange-700"><AlertTriangle className="h-4 w-4" />Divergente</span> : <span className="text-muted-foreground">Não informado</span>}</td></tr>)}</tbody></table></div>
                     </section>
                   ) : null}
@@ -717,7 +905,7 @@ export function FinancialInboxPage() {
                   <section className="rounded-2xl border p-4">
                     <h3 className="flex items-center gap-2 text-sm font-bold"><Link2 className="h-4 w-4 text-violet-600" />Lançamento sugerido</h3>
                     {["suggested", "linked"].includes(selected.existingExpenseSuggestion?.status ?? "") ? (
-                      <div className="mt-3"><p className="font-semibold">{selected.existingExpenseSuggestion?.description || "Despesa encontrada"}</p><p className="mt-1 text-sm text-muted-foreground">{[selected.existingExpenseSuggestion?.supplier, installmentLabel(selected), formatAmount(selected.existingExpenseSuggestion?.amountCents), formatDate(selected.existingExpenseSuggestion?.dueDate)].filter(Boolean).join(" · ")}</p><p className="mt-1 text-xs text-muted-foreground">{selected.existingExpenseSuggestion?.reasons.join(" · ")}</p></div>
+                      <div className="mt-3"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{selected.existingExpenseSuggestion?.description || "Despesa encontrada"}</p>{selected.existingExpenseSuggestion?.automaticLinkEligible ? <Badge variant="outline" className="border-violet-200 bg-violet-50 text-[10px] text-violet-800">Identidade documental forte</Badge> : null}</div><p className="mt-1 text-sm text-muted-foreground">{[selected.existingExpenseSuggestion?.supplier, installmentLabel(selected), formatAmount(selected.existingExpenseSuggestion?.amountCents), formatDate(selected.existingExpenseSuggestion?.dueDate)].filter(Boolean).join(" · ")}</p><p className="mt-1 text-xs text-muted-foreground">{selected.existingExpenseSuggestion?.reasons.join(" · ")}</p>{selected.existingExpenseSuggestion?.automaticLinkEligible ? <p className="mt-1 text-xs font-medium text-violet-700">{selected.existingExpenseSuggestion.automaticLinkReasons?.join(" · ")}</p> : null}</div>
                     ) : selected.provisionSuggestion?.status === "suggested" ? (
                       <div className="mt-3"><p className="font-semibold">{selected.provisionSuggestion.description || "Previsão encontrada"}</p><p className="mt-1 text-sm text-muted-foreground">{formatAmount(selected.provisionSuggestion.provisionedAmountCents)} · {selected.provisionSuggestion.reasons.join(" · ")}</p></div>
                     ) : selected.creationSuggestion?.status === "suggested" ? (
@@ -727,10 +915,11 @@ export function FinancialInboxPage() {
                     ) : <p className="mt-3 text-sm text-muted-foreground">Nenhuma correspondência única foi encontrada.</p>}
 
                     {!selected.linkedExpenseId && selected.existingExpenseSuggestion?.status !== "suggested" && (selected.existingExpenseSuggestion?.alternatives?.length ?? 0) > 0 ? (
-                      <div className="mt-4 space-y-2 border-t pt-4"><p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Alternativas — confirmação manual</p>{selected.existingExpenseSuggestion!.alternatives!.map((alternative) => <div key={`${alternative.expenseId}:${alternative.installmentNumber ?? "expense"}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3"><div><p className="text-sm font-semibold">{alternative.description}</p><p className="text-xs text-muted-foreground">{[alternative.supplier, alternative.installmentNumber ? `Parcela ${alternative.installmentNumber}${alternative.installmentTotal ? `/${alternative.installmentTotal}` : ""}` : null, formatAmount(alternative.amountCents), formatDate(alternative.dueDate)].filter(Boolean).join(" · ")}</p><p className="mt-1 text-[11px] text-muted-foreground">{alternative.reasons.join(" · ")}</p></div>{canLink ? <Button variant="outline" size="sm" onClick={() => setConfirmation({ kind: "link", message: selected, alternative })}>Escolher vínculo</Button> : null}</div>)}</div>
+                      <div className="mt-4 space-y-2 border-t pt-4"><p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Alternativas — confirmação manual</p>{selected.existingExpenseSuggestion!.alternatives!.map((alternative) => <div key={`${alternative.expenseId}:${alternative.installmentNumber ?? "expense"}`} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3"><div><p className="text-sm font-semibold">{alternative.description}</p><p className="text-xs text-muted-foreground">{[alternative.supplier, alternative.installmentNumber ? `Parcela ${alternative.installmentNumber}${alternative.installmentTotal ? `/${alternative.installmentTotal}` : ""}` : null, formatAmount(alternative.amountCents), formatDate(alternative.dueDate)].filter(Boolean).join(" · ")}</p><p className="mt-1 text-[11px] text-muted-foreground">{alternative.reasons.join(" · ")}</p></div>{canIdentify ? <Button variant="outline" size="sm" onClick={() => setConfirmation({ kind: "link", message: selected, alternative, resolutionOnly: true })}>Identificar lançamento</Button> : null}</div>)}</div>
                     ) : null}
 
                     {selected.linkedExpenseId ? <div className="mt-4 flex gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span>Vinculada à despesa {selected.linkedExpenseId}{selected.linkedExpenseInstallmentNumber ? `, parcela ${selected.linkedExpenseInstallmentNumber}` : ""}.</span></div> : null}
+                    {!selected.linkedExpenseId && selectedResolution?.status === "identified" && selectedResolution.targetId ? <div className="mt-4 flex gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span>Identificada como referência da despesa {selectedResolution.targetId}{selectedResolution.installmentNumber ? `, parcela ${selectedResolution.installmentNumber}` : ""}. A despesa não foi alterada.</span></div> : null}
                     {selected.existingExpenseSuggestion?.paymentState === "paid" ? <div className="mt-3 flex gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /><span>Liquidação confirmada pelo extrato{selected.existingExpenseSuggestion.existingSettlement?.paidAt ? ` em ${formatDate(selected.existingExpenseSuggestion.existingSettlement.paidAt)}` : ""}.</span></div> : null}
                     {selected.existingExpenseSuggestion?.paymentState === "scheduled" ? <div className="mt-3 flex gap-2 rounded-xl bg-blue-50 p-3 text-sm text-blue-800"><Landmark className="mt-0.5 h-4 w-4 shrink-0" /><span>Há uma solicitação bancária existente. O agendamento não é tratado como liquidação.</span></div> : null}
                   </section>
@@ -742,14 +931,14 @@ export function FinancialInboxPage() {
                   <Accordion type="multiple" defaultValue={["documents"]} className="rounded-2xl border px-4">
                     <AccordionItem value="email"><AccordionTrigger className="text-sm">Conteúdo do e-mail</AccordionTrigger><AccordionContent><p className="max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-muted/30 p-4 leading-6">{selected.textContent || "O e-mail não possui conteúdo textual."}</p></AccordionContent></AccordionItem>
                     <AccordionItem value="documents"><AccordionTrigger className="text-sm">Documentos arquivados ({selected.attachments.filter((attachment) => attachment.storagePath).length + (selected.rawStoragePath ? 1 : 0)})</AccordionTrigger><AccordionContent><div className="flex flex-wrap gap-2">{selected.attachments.filter((attachment) => attachment.storagePath).map((attachment) => <Button key={attachment.id} variant="outline" size="sm" onClick={() => void openFile(selected, attachment.id)} disabled={working === `file:${attachment.id}`}>{working === `file:${attachment.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}{attachment.filename}{attachment.extractionStatus === "failed" ? <XCircle className="ml-2 h-3.5 w-3.5 text-red-600" /> : attachment.extractionStatus === "needs_ocr" ? <AlertTriangle className="ml-2 h-3.5 w-3.5 text-amber-600" /> : attachment.extractionStatus === "extracted" || attachment.extractionStatus === "ocr_extracted" ? <Check className="ml-2 h-3.5 w-3.5 text-emerald-600" /> : null}</Button>)}{selected.rawStoragePath ? <Button variant="ghost" size="sm" onClick={() => void openFile(selected, "raw")} disabled={working === "file:raw"}><Download className="mr-2 h-4 w-4" />E-mail original (.eml)</Button> : null}{!selected.rawStoragePath && !selected.attachments.some((attachment) => attachment.storagePath) ? <p className="text-sm text-muted-foreground">Nenhum documento foi arquivado.</p> : null}</div>{selected.linkResolution?.message ? <p className={cn("mt-3 text-xs", selected.linkResolution.status === "resolved" ? "text-emerald-700" : selected.linkResolution.status === "requires_login" ? "text-amber-700" : "text-muted-foreground")}>{selected.linkResolution.message}</p> : null}</AccordionContent></AccordionItem>
-                    {selected.classification.links.length > 0 ? <AccordionItem value="links"><AccordionTrigger className="text-sm">Links enviados pelo fornecedor ({selected.classification.links.length})</AccordionTrigger><AccordionContent><p className="mb-3 text-xs text-muted-foreground">O domínio será mostrado para confirmação antes de abrir. A análise automática aceita apenas destinos permitidos.</p><div className="grid gap-2">{selected.classification.links.map((link) => <button key={link} type="button" onClick={() => openExternalConfirmation(link)} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm text-blue-700 hover:bg-blue-50"><span className="truncate">{link}</span><ExternalLink className="h-4 w-4 shrink-0" /></button>)}</div></AccordionContent></AccordionItem> : null}
+                    {selected.classification.links.length > 0 ? <AccordionItem value="links"><AccordionTrigger className="text-sm">Links enviados pelo fornecedor ({selected.classification.links.length})</AccordionTrigger><AccordionContent><p className="mb-3 text-xs text-muted-foreground">Somente provedores e rotas documentais verificados podem ser abertos. A validação independe do endereço do remetente.</p><div className="grid gap-2">{selected.classification.links.map((link) => { const provider = trustedFinancialDocumentProvider(link); return <button key={link} type="button" onClick={() => openExternalConfirmation(link)} disabled={!provider} className={cn("flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm", provider ? "text-blue-700 hover:bg-blue-50" : "cursor-not-allowed bg-muted/30 text-muted-foreground")}><span className="min-w-0"><span className="block truncate">{link}</span><span className={cn("mt-1 block text-[10px] font-semibold", provider ? "text-emerald-700" : "text-amber-700")}>{provider?.name ?? "Destino não verificado — abertura bloqueada"}</span></span>{provider ? <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-700" /> : <XCircle className="h-4 w-4 shrink-0" />}</button>; })}</div></AccordionContent></AccordionItem> : null}
                   </Accordion>
 
                   {selected.archiveWarnings.length > 0 ? <div className="flex gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div>{selected.archiveWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div></div> : null}
 
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                    <div className="text-[11px] text-muted-foreground"><p>Mensagem: {selected.id}</p><p>Atualizada em {formatDateTime(selected.updatedAt)} · origem {selected.provider}</p>{selected.paymentRequestId ? <p>Solicitação de pagamento: {selected.paymentRequestId}</p> : null}{selected.statementTransactionId ? <p>Movimentação conciliada: {selected.statementTransactionId}</p> : null}</div>
-                    <div className="flex flex-wrap gap-2">{canLink && !selected.linkedExpenseId && selected.creationSuggestion?.status !== "blocked_by_ambiguity" ? <Button asChild variant="outline"><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(selected.id)}`}>{selected.creationSuggestion?.status === "suggested" ? "Criar despesa preenchida" : "Registrar manualmente"}</Link></Button> : null}{canDiscard && selected.status !== "ignored" && isFinancialInboxBulkDiscardEligible(selected) ? <Button variant="outline" onClick={() => setConfirmation({ kind: "discard", ids: [selected.id] })}><Trash2 className="mr-2 h-4 w-4" />Descartar</Button> : null}</div>
+                    <div className="text-[11px] text-muted-foreground"><p>Mensagem: {selected.id}</p><p>Atualizada em {formatDateTime(selected.updatedAt)} · origem {selected.provider}</p>{selectedResolution?.resolvedAt ? <p>Identificação {selectedResolution.mode === "automatic" ? "automática" : "manual"} em {formatDateTime(selectedResolution.resolvedAt)}</p> : null}{selected.paymentRequestId ? <p>Solicitação de pagamento: {selected.paymentRequestId}</p> : null}{selected.statementTransactionId ? <p>Movimentação conciliada: {selected.statementTransactionId}</p> : null}</div>
+                    <div className="flex flex-wrap gap-2">{view === "work" && canLink && selectedResolution?.status === "pending" && !selected.linkedExpenseId ? <Button variant="outline" onClick={() => setConfirmation({ kind: "create", message: selected })}>Criar nova despesa</Button> : null}{view === "work" && canDiscard && selected.status !== "ignored" && isFinancialInboxBulkDiscardEligible(selected) ? <Button variant="outline" onClick={() => setConfirmation({ kind: "discard", ids: [selected.id] })}><Trash2 className="mr-2 h-4 w-4" />Descartar</Button> : null}</div>
                   </div>
                 </div>
               </div>
@@ -765,9 +954,10 @@ export function FinancialInboxPage() {
       <Dialog open={confirmation !== null} onOpenChange={(open) => { if (!open && !working) setConfirmation(null); }}>
         <DialogContent className="rounded-2xl sm:max-w-lg">
           {confirmation?.kind === "discard" ? <><DialogHeader><DialogTitle>Descartar {confirmation.ids.length === 1 ? "esta mensagem" : `${confirmation.ids.length} mensagens`}?</DialogTitle><DialogDescription>O descarte será auditado e não excluirá o e-mail original. Nenhuma despesa ou pagamento será criado. Mensagens já vinculadas ou em processamento são bloqueadas pelo servidor.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirmation(null)}>Voltar</Button><Button variant="destructive" onClick={confirmAction} disabled={working === "discard:many"}><Trash2 className="mr-2 h-4 w-4" />Confirmar descarte</Button></DialogFooter></> : null}
-          {confirmation?.kind === "link" ? <><DialogHeader><DialogTitle>Confirmar vínculo?</DialogTitle><DialogDescription>Esta ação registra a relação entre a cobrança e {confirmation.alternative ? `“${confirmation.alternative.description}”` : "o lançamento sugerido"}. Ela não autoriza nem executa pagamento.</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3 text-sm"><p className="font-semibold">{confirmation.message.subject}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.classification.amountCents)} · vence em {formatDate(confirmation.message.classification.dueDate)}</p></div><DialogFooter><Button variant="outline" onClick={() => setConfirmation(null)}>Revisar novamente</Button><Button onClick={confirmAction}><Link2 className="mr-2 h-4 w-4" />Registrar vínculo</Button></DialogFooter></> : null}
+          {confirmation?.kind === "link" ? <><DialogHeader><DialogTitle>{confirmation.resolutionOnly ? "Confirmar identificação?" : "Confirmar vínculo?"}</DialogTitle><DialogDescription>{confirmation.resolutionOnly ? "A mensagem será registrada como lembrete de uma despesa existente. A despesa, o agendamento e o pagamento não serão alterados." : <>Esta ação registra a relação entre a cobrança e {confirmation.alternative ? `“${confirmation.alternative.description}”` : "o lançamento sugerido"}. Ela não autoriza nem executa pagamento.</>}</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3 text-sm"><p className="font-semibold">{confirmation.message.subject}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.classification.amountCents)} · vence em {formatDate(confirmation.message.classification.dueDate)}</p></div><DialogFooter><Button variant="outline" onClick={() => setConfirmation(null)}>Revisar novamente</Button><Button onClick={confirmAction}>{confirmation.resolutionOnly ? <CheckCircle2 className="mr-2 h-4 w-4" /> : <Link2 className="mr-2 h-4 w-4" />}{confirmation.resolutionOnly ? "Registrar como já existente" : "Registrar vínculo"}</Button></DialogFooter></> : null}
+          {confirmation?.kind === "create" ? <><DialogHeader><DialogTitle>Criar uma nova despesa?</DialogTitle><DialogDescription>Use esta opção quando a cobrança realmente representar uma nova obrigação. As correspondências encontradas continuarão disponíveis para evitar duplicidade.</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3 text-sm"><p className="font-semibold">{confirmation.message.subject}</p><p className="mt-1 text-muted-foreground">{formatAmount(confirmation.message.classification.amountCents)} · vence em {formatDate(confirmation.message.classification.dueDate)}</p>{(confirmation.message.existingExpenseSuggestion?.alternatives?.length ?? 0) > 0 ? <p className="mt-2 font-medium text-amber-700">Há lançamentos semelhantes. Confirme que esta é uma obrigação diferente.</p> : null}</div><DialogFooter><Button variant="outline" onClick={() => setConfirmation(null)}>Voltar</Button><Button asChild><Link href={`${FINANCIAL_ROUTES.newExpense}?inbox=${encodeURIComponent(confirmation.message.id)}`}>Continuar e criar</Link></Button></DialogFooter></> : null}
           {confirmation?.kind === "payment" ? <><DialogHeader><DialogTitle>Preparar solicitação de pagamento</DialogTitle><DialogDescription><strong>Preparar não autoriza, agenda nem executa pagamento.</strong> A solicitação seguirá para a fila de autorizações financeiras.</DialogDescription></DialogHeader><div className="space-y-4"><div className="rounded-xl border bg-muted/30 p-3"><p className="text-sm font-semibold">{confirmation.message.subject}</p><p className="mt-1 font-mono text-lg font-bold">{formatAmount(confirmation.message.classification.amountCents)}</p></div>{!confirmation.message.classification.barcode ? <div><label htmlFor="payment-barcode" className="text-sm font-medium">Código de barras</label><Input id="payment-barcode" className="mt-1 font-mono" value={manualBarcode} onChange={(event) => setManualBarcode(event.target.value)} placeholder="Informe o código completo" /></div> : <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline h-4 w-4" />Código de barras extraído do documento.</p>}<fieldset><legend className="text-sm font-medium">Data pretendida</legend><div className="mt-2 grid gap-2 sm:grid-cols-3">{([{ value: "due", label: `Vencimento (${formatDate(confirmation.message.classification.dueDate)})` }, { value: "today", label: "Hoje" }, { value: "custom", label: "Outra data" }] as const).map((option) => <button key={option.value} type="button" onClick={() => setPaymentDateMode(option.value)} className={cn("rounded-xl border p-3 text-left text-xs font-semibold", paymentDateMode === option.value ? "border-violet-400 bg-violet-50 text-violet-800" : "hover:bg-muted")}>{option.label}</button>)}</div></fieldset>{paymentDateMode === "custom" ? <div><label htmlFor="custom-payment-date" className="text-sm font-medium">Data</label><Input id="custom-payment-date" type="date" value={customPaymentDate} max={confirmation.message.classification.dueDate ?? undefined} onChange={(event) => setCustomPaymentDate(event.target.value)} className="mt-1" /></div> : null}<div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>A autorização no sistema e a aprovação no Banco Inter continuam sendo etapas separadas.</span></div></div><DialogFooter><Button variant="outline" onClick={() => setConfirmation(null)} disabled={working === `payment:${confirmation.message.id}`}>Cancelar</Button><Button onClick={confirmAction} disabled={working === `payment:${confirmation.message.id}`}>{working === `payment:${confirmation.message.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}Enviar para autorização</Button></DialogFooter></> : null}
-          {confirmation?.kind === "external" ? <><DialogHeader><DialogTitle>Abrir site externo?</DialogTitle><DialogDescription>O link será aberto em uma nova aba. Confirme o domínio antes de continuar.</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Domínio</p><p className="font-mono text-sm font-bold">{confirmation.domain}</p><p className="mt-2 break-all text-xs text-muted-foreground">{confirmation.url}</p></div><DialogFooter><Button variant="outline" onClick={() => setConfirmation(null)}>Cancelar</Button><Button onClick={confirmAction}><ExternalLink className="mr-2 h-4 w-4" />Abrir link</Button></DialogFooter></> : null}
+          {confirmation?.kind === "external" ? <><DialogHeader><DialogTitle>Abrir documento externo verificado?</DialogTitle><DialogDescription>O host e a rota pertencem a um provedor documental autorizado. Essa validação não substitui a conferência do conteúdo e dos dados da cobrança.</DialogDescription></DialogHeader><div className="rounded-xl border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Provedor verificado</p><p className="text-sm font-bold text-emerald-700">{confirmation.provider}</p><p className="mt-3 text-xs text-muted-foreground">Domínio</p><p className="font-mono text-sm font-bold">{confirmation.domain}</p><p className="mt-2 break-all text-xs text-muted-foreground">{confirmation.url}</p></div><DialogFooter><Button variant="outline" onClick={() => setConfirmation(null)}>Cancelar</Button><Button onClick={confirmAction}><ExternalLink className="mr-2 h-4 w-4" />Abrir link verificado</Button></DialogFooter></> : null}
         </DialogContent>
       </Dialog>
     </PageContainer>

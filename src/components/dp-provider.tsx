@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import {
   collection,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -102,7 +103,8 @@ function normalizeResourceError(scope: string, error: unknown, fallbackMessage: 
 
 export function DPProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { firebaseUser, loading: authLoading } = useAuth();
+  const { firebaseUser, loading: authLoading, permissions, isDefaultAdmin } = useAuth();
+  const canSubscribeVacations = isDefaultAdmin || permissions.dp?.vacation?.viewAll === true;
   const scope = useMemo(() => getDPScope(pathname), [pathname]);
   const previousUserIdRef = useRef<string | null>(null);
 
@@ -479,14 +481,18 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
       errorMessage: 'Falha ao carregar escalas do DP.',
     });
 
-    registerResource({
-      resource: 'vacations',
-      queryRef: query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc')),
-      applySnapshot: (snapshot) => {
-        store.setVacations(snapshot.docs.map(normalizeVacation));
-      },
-      errorMessage: 'Falha ao carregar férias do DP.',
-    });
+    if (canSubscribeVacations) {
+      registerResource({
+        resource: 'vacations',
+        queryRef: query(collection(db, 'dp_vacations'), orderBy('createdAt', 'desc'), limit(200)),
+        applySnapshot: (snapshot) => {
+          store.setVacations(snapshot.docs.map(normalizeVacation));
+        },
+        errorMessage: 'Falha ao carregar férias do DP.',
+      });
+    } else if (requiredResources.has('vacations')) {
+      void loadServerBootstrap('vacations require server-side unit filtering');
+    }
 
     registerResource({
       resource: 'calendars',
@@ -500,7 +506,7 @@ export function DPProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cleanup();
     };
-  }, [firebaseUser?.uid, scope]);
+  }, [canSubscribeVacations, firebaseUser?.uid, scope]);
 
   return <>{children}</>;
 }

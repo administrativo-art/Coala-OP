@@ -99,3 +99,20 @@ test("resumo possui índice para somar valores por workspace e status", () => {
       === "status|workspaceId|classification.amountCents");
   assert.ok(summaryIndex);
 });
+
+test("auditoria possui índices paginados para natureza e situação financeira", () => {
+  const indexes = JSON.parse(readFileSync("firestore.financial.indexes.json", "utf8")) as {
+    indexes: Array<{ collectionGroup: string; fields: Array<{ fieldPath: string; order?: string; arrayConfig?: string }> }>;
+  };
+  const financialInboxIndexes = indexes.indexes.filter((index) => index.collectionGroup === "financialInboxMessages");
+  const fieldPaths = financialInboxIndexes.map((index) => index.fields.map((field) => field.fieldPath).join("|"));
+  assert.ok(fieldPaths.includes("workspaceId|resolution.status|resolution.kind|receivedAt"));
+  assert.ok(fieldPaths.includes("workspaceId|resolution.status|resolution.kind|searchTerms|receivedAt"));
+  assert.ok(fieldPaths.includes("workspaceId|resolution.status|resolution.financialState|receivedAt"));
+  assert.ok(fieldPaths.includes("workspaceId|resolution.status|resolution.financialState|searchTerms|receivedAt"));
+
+  const repository = readFileSync("src/features/financial/inbox/repository.server.ts", "utf8");
+  assert.match(repository, /FINANCIAL_INBOX_WORK_STATUSES/);
+  assert.match(repository, /FINANCIAL_INBOX_IDENTIFIED_STATUSES/);
+  assert.match(repository, /limit\(pageSize \+ 1\)/);
+});

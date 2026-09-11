@@ -24,8 +24,11 @@ export const GET = withApiErrorHandling({
   }
   const result = await listFinancialInboxMessages({
     workspaceId: actor.workspace_id,
+    view: request.nextUrl.searchParams.get("view"),
     status: request.nextUrl.searchParams.get("status"),
     stage: request.nextUrl.searchParams.get("stage"),
+    resolutionKind: request.nextUrl.searchParams.get("kind"),
+    financialState: request.nextUrl.searchParams.get("financialState"),
     search: request.nextUrl.searchParams.get("q"),
     cursor: request.nextUrl.searchParams.get("cursor"),
     limit: Number(request.nextUrl.searchParams.get("limit") || 25),
