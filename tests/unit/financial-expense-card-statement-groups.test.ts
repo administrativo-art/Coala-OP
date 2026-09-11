@@ -50,7 +50,7 @@ test("agrupa compras do cartão em uma única fatura sem somar uma nova despesa"
   assert.equal(entries[0].statement.title, "Fatura Inter 1127 — 08/2026");
   assert.equal(entries[0].statement.totalValue, 179.62);
   assert.equal(entries[0].statement.expenses.length, 2);
-  assert.deepEqual(entries[0].statement.auditCounts, { pending: 1, audited: 0, reconciled: 1 });
+  assert.deepEqual(entries[0].statement.auditCounts, { pending: 1, audited: 0, historical: 0, reconciled: 1 });
   assert.equal(entries[0].statement.statementId, cardStatementDocumentId(statementKey));
 });
 
@@ -58,4 +58,27 @@ test("mantém despesas que não pertencem a uma fatura como linhas independentes
   const ordinaryExpense = { id: "rent", totalValue: 3000, status: "pending" };
   const entries = groupExpensesByCardStatement([ordinaryExpense]);
   assert.deepEqual(entries, [{ kind: "expense", expense: ordinaryExpense }]);
+});
+
+test("separa o histórico anterior à DRE da fila de auditoria", () => {
+  const entries = groupExpensesByCardStatement([{
+    id: "historical-charge",
+    description: "Compra histórica do cartão",
+    supplier: "Fornecedor",
+    totalValue: 100,
+    status: "pending",
+    plannedPaymentMethodType: "credit_card",
+    plannedBankAccountId: "inter",
+    plannedPaymentMethodId: "card-1127",
+    plannedPaymentMethodLabel: "Cartão Crédito Inter - 1127",
+    cardStatementKey: "inter:card-1127:2026-07",
+    cardStatementMonthKey: "2026-07",
+    cardStatementAuditDisposition: "waived_before_dre_start",
+    competenceDate: new Date("2026-07-01T12:00:00"),
+    dueDate: new Date("2026-08-12T12:00:00"),
+  }]);
+
+  assert.equal(entries[0]?.kind, "card_statement");
+  if (entries[0]?.kind !== "card_statement") return;
+  assert.deepEqual(entries[0].statement.auditCounts, { pending: 0, audited: 0, historical: 1, reconciled: 0 });
 });

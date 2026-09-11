@@ -7,6 +7,7 @@ export type FinancialDescriptionKind =
   | "accounting_fee"
   | "das"
   | "salary"
+  | "salary_advance"
   | "payroll_loan"
   | "fgts"
   | "inss"
@@ -39,6 +40,7 @@ export const FINANCIAL_DESCRIPTION_PATTERNS = {
   accounting_fee: "Honorário contábil - {unidade} | {favorecido}",
   das: "DAS - Única - {MM/AAAA}",
   salary: "Salário - {MM/AAAA} | {colaborador}",
+  salary_advance: "Adiantamento salarial - {MM/AAAA} | {colaborador}",
   payroll_loan: "Empréstimo consignado - {MM/AAAA} | {colaborador}",
   fgts: "FGTS - {MM/AAAA} | FGTS + empréstimo consignado",
   inss: "INSS - {MM/AAAA} | Folha de pagamento",
@@ -131,6 +133,8 @@ export function buildFinancialDescription(
       return `DAS - Única - ${displayFinancialMonth(requiredText(params.competence, "Competência"))}`;
     case "salary":
       return `Salário - ${displayFinancialMonth(requiredText(params.competence, "Competência"))} | ${requiredText(params.employee, "Colaborador")}`;
+    case "salary_advance":
+      return `Adiantamento salarial - ${displayFinancialMonth(requiredText(params.competence, "Competência"))} | ${requiredText(params.employee, "Colaborador")}`;
     case "payroll_loan":
       return `Empréstimo consignado - ${displayFinancialMonth(requiredText(params.competence, "Competência"))} | ${requiredText(params.employee, "Colaborador")}`;
     case "fgts":

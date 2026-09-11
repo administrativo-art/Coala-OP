@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import {
   buildCardStatementImportFingerprint,
+  cardStatementCreditTotal,
+  type CardStatementExcludedEntry,
   type CardStatementImportLine,
   type CardStatementPreviousImportLine,
   type CardStatementRevisionLine,
@@ -13,7 +15,12 @@ import {
   identifyCardStatementFinancialCharge,
   resolveCardStatementFinancialCharge,
 } from "@/features/financial/lib/expense-description-catalog";
-import { cardStatementAllocationIntegrity } from "@/features/financial/lib/card-invoices";
+import {
+  canRegisterCardStatementAsHistorical,
+  cardStatementAllocationIntegrity,
+} from "@/features/financial/lib/card-invoices";
+import { FINANCIAL_DRE_START_MONTH_KEY } from "@/features/financial/lib/constants";
+import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { requireUser } from "@/lib/auth-server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { reportSystemError } from "@/lib/observability";
@@ -49,6 +56,7 @@ const requestSchema = z.object({
   importId: z.string().min(1).max(100),
   fileSha256: z.string().regex(/^[a-f0-9]{64}$/),
   revisionAction: z.enum(["none", "reopen"]),
+  registrationMode: z.enum(["standard", "historical_before_dre"]).default("standard"),
   accountId: z.string().min(1).max(300),
   accountName: z.string().max(500),
   paymentMethodId: z.string().min(1).max(300),
@@ -240,8 +248,16 @@ export async function POST(request: NextRequest) {
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return errorResponse("Revise os itens e vínculos da fatura.", 400);
     const input = parsed.data;
+    const historicalRegistration = input.registrationMode === "historical_before_dre";
+    const canClose = actor.isDefaultAdmin || actor.permissions.financial?.cardStatements?.close === true;
     if (input.statementKey !== `${input.accountId}:${input.paymentMethodId}:${input.monthKey}`) {
       return errorResponse("A fatura, o cartão e a competência não correspondem à prévia.", 409);
+    }
+    if (historicalRegistration && !canRegisterCardStatementAsHistorical(input.monthKey, FINANCIAL_DRE_START_MONTH_KEY)) {
+      return errorResponse("Somente competências anteriores ao início da DRE podem ser registradas como histórico.", 409);
+    }
+    if (historicalRegistration && !canClose) {
+      return errorResponse("Sem permissão para dispensar a auditoria e fechar esta fatura histórica.", 403);
     }
     if (input.analysis.status === "blocked") {
       return errorResponse("A análise bloqueada não pode ser importada.", 409);
@@ -301,6 +317,13 @@ export async function POST(request: NextRequest) {
       const storedByFingerprint = new Map(storedLines.map((line) => [String(line.fingerprint || ""), line]));
       const canonicalFileName = String(importData.fileName || input.fileName);
       const canonicalAnalysis = asRecord(importData.preview?.analysis);
+      const canonicalExcludedEntries = (Array.isArray(importData.preview?.excludedEntries)
+        ? importData.preview.excludedEntries.map(asRecord)
+        : []) as unknown as CardStatementExcludedEntry[];
+      const canonicalCredits = canonicalExcludedEntries.filter((entry) =>
+        (entry.kind === "credit" || entry.kind === "refund") && asNumber(entry.amount) > 0
+      );
+      const canonicalCreditTotal = cardStatementCreditTotal(canonicalCredits);
       const canonicalOfficialTotal = asNumber(importData.preview?.officialTotal) || input.officialTotal;
       const canonicalDueDate = String(importData.preview?.dueDate || input.dueDate);
       const canonicalClosingDate = String(importData.preview?.closingDate || input.closingDate);
@@ -312,6 +335,12 @@ export async function POST(request: NextRequest) {
       });
       if (canonicalLines.length === 0 && !(Number(importData.diff?.summary?.removed) > 0)) {
         throw new Error("EMPTY_IMPORT");
+      }
+      if (
+        historicalRegistration
+        && (activeImportId || statementData.status === "closed" || statementData.status === "paid" || canonicalLines.length !== storedLines.length)
+      ) {
+        throw new Error("HISTORICAL_REGISTRATION_REQUIRES_COMPLETE_FIRST_VERSION");
       }
 
       const revisionLines = (Array.isArray(importData.diff?.lines)
@@ -473,6 +502,7 @@ export async function POST(request: NextRequest) {
         const competenceDate = timestamp(`${input.monthKey}-01`);
         const dueDate = timestamp(canonicalDueDate);
         const importFields = {
+          ...financialExpenseAccountingFields({ competenceMonth: input.monthKey, competenceDate }),
           cardChargeDate: chargeDate,
           originalCardChargeDate: line.date,
           plannedPaymentMethodType: "credit_card",
@@ -480,7 +510,11 @@ export async function POST(request: NextRequest) {
           plannedBankAccountName: input.accountName,
           plannedPaymentMethodId: input.paymentMethodId,
           plannedPaymentMethodLabel: input.paymentMethodLabel,
-          cardReconciliationStatus: "pending",
+          cardReconciliationStatus: historicalRegistration ? "not_required" : "pending",
+          cardStatementAuditDisposition: historicalRegistration ? "waived_before_dre_start" : null,
+          cardStatementAuditWaivedAt: historicalRegistration ? now : null,
+          cardStatementAuditWaivedBy: historicalRegistration ? actor.decoded.uid : null,
+          dreStartMonthKey: historicalRegistration ? FINANCIAL_DRE_START_MONTH_KEY : null,
           cardStatementRevisionStatus: "active",
           cardStatementId: statementId,
           cardStatementKey: input.statementKey,
@@ -518,7 +552,9 @@ export async function POST(request: NextRequest) {
               ...inheritedExpenseFields(expense),
               description: financialChargeIdentity?.description || line.description || String(expense.description || "Despesa do cartão"),
               supplier: financialChargeIdentity?.supplier || line.supplier || String(expense.supplier || ""),
-              notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
+              notes: historicalRegistration
+                ? `Histórico anterior à DRE, sem conferência contábil. Fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`
+                : `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
               totalValue: line.amount,
               competenceDate,
               dueDate,
@@ -559,7 +595,9 @@ export async function POST(request: NextRequest) {
                     value: line.amount,
                     dueDate,
                     competenceDate,
-                    cardReconciliationStatus: "pending",
+                    cardReconciliationStatus: historicalRegistration ? "not_required" : "pending",
+                    cardStatementAuditDisposition: historicalRegistration ? "waived_before_dre_start" : null,
+                    dreStartMonthKey: historicalRegistration ? FINANCIAL_DRE_START_MONTH_KEY : null,
                     cardStatementRevisionStatus: "active",
                     cardStatementId: statementId,
                     cardStatementKey: input.statementKey,
@@ -607,7 +645,9 @@ export async function POST(request: NextRequest) {
             transaction.set(expenseRef, {
               description: financialChargeIdentity?.description || line.description,
               supplier: financialChargeIdentity?.supplier || line.supplier,
-              notes: `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
+              notes: historicalRegistration
+                ? `Histórico anterior à DRE, sem conferência contábil. Fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`
+                : `Importado da fatura ${input.paymentMethodLabel} · ${input.monthKey}. Arquivo: ${canonicalFileName}.`,
               totalValue: line.amount,
               competenceDate,
               dueDate,
@@ -655,6 +695,7 @@ export async function POST(request: NextRequest) {
       const allocationIntegrity = cardStatementAllocationIntegrity(
         nextAllocations as Array<{ lineId: string; amount: number; importFingerprint?: string }>,
         canonicalOfficialTotal || 0,
+        canonicalCreditTotal,
       );
       if (allocationIntegrity.duplicateLineIds.length || allocationIntegrity.duplicateFingerprints.length) {
         throw new Error("CARD_STATEMENT_DUPLICATE_ALLOCATION");
@@ -662,7 +703,9 @@ export async function POST(request: NextRequest) {
       if (canonicalOfficialTotal && Math.abs(allocationIntegrity.difference) > 0.05) {
         throw new Error("CARD_STATEMENT_ALLOCATION_TOTAL_MISMATCH");
       }
-      const nextStatus = statementData.status === "closed" && hasRevisionChanges ? "open" : statementData.status === "paid" ? "paid" : "open";
+      const nextStatus = historicalRegistration
+        ? "closed"
+        : statementData.status === "closed" && hasRevisionChanges ? "open" : statementData.status === "paid" ? "paid" : "open";
       transaction.set(statementRef, {
         key: input.statementKey,
         monthKey: input.monthKey,
@@ -674,7 +717,20 @@ export async function POST(request: NextRequest) {
         dueDate: timestamp(canonicalDueDate),
         ...(canonicalOfficialTotal ? { officialTotal: canonicalOfficialTotal } : {}),
         status: nextStatus,
+        registrationMode: input.registrationMode,
+        auditDisposition: historicalRegistration ? "waived_before_dre_start" : null,
+        dreStartMonthKey: historicalRegistration ? FINANCIAL_DRE_START_MONTH_KEY : null,
+        ...(historicalRegistration ? {
+          auditWaivedAt: now,
+          auditWaivedBy: actor.decoded.uid,
+          auditWaivedLineCount: nextAllocations.length,
+          closedAt: now,
+          closedBy: actor.decoded.uid,
+        } : {}),
         allocations: nextAllocations,
+        grossChargesTotal: allocationIntegrity.grossAllocatedTotal,
+        creditTotal: canonicalCreditTotal,
+        credits: canonicalCredits,
         activeImportId: input.importId,
         activeImportVersion: asNumber(importData.version),
         activeImportFileSha256: input.fileSha256,
@@ -687,6 +743,9 @@ export async function POST(request: NextRequest) {
           includedCount: storedLines.length,
           appliedCount: activeAppliedByFingerprint.size,
           includedTotal,
+          grossIncludedTotal: includedTotal,
+          creditTotal: canonicalCreditTotal,
+          netIncludedTotal: Number((includedTotal - canonicalCreditTotal).toFixed(2)),
           excludedCount: asNumber(canonicalAnalysis.excludedCount),
           promptVersion: canonicalAnalysis.promptVersion || input.analysis.promptVersion,
           schemaVersion: canonicalAnalysis.schemaVersion ?? input.analysis.schemaVersion,
@@ -704,6 +763,7 @@ export async function POST(request: NextRequest) {
       }, { merge: true });
       transaction.set(importRef, {
         status: excludedFingerprints.length ? "applied_with_exclusions" : "applied",
+        registrationMode: input.registrationMode,
         appliedLines: [...activeAppliedByFingerprint.values()],
         excludedFingerprints,
         appliedAt: now,
@@ -726,10 +786,20 @@ export async function POST(request: NextRequest) {
         previousImportId: activeImportId,
         result: { created, linked, replacedForecasts, skipped, removed: removedLines.length },
         reopened: statementData.status === "closed" && hasRevisionChanges,
+        registrationMode: input.registrationMode,
+        dreStartMonthKey: historicalRegistration ? FINANCIAL_DRE_START_MONTH_KEY : null,
         actorId: actor.decoded.uid,
         occurredAt: now,
       }, { merge: true });
-      return { created, linked, replacedForecasts, skipped, removed: removedLines.length, reopened: statementData.status === "closed" && hasRevisionChanges };
+      return {
+        created,
+        linked,
+        replacedForecasts,
+        skipped,
+        removed: removedLines.length,
+        reopened: statementData.status === "closed" && hasRevisionChanges,
+        historical: historicalRegistration,
+      };
     });
 
     return NextResponse.json({ ok: true, ...result });
@@ -755,6 +825,9 @@ export async function POST(request: NextRequest) {
     if (message === "IMPORT_PREVIEW_NOT_FOUND" || message === "IMPORT_PREVIEW_MISMATCH") return errorResponse("A prévia versionada não foi encontrada ou não corresponde ao arquivo analisado.", 409);
     if (message === "STALE_IMPORT_PREVIEW") return errorResponse("A fatura mudou depois desta análise. Gere uma nova prévia antes de importar.", 409);
     if (message === "EMPTY_IMPORT") return errorResponse("Selecione ao menos um item ou uma alteração da nova versão.", 409);
+    if (message === "HISTORICAL_REGISTRATION_REQUIRES_COMPLETE_FIRST_VERSION") {
+      return errorResponse("O registro histórico exige a primeira versão completa da fatura.", 409);
+    }
     if (message === "BLOCKED_ANALYSIS") return errorResponse("A análise bloqueada não pode ser importada.", 409);
     if (message === "REVISION_TOO_LARGE") return errorResponse("A revisão possui alterações demais para uma aplicação atômica. Divida o tratamento em uma fatura menor.", 409);
     if (message === "PAID_STATEMENT_REVISION" || message === "PAID_LINE_REVISION") return errorResponse("Uma fatura já paga não pode ser alterada. A nova versão ficou registrada para tratamento como ajuste.", 409);

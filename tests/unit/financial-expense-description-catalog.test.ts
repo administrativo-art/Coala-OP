@@ -31,6 +31,10 @@ test("monta os padrões financeiros aprovados", () => {
     "Salário - 07/2026 | Aliny Rodrigues",
   );
   assert.equal(
+    buildFinancialDescription("salary_advance", { competence: "2026-09", employee: "Samila Silva" }),
+    "Adiantamento salarial - 09/2026 | Samila Silva",
+  );
+  assert.equal(
     buildFinancialDescription("das", { competence: "2026-07" }),
     "DAS - Única - 07/2026",
   );

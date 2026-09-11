@@ -4,10 +4,11 @@ import { createHash } from "node:crypto";
 import { getStorage } from "firebase-admin/storage";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
-import type {
-  CardStatementImportPreview,
-  CardStatementPreviousImportLine,
-  CardStatementRevisionPreview,
+import {
+  cardStatementCreditTotal,
+  type CardStatementImportPreview,
+  type CardStatementPreviousImportLine,
+  type CardStatementRevisionPreview,
 } from "@/features/financial/lib/card-statement-import";
 import { diffCardStatementRevision } from "@/features/financial/lib/card-statement-revisions";
 import { adminApp } from "@/lib/firebase-admin";
@@ -167,13 +168,27 @@ export async function prepareVersionedCardStatementPreview(params: {
       );
     }
 
-    const diff = diffCardStatementRevision(basePreview.transactions, previousLines);
+    const lineDiff = diffCardStatementRevision(basePreview.transactions, previousLines);
+    const previousCreditTotal = number(statement.creditTotal);
+    const nextCreditTotal = cardStatementCreditTotal(basePreview.excludedEntries);
+    const creditDifference = Number((nextCreditTotal - previousCreditTotal).toFixed(2));
+    const diff = {
+      ...lineDiff,
+      hasChanges: lineDiff.hasChanges || Math.abs(creditDifference) > 0.009,
+      creditSummary: {
+        previousTotal: previousCreditTotal,
+        nextTotal: nextCreditTotal,
+        difference: creditDifference,
+      },
+    };
     const statementStatus = statement.status === "open" || statement.status === "closed" || statement.status === "paid"
       ? statement.status
       : null;
     const exactFileReimport = Boolean(exactActiveFile);
-    const previousTotal = number(statement.officialTotal) || previousLines.reduce((total, line) => total + line.amount, 0);
-    const nextTotal = number(basePreview.officialTotal) || number(basePreview.analysis.includedTotal);
+    const previousTotal = number(statement.officialTotal)
+      || previousLines.reduce((total, line) => total + line.amount, 0) - previousCreditTotal;
+    const nextTotal = number(basePreview.officialTotal)
+      || number(basePreview.analysis.includedTotal) - nextCreditTotal;
     const difference = Number((nextTotal - previousTotal).toFixed(2));
     const adjustment: CardStatementRevisionPreview["adjustment"] = statementStatus === "paid" && diff.hasChanges
       ? {
@@ -229,6 +244,7 @@ export async function prepareVersionedCardStatementPreview(params: {
         requiresReopen: revision.requiresReopen,
         blockedReason: revision.blockedReason,
         adjustment,
+        creditSummary: diff.creditSummary,
         summary: diff.summary,
       },
       previewStatus,

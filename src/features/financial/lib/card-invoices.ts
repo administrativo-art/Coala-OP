@@ -56,6 +56,7 @@ export type CardExpenseEntry = {
     cardStatementKey?: unknown;
     cardStatementMonthKey?: unknown;
     cardStatementImportFingerprint?: unknown;
+    cardStatementAuditDisposition?: unknown;
   }>;
   plannedPaymentMethodType?: unknown;
   plannedBankAccountId?: unknown;
@@ -68,6 +69,7 @@ export type CardExpenseEntry = {
   cardStatementKey?: unknown;
   cardStatementMonthKey?: unknown;
   cardStatementImportFingerprint?: unknown;
+  cardStatementAuditDisposition?: unknown;
 };
 
 export type CardStatementCycle = {
@@ -89,7 +91,7 @@ export type CardStatementLine = {
   sourceReference?: string;
 };
 
-export type CardStatementLineAuditStatus = "pending" | "audited" | "reconciled";
+export type CardStatementLineAuditStatus = "pending" | "audited" | "historical" | "reconciled";
 
 export type CardStatementAllocation = {
   lineId: string;
@@ -119,19 +121,33 @@ export type CardStatementGroup = CardStatementCycle & {
   provisionedTotal: number;
 };
 
+export function canRegisterCardStatementAsHistorical(
+  statementMonthKey: string,
+  dreStartMonthKey: string,
+) {
+  return /^\d{4}-\d{2}$/.test(statementMonthKey)
+    && /^\d{4}-\d{2}$/.test(dreStartMonthKey)
+    && statementMonthKey < dreStartMonthKey;
+}
+
 export function cardStatementAllocationIntegrity(
   allocations: Array<Pick<CardStatementAllocation, "lineId" | "amount" | "importFingerprint">>,
   officialTotal: number,
+  creditTotal = 0,
 ) {
   const lineIds = allocations.map((allocation) => String(allocation.lineId || "")).filter(Boolean);
   const fingerprints = allocations.map((allocation) => String(allocation.importFingerprint || "")).filter(Boolean);
-  const allocatedTotal = Number(allocations.reduce((total, allocation) => total + Number(allocation.amount || 0), 0).toFixed(2));
+  const grossAllocatedTotal = Number(allocations.reduce((total, allocation) => total + Number(allocation.amount || 0), 0).toFixed(2));
+  const normalizedCreditTotal = Number(Math.max(0, Number(creditTotal || 0)).toFixed(2));
+  const allocatedTotal = Number((grossAllocatedTotal - normalizedCreditTotal).toFixed(2));
   const difference = Number((Number(officialTotal || 0) - allocatedTotal).toFixed(2));
   return {
     valid: new Set(lineIds).size === lineIds.length
       && new Set(fingerprints).size === fingerprints.length
       && Math.abs(difference) <= 0.05,
     allocatedTotal,
+    grossAllocatedTotal,
+    creditTotal: normalizedCreditTotal,
     difference,
     duplicateLineIds: lineIds.filter((lineId, index) => lineIds.indexOf(lineId) !== index),
     duplicateFingerprints: fingerprints.filter((fingerprint, index) => fingerprints.indexOf(fingerprint) !== index),
@@ -216,11 +232,21 @@ export function cardExpenseAuditIssues(expense: CardExpenseEntry) {
 }
 
 export function cardStatementLineAuditIssues(line: CardStatementLine) {
+  const installment = installmentByNumber(line.expense, line.installmentNumber ?? null);
+  const auditDisposition = installment
+    ? installment?.cardStatementAuditDisposition
+    : line.expense.cardStatementAuditDisposition;
+  if (auditDisposition === "waived_before_dre_start") return [];
   return cardExpenseAuditIssues(line.expense);
 }
 
 export function cardStatementLineAuditStatus(line: CardStatementLine): CardStatementLineAuditStatus {
   if (line.reconciled) return "reconciled";
+  const installment = installmentByNumber(line.expense, line.installmentNumber ?? null);
+  const auditDisposition = installment
+    ? installment?.cardStatementAuditDisposition
+    : line.expense.cardStatementAuditDisposition;
+  if (auditDisposition === "waived_before_dre_start") return "historical";
   return cardStatementLineAuditIssues(line).length === 0 ? "audited" : "pending";
 }
 

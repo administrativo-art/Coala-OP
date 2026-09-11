@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { calculateFinancialObligationSummary, moneyToCents } from "@/features/financial/obligations/calculations";
+import { cardStatementAllocationIntegrity } from "@/features/financial/lib/card-invoices";
 import { requireUser } from "@/lib/auth-server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 
@@ -62,8 +63,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
       const allocations = Array.isArray(statement.allocations) ? statement.allocations as RawRecord[] : [];
       if (allocations.length === 0) throw new Error("A fatura não possui despesas alocadas.");
-      const allocatedCents = allocations.reduce((total, allocation) => total + moneyToCents(allocation.amount), 0);
-      if (Math.abs(allocatedCents - officialTotalCents) > 5) throw new Error("As despesas da fatura não correspondem ao total oficial.");
+      const allocationIntegrity = cardStatementAllocationIntegrity(
+        allocations.map((allocation) => ({
+          lineId: String(allocation.lineId || ""),
+          amount: Number(allocation.amount || 0),
+          importFingerprint: String(allocation.importFingerprint || ""),
+        })),
+        Number(statement.officialTotal || 0),
+        Number(statement.creditTotal || 0),
+      );
+      if (!allocationIntegrity.valid) throw new Error("As despesas e os créditos da fatura não correspondem ao total oficial.");
 
       const expenseIds = [...new Set(allocations.map((allocation) => String(allocation.expenseId || "")).filter(Boolean))];
       const expenseSnapshots = await Promise.all(

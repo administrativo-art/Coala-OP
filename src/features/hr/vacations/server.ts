@@ -7,6 +7,7 @@ import type { NextRequest } from 'next/server';
 
 import { createPaymentRequest, refreshPaymentRequest } from '@/features/financial/payment-requests/service.server';
 import { getPaymentRequest } from '@/features/financial/payment-requests/repository.server';
+import { financialExpenseAccountingFields } from '@/features/financial/lib/expense-accounting-contract';
 import { resolveDocumentLegalEntitySnapshot } from '@/features/hr/documents/legal-entity-snapshot.server';
 import { resolveCompanyDocumentSignatory } from '@/features/hr/documents/company-document-signatory.server';
 import { canAccessUserByUnit } from '@/lib/unit-access';
@@ -54,6 +55,8 @@ import { buildVacationNoticePdf } from './vacation-notice-pdf.server';
 const VACATION_QUERY_LIMIT = 200;
 const VACATION_CYCLE_QUERY_LIMIT = 31;
 const VACATION_NOTICE_TEMPLATE_VERSION = '2.0';
+const VACATION_ACCOUNT_ID = 'folha-ferias-terco-constitucional';
+const VACATION_ACCOUNT_NAME = 'Férias e 1/3 constitucional';
 const PUBLIC_RECRUITMENT_URL = process.env.NEXT_PUBLIC_RECRUITMENT_URL?.trim()
   || 'https://vagas.coalashakes.com';
 
@@ -1871,12 +1874,13 @@ async function prepareVacationPaymentControl(
         supplier: employeeName,
         employeeId,
         employeeName,
-        accountPlan: null,
-        accountId: null,
-        accountPlanName: 'Férias',
+        accountPlan: VACATION_ACCOUNT_ID,
+        accountId: VACATION_ACCOUNT_ID,
+        accountPlanName: VACATION_ACCOUNT_NAME,
         resultCenter,
         totalValue: amount,
         competenceDate,
+        ...financialExpenseAccountingFields({ competenceDate }),
         dueDate,
         paymentMethod: 'single',
         plannedPaymentMethodType: 'pix',

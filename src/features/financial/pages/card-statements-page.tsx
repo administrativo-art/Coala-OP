@@ -39,6 +39,7 @@ import {
   buildCardStatementGroups,
   buildCardStatementAllocations,
   buildCardStatementLinesFromAllocations,
+  canRegisterCardStatementAsHistorical,
   cardStatementLineAuditIssues as cardLineAuditIssues,
   cardStatementLineAuditStatus as getCardLineAuditStatus,
   findCardStatementPaymentCandidates,
@@ -49,8 +50,14 @@ import {
   type CardStatementAllocation,
   type CreditCardInstrument,
 } from "@/features/financial/lib/card-invoices";
-import { FINANCIAL_ROUTES } from "@/features/financial/lib/constants";
-import type { CardStatementImportPreview } from "@/features/financial/lib/card-statement-import";
+import {
+  FINANCIAL_DRE_START_MONTH_KEY,
+  FINANCIAL_ROUTES,
+} from "@/features/financial/lib/constants";
+import {
+  cardStatementCreditTotal,
+  type CardStatementImportPreview,
+} from "@/features/financial/lib/card-statement-import";
 import {
   buildCardStatementExpenseCandidates,
   matchCardStatementExpenses,
@@ -68,9 +75,21 @@ type StatementDocument = {
   monthKey?: string;
   officialTotal?: number;
   status?: "open" | "closed" | "paid";
+  registrationMode?: "standard" | "historical_before_dre";
+  auditDisposition?: "waived_before_dre_start";
+  dreStartMonthKey?: string;
   linkedBankTransactionId?: string;
   linkedBankTransactionIds?: string[];
   allocations?: CardStatementAllocation[];
+  grossChargesTotal?: number;
+  creditTotal?: number;
+  credits?: Array<{
+    sourceReference?: string;
+    description?: string;
+    amount?: number;
+    kind?: "credit" | "refund";
+    reason?: string;
+  }>;
   settlements?: Array<{
     transactionId: string;
     amount: number;
@@ -90,7 +109,8 @@ type CardStatementsWorkspaceProps = {
   returnTo?: string;
 };
 
-type CardLineStatusFilter = "all" | "pending" | "audited" | "reconciled";
+type CardLineStatusFilter = "all" | "pending" | "audited" | "historical" | "reconciled";
+type CardStatementRegistrationMode = "standard" | "historical_before_dre";
 type CardLineSourceFilter = "all" | "forecast" | "actual";
 
 const COPILOT_STATUS_LABELS = {
@@ -310,16 +330,19 @@ export function CardStatementsWorkspace({
     (group) => `${group.card.accountId}:${group.card.methodId}` === selectedCardKey
   ) ?? monthGroups[0] ?? null;
   const selectedStatement = selectedGroup ? statementByKey.get(selectedGroup.key) ?? null : null;
+  const historicalRegistration = selectedStatement?.registrationMode === "historical_before_dre";
   const officialTotal = Number(selectedStatement?.officialTotal || 0);
-  const postedTotal = selectedGroup?.lines
+  const statementCreditTotal = Math.max(0, Number(selectedStatement?.creditTotal || 0));
+  const postedGrossTotal = selectedGroup?.lines
     .filter((line) => !isCardLineForecast(line))
     .reduce((total, line) => total + line.value, 0) ?? 0;
+  const postedTotal = Math.max(0, Number((postedGrossTotal - statementCreditTotal).toFixed(2)));
   const difference = officialTotal > 0 && selectedGroup
     ? Number((officialTotal - postedTotal).toFixed(2))
     : null;
   const reconciledCount = selectedGroup?.lines.filter((line) => line.reconciled).length ?? 0;
   const selectedLineCounts = useMemo(() => {
-    const counts = { all: 0, pending: 0, audited: 0, reconciled: 0 };
+    const counts = { all: 0, pending: 0, audited: 0, historical: 0, reconciled: 0 };
     for (const line of selectedGroup?.lines || []) {
       counts.all += 1;
       counts[getCardLineAuditStatus(line)] += 1;
@@ -358,9 +381,11 @@ export function CardStatementsWorkspace({
     && visibleCardLines.every((line) => selectedLineIdSet.has(line.lineId));
   const allLinesReconciled = !!selectedGroup?.lines.length && reconciledCount === selectedGroup.lines.length;
   const allLinesAuditComplete = !!selectedGroup?.lines.length && selectedGroup.lines.every(
-    (line) => cardLineAuditIssues(line).length === 0
+    (line) => getCardLineAuditStatus(line) !== "pending"
   );
-  const canClose = allLinesReconciled && allLinesAuditComplete && officialTotal > 0 && Math.abs(difference || 0) <= 0.05;
+  const canClose = (historicalRegistration || (allLinesReconciled && allLinesAuditComplete))
+    && officialTotal > 0
+    && Math.abs(difference || 0) <= 0.05;
   const linkedTransactionIds = useMemo(
     () => new Set(
       (statementsData || []).flatMap((statement) => [
@@ -423,8 +448,13 @@ export function CardStatementsWorkspace({
   );
   const revisionRemovedCount = importPreview?.revision?.summary.removed || 0;
   const hasImportChanges = selectedImportLines.length > 0 || revisionRemovedCount > 0;
+  const importCreditTotal = cardStatementCreditTotal(importPreview?.excludedEntries);
   const importBlocked = importPreview?.revision?.blockedReason === "paid_statement";
   const importNeedsUnavailableReopen = importPreview?.revision?.requiresReopen && !canCloseCardStatements;
+  const historicalImportAvailable = importPreview?.revision?.version === 1
+    && !!selectedGroup
+    && canCloseCardStatements
+    && canRegisterCardStatementAsHistorical(selectedGroup.monthKey, FINANCIAL_DRE_START_MONTH_KEY);
 
   useEffect(() => {
     if (!importPreview) {
@@ -665,8 +695,20 @@ export function CardStatementsWorkspace({
     }
   }
 
-  async function confirmCardStatementImport() {
-    if (!firebaseUser || !selectedGroup || !importPreview || !importPreview.revision || !hasImportChanges || importBlocked || importNeedsUnavailableReopen || !canImportCardStatements) return;
+  async function confirmCardStatementImport(registrationMode: CardStatementRegistrationMode = "standard") {
+    const linesToImport = registrationMode === "historical_before_dre" ? availableImportLines : selectedImportLines;
+    const hasChangesForMode = linesToImport.length > 0 || revisionRemovedCount > 0;
+    if (
+      !firebaseUser
+      || !selectedGroup
+      || !importPreview
+      || !importPreview.revision
+      || !hasChangesForMode
+      || importBlocked
+      || importNeedsUnavailableReopen
+      || !canImportCardStatements
+      || (registrationMode === "historical_before_dre" && !historicalImportAvailable)
+    ) return;
     setImportingStatement(true);
     try {
       const importedDueDate = importPreview.dueDate
@@ -685,6 +727,7 @@ export function CardStatementsWorkspace({
           importId: importPreview.revision.importId,
           fileSha256: importPreview.revision.fileSha256,
           revisionAction: importPreview.revision.requiresReopen ? "reopen" : "none",
+          registrationMode,
           accountId: selectedGroup.card.accountId,
           accountName: selectedGroup.card.accountName,
           paymentMethodId: selectedGroup.card.methodId,
@@ -696,10 +739,13 @@ export function CardStatementsWorkspace({
           dueDate: format(importedDueDate, "yyyy-MM-dd"),
           closingDate: format(importedClosingDate, "yyyy-MM-dd"),
           analysis: importPreview.analysis,
-          lines: selectedImportLines.map((line) => {
+          lines: linesToImport.map((line) => {
             const revision = revisionLineByFingerprint.get(line.fingerprint);
-            const selectedCandidateId = importResolutionByLineId[line.id] || "create";
-            const candidate = importExpenseMatchByLineId.get(line.id)?.candidates
+            const match = importExpenseMatchByLineId.get(line.id);
+            const selectedCandidateId = importResolutionByLineId[line.id]
+              || (match?.confidence === "high" ? match.recommendedCandidateId : null)
+              || "create";
+            const candidate = match?.candidates
               .find((entry) => entry.lineId === selectedCandidateId);
             return {
               ...line,
@@ -730,6 +776,7 @@ export function CardStatementsWorkspace({
         skipped?: number;
         removed?: number;
         reopened?: boolean;
+        historical?: boolean;
       } | null;
       if (!response.ok) throw new Error(result?.error || "Não foi possível registrar os itens da fatura.");
       setImportDialogOpen(false);
@@ -739,7 +786,7 @@ export function CardStatementsWorkspace({
       refreshStatements();
       refreshExpenses();
       toast({
-        title: "Fatura importada para auditoria.",
+        title: result?.historical ? "Fatura registrada como histórico." : "Fatura importada para auditoria.",
         description: [
           result?.created ? `${result.created} nova(s)` : null,
           result?.linked ? `${result.linked} vinculada(s)` : null,
@@ -747,6 +794,7 @@ export function CardStatementsWorkspace({
           result?.removed ? `${result.removed} removida(s) da versão ativa` : null,
           result?.skipped ? `${result.skipped} já importada(s)` : null,
           result?.reopened ? "fatura reaberta" : null,
+          result?.historical ? "conferência dispensada antes da DRE" : null,
         ].filter(Boolean).join(" · ") || "Itens registrados sem efetivação automática.",
       });
     } catch (error) {
@@ -764,13 +812,15 @@ export function CardStatementsWorkspace({
   const statementStatus = selectedStatement?.status || "open";
   const selectedGroupLineCount = selectedGroup?.lines.length || 0;
   const valuesBalanced = difference !== null && Math.abs(difference) <= 0.05;
-  const reconciledTotal = selectedGroup?.lines
+  const reconciledGrossTotal = selectedGroup?.lines
     .filter((line) => line.reconciled)
     .reduce((total, line) => total + line.value, 0) || 0;
+  const reconciledTotal = Math.max(0, Number((reconciledGrossTotal - statementCreditTotal).toFixed(2)));
   const postedProgress = officialTotal > 0
     ? Math.min(100, Math.round((postedTotal / officialTotal) * 100))
     : 0;
-  const auditStepDone = selectedGroupLineCount > 0 && allLinesAuditComplete;
+  const auditStepDone = historicalRegistration || (selectedGroupLineCount > 0 && allLinesAuditComplete);
+  const conferenceStepDone = historicalRegistration || allLinesReconciled;
   const workflowBase = [
     {
       label: "Importar",
@@ -779,7 +829,9 @@ export function CardStatementsWorkspace({
     },
     {
       label: "Auditar",
-      meta: selectedLineCounts.pending === 0 && selectedGroupLineCount > 0
+      meta: historicalRegistration
+        ? "dispensada antes da DRE"
+        : selectedLineCounts.pending === 0 && selectedGroupLineCount > 0
         ? "cadastros completos"
         : selectedGroupLineCount === 0
           ? "aguardando cobranças"
@@ -788,8 +840,8 @@ export function CardStatementsWorkspace({
     },
     {
       label: "Conferir",
-      meta: `${reconciledCount} de ${selectedGroupLineCount}`,
-      done: allLinesReconciled,
+      meta: historicalRegistration ? "registro histórico" : `${reconciledCount} de ${selectedGroupLineCount}`,
+      done: conferenceStepDone,
     },
     {
       label: "Fechar",
@@ -810,16 +862,18 @@ export function CardStatementsWorkspace({
   });
   const closeChecklist = [
     {
-      label: "Cadastros auditados",
-      meta: auditStepDone
+      label: historicalRegistration ? "Histórico anterior à DRE" : "Cadastros auditados",
+      meta: historicalRegistration
+        ? `Competência preservada sem conferência; a DRE começa em ${format(new Date(`${FINANCIAL_DRE_START_MONTH_KEY}-01T12:00:00`), "MMMM 'de' yyyy", { locale: ptBR })}.`
+        : auditStepDone
         ? "Nenhuma cobrança com cadastro incompleto."
         : `${selectedLineCounts.pending} cobrança(s) exigem auditoria antes da conferência.`,
       done: auditStepDone,
     },
     {
-      label: "Cobranças conferidas",
-      meta: `${reconciledCount} de ${selectedGroupLineCount} conferidas.`,
-      done: allLinesReconciled,
+      label: historicalRegistration ? "Conferência dispensada" : "Cobranças conferidas",
+      meta: historicalRegistration ? "As linhas não foram marcadas como auditadas." : `${reconciledCount} de ${selectedGroupLineCount} conferidas.`,
+      done: conferenceStepDone,
     },
     {
       label: "Total oficial informado",
@@ -928,6 +982,7 @@ export function CardStatementsWorkspace({
                   ["all", "Todos", selectedLineCounts.all, "border-zinc-300 bg-zinc-100 text-zinc-800", "bg-zinc-500"],
                   ["pending", "Pendentes", selectedLineCounts.pending, "border-amber-300 bg-amber-50 text-amber-700", "bg-amber-500"],
                   ["audited", "Auditadas", selectedLineCounts.audited, "border-sky-300 bg-sky-50 text-sky-700", "bg-sky-500"],
+                  ["historical", "Histórico", selectedLineCounts.historical, "border-stone-300 bg-stone-100 text-stone-700", "bg-stone-500"],
                   ["reconciled", "Conferidas", selectedLineCounts.reconciled, "border-emerald-300 bg-emerald-50 text-emerald-700", "bg-emerald-500"],
                 ] as const).map(([value, label, count, activeClass, dotClass], index) => (
                   <div key={value} className="flex items-center gap-1.5">
@@ -1020,6 +1075,8 @@ export function CardStatementsWorkspace({
                     ? { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" }
                     : status === "audited"
                     ? { label: "Auditada", className: "border-sky-200 bg-sky-50 text-sky-700" }
+                    : status === "historical"
+                    ? { label: "Histórico", className: "border-stone-200 bg-stone-100 text-stone-700" }
                     : { label: "Conferida", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
                   return (
                     <div
@@ -1052,7 +1109,7 @@ export function CardStatementsWorkspace({
                         − {formatCurrency(line.value)}
                       </p>
                       <div className="flex items-center justify-end gap-1.5">
-                        {canAuditCardStatements && selectedStatement?.status !== "paid" ? (
+                        {canAuditCardStatements && selectedStatement?.status !== "paid" && status !== "historical" ? (
                           <>
                             <Button size="sm" variant="ghost" className="h-7 max-w-0 overflow-hidden px-0 text-[10px] opacity-0 transition-all group-hover:max-w-24 group-hover:px-2 group-hover:opacity-100" asChild>
                               <Link href={expenseEditHref(line.expense.id, returnTo)}>Auditar</Link>
@@ -1102,7 +1159,10 @@ export function CardStatementsWorkspace({
             </div>
           ) : selectedStatement?.status === "closed" ? (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-sky-200 bg-sky-50 px-4 py-2 text-xs text-sky-800">
-              <span>{paymentCandidates.length > 0 ? `${paymentCandidates.length} pagamento(s) compatível(is) encontrado(s) no extrato.` : "Nenhum pagamento compatível encontrado no extrato."}</span>
+              <span>
+                {historicalRegistration ? "Histórico anterior à DRE · conferência dispensada. " : ""}
+                {paymentCandidates.length > 0 ? `${paymentCandidates.length} pagamento(s) compatível(is) encontrado(s) no extrato.` : "Nenhum pagamento compatível encontrado no extrato."}
+              </span>
               {canReconcileCardStatements ? paymentCandidates.slice(0, 1).map((candidate) => (
                 <Button key={candidate.transaction.id} size="sm" className="h-7 text-[10px]" disabled={!!working} onClick={() => void reconcilePayment(candidate)}>
                   {working === `payment-${candidate.transaction.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
@@ -1283,6 +1343,7 @@ export function CardStatementsWorkspace({
                       ["all", "Todos", selectedLineCounts.all, "border-zinc-300 bg-zinc-100 text-zinc-800", "bg-zinc-500"],
                       ["pending", "Pendentes", selectedLineCounts.pending, "border-amber-300 bg-amber-50 text-amber-700", "bg-amber-500"],
                       ["audited", "Auditadas", selectedLineCounts.audited, "border-sky-300 bg-sky-50 text-sky-700", "bg-sky-500"],
+                      ["historical", "Histórico", selectedLineCounts.historical, "border-stone-300 bg-stone-100 text-stone-700", "bg-stone-500"],
                       ["reconciled", "Conferidas", selectedLineCounts.reconciled, "border-emerald-300 bg-emerald-50 text-emerald-700", "bg-emerald-500"],
                     ] as const).map(([value, label, count, activeClass, dotClass], index) => (
                       <div key={value} className="flex items-center gap-1.5">
@@ -1351,7 +1412,7 @@ export function CardStatementsWorkspace({
                         type="checkbox"
                         aria-label="Selecionar cobranças visíveis"
                         checked={allVisibleLinesSelected}
-                        disabled={!canAuditCardStatements || statementStatus === "paid" || visibleCardLines.length === 0 || working === "bulk-lines"}
+                        disabled={!canAuditCardStatements || historicalRegistration || statementStatus === "paid" || visibleCardLines.length === 0 || working === "bulk-lines"}
                         onChange={() => setSelectedLineIds((current) => {
                           const visibleIds = new Set(visibleCardLines.map((line) => line.lineId));
                           return allVisibleLinesSelected
@@ -1393,6 +1454,8 @@ export function CardStatementsWorkspace({
                               ? { label: "Pendente", className: "border-amber-200 bg-amber-50 text-amber-700" }
                               : status === "audited"
                                 ? { label: "Auditada", className: "border-sky-200 bg-sky-50 text-sky-700" }
+                                : status === "historical"
+                                  ? { label: "Histórico", className: "border-stone-200 bg-stone-100 text-stone-700" }
                                 : { label: "Conferida", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
                             return (
                               <div
@@ -1406,7 +1469,7 @@ export function CardStatementsWorkspace({
                                   type="checkbox"
                                   aria-label={`Selecionar ${line.expense.description || "cobrança"}`}
                                   checked={selected}
-                                  disabled={!canAuditCardStatements || statementStatus === "paid" || working === "bulk-lines"}
+                                  disabled={!canAuditCardStatements || historicalRegistration || statementStatus === "paid" || working === "bulk-lines"}
                                   onChange={(event) => setSelectedLineIds((current) => event.target.checked
                                     ? [...new Set([...current, line.lineId])]
                                     : current.filter((lineId) => lineId !== line.lineId))}
@@ -1435,7 +1498,7 @@ export function CardStatementsWorkspace({
                                 </div>
                                 <span className="whitespace-nowrap text-right font-mono text-[13px] font-extrabold text-rose-700">− {formatCurrency(line.value)}</span>
                                 <div className="flex items-center justify-end gap-1.5">
-                                  {canAuditCardStatements && statementStatus !== "paid" ? (
+                                  {canAuditCardStatements && statementStatus !== "paid" && status !== "historical" ? (
                                     status === "pending" ? (
                                       <Button asChild variant="outline" size="sm" className="h-7 rounded-lg px-2.5 text-[10.5px] font-bold">
                                         <Link href={expenseEditHref(line.expense.id, returnTo)}>Auditar item</Link>
@@ -1511,6 +1574,10 @@ export function CardStatementsWorkspace({
                           className="h-full bg-[repeating-linear-gradient(135deg,#f6cfe4,#f6cfe4_4px,#f0eae4_4px,#f0eae4_8px)]"
                           style={{ width: `${Math.max(0, 100 - postedProgress)}%` }}
                         />
+                      </div>
+                      <div className="mt-2 flex items-baseline justify-between gap-3">
+                        <span className="text-[11.5px] text-muted-foreground">Créditos e estornos</span>
+                        <span className="font-mono text-[13.5px] font-extrabold text-emerald-700">− {formatCurrency(statementCreditTotal)}</span>
                       </div>
                       <div className="mt-2 flex items-baseline justify-between gap-3">
                         <span className="text-[11.5px] text-muted-foreground">Total oficial da fatura</span>
@@ -1683,6 +1750,7 @@ export function CardStatementsWorkspace({
                   {importPreview.analysis.detectedFormat ? <span>Formato: {importPreview.analysis.detectedFormat}</span> : null}
                   <span>Compras: {importPreview.transactions.length}</span>
                   <span>Soma das compras: {formatCurrency(importPreview.analysis.includedTotal)}</span>
+                  {importCreditTotal > 0 ? <span>Créditos/estornos: − {formatCurrency(importCreditTotal)}</span> : null}
                   <span>Excluídos: {importPreview.analysis.excludedCount}</span>
                 </div>
               </div>
@@ -1778,6 +1846,15 @@ export function CardStatementsWorkspace({
               {importPreview.warnings.length > 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
                   {importPreview.warnings.map((warning) => <p key={warning}>• {warning}</p>)}
+                </div>
+              ) : null}
+
+              {historicalImportAvailable ? (
+                <div className="rounded-xl border border-stone-300 bg-stone-100/80 px-4 py-3 text-xs text-stone-800">
+                  <p className="font-extrabold">Competência anterior ao início da DRE</p>
+                  <p className="mt-1.5 leading-relaxed">
+                    Esta fatura pode ser registrada integralmente como histórico, sem auditoria item a item. As compras permanecem em {format(new Date(`${selectedGroup!.monthKey}-01T12:00:00`), "MMMM 'de' yyyy", { locale: ptBR })} e a série da DRE começa em {format(new Date(`${FINANCIAL_DRE_START_MONTH_KEY}-01T12:00:00`), "MMMM 'de' yyyy", { locale: ptBR })}.
+                  </p>
                 </div>
               ) : null}
 
@@ -1889,8 +1966,13 @@ export function CardStatementsWorkspace({
               {importPreview.excludedEntries.length > 0 ? (
                 <details className="rounded-[13px] border border-[#e9e5dc] bg-[#fbfaf7] px-[15px] py-3 text-xs">
                   <summary className="cursor-pointer text-[11.5px] font-extrabold text-muted-foreground">
-                    {importPreview.excludedEntries.length} movimento(s) não serão importados
+                    {importPreview.excludedEntries.length} movimento(s) separados das despesas
                   </summary>
+                  {importCreditTotal > 0 ? (
+                    <p className="mt-2 text-[10.5px] font-semibold text-emerald-700">
+                      Créditos e estornos reduzirão o total da fatura em {formatCurrency(importCreditTotal)}.
+                    </p>
+                  ) : null}
                   <div className="mt-2.5 space-y-1.5">
                     {importPreview.excludedEntries.map((entry) => (
                       <div key={entry.sourceReference} className="flex items-start justify-between gap-3 rounded-lg border border-[#f0ece3] bg-white px-3 py-2">
@@ -1910,14 +1992,25 @@ export function CardStatementsWorkspace({
           ) : null}
           <DialogFooter className="shrink-0 flex-col gap-3 border-t border-[#f0ece3] bg-[#faf9f6] px-6 py-[15px] sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-md text-left text-[11.5px] leading-relaxed text-muted-foreground">
-              Os itens entram como pendentes de auditoria. Nada é efetivado ou pago automaticamente.
+              No fluxo normal, os itens entram pendentes de auditoria. O registro histórico dispensa a conferência, mas não efetua pagamentos.
             </p>
-            <div className="flex shrink-0 justify-end gap-2">
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
               <Button variant="outline" className="h-10 rounded-xl bg-white px-4 text-[12.5px] font-bold" disabled={importingStatement} onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
+              {historicalImportAvailable ? (
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-xl border-stone-400 bg-stone-100 px-4 text-[12.5px] font-extrabold text-stone-800 hover:bg-stone-200"
+                  disabled={importingStatement || availableImportLines.length === 0 || importPreview?.analysis.status === "blocked" || importBlocked || importNeedsUnavailableReopen}
+                  onClick={() => void confirmCardStatementImport("historical_before_dre")}
+                >
+                  {importingStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Registrar como histórico
+                </Button>
+              ) : null}
               <Button
               className="h-10 rounded-xl px-4 text-[12.5px] font-extrabold"
               disabled={importingStatement || !hasImportChanges || importPreview?.analysis.status === "blocked" || importBlocked || importNeedsUnavailableReopen}
-              onClick={() => void confirmCardStatementImport()}
+              onClick={() => void confirmCardStatementImport("standard")}
             >
               {importingStatement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
               {importBlocked

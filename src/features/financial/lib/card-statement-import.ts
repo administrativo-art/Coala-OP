@@ -61,6 +61,11 @@ export type CardStatementRevisionPreview = CardStatementRevisionDiff & {
     kind: "additional_charge" | "credit" | "allocation_revision";
     amount: number;
   } | null;
+  creditSummary?: {
+    previousTotal: number;
+    nextTotal: number;
+    difference: number;
+  };
 };
 
 export type CardStatementExcludedEntry = {
@@ -70,6 +75,15 @@ export type CardStatementExcludedEntry = {
   kind: CardStatementExcludedKind;
   reason: string;
 };
+
+export function cardStatementCreditTotal(
+  entries: Array<Pick<CardStatementExcludedEntry, "amount" | "kind">> | null | undefined,
+) {
+  const totalCents = (entries || [])
+    .filter((entry) => entry.kind === "credit" || entry.kind === "refund")
+    .reduce((total, entry) => total + Math.max(0, cents(entry.amount)), 0);
+  return totalCents / 100;
+}
 
 export type CardStatementImportPreview = {
   fileName: string;

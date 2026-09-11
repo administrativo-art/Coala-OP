@@ -97,3 +97,26 @@ test("aplica o centro de resultado também sobre a individualização", () => {
   assert.equal(heucilene?.employerCost, 1230);
   assert.deepEqual(heucilene?.resultCenters, ["João Paulo"]);
 });
+
+test("mantém salário de agosto em agosto quando a competência legada está à meia-noite UTC", () => {
+  const analysis = buildDrePersonAnalysis({
+    expenses: [{
+      id: "salary-legacy-utc",
+      status: "paid",
+      description: "Salário - 08/2026 | Maria Silva",
+      competenceDate: new Date("2026-08-01T00:00:00.000Z"),
+      dueDate: new Date("2026-09-05T15:00:00.000Z"),
+      paidAt: new Date("2026-09-05T15:00:00.000Z"),
+      totalValue: 1_044.10,
+      accountPlan: "salary",
+      resultCenter: "center-jp",
+    }],
+    accounts,
+    monthKey: "2026-08",
+    resultCenter: "João Paulo",
+    resultCenterNames: { "center-jp": "João Paulo" },
+  });
+
+  assert.equal(analysis.employerCost, 1_044.10);
+  assert.equal(analysis.people[0]?.employeeName, "Maria Silva");
+});
