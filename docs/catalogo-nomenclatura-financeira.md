@@ -13,6 +13,7 @@ Este catálogo é a fonte canônica para descrições de despesas e movimentaç�
 | Honorário contábil | `Honorário contábil - Unidade \| Favorecido` |
 | DAS | `DAS - Única - MM/AAAA` |
 | Salário | `Salário - MM/AAAA \| Colaborador` |
+| Adiantamento salarial | `Adiantamento salarial - MM/AAAA \| Colaborador` |
 | Empréstimo consignado, linha analítica | `Empréstimo consignado - MM/AAAA \| Colaborador` |
 | FGTS com consignado | `FGTS - MM/AAAA \| FGTS + empréstimo consignado` |
 | FGTS sem consignado | `FGTS - MM/AAAA \| FGTS` |
@@ -38,6 +39,7 @@ Este catálogo é a fonte canônica para descrições de despesas e movimentaç�
 - `IOF do cartão` usa o plano `IOF | tarifas bancárias`. Os demais encargos do rotativo, saldo financiado, juros de mora e multa por atraso usam `Juros e multas`.
 - Encargos financeiros do cartão usam o centro de resultado padrão da conta bancária emissora; não herdam automaticamente o centro das compras que originaram o saldo.
 - Corridas por aplicativo usam a pessoa identificada no relatório do fornecedor. A política de rateio da pessoa prevalece sobre inferências pelo endereço de origem ou destino.
+- O adiantamento salarial usa a competência da folha que conterá o desconto. No modelo financeiro atual, ele compõe `Pessoal` porque o título salarial posterior registra o líquido já reduzido pelo adiantamento; registrar também o líquido anterior ao desconto causaria dupla contagem.
 - O sistema e o assistente nunca autorizam o pagamento bancário. A autorização final continua exclusiva do usuário no aplicativo do Banco Inter.
 
 ## Implementação

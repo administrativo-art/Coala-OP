@@ -1,6 +1,6 @@
 # Vinculação do Plano de Contas com a DRE
 
-> Estado após a migração de 2026-07-08, banco Firestore `coala-financeiro` (94 contas). A migração one-shot foi removida de `scripts/` após confirmação em produção; o histórico permanece no Git. Snapshot pré-migração em `backups/plano-contas-20260708/`.
+> Estado atualizado em 2026-09-10, banco Firestore `coala-financeiro` (115 contas). A migração estrutural de 2026-07-08 partiu de 94 contas; o histórico permanece no Git. Snapshot pré-migração em `backups/plano-contas-20260708/`.
 
 ## Como funciona
 
@@ -42,7 +42,11 @@ Grupo e filhas: **Ajustes de CMV / perdas não previstas**, **Perdas extraordin�
 
 ## 4. Recursos humanos → linha (-) Pessoal (`pessoal`)
 
-Tudo com `pessoal`: **Folha de pagamento** (grupo, com **Salários**, **INSS patronal**, **FGTS**, **Comissões de colaboradores**, **Bonificações / premiações de equipe**), **Vale-transporte**, **Plano odontológico**, **Vale alimentação**, **Contribuição sindical**.
+Tudo com `pessoal`: **Folha de pagamento** (grupo, com **Salários**, **Adiantamento salarial**, **INSS patronal**, **FGTS**, **Comissões de colaboradores**, **Bonificações / premiações de equipe**), **Vale-transporte**, **Plano odontológico**, **Vale alimentação**, **Contribuição sindical**.
+
+**Adiantamento salarial** entra em `Pessoal` no modelo financeiro atual porque o recibo posterior é lançado pelo valor líquido já descontado. A competência do adiantamento deve ser a mesma da folha que fará o desconto; a soma do adiantamento com o saldo líquido pago representa o valor líquido anterior à antecipação.
+
+A conta foi criada em 2026-09-10 com o identificador estável `adiantamento-salarial-v1`. Como a DRE atual usa a data efetiva do pagamento, o adiantamento e o saldo salarial podem aparecer em meses de caixa diferentes, embora conservem a mesma competência de folha na descrição e no cadastro da despesa.
 
 ## 5. Administrativo → linha (-) Despesas operacionais (`despesas_operacionais`)
 
