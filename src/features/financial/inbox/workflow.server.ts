@@ -8,7 +8,7 @@ import { financialExpenseAccountingFields } from "@/features/financial/lib/expen
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
 import { classifyFinancialEmail, mergeBillingIdentities } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
-import { chooseProvisionSuggestion, type ProvisionCandidate } from "./provision-suggestions";
+import { chooseProvisionSuggestion, scoreProvisionCandidate, type ProvisionCandidate } from "./provision-suggestions";
 import { chooseCreationSuggestion } from "./creation-suggestions";
 import { shouldAutomaticallyIdentifyInboxCharge } from "./automation-policy";
 import {
@@ -346,6 +346,17 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
     if (provision.provisionCompetence !== message.classification.competence) {
       throw new Error("A competência da cobrança diverge do provisionamento.");
     }
+    if (["tax", "fgts", "inss_darf"].includes(message.classification.documentType)
+      && !message.classification.fiscalIdentity) {
+      throw new Error("Reanalise o documento fiscal antes de substituir a previsão.");
+    }
+    const provisionMatch = scoreProvisionCandidate(message.classification, {
+      id: provisionId,
+      ...provision,
+    });
+    if (!provisionMatch.eligible || provisionMatch.score < 50) {
+      throw new Error("A natureza fiscal do documento não corresponde à previsão sugerida. Reanalise a cobrança.");
+    }
 
     const actualValue = money(message.classification.amountCents / 100);
     const provisionedValue = money(provision.totalValue);
@@ -391,6 +402,7 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       originModule: "financial_inbox",
       financialInboxMessageId: id,
       billingIdentity: message.classification.billingIdentity ?? null,
+      fiscalIdentity: message.classification.fiscalIdentity ?? null,
       status: "pending",
       createdAt: now,
       createdBy: actor.uid,
@@ -519,6 +531,10 @@ export async function linkInboxChargeToExistingExpense(
       return { message, expenseId, duplicate: true };
     }
     if (expense.provisionType === "forecast") throw new Error("A cobrança deve ser vinculada à despesa real, não à previsão.");
+    if (["tax", "fgts", "inss_darf"].includes(message.classification.documentType)
+      && !message.classification.fiscalIdentity) {
+      throw new Error("Reanalise o documento fiscal antes de vinculá-lo a uma despesa.");
+    }
     const reevaluatedSuggestion = chooseExistingExpenseSuggestion(message.classification, [{ id: expenseId, ...expense }]);
     const selectedAlternative = reevaluatedSuggestion.alternatives?.find((alternative) => (
       alternative.expenseId === expenseId
@@ -592,9 +608,19 @@ export async function linkInboxChargeToExistingExpense(
       const nextInstallments = installments.map((installment, index) => index === installmentIndex
         ? { ...installment, financialInboxMessageId: id, financialInboxLinkedAt: now, financialInboxLinkedBy: actor.uid }
         : installment);
-      transaction.set(expenseRef, { installments: nextInstallments, billingIdentity, updatedAt: Timestamp.now() }, { merge: true });
+      transaction.set(expenseRef, {
+        installments: nextInstallments,
+        billingIdentity,
+        fiscalIdentity: message.classification.fiscalIdentity ?? null,
+        updatedAt: Timestamp.now(),
+      }, { merge: true });
     } else if (!resolutionOnly) {
-      transaction.set(expenseRef, { financialInboxMessageId: id, billingIdentity, updatedAt: Timestamp.now() }, { merge: true });
+      transaction.set(expenseRef, {
+        financialInboxMessageId: id,
+        billingIdentity,
+        fiscalIdentity: message.classification.fiscalIdentity ?? null,
+        updatedAt: Timestamp.now(),
+      }, { merge: true });
     }
     const isNewCharge = !resolutionOnly && (
       expense.financialInboxMessageId === id
