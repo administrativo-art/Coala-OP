@@ -7,6 +7,15 @@ const receiptValuesSchema = z.object({
   discountAmount: z.coerce.number().finite().min(0).max(10_000_000),
   netAmount: z.coerce.number().finite().positive().max(10_000_000),
   paymentDate: isoDateSchema.nullish(),
+}).superRefine((value, context) => {
+  const expectedNet = Number((value.grossAmount - value.discountAmount).toFixed(2));
+  if (Math.abs(expectedNet - value.netAmount) > 0.01) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['netAmount'],
+      message: 'O valor líquido deve corresponder ao bruto menos os descontos.',
+    });
+  }
 });
 
 const reviewReceiptSchema = z.object({
@@ -15,6 +24,7 @@ const reviewReceiptSchema = z.object({
   values: receiptValuesSchema.optional(),
   notes: z.string().trim().max(2_000).optional(),
   reason: z.string().trim().max(2_000).optional(),
+  overrideReason: z.string().trim().min(10).max(2_000).optional(),
 }).superRefine((value, context) => {
   if (value.decision === 'approved' && !value.values) {
     context.addIssue({
@@ -39,6 +49,12 @@ const vacationCoreSchema = z.object({
   endDate: isoDateSchema.optional(),
   days: z.coerce.number().int().min(1).max(30),
   returnDate: isoDateSchema.optional(),
+  unjustifiedAbsences: z.coerce.number().int().min(0).max(100).default(0),
+  calendarId: z.string().trim().min(1).max(180).optional(),
+  weeklyRestDay: z.coerce.number().int().min(0).max(6).default(0),
+  employeeAgreedToSplit: z.boolean().default(false),
+  allowanceRequestedAt: isoDateSchema.optional(),
+  thirteenthAdvanceRequested: z.boolean().default(false),
 }).superRefine((value, context) => {
   if (value.recordType !== 'gozo') {
     if (value.days > 10) {
@@ -48,7 +64,21 @@ const vacationCoreSchema = z.object({
         message: 'O abono não pode superar 10 dias.',
       });
     }
+    if (!value.allowanceRequestedAt) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['allowanceRequestedAt'],
+        message: 'Informe quando o abono foi solicitado.',
+      });
+    }
     return;
+  }
+  if (!value.calendarId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['calendarId'],
+      message: 'Selecione o calendário aplicável.',
+    });
   }
   if (!value.startDate) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: 'Informe o início das férias.' });
@@ -70,10 +100,14 @@ export const createVacationSchema = z.object({
 export const updateVacationSchema = z.union([
   z.object({ action: z.literal('update_record'), vacation: vacationCoreSchema }),
   z.object({ action: z.literal('approve') }),
-  z.object({ action: z.literal('reject') }),
+  z.object({ action: z.literal('reject'), reason: z.string().trim().min(10).max(2_000) }),
+  z.object({ action: z.literal('cancel'), reason: z.string().trim().min(10).max(2_000) }),
   z.object({ action: z.literal('generate_notice') }),
   z.object({ action: z.literal('validate_notice') }),
-  z.object({ action: z.literal('send_notice') }),
+  z.object({
+    action: z.literal('send_notice'),
+    complianceOverrideReason: z.string().trim().min(10).max(2_000).optional(),
+  }),
   z.object({ action: z.literal('sync_notice') }),
   z.object({ action: z.literal('send_accountant') }),
   reviewReceiptSchema,

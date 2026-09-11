@@ -30,7 +30,7 @@ export const GET = withApiErrorHandling({
   const params = await context.params;
   const vacationId = boundedId(params.vacationId, 'Identificador de férias');
   const kind = boundedId(params.kind, 'Tipo de documento');
-  if (kind !== 'receipt-original' && kind !== 'receipt-signed') {
+  if (kind !== 'receipt-original' && kind !== 'receipt-signed' && kind !== 'payment-proof') {
     throw new AppError({
       code: 'DP_VACATION_ASSET_KIND_INVALID',
       kind: 'VALIDATION',

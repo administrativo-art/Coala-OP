@@ -420,7 +420,7 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
     await batch.commit();
   },
   addVacation: async (data) => {
-    await dpApiRequest('/api/dp/vacations', {
+    const response = await dpApiRequest<{ vacation: DPVacationRecord }>('/api/dp/vacations', {
       method: 'POST',
       json: {
         userId: data.userId,
@@ -432,19 +432,28 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
           endDate: data.endDate,
           days: data.days,
           returnDate: data.returnDate,
+          unjustifiedAbsences: data.unjustifiedAbsences,
+          calendarId: data.calendarId,
+          weeklyRestDay: data.weeklyRestDay,
+          employeeAgreedToSplit: data.employeeAgreedToSplit,
+          allowanceRequestedAt: data.allowanceRequestedAt,
+          thirteenthAdvanceRequested: data.thirteenthAdvanceRequested,
         },
       },
       fallbackError: 'Falha ao registrar férias.',
     });
+    if (response.vacation?.id) {
+      set((state) => ({
+        vacations: [response.vacation, ...state.vacations.filter((vacation) => vacation.id !== response.vacation.id)],
+      }));
+    }
   },
   updateVacation: async ({ id, ...data }) => {
     const current = get().vacations.find((vacation) => vacation.id === id);
     const action = data.status === 'APPROVED' && current?.status !== 'APPROVED'
       ? 'approve'
-      : data.status === 'REJECTED' && current?.status !== 'REJECTED'
-        ? 'reject'
-        : 'update_record';
-    await dpApiRequest(`/api/dp/vacations/${encodeURIComponent(id)}`, {
+      : 'update_record';
+    const response = await dpApiRequest<{ vacation: Partial<DPVacationRecord> & { id: string } }>(`/api/dp/vacations/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       json: action === 'update_record'
         ? {
@@ -456,17 +465,29 @@ export const useDPStore = create<DPStoreState>((set, get) => ({
               endDate: data.endDate,
               days: data.days,
               returnDate: data.returnDate,
+              unjustifiedAbsences: data.unjustifiedAbsences,
+              calendarId: data.calendarId,
+              weeklyRestDay: data.weeklyRestDay,
+              employeeAgreedToSplit: data.employeeAgreedToSplit,
+              allowanceRequestedAt: data.allowanceRequestedAt,
+              thirteenthAdvanceRequested: data.thirteenthAdvanceRequested,
             },
           }
         : { action },
       fallbackError: 'Falha ao atualizar férias.',
     });
+    set((state) => ({
+      vacations: state.vacations.map((vacation) => (
+        vacation.id === id ? { ...vacation, ...response.vacation, id } : vacation
+      )),
+    }));
   },
   deleteVacation: async (vacationId) => {
     await dpApiRequest(`/api/dp/vacations/${encodeURIComponent(vacationId)}`, {
       method: 'DELETE',
       fallbackError: 'Falha ao excluir férias.',
     });
+    set((state) => ({ vacations: state.vacations.filter((vacation) => vacation.id !== vacationId) }));
   },
   addCalendar: async (data) => {
     const ref = await addDoc(collection(db, 'dp_calendars'), stripUndefinedForCreate({ ...data, holidayCount: 0, createdAt: serverTimestamp() }) as Record<string, unknown>);

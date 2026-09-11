@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import type { NextRequest } from 'next/server';
 
@@ -27,9 +27,11 @@ import {
   type AutentiqueCreatedDocument,
 } from '@/lib/autentique.server';
 import {
+  analyzeVacationScheduling,
   advanceVacationWorkflowToNotice,
   cancelVacationWorkflow,
   createInitialVacationWorkflow,
+  vacationEntitlementDays,
 } from '@/lib/dp-vacation-workflow';
 import type {
   DPVacationRecord,
@@ -46,6 +48,7 @@ import type {
 } from './schemas';
 import { vacationAccountantEmailContent } from './emails';
 import { downloadVacationAutentiqueSignedPdf } from './autentique-signed-pdf.server';
+import { saveImmutableVacationPdf } from './immutable-pdf.server';
 import {
   retryVacationReceiptSignature,
   syncVacationReceiptSignatureRequest,
@@ -116,6 +119,17 @@ function conflict(code: string, safeMessage: string) {
 }
 
 function cleanedCore(input: VacationCoreInput) {
+  const unjustifiedAbsences = input.unjustifiedAbsences;
+  const entitledDays = vacationEntitlementDays(unjustifiedAbsences);
+  const compliance = {
+    unjustifiedAbsences,
+    entitledDays,
+    calendarId: input.calendarId ?? null,
+    weeklyRestDay: input.weeklyRestDay,
+    employeeAgreedToSplit: input.employeeAgreedToSplit,
+    allowanceRequestedAt: input.allowanceRequestedAt ?? null,
+    thirteenthAdvanceRequested: input.thirteenthAdvanceRequested,
+  };
   if (input.recordType === 'venda') {
     return {
       cycleId: input.cycleId,
@@ -124,6 +138,7 @@ function cleanedCore(input: VacationCoreInput) {
       startDate: null,
       endDate: null,
       returnDate: null,
+      ...compliance,
     } as const;
   }
   const startDate = input.startDate!;
@@ -135,7 +150,25 @@ function cleanedCore(input: VacationCoreInput) {
     endDate,
     days: dateLength(startDate, endDate),
     returnDate: input.returnDate ?? returnDate(endDate),
+    ...compliance,
   } as const;
+}
+
+function coreFromStoredVacation(current: Record<string, unknown>) {
+  return cleanedCore({
+    cycleId: String(current.cycleId ?? ''),
+    recordType: current.recordType === 'venda' ? 'venda' : 'gozo',
+    startDate: typeof current.startDate === 'string' ? current.startDate : undefined,
+    endDate: typeof current.endDate === 'string' ? current.endDate : undefined,
+    days: Number(current.days ?? 0),
+    returnDate: typeof current.returnDate === 'string' ? current.returnDate : undefined,
+    unjustifiedAbsences: Number(current.unjustifiedAbsences ?? 0),
+    calendarId: typeof current.calendarId === 'string' ? current.calendarId : undefined,
+    weeklyRestDay: Number(current.weeklyRestDay ?? 0),
+    employeeAgreedToSplit: current.employeeAgreedToSplit === true,
+    allowanceRequestedAt: typeof current.allowanceRequestedAt === 'string' ? current.allowanceRequestedAt : undefined,
+    thirteenthAdvanceRequested: current.thirteenthAdvanceRequested === true,
+  });
 }
 
 function overlapping(left: Record<string, unknown>, right: ReturnType<typeof cleanedCore>) {
@@ -149,6 +182,7 @@ function overlapping(left: Record<string, unknown>, right: ReturnType<typeof cle
 function serialize(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (Array.isArray(value)) return value.map(serialize);
+  if (value instanceof Date) return value.toISOString();
   if (typeof (value as { toDate?: unknown })?.toDate === 'function') {
     return (value as { toDate(): Date }).toDate().toISOString();
   }
@@ -297,6 +331,95 @@ function formattedCpf(value: string) {
     : value;
 }
 
+function normalizedIdentityText(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function sameMoney(left: unknown, right: unknown) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  return Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
+    && Math.abs(leftNumber - rightNumber) <= 0.01;
+}
+
+function vacationReceiptMismatches(params: {
+  current: Record<string, unknown>;
+  user: User;
+  employerCnpj: string;
+  workflow: DPVacationWorkflow;
+  values: NonNullable<ReviewVacationReceiptInput['values']>;
+}) {
+  const analysis = params.workflow.receipt.analysis;
+  if (!analysis) return ['O recibo não possui análise documental disponível.'];
+  const extracted = analysis.extractedFields;
+  const mismatches = [...analysis.issues];
+  const expectedName = normalizedIdentityText(params.user.username);
+  const receivedName = normalizedIdentityText(extracted.employeeName ?? analysis.identifiedEmployeeName);
+  if (analysis.documentTypeCode !== 'VACATION_RECEIPT') mismatches.push('O documento não foi classificado como recibo de férias.');
+  if (analysis.employeeMatchStatus !== 'MATCH') {
+    mismatches.push('A identidade da colaboradora não foi confirmada pela análise documental.');
+  }
+  if (!receivedName) {
+    mismatches.push('O nome da colaboradora não foi identificado no recibo.');
+  } else if (expectedName && receivedName !== expectedName) {
+    mismatches.push('O nome da colaboradora diverge do cadastro.');
+  }
+  const expectedCnpj = CnpjValidator.clean(params.employerCnpj);
+  const receivedCnpj = CnpjValidator.clean(String(extracted.cnpj ?? ''));
+  if (!receivedCnpj) {
+    mismatches.push('O CNPJ da empregadora não foi identificado no recibo.');
+  } else if (receivedCnpj !== expectedCnpj) {
+    mismatches.push('O CNPJ do recibo diverge da empregadora.');
+  }
+  const admissionDate = asIsoDate(params.user.admissionDate);
+  if (admissionDate && typeof params.current.cycleId === 'string') {
+    const period = vacationCyclePeriod(params.current.cycleId, admissionDate);
+    if (!extracted.acquisitionPeriodStart || !extracted.acquisitionPeriodEnd) {
+      mismatches.push('O período aquisitivo não foi identificado por completo no recibo.');
+    } else if (extracted.acquisitionPeriodStart !== period.acquisitionPeriodStart
+      || extracted.acquisitionPeriodEnd !== period.acquisitionPeriodEnd) {
+      mismatches.push('O período aquisitivo do recibo diverge do cadastro.');
+    }
+  }
+  if (!extracted.vacationStartDate) {
+    mismatches.push('A data inicial das férias não foi identificada no recibo.');
+  } else if (extracted.vacationStartDate !== params.current.startDate) {
+    mismatches.push('A data inicial do recibo diverge do agendamento.');
+  }
+  if (!extracted.vacationEndDate) {
+    mismatches.push('A data final das férias não foi identificada no recibo.');
+  } else if (extracted.vacationEndDate !== params.current.endDate) {
+    mismatches.push('A data final do recibo diverge do agendamento.');
+  }
+  if (extracted.numberOfDays == null) {
+    mismatches.push('A quantidade de dias não foi identificada no recibo.');
+  } else if (Number(extracted.numberOfDays) !== Number(params.current.days)) {
+    mismatches.push('A quantidade de dias do recibo diverge do agendamento.');
+  }
+  if (extracted.amountGross == null) {
+    mismatches.push('O valor bruto não foi identificado no recibo.');
+  } else if (!sameMoney(extracted.amountGross, params.values.grossAmount)) {
+    mismatches.push('O valor bruto confirmado diverge da leitura do documento.');
+  }
+  if (extracted.amountDiscounts == null) {
+    mismatches.push('Os descontos não foram identificados no recibo.');
+  } else if (!sameMoney(extracted.amountDiscounts, params.values.discountAmount)) {
+    mismatches.push('Os descontos confirmados divergem da leitura do documento.');
+  }
+  if (extracted.amountNet == null) {
+    mismatches.push('O valor líquido não foi identificado no recibo.');
+  } else if (!sameMoney(extracted.amountNet, params.values.netAmount)) {
+    mismatches.push('O valor líquido confirmado diverge da leitura do documento.');
+  }
+  if (extracted.signatureDetected === false) mismatches.push('Não foi detectada assinatura no recibo original.');
+  return [...new Set(mismatches.map((message) => message.trim()).filter(Boolean))];
+}
+
 function isoDateForYear(source: string, year: number) {
   const [, month, rawDay] = source.split('-').map(Number);
   if (!month || !rawDay || !Number.isInteger(year)) return '';
@@ -341,7 +464,18 @@ function formatBelemDateTime(value: string) {
 
 type VacationCycleRecord = Pick<
   DPVacationRecord,
-  'id' | 'cycleId' | 'recordType' | 'startDate' | 'endDate' | 'days' | 'status'
+  | 'id'
+  | 'cycleId'
+  | 'recordType'
+  | 'startDate'
+  | 'endDate'
+  | 'days'
+  | 'status'
+  | 'unjustifiedAbsences'
+  | 'entitledDays'
+  | 'employeeAgreedToSplit'
+  | 'allowanceRequestedAt'
+  | 'thirteenthAdvanceRequested'
 >;
 
 function vacationCycleQuery(userId: string, cycleId: string) {
@@ -362,6 +496,105 @@ function vacationCycleRecords(snapshot: FirebaseFirestore.QuerySnapshot): Vacati
     id: document.id,
     ...document.data(),
   } as VacationCycleRecord));
+}
+
+async function vacationComplianceAnalysis(
+  transaction: FirebaseFirestore.Transaction,
+  user: User,
+  core: ReturnType<typeof cleanedCore>,
+  history: FirebaseFirestore.QueryDocumentSnapshot[],
+  asOfDate: string,
+  options: { ignoreId?: string; candidateStatus?: DPVacationRecord['status'] } = {},
+) {
+  const admissionDate = requiredText(
+    asIsoDate(user.admissionDate),
+    'DP_VACATION_EMPLOYEE_ADMISSION_REQUIRED',
+    'Informe a data de admissão da colaboradora antes de validar as férias.',
+  );
+  const cyclePeriod = vacationCyclePeriod(core.cycleId, admissionDate);
+  const existing = history
+    .filter((document) => document.id !== options.ignoreId)
+    .map((document) => ({ id: document.id, ...document.data() } as VacationCycleRecord))
+    .filter((record) => record.cycleId === core.cycleId && record.status !== 'REJECTED');
+  const candidate: VacationCycleRecord = {
+    id: options.ignoreId ?? 'candidate',
+    cycleId: core.cycleId,
+    recordType: core.recordType,
+    startDate: core.startDate ?? undefined,
+    endDate: core.endDate ?? undefined,
+    days: core.days,
+    status: options.candidateStatus ?? 'PLANNED',
+    unjustifiedAbsences: core.unjustifiedAbsences,
+    entitledDays: core.entitledDays,
+    employeeAgreedToSplit: core.employeeAgreedToSplit,
+    allowanceRequestedAt: core.allowanceRequestedAt ?? undefined,
+  };
+  const cycleRecords = [...existing, candidate];
+  const unjustifiedAbsences = Math.max(
+    core.unjustifiedAbsences,
+    ...existing.map((record) => Number(record.unjustifiedAbsences ?? 0)),
+  );
+  const entitledDays = vacationEntitlementDays(unjustifiedAbsences);
+  let calendarConfigured = core.recordType !== 'gozo';
+  let holidays: string[] = [];
+  if (core.recordType === 'gozo' && core.calendarId) {
+    const calendarRef = dbAdmin.collection('dp_calendars').doc(core.calendarId);
+    const [calendar, holidaySnapshot] = await Promise.all([
+      transaction.get(calendarRef),
+      transaction.get(calendarRef.collection('holidays').limit(367)),
+    ]);
+    if (holidaySnapshot.size > 366) {
+      throw conflict('DP_VACATION_CALENDAR_LIMIT', 'O calendário possui feriados demais e precisa ser revisado.');
+    }
+    const startYear = Number(String(core.startDate).slice(0, 4));
+    calendarConfigured = calendar.exists && Number(calendar.get('year')) === startYear;
+    holidays = holidaySnapshot.docs.map((document) => asIsoDate(document.get('date'))).filter(Boolean);
+  }
+
+  const result = analyzeVacationScheduling({
+    recordType: core.recordType,
+    startDate: core.startDate,
+    endDate: core.endDate,
+    asOfDate,
+    calendarConfigured,
+    holidays,
+    weeklyRestDay: core.weeklyRestDay,
+    cycleRecords,
+    entitledDays,
+    employeeAgreedToSplit: core.employeeAgreedToSplit,
+    acquisitionPeriodEnd: cyclePeriod.acquisitionPeriodEnd,
+    concessiveDeadline: cyclePeriod.concessiveDeadline,
+    allowanceRequestedAt: core.allowanceRequestedAt,
+  });
+  return { ...result, entitledDays, cyclePeriod };
+}
+
+function assertVacationCompliance(
+  analysis: Awaited<ReturnType<typeof vacationComplianceAnalysis>>,
+) {
+  const blocking = analysis.checks.find((check) => check.blocking && check.code !== 'notice_lead_time');
+  if (blocking) {
+    throw conflict('DP_VACATION_LEGAL_BLOCK', blocking.message);
+  }
+}
+
+function workflowWithLegalAnalysis(
+  workflow: DPVacationWorkflow,
+  analysis: Awaited<ReturnType<typeof vacationComplianceAnalysis>>,
+  now: string,
+  asOfDate: string,
+) {
+  return {
+    ...workflow,
+    legalAnalysis: {
+      ...workflow.legalAnalysis,
+      analyzedAt: now,
+      asOfDate,
+      noticeLeadDays: analysis.noticeLeadDays,
+      checks: analysis.checks,
+    },
+    updatedAt: now,
+  } satisfies DPVacationWorkflow;
 }
 
 async function loadVacationEmployeeDocumentData(user: User) {
@@ -430,6 +663,9 @@ function vacationCycleDocumentSummary(records: VacationCycleRecord[]) {
         days: Number(record.days),
         status: statusLabels[record.status] ?? record.status,
       })),
+    thirteenthAdvanceText: active.some((record) => record.thirteenthAdvanceRequested === true)
+      ? 'Requerida'
+      : 'Não requerida',
   };
 }
 
@@ -480,7 +716,10 @@ async function ensureVacationAccountantRequestSent(vacationId: string) {
   if (!snapshot.exists) throw notFound();
   const current = snapshot.data() ?? {};
   const workflow = current.workflow as DPVacationWorkflow | undefined;
-  if (!workflow || workflow.notice.status !== 'signed' || !workflow.notice.signedStoragePath || !workflow.notice.signedHashSha256) {
+  if (!workflow || workflow.status !== 'active') {
+    throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+  }
+  if (workflow.notice.status !== 'signed' || !workflow.notice.signedStoragePath || !workflow.notice.signedHashSha256) {
     throw conflict('DP_VACATION_ACCOUNTANT_NOTICE_REQUIRED', 'O aviso assinado ainda não está disponível para a contabilidade.');
   }
   if (['sent', 'receipt_received', 'completed'].includes(workflow.accountant.status)) {
@@ -552,6 +791,9 @@ async function ensureVacationAccountantRequestSent(vacationId: string) {
     const fresh = await transaction.get(vacationRef);
     if (!fresh.exists) throw notFound();
     const freshWorkflow = fresh.get('workflow') as DPVacationWorkflow;
+    if (freshWorkflow.status !== 'active') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
     const allowed = ['ready_to_send', 'failed'].includes(freshWorkflow.accountant.status)
       || (freshWorkflow.accountant.status === 'correction_requested' && freshWorkflow.receipt.status === 'correction_requested');
     if (!allowed) {
@@ -614,7 +856,7 @@ async function ensureVacationAccountantRequestSent(vacationId: string) {
     vacationDays: Number(current.days),
     returnDate: expectedReturnDate,
     allowanceText: cycleSummary.allowanceText,
-    thirteenthAdvanceText: 'Não requerida',
+    thirteenthAdvanceText: cycleSummary.thirteenthAdvanceText,
     noticeSignedAt: formatBelemDateTime(signedAt),
     receiptUploadUrl: uploadUrl,
     correctionReason,
@@ -658,7 +900,8 @@ async function ensureVacationAccountantRequestSent(vacationId: string) {
       const fresh = await transaction.get(vacationRef);
       if (!fresh.exists) throw notFound();
       const freshWorkflow = fresh.get('workflow') as DPVacationWorkflow;
-      if (freshWorkflow.accountant.communicationId !== communicationId
+      if (freshWorkflow.status !== 'active'
+        || freshWorkflow.accountant.communicationId !== communicationId
         || freshWorkflow.accountant.tokenHash !== tokenHash) return;
       transaction.update(vacationRef, {
         workflow: {
@@ -699,7 +942,7 @@ async function ensureVacationAccountantRequestSent(vacationId: string) {
       const failedSnapshot = await transaction.get(vacationRef);
       if (!failedSnapshot.exists) return;
       const failedWorkflow = failedSnapshot.get('workflow') as DPVacationWorkflow | undefined;
-      if (!failedWorkflow || failedWorkflow.accountant.communicationId !== communicationId) return;
+      if (!failedWorkflow || failedWorkflow.status !== 'active' || failedWorkflow.accountant.communicationId !== communicationId) return;
       transaction.update(vacationRef, {
         workflow: {
           ...failedWorkflow,
@@ -738,7 +981,7 @@ async function attemptVacationAccountantDispatch(vacationId: string) {
       const snapshot = await transaction.get(vacationRef);
       if (!snapshot.exists) return;
       const workflow = snapshot.get('workflow') as DPVacationWorkflow | undefined;
-      if (!workflow || ['sent', 'receipt_received', 'completed'].includes(workflow.accountant.status)) return;
+      if (!workflow || workflow.status !== 'active' || ['sent', 'receipt_received', 'completed'].includes(workflow.accountant.status)) return;
       transaction.update(vacationRef, {
         workflow: {
           ...workflow,
@@ -879,18 +1122,22 @@ export async function createVacation(request: NextRequest, input: CreateVacation
   let created: Record<string, unknown> = {};
 
   await dbAdmin.runTransaction(async (transaction) => {
-    await assertTargetAccess(transaction, context, input.userId);
+    const user = await assertTargetAccess(transaction, context, input.userId);
     const history = await relatedVacations(transaction, input.userId);
     validateAgainstHistory(history, core);
+    const compliance = await vacationComplianceAnalysis(transaction, user, core, history, asOfDate, {
+      candidateStatus: input.status,
+    });
+    if (input.status === 'APPROVED') assertVacationCompliance(compliance);
     const workflow = core.recordType === 'gozo'
-      ? createInitialVacationWorkflow({
+      ? workflowWithLegalAnalysis(createInitialVacationWorkflow({
           status: input.status,
           startDate: core.startDate,
           endDate: core.endDate,
           now,
           asOfDate,
           actorId: context.decoded.uid,
-        })
+        }), compliance, now, asOfDate)
       : undefined;
     const warnings = workflow?.legalAnalysis.checks
       .filter((check) => check.status === 'warning')
@@ -898,6 +1145,7 @@ export async function createVacation(request: NextRequest, input: CreateVacation
     created = {
       userId: input.userId,
       ...core,
+      entitledDays: compliance.entitledDays,
       status: input.status,
       warnings,
       ...(workflow ? { workflow } : {}),
@@ -945,6 +1193,9 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       throw conflict('DP_VACATION_NOTICE_NOT_READY', 'Aprove o agendamento antes de gerar o aviso.');
     }
     const workflow = workflowForStoredVacation(current, now, asOfDate);
+    if (workflow.status !== 'active') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
     if (!['not_generated', 'failed'].includes(workflow.notice.status)) {
       throw conflict(
         'DP_VACATION_NOTICE_GENERATION_STATE',
@@ -953,14 +1204,22 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
           : 'O aviso já foi gerado. Abra o documento para validá-lo.',
       );
     }
-    if (workflow.legalAnalysis.checks.some((check) => check.blocking)) {
-      throw conflict('DP_VACATION_LEGAL_BLOCK', 'Corrija os impedimentos antes de gerar o aviso.');
-    }
+    const history = await relatedVacations(transaction, user.id);
+    const compliance = await vacationComplianceAnalysis(
+      transaction,
+      user,
+      coreFromStoredVacation(current),
+      history,
+      asOfDate,
+      { ignoreId: vacationId, candidateStatus: 'APPROVED' },
+    );
+    assertVacationCompliance(compliance);
+    const compliantWorkflow = workflowWithLegalAnalysis(workflow, compliance, now, asOfDate);
     const cycleId = requiredText(current.cycleId, 'DP_VACATION_CYCLE_REQUIRED', 'Informe o período aquisitivo.');
     const cycleSnapshot = await transaction.get(vacationCycleQuery(user.id, cycleId));
     const cycleRecords = vacationCycleRecords(cycleSnapshot);
     const nextWorkflow: DPVacationWorkflow = {
-      ...workflow,
+      ...compliantWorkflow,
       currentStage: 'notice',
       notice: {
         status: 'generating',
@@ -1014,7 +1273,7 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       throw conflict('DP_VACATION_NOTICE_LEAD_TIME_REQUIRED', 'Não foi possível calcular a antecedência do aviso.');
     }
     const observations = noticeLeadDays < 30
-      ? `Aviso emitido com ${noticeLeadDays} dias de antecedência. O prazo recomendado pelo art. 135 da CLT é de 30 dias.`
+      ? `Aviso emitido com ${noticeLeadDays} dias de antecedência. O prazo legal mínimo do art. 135 da CLT é de 30 dias.`
       : null;
     const fingerprintInput = {
       vacationId,
@@ -1029,6 +1288,8 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       ...employee,
       ...cyclePeriod,
       ...cycleSummary,
+      entitledDays: Number(current.entitledDays ?? vacationEntitlementDays(Number(current.unjustifiedAbsences ?? 0))),
+      unjustifiedAbsences: Number(current.unjustifiedAbsences ?? 0),
       noticeLeadDays,
       observations,
       companyLegalName: employer.legalName,
@@ -1052,9 +1313,10 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       endDate,
       returnDate: expectedReturnDate,
       days: Number(current.days),
-      entitledDays: 30,
+      entitledDays: Number(current.entitledDays ?? vacationEntitlementDays(Number(current.unjustifiedAbsences ?? 0))),
       allowanceText: cycleSummary.allowanceText,
-      thirteenthAdvanceText: 'Não requerida',
+      thirteenthAdvanceText: cycleSummary.thirteenthAdvanceText,
+      unjustifiedAbsencesText: `${Number(current.unjustifiedAbsences ?? 0)} falta(s); direito calculado de ${Number(current.entitledDays ?? 30)} dias`,
       paymentDeadline: source.workflow.legalAnalysis.paymentDeadline ?? startDate,
       noticeLeadDays,
       observations,
@@ -1085,7 +1347,9 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       const stored = snapshot.data() ?? {};
       await assertTargetAccess(transaction, context, String(stored.userId ?? ''));
       const workflow = workflowForStoredVacation(stored, generatedAt, asOfDate);
-      if (workflow.notice.generationOperationId !== operationId || workflow.notice.status !== 'generating') {
+      if (workflow.status !== 'active'
+        || workflow.notice.generationOperationId !== operationId
+        || workflow.notice.status !== 'generating') {
         throw conflict('DP_VACATION_NOTICE_GENERATION_SUPERSEDED', 'A geração do aviso foi substituída por uma operação mais recente.');
       }
       generatedWorkflow = {
@@ -1129,7 +1393,9 @@ export async function generateVacationNotice(request: NextRequest, vacationId: s
       if (!snapshot.exists) return;
       const stored = snapshot.data() ?? {};
       const workflow = workflowForStoredVacation(stored, failedAt, asOfDate);
-      if (workflow.notice.generationOperationId !== operationId || workflow.notice.status !== 'generating') return;
+      if (workflow.status !== 'active'
+        || workflow.notice.generationOperationId !== operationId
+        || workflow.notice.status !== 'generating') return;
       transaction.update(vacationRef, {
         workflow: {
           ...workflow,
@@ -1230,6 +1496,9 @@ export async function validateVacationNotice(request: NextRequest, vacationId: s
     const current = snapshot.data() ?? {};
     await assertTargetAccess(transaction, context, String(current.userId ?? ''));
     const workflow = workflowForStoredVacation(current, new Date().toISOString(), asOfDate);
+    if (workflow.status !== 'active' || current.status !== 'APPROVED') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
     if (workflow.notice.status !== 'draft'
       || !workflow.notice.storagePath
       || !workflow.notice.hashSha256
@@ -1266,6 +1535,9 @@ export async function validateVacationNotice(request: NextRequest, vacationId: s
     const current = snapshot.data() ?? {};
     await assertTargetAccess(transaction, context, String(current.userId ?? ''));
     const workflow = workflowForStoredVacation(current, validatedAt, asOfDate);
+    if (workflow.status !== 'active' || current.status !== 'APPROVED') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
     if (workflow.notice.status !== 'draft'
       || workflow.notice.generationOperationId !== draft!.operationId
       || workflow.notice.hashSha256 !== actualHash) {
@@ -1298,17 +1570,25 @@ export async function validateVacationNotice(request: NextRequest, vacationId: s
   return { id: vacationId, workflow: validatedWorkflow };
 }
 
-export async function sendVacationNotice(request: NextRequest, vacationId: string) {
+export async function sendVacationNotice(
+  request: NextRequest,
+  vacationId: string,
+  input: { complianceOverrideReason?: string } = {},
+) {
   const context = await requireUser(request);
   if (!canManageVacation(context, 'approve')) throw forbidden();
   const asOfDate = belemDateOnly();
+  const requestedAt = new Date().toISOString();
   const vacationRef = dbAdmin.collection('dp_vacations').doc(vacationId);
   const prepared = await dbAdmin.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(vacationRef);
     if (!snapshot.exists) throw notFound();
     const current = snapshot.data() ?? {};
     const user = await assertTargetAccess(transaction, context, String(current.userId ?? ''));
-    const workflow = workflowForStoredVacation(current, new Date().toISOString(), asOfDate);
+    const workflow = workflowForStoredVacation(current, requestedAt, asOfDate);
+    if (workflow.status !== 'active' || current.status !== 'APPROVED') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
     if (workflow.notice.status !== 'validated'
       || !workflow.notice.storagePath
       || !workflow.notice.fileName
@@ -1316,7 +1596,33 @@ export async function sendVacationNotice(request: NextRequest, vacationId: strin
       || !workflow.notice.documentId) {
       throw conflict('DP_VACATION_NOTICE_NOT_VALIDATED', 'Valide o aviso antes de enviá-lo.');
     }
-    return { current, user, workflow };
+    const history = await relatedVacations(transaction, user.id);
+    const compliance = await vacationComplianceAnalysis(
+      transaction,
+      user,
+      coreFromStoredVacation(current),
+      history,
+      asOfDate,
+      { ignoreId: vacationId, candidateStatus: 'APPROVED' },
+    );
+    assertVacationCompliance(compliance);
+    if ((compliance.noticeLeadDays ?? -1) < 30 && !input.complianceOverrideReason) {
+      throw conflict(
+        'DP_VACATION_NOTICE_EXCEPTION_REASON_REQUIRED',
+        'O aviso está fora da antecedência legal. Informe uma justificativa formal para registrar a exceção.',
+      );
+    }
+    const complianceStatus = (compliance.noticeLeadDays ?? -1) >= 30 ? 'compliant' as const : 'exception' as const;
+    const updatedWorkflow = workflowWithLegalAnalysis(workflow, compliance, requestedAt, asOfDate);
+    updatedWorkflow.legalAnalysis = {
+      ...updatedWorkflow.legalAnalysis,
+      noticeReferenceAt: requestedAt,
+      noticeCompliance: complianceStatus,
+      noticeExceptionReason: complianceStatus === 'exception' ? input.complianceOverrideReason ?? null : null,
+      noticeExceptionAt: complianceStatus === 'exception' ? requestedAt : null,
+      noticeExceptionBy: complianceStatus === 'exception' ? context.decoded.uid : null,
+    };
+    return { current, user, workflow: updatedWorkflow };
   });
 
   const employer = await resolveVacationEmployer(prepared.user);
@@ -1374,7 +1680,6 @@ export async function sendVacationNotice(request: NextRequest, vacationId: strin
       avatarUrl: prepared.user.avatarUrl ?? null,
     },
   ];
-  const requestedAt = new Date().toISOString();
   const signatureRequestRef = hrDbAdmin.collection('hrSignatureRequests').doc(
     `vacation_notice_${vacationId}_${prepared.workflow.notice.documentId}`,
   );
@@ -1385,6 +1690,9 @@ export async function sendVacationNotice(request: NextRequest, vacationId: strin
     const current = snapshot.data() ?? {};
     await assertTargetAccess(transaction, context, String(current.userId ?? ''));
     const workflow = workflowForStoredVacation(current, requestedAt, asOfDate);
+    if (workflow.status !== 'active' || current.status !== 'APPROVED') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
     if (workflow.notice.status !== 'validated'
       || workflow.notice.documentId !== prepared.workflow.notice.documentId
       || workflow.notice.hashSha256 !== actualHash) {
@@ -1393,6 +1701,7 @@ export async function sendVacationNotice(request: NextRequest, vacationId: strin
     transaction.update(vacationRef, {
       workflow: {
         ...workflow,
+        legalAnalysis: prepared.workflow.legalAnalysis,
         notice: {
           ...workflow.notice,
           status: 'sending',
@@ -1410,7 +1719,13 @@ export async function sendVacationNotice(request: NextRequest, vacationId: strin
       'VACATION_NOTICE_SEND_REQUESTED',
       'Envio do aviso de férias solicitado.',
       requestedAt,
-      { signatureRequestId: signatureRequestRef.id, documentId: workflow.notice.documentId },
+      {
+        signatureRequestId: signatureRequestRef.id,
+        documentId: workflow.notice.documentId,
+        noticeLeadDays: prepared.workflow.legalAnalysis.noticeLeadDays,
+        noticeCompliance: prepared.workflow.legalAnalysis.noticeCompliance,
+        noticeExceptionReason: prepared.workflow.legalAnalysis.noticeExceptionReason ?? null,
+      },
     ));
   });
   await signatureRequestRef.set({
@@ -1476,12 +1791,24 @@ export async function sendVacationNotice(request: NextRequest, vacationId: strin
       if (!snapshot.exists) throw notFound();
       const current = snapshot.data() ?? {};
       const workflow = workflowForStoredVacation(current, sentAt, asOfDate);
+      if (workflow.status !== 'active') {
+        throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+      }
       if (workflow.notice.signatureRequestId !== signatureRequestRef.id
         || !['sending', 'sent'].includes(workflow.notice.status)) {
         throw conflict('DP_VACATION_NOTICE_SEND_SUPERSEDED', 'O envio foi substituído por outra operação.');
       }
       sentWorkflow = {
         ...workflow,
+        legalAnalysis: {
+          ...workflow.legalAnalysis,
+          noticeReferenceAt: sentAt,
+          noticeLeadDays: analyzeVacationScheduling({
+            startDate: String(current.startDate ?? ''),
+            endDate: String(current.endDate ?? ''),
+            asOfDate: sentAt.slice(0, 10),
+          }).noticeLeadDays,
+        },
         notice: {
           ...workflow.notice,
           status: 'sent',
@@ -1529,7 +1856,8 @@ export async function sendVacationNotice(request: NextRequest, vacationId: strin
         if (!snapshot.exists) return;
         const current = snapshot.data() ?? {};
         const workflow = workflowForStoredVacation(current, failedAt, asOfDate);
-        if (workflow.notice.signatureRequestId !== signatureRequestRef.id
+        if (workflow.status !== 'active'
+          || workflow.notice.signatureRequestId !== signatureRequestRef.id
           || workflow.notice.status !== 'sending') return;
         transaction.update(vacationRef, {
           workflow: {
@@ -1583,26 +1911,25 @@ export async function syncVacationNoticeSignatureRequest(params: {
     ? String(request.get('signedFileUrl'))
     : '';
   const vacationRef = dbAdmin.collection('dp_vacations').doc(params.vacationId);
+  const vacationBeforeSync = await vacationRef.get();
+  if (!vacationBeforeSync.exists) throw notFound();
+  if ((vacationBeforeSync.get('workflow') as DPVacationWorkflow | undefined)?.status !== 'active') {
+    return { changed: false, signed: false };
+  }
 
   if (providerStatus === 'signed' && signedUrl) {
     const buffer = await downloadVacationAutentiqueSignedPdf(signedUrl);
     const signedHashSha256 = createHash('sha256').update(buffer).digest('hex');
-    const signedStoragePath = `hr/vacations/${params.vacationId}/notice/signed/${params.signatureRequestId}.pdf`;
-    await getStorage(adminApp)
-      .bucket(firebaseClientConfig.storageBucket)
-      .file(signedStoragePath)
-      .save(buffer, {
-        resumable: false,
-        metadata: {
-          contentType: 'application/pdf',
-          cacheControl: 'private, max-age=0, no-store',
-          metadata: {
-            vacationId: params.vacationId,
-            signatureRequestId: params.signatureRequestId,
-            signedHashSha256,
-          },
-        },
-      });
+    const signedStoragePath = `hr/vacations/${params.vacationId}/notice/signed/${params.signatureRequestId}-${signedHashSha256}.pdf`;
+    await saveImmutableVacationPdf({
+      storagePath: signedStoragePath,
+      buffer,
+      metadata: {
+        vacationId: params.vacationId,
+        signatureRequestId: params.signatureRequestId,
+        documentKind: 'vacation_notice_signed',
+      },
+    });
     const signedAt = typeof request.get('signedAt') === 'string'
       ? String(request.get('signedAt'))
       : new Date().toISOString();
@@ -1612,10 +1939,15 @@ export async function syncVacationNoticeSignatureRequest(params: {
       if (!snapshot.exists) throw notFound();
       const current = snapshot.data() ?? {};
       const workflow = workflowForStoredVacation(current, signedAt, belemDateOnly());
+      if (workflow.status !== 'active') return;
       if (workflow.notice.signatureRequestId !== params.signatureRequestId) return;
       if (workflow.notice.status === 'signed' && workflow.notice.signedHashSha256 === signedHashSha256) return;
       const nextWorkflow: DPVacationWorkflow = {
         ...workflow,
+        legalAnalysis: {
+          ...workflow.legalAnalysis,
+          noticeAcknowledgedAt: signedAt,
+        },
         currentStage: 'accountant',
         steps: workflow.steps.map((step) => {
           if (step.id === 'notice') {
@@ -1673,7 +2005,7 @@ export async function syncVacationNoticeSignatureRequest(params: {
     if (!snapshot.exists) throw notFound();
     const current = snapshot.data() ?? {};
     const workflow = workflowForStoredVacation(current, new Date().toISOString(), belemDateOnly());
-    if (workflow.notice.signatureRequestId !== params.signatureRequestId) return;
+    if (workflow.status !== 'active' || workflow.notice.signatureRequestId !== params.signatureRequestId) return;
     transaction.update(vacationRef, {
       workflow: {
         ...workflow,
@@ -1701,7 +2033,9 @@ export async function syncVacationNotice(request: NextRequest, vacationId: strin
     if (!snapshot.exists) throw notFound();
     const current = snapshot.data() ?? {};
     await assertTargetAccess(transaction, context, String(current.userId ?? ''));
-    const notice = (current.workflow as DPVacationWorkflow | undefined)?.notice;
+    const workflow = current.workflow as DPVacationWorkflow | undefined;
+    if (workflow?.status !== 'active') throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    const notice = workflow.notice;
     if (!notice?.signatureRequestId || !notice.providerDocumentId) {
       throw conflict('DP_VACATION_NOTICE_NOT_SENT', 'O aviso ainda não foi enviado para assinatura.');
     }
@@ -1790,7 +2124,10 @@ async function prepareVacationPaymentControl(
     const current = snapshot.data() ?? {};
     const user = await assertTargetAccess(transaction, context, String(current.userId ?? ''));
     const workflow = current.workflow as DPVacationWorkflow | undefined;
-    if (!workflow || workflow.receipt.status !== 'approved' || !workflow.receipt.reviewedValues) {
+    if (!workflow || workflow.status !== 'active') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
+    if (workflow.receipt.status !== 'approved' || !workflow.receipt.reviewedValues) {
       throw conflict('DP_VACATION_RECEIPT_NOT_APPROVED', 'Aprove o recibo e os valores antes de preparar o pagamento.');
     }
     if (workflow.payment.paymentRequestId) {
@@ -1917,6 +2254,9 @@ async function prepareVacationPaymentControl(
       const snapshot = await transaction.get(vacationRef);
       if (!snapshot.exists) throw notFound();
       const workflow = snapshot.get('workflow') as DPVacationWorkflow;
+      if (workflow.status !== 'active') {
+        throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+      }
       transaction.update(vacationRef, {
         workflow: {
           ...workflow,
@@ -1978,7 +2318,7 @@ async function prepareVacationPaymentControl(
       const snapshot = await transaction.get(vacationRef);
       if (!snapshot.exists) return;
       const workflow = snapshot.get('workflow') as DPVacationWorkflow;
-      if (workflow.payment.paymentRequestId) return;
+      if (workflow.status !== 'active' || workflow.payment.paymentRequestId) return;
       transaction.update(vacationRef, {
         workflow: {
           ...workflow,
@@ -2009,15 +2349,19 @@ export async function reviewVacationReceipt(
   vacationId: string,
   input: ReviewVacationReceiptInput,
 ) {
-  const { context, vacationRef } = await requireVacationApprovalAccess(request, vacationId);
+  const { context, vacationRef, user: authorizedUser } = await requireVacationApprovalAccess(request, vacationId);
+  const employer = input.decision === 'approved' ? await resolveVacationEmployer(authorizedUser) : null;
   const now = new Date().toISOString();
   await dbAdmin.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(vacationRef);
     if (!snapshot.exists) throw notFound();
     const current = snapshot.data() ?? {};
-    await assertTargetAccess(transaction, context, String(current.userId ?? ''));
+    const user = await assertTargetAccess(transaction, context, String(current.userId ?? ''));
     const workflow = current.workflow as DPVacationWorkflow | undefined;
-    if (!workflow || workflow.receipt.status !== 'review_pending' || !workflow.receipt.originalDocumentId) {
+    if (!workflow || workflow.status !== 'active') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
+    if (workflow.receipt.status !== 'review_pending' || !workflow.receipt.originalDocumentId) {
       throw conflict('DP_VACATION_RECEIPT_NOT_READY', 'O recibo ainda não está disponível para auditoria.');
     }
     if (input.decision === 'correction_required') {
@@ -2046,6 +2390,19 @@ export async function reviewVacationReceipt(
       return;
     }
     const values = input.values!;
+    const identityMismatches = vacationReceiptMismatches({
+      current,
+      user,
+      employerCnpj: employer!.cnpj,
+      workflow,
+      values,
+    });
+    if (identityMismatches.length && !input.overrideReason) {
+      throw conflict(
+        'DP_VACATION_RECEIPT_OVERRIDE_REASON_REQUIRED',
+        `Há divergências no recibo: ${identityMismatches.join(' ')}`,
+      );
+    }
     const nextWorkflow: DPVacationWorkflow = {
       ...workflow,
       currentStage: 'payment',
@@ -2065,6 +2422,8 @@ export async function reviewVacationReceipt(
           paymentDate: values.paymentDate ?? null,
         },
         reviewNotes: input.notes ?? null,
+        reviewOverrideReason: input.overrideReason ?? null,
+        identityMismatches,
         correctionReason: null,
         approvedAt: now,
         approvedBy: context.decoded.uid,
@@ -2079,7 +2438,11 @@ export async function reviewVacationReceipt(
       'VACATION_RECEIPT_APPROVED',
       'O recibo original e os valores processados foram aprovados pelo RH.',
       now,
-      { reviewedValues: nextWorkflow.receipt.reviewedValues },
+      {
+        reviewedValues: nextWorkflow.receipt.reviewedValues,
+        identityMismatches,
+        overrideReason: input.overrideReason ?? null,
+      },
     ));
   });
   if (input.decision === 'correction_required') {
@@ -2099,6 +2462,7 @@ export async function syncVacationPayment(request: NextRequest, vacationId: stri
   const { context, vacationRef } = await requireVacationApprovalAccess(request, vacationId);
   const snapshot = await vacationRef.get();
   const workflow = snapshot.get('workflow') as DPVacationWorkflow | undefined;
+  if (workflow?.status !== 'active') throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
   const paymentRequestId = workflow?.payment.paymentRequestId;
   if (!paymentRequestId) throw conflict('DP_VACATION_PAYMENT_NOT_PREPARED', 'O pagamento ainda não foi preparado.');
   let payment = await getPaymentRequest(paymentRequestId);
@@ -2114,7 +2478,7 @@ export async function syncVacationPayment(request: NextRequest, vacationId: stri
     const fresh = await transaction.get(vacationRef);
     if (!fresh.exists) throw notFound();
     const currentWorkflow = fresh.get('workflow') as DPVacationWorkflow;
-    if (currentWorkflow.payment.paymentRequestId !== payment.id) return;
+    if (currentWorkflow.status !== 'active' || currentWorkflow.payment.paymentRequestId !== payment.id) return;
     const status = vacationPaymentStatus(payment.status);
     transaction.update(vacationRef, {
       workflow: {
@@ -2164,7 +2528,10 @@ export async function finalizeVacationWorkflow(request: NextRequest, vacationId:
     const current = snapshot.data() ?? {};
     await assertTargetAccess(transaction, context, String(current.userId ?? ''));
     const workflow = current.workflow as DPVacationWorkflow | undefined;
-    if (!workflow || workflow.receiptSignature.status !== 'signed' || workflow.closure.status !== 'ready') {
+    if (!workflow || workflow.status !== 'active' || current.status !== 'APPROVED') {
+      throw conflict('DP_VACATION_WORKFLOW_INACTIVE', 'Esta trilha de férias não está ativa.');
+    }
+    if (workflow.receiptSignature.status !== 'signed' || workflow.closure.status !== 'ready') {
       throw conflict('DP_VACATION_CLOSURE_NOT_READY', 'A assinatura do recibo precisa estar concluída antes da finalização.');
     }
     const nextWorkflow: DPVacationWorkflow = {
@@ -2192,7 +2559,7 @@ export async function finalizeVacationWorkflow(request: NextRequest, vacationId:
 export async function getVacationWorkflowAsset(
   request: NextRequest,
   vacationId: string,
-  kind: 'receipt-original' | 'receipt-signed',
+  kind: 'receipt-original' | 'receipt-signed' | 'payment-proof',
 ) {
   const context = await requireUser(request);
   if (!canManageVacation(context, 'view') && !canManageVacation(context, 'approve')) throw forbidden();
@@ -2205,14 +2572,20 @@ export async function getVacationWorkflowAsset(
     const workflow = current.workflow as DPVacationWorkflow | undefined;
     const storagePath = kind === 'receipt-original'
       ? workflow?.receipt.originalStoragePath
-      : workflow?.receiptSignature.signedStoragePath;
+      : kind === 'receipt-signed'
+        ? workflow?.receiptSignature.signedStoragePath
+        : workflow?.payment.proofStoragePath;
     const hashSha256 = kind === 'receipt-original'
       ? workflow?.receipt.originalHashSha256
-      : workflow?.receiptSignature.signedHashSha256;
+      : kind === 'receipt-signed'
+        ? workflow?.receiptSignature.signedHashSha256
+        : null;
     const fileName = kind === 'receipt-original'
       ? workflow?.receipt.originalFileName ?? `recibo-ferias-${vacationId}.pdf`
-      : `recibo-ferias-assinado-${vacationId}.pdf`;
-    if (!storagePath || !hashSha256) {
+      : kind === 'receipt-signed'
+        ? `recibo-ferias-assinado-${vacationId}.pdf`
+        : `comprovante-pagamento-ferias-${vacationId}.pdf`;
+    if (!storagePath || (kind !== 'payment-proof' && !hashSha256)) {
       throw new AppError({
         code: 'DP_VACATION_ASSET_NOT_FOUND',
         kind: 'NOT_FOUND',
@@ -2224,7 +2597,7 @@ export async function getVacationWorkflowAsset(
   });
   const [buffer] = await getStorage(adminApp).bucket(firebaseClientConfig.storageBucket).file(asset.storagePath).download();
   const actualHash = createHash('sha256').update(buffer).digest('hex');
-  if (actualHash !== asset.hashSha256) {
+  if (asset.hashSha256 && actualHash !== asset.hashSha256) {
     throw new AppError({
       code: 'DP_VACATION_ASSET_INTEGRITY',
       kind: 'DATA_INTEGRITY',
@@ -2235,13 +2608,86 @@ export async function getVacationWorkflowAsset(
   return { buffer, fileName: asset.fileName, hashSha256: actualHash };
 }
 
+export async function listVacationEvents(
+  request: NextRequest,
+  vacationId: string,
+  options: { limit: number; cursor?: string | null },
+) {
+  const context = await requireUser(request);
+  if (!canManageVacation(context, 'view')
+    && !canManageVacation(context, 'approve')
+    && !canManageVacation(context, 'request')) throw forbidden();
+  const vacationRef = dbAdmin.collection('dp_vacations').doc(vacationId);
+  await dbAdmin.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(vacationRef);
+    if (!snapshot.exists) throw notFound();
+    await assertTargetAccess(transaction, context, String(snapshot.get('userId') ?? ''));
+  });
+
+  let query: FirebaseFirestore.Query = dbAdmin.collection('dp_vacationEvents')
+    .where('vacationId', '==', vacationId)
+    .orderBy('at', 'desc')
+    .orderBy(FieldPath.documentId(), 'desc');
+  if (options.cursor) {
+    const cursor = await dbAdmin.collection('dp_vacationEvents').doc(options.cursor).get();
+    if (!cursor.exists || cursor.get('vacationId') !== vacationId) {
+      throw conflict('DP_VACATION_EVENT_CURSOR_INVALID', 'O cursor do histórico é inválido.');
+    }
+    query = query.startAfter(cursor);
+  }
+  const snapshot = await query.limit(options.limit + 1).get();
+  const hasMore = snapshot.size > options.limit;
+  const documents = snapshot.docs.slice(0, options.limit);
+  return {
+    events: documents.map((document) => ({
+      id: document.id,
+      ...serialize(document.data()) as Record<string, unknown>,
+    })),
+    nextCursor: hasMore ? documents.at(-1)?.id ?? null : null,
+  };
+}
+
+export async function listVacations(
+  request: NextRequest,
+  options: { userId: string; limit: number; cursor?: string | null },
+) {
+  const context = await requireUser(request);
+  if (!canManageVacation(context, 'view')
+    && !canManageVacation(context, 'approve')
+    && !canManageVacation(context, 'request')) throw forbidden();
+  await dbAdmin.runTransaction(async (transaction) => {
+    await assertTargetAccess(transaction, context, options.userId);
+  });
+  let query: FirebaseFirestore.Query = dbAdmin.collection('dp_vacations')
+    .where('userId', '==', options.userId)
+    .orderBy('createdAt', 'desc')
+    .orderBy(FieldPath.documentId(), 'desc');
+  if (options.cursor) {
+    const cursor = await dbAdmin.collection('dp_vacations').doc(options.cursor).get();
+    if (!cursor.exists || cursor.get('userId') !== options.userId) {
+      throw conflict('DP_VACATION_CURSOR_INVALID', 'O cursor do histórico de férias é inválido.');
+    }
+    query = query.startAfter(cursor);
+  }
+  const snapshot = await query.limit(options.limit + 1).get();
+  const hasMore = snapshot.size > options.limit;
+  const documents = snapshot.docs.slice(0, options.limit);
+  return {
+    vacations: documents.map((document) => ({
+      id: document.id,
+      ...serialize(document.data()) as Record<string, unknown>,
+    })),
+    nextCursor: hasMore ? documents.at(-1)?.id ?? null : null,
+  };
+}
+
 export async function updateVacation(
   request: NextRequest,
   vacationId: string,
   input: UpdateVacationInput,
 ) {
   const context = await requireUser(request);
-  const needsApproval = input.action === 'approve' || input.action === 'reject';
+  const needsApproval = input.action === 'approve' || input.action === 'reject' || input.action === 'cancel';
   if (!canManageVacation(context, needsApproval ? 'approve' : 'request')) throw forbidden();
   const now = new Date().toISOString();
   const asOfDate = belemDateOnly();
@@ -2254,9 +2700,12 @@ export async function updateVacation(
     if (!snapshot.exists) throw notFound();
     const current = snapshot.data() ?? {};
     const userId = String(current.userId ?? '');
-    await assertTargetAccess(transaction, context, userId);
+    const user = await assertTargetAccess(transaction, context, userId);
 
     if (input.action === 'update_record') {
+      if (!['PLANNED', 'PENDING'].includes(String(current.status))) {
+        throw conflict('DP_VACATION_UPDATE_STATE', 'Somente agendamentos ainda não aprovados podem ser alterados.');
+      }
       const workflow = current.workflow as DPVacationWorkflow | undefined;
       if (workflow && !['not_generated', 'failed'].includes(workflow.notice.status)) {
         throw conflict(
@@ -2267,21 +2716,26 @@ export async function updateVacation(
       const core = cleanedCore(input.vacation);
       const history = await relatedVacations(transaction, userId);
       validateAgainstHistory(history, core, { ignoreId: vacationId });
+      const compliance = await vacationComplianceAnalysis(transaction, user, core, history, asOfDate, {
+        ignoreId: vacationId,
+        candidateStatus: current.status as DPVacationRecord['status'],
+      });
       const nextWorkflow = core.recordType === 'gozo'
-        ? createInitialVacationWorkflow({
+        ? workflowWithLegalAnalysis(createInitialVacationWorkflow({
             status: current.status as DPVacationRecord['status'],
             startDate: core.startDate,
             endDate: core.endDate,
             now,
             asOfDate,
             actorId: context.decoded.uid,
-          })
+          }), compliance, now, asOfDate)
         : undefined;
       const warnings = nextWorkflow?.legalAnalysis.checks
         .filter((check) => check.status === 'warning')
         .map((check) => check.message) ?? [];
       updated = {
         ...core,
+        entitledDays: compliance.entitledDays,
         warnings,
         workflow: nextWorkflow ?? null,
         updatedAt: new Date(now),
@@ -2299,10 +2753,26 @@ export async function updateVacation(
     }
 
     if (input.action === 'approve') {
+      if (!['PLANNED', 'PENDING'].includes(String(current.status))) {
+        throw conflict('DP_VACATION_APPROVAL_STATE', 'Este registro não está disponível para aprovação.');
+      }
+      const core = coreFromStoredVacation(current);
+      const history = await relatedVacations(transaction, userId);
+      validateAgainstHistory(history, core, { ignoreId: vacationId });
+      const compliance = await vacationComplianceAnalysis(transaction, user, core, history, asOfDate, {
+        ignoreId: vacationId,
+        candidateStatus: 'APPROVED',
+      });
+      assertVacationCompliance(compliance);
       if (current.recordType !== 'gozo') {
-        updated = { status: 'APPROVED', updatedAt: new Date(now), updatedBy: context.decoded.uid };
+        updated = {
+          status: 'APPROVED',
+          entitledDays: compliance.entitledDays,
+          updatedAt: new Date(now),
+          updatedBy: context.decoded.uid,
+        };
       } else {
-        const baseWorkflow = (current.workflow as DPVacationWorkflow | undefined)
+        const storedWorkflow = (current.workflow as DPVacationWorkflow | undefined)
           ?? createInitialVacationWorkflow({
             status: current.status as DPVacationRecord['status'],
             startDate: String(current.startDate ?? ''),
@@ -2310,11 +2780,10 @@ export async function updateVacation(
             now,
             asOfDate,
           });
-        if (baseWorkflow.legalAnalysis.checks.some((check) => check.blocking)) {
-          throw conflict('DP_VACATION_LEGAL_BLOCK', 'Corrija os impedimentos antes de aprovar o agendamento.');
-        }
+        const baseWorkflow = workflowWithLegalAnalysis(storedWorkflow, compliance, now, asOfDate);
         updated = {
           status: 'APPROVED',
+          entitledDays: compliance.entitledDays,
           workflow: advanceVacationWorkflowToNotice(baseWorkflow, {
             now,
             actorId: context.decoded.uid,
@@ -2334,6 +2803,63 @@ export async function updateVacation(
       return;
     }
 
+    if (input.action === 'cancel') {
+      if (current.status !== 'APPROVED') {
+        throw conflict('DP_VACATION_CANCEL_STATE', 'Somente férias aprovadas podem ser canceladas formalmente.');
+      }
+      const baseWorkflow = current.workflow as DPVacationWorkflow | undefined;
+      if (!baseWorkflow || baseWorkflow.status !== 'active') {
+        throw conflict('DP_VACATION_CANCEL_STATE', 'Esta trilha não está ativa.');
+      }
+      if (baseWorkflow.payment.paymentRequestId || ['preparing', 'paid'].includes(baseWorkflow.payment.status)) {
+        throw conflict(
+          'DP_VACATION_CANCEL_FINANCIAL_REVERSAL_REQUIRED',
+          'Há movimentação financeira vinculada. Faça a reversão financeira antes do cancelamento.',
+        );
+      }
+      const cancelledWorkflow = cancelVacationWorkflow(baseWorkflow, now);
+      updated = {
+        status: 'REJECTED',
+        workflow: {
+          ...cancelledWorkflow,
+          accountant: {
+            ...cancelledWorkflow.accountant,
+            tokenHash: null,
+            tokenExpiresAt: now,
+          },
+        },
+        cancellation: {
+          reason: input.reason,
+          cancelledAt: now,
+          cancelledBy: context.decoded.uid,
+          source: 'hr',
+        },
+        warnings: [...new Set([
+          ...(Array.isArray(current.warnings) ? current.warnings.filter((entry): entry is string => typeof entry === 'string') : []),
+          `Cancelada: ${input.reason}`,
+        ])],
+        updatedAt: new Date(now),
+        updatedBy: context.decoded.uid,
+      };
+      transaction.update(vacationRef, updated);
+      transaction.create(eventRef, vacationEvent(
+        context,
+        vacationId,
+        'VACATION_CANCELLED',
+        'Férias canceladas formalmente pelo RH.',
+        now,
+        { reason: input.reason },
+      ));
+      return;
+    }
+
+    if (input.action !== 'reject') {
+      throw conflict('DP_VACATION_TRANSITION_INVALID', 'A transição solicitada não é válida para este registro.');
+    }
+    if (!['PLANNED', 'PENDING'].includes(String(current.status))) {
+      throw conflict('DP_VACATION_REJECTION_STATE', 'Somente agendamentos pendentes podem ser rejeitados.');
+    }
+
     const baseWorkflow = current.recordType === 'gozo'
       ? (current.workflow as DPVacationWorkflow | undefined)
         ?? createInitialVacationWorkflow({
@@ -2347,6 +2873,12 @@ export async function updateVacation(
     updated = {
       status: 'REJECTED',
       ...(baseWorkflow ? { workflow: cancelVacationWorkflow(baseWorkflow, now) } : {}),
+      cancellation: {
+        reason: input.reason,
+        cancelledAt: now,
+        cancelledBy: context.decoded.uid,
+        source: 'hr',
+      },
       updatedAt: new Date(now),
       updatedBy: context.decoded.uid,
     };
@@ -2357,6 +2889,7 @@ export async function updateVacation(
       'VACATION_REJECTED',
       'Agendamento rejeitado pelo RH.',
       now,
+      { reason: input.reason },
     ));
   });
 

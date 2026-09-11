@@ -19,12 +19,21 @@ export const E2E_FINANCIAL_INBOX_IDS = {
   expense: "expense-e2e-vivo-0001",
 };
 export const E2E_UBER_EXPENSE_ID = "expense-e2e-uber-0001";
+export const E2E_VACATION = {
+  employeeId: "employee-vacation-e2e",
+  vacationId: "vacation-e2e-planned-0001",
+  calendarId: "calendar-vacation-e2e",
+};
 
 function isoDate(offsetDays = 0) {
   const date = new Date();
   date.setHours(12, 0, 0, 0);
   date.setDate(date.getDate() + offsetDays);
   return date.toISOString();
+}
+
+function dateOnly(offsetDays = 0) {
+  return isoDate(offsetDays).slice(0, 10);
 }
 
 export default async function seedE2E() {
@@ -55,7 +64,7 @@ export default async function seedE2E() {
     isDefaultAdmin: true,
   });
 
-  const now = isoDate();
+  const now = new Date().toISOString();
   const batch = mainDb.batch();
   batch.set(mainDb.collection("profiles").doc("admin"), {
     name: "Administrador",
@@ -81,6 +90,45 @@ export default async function seedE2E() {
       lastConfirmedAt: now,
       nextReviewAt: isoDate(180),
     },
+  });
+  const vacationStart = dateOnly(45);
+  const vacationEnd = dateOnly(58);
+  const vacationYear = Number(vacationStart.slice(0, 4));
+  const weeklyRestDay = (new Date(`${vacationStart}T12:00:00Z`).getUTCDay() + 3) % 7;
+  batch.set(mainDb.collection("users").doc(E2E_VACATION.employeeId), {
+    username: "Colaboradora Férias E2E",
+    email: "ferias.e2e@coala.test",
+    profileId: "user",
+    assignedKioskIds: [],
+    unitIds: [],
+    isActive: true,
+    admissionDate: "2024-01-01",
+    createdAt: now,
+  });
+  batch.set(mainDb.collection("dp_calendars").doc(E2E_VACATION.calendarId), {
+    name: `Calendário E2E ${vacationYear}`,
+    year: vacationYear,
+    holidayCount: 0,
+    createdAt: now,
+  });
+  batch.set(mainDb.collection("dp_vacations").doc(E2E_VACATION.vacationId), {
+    userId: E2E_VACATION.employeeId,
+    cycleId: `${vacationYear - 1}-${vacationYear}`,
+    recordType: "gozo",
+    startDate: vacationStart,
+    endDate: vacationEnd,
+    returnDate: dateOnly(59),
+    days: 14,
+    unjustifiedAbsences: 0,
+    entitledDays: 30,
+    calendarId: E2E_VACATION.calendarId,
+    weeklyRestDay,
+    employeeAgreedToSplit: false,
+    thirteenthAdvanceRequested: false,
+    status: "PLANNED",
+    warnings: [],
+    createdAt: now,
+    updatedAt: now,
   });
   batch.set(mainDb.collection("entities").doc("supplier-e2e"), {
     type: "pessoa_juridica",

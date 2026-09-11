@@ -58,6 +58,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import {
   CalendarDays, CheckCircle, MoreHorizontal,
   Pencil, Plus, Trash2, XCircle,
@@ -66,6 +68,7 @@ import { BackButton } from '@/components/navigation/back-button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthenticatedApi } from '@/hooks/use-authenticated-api';
 import { DPVacationWorkflowPanel } from '@/components/dp/dp-vacation-workflow';
+import { vacationEntitlementDays } from '@/lib/dp-vacation-workflow';
 
 import {
   calculateVacationHealth,
@@ -86,7 +89,7 @@ function toDate(ts: unknown): Date | undefined {
   if (!ts) return undefined;
   if (ts instanceof Date) return ts;
   if (typeof (ts as any).toDate === 'function') return (ts as any).toDate();
-  if (typeof ts === 'string') return new Date(ts);
+  if (typeof ts === 'string') return /^\d{4}-\d{2}-\d{2}$/.test(ts) ? parseISO(ts) : new Date(ts);
   return undefined;
 }
 
@@ -126,10 +129,24 @@ const vacationSchema = z.object({
   days: z.coerce.number().min(1).max(30),
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'PLANNED']),
   returnDate: z.string().optional(),
-}).refine(d => {
-  if (d.startDate && d.endDate) return d.endDate >= d.startDate;
-  return true;
-}, { message: 'Data fim deve ser após data início.', path: ['endDate'] });
+  unjustifiedAbsences: z.coerce.number().int().min(0).max(100),
+  calendarId: z.string().optional(),
+  weeklyRestDay: z.coerce.number().int().min(0).max(6),
+  employeeAgreedToSplit: z.boolean(),
+  allowanceRequestedAt: z.string().optional(),
+  thirteenthAdvanceRequested: z.boolean(),
+}).superRefine((data, context) => {
+  if (data.recordType === 'gozo') {
+    if (!data.startDate) context.addIssue({ code: 'custom', path: ['startDate'], message: 'Informe o início.' });
+    if (!data.endDate) context.addIssue({ code: 'custom', path: ['endDate'], message: 'Informe o fim.' });
+    if (!data.calendarId) context.addIssue({ code: 'custom', path: ['calendarId'], message: 'Selecione o calendário.' });
+    if (data.startDate && data.endDate && data.endDate < data.startDate) {
+      context.addIssue({ code: 'custom', path: ['endDate'], message: 'Data fim deve ser após data início.' });
+    }
+  } else if (!data.allowanceRequestedAt) {
+    context.addIssue({ code: 'custom', path: ['allowanceRequestedAt'], message: 'Informe a data do pedido do abono.' });
+  }
+});
 
 type VacationFormValues = z.infer<typeof vacationSchema>;
 
@@ -145,6 +162,7 @@ interface VacationDialogProps {
 
 function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }: VacationDialogProps) {
   const { addVacation, updateVacation } = useDP();
+  const { calendars } = useDPBootstrap();
   const { toast } = useToast();
   const isEdit = !!vacation;
 
@@ -158,6 +176,12 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
       days: vacation?.days ?? 30,
       status: vacation?.status ?? 'PLANNED',
       returnDate: vacation?.returnDate ?? '',
+      unjustifiedAbsences: vacation?.unjustifiedAbsences ?? 0,
+      calendarId: vacation?.calendarId ?? '',
+      weeklyRestDay: vacation?.weeklyRestDay ?? 0,
+      employeeAgreedToSplit: vacation?.employeeAgreedToSplit ?? false,
+      allowanceRequestedAt: vacation?.allowanceRequestedAt ?? '',
+      thirteenthAdvanceRequested: vacation?.thirteenthAdvanceRequested ?? false,
     },
   });
 
@@ -171,6 +195,12 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
         days: vacation?.days ?? 30,
         status: vacation?.status ?? 'PLANNED',
         returnDate: vacation?.returnDate ?? '',
+        unjustifiedAbsences: vacation?.unjustifiedAbsences ?? 0,
+        calendarId: vacation?.calendarId ?? '',
+        weeklyRestDay: vacation?.weeklyRestDay ?? 0,
+        employeeAgreedToSplit: vacation?.employeeAgreedToSplit ?? false,
+        allowanceRequestedAt: vacation?.allowanceRequestedAt ?? '',
+        thirteenthAdvanceRequested: vacation?.thirteenthAdvanceRequested ?? false,
       });
     }
   }, [open, vacation, defaultCycleId]);
@@ -178,6 +208,7 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
   const startDate = form.watch('startDate');
   const endDate = form.watch('endDate');
   const recordType = form.watch('recordType');
+  const unjustifiedAbsences = form.watch('unjustifiedAbsences');
 
   React.useEffect(() => {
     if (startDate && endDate && endDate >= startDate) {
@@ -185,6 +216,13 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
       form.setValue('days', diff);
     }
   }, [startDate, endDate]);
+
+  React.useEffect(() => {
+    if (!open || recordType !== 'gozo' || form.getValues('calendarId')) return;
+    const year = Number(startDate?.slice(0, 4));
+    const calendar = calendars.find((candidate) => candidate.year === year) ?? calendars[0];
+    if (calendar) form.setValue('calendarId', calendar.id, { shouldValidate: true });
+  }, [calendars, form, open, recordType, startDate]);
 
   async function onSubmit(values: VacationFormValues) {
     try {
@@ -194,6 +232,8 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
         startDate: values.startDate || undefined,
         endDate: values.endDate || undefined,
         returnDate: values.returnDate || undefined,
+        calendarId: values.calendarId || undefined,
+        allowanceRequestedAt: values.allowanceRequestedAt || undefined,
         warnings: vacation?.warnings ?? [],
       };
       if (isEdit && vacation) {
@@ -211,7 +251,7 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Editar férias' : 'Agendar férias'}</DialogTitle>
           <DialogDescription>
@@ -263,6 +303,39 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
               </div>
             )}
 
+            {recordType === 'gozo' && (
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="calendarId" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Calendário aplicável</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {calendars.map((calendar) => (
+                          <SelectItem key={calendar.id} value={calendar.id}>{calendar.name} · {calendar.year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="weeklyRestDay" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descanso semanal</FormLabel>
+                    <Select value={String(field.value)} onValueChange={(value) => field.onChange(Number(value))}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((label, index) => (
+                          <SelectItem key={label} value={String(index)}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            )}
+
             <FormField control={form.control} name="days" render={({ field }) => (
               <FormItem>
                 <FormLabel>Dias</FormLabel>
@@ -270,6 +343,27 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
                 <FormMessage />
               </FormItem>
             )} />
+
+            <FormField control={form.control} name="unjustifiedAbsences" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Faltas injustificadas no ciclo</FormLabel>
+                <FormControl><Input type="number" min={0} max={100} {...field} /></FormControl>
+                <p className="text-[11px] text-muted-foreground">
+                  Direito calculado: {vacationEntitlementDays(Number(unjustifiedAbsences) || 0)} dias.
+                </p>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {recordType === 'venda' && (
+              <FormField control={form.control} name="allowanceRequestedAt" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Data do pedido do abono</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
 
             {recordType === 'gozo' && (
               <FormField control={form.control} name="returnDate" render={({ field }) => (
@@ -283,6 +377,21 @@ function VacationDialog({ userId, defaultCycleId, vacation, open, onOpenChange }
                 </FormItem>
               )} />
             )}
+
+            <div className="space-y-3 rounded-xl border p-3">
+              <FormField control={form.control} name="employeeAgreedToSplit" render={({ field }) => (
+                <FormItem className="flex items-start gap-2 space-y-0">
+                  <FormControl><Checkbox checked={field.value} onCheckedChange={(value) => field.onChange(value === true)} /></FormControl>
+                  <div><FormLabel>Colaborador concordou com o fracionamento</FormLabel><FormMessage /></div>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="thirteenthAdvanceRequested" render={({ field }) => (
+                <FormItem className="flex items-start gap-2 space-y-0">
+                  <FormControl><Checkbox checked={field.value} onCheckedChange={(value) => field.onChange(value === true)} /></FormControl>
+                  <div><FormLabel>Adiantamento da 1ª parcela do 13º solicitado</FormLabel><FormMessage /></div>
+                </FormItem>
+              )} />
+            </div>
 
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
@@ -479,18 +588,60 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [editVacation, setEditVacation] = useState<DPVacationRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DPVacationRecord | null>(null);
+  const [decisionTarget, setDecisionTarget] = useState<{ record: DPVacationRecord; action: 'reject' | 'cancel' } | null>(null);
+  const [decisionReason, setDecisionReason] = useState('');
   const [selectedCycleId, setSelectedCycleId] = useState<string | undefined>();
   const [selectedWorkflowVacationId, setSelectedWorkflowVacationId] = useState<string | null>(null);
   const [noticeBusy, setNoticeBusy] = useState<'generate' | 'validate' | 'open' | 'send' | 'sync' | null>(null);
   const [workflowBusy, setWorkflowBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+  const [vacationHistory, setVacationHistory] = useState<DPVacationRecord[]>([]);
+  const [vacationHistoryCursor, setVacationHistoryCursor] = useState<string | null>(null);
+  const [vacationHistoryLoading, setVacationHistoryLoading] = useState(false);
+
+  const loadVacationHistory = React.useCallback(async (cursor?: string | null) => {
+    setVacationHistoryLoading(true);
+    try {
+      const search = new URLSearchParams({ userId, limit: '50' });
+      if (cursor) search.set('cursor', cursor);
+      const payload = await api<{ vacations: DPVacationRecord[]; nextCursor: string | null }>(
+        `/api/dp/vacations?${search}`,
+        { fallbackError: 'Não foi possível carregar o histórico de férias.' },
+      );
+      setVacationHistory((current) => cursor ? [...current, ...payload.vacations] : payload.vacations);
+      setVacationHistoryCursor(payload.nextCursor);
+    } catch (error) {
+      toast({
+        title: 'Histórico de férias indisponível.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setVacationHistoryLoading(false);
+    }
+  }, [api, toast, userId]);
+
+  React.useEffect(() => {
+    setVacationHistory([]);
+    setVacationHistoryCursor(null);
+    void loadVacationHistory(null);
+  }, [loadVacationHistory]);
 
   const user = users.find(u => u.id === userId);
   const admDate = toDate(user?.admissionDate);
-  const userVacations = useMemo(() =>
-    vacations.filter(v => v.userId === userId),
-    [vacations, userId]
-  );
+  const userVacations = useMemo(() => {
+    const records = new Map(
+      vacations.filter(vacation => vacation.userId === userId).map((vacation) => [vacation.id, vacation]),
+    );
+    vacationHistory.forEach((vacation) => {
+      const current = records.get(vacation.id);
+      const currentTime = toDate(current?.updatedAt)?.getTime() ?? 0;
+      const historyTime = toDate(vacation.updatedAt)?.getTime() ?? 0;
+      if (!current || historyTime >= currentTime) records.set(vacation.id, vacation);
+    });
+    return [...records.values()];
+  }, [vacationHistory, vacations, userId]);
 
   const health = useMemo(() =>
     calculateVacationHealth(admDate, userVacations),
@@ -535,8 +686,39 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
   }
 
   async function handleReject(v: DPVacationRecord) {
-    try { await updateVacation({ ...v, status: 'REJECTED' }); toast({ title: 'Rejeitado.' }); }
-    catch { toast({ title: 'Erro.', variant: 'destructive' }); }
+    setDecisionReason('');
+    setDecisionTarget({ record: v, action: 'reject' });
+  }
+
+  function handleCancel(v: DPVacationRecord) {
+    setDecisionReason('');
+    setDecisionTarget({ record: v, action: 'cancel' });
+  }
+
+  async function confirmDecision() {
+    if (!decisionTarget || decisionReason.trim().length < 10) return;
+    setDeciding(true);
+    try {
+      await api(`/api/dp/vacations/${encodeURIComponent(decisionTarget.record.id)}`, {
+        method: 'PATCH',
+        json: { action: decisionTarget.action, reason: decisionReason.trim() },
+        fallbackError: decisionTarget.action === 'cancel'
+          ? 'Não foi possível cancelar formalmente as férias.'
+          : 'Não foi possível rejeitar o agendamento.',
+      });
+      toast({ title: decisionTarget.action === 'cancel' ? 'Férias canceladas formalmente.' : 'Agendamento rejeitado.' });
+      await loadVacationHistory(null);
+      setDecisionTarget(null);
+      setDecisionReason('');
+    } catch (error) {
+      toast({
+        title: 'A ação não foi concluída.',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeciding(false);
+    }
   }
 
   async function handleGenerateNotice(vacation: DPVacationRecord) {
@@ -551,6 +733,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
         title: 'Aviso gerado.',
         description: 'Abra o PDF e confira o conteúdo antes de validar.',
       });
+      await loadVacationHistory(null);
     } catch (error) {
       toast({
         title: 'Não foi possível gerar o aviso.',
@@ -599,6 +782,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
         title: 'Aviso validado.',
         description: 'O documento foi liberado para a futura etapa de envio e assinatura.',
       });
+      await loadVacationHistory(null);
     } catch (error) {
       toast({
         title: 'Não foi possível validar o aviso.',
@@ -610,18 +794,19 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
     }
   }
 
-  async function handleSendNotice(vacation: DPVacationRecord) {
+  async function handleSendNotice(vacation: DPVacationRecord, complianceOverrideReason?: string) {
     setNoticeBusy('send');
     try {
       await api(`/api/dp/vacations/${encodeURIComponent(vacation.id)}`, {
         method: 'PATCH',
-        json: { action: 'send_notice' },
+        json: { action: 'send_notice', complianceOverrideReason },
         fallbackError: 'Não foi possível enviar o aviso para assinatura.',
       });
       toast({
         title: 'Aviso enviado.',
         description: 'A empregadora e a colaboradora receberam solicitações individuais de assinatura.',
       });
+      await loadVacationHistory(null);
     } catch (error) {
       toast({
         title: 'Não foi possível enviar o aviso.',
@@ -642,6 +827,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
         fallbackError: 'Não foi possível atualizar o acompanhamento.',
       });
       toast({ title: 'Acompanhamento atualizado.' });
+      await loadVacationHistory(null);
     } catch (error) {
       toast({
         title: 'Não foi possível atualizar o acompanhamento.',
@@ -677,6 +863,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
           ? 'O recibo foi aprovado, mas o pagamento exige ajuste no vínculo, CPF ou chave Pix da colaboradora.'
           : undefined,
       });
+      await loadVacationHistory(null);
     } catch (error) {
       toast({
         title: 'Não foi possível avançar a trilha.',
@@ -690,7 +877,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
   async function handleOpenWorkflowAsset(
     vacation: DPVacationRecord,
-    kind: 'receipt-original' | 'receipt-signed',
+    kind: 'receipt-original' | 'receipt-signed' | 'payment-proof',
   ) {
     const preview = window.open('', '_blank');
     setWorkflowBusy(`open-${kind}`);
@@ -814,6 +1001,7 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
         onSyncReceiptSignature={(vacation) => handleWorkflowAction(vacation, 'sync-receipt-signature', { action: 'sync_receipt_signature' }, 'Assinatura do recibo atualizada.')}
         onFinalizeWorkflow={(vacation) => handleWorkflowAction(vacation, 'finalize', { action: 'finalize_workflow' }, 'Trilha de férias finalizada.')}
         onOpenWorkflowAsset={handleOpenWorkflowAsset}
+        onCancel={handleCancel}
       />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -907,9 +1095,22 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
 
         {/* Right: Cycle History */}
         <div className="lg:col-span-2 space-y-4">
-          <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Histórico de Ciclos
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Histórico de Ciclos
+            </p>
+            {vacationHistoryCursor ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={vacationHistoryLoading}
+                onClick={() => void loadVacationHistory(vacationHistoryCursor)}
+              >
+                {vacationHistoryLoading ? 'Carregando...' : 'Carregar períodos anteriores'}
+              </Button>
+            ) : null}
+          </div>
 
           {vacationsLoading ? (
             <div className="space-y-3">
@@ -971,6 +1172,43 @@ export function DPFeriasProfile({ userId }: DPFeriasProfileProps) {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!decisionTarget}
+        onOpenChange={(open) => {
+          if (!open && !deciding) {
+            setDecisionTarget(null);
+            setDecisionReason('');
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {decisionTarget?.action === 'cancel' ? 'Cancelar férias formalmente?' : 'Rejeitar agendamento?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              A justificativa ficará registrada na trilha de auditoria. Férias com pagamento já preparado ou confirmado não podem ser canceladas por esta ação.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            value={decisionReason}
+            onChange={(event) => setDecisionReason(event.target.value)}
+            placeholder="Informe o motivo (mínimo de 10 caracteres)"
+            className="min-h-24"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deciding}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDecision}
+              disabled={deciding || decisionReason.trim().length < 10}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deciding ? 'Registrando...' : 'Confirmar com justificativa'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

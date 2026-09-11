@@ -5,7 +5,7 @@ import { requireUser } from '@/lib/auth-server';
 import { vacationQueryWindow } from '@/lib/dp-vacation-schedule-rules';
 import { dbAdmin } from '@/lib/firebase-admin';
 import { AppError, withApiErrorHandling } from '@/lib/observability';
-import { canAccessUnit, resolveUnitAccess } from '@/lib/unit-access';
+import { canAccessUnit, canAccessUserByUnit, resolveUnitAccess } from '@/lib/unit-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -96,9 +96,25 @@ export const GET = withApiErrorHandling<RouteContext>({
     });
   }
 
+  const userIds = [...new Set(snapshot.docs.flatMap((document) => {
+    const userId = document.get('userId');
+    return typeof userId === 'string' && userId ? [userId] : [];
+  }))];
+  const userSnapshots = userIds.length
+    ? await dbAdmin.getAll(...userIds.map((userId) => dbAdmin.collection('users').doc(userId)))
+    : [];
+  const accessibleUserIds = new Set(userSnapshots.flatMap((userSnapshot) => {
+    if (!userSnapshot.exists) return [];
+    return canAccessUserByUnit(context.userDoc, userSnapshot.data() ?? {}, {
+      isDefaultAdmin: context.isDefaultAdmin,
+    }) ? [userSnapshot.id] : [];
+  }));
+
   const vacations = snapshot.docs.flatMap((document) => {
     const data = document.data();
     if (
+      !accessibleUserIds.has(String(data.userId ?? ''))
+      ||
       data.status !== 'APPROVED'
       || data.recordType !== 'gozo'
       || typeof data.startDate !== 'string'
