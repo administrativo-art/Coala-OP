@@ -50,6 +50,7 @@ import {
   personAllocationsAreValid,
 } from "@/features/financial/lib/expense-person-allocations";
 import { expenseProvisionIdentity } from "@/features/financial/lib/expense-provisions";
+import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import type { FinancialInboxBillingIdentity } from "@/features/financial/inbox/types";
@@ -1516,6 +1517,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   function buildExpensePayload(values: ExpenseFormValues) {
     const account = (accounts || []).find((item: any) => item.id === values.accountPlan);
     const installmentsToSave = buildInstallmentsFromValues(values);
+    const competenceDate = values.competenceDate ? Timestamp.fromDate(values.competenceDate) : null;
     const inferredProvisionIdentity = expenseProvisionIdentity({
       description: values.description,
       accountPlanName: account?.name,
@@ -1577,7 +1579,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       supplier: values.supplier ?? "",
       notes: values.notes ?? "",
       totalValue: values.totalValue || 0,
-      competenceDate: values.competenceDate ? Timestamp.fromDate(values.competenceDate) : null,
+      competenceDate,
       dueDate:
         values.paymentMethod === "installments"
           ? values.installmentType === "equal"
@@ -1631,6 +1633,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         values.paymentMethod === "recurring" && values.recurrenceEndDate
           ? Timestamp.fromDate(values.recurrenceEndDate)
           : null,
+      ...financialExpenseAccountingFields({
+        competenceDate,
+        provisionCompetence: provisionIdentity?.provisionCompetence,
+      }),
       updatedAt: Timestamp.now(),
     };
   }
@@ -1924,6 +1930,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
               ...payload,
               totalValue: occurrence.value,
               competenceDate: Timestamp.fromDate(occurrence.competenceDate),
+              ...financialExpenseAccountingFields({ competenceDate: occurrence.competenceDate }),
               dueDate: Timestamp.fromDate(occurrence.dueDate),
               installments: [
                 {

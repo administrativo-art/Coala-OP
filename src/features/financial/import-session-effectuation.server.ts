@@ -13,6 +13,7 @@ import {
   queueReopenedBankPayment,
 } from "@/features/financial/obligations/service.server";
 import { calculateFinancialObligationSummary, moneyToCents } from "@/features/financial/obligations/calculations";
+import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 
 type RawRecord = Record<string, unknown>;
 type ItemStatus = "pending" | "audited" | "ignored" | "completed";
@@ -570,6 +571,7 @@ export async function effectuateImportSessionItem(params: {
         expenseIds.push(id);
         createdExpenseIds.push(id);
         batch.set(financialDbAdmin.collection("expenses").doc(id), {
+          ...financialExpenseAccountingFields({ competenceDate }),
           accountPlan: asString(split.accountPlanId),
           accountId: asString(split.accountPlanId),
           accountPlanName: asString(split.accountPlanName),
@@ -638,6 +640,7 @@ export async function effectuateImportSessionItem(params: {
       expenseIds.push(expenseId);
       createdExpenseIds.push(expenseId);
       batch.set(financialDbAdmin.collection("expenses").doc(expenseId), {
+        ...financialExpenseAccountingFields({ competenceDate }),
         accountPlan: asString(expenseDraft.accountPlanId),
         accountId: asString(expenseDraft.accountPlanId),
         accountPlanName: asString(expenseDraft.accountPlanName),
@@ -766,6 +769,7 @@ export async function effectuateImportSessionItem(params: {
         if (!existingManualChargeExpenseId) createdExpenseIds.push(chargeExpenseId);
         const chargeRef = financialDbAdmin.collection("expenses").doc(chargeExpenseId);
         batch.set(chargeRef, {
+          ...financialExpenseAccountingFields({ competenceDate: date }),
           accountPlan: asString(expenseDraft.chargesAccountPlanId),
           accountId: asString(expenseDraft.chargesAccountPlanId),
           accountPlanId: asString(expenseDraft.chargesAccountPlanId),

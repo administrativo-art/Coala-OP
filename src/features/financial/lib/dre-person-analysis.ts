@@ -1,7 +1,7 @@
 import { expenseAccountAllocationsForResultCenter } from "./expense-account-allocations";
+import { financialExpenseCompetenceMonth, financialExpenseParticipatesInDre } from "./expense-accounting-contract";
 import { expensePersonAllocations, type PersonAllocationAnalysisType } from "./expense-person-allocations";
 import { expenseValueForResultCenter, type ResultCenterNameMap } from "./expense-rateio";
-import { toDate } from "./utils";
 
 export type DrePersonAccountMeta = {
   name: string;
@@ -50,7 +50,6 @@ type BuildDrePersonAnalysisInput = {
   resultCenterNames?: ResultCenterNameMap;
 };
 
-const EXCLUDED_STATUSES = new Set(["draft", "cancelled", "reconciled"]);
 const DIRECT_PAYROLL_DESCRIPTION = /^(sal[aá]rio|rescis[aã]o|f[eé]rias|13\s*[ºoª]?\s*sal[aá]rio)\b/i;
 
 function cents(value: unknown) {
@@ -69,14 +68,8 @@ function normalized(value: unknown) {
     .toLowerCase();
 }
 
-function monthKey(value: unknown) {
-  const date = toDate(value);
-  if (!date) return null;
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function expenseMonth(expense: any) {
-  return monthKey(expense.competenceDate) || monthKey(expense.dueDate) || monthKey(expense.paidAt);
+  return financialExpenseCompetenceMonth(expense);
 }
 
 function resolveResultCenter(value: unknown, names: ResultCenterNameMap) {
@@ -219,7 +212,7 @@ export function buildDrePersonAnalysis({
   }
 
   (expenses || []).forEach((expense) => {
-    if (EXCLUDED_STATUSES.has(String(expense.status || ""))) return;
+    if (!financialExpenseParticipatesInDre(expense)) return;
     if (expenseMonth(expense) !== selectedMonth) return;
 
     const storedPersonAllocations = expensePersonAllocations(expense, accountNames);

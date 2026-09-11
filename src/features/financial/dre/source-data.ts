@@ -1,9 +1,10 @@
 import type { SalesReport } from "@/types";
+import type { FinancialExpenseDreDocument } from "@/features/financial/lib/expense-accounting-contract";
 
 export class DreSourceLimitError extends Error {
-  readonly reason: "reports" | "simulations";
+  readonly reason: "reports" | "simulations" | "expenses";
 
-  constructor(reason: "reports" | "simulations") {
+  constructor(reason: "reports" | "simulations" | "expenses") {
     super("O volume solicitado ultrapassa o limite operacional da DRE.");
     this.name = "DreSourceLimitError";
     this.reason = reason;
@@ -22,9 +23,11 @@ export type DreSourceDataStats = {
   salesReportDocuments: number;
   simulationDocuments: number;
   closureSummaryDocuments: number;
+  expenseDocuments: number;
 };
 
 export type DreSourceDataPayload = {
+  expenses: FinancialExpenseDreDocument[];
   salesSummaries: DreSalesUnitMonthSummary[];
   closureSummaries: Array<{
     id: string;

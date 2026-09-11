@@ -6,6 +6,7 @@ import { dbAdmin } from "@/lib/firebase-admin";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
 import type { ProductSimulation, SalesReport } from "@/types";
+import { normalizeFinancialExpenseForDre } from "@/features/financial/lib/expense-accounting-contract";
 import {
   chunkDreSimulationIds,
   DreSourceLimitError,
@@ -14,7 +15,9 @@ import {
 } from "./source-data";
 
 const SALES_PAGE_SIZE = 500;
+const EXPENSE_PAGE_SIZE = 500;
 const MAX_REPORTS_PER_PERIOD = 5_000;
+const MAX_EXPENSES_PER_PERIOD = 5_000;
 const MAX_SIMULATIONS_PER_REQUEST = 5_000;
 
 async function listSalesReportsForPeriod(year: number, month: number, kioskIds: string[]) {
@@ -41,6 +44,29 @@ async function listSalesReportsForPeriod(year: number, month: number, kioskIds: 
   return documents;
 }
 
+async function listExpensesForPeriod(period: string) {
+  const documents: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  let cursor: string | null = null;
+
+  while (documents.length <= MAX_EXPENSES_PER_PERIOD) {
+    const remaining = MAX_EXPENSES_PER_PERIOD + 1 - documents.length;
+    let query: FirebaseFirestore.Query = financialDbAdmin.collection("expenses")
+      .where("competenceMonth", "==", period)
+      .orderBy(FieldPath.documentId())
+      .limit(Math.min(EXPENSE_PAGE_SIZE, remaining));
+    if (cursor) query = query.startAfter(cursor);
+    const snapshot = await query.get();
+    documents.push(...snapshot.docs);
+    if (snapshot.empty || snapshot.size < Math.min(EXPENSE_PAGE_SIZE, remaining)) break;
+    cursor = snapshot.docs.at(-1)?.id ?? null;
+    if (!cursor) break;
+  }
+  if (documents.length > MAX_EXPENSES_PER_PERIOD) {
+    throw new DreSourceLimitError("expenses");
+  }
+  return documents;
+}
+
 export async function getDreSourceData(input: {
   workspaceId: string;
   kioskIds: string[];
@@ -50,11 +76,19 @@ export async function getDreSourceData(input: {
     throw new DreSourceLimitError("reports");
   }
   const allowedKiosks = new Set(input.kioskIds);
-  const periodDocuments = await Promise.all(input.periods.map((period) => {
-    const [year, month] = period.split("-").map(Number);
-    return listSalesReportsForPeriod(year, month, input.kioskIds);
-  }));
+  const [periodDocuments, expensePeriodDocuments] = await Promise.all([
+    Promise.all(input.periods.map((period) => {
+      const [year, month] = period.split("-").map(Number);
+      return listSalesReportsForPeriod(year, month, input.kioskIds);
+    })),
+    Promise.all(input.periods.map(listExpensesForPeriod)),
+  ]);
   const reportDocuments = periodDocuments.flat();
+  const requestedPeriods = new Set(input.periods);
+  const expenseDocuments = expensePeriodDocuments.flat();
+  const expenses = expenseDocuments
+    .map((document) => normalizeFinancialExpenseForDre(document.id, document.data()))
+    .filter((expense) => expense.competenceMonth && requestedPeriods.has(expense.competenceMonth));
   const reports = reportDocuments.flatMap((document): SalesReport[] => {
     const data = document.data();
     if (!allowedKiosks.has(String(data.kioskId ?? "")) || !Array.isArray(data.items)) return [];
@@ -90,6 +124,7 @@ export async function getDreSourceData(input: {
     .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as CashClosureMonthlySummary));
 
   return {
+    expenses,
     salesSummaries: sales.salesSummaries,
     closureSummaries,
     missingSimulationIds: sales.missingSimulationIds,
@@ -97,6 +132,7 @@ export async function getDreSourceData(input: {
       salesReportDocuments: reportDocuments.length,
       simulationDocuments: simulationDocuments.length,
       closureSummaryDocuments: closureSnapshots.length,
+      expenseDocuments: expenseDocuments.length,
     },
   };
 }

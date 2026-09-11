@@ -2,14 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, LayoutDashboard, Table2, UsersRound } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, LayoutDashboard, RefreshCw, Table2, UsersRound } from "lucide-react";
 import { addMonths, format, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
 import { FINANCIAL_DRE_START_MONTH_KEY } from "@/features/financial/lib/constants";
 import { financialCollection } from "@/features/financial/lib/repositories";
-import { formatCurrency, toDate } from "@/features/financial/lib/utils";
+import { formatCurrency } from "@/features/financial/lib/utils";
 import { expenseAccountAllocationsForResultCenter } from "@/features/financial/lib/expense-account-allocations";
+import {
+  financialExpenseCompetenceMonth,
+  financialExpenseParticipatesInDre,
+  type FinancialExpenseDreDocument,
+} from "@/features/financial/lib/expense-accounting-contract";
+import { calculateDreExpenses } from "@/features/financial/lib/dre-expense-calculation";
 import { buildDrePersonAnalysis, type DrePersonAccountMeta } from "@/features/financial/lib/dre-person-analysis";
 import { DrePeopleView } from "@/features/financial/components/dre/dre-people-view";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
@@ -67,20 +73,22 @@ export function DrePage() {
     if (!canViewPersonnelCosts && viewMode === "people") setViewMode("dashboard");
   }, [canViewPersonnelCosts, viewMode]);
 
-  const { data: expenses, loading: loadingExp } = useFinancialCollection<any>(financialCollection("expenses"));
-  const { data: accounts } = useFinancialCollection<any>(financialCollection("accounts"));
+  const { data: accounts, loading: loadingAccounts } = useFinancialCollection<any>(financialCollection("accounts"));
   const { data: resultCenters, loading: loadingResultCenters } = useFinancialCollection<any>(financialCollection("resultCenters"));
 
+  const [expenses, setExpenses] = useState<FinancialExpenseDreDocument[]>([]);
   const [salesSummaries, setSalesSummaries] = useState<DreSalesUnitMonthSummary[]>([]);
   const [closureRevenueSummaries, setClosureRevenueSummaries] = useState<CashClosureMonthlySummary[]>([]);
   const [missingSimulationIds, setMissingSimulationIds] = useState<string[]>([]);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [loadingSource, setLoadingSource] = useState(true);
+  const [sourceReloadToken, setSourceReloadToken] = useState(0);
 
   useEffect(() => {
     if (!firebaseUser || kiosks.length === 0 || !permissions.financial?.dre) {
       setSalesSummaries([]);
       setClosureRevenueSummaries([]);
+      setExpenses([]);
       setMissingSimulationIds([]);
       setSourceError(null);
       setLoadingSource(false);
@@ -98,20 +106,22 @@ export function DrePage() {
       if (cancelled) return;
       setSalesSummaries(payload.salesSummaries ?? []);
       setClosureRevenueSummaries((payload.closureSummaries ?? []) as CashClosureMonthlySummary[]);
+      setExpenses(payload.expenses ?? []);
       setMissingSimulationIds(payload.missingSimulationIds ?? []);
     }).catch((error) => {
       if (cancelled) return;
       setSalesSummaries([]);
       setClosureRevenueSummaries([]);
+      setExpenses([]);
       setMissingSimulationIds([]);
       setSourceError(error instanceof Error ? error.message : "Falha ao carregar as fontes da DRE.");
     }).finally(() => {
       if (!cancelled) setLoadingSource(false);
     });
     return () => { cancelled = true; };
-  }, [api, firebaseUser, kiosks, permissions.financial?.dre, selectedMonth]);
+  }, [api, firebaseUser, kiosks, permissions.financial?.dre, selectedMonth, sourceReloadToken]);
 
-  const loading = loadingExp || loadingResultCenters || loadingSource;
+  const loading = loadingAccounts || loadingResultCenters || loadingSource;
 
   if (!permissions.financial?.dre) {
     return <FinancialAccessGuard title="DRE" description="Seu perfil não possui permissão para acessar o demonstrativo de resultado." />;
@@ -149,20 +159,6 @@ export function DrePage() {
     return map;
   }, [resultCenters]);
 
-  // accountId → dre_position (flat, no inheritance needed)
-  const accountDrePosMap = useMemo(() => {
-    const m: Record<string, string | null> = {};
-    (accounts || []).forEach((a: any) => { m[a.id] = a.dre_position ?? null; });
-    return m;
-  }, [accounts]);
-
-  // accountId → is_dre_account (false = patrimonial: never appears in DRE, not even as "Não classificado")
-  const accountIsDreMap = useMemo(() => {
-    const m: Record<string, boolean> = {};
-    (accounts || []).forEach((a: any) => { m[a.id] = a.is_dre_account !== false; });
-    return m;
-  }, [accounts]);
-
   const selectedUnitName = unitFilter === "all"
     ? null
     : (resultCenterNameByKioskId[unitFilter] ?? kioskNameById[unitFilter] ?? null);
@@ -198,52 +194,50 @@ export function DrePage() {
     }, 0);
   }
 
-  function getExpensesByDrePos(pos: string | null, monthKey: string): number {
-    if (monthKey < FINANCIAL_DRE_START_MONTH_KEY) return 0;
-    return (expenses || []).reduce((sum: number, exp: any) => {
-      if (["draft", "cancelled", "reconciled"].includes(exp.status)) return sum;
-      const d = toDate(exp.competenceDate) || toDate(exp.dueDate) || toDate(exp.paidAt);
-      if (!d || format(d, "yyyy-MM") !== monthKey) return sum;
-      const allocated = expenseAccountAllocationsForResultCenter(exp, selectedUnitName);
-      return sum + allocated.reduce((allocationSum, allocation) => {
-        // Contas patrimoniais nunca entram na DRE, nem em "Não classificado".
-        if (accountIsDreMap[allocation.accountPlanId] === false) return allocationSum;
-        const allocationPosition = accountDrePosMap[allocation.accountPlanId] ?? null;
-        return allocationPosition === pos ? allocationSum + allocation.amount : allocationSum;
-      }, 0);
-    }, 0);
-  }
-
   function getDreMetrics(monthKey: string) {
+    const expenseCalculation = monthKey < FINANCIAL_DRE_START_MONTH_KEY
+      ? { totalsByPosition: {}, issues: [] }
+      : calculateDreExpenses({
+          expenses,
+          accounts: Object.fromEntries((accounts || []).map((account: any) => [account.id, {
+            name: account.name || account.id,
+            drePosition: account.dre_position ?? null,
+            isDreAccount: account.is_dre_account !== false,
+          }])),
+          monthKey,
+          resultCenter: selectedUnitName,
+          resultCenterNames: resultCenterNameMap,
+        });
+    const expenseAt = (position: string | null) => expenseCalculation.totalsByPosition[position ?? "null"] ?? 0;
     const revBruta = getRevenue(monthKey);
-    const impostos = getExpensesByDrePos("impostos_deducoes", monthKey);
+    const impostos = expenseAt("impostos_deducoes");
     const recLiq = revBruta - impostos;
 
     const cmv = getCmv(monthKey);
     const margBruta = recLiq - cmv;
 
-    const custVar = getExpensesByDrePos("custos_variaveis", monthKey);
+    const custVar = expenseAt("custos_variaveis");
     const margContr = margBruta - custVar;
 
-    const pessoal = getExpensesByDrePos("pessoal", monthKey);
-    const despOp = getExpensesByDrePos("despesas_operacionais", monthKey);
-    const ocupacao = getExpensesByDrePos("ocupacao", monthKey);
-    const semCategoria = getExpensesByDrePos(null, monthKey);
+    const pessoal = expenseAt("pessoal");
+    const despOp = expenseAt("despesas_operacionais");
+    const ocupacao = expenseAt("ocupacao");
+    const semCategoria = expenseAt(null);
     const totalFixos = pessoal + despOp + ocupacao + semCategoria;
     const resOp = margContr - totalFixos;
 
-    const recFin = getExpensesByDrePos("receita_financeira", monthKey);
-    const despFin = getExpensesByDrePos("despesas_financeiras", monthKey);
-    const recNaoOp = getExpensesByDrePos("receita_nao_operacional", monthKey);
-    const despNaoOp = getExpensesByDrePos("despesa_nao_operacional", monthKey);
+    const recFin = expenseAt("receita_financeira");
+    const despFin = expenseAt("despesas_financeiras");
+    const recNaoOp = expenseAt("receita_nao_operacional");
+    const despNaoOp = expenseAt("despesa_nao_operacional");
     const lair = resOp + recFin - despFin + recNaoOp - despNaoOp;
-    const irCsll = getExpensesByDrePos("impostos_resultado", monthKey);
+    const irCsll = expenseAt("impostos_resultado");
     const lucroLiq = lair - irCsll;
 
     const margContPct = recLiq > 0 ? margContr / recLiq : 0;
     const pe = margContPct > 0 ? totalFixos / margContPct : 0;
 
-    return { revBruta, impostos, recLiq, cmv, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, totalFixos, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe, margContPct };
+    return { revBruta, impostos, recLiq, cmv, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, totalFixos, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe, margContPct, expenseIssues: expenseCalculation.issues };
   }
 
   // ── per-month data ───────────────────────────────────────────────────────────
@@ -270,13 +264,14 @@ export function DrePage() {
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartMonthKeys, closureRevenueByUnitMonth, expenses, kiosks, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, accountDrePosMap, accountIsDreMap]);
+  }, [accounts, chartMonthKeys, closureRevenueByUnitMonth, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId]);
 
   const metrics = useMemo(
     () => getDreMetrics(selectedMonth),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedMonth, closureRevenueByUnitMonth, expenses, kiosks, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, accountDrePosMap, accountIsDreMap]
+    [accounts, selectedMonth, closureRevenueByUnitMonth, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId]
   );
+  const expenseContractIssues = metrics.expenseIssues;
 
   const accountNameById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -306,18 +301,18 @@ export function DrePage() {
 
   const topExpensePlans = useMemo(() => {
     const totals: Record<string, number> = {};
-    (expenses || []).forEach((exp: any) => {
-      if (["cancelled", "draft", "reconciled"].includes(exp.status)) return;
-      const d = toDate(exp.competenceDate) || toDate(exp.dueDate) || toDate(exp.createdAt);
-      if (d && format(d, "yyyy-MM") !== selectedMonth) return;
-      expenseAccountAllocationsForResultCenter(exp, selectedUnitName, {}, accountNameById).forEach((allocation) => {
+    expenses.forEach((expense) => {
+      if (!financialExpenseParticipatesInDre(expense)) return;
+      if (financialExpenseCompetenceMonth(expense) !== selectedMonth) return;
+      expenseAccountAllocationsForResultCenter(expense, selectedUnitName, resultCenterNameMap, accountNameById).forEach((allocation) => {
+        if (!accountMetaById[allocation.accountPlanId]?.isDreAccount) return;
         const name = allocation.accountPlanName || "Sem classificação";
         totals[name] = (totals[name] || 0) + allocation.amount;
       });
     });
     return Object.entries(totals).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expenses, accountNameById, selectedMonth, selectedUnitName]);
+  }, [expenses, accountMetaById, accountNameById, resultCenterNameMap, selectedMonth, selectedUnitName]);
 
   const cmvByUnit = useMemo(() => {
     const [y, m] = selectedMonth.split("-").map(Number);
@@ -449,6 +444,17 @@ export function DrePage() {
             </SelectContent>
           </Select>
 
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Atualizar DRE"
+            title="Atualizar DRE"
+            onClick={() => setSourceReloadToken((current) => current + 1)}
+            disabled={loadingSource}
+          >
+            <RefreshCw className={`h-4 w-4 ${loadingSource ? "animate-spin" : ""}`} />
+          </Button>
+
           {/* View toggle */}
           <div className="flex rounded-xl border bg-background p-1 shadow-sm">
             <button type="button" onClick={() => setViewMode("dashboard")}
@@ -468,13 +474,14 @@ export function DrePage() {
           </div>
 
           {(viewMode !== "people" || canExportPersonnelCosts) ? (
-            <Button variant="outline" onClick={exportCsv} disabled={Boolean(sourceError) || missingSimulationIds.length > 0}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+            <Button variant="outline" onClick={exportCsv} disabled={Boolean(sourceError) || missingSimulationIds.length > 0 || expenseContractIssues.length > 0}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
           ) : null}
         </div>
       </div>
 
       {sourceError && <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
       {!sourceError && missingSimulationIds.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> {missingSimulationIds.length} ficha(s) referenciada(s) pelas vendas não foram encontradas. A exportação foi bloqueada; exemplos: {missingSimulationIds.slice(0, 5).join(", ")}.</span></div>}
+      {!sourceError && expenseContractIssues.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>Despesas pendentes de integridade.</strong> {expenseContractIssues.length} inconsistência(s) contábil(is) impedem considerar a DRE fechada. A exportação foi bloqueada; revise as tarefas financeiras antes de concluir o demonstrativo.</span></div>}
 
       {/* ── DASHBOARD ───────────────────────────────────────────────────────── */}
       {viewMode === "dashboard" && (

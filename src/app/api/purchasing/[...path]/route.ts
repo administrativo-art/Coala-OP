@@ -29,6 +29,7 @@ import {
 } from '@/lib/purchasing-item-treatment';
 import { buildPurchaseExpenseComponents } from '@/lib/purchase-financial-expenses';
 import { computeReceiptFinancialUpdate } from '@/lib/purchase-receipt-financials';
+import { financialExpenseAccountingFields } from '@/features/financial/lib/expense-accounting-contract';
 import {
   cancelPurchaseSchema,
   revertPurchaseStageSchema,
@@ -458,6 +459,7 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
   const freightComponent = components.find((component) => component.role === 'freight');
   const primaryComponent = components.find((component) => component.role !== 'freight');
   if (!primaryComponent) throw new Error('A compra não gerou uma despesa principal válida.');
+  const competenceDate = Timestamp.fromDate(new Date(orderData.createdAt ?? orderData.paymentDueDate));
 
   const sharedPayload = {
     paymentAccountId: orderData.paymentAccountId ?? null,
@@ -465,7 +467,8 @@ async function internalSyncExpense(orderId: string, orderData: any, uid: string)
     paymentMethodId: orderData.paymentMethodId ?? null,
     paymentMethodLabel: orderData.paymentMethodLabel ?? null,
     dueDate: Timestamp.fromDate(new Date(orderData.paymentDueDate)),
-    competenceDate: Timestamp.fromDate(new Date(orderData.createdAt ?? orderData.paymentDueDate)),
+    competenceDate,
+    ...financialExpenseAccountingFields({ competenceDate }),
     isApportioned: false,
     resultCenter: orderData.resultCenterName ?? orderData.resultCenterId ?? null,
     resultCenterId: orderData.resultCenterId ?? null,
@@ -2282,6 +2285,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       .get();
 
     const totalValue = Number(order.totalEstimated ?? 0);
+    const competenceDate = Timestamp.fromDate(new Date(order.createdAt ?? order.paymentDueDate));
     const basePayload = {
       description: `Compra ${supplier?.fantasyName || supplier?.name || order.supplierId || id}`,
       supplier: supplier?.fantasyName || supplier?.name || '',
@@ -2289,7 +2293,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
       accountPlanName: order.accountPlanName ?? '',
       totalValue,
       dueDate: Timestamp.fromDate(new Date(order.paymentDueDate)),
-      competenceDate: Timestamp.fromDate(new Date(order.createdAt ?? order.paymentDueDate)),
+      competenceDate,
+      ...financialExpenseAccountingFields({ competenceDate }),
       paymentMethod: order.paymentCondition === 'installments' ? 'installments' : 'single',
       installments:
         order.paymentCondition === 'installments'

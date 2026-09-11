@@ -20,6 +20,7 @@ import {
   cardStatementAllocationIntegrity,
 } from "@/features/financial/lib/card-invoices";
 import { FINANCIAL_DRE_START_MONTH_KEY } from "@/features/financial/lib/constants";
+import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { requireUser } from "@/lib/auth-server";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { reportSystemError } from "@/lib/observability";
@@ -501,6 +502,7 @@ export async function POST(request: NextRequest) {
         const competenceDate = timestamp(`${input.monthKey}-01`);
         const dueDate = timestamp(canonicalDueDate);
         const importFields = {
+          ...financialExpenseAccountingFields({ competenceMonth: input.monthKey, competenceDate }),
           cardChargeDate: chargeDate,
           originalCardChargeDate: line.date,
           plannedPaymentMethodType: "credit_card",

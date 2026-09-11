@@ -9,11 +9,13 @@ Cada conta do plano de contas tem dois campos que controlam sua presença na DRE
 - **`dre_position`** — a linha da DRE em que as despesas classificadas nessa conta são somadas. As posições disponíveis são fixas no código (`DRE_POSITIONS` em `src/features/financial/components/settings/account-plans-management.tsx`): Impostos e deduções, Custos variáveis, Pessoal, Despesas operacionais, Ocupação, Despesas financeiras, Receita financeira, Receita não operacional, Despesa não operacional e IR/CSLL.
 - **`is_dre_account`** — quando `false`, a conta é **patrimonial**: nunca entra na DRE, nem na linha "Não classificado" (ex.: compras para estoque, imobilizado, aplicações).
 
-A DRE (`src/features/financial/pages/dre-page.tsx`) soma cada despesa **paga** (`status: "paid"`, competência por `paidAt`) na linha correspondente ao `dre_position` da conta em que a despesa foi classificada. O mapeamento é da própria conta, sem herança do grupo pai.
+A DRE (`src/features/financial/pages/dre-page.tsx`) reconhece despesas por **competência**, usando a chave contábil `competenceMonth` (`AAAA-MM`). Entram títulos `pending`, `partially_paid`, `paid` e `provisioned`; rascunhos, cancelados e provisões já substituídas (`reconciled`) ficam fora. `dueDate` controla o contas a pagar e `paidAt` controla o caixa, mas nenhum dos dois altera o mês da DRE. O mapeamento da linha vem da própria conta, sem herança do grupo pai.
+
+O contrato central está em `src/features/financial/lib/expense-accounting-contract.ts`. Toda gravação de despesa persiste `accountingContractVersion` e `competenceMonth`; a fonte da DRE consulta somente os meses solicitados. Inconsistências de conta, apropriação ou centro de resultado ficam visíveis na DRE e bloqueiam sua exportação até revisão.
 
 Duas linhas não dependem do plano de contas:
 
-- **Receita Bruta** — vem de `transactions` com `direction: "in"` (excluindo transferências).
+- **Receita Bruta** — vem dos fechamentos mensais de caixa; enquanto o fechamento não está disponível, usa os relatórios de venda do PDV para a mesma unidade e competência.
 - **CMV** — automático via PDV: `salesReports.items` × `totalCmv` das `productSimulations`.
 
 Regras aplicadas em 2026-07-08:
@@ -46,7 +48,7 @@ Tudo com `pessoal`: **Folha de pagamento** (grupo, com **Salários**, **Adiantam
 
 **Adiantamento salarial** entra em `Pessoal` no modelo financeiro atual porque o recibo posterior é lançado pelo valor líquido já descontado. A competência do adiantamento deve ser a mesma da folha que fará o desconto; a soma do adiantamento com o saldo líquido pago representa o valor líquido anterior à antecipação.
 
-A conta foi criada em 2026-09-10 com o identificador estável `adiantamento-salarial-v1`. Como a DRE atual usa a data efetiva do pagamento, o adiantamento e o saldo salarial podem aparecer em meses de caixa diferentes, embora conservem a mesma competência de folha na descrição e no cadastro da despesa.
+A conta foi criada em 2026-09-10 com o identificador estável `adiantamento-salarial-v1`. O adiantamento e o saldo salarial podem sair do caixa em datas ou meses diferentes, mas aparecem juntos na DRE quando têm a mesma `competenceMonth`. Exemplo: adiantamento de R$ 300 e saldo líquido de R$ 1.000, ambos da competência 08/2026, formam R$ 1.300 em `Pessoal`; as datas de pagamento afetam apenas o fluxo de caixa.
 
 ## 5. Administrativo → linha (-) Despesas operacionais (`despesas_operacionais`)
 
