@@ -31,6 +31,21 @@ test("interface separa a caixa operacional da auditoria de cobranças identifica
   assert.doesNotMatch(page, /const STAGE_OPTIONS/);
 });
 
+test("mostra o lançamento sugerido antes da decisão e explicita a substituição da previsão", () => {
+  assert.ok(page.indexOf("1. Lançamento sugerido") < page.indexOf("2. Próxima decisão"));
+  assert.match(page, /Previsão a substituir/);
+  assert.match(page, /Substituir esta previsão pela cobrança/);
+  assert.match(page, /Previsão substituída/);
+  assert.match(page, /Uma única despesa de/);
+});
+
+test("documento fiscal separa remetente, arrecadador, contribuinte e composição", () => {
+  assert.match(page, /Remetente do e-mail:/);
+  assert.match(page, /Beneficiário \/ arrecadador/);
+  assert.match(page, /Contribuinte/);
+  assert.match(page, /Composição da guia/);
+});
+
 test("descarte em lote é limitado, validado e auditado dentro de uma transação", () => {
   assert.match(bulkRoute, /z\.array\(z\.string\(\)\.min\(1\)\)\.min\(1\)\.max\(50\)/);
   assert.match(bulkRoute, /inbox\?\.discard/);

@@ -281,3 +281,29 @@ test("telefonia exige a mesma linha para sugerir automaticamente", () => {
   })]);
   assert.equal(accountOnly.status, "not_found");
 });
+
+test("não cruza tributos federais diferentes só porque favorecido, valor e vencimento coincidem", () => {
+  const suggestion = chooseExistingExpenseSuggestion({
+    ...classification,
+    documentType: "tax",
+    supplierName: "Receita Federal do Brasil",
+    fiscalIdentity: {
+      documentKind: "das",
+      collectorName: "Receita Federal do Brasil",
+      taxpayerName: "CT SORVETES LTDA",
+      taxpayerTaxId: "14276603000125",
+      taxpayerRegistration: null,
+      documentNumber: "07.20.26250.8492649-0",
+      revenueCodes: [],
+      revenueDescriptions: ["Simples Nacional"],
+      revenueItems: [],
+    },
+  }, [marviExpense({
+    id: "darf-expense",
+    supplier: "Receita Federal do Brasil",
+    description: "DARF DCTFWeb 08/2026",
+  })]);
+
+  assert.equal(suggestion.status, "not_found");
+  assert.deepEqual(suggestion.alternatives, []);
+});
