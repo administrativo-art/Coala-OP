@@ -32,6 +32,10 @@ import { useAuthenticatedApi } from "@/hooks/use-authenticated-api";
 import { useKiosks } from "@/hooks/use-kiosks";
 import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
 import type { DreSalesUnitMonthSummary, DreSourceDataPayload } from "@/features/financial/dre/source-data";
+import type {
+  DreCmvCriterion,
+  DreStockCmvPayload,
+} from "@/features/financial/dre/stock-cmv";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,6 +119,7 @@ export function DrePage() {
     return currentMonth < FINANCIAL_DRE_START_MONTH_KEY ? FINANCIAL_DRE_START_MONTH_KEY : currentMonth;
   });
   const [unitFilter, setUnitFilter] = useState("all");
+  const [cmvCriterion, setCmvCriterion] = useState<DreCmvCriterion>("composition");
   const [viewMode, setViewMode] = useState<"dashboard" | "classic" | "people">("dashboard");
   const [expandedDreRows, setExpandedDreRows] = useState<Record<string, boolean>>({});
   const canViewPersonnelCosts = permissions.financial?.personnelCosts?.view === true;
@@ -137,6 +142,9 @@ export function DrePage() {
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [loadingSource, setLoadingSource] = useState(true);
   const [sourceReloadToken, setSourceReloadToken] = useState(0);
+  const [stockCmvPayload, setStockCmvPayload] = useState<DreStockCmvPayload | null>(null);
+  const [stockCmvError, setStockCmvError] = useState<string | null>(null);
+  const [loadingStockCmv, setLoadingStockCmv] = useState(false);
 
   useEffect(() => {
     if (!firebaseUser || kiosks.length === 0 || !permissions.financial?.dre) {
@@ -175,7 +183,34 @@ export function DrePage() {
     return () => { cancelled = true; };
   }, [api, firebaseUser, kiosks, permissions.financial?.dre, selectedMonth, sourceReloadToken]);
 
-  const loading = loadingAccounts || loadingResultCenters || loadingSource;
+  useEffect(() => {
+    if (cmvCriterion !== "stock_movement") return;
+    if (!firebaseUser || kiosks.length === 0 || !permissions.financial?.dre) return;
+    let cancelled = false;
+    setLoadingStockCmv(true);
+    setStockCmvError(null);
+    const params = new URLSearchParams();
+    kiosks.slice(0, 20).forEach((kiosk) => params.append("kioskId", kiosk.id));
+    dreMonthKeysEndingAt(selectedMonth).forEach((period) => params.append("period", period));
+    void api<DreStockCmvPayload>(`/api/financial/dre/stock-cmv?${params}`, {
+      fallbackError: "Falha ao calcular o CMV pelas movimentações de estoque.",
+    }).then((payload) => {
+      if (cancelled) return;
+      setStockCmvPayload(payload);
+    }).catch((error) => {
+      if (cancelled) return;
+      setStockCmvPayload(null);
+      setStockCmvError(error instanceof Error ? error.message : "Falha ao calcular o CMV pelas movimentações de estoque.");
+    }).finally(() => {
+      if (!cancelled) setLoadingStockCmv(false);
+    });
+    return () => { cancelled = true; };
+  }, [api, cmvCriterion, firebaseUser, kiosks, permissions.financial?.dre, selectedMonth, sourceReloadToken]);
+
+  const loading = loadingAccounts
+    || loadingResultCenters
+    || loadingSource
+    || (cmvCriterion === "stock_movement" && loadingStockCmv);
 
   if (!permissions.financial?.dre) {
     return <FinancialAccessGuard title="DRE" description="Seu perfil não possui permissão para acessar o demonstrativo de resultado." />;
@@ -225,6 +260,10 @@ export function DrePage() {
     `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
     summary,
   ])), [salesSummaries]);
+  const stockCmvByUnitMonth = useMemo(() => new Map((stockCmvPayload?.stockSummaries ?? []).map((summary) => [
+    `${summary.kioskId}:${summary.year}-${String(summary.month).padStart(2, "0")}`,
+    summary,
+  ])), [stockCmvPayload]);
 
   // ── computation helpers ─────────────────────────────────────────────────────
 
@@ -239,13 +278,43 @@ export function DrePage() {
     }, 0);
   }
 
-  function getCmv(monthKey: string): number {
+  function getCompositionCmv(monthKey: string): number {
     const [y, m] = monthKey.split("-").map(Number);
     return salesSummaries.reduce((sum, summary) => {
       if (summary.year !== y || summary.month !== m) return sum;
       if (selectedKioskId && summary.kioskId !== selectedKioskId) return sum;
       return sum + summary.cmv;
     }, 0);
+  }
+
+  function getStockCmvBreakdown(monthKey: string) {
+    const empty = {
+      consumptionCmv: 0,
+      lossesCmv: 0,
+      adjustmentsCmv: 0,
+      totalCmv: 0,
+      movementCount: 0,
+      unpricedMovementCount: 0,
+      movementDays: 0,
+    };
+    const unitIds = selectedKioskId
+      ? [selectedKioskId]
+      : Array.from(new Set([
+          ...kiosks.map((kiosk) => kiosk.id),
+          ...(stockCmvPayload?.stockSummaries ?? []).map((summary) => summary.kioskId),
+        ]));
+    return unitIds.reduce((total, kioskId) => {
+      const summary = stockCmvByUnitMonth.get(`${kioskId}:${monthKey}`);
+      if (!summary) return total;
+      total.consumptionCmv += summary.consumptionCmv;
+      total.lossesCmv += summary.lossesCmv;
+      total.adjustmentsCmv += summary.adjustmentsCmv;
+      total.totalCmv += summary.totalCmv;
+      total.movementCount += summary.movementCount;
+      total.unpricedMovementCount += summary.unpricedMovementCount;
+      total.movementDays = Math.max(total.movementDays, summary.movementDays);
+      return total;
+    }, empty);
   }
 
   function getDreMetrics(monthKey: string) {
@@ -267,7 +336,10 @@ export function DrePage() {
     const impostos = expenseAt("impostos_deducoes");
     const recLiq = revBruta - impostos;
 
-    const cmv = getCmv(monthKey);
+    const stockCmvBreakdown = getStockCmvBreakdown(monthKey);
+    const cmv = cmvCriterion === "stock_movement"
+      ? stockCmvBreakdown.totalCmv
+      : getCompositionCmv(monthKey);
     const margBruta = recLiq - cmv;
 
     const custVar = expenseAt("custos_variaveis");
@@ -296,6 +368,7 @@ export function DrePage() {
       impostos,
       recLiq,
       cmv,
+      stockCmvBreakdown,
       custVar,
       margBruta,
       margContr,
@@ -343,13 +416,29 @@ export function DrePage() {
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, chartMonthKeys, closureRevenueByUnitMonth, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId]);
+  }, [accounts, chartMonthKeys, closureRevenueByUnitMonth, cmvCriterion, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]);
 
   const metrics = useMemo(
     () => getDreMetrics(selectedMonth),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, selectedMonth, closureRevenueByUnitMonth, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId]
+    [accounts, selectedMonth, closureRevenueByUnitMonth, cmvCriterion, expenses, kiosks, resultCenterNameMap, salesByUnitMonth, salesSummaries, selectedUnitName, selectedKioskId, stockCmvByUnitMonth, stockCmvPayload]
   );
+  const stockValuationIssueCount = (stockCmvPayload?.missingProductIds.length ?? 0)
+    + (stockCmvPayload?.missingBaseProductIds.length ?? 0)
+    + (stockCmvPayload?.unpricedBaseProductIds.length ?? 0);
+  const stockUnpricedMovementCount = (stockCmvPayload?.stockSummaries ?? [])
+    .reduce((total, summary) => total + summary.unpricedMovementCount, 0);
+  const stockCmvAvailableForSelectedMonth = stockCmvPayload?.periods.includes(selectedMonth) === true;
+  const selectedStockBreakdown = metrics.stockCmvBreakdown;
+  const selectedCompositionCmv = getCompositionCmv(selectedMonth);
+  const selectedStockCmvDifference = selectedStockBreakdown.totalCmv - selectedCompositionCmv;
+  const selectedStockHasNoMovements = cmvCriterion === "stock_movement"
+    && !loadingStockCmv
+    && !stockCmvError
+    && selectedStockBreakdown.movementCount === 0;
+  const cmvIntegrityIssue = cmvCriterion === "composition"
+    ? missingSimulationIds.length > 0
+    : stockValuationIssueCount > 0 || selectedStockHasNoMovements;
   const expenseContractIssues = metrics.expenseIssues;
   const expenseContractIssueGroups = useMemo(() => {
     const expensesById = new Map(expenses.map((expense) => [expense.id, expense]));
@@ -423,11 +512,17 @@ export function DrePage() {
 
   const cmvByUnit = useMemo(() => {
     const [y, m] = selectedMonth.split("-").map(Number);
-    return salesSummaries
-      .filter((summary) => summary.year === y && summary.month === m && summary.cmv > 0)
-      .map((summary) => ({ kioskId: summary.kioskId, name: kioskNameById[summary.kioskId] || summary.kioskId, cmv: summary.cmv }))
+    const summaries: Array<{ kioskId: string; cmv: number }> = cmvCriterion === "stock_movement"
+      ? (stockCmvPayload?.stockSummaries ?? [])
+          .filter((summary) => summary.year === y && summary.month === m && summary.totalCmv > 0)
+          .map((summary) => ({ kioskId: summary.kioskId, cmv: summary.totalCmv }))
+      : salesSummaries
+          .filter((summary) => summary.year === y && summary.month === m && summary.cmv > 0)
+          .map((summary) => ({ kioskId: summary.kioskId, cmv: summary.cmv }));
+    return summaries
+      .map((summary) => ({ ...summary, name: kioskNameById[summary.kioskId] || summary.kioskId }))
       .sort((left, right) => right.cmv - left.cmv);
-  }, [salesSummaries, selectedMonth, kioskNameById]);
+  }, [cmvCriterion, salesSummaries, selectedMonth, kioskNameById, stockCmvPayload]);
 
   const hasDreCategories = useMemo(
     () => (accounts || []).length > 0,
@@ -478,7 +573,19 @@ export function DrePage() {
       URL.revokeObjectURL(anchor.href);
       return;
     }
-    const { revBruta, impostos, recLiq, cmv, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
+    const { revBruta, impostos, recLiq, cmv, stockCmvBreakdown, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
+    const cmvRows = cmvCriterion === "stock_movement"
+      ? [
+          ["Critério do CMV", "Movimentação de estoque (estimativa histórica)", ""],
+          ["(-) Consumo movimentado", formatCurrency(stockCmvBreakdown.consumptionCmv), pct(stockCmvBreakdown.consumptionCmv, recLiq)],
+          ["(-) Perdas e descartes", formatCurrency(stockCmvBreakdown.lossesCmv), pct(stockCmvBreakdown.lossesCmv, recLiq)],
+          ["(-) Ajustes negativos de estoque", formatCurrency(stockCmvBreakdown.adjustmentsCmv), pct(stockCmvBreakdown.adjustmentsCmv, recLiq)],
+          ["= Impacto total dos insumos", formatCurrency(cmv), pct(cmv, recLiq)],
+        ]
+      : [
+          ["Critério do CMV", "Composição dos produtos", ""],
+          ["(-) CMV pela composição", formatCurrency(cmv), pct(cmv, recLiq)],
+        ];
     const rows = [
       ["DRE —", selectedMonthLabel, unitFilter === "all" ? "Todas as unidades" : (kioskNameById[unitFilter] ?? unitFilter)],
       [],
@@ -486,7 +593,7 @@ export function DrePage() {
       ["Receita Bruta", formatCurrency(revBruta), pct(revBruta, recLiq)],
       ["(-) Impostos e deduções", formatCurrency(impostos), pct(impostos, recLiq)],
       ["= Receita Líquida", formatCurrency(recLiq), "100%"],
-      ["(-) CMV", formatCurrency(cmv), pct(cmv, recLiq)],
+      ...cmvRows,
       ["= Margem Bruta", formatCurrency(margBruta), pct(margBruta, recLiq)],
       ["(-) Insumos e fretes de aquisição", formatCurrency(custVar), pct(custVar, recLiq)],
       ["= Margem de Contribuição", formatCurrency(margContr), pct(margContr, recLiq)],
@@ -508,7 +615,7 @@ export function DrePage() {
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `dre-${selectedMonth}.csv`;
+    a.download = `dre-${selectedMonth}-${cmvCriterion === "stock_movement" ? "estoque" : "composicao"}.csv`;
     a.click();
   }
 
@@ -520,7 +627,7 @@ export function DrePage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">DRE</h1>
-          <p className="text-muted-foreground">Demonstrativo gerencial com CMV automático e categorização por plano de contas.</p>
+          <p className="text-muted-foreground">Demonstrativo gerencial com comparação do CMV por composição ou movimentação de estoque.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Month nav */}
@@ -548,6 +655,16 @@ export function DrePage() {
             <SelectContent>
               <SelectItem value="all">Todas as unidades</SelectItem>
               {kiosks.map((k) => <SelectItem key={k.id} value={k.id}>{k.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          <Select value={cmvCriterion} onValueChange={(value) => setCmvCriterion(value as DreCmvCriterion)}>
+            <SelectTrigger className="w-56" aria-label="Critério do CMV">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="composition">CMV pela composição</SelectItem>
+              <SelectItem value="stock_movement">CMV pela movimentação</SelectItem>
             </SelectContent>
           </Select>
 
@@ -581,13 +698,90 @@ export function DrePage() {
           </div>
 
           {(viewMode !== "people" || canExportPersonnelCosts) ? (
-            <Button variant="outline" onClick={exportCsv} disabled={Boolean(sourceError) || missingSimulationIds.length > 0 || expenseContractIssues.length > 0}><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+            <Button
+              variant="outline"
+              onClick={exportCsv}
+              disabled={Boolean(sourceError)
+                || Boolean(stockCmvError && cmvCriterion === "stock_movement")
+                || cmvIntegrityIssue
+                || expenseContractIssues.length > 0}
+            >
+              <Download className="mr-2 h-4 w-4" /> Exportar
+            </Button>
           ) : null}
         </div>
       </div>
 
       {sourceError && <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>A DRE não pôde carregar todas as fontes.</strong> {sourceError} Os indicadores e a exportação não devem ser usados até a correção.</span></div>}
-      {!sourceError && missingSimulationIds.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> {missingSimulationIds.length} ficha(s) referenciada(s) pelas vendas não foram encontradas. A exportação foi bloqueada; exemplos: {missingSimulationIds.slice(0, 5).join(", ")}.</span></div>}
+      {!sourceError && cmvCriterion === "composition" && missingSimulationIds.length > 0 && <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><span><strong>CMV incompleto.</strong> {missingSimulationIds.length} ficha(s) referenciada(s) pelas vendas não foram encontradas. A exportação foi bloqueada; exemplos: {missingSimulationIds.slice(0, 5).join(", ")}.</span></div>}
+      {!sourceError && cmvCriterion === "stock_movement" && stockCmvError && (
+        <div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <span><strong>O CMV por movimentação não pôde ser calculado.</strong> {stockCmvError}</span>
+        </div>
+      )}
+      {!sourceError && cmvCriterion === "stock_movement" && !stockCmvError && stockValuationIssueCount > 0 && (
+        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <span>
+            <strong>Valorização do estoque incompleta.</strong>{" "}
+            {stockUnpricedMovementCount} movimentação(ões) dos últimos seis meses ficaram sem custo
+            {selectedStockBreakdown.unpricedMovementCount > 0
+              ? `; ${selectedStockBreakdown.unpricedMovementCount} estão no filtro atual`
+              : ""}.
+            A exportação foi bloqueada até a correção dos cadastros.
+          </span>
+        </div>
+      )}
+      {!sourceError && selectedStockHasNoMovements && (
+        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <span><strong>Não há saídas de estoque no filtro atual.</strong> O CMV por movimentação ficou zerado e a exportação foi bloqueada.</span>
+        </div>
+      )}
+
+      <div className="rounded-xl border bg-background p-4 shadow-sm">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <p className="text-sm font-semibold">Critério dos insumos na DRE</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {cmvCriterion === "composition"
+                ? "A DRE usa as vendas multiplicadas pelo custo salvo nas fichas de composição."
+                : "A DRE usa consumo, perdas e ajustes negativos registrados no estoque. Transferências e movimentos estornados não entram."}
+            </p>
+          </div>
+          <div className="grid min-w-0 gap-3 sm:grid-cols-3 lg:min-w-[560px]">
+            <div className="rounded-lg bg-muted/40 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Composição</p>
+              <p className="mt-0.5 font-mono text-sm font-bold">{formatCurrency(selectedCompositionCmv)}</p>
+            </div>
+            <div className="rounded-lg bg-muted/40 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Movimentação</p>
+              <p className="mt-0.5 font-mono text-sm font-bold">
+                {loadingStockCmv && cmvCriterion === "stock_movement"
+                  ? "Calculando…"
+                  : stockCmvAvailableForSelectedMonth ? formatCurrency(selectedStockBreakdown.totalCmv) : "Selecione para calcular"}
+              </p>
+            </div>
+            <div className="rounded-lg bg-muted/40 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Diferença</p>
+              <p className={`mt-0.5 font-mono text-sm font-bold ${selectedStockCmvDifference > 0 ? "text-rose-600" : selectedStockCmvDifference < 0 ? "text-emerald-600" : ""}`}>
+                {stockCmvAvailableForSelectedMonth
+                  ? `${selectedStockCmvDifference > 0 ? "+" : ""}${formatCurrency(selectedStockCmvDifference)}`
+                  : "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+        {cmvCriterion === "stock_movement" && stockCmvPayload && !loadingStockCmv ? (
+          <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
+            Estimativa gerencial pelo último custo efetivo disponível na data de cada saída:{" "}
+            {formatCurrency(selectedStockBreakdown.consumptionCmv)} de consumo,{" "}
+            {formatCurrency(selectedStockBreakdown.lossesCmv)} de perdas e{" "}
+            {formatCurrency(selectedStockBreakdown.adjustmentsCmv)} de ajustes negativos.
+          </p>
+        ) : null}
+      </div>
       {!sourceError && expenseContractIssues.length > 0 && (
         <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
@@ -662,7 +856,7 @@ export function DrePage() {
           {/* Secondary KPIs: percentuais */}
           <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
             {loading ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />) : (<>
-              <KpiCard label="CMV %" value={pct(metrics.cmv, metrics.recLiq)} sub={formatCurrency(metrics.cmv)} color="text-amber-600" />
+              <KpiCard label={cmvCriterion === "stock_movement" ? "CMV estoque %" : "CMV composição %"} value={pct(metrics.cmv, metrics.recLiq)} sub={formatCurrency(metrics.cmv)} color="text-amber-600" />
               <KpiCard label="Pessoal %" value={pct(metrics.pessoal, metrics.recLiq)} sub={formatCurrency(metrics.pessoal)} color="text-blue-700" />
               <KpiCard label="Operacional %" value={pct(metrics.despOp, metrics.recLiq)} sub={formatCurrency(metrics.despOp)} color="text-purple-700" />
               <KpiCard label="Ocupação %" value={pct(metrics.ocupacao, metrics.recLiq)} sub={formatCurrency(metrics.ocupacao)} color="text-slate-700" />
@@ -689,7 +883,7 @@ export function DrePage() {
                         <Tooltip formatter={(value: number) => formatCurrency(value)} />
                         <Legend />
                         <Area type="monotone" dataKey="receita" name="Receita bruta" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2))" fillOpacity={0.1} />
-                        <Area type="monotone" dataKey="cmv" name="CMV" stroke="#d97706" fill="#d97706" fillOpacity={0.1} />
+                        <Area type="monotone" dataKey="cmv" name={cmvCriterion === "stock_movement" ? "CMV estoque" : "CMV composição"} stroke="#d97706" fill="#d97706" fillOpacity={0.1} />
                         <Area type="monotone" dataKey="despesas" name="Despesas fixas" stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.1} />
                         <Area type="monotone" dataKey="resultado" name="Lucro líquido" stroke="hsl(var(--chart-3))" fill="hsl(var(--chart-3))" fillOpacity={0.14} />
                       </AreaChart>
@@ -724,7 +918,12 @@ export function DrePage() {
             <Card>
               <CardHeader>
                 <CardTitle>CMV por unidade</CardTitle>
-                <CardDescription>Calculado via PDV + composição dos produtos — {selectedMonthLabel}.</CardDescription>
+                <CardDescription>
+                  {cmvCriterion === "stock_movement"
+                    ? "Consumo, perdas e ajustes negativos valorizados na data de cada saída"
+                    : "Calculado via PDV + composição dos produtos"}{" "}
+                  — {selectedMonthLabel}.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -766,7 +965,7 @@ export function DrePage() {
             {loading ? (
               <div className="space-y-2 p-6">{Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
             ) : (() => {
-              const { revBruta, impostos, recLiq, cmv, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
+              const { revBruta, impostos, recLiq, cmv, stockCmvBreakdown, custVar, margBruta, margContr, pessoal, despOp, ocupacao, semCategoria, resOp, recFin, despFin, recNaoOp, despNaoOp, lair, irCsll, lucroLiq, pe } = metrics;
 
               type Row =
                 | { type: "section"; label: string }
@@ -782,7 +981,17 @@ export function DrePage() {
                 { type: "subtotal", label: "= RECEITA LÍQUIDA", value: recLiq, variant: "blue" },
                 { type: "divider" },
                 { type: "section", label: "CUSTO DE MERCADORIA VENDIDA" },
-                { type: "line", label: "(-) CMV (PDV + composição automática)", value: cmv, negative: true },
+                ...(cmvCriterion === "stock_movement"
+                  ? [
+                      { type: "line" as const, label: "(-) Consumo pela movimentação de estoque", value: stockCmvBreakdown.consumptionCmv, negative: true },
+                      ...(stockCmvBreakdown.lossesCmv > 0
+                        ? [{ type: "line" as const, label: "(-) Perdas e descartes", value: stockCmvBreakdown.lossesCmv, negative: true }]
+                        : []),
+                      ...(stockCmvBreakdown.adjustmentsCmv > 0
+                        ? [{ type: "line" as const, label: "(-) Ajustes negativos de estoque", value: stockCmvBreakdown.adjustmentsCmv, negative: true }]
+                        : []),
+                    ]
+                  : [{ type: "line" as const, label: "(-) CMV (PDV + composição automática)", value: cmv, negative: true }]),
                 { type: "subtotal", label: "= MARGEM BRUTA", value: margBruta, variant: "blue" },
                 { type: "kpi", label: "Margem Bruta %", value: pct(margBruta, recLiq) },
                 { type: "divider" },
