@@ -830,6 +830,8 @@ export async function registerReportedPayment(
         interest: interestCents / 100,
         fine: fineCents / 100,
         isApportioned: expense.isApportioned === true,
+        referenceResultCenterId: expense.referenceResultCenterId || expense.resultCenterId || null,
+        referenceResultCenterName: expense.referenceResultCenterName || expense.resultCenterName || expense.resultCenter || null,
         resultCenter: expense.resultCenter || null,
         resultCenterId: expense.resultCenterId || null,
         resultCenterName: expense.resultCenterName || expense.resultCenter || null,

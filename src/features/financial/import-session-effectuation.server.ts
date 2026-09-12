@@ -14,6 +14,7 @@ import {
 } from "@/features/financial/obligations/service.server";
 import { calculateFinancialObligationSummary, moneyToCents } from "@/features/financial/obligations/calculations";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
+import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
 
 type RawRecord = Record<string, unknown>;
 type ItemStatus = "pending" | "audited" | "ignored" | "completed";
@@ -168,11 +169,11 @@ function assertItemReadyForEffectuation(item: RawRecord) {
   const apportionments = asArray(expense.apportionments).map(asRecord);
   const apportioned = expense.isApportioned === true;
   const apportionmentTotal = apportionments.reduce((sum, entry) => sum + asNumber(entry.percentage), 0);
-  const allocationValid = apportioned
+  const allocationValid = hasText(expense.resultCenterId) && (apportioned
     ? apportionments.length > 0 &&
       apportionments.every((entry) => hasText(entry.resultCenterId) && asNumber(entry.percentage) > 0) &&
       Math.abs(apportionmentTotal - 100) < 0.01
-    : hasText(expense.resultCenterId);
+    : true);
   const accountAllocations = asArray(expense.accountAllocations).map(asRecord);
   const accountAllocationIds = accountAllocations.map((entry) => asString(entry.accountPlanId)).filter(Boolean);
   const accountAllocationValid = expense.hasAccountAllocations !== true ||
@@ -457,6 +458,7 @@ export async function effectuateImportSessionItem(params: {
     });
     return {
       ...identity,
+      ...inheritExpenseReferenceCenter(expense, consultation.provision as RawRecord),
       obligationId,
       reconciledProvisionId: consultation.provision.id,
       provisionReconciliationStatus: "reconciled",
@@ -547,6 +549,8 @@ export async function effectuateImportSessionItem(params: {
           competenceDate,
           totalValue: asNumber(split.value),
           provisionType: "actual",
+          referenceResultCenterId: asString(split.resultCenterId),
+          referenceResultCenterName: asString(split.resultCenterName),
         });
         const splitPaymentMatch = await queueMatchedBankPayment({
           batch,
@@ -587,7 +591,11 @@ export async function effectuateImportSessionItem(params: {
           hasPersonAllocations: false,
           personAllocations: null,
           isApportioned: false,
+          referenceResultCenterId: asString(split.resultCenterId) || null,
+          referenceResultCenterName: asString(split.resultCenterName) || null,
           resultCenter: asString(split.resultCenterName) || null,
+          resultCenterId: asString(split.resultCenterId) || null,
+          resultCenterName: asString(split.resultCenterName) || null,
           installments: [{ number: 1, dueDate, value: asNumber(split.value), status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }],
           status: "paid",
           paidAt: date,
@@ -616,6 +624,8 @@ export async function effectuateImportSessionItem(params: {
         competenceDate,
         totalValue: amount,
         provisionType: "actual",
+        referenceResultCenterId: asString(expenseDraft.resultCenterId),
+        referenceResultCenterName: asString(expenseDraft.resultCenterName),
       });
       bankPaymentMatch = await queueMatchedBankPayment({
         batch,
@@ -680,7 +690,11 @@ export async function effectuateImportSessionItem(params: {
             })
           : null,
         isApportioned: expenseDraft.isApportioned === true,
+        referenceResultCenterId: asString(expenseDraft.resultCenterId) || null,
+        referenceResultCenterName: asString(expenseDraft.resultCenterName) || null,
         resultCenter: expenseDraft.isApportioned === true ? null : asString(expenseDraft.resultCenterName) || null,
+        resultCenterId: expenseDraft.isApportioned === true ? null : asString(expenseDraft.resultCenterId) || null,
+        resultCenterName: expenseDraft.isApportioned === true ? null : asString(expenseDraft.resultCenterName) || null,
         apportionments: expenseDraft.isApportioned === true ? asArray(expenseDraft.apportionments).map((entry) => ({ resultCenter: asString(asRecord(entry).resultCenterName), percentage: asNumber(asRecord(entry).percentage) })) : null,
         installments: [{ number: 1, dueDate, value: amount, status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }],
         status: "paid",
@@ -790,6 +804,8 @@ export async function effectuateImportSessionItem(params: {
           hasPersonAllocations: false,
           personAllocations: null,
           isApportioned: expense.isApportioned === true,
+          referenceResultCenterId: asString(expense.referenceResultCenterId) || asString(expense.resultCenterId) || null,
+          referenceResultCenterName: asString(expense.referenceResultCenterName) || asString(expense.resultCenterName) || asString(expense.resultCenter) || null,
           resultCenter: expense.isApportioned === true ? null : asString(expense.resultCenter) || asString(expense.resultCenterName) || null,
           resultCenterId: expense.isApportioned === true ? null : asString(expense.resultCenterId) || null,
           resultCenterName: expense.isApportioned === true ? null : asString(expense.resultCenterName) || asString(expense.resultCenter) || null,

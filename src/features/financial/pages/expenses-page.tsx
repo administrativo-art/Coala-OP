@@ -52,6 +52,7 @@ import {
   resolveResultCenterName,
   type ResultCenterNameMap,
 } from "@/features/financial/lib/expense-rateio";
+import { expenseReferenceCenterLabel } from "@/features/financial/lib/expense-reference-center";
 import {
   expenseAccountAllocations,
   expenseAccountPlanLabels,
@@ -326,9 +327,8 @@ function getUnitColorStyle(unitName: string) {
 }
 
 function getExpenseUnitLabel(expense: any, resultCenterNameById: ResultCenterNameMap) {
-  if (!expense.isApportioned) {
-    return resolveResultCenterName(expense.resultCenter, resultCenterNameById) || "—";
-  }
+  const referenceCenter = expenseReferenceCenterLabel(expense, resultCenterNameById);
+  if (!expense.isApportioned) return referenceCenter;
 
   const participants = Array.from(
     new Set<string>(
@@ -338,9 +338,8 @@ function getExpenseUnitLabel(expense: any, resultCenterNameById: ResultCenterNam
     )
   );
 
-  if (participants.length === 1) return participants[0];
-  if (participants.length > 1) return `Rateado · ${participants.length} unidades`;
-  return "Rateado";
+  if (participants.length > 0) return `${referenceCenter} · Rateada em ${participants.length} centro${participants.length === 1 ? "" : "s"}`;
+  return `${referenceCenter} · Rateada`;
 }
 
 function matchesBaseFilters(
@@ -1039,7 +1038,7 @@ export function ExpensesPage() {
       />
 
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unidade</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Apropriação na DRE</p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -1203,7 +1202,7 @@ export function ExpensesPage() {
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Descrição</th>
                   <th className="px-4 py-3 font-medium">Fornecedor</th>
-                  <th className="px-4 py-3 font-medium">Unidade</th>
+                  <th className="px-4 py-3 font-medium">Centro de referência</th>
                   <th
                     className="px-4 py-3 font-medium"
                     aria-sort={expenseSort.key === "dueDate" ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"}
@@ -1394,7 +1393,7 @@ export function ExpensesPage() {
                                           <th className="px-3 py-2.5 font-semibold">Compra</th>
                                           <th className="px-3 py-2.5 font-semibold">Data</th>
                                           <th className="px-3 py-2.5 font-semibold">Plano de contas</th>
-                                          <th className="px-3 py-2.5 font-semibold">Unidade</th>
+                                          <th className="px-3 py-2.5 font-semibold">Centro de referência</th>
                                           <th className="px-3 py-2.5 text-right font-semibold">Valor</th>
                                           <th className="px-3 py-2.5 text-center font-semibold">Auditoria</th>
                                         </tr>
@@ -1749,8 +1748,18 @@ export function ExpensesPage() {
                                     </div>
                                   )}
                                   <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Centro de resultado</p>
-                                    <p className="mt-1 text-sm font-medium">{expense.isApportioned ? "Rateado" : primaryUnit}</p>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Centro de referência</p>
+                                    <p className="mt-1 text-sm font-medium">
+                                      {expenseReferenceCenterLabel(expense, resultCenterNameById)}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Apropriação na DRE</p>
+                                    <p className="mt-1 text-sm font-medium">
+                                      {expense.isApportioned
+                                        ? `${Array.isArray(expense.apportionments) ? expense.apportionments.length : 0} centro(s) no rateio`
+                                        : "100% no centro de referência"}
+                                    </p>
                                   </div>
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Competência</p>
