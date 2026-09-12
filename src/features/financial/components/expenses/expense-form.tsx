@@ -51,6 +51,11 @@ import {
 } from "@/features/financial/lib/expense-person-allocations";
 import { expenseProvisionIdentity } from "@/features/financial/lib/expense-provisions";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
+import {
+  ADMIN_REFERENCE_RESULT_CENTER,
+  expenseReferenceCenterFields,
+  resolveExpenseReferenceCenter,
+} from "@/features/financial/lib/expense-reference-center";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { fetchWithTimeout } from "@/lib/fetch-utils";
 import type { FinancialInboxBillingIdentity } from "@/features/financial/inbox/types";
@@ -512,6 +517,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       description: "",
       supplier: "",
       notes: "",
+      referenceResultCenterId: "",
       resultCenter: "",
       totalValue: 0,
       installments: 2,
@@ -592,6 +598,14 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     });
     return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
   }, [resultCenters, units]);
+  const referenceResultCenterById = useMemo(
+    () => new Map(personResultCenterOptions.map((center) => [center.id, center])),
+    [personResultCenterOptions]
+  );
+  const referenceResultCenterIdByName = useMemo(
+    () => new Map(personResultCenterOptions.map((center) => [center.name.trim().toLocaleLowerCase("pt-BR"), center.id])),
+    [personResultCenterOptions]
+  );
 
   const hasAccountAllocations = form.watch("hasAccountAllocations");
 
@@ -683,7 +697,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
   const totalValue = form.watch("totalValue");
   const descriptionValue = form.watch("description");
   const supplierValue = form.watch("supplier");
+  const referenceResultCenterId = form.watch("referenceResultCenterId");
   const resultCenterValue = form.watch("resultCenter");
+  const referenceResultCenterName =
+    referenceResultCenterById.get(referenceResultCenterId || "")?.name || resultCenterValue || "";
   const dueDateValue = form.watch("dueDate");
   const notesValue = form.watch("notes");
   const competenceDateValue = form.watch("competenceDate");
@@ -1019,6 +1036,14 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     form.setValue("isApportioned", checked, { shouldDirty: true, shouldValidate: true });
     if (!checked) return;
 
+    if (!form.getValues("referenceResultCenterId")) {
+      form.setValue("referenceResultCenterId", ADMIN_REFERENCE_RESULT_CENTER.id, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      form.setValue("resultCenter", ADMIN_REFERENCE_RESULT_CENTER.name, { shouldDirty: true });
+    }
+
     const participationStartDate =
       paymentMethod === "recurring"
         ? rateioEffectiveFrom || recurrenceFirstDueDate || startOfMonth(addMonths(new Date(), 1))
@@ -1169,7 +1194,12 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           personAllocations: [],
           description: data.description || "",
           supplier: data.supplier || "",
-          resultCenter: data.resultCenterName || "",
+          referenceResultCenterId:
+            data.referenceResultCenterId ||
+            data.resultCenterId ||
+            referenceResultCenterIdByName.get(String(data.resultCenterName || "").trim().toLocaleLowerCase("pt-BR")) ||
+            "",
+          resultCenter: data.referenceResultCenterName || data.resultCenterName || "",
           notes: data.rawBankDescription || "",
           totalValue: Number(data.amount) || 0,
           competenceDate,
@@ -1192,7 +1222,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     return () => {
       active = false;
     };
-  }, [editId, form, importTransactionId, toast]);
+  }, [editId, form, importTransactionId, referenceResultCenterIdByName, toast]);
 
   useEffect(() => {
     if (!editId || resultCenters === null) return;
@@ -1245,6 +1275,12 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
             ? toOptionalDate(`${String(item.participationStartDate).slice(0, 10)}T12:00:00`)
             : undefined,
         }));
+        const storedReferenceCenter = resolveExpenseReferenceCenter(data, resultCenterNameById)
+          || (data.isApportioned ? ADMIN_REFERENCE_RESULT_CENTER : null);
+        const storedReferenceName = storedReferenceCenter?.name || "";
+        const storedReferenceId = storedReferenceCenter?.id
+          || referenceResultCenterIdByName.get(storedReferenceName.trim().toLocaleLowerCase("pt-BR"))
+          || "";
         const resetData: any = {
           accountPlan: data.accountPlan,
           hasAccountAllocations:
@@ -1286,7 +1322,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           plannedPaymentMethodId: data.plannedPaymentMethodId || "",
           plannedPaymentMethodLabel: data.plannedPaymentMethodLabel || "",
           isApportioned: data.isApportioned,
-          resultCenter: resolveResultCenterName(data.resultCenter, resultCenterNameById),
+          referenceResultCenterId: storedReferenceId,
+          resultCenter: storedReferenceName,
           apportionments: loadedApportionments,
           rateioCriterion:
             data.rateioCriterion || storedPolicy?.criterion || (data.isApportioned ? "fixed" : "equal"),
@@ -1350,7 +1387,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
     return () => {
       active = false;
     };
-  }, [editId, firebaseUser, form, resultCenterNameById, resultCenters, toast]);
+  }, [editId, firebaseUser, form, referenceResultCenterIdByName, resultCenterNameById, resultCenters, toast]);
 
   const equalInstallments = useMemo<InstallmentPreview[]>(() => {
     if (
@@ -1463,7 +1500,8 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
         personAllocations,
       }),
     },
-    { label: "Unidade ou rateio", ok: isApportioned ? rateioTotal === 100 : !!resultCenterValue },
+    { label: "Centro de referência", ok: !!referenceResultCenterId },
+    { label: "Rateio", ok: !isApportioned || rateioTotal === 100 },
     { label: "Valor", ok: Number(totalValue || 0) > 0 },
     { label: "Vencimento", ok: !!previewDueDate },
   ];
@@ -1563,6 +1601,11 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           };
         })
       : null;
+    const referenceCenter = referenceResultCenterById.get(values.referenceResultCenterId || "") || {
+      id: values.referenceResultCenterId || "",
+      name: values.resultCenter || "",
+    };
+    const referenceFields = expenseReferenceCenterFields(referenceCenter);
 
     return {
       accountPlan: values.accountPlan || "",
@@ -1606,7 +1649,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       installmentPeriodicity:
         values.paymentMethod === "installments" ? values.installmentPeriodicity ?? null : null,
       isApportioned: values.isApportioned,
-      resultCenter: values.isApportioned ? null : values.resultCenter ?? null,
+      ...referenceFields,
+      resultCenter: values.isApportioned ? null : referenceCenter.name || null,
+      resultCenterId: values.isApportioned ? null : referenceCenter.id || null,
+      resultCenterName: values.isApportioned ? null : referenceCenter.name || null,
       apportionments: values.isApportioned
         ? (values.apportionments || []).map((item) => ({
             resultCenter: item.resultCenter,
@@ -1791,6 +1837,22 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       const rateioPolicy = rateioVersionId ? buildRateioPolicy(values, rateioVersionId) : null;
 
       let savedExpenseId = editId || "";
+      const dirtyKeys = Object.entries(form.formState.dirtyFields)
+        .filter(([, changed]) => Boolean(changed))
+        .map(([field]) => field);
+      const referenceOnlyEdit = dirtyKeys.length > 0
+        && dirtyKeys.every((field) => field === "referenceResultCenterId" || field === "resultCenter");
+      const referenceOnlyPatch = {
+        referenceResultCenterId: editPayload.referenceResultCenterId,
+        referenceResultCenterName: editPayload.referenceResultCenterName,
+        ...(!values.isApportioned ? {
+          resultCenter: editPayload.resultCenter,
+          resultCenterId: editPayload.resultCenterId,
+          resultCenterName: editPayload.resultCenterName,
+        } : {}),
+        updatedAt: Timestamp.now(),
+        updatedBy: firebaseUser.uid,
+      };
 
       if (editId && loadedRecurrenceGroupId && updateScope !== "single") {
         const groupSnapshot = await getDocs(
@@ -1819,10 +1881,9 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
           if (expenseDoc.id === editId) {
             batch.update(expenseDoc.ref, {
-              ...editPayload,
-              rateioVersionId,
-              rateioPolicy,
-              updatedBy: firebaseUser.uid,
+              ...(referenceOnlyEdit
+                ? referenceOnlyPatch
+                : { ...editPayload, rateioVersionId, rateioPolicy, updatedBy: firebaseUser.uid }),
             });
             return;
           }
@@ -1874,11 +1935,21 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
 
           const rateioChanged =
             !!dirtyFields.isApportioned ||
-            !!dirtyFields.resultCenter ||
             !!dirtyFields.apportionments ||
             !!dirtyFields.rateioCriterion ||
             !!dirtyFields.rateioEffectiveFrom ||
             !!dirtyFields.rateioFirstMonthMode;
+          const referenceCenterChanged =
+            !!dirtyFields.referenceResultCenterId || !!dirtyFields.resultCenter;
+          if (referenceCenterChanged) {
+            sharedPatch.referenceResultCenterId = editPayload.referenceResultCenterId;
+            sharedPatch.referenceResultCenterName = editPayload.referenceResultCenterName;
+            if (!values.isApportioned) {
+              sharedPatch.resultCenter = editPayload.resultCenter;
+              sharedPatch.resultCenterId = editPayload.resultCenterId;
+              sharedPatch.resultCenterName = editPayload.resultCenterName;
+            }
+          }
           const competence = toOptionalDate(existing.competenceDate) || toOptionalDate(existing.dueDate);
           const resolvedApportionments = rateioPolicy && competence
             ? resolveRateioForCompetence(rateioPolicy, competence)
@@ -1910,11 +1981,15 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
           description: `${selectedExpenses.length} parcela${selectedExpenses.length === 1 ? " foi atualizada" : "s foram atualizadas"}. Vencimentos, competências e pagamentos das demais foram preservados.`,
         });
       } else if (editId) {
-        await updateDoc(financialDoc("expenses", editId), {
-          ...editPayload,
-          rateioVersionId,
-          rateioPolicy,
-        });
+        if (referenceOnlyEdit) {
+          await updateDoc(financialDoc("expenses", editId), referenceOnlyPatch);
+        } else {
+          await updateDoc(financialDoc("expenses", editId), {
+            ...editPayload,
+            rateioVersionId,
+            rateioPolicy,
+          });
+        }
         toast({ title: "Despesa atualizada." });
       } else if (values.paymentMethod === "recurring") {
         const recurrenceGroupId = crypto.randomUUID();
@@ -2041,6 +2116,7 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
       dirtyFields.plannedPaymentMethodLabel ||
       dirtyFields.totalValue ||
       dirtyFields.isApportioned ||
+      dirtyFields.referenceResultCenterId ||
       dirtyFields.resultCenter ||
       dirtyFields.apportionments ||
       dirtyFields.rateioCriterion ||
@@ -2601,33 +2677,37 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                         </div>
                       )}
 
-                      {!isApportioned && (
-                        <FormField
-                          control={form.control}
-                          name="resultCenter"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Centro de resultado / Unidade</FormLabel>
-                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                {units.map((unit) => (
-                                  <button
-                                    key={unit.id}
-                                    type="button"
-                                    onClick={() => field.onChange(unit.name)}
-                                    className={cn(
-                                      "rounded-xl border px-3 py-3 text-left transition-colors hover:border-primary/40",
-                                      field.value === unit.name && "border-primary bg-primary/5"
-                                    )}
-                                  >
-                                    <p className="text-sm font-medium">{unit.name}</p>
-                                  </button>
-                                ))}
-                              </div>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
+                      <FormField
+                        control={form.control}
+                        name="referenceResultCenterId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Centro de referência</FormLabel>
+                            <p className="text-sm text-muted-foreground">
+                              Identifica de onde vem a despesa. O rateio abaixo define onde o valor entra na DRE.
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                              {personResultCenterOptions.map((center) => (
+                                <button
+                                  key={center.id}
+                                  type="button"
+                                  onClick={() => {
+                                    field.onChange(center.id);
+                                    form.setValue("resultCenter", center.name, { shouldDirty: true });
+                                  }}
+                                  className={cn(
+                                    "rounded-xl border px-3 py-3 text-left transition-colors hover:border-primary/40",
+                                    field.value === center.id && "border-primary bg-primary/5"
+                                  )}
+                                >
+                                  <p className="text-sm font-medium">{center.name}</p>
+                                </button>
+                              ))}
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
                       <FormField
                         control={form.control}
@@ -3301,8 +3381,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                             <p className="text-sm font-medium">{selectedAccountPlan?.name || "—"}</p>
                           </div>
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unidade</p>
-                            <p className="text-sm font-medium">{isApportioned ? "Rateado" : resultCenterValue || "—"}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Centro de referência</p>
+                            <p className="text-sm font-medium">
+                              {referenceResultCenterName || "—"}{isApportioned ? " · Rateado" : ""}
+                            </p>
                           </div>
                           <div>
                             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vencimento</p>
@@ -3464,8 +3546,10 @@ export function ExpenseForm({ presentation = "page" }: ExpenseFormProps) {
                       <p className="mt-1">{previewDueDate ? format(previewDueDate, "dd/MM/yyyy") : "—"}</p>
                     </div>
                     <div>
-                      <p className="font-medium text-muted-foreground">Unidade</p>
-                      <p className="mt-1">{isApportioned ? "Rateado" : resultCenterValue || "—"}</p>
+                      <p className="font-medium text-muted-foreground">Centro de referência</p>
+                      <p className="mt-1">
+                        {referenceResultCenterName || "—"}{isApportioned ? " · Rateado" : ""}
+                      </p>
                     </div>
                     <div>
                       <p className="font-medium text-muted-foreground">Competência</p>

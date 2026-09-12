@@ -7,6 +7,7 @@ import {
   expenseProvisionIdentity,
 } from "@/features/financial/lib/expense-provisions";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
+import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
 import { financialDbAdmin } from "@/lib/firebase-financial-admin";
 import { AppError } from "@/lib/observability";
 
@@ -107,6 +108,10 @@ export async function reconcileExpenseProvisionOnServer(
     }
     const consultation = consultExpenseProvision({ ...actual, ...identity }, related);
     const accountingFields = financialExpenseAccountingFields({ ...actual, ...identity });
+    const referenceCenterFields = inheritExpenseReferenceCenter(
+      actual,
+      "provision" in consultation ? asRecord(consultation.provision) : {},
+    );
     const now = Timestamp.now();
 
     if (consultation.status === "ambiguous") return { status: "ambiguous" as const };
@@ -116,6 +121,7 @@ export async function reconcileExpenseProvisionOnServer(
         ...options.expensePatch,
         ...identity,
         ...accountingFields,
+        ...referenceCenterFields,
         provisionReconciliationStatus: "forecast_not_found",
         updatedAt: now,
       }, { merge: true });
@@ -128,6 +134,7 @@ export async function reconcileExpenseProvisionOnServer(
         ...options.expensePatch,
         ...identity,
         ...accountingFields,
+        ...referenceCenterFields,
         updatedAt: now,
       }, { merge: true });
       return {
@@ -150,6 +157,7 @@ export async function reconcileExpenseProvisionOnServer(
       ...options.expensePatch,
       ...identity,
       ...accountingFields,
+      ...referenceCenterFields,
       obligationId,
       reconciledProvisionId: provisionId,
       provisionReconciliationStatus: "reconciled",
