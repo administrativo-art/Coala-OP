@@ -15,6 +15,11 @@ import {
 import { calculateFinancialObligationSummary, moneyToCents } from "@/features/financial/obligations/calculations";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
 import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
+import {
+  canonicalizeExpenseDraftResultCenters,
+  expenseDraftResultCenterIds,
+  MAX_EXPENSE_RESULT_CENTER_REFERENCES,
+} from "@/features/financial/lib/result-center-canonicalization";
 
 type RawRecord = Record<string, unknown>;
 type ItemStatus = "pending" | "audited" | "ignored" | "completed";
@@ -223,6 +228,27 @@ function assertItemReadyForEffectuation(item: RawRecord) {
   }
 }
 
+async function canonicalExpenseDraftResultCenters(expenseDraft: RawRecord) {
+  const resultCenterIds = expenseDraftResultCenterIds(expenseDraft);
+  if (resultCenterIds.length === 0) return expenseDraft;
+  if (resultCenterIds.length > MAX_EXPENSE_RESULT_CENTER_REFERENCES) {
+    throw new Error("RESULT_CENTER_NOT_FOUND");
+  }
+
+  const snapshots = await financialDbAdmin.getAll(...resultCenterIds.map((resultCenterId) => (
+    financialDbAdmin.collection("resultCenters").doc(resultCenterId)
+  )));
+  const namesById: Record<string, string> = {};
+  snapshots.forEach((snapshot, index) => {
+    if (!snapshot.exists) throw new Error("RESULT_CENTER_NOT_FOUND");
+    const name = asString(snapshot.get("name")).trim();
+    if (!name) throw new Error("RESULT_CENTER_NOT_FOUND");
+    namesById[resultCenterIds[index]!] = name;
+  });
+
+  return canonicalizeExpenseDraftResultCenters(expenseDraft, namesById);
+}
+
 function appendAuditHistory(item: RawRecord, entry: RawRecord) {
   return [...asArray(item.auditHistory), entry].slice(-50);
 }
@@ -413,8 +439,11 @@ export async function effectuateImportSessionItem(params: {
 
   const effectuationId = deterministicKey(params.sessionId, params.itemId);
   const draft = asRecord(item.financialDraft);
-  const expenseDraft = asRecord(item.expenseDraft);
+  const rawExpenseDraft = asRecord(item.expenseDraft);
   assertItemReadyForEffectuation(item);
+  const expenseDraft = asNumber(item.amount) < 0 && !isCardStatementSettlement(item)
+    ? await canonicalExpenseDraftResultCenters(rawExpenseDraft)
+    : rawExpenseDraft;
   const amount = Math.abs(asNumber(item.amount));
   const date = transactionTimestamp(item);
   const now = Timestamp.now();
@@ -682,6 +711,7 @@ export async function effectuateImportSessionItem(params: {
                 analysisType: asString(allocation.analysisType) || "informational",
                 amount: asNumber(allocation.amount),
                 resultCenterId: asString(allocation.resultCenterId),
+                resultCenterName: asString(allocation.resultCenterName),
                 resultCenter: asString(allocation.resultCenterName),
                 payrollDocumentId: asString(allocation.payrollDocumentId) || null,
                 contractReference: asString(allocation.contractReference) || null,
@@ -695,7 +725,12 @@ export async function effectuateImportSessionItem(params: {
         resultCenter: expenseDraft.isApportioned === true ? null : asString(expenseDraft.resultCenterName) || null,
         resultCenterId: expenseDraft.isApportioned === true ? null : asString(expenseDraft.resultCenterId) || null,
         resultCenterName: expenseDraft.isApportioned === true ? null : asString(expenseDraft.resultCenterName) || null,
-        apportionments: expenseDraft.isApportioned === true ? asArray(expenseDraft.apportionments).map((entry) => ({ resultCenter: asString(asRecord(entry).resultCenterName), percentage: asNumber(asRecord(entry).percentage) })) : null,
+        apportionments: expenseDraft.isApportioned === true ? asArray(expenseDraft.apportionments).map((entry) => ({
+          resultCenterId: asString(asRecord(entry).resultCenterId),
+          resultCenterName: asString(asRecord(entry).resultCenterName),
+          resultCenter: asString(asRecord(entry).resultCenterName),
+          percentage: asNumber(asRecord(entry).percentage),
+        })) : null,
         installments: [{ number: 1, dueDate, value: amount, status: "paid", paidAt: date, linkedBankTransactionId: primaryTransactionId }],
         status: "paid",
         paidAt: date,
@@ -896,6 +931,7 @@ export async function effectuateImportSessionItem(params: {
               analysisType: asString(allocation.analysisType) || "informational",
               amount: asNumber(allocation.amount),
               resultCenterId: asString(allocation.resultCenterId),
+              resultCenterName: asString(allocation.resultCenterName),
               resultCenter: asString(allocation.resultCenterName),
               payrollDocumentId: asString(allocation.payrollDocumentId) || null,
               contractReference: asString(allocation.contractReference) || null,
@@ -903,8 +939,8 @@ export async function effectuateImportSessionItem(params: {
             };
           })
         : null,
-      resultCenterId: asString(expenseDraft.resultCenterId) || null,
-      resultCenterName: asString(expenseDraft.resultCenterName) || null,
+      resultCenterId: mode === "split" ? null : asString(expenseDraft.resultCenterId) || null,
+      resultCenterName: mode === "split" ? null : asString(expenseDraft.resultCenterName) || null,
       supplier: asString(expenseDraft.supplier) || null,
       expenseId: expenseId || null,
       linkedExpenseId: expenseId || null,
