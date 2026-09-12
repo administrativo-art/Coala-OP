@@ -351,6 +351,7 @@ export async function PATCH(
     if (message === "EXPENSE_NOT_FOUND") return jsonError("A despesa vinculada não foi encontrada.", 409);
     if (message === "EXPENSE_VALUE_CHANGED") return jsonError("O valor da despesa vinculada mudou. Revise o principal, os juros e a multa.", 409);
     if (message === "INVALID_PAYMENT_CHARGE_ACCOUNT") return jsonError("Selecione um plano de contas ativo e analítico para os juros e a multa.", 409);
+    if (message === "RESULT_CENTER_NOT_FOUND") return jsonError("O centro de resultado selecionado não existe mais. Revise a classificação e confirme novamente a auditoria.", 409);
     if (message === "PURCHASE_FINANCIAL_NOT_FOUND") return jsonError("O financeiro da compra vinculada não foi encontrado.", 409);
     if (message === "STATEMENT_HAS_PENDING_ITEMS") return jsonError("Efetive ou ignore todos os itens antes de fechar o extrato.", 409);
     console.error("[financial/import-sessions] Falha ao atualizar sessão", error);
