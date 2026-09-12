@@ -70,6 +70,33 @@ test("classifica somente saídas operacionais válidas para o CMV por estoque", 
   assert.equal(isDreStockOutflowMovement(movement("4", "TRANSFERENCIA_SAIDA", 1, "2026-08-10T12:00:00Z")), false);
   assert.equal(isDreStockOutflowMovement(movement("5", "SAIDA_CONSUMO", 1, "2026-08-10T12:00:00Z", { reverted: true })), false);
   assert.equal(isDreStockOutflowMovement(movement("6", "SAIDA_ENTREGA_UNIFORME", 1, "2026-08-10T12:00:00Z")), false);
+  assert.equal(isDreStockOutflowMovement(movement("7", "SAIDA_CONSUMO", 1, "2026-08-10T12:00:00Z", {
+    excludeFromDreStockCmv: true,
+  })), false);
+  assert.equal(isDreStockOutflowMovement(movement("8", "SAIDA_CONSUMO", 1, "2026-08-10T12:00:00Z", {
+    notes: "Ajuste de contagem",
+  })), true);
+});
+
+test("a exceção manual não entra no total nem gera pendência de custo", () => {
+  const noCostBase = { ...baseProduct, id: "base-no-cost", initialCostPerUnit: undefined };
+  const noCostProduct = { ...product, id: "product-no-cost", baseProductId: noCostBase.id };
+  const result = summarizeDreStockMovements([
+    movement("excluded", "SAIDA_CONSUMO", 1, "2026-08-20T12:00:00Z", {
+      productId: noCostProduct.id,
+      excludeFromDreStockCmv: true,
+    }),
+    movement("included", "SAIDA_CONSUMO", 1, "2026-08-20T12:00:00Z"),
+  ], {
+    productsById: new Map([[product.id, product], [noCostProduct.id, noCostProduct]]),
+    baseProductsById: new Map([[baseProduct.id, baseProduct], [noCostBase.id, noCostBase]]),
+    effectiveCostsByBaseProductId: new Map(),
+  });
+
+  assert.equal(result.stockSummaries[0].movementCount, 1);
+  assert.equal(result.stockSummaries[0].consumptionCmv, 8);
+  assert.equal(result.stockSummaries[0].unpricedMovementCount, 0);
+  assert.deepEqual(result.unpricedBaseProductIds, []);
 });
 
 test("valoriza cada saída pelo último custo efetivo disponível e separa perdas e ajustes", () => {
