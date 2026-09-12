@@ -8,7 +8,11 @@ import {
   financialExpenseParticipatesInDre,
   type FinancialExpenseDreDocument,
 } from "./expense-accounting-contract";
-import { personAllocationsAreValid } from "./expense-person-allocations";
+import {
+  personAllocationAccountTotals,
+  personAllocationDifference,
+  personAllocationsAreValid,
+} from "./expense-person-allocations";
 import type { ResultCenterNameMap } from "./expense-rateio";
 
 export type DreExpenseAccountMeta = {
@@ -30,6 +34,12 @@ export type DreExpenseContractIssue = {
   expenseId: string;
   code: DreExpenseContractIssueCode;
   differenceCents?: number;
+  personDifferenceCents?: number;
+  personAccountDifferences?: Array<{
+    accountPlanId: string;
+    accountPlanName: string;
+    differenceCents: number;
+  }>;
 };
 
 export type DreExpenseLineDetail = {
@@ -39,6 +49,8 @@ export type DreExpenseLineDetail = {
   accountPlanId: string;
   accountPlanName: string;
   amount: number;
+  billingIdentity?: FinancialExpenseDreDocument["billingIdentity"];
+  cardChargeDate?: string | null;
 };
 
 export type DreExpenseCalculation = {
@@ -108,7 +120,31 @@ export function calculateDreExpenses(input: {
       }
     }
     if (expense.hasPersonAllocations && !personAllocationsAreValid(expense)) {
-      addIssue({ expenseId: expense.id, code: "invalid_person_allocations" });
+      const actualByAccount = personAllocationAccountTotals(expense.personAllocations);
+      const expectedByAccount = new Map<string, number>();
+      allocations.forEach((allocation) => {
+        expectedByAccount.set(
+          allocation.accountPlanId,
+          (expectedByAccount.get(allocation.accountPlanId) ?? 0) + cents(allocation.amount),
+        );
+      });
+      const accountIds = new Set([...expectedByAccount.keys(), ...actualByAccount.keys()]);
+      const personAccountDifferences = [...accountIds].flatMap((accountPlanId) => {
+        const differenceCents = (expectedByAccount.get(accountPlanId) ?? 0)
+          - cents(actualByAccount.get(accountPlanId));
+        if (differenceCents === 0) return [];
+        return [{
+          accountPlanId,
+          accountPlanName: input.accounts[accountPlanId]?.name || accountPlanId,
+          differenceCents,
+        }];
+      });
+      addIssue({
+        expenseId: expense.id,
+        code: "invalid_person_allocations",
+        personDifferenceCents: cents(personAllocationDifference(expense.personAllocations, expense.totalValue)),
+        personAccountDifferences,
+      });
     }
 
     const centerReferences = resultCenterReferences(expense);
@@ -144,6 +180,8 @@ export function calculateDreExpenses(input: {
         accountPlanId: allocation.accountPlanId,
         accountPlanName: account.name || allocation.accountPlanName || allocation.accountPlanId,
         amount: amountInCents / 100,
+        ...(expense.billingIdentity ? { billingIdentity: expense.billingIdentity } : {}),
+        ...(expense.cardChargeDate ? { cardChargeDate: expense.cardChargeDate } : {}),
       });
       detailsByPosition.set(position, details);
     }
