@@ -40,6 +40,10 @@ test("mantém a fonte da DRE filtrada, paginada e sem leitura direta no cliente"
     new URL("../../src/features/financial/pages/dre-page.tsx", import.meta.url),
     "utf8",
   );
+  const stockServerSource = await readFile(
+    new URL("../../src/features/financial/dre/stock-cmv.server.ts", import.meta.url),
+    "utf8",
+  );
   const indexes = JSON.parse(await readFile(
     new URL("../../firestore.indexes.json", import.meta.url),
     "utf8",
@@ -58,11 +62,22 @@ test("mantém a fonte da DRE filtrada, paginada e sem leitura direta no cliente"
   assert.match(serverSource, /MAX_REPORTS_PER_PERIOD/);
   assert.doesNotMatch(pageSource, /\b(?:getDocs|onSnapshot)\s*\(/);
   assert.doesNotMatch(pageSource, /financialCollection\("expenses"\)/);
+  assert.doesNotMatch(pageSource, /collection\("movementHistory"\)/);
+  assert.match(pageSource, /\/api\/financial\/dre\/stock-cmv/);
+  assert.match(stockServerSource, /\.where\("fromKioskId", "in", params\.kioskIds\)/);
+  assert.match(stockServerSource, /\.where\("timestamp", ">=", params\.startAt\)/);
+  assert.match(stockServerSource, /MAX_MOVEMENTS_PER_RANGE/);
   assert.match(pageSource, /\.filter\(\(key\) => key >= FINANCIAL_DRE_START_MONTH_KEY\)/);
   assert.match(pageSource, /min=\{FINANCIAL_DRE_START_MONTH_KEY\}/);
   assert.ok(indexes.indexes.some((index) => (
     index.collectionGroup === "salesReports"
     && ["year", "month", "kioskId", "__name__"].every((field) => (
+      index.fields.some((candidate) => candidate.fieldPath === field)
+    ))
+  )));
+  assert.ok(indexes.indexes.some((index) => (
+    index.collectionGroup === "movementHistory"
+    && ["fromKioskId", "timestamp", "__name__"].every((field) => (
       index.fields.some((candidate) => candidate.fieldPath === field)
     ))
   )));
