@@ -37,6 +37,7 @@ export const expenseFormSchema = z
     competenceDate: z.date().optional(),
     dueDate: z.date().optional(),
     isApportioned: z.boolean().default(false),
+    referenceResultCenterId: z.string().optional(),
     resultCenter: z.string().optional(),
     apportionments: z
       .array(
@@ -146,15 +147,22 @@ export const expenseFormSchema = z
     }
   )
   .refine(
+    (data) => !!data.referenceResultCenterId?.trim(),
+    {
+      message: "Selecione o centro de referência.",
+      path: ["referenceResultCenterId"],
+    }
+  )
+  .refine(
     (data) => {
       if (data.isApportioned) {
         return data.apportionments && data.apportionments.length > 0;
       }
-      return !!data.resultCenter;
+      return true;
     },
     {
-      message: "Defina a unidade ou o rateio.",
-      path: ["resultCenter"],
+      message: "Defina ao menos um participante do rateio.",
+      path: ["apportionments"],
     }
   )
   .refine(

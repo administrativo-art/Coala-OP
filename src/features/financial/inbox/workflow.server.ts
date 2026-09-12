@@ -5,6 +5,7 @@ import { WORKSPACE_ID } from "@/lib/workspace";
 import { calculateFinancialObligationSummary } from "@/features/financial/obligations/calculations";
 import { buildFinancialDescription } from "@/features/financial/lib/expense-description-catalog";
 import { financialExpenseAccountingFields } from "@/features/financial/lib/expense-accounting-contract";
+import { inheritExpenseReferenceCenter } from "@/features/financial/lib/expense-reference-center";
 import type { PaymentActor } from "@/features/financial/payment-requests/types";
 import { classifyFinancialEmail, mergeBillingIdentities } from "./parser";
 import { chooseExistingExpenseSuggestion, existingPayment, type InboxExpenseCandidate } from "./expense-suggestions";
@@ -68,7 +69,8 @@ function isoDateKey(value: unknown) {
 function copyExpenseClassification(provision: Record<string, unknown>) {
   const fields = [
     "accountPlan", "accountId", "accountPlanName", "hasAccountAllocations", "accountAllocations",
-    "hasPersonAllocations", "personAllocations", "isApportioned", "resultCenter", "resultCenterId",
+    "hasPersonAllocations", "personAllocations", "isApportioned", "resultCenter", "resultCenterId", "resultCenterName",
+    "referenceResultCenterId", "referenceResultCenterName",
     "apportionments", "rateioCriterion", "rateioEffectiveFrom", "rateioFirstMonthMode",
     "plannedPaymentMethodType", "plannedBankAccountId", "plannedBankAccountName",
     "plannedPaymentMethodId", "plannedPaymentMethodLabel", "provisionSeriesKey",
@@ -377,6 +379,7 @@ export async function linkSuggestedInboxCharge(id: string, actor: PaymentActor, 
       : String(provision.description || message.subject).trim();
     const actual = {
       ...copyExpenseClassification(provision),
+      ...inheritExpenseReferenceCenter({}, provision),
       ...financialExpenseAccountingFields({
         competenceMonth: message.classification.competence,
         competenceDate,
