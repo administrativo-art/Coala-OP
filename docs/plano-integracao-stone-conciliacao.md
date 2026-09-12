@@ -1,4 +1,4 @@
-# Plano de integração Stone e conciliação de receitas — v4
+# Plano de integração Stone e conciliação de receitas — v5
 
 **Status:** plano para implementação incremental
 
@@ -8,7 +8,7 @@
 
 **Fuso operacional:** `America/Belem`
 
-**Premissa de reaproveitamento:** fechamento de caixa, sangrias, suprimentos, contagem física, malotes/lotes de depósito, depósitos, cobrança no Inter, lançamentos financeiros e conciliação de extratos já existem e permanecem como fontes oficiais. Este plano não cria módulos, coleções ou fluxos paralelos para essas capacidades; apenas os integra à conciliação de receitas e à Stone.
+**Premissa de reaproveitamento:** fechamento de caixa, sangrias, suprimentos, contagem física, malotes/lotes de depósito, depósitos, cobrança no Inter, lançamentos financeiros, conciliação de extratos e a tela de fluxo de caixa já existem e permanecem como capacidades oficiais. Este plano não cria módulos, coleções ou fluxos paralelos; apenas evolui e integra os contratos existentes à conciliação de receitas e à Stone.
 
 ## 1. Objetivo
 
@@ -120,6 +120,25 @@ Referência:
 - [`src/features/financial/inter-statement-sync.server.ts`](../src/features/financial/inter-statement-sync.server.ts)
 - [`src/features/financial/pages/import-page.tsx`](../src/features/financial/pages/import-page.tsx)
 
+### 4.6 Fluxo de caixa existente
+
+O sistema já possui `Financeiro > Fluxo de caixa`, protegido pelas permissões de fluxo financeiro. A tela combina `transactions` e pagamentos realizados com despesas abertas, permitindo filtrar por conta e consultar realizado e previsto.
+
+Hoje, porém:
+
+- o período disponível olha o mês atual e meses anteriores, não as próximas 13 semanas;
+- a previsão contém saídas de despesas abertas, mas ainda não contém entradas futuras da agenda Stone;
+- o “saldo realizado” é o resultado das entradas menos saídas dentro do período filtrado, iniciado em zero, e não o saldo bancário real no começo da projeção;
+- as coleções são carregadas de forma ampla e filtradas no cliente, contrato que não deve ser ampliado com o volume da Stone;
+- não existem cobertura da fonte, revisão da previsão, atraso de recebível nem eliminação explícita das transferências entre Stone, Inter e numerário físico na projeção futura.
+
+A implementação deve evoluir essa tela e suas permissões existentes, sem criar outro módulo de fluxo de caixa.
+
+Referências:
+
+- [`src/features/financial/pages/cash-flow-page.tsx`](../src/features/financial/pages/cash-flow-page.tsx)
+- [`src/features/financial/lib/cash-flow-analysis.ts`](../src/features/financial/lib/cash-flow-analysis.ts)
+
 ## 5. Arquitetura-alvo
 
 ```text
@@ -138,6 +157,8 @@ Stone Vendas ─> recebíveis/parcelas ─> agenda líquida ──────�
                         débito Stone ─> transferência interna ─> crédito Inter
 
 Caixa/contagem/sangria/depósito existentes ─> referências e estados no fechamento mensal
+
+saldo atual + recebíveis + obrigações ─> previsão diária de 91 dias ─> conta/unidade/consolidado
 ```
 
 PDV e Financeiro usam bancos distintos. A solução não tentará simular transação atômica entre eles. Os fatos do PDV serão projetados de forma idempotente no banco financeiro, e a conciliação ocorrerá integralmente nesse banco.
@@ -279,6 +300,26 @@ Permanecem canônicas as estruturas atuais de contas bancárias, `transactions`,
 - identificar o par débito Stone/crédito Inter como transferência interna;
 - impedir que liquidação, lançamento Stone e crédito Inter sejam somados como três entradas distintas.
 
+### 6.7 Modelo de leitura do fluxo de caixa
+
+O fluxo de caixa continuará usando como registros canônicos `bankAccounts`, `transactions`, `payments`, `expenses`, `stoneReceivables`, `stoneSettlements` e os registros existentes de fechamento e depósito. Não será criado outro livro financeiro.
+
+Um serviço no servidor comporá uma janela limitada de 91 dias corridos, incluindo a data de referência. Cada item retornado terá, no mínimo:
+
+- `sourceType` e `sourceId`, para abrir o registro canônico;
+- conta financeira e unidade de origem/rateio, quando aplicável;
+- entrada ou saída e valor em centavos;
+- data prevista original, data prevista atual e data realizada;
+- `scheduled`, `unprogrammed`, `overdue`, `realized`, `cancelled` ou `replaced`;
+- grupo de transferência interna, quando houver;
+- revisão/hash da fonte e horário da última atualização.
+
+O serviço produzirá totais diários e semanais sem copiar transações contábeis. Se o preflight comprovar que a composição em tempo de consulta é cara, poderão ser materializados resumos diários reconstruíveis; essa otimização não se torna fonte oficial e só será criada após medição do volume.
+
+O saldo inicial de cada conta deve vir do último saldo confirmado pela conciliação ou pelo provedor, com data e horário de referência. Se ele não estiver disponível, a projeção será marcada como incompleta; o sistema nunca presumirá saldo inicial zero.
+
+Cada resposta do fluxo incluirá `generatedAt`, data de corte, saldo inicial e sua referência, corte de cada fonte e percentual de cobertura. Isso permite distinguir uma projeção atualizada de outra incompleta ou desatualizada.
+
 ## 7. Contratos de conciliação
 
 ### 7.1 PDV × painel de Vendas Stone
@@ -386,6 +427,58 @@ Assim, a liquidação alimenta o realizado uma única vez e a passagem Stone →
 - O consolidado só fecha quando Whopping, Tirirical e João Paulo estiverem fechados.
 - Uma revisão tardia do PDV ou Stone marca o período `stale`; não altera silenciosamente um mês fechado.
 - Reabertura exige permissão, motivo e auditoria.
+
+### 7.6 Previsão do fluxo de caixa
+
+A primeira versão será uma previsão de caixa contratado/conhecido, não uma estimativa estatística de vendas futuras. A janela padrão terá 91 dias corridos, incluindo a data de referência, com consolidação semanal opcional.
+
+```text
+saldo final projetado do dia
+= saldo inicial confirmado
++ entradas previstas para o dia
+- saídas previstas para o dia
+```
+
+Fontes e tratamento:
+
+| Evento | Data da previsão | Efeito por conta | Efeito consolidado |
+|---|---|---:|---:|
+| Recebível líquido Stone | data atual prevista na agenda | entrada na Stone | entrada |
+| Outro recebimento financeiro conhecido | data programada | entrada na conta indicada | entrada |
+| Despesa aberta/provisionada | vencimento ou pagamento programado | saída da conta indicada | saída |
+| Venda em dinheiro já fechada | data do fechamento | realizado no numerário físico | realizado |
+| Depósito programado | data confirmada do lote | reduz numerário e aumenta banco | zero |
+| Transferência Stone → Inter | data programada/confirmada | reduz Stone e aumenta Inter | zero |
+| Liquidação/extrato conciliado | data efetiva | substitui a previsão pelo realizado | realizado uma vez |
+
+Regras:
+
+- A agenda Stone fornece valor líquido e data prevista atuais. MDR e antecipação continuam visíveis na DRE, mas não são novamente subtraídos do líquido no fluxo de caixa.
+- Mudança de data ou valor na agenda preserva a previsão original e cria uma nova revisão visível.
+- Data vencida sem liquidação muda o item para `overdue`; valor parcialmente liquidado mantém somente o saldo pendente na previsão.
+- Liquidação conciliada substitui a parcela prevista pelo realizado e aponta para a transação bancária canônica, sem dupla contagem.
+- Dinheiro contado já é disponibilidade realizada. Seu depósito posterior apenas muda a localização do recurso.
+- A posição inicial do numerário físico vem dos fechamentos, contagens e lotes ainda não depositados; vendas em dinheiro não são somadas novamente como previsão.
+- Depósito ou transferência sem data não será colocado arbitrariamente em um dia: ficará em `unprogrammed` e aparecerá fora do saldo datado.
+- Enquanto a política/agenda de transferência Stone → Inter não estiver comprovada, o sistema mostrará “valor na Stone aguardando transferência” e a necessidade de caixa no Inter, mas não inventará uma entrada futura no Inter.
+- A projeção não executa transferência, antecipação nem pagamento. Qualquer automação financeira exige regra e autorização próprias.
+- O saldo consolidado elimina Stone → Inter, numerário → banco e demais transferências entre contas próprias.
+
+As visões terão significados diferentes:
+
+- **Por conta:** mostra o saldo real e projetado da Stone, do Inter ou do numerário físico.
+- **Por unidade:** atribui recebíveis pela unidade/Stonecode da venda e saídas pelos centros/rateios existentes. É uma visão gerencial; não divide artificialmente o saldo de uma conta bancária compartilhada.
+- **Consolidado:** mostra a liquidez real do negócio e elimina todas as transferências internas.
+
+Exemplo:
+
+```text
+Venda no cartão                         R$ 100,00 de receita na DRE
+Recebível líquido para D+2              R$  98,00 de entrada prevista na Stone
+Transferência posterior Stone -> Inter  R$  98,00 entre contas; efeito consolidado zero
+```
+
+Sem orçamento ou modelo de vendas, os dias posteriores aos recebíveis já contratados podem mostrar poucas entradas. A interface deve informar que isso significa “vendas futuras ainda não estimadas”, e não previsão de faturamento zero.
 
 ## 8. Plano de implementação
 
@@ -508,6 +601,10 @@ Preferência operacional:
 
 - projetar recebíveis por parcela e data;
 - mostrar bruto, taxas e líquido;
+- obter o saldo inicial confirmado e sua data de referência para cada conta;
+- compor a previsão diária de 91 dias com recebíveis líquidos e obrigações existentes;
+- manter data/valor originais e atuais de cada previsão;
+- tratar itens programados, sem data, vencidos, parcialmente liquidados, realizados e cancelados;
 - importar liquidações/extrato Stone;
 - conciliar recebível previsto com liquidação Stone;
 - extrair um núcleo neutro do sincronizador atual sem romper a integração Inter;
@@ -516,7 +613,8 @@ Preferência operacional:
 - conciliar débito de transferência Stone com crédito Inter;
 - criar sugestão por valor/data somente quando não houver referência forte;
 - exigir confirmação humana para vínculo ambíguo;
-- registrar tarifas e ajustes separadamente.
+- registrar tarifas e ajustes separadamente;
+- não incluir estimativa de vendas futuras sem um cenário/orçamento explícito.
 
 **Saída:** previsão de 13 semanas e realizado conferidos para o Tirirical antes da expansão.
 
@@ -575,12 +673,20 @@ Regras da interface:
 
 No fluxo de caixa:
 
+- evoluir a tela existente, sem criar um segundo módulo;
+- preservar a consulta histórica de realizados e acrescentar a visão futura;
+- usar horizonte padrão de 91 dias corridos, com visão diária e semanal;
+- iniciar cada conta pelo último saldo confirmado e exibir a atualização/cobertura da fonte;
 - agenda Stone alimenta entradas previstas;
 - liquidação Stone alimenta realizado na conta Stone;
 - o realizado aponta para a transação da conciliação bancária existente, sem duplicá-la;
 - transferência Stone → Inter move saldo entre contas;
 - consolidado elimina transferências internas;
-- atrasos, rejeições, chargebacks e mudanças de previsão permanecem visíveis.
+- atrasos, rejeições, chargebacks e mudanças de previsão permanecem visíveis;
+- itens sem data ficam em uma fila separada e não contaminam o saldo datado;
+- a visão por unidade mostra atribuição gerencial; saldo bancário real permanece por conta;
+- destacar menor saldo projetado, primeiro dia negativo, valor na Stone aguardando transferência e necessidade de recursos no Inter;
+- informar claramente que recebíveis contratados não representam uma projeção de vendas ainda não realizadas.
 
 **Saída:** DRE e fluxo de caixa fecham por unidade e no consolidado sem dupla contagem.
 
@@ -613,10 +719,12 @@ financial.stoneIntegration.manage
 
 - `financial.reconciliation` continua protegendo a conciliação de extratos e suas ações atuais; a origem `stone_api` não cria uma permissão bancária paralela.
 - As permissões atuais de fechamento de caixa e depósitos continuam protegendo a consulta e a correção dos registros de origem.
+- `financial.cashFlow.view` continua protegendo a tela e os resumos projetados; `financial.cashFlow.create` continua restrita aos lançamentos manuais já permitidos.
 - `financial.dre` permite consultar os resumos usados pela DRE, mas não os detalhes sensíveis.
-- Ter permissão de DRE, caixa, depósito ou conciliação bancária não concede automaticamente acesso aos detalhes de vendas/recebíveis Stone.
+- Ter permissão de DRE, fluxo de caixa, caixa, depósito ou conciliação bancária não concede automaticamente acesso aos detalhes de vendas/recebíveis Stone.
 - Toda leitura e escrita precisa de autorização no servidor.
 - Fechamento, reabertura, classificação contábil e gestão de integração são ações segregadas.
+- A previsão não concede permissão para transferir, antecipar, pagar ou movimentar recursos.
 - Ocultar botões não substitui controle de acesso.
 
 ## 10. Auditoria e observabilidade
@@ -636,6 +744,9 @@ Diretrizes:
 
 - DRE: um `revenueMonthlySummary` por unidade/mês. Para seis meses e três unidades, 18 leituras de receita por carregamento.
 - Tela de conciliação: consultas por `workspaceId + period + kioskId + status`, paginadas, inicialmente em até 100 casos.
+- Fluxo de caixa: consultas no servidor por conta/unidade, data e status, limitadas à janela de 13 semanas; a tela não carregará coleções financeiras completas para filtrar no cliente.
+- A implementação deverá substituir o carregamento integral atual de `transactions`, `payments` e `expenses` na tela antes de acrescentar os recebíveis Stone.
+- Se resumos diários forem materializados, uma carga terá no máximo 91 documentos por escopo consultado; o preflight decidirá entre cálculo limitado e resumo persistido conforme o volume real.
 - Jobs: cursor, data-fonte, checksum e overlap curto; nunca scan completo recorrente.
 - Históricos fechados ficam fora das filas operacionais.
 - Índices são criados somente para queries documentadas.
@@ -658,6 +769,14 @@ Diretrizes:
 - sangria sem efeito na DRE;
 - projeção do resumo sem duplicar fechamento, sangria, depósito ou lançamento bancário;
 - transferência Stone → Inter sem efeito consolidado;
+- saldo inicial ausente gera estado incompleto, nunca saldo zero presumido;
+- horizonte de 13 semanas respeita a fronteira diária de `America/Belem`;
+- recebível líquido entra na data prevista atual e preserva data/valor originais;
+- previsão vencida, parcial, revisada, cancelada e substituída pelo realizado;
+- despesas abertas entram pelo saldo pendente e pela data de pagamento/vencimento;
+- depósito e transferência interna alteram contas, mas têm efeito consolidado zero;
+- visão por unidade não divide artificialmente saldo de conta compartilhada;
+- ausência de estimativa de vendas futuras é sinalizada e não gera entradas inventadas;
 - período fechado e revisão tardia.
 
 ### Contrato e integração
@@ -669,6 +788,8 @@ Diretrizes:
 - compatibilidade do núcleo bancário com `inter_api` e `stone_api`;
 - vínculo único entre liquidação Stone e lançamento bancário existente;
 - links para fechamento e depósito originais sem escrita paralela;
+- consulta limitada do fluxo de caixa sem leitura integral das coleções;
+- saldo por conta e consolidado com a mesma transferência interna;
 - Firestore Emulator com dados determinísticos;
 - rerun do mesmo arquivo sem duplicação.
 
@@ -679,9 +800,11 @@ Diretrizes:
 3. classificar e justificar;
 4. fechar unidade/mês;
 5. verificar Receita conciliada na DRE;
-6. verificar recebível previsto no fluxo de caixa;
-7. liquidar e verificar realizado;
-8. reabrir após revisão tardia.
+6. abrir a previsão de 13 semanas e verificar recebível líquido e despesa futura;
+7. conferir saldos Stone, Inter, por unidade e consolidado;
+8. liquidar e verificar substituição da previsão pelo realizado;
+9. transferir Stone → Inter e verificar efeito consolidado zero;
+10. reabrir após revisão tardia.
 
 Mudanças comuns devem manter `npm run check` verde. Mudanças de rotas, fronteiras server/client ou build devem manter `npm run verify` verde. Regras do Firestore exigem `npm run check:rules`.
 
@@ -703,6 +826,14 @@ Para cada unidade e competência:
 - transferências Stone → Inter não duplicam entrada no consolidado;
 - DRE permite alternar PDV Legal e Receita conciliada;
 - fluxo de caixa diferencia previsto e realizado;
+- previsão cobre 91 dias corridos a partir de hoje e começa no saldo confirmado de cada conta;
+- recebíveis Stone aparecem líquidos na data prevista, sem nova dedução das taxas;
+- despesas abertas aparecem pela obrigação pendente e pela data prevista de saída;
+- previsão liquidada é substituída pelo realizado sem dupla contagem;
+- itens vencidos, parciais, revisados e sem data permanecem identificáveis;
+- visões por conta, unidade e consolidado respeitam seus significados e eliminam transferências internas;
+- a tela informa a data de atualização, a cobertura e a ausência de estimativa para vendas futuras;
+- saldo inicial indisponível bloqueia a exibição de um saldo projetado enganoso;
 - mês fechado não muda sem reabertura auditada;
 - o consolidado só fecha quando Whopping, Tirirical e João Paulo fecharem.
 
@@ -731,11 +862,16 @@ O seletor de CMV já foi implementado em `feat/dre-cmv-source` (`39d21bf5`). Com
 - substituir dados originais do PDV ou Stone por ajustes manuais;
 - criar um segundo módulo de fechamento de caixa, sangrias, custódia ou depósitos;
 - criar uma conciliação bancária paralela à existente;
-- copiar liquidações Stone como novas transações quando já houver lançamento bancário canônico.
+- copiar liquidações Stone como novas transações quando já houver lançamento bancário canônico;
+- prever vendas futuras por média, sazonalidade ou inteligência estatística sem orçamento/cenário aprovado;
+- executar automaticamente transferências Stone → Inter, antecipações ou pagamentos a partir da previsão.
 
-## 16. Decisões incorporadas na v4
+## 16. Decisões consolidadas na v5
 
 - Fechamento de caixa, sangrias, suprimentos, contagem, malotes/lotes e depósitos já estão implementados e serão apenas referenciados.
 - A conciliação de extratos já existente será generalizada para receber a Stone, mantendo o Inter e as importações atuais.
 - A interface não duplicará operações de caixa ou depósito; mostrará resumo, estado e link para a origem.
 - O escopo novo concentra-se em `PDV × Stone Vendas`, agenda/liquidação de recebíveis, classificação das divergências, fechamento mensal e critérios de receita da DRE.
+- A tela de fluxo de caixa existente será evoluída para uma previsão diária de 13 semanas, iniciada por saldos reais e composta por entradas e saídas conhecidas.
+- A primeira versão não estima vendas futuras; separa disponibilidade contratada de cenários comerciais ainda inexistentes.
+- Saldos bancários permanecem por conta, enquanto a visão por unidade representa apenas a atribuição gerencial dos movimentos.
