@@ -108,6 +108,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "fromKioskId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "movementHistory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "activityId",
           "order": "ASCENDING"
         },
