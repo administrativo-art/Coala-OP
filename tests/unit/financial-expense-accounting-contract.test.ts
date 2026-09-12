@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { calculateDreExpenses } from "../../src/features/financial/lib/dre-expense-calculation";
 import {
+  financialExpenseDreWithoutPresentationDetails,
   financialExpenseCompetenceMonth,
   financialExpenseParticipatesInDre,
   normalizeFinancialExpenseForDre,
@@ -12,6 +13,8 @@ const accounts = {
   salary: { name: "Salários", drePosition: "pessoal", isDreAccount: true },
   advance: { name: "Adiantamento salarial", drePosition: "pessoal", isDreAccount: true },
   occupancy: { name: "Ocupação", drePosition: "ocupacao", isDreAccount: true },
+  fgts: { name: "FGTS", drePosition: "pessoal", isDreAccount: true },
+  loans: { name: "Empréstimos consignados a pagar", drePosition: null, isDreAccount: false },
 };
 
 test("competência contábil não recua de mês nem usa vencimento ou pagamento", () => {
@@ -177,4 +180,108 @@ test("normaliza identificadores legados de centro sem perder a individualizaçã
 
   assert.equal(result.totalsByPosition.pessoal, 427.63);
   assert.deepEqual(result.issues, []);
+});
+
+test("DRE explica a diferença total e por conta do rateio individual inválido", () => {
+  const expense = normalizeFinancialExpenseForDre("fgts-august", {
+    status: "pending",
+    competenceMonth: "2026-08",
+    totalValue: 3_370.51,
+    hasAccountAllocations: true,
+    accountAllocations: [
+      { accountPlanId: "fgts", amount: 1_083.26 },
+      { accountPlanId: "loans", amount: 2_287.25 },
+    ],
+    hasPersonAllocations: true,
+    personAllocations: [
+      {
+        accountPlanId: "fgts",
+        employeeId: "employee-1",
+        employeeName: "Colaboradora",
+        analysisType: "employer_cost",
+        amount: 1_053.76,
+        resultCenter: "center-jp",
+      },
+      {
+        accountPlanId: "loans",
+        employeeId: "employee-1",
+        employeeName: "Colaboradora",
+        analysisType: "employee_deduction",
+        amount: 2_292.80,
+        resultCenter: "center-jp",
+      },
+    ],
+  });
+
+  const result = calculateDreExpenses({
+    expenses: [expense],
+    accounts,
+    monthKey: "2026-08",
+    resultCenterNames: { "center-jp": "Quiosque João Paulo" },
+  });
+
+  assert.deepEqual(result.issues, [{
+    expenseId: "fgts-august",
+    code: "invalid_person_allocations",
+    personDifferenceCents: 2_395,
+    personAccountDifferences: [
+      {
+        accountPlanId: "fgts",
+        accountPlanName: "FGTS",
+        differenceCents: 2_950,
+      },
+      {
+        accountPlanId: "loans",
+        accountPlanName: "Empréstimos consignados a pagar",
+        differenceCents: -555,
+      },
+    ],
+  }]);
+});
+
+test("normaliza identificadores de telefonia e a data da compra para o detalhamento", () => {
+  const expense = normalizeFinancialExpenseForDre("mobile", {
+    status: "pending",
+    competenceMonth: "2026-08",
+    totalValue: 39.99,
+    accountPlan: "occupancy",
+    resultCenter: "center-jp",
+    billingIdentity: {
+      customerAccount: " 0466955628 ",
+      serviceNumbers: ["+5598987846117", " +5598987846117 "],
+    },
+    cardChargeDate: new Date("2026-08-17T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(expense.billingIdentity, {
+    customerAccount: "0466955628",
+    serviceNumbers: ["+5598987846117"],
+  });
+  assert.equal(expense.cardChargeDate, "2026-08-17");
+});
+
+test("remove detalhes de apresentação quando o perfil não pode visualizar despesas", () => {
+  const expense = normalizeFinancialExpenseForDre("mobile", {
+    status: "pending",
+    competenceMonth: "2026-08",
+    description: "Conta de celular",
+    supplier: "Vivo",
+    totalValue: 39.99,
+    accountPlan: "occupancy",
+    resultCenter: "center-jp",
+    billingIdentity: {
+      customerAccount: "0466955628",
+      serviceNumbers: ["+5598987846117"],
+    },
+    cardChargeDate: "2026-08-17",
+  });
+
+  const redacted = financialExpenseDreWithoutPresentationDetails(expense);
+
+  assert.equal(redacted.description, null);
+  assert.equal(redacted.supplier, null);
+  assert.equal(redacted.billingIdentity, null);
+  assert.equal(redacted.cardChargeDate, null);
+  assert.equal(redacted.totalValue, 39.99);
+  assert.equal(redacted.accountPlan, "occupancy");
 });

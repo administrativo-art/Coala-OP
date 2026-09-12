@@ -20,6 +20,10 @@ import {
   calculateDreExpenses,
   type DreExpenseContractIssue,
 } from "@/features/financial/lib/dre-expense-calculation";
+import {
+  dreExpenseDetailReferences,
+  groupDreExpenseDetailsByAccount,
+} from "@/features/financial/lib/dre-expense-details";
 import { buildDrePersonAnalysis, type DrePersonAccountMeta } from "@/features/financial/lib/dre-person-analysis";
 import { DrePeopleView } from "@/features/financial/components/dre/dre-people-view";
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
@@ -29,6 +33,7 @@ import { useKiosks } from "@/hooks/use-kiosks";
 import type { CashClosureMonthlySummary } from "@/features/financial/cash-closures/types";
 import type { DreSalesUnitMonthSummary, DreSourceDataPayload } from "@/features/financial/dre/source-data";
 import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,7 +62,7 @@ function dreMonthKeysEndingAt(monthKey: string) {
     .filter((key) => key >= FINANCIAL_DRE_START_MONTH_KEY);
 }
 
-function expenseIssueLabel(issue: DreExpenseContractIssue) {
+function expenseIssueLabel(issue: DreExpenseContractIssue, showPersonnelDetails = true) {
   switch (issue.code) {
     case "missing_account":
       return "Plano de contas não informado";
@@ -70,8 +75,25 @@ function expenseIssueLabel(issue: DreExpenseContractIssue) {
         ? `Rateio por plano de contas incompleto: faltam ${amount}`
         : `Rateio por plano de contas excede o total em ${amount}`;
     }
-    case "invalid_person_allocations":
-      return "Rateio por colaborador inválido";
+    case "invalid_person_allocations": {
+      if (!showPersonnelDetails) return "Rateio por colaborador inválido";
+      const accountDifferences = issue.personAccountDifferences ?? [];
+      const totalDifference = issue.personDifferenceCents ?? 0;
+      if (accountDifferences.length === 0 && totalDifference === 0) {
+        return "Rateio por colaborador inválido: revise colaborador, centro, plano e valor";
+      }
+      const totalLabel = totalDifference > 0
+        ? `faltam ${formatCurrency(totalDifference / 100)} no total`
+        : totalDifference < 0
+          ? `o total excede em ${formatCurrency(Math.abs(totalDifference) / 100)}`
+          : "o total geral fecha, mas os planos divergem";
+      const planLabel = accountDifferences.map((difference) => (
+        difference.differenceCents > 0
+          ? `${difference.accountPlanName}: faltam ${formatCurrency(difference.differenceCents / 100)}`
+          : `${difference.accountPlanName}: excede em ${formatCurrency(Math.abs(difference.differenceCents) / 100)}`
+      )).join("; ");
+      return `Rateio por colaborador não fecha: ${totalLabel}${planLabel ? ` (${planLabel})` : ""}`;
+    }
     case "missing_result_center":
       return "Centro de resultado não informado";
     case "unknown_result_center":
@@ -585,8 +607,8 @@ export function DrePage() {
                 const canIdentifyExpense = canViewExpenseDetails
                   && (!isPersonnelExpense || canViewPersonnelCosts);
                 const title = canIdentifyExpense
-                  ? expense?.description || expense?.supplier || `Despesa ${expenseId}`
-                  : `Despesa ${expenseId}`;
+                  ? expense?.description || expense?.supplier || "Despesa sem descrição"
+                  : "Despesa com inconsistência";
                 const showSupplier = Boolean(
                   canIdentifyExpense
                   && expense?.description
@@ -599,7 +621,10 @@ export function DrePage() {
                       <p className="truncate font-semibold text-amber-950">{title}</p>
                       {showSupplier ? <p className="truncate text-xs text-amber-900/75">{expense?.supplier}</p> : null}
                       <p className="mt-0.5 text-xs text-amber-900">
-                        {issues.map(expenseIssueLabel).join(" · ")}
+                        {issues.map((issue) => expenseIssueLabel(
+                          issue,
+                          !isPersonnelExpense || canViewPersonnelCosts,
+                        )).join(" · ")}
                       </p>
                     </div>
                     {canIdentifyExpense && canEditExpenses ? (
@@ -839,29 +864,9 @@ export function DrePage() {
                       // line
                       const detailsKey = row.detailsKey;
                       const details = detailsKey ? metrics.expenseDetailsByPosition[detailsKey] ?? [] : [];
-                      const detailsByExpense = new Map<string, {
-                        expenseId: string;
-                        description: string | null;
-                        supplier: string | null;
-                        accountPlanNames: string[];
-                        amount: number;
-                      }>();
-                      details.forEach((detail) => {
-                        const current = detailsByExpense.get(detail.expenseId) ?? {
-                          expenseId: detail.expenseId,
-                          description: detail.description,
-                          supplier: detail.supplier,
-                          accountPlanNames: [],
-                          amount: 0,
-                        };
-                        if (!current.accountPlanNames.includes(detail.accountPlanName)) {
-                          current.accountPlanNames.push(detail.accountPlanName);
-                        }
-                        current.amount = Number((current.amount + detail.amount).toFixed(2));
-                        detailsByExpense.set(detail.expenseId, current);
-                      });
-                      const expenseDetails = [...detailsByExpense.values()];
-                      const canExpandDetails = expenseDetails.length > 0
+                      const accountGroups = groupDreExpenseDetailsByAccount(details);
+                      const expenseCount = new Set(details.map((detail) => detail.expenseId)).size;
+                      const canExpandDetails = expenseCount > 0
                         && canViewExpenseDetails
                         && (detailsKey !== "pessoal" || canViewPersonnelCosts);
                       const isExpanded = Boolean(detailsKey && expandedDreRows[detailsKey] && canExpandDetails);
@@ -884,7 +889,7 @@ export function DrePage() {
                                   <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                                   <span>{row.label}</span>
                                   <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                    {expenseDetails.length} {expenseDetails.length === 1 ? "despesa" : "despesas"}
+                                    {expenseCount} {expenseCount === 1 ? "despesa" : "despesas"}
                                   </span>
                                 </button>
                               ) : (
@@ -905,43 +910,69 @@ export function DrePage() {
                                   aria-label={`Lançamentos de ${row.label}`}
                                   className="overflow-hidden rounded-lg border bg-background"
                                 >
-                                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b bg-muted/30 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid-cols-[minmax(0,1fr)_minmax(140px,0.5fr)_auto]">
-                                    <span>Despesa</span>
-                                    <span className="hidden sm:block">Plano de contas</span>
-                                    <span className="text-right">Valor nesta linha</span>
-                                  </div>
-                                  <div className="divide-y divide-border/60">
-                                    {expenseDetails.map((detail) => {
-                                      const title = detail.description || detail.supplier || `Despesa ${detail.expenseId}`;
-                                      const showSupplier = Boolean(detail.description && detail.supplier && detail.supplier !== detail.description);
-                                      return (
-                                        <div
-                                          key={detail.expenseId}
-                                          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(140px,0.5fr)_auto]"
-                                        >
-                                          <div className="min-w-0">
-                                            <p className="truncate font-medium text-foreground">{title}</p>
-                                            <p className="truncate text-xs text-muted-foreground">
-                                              {showSupplier ? `${detail.supplier} · ` : ""}ID {detail.expenseId}
-                                            </p>
-                                            <p className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">{detail.accountPlanNames.join(" · ")}</p>
+                                  <Accordion type="multiple">
+                                    {accountGroups.map((group) => (
+                                      <AccordionItem
+                                        key={group.accountPlanId}
+                                        value={`${detailsKey}:${group.accountPlanId}`}
+                                        className="last:border-b-0"
+                                      >
+                                        <AccordionTrigger className="gap-3 bg-muted/20 px-4 py-3 text-left hover:no-underline">
+                                          <span className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-1">
+                                            <span className="min-w-0">
+                                              <span className="block truncate text-sm font-semibold text-foreground">{group.accountPlanName}</span>
+                                              <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
+                                                {group.expenses.length} {group.expenses.length === 1 ? "despesa" : "despesas"}
+                                              </span>
+                                            </span>
+                                            <span className="whitespace-nowrap font-mono text-xs font-semibold text-foreground">
+                                              {formatCurrency(group.totalAmount)}
+                                            </span>
+                                          </span>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="border-t pb-0">
+                                          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b bg-muted/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                            <span>Despesa</span>
+                                            <span className="text-right">Valor nesta linha</span>
                                           </div>
-                                          <span className="hidden truncate text-xs text-muted-foreground sm:block">{detail.accountPlanNames.join(" · ")}</span>
-                                          <div className="flex items-center justify-end gap-2">
-                                            <span className="whitespace-nowrap font-mono text-xs font-semibold">{formatCurrency(detail.amount)}</span>
-                                            {canEditExpenses ? (
-                                              <Button asChild variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Abrir despesa">
-                                                <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(detail.expenseId)}`}>
-                                                  <ExternalLink className="h-3.5 w-3.5" />
-                                                  <span className="sr-only">Abrir {title}</span>
-                                                </Link>
-                                              </Button>
-                                            ) : null}
+                                          <div className="divide-y divide-border/60">
+                                            {group.expenses.map((detail) => {
+                                              const title = detail.description || detail.supplier || "Despesa sem descrição";
+                                              const showSupplier = Boolean(detail.description && detail.supplier && detail.supplier !== detail.description);
+                                              const references = dreExpenseDetailReferences(detail);
+                                              return (
+                                                <div
+                                                  key={detail.expenseId}
+                                                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3"
+                                                >
+                                                  <div className="min-w-0">
+                                                    <p className="truncate font-medium text-foreground">{title}</p>
+                                                    {showSupplier ? (
+                                                      <p className="truncate text-xs text-muted-foreground">{detail.supplier}</p>
+                                                    ) : null}
+                                                    {references.length > 0 ? (
+                                                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{references.join(" · ")}</p>
+                                                    ) : null}
+                                                  </div>
+                                                  <div className="flex items-center justify-end gap-2">
+                                                    <span className="whitespace-nowrap font-mono text-xs font-semibold">{formatCurrency(detail.amount)}</span>
+                                                    {canEditExpenses ? (
+                                                      <Button asChild variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Abrir despesa">
+                                                        <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${encodeURIComponent(detail.expenseId)}`}>
+                                                          <ExternalLink className="h-3.5 w-3.5" />
+                                                          <span className="sr-only">Abrir {title}</span>
+                                                        </Link>
+                                                      </Button>
+                                                    ) : null}
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
                                           </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
+                                        </AccordionContent>
+                                      </AccordionItem>
+                                    ))}
+                                  </Accordion>
                                 </div>
                               </td>
                             </tr>
