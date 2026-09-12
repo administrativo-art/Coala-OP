@@ -24,7 +24,6 @@ import {
   FilePlus2,
   FileUp,
   Inbox,
-  Loader2,
   MoreHorizontal,
   Pencil,
   ReceiptText,
@@ -37,8 +36,11 @@ import {
   ExpensePeriodFilter,
   type ExpensePeriodPreset,
 } from "@/features/financial/components/expenses/expense-period-filter";
+import {
+  ExpenseExpandedDetails,
+  PurchaseOrderItemsLink,
+} from "@/features/financial/components/expenses/expense-expanded-details";
 import { KpiFlowStrip } from "@/features/financial/components/expenses/kpi-flow-strip";
-import { ExpenseFinancialSummary } from "@/features/financial/components/expenses/expense-financial-summary";
 import { ExpenseCompetencePicker } from "@/features/financial/components/expenses/expense-competence-picker";
 import { UberRecognitionStatus } from "@/features/financial/components/expenses/uber-recognition-status";
 import { FinancialAccessGuard } from "@/features/financial/components/financial-access-guard";
@@ -87,10 +89,7 @@ import {
 import { useFinancialCollection } from "@/features/financial/hooks/use-financial-collection";
 import { useAuth } from "@/hooks/use-auth";
 import { useKiosks } from "@/hooks/use-kiosks";
-import { useProducts } from "@/hooks/use-products";
-import { usePurchaseOrders } from "@/hooks/use-purchase-orders";
 import { useToast } from "@/hooks/use-toast";
-import type { PurchaseOrderItem } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -180,90 +179,6 @@ const UNIT_COLOR_STYLES: Array<{ match: string; dot: string; active: string; sof
   { match: "morumbi", dot: "bg-violet-500", active: "border-violet-500 bg-violet-50 text-violet-700", soft: "border-violet-200 hover:border-violet-300" },
   { match: "matriz", dot: "bg-sky-500", active: "border-sky-500 bg-sky-50 text-sky-700", soft: "border-sky-200 hover:border-sky-300" },
 ];
-
-function PurchaseOrderItemsLink({ orderId, href, label }: { orderId: string; href: string; label?: string }) {
-  const { fetchOrderItems } = usePurchaseOrders();
-  const { products, getProductFullName } = useProducts();
-  const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<PurchaseOrderItem[] | null>(null);
-  const [loadError, setLoadError] = useState(false);
-
-  useEffect(() => {
-    if (!open || items !== null || loadError) return;
-    let cancelled = false;
-
-    void fetchOrderItems(orderId)
-      .then((data) => {
-        if (!cancelled) setItems(data);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchOrderItems, items, loadError, open, orderId]);
-
-  return (
-    <TooltipProvider delayDuration={250}>
-      <Tooltip open={open} onOpenChange={setOpen}>
-        <TooltipTrigger asChild>
-          <Link href={href} className="mt-1 inline-block text-sm font-medium text-primary underline underline-offset-2">
-            {label || `Abrir pedido ${orderId}`}
-          </Link>
-        </TooltipTrigger>
-        <TooltipContent
-          side="top"
-          align="start"
-          sideOffset={8}
-          className="w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl p-0"
-        >
-          <div className="border-b bg-muted/40 px-3 py-2.5">
-            <p className="font-semibold">Itens do pedido</p>
-            <p className="text-xs text-muted-foreground">Clique no link para abrir todos os detalhes.</p>
-          </div>
-          <div className="max-h-72 overflow-y-auto p-2">
-            {items === null && !loadError ? (
-              <div className="flex items-center justify-center gap-2 px-3 py-5 text-xs text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Carregando itens...
-              </div>
-            ) : loadError ? (
-              <p className="px-3 py-4 text-xs text-muted-foreground">Não foi possível carregar a prévia.</p>
-            ) : items?.length ? (
-              <div className="divide-y">
-                {items.map((item) => {
-                  const product = item.productId ? products.find((entry) => entry.id === item.productId) : null;
-                  const itemName =
-                    (product ? getProductFullName(product) : "") ||
-                    item.itemName ||
-                    item.baseItemId ||
-                    "Item da compra";
-                  const quantity = Number(item.quantityOrdered || 0);
-                  const total = Number(item.totalOrdered ?? quantity * Number(item.unitPriceOrdered || 0));
-
-                  return (
-                    <div key={item.id} className="flex items-start justify-between gap-3 px-2 py-2.5">
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 text-xs font-medium leading-4">{itemName}</p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {quantity.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} {item.purchaseUnitLabel || item.unit || "un."}
-                        </p>
-                      </div>
-                      <p className="shrink-0 font-mono text-xs font-semibold">{formatCurrency(total)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="px-3 py-4 text-xs text-muted-foreground">Nenhum item cadastrado neste pedido.</p>
-            )}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
 
 function InstallmentScheduleTooltip({
   installments,
@@ -1487,29 +1402,6 @@ export function ExpensesPage() {
                     const statusKey = getExpenseStatusKey(expense, startOfDay(new Date()));
                     const isExpanded = expandedExpenseId === expense.id;
                     const planName = accountPlanMap[expense.accountId ?? expense.accountPlan] || expense.accountPlanName || expense.accountId || expense.accountPlan || "—";
-                    const accountingAllocations = expenseAccountAllocations(expense, accountPlanMap);
-                    const personAllocations = canViewPersonnelCosts
-                      ? expensePersonAllocations(expense, accountPlanMap)
-                      : [];
-                    const personAllocationPeopleCount = personAllocationDistinctPeopleCount(personAllocations);
-                    const showPersonIndividualization = personAllocationPeopleCount > 1;
-                    const personAllocationGroups = Array.from(
-                      personAllocations.reduce((groups, allocation) => {
-                        const key = allocation.accountPlanId;
-                        const current = groups.get(key) || {
-                          accountPlanId: key,
-                          accountPlanName: allocation.accountPlanName || key,
-                          allocations: [] as typeof personAllocations,
-                        };
-                        current.allocations.push(allocation);
-                        groups.set(key, current);
-                        return groups;
-                      }, new Map<string, {
-                        accountPlanId: string;
-                        accountPlanName: string;
-                        allocations: typeof personAllocations;
-                      }>()).values()
-                    ).sort((left, right) => left.accountPlanName.localeCompare(right.accountPlanName, "pt-BR"));
                     const primaryUnit = getExpenseUnitLabel(expense, resultCenterNameById);
                     const installmentSchedule = Array.isArray(expense.installmentSchedule) && expense.installmentSchedule.length > 0
                       ? expense.installmentSchedule
@@ -1611,287 +1503,27 @@ export function ExpensesPage() {
                           </td>
                         </tr>
                         {isExpanded && (
-                          <tr className="border-b bg-muted/10">
-                            <td colSpan={7} className="px-4 pb-4 pt-1">
-                              <div className="grid gap-4 rounded-2xl border border-border/70 bg-background p-4 md:grid-cols-[minmax(0,1fr)_auto]">
-                                <div className="grid gap-4 sm:grid-cols-3">
-                                  <ExpenseFinancialSummary expense={expense} />
-                                  <UberRecognitionStatus record={expense} />
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Fornecedor</p>
-                                    <p className="mt-1 text-sm font-medium">{expense.supplier || "—"}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Plano de contas</p>
-                                    <p className="mt-1 text-sm font-medium">{planName}</p>
-                                  </div>
-                                  {accountingAllocations.length > 1 && (
-                                    <div className="sm:col-span-3 rounded-xl border bg-muted/20 p-3">
-                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                        Apropriações do título
-                                      </p>
-                                      <div className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                                        {accountingAllocations.map((allocation) => (
-                                          <div key={allocation.accountPlanId} className="flex items-center justify-between gap-3 text-sm">
-                                            <span>{allocation.accountPlanName || allocation.accountPlanId}</span>
-                                            <span className="font-mono font-semibold">{formatCurrency(allocation.amount)}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                  {showPersonIndividualization && (
-                                    <div className="sm:col-span-3 rounded-xl border bg-muted/20 p-3">
-                                      <div className="flex items-center justify-between gap-3">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                          Individualização auditável
-                                        </p>
-                                        <span className="text-xs text-muted-foreground">
-                                          {personAllocationPeopleCount} pessoas · {personAllocations.length} vínculos
-                                        </span>
-                                      </div>
-                                      <div className="mt-3 space-y-3">
-                                        {personAllocationGroups.map((group) => {
-                                          const groupTotal = group.allocations.reduce((total, allocation) => total + allocation.amount, 0);
-                                          const people = Array.from(
-                                            group.allocations.reduce((peopleMap, allocation) => {
-                                              const key = allocation.employeeId || allocation.employeeName;
-                                              const current = peopleMap.get(key) || {
-                                                employeeId: allocation.employeeId,
-                                                employeeName: allocation.employeeName,
-                                                allocations: [] as typeof group.allocations,
-                                              };
-                                              current.allocations.push(allocation);
-                                              peopleMap.set(key, current);
-                                              return peopleMap;
-                                            }, new Map<string, {
-                                              employeeId: string;
-                                              employeeName: string;
-                                              allocations: typeof group.allocations;
-                                            }>()).values()
-                                          ).sort((left, right) => left.employeeName.localeCompare(right.employeeName, "pt-BR"));
-                                          return (
-                                            <div key={group.accountPlanId} className="overflow-hidden rounded-xl border bg-background">
-                                              <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/35 px-3 py-2.5">
-                                                <div>
-                                                  <p className="text-sm font-semibold">{group.accountPlanName}</p>
-                                                  <p className="text-[10.5px] text-muted-foreground">
-                                                    {group.allocations.length} vínculo{group.allocations.length === 1 ? "" : "s"}
-                                                  </p>
-                                                </div>
-                                                <p className="font-mono text-sm font-semibold">{formatCurrency(groupTotal)}</p>
-                                              </div>
-                                              <div className="divide-y">
-                                                {people.map((person) => {
-                                                  const personTotal = person.allocations.reduce((total, allocation) => total + allocation.amount, 0);
-                                                  return (
-                                                    <details key={person.employeeId || person.employeeName} className="group/person">
-                                                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 transition-colors hover:bg-muted/20 [&::-webkit-details-marker]:hidden">
-                                                        <div className="min-w-0">
-                                                          <p className="truncate text-sm font-medium">{person.employeeName}</p>
-                                                          <p className="mt-0.5 text-[10.5px] text-muted-foreground">
-                                                            {person.allocations.length} lançamento{person.allocations.length === 1 ? "" : "s"}
-                                                          </p>
-                                                        </div>
-                                                        <div className="flex shrink-0 items-center gap-2">
-                                                          <p className="font-mono text-sm font-semibold">{formatCurrency(personTotal)}</p>
-                                                          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/person:rotate-180" />
-                                                        </div>
-                                                      </summary>
-                                                      <div className="overflow-x-auto border-t bg-muted/10">
-                                                        <table className="min-w-[700px] w-full text-left text-xs">
-                                                          <thead className="border-b text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                                            <tr>
-                                                              <th className="px-3 py-2 font-semibold">Classificação</th>
-                                                              <th className="px-3 py-2 font-semibold">Unidade</th>
-                                                              <th className="px-3 py-2 font-semibold">Referência</th>
-                                                              <th className="px-3 py-2 font-semibold">Documento</th>
-                                                              <th className="px-3 py-2 text-right font-semibold">Valor</th>
-                                                            </tr>
-                                                          </thead>
-                                                          <tbody className="divide-y">
-                                                            {person.allocations.map((allocation, index) => (
-                                                              <tr key={allocation.id || `${allocation.employeeId}-${index}`} className="align-top">
-                                                                <td className="px-3 py-2.5 text-muted-foreground">
-                                                                  {allocation.analysisType === "employer_cost"
-                                                                    ? "Custo da empresa"
-                                                                    : allocation.analysisType === "employee_deduction"
-                                                                      ? "Desconto do colaborador"
-                                                                      : "Informativo"}
-                                                                </td>
-                                                                <td className="px-3 py-2.5 text-muted-foreground">{allocation.resultCenter || "Centro pendente"}</td>
-                                                                <td className="px-3 py-2.5 text-muted-foreground">
-                                                                  {allocation.contractReference || allocation.creditorName || "—"}
-                                                                  {allocation.contractReference && allocation.creditorName ? (
-                                                                    <span className="mt-0.5 block text-[10.5px]">{allocation.creditorName}</span>
-                                                                  ) : null}
-                                                                </td>
-                                                                <td className="max-w-[180px] break-all px-3 py-2.5 font-mono text-[10.5px] text-muted-foreground">
-                                                                  {allocation.payrollDocumentId ? `RH ${allocation.payrollDocumentId}` : "—"}
-                                                                </td>
-                                                                <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold">
-                                                                  {formatCurrency(allocation.amount)}
-                                                                </td>
-                                                              </tr>
-                                                            ))}
-                                                          </tbody>
-                                                        </table>
-                                                      </div>
-                                                    </details>
-                                                  );
-                                                })}
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Centro de referência</p>
-                                    <p className="mt-1 text-sm font-medium">
-                                      {expenseReferenceCenterLabel(expense, resultCenterNameById)}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Apropriação na DRE</p>
-                                    <p className="mt-1 text-sm font-medium">
-                                      {expense.isApportioned
-                                        ? `${Array.isArray(expense.apportionments) ? expense.apportionments.length : 0} centro(s) no rateio`
-                                        : "100% no centro de referência"}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Competência</p>
-                                    <p className="mt-1 text-sm font-medium">
-                                      {toDate(expense.competenceDate) ? format(toDate(expense.competenceDate)!, "MM/yyyy") : "—"}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vencimento</p>
-                                    <p className="mt-1 text-sm font-medium">{due ? format(due, "dd/MM/yyyy") : "—"}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Parcela</p>
-                                    <div className="mt-1 text-sm font-medium">
-                                      <InstallmentScheduleTooltip
-                                        installments={installmentSchedule}
-                                        label={installmentLabel}
-                                        totalInstallments={installmentTotal}
-                                      />
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pagamento previsto</p>
-                                    <p className="mt-1 text-sm font-medium">
-                                      {expense.plannedPaymentMethodType
-                                        ? `${expense.plannedBankAccountName ? `${expense.plannedBankAccountName} · ` : ""}${
-                                            expense.plannedPaymentMethodLabel ||
-                                            PLANNED_PAYMENT_METHOD_LABELS[expense.plannedPaymentMethodType as PlannedPaymentMethodType]
-                                          }`
-                                        : "Não informado"}
-                                    </p>
-                                  </div>
-                                  {expense.purchaseOrderId && (
-                                    <div className="sm:col-span-3">
-                                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pedido vinculado</p>
-                                      <PurchaseOrderItemsLink
-                                        orderId={expense.purchaseOrderId}
-                                        href={`/dashboard/purchasing/orders/${expense.purchaseOrderId}?returnTo=${encodeURIComponent(FINANCIAL_ROUTES.pendingAuditExpenses)}`}
-                                      />
-                                    </div>
-                                  )}
-                                  {relatedPurchaseExpense && (
-                                    <div className="sm:col-span-3 rounded-xl border bg-muted/20 p-3">
-                                      <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                            {expense.purchaseExpenseRole === "freight"
-                                              ? "Mercadoria relacionada"
-                                              : "Frete pago separadamente"}
-                                          </p>
-                                          <p className="mt-1 truncate text-sm font-medium">
-                                            {relatedPurchaseExpense.description || "Despesa vinculada à compra"}
-                                          </p>
-                                          <p className="mt-0.5 text-xs text-muted-foreground">
-                                            {relatedPurchaseExpense.supplier || "Favorecido não informado"}
-                                          </p>
-                                        </div>
-                                        <div className="flex shrink-0 items-center gap-3">
-                                          <p className="font-mono text-sm font-semibold">
-                                            {formatCurrency(Number(relatedPurchaseExpense.totalValue) || 0)}
-                                          </p>
-                                          {permissions.financial?.expenses?.view && (
-                                            <Button type="button" variant="outline" size="sm" asChild onClick={(event) => event.stopPropagation()}>
-                                              <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${relatedPurchaseExpense.id}`}>
-                                                Abrir despesa
-                                              </Link>
-                                            </Button>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                  {expense.notes && (
-                                    <div className="sm:col-span-3 rounded-xl bg-muted/50 p-3 text-sm text-muted-foreground">
-                                      <span className="font-medium text-foreground">Observações:</span> {expense.notes}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Valor total</p>
-                                  <p className="mt-1 font-mono text-xl font-bold">{formatCurrency(expense.totalValue || 0)}</p>
-                                </div>
-                                <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4 md:col-span-2 md:flex-nowrap">
-                                  {permissions.financial?.expenses?.edit &&
-                                    expense.originModule === "purchasing" &&
-                                    expense.originStatus === "pending_audit" && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        className="border-rose-200 bg-rose-50 text-rose-600 hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/50"
-                                        disabled={finalizingAuditId === expense.id}
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          void handleFinalizeAudit(expense);
-                                        }}
-                                      >
-                                        {finalizingAuditId === expense.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Finalizar auditoria
-                                      </Button>
-                                    )}
-                                  {permissions.financial?.expenses?.pay && ["pending", "partially_paid"].includes(expense.status) && (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="bg-emerald-600 text-white hover:bg-emerald-700"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setPayTarget({
-                                          ...expense,
-                                          accountPlanName: planName,
-                                          resultCenter: primaryUnit,
-                                        });
-                                      }}
-                                    >
-                                      Registrar pagamento
-                                    </Button>
-                                  )}
-                                  {permissions.financial?.expenses?.edit && (
-                                    <Button type="button" variant="outline" size="sm" asChild onClick={(event) => event.stopPropagation()}>
-                                      <Link href={`${FINANCIAL_ROUTES.newExpense}?edit=${expense.id}`}>
-                                        {expense.status === "draft" ? "Continuar" : "Editar"}
-                                      </Link>
-                                    </Button>
-                                  )}
-                                  {permissions.financial?.expenses?.delete && expense.originModule !== "purchasing" && (
-                                    <Button type="button" variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); setDeleteTarget(expense); }}>
-                                      Excluir
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
+                          <tr className="border-b bg-[#fdfcfa] dark:bg-muted/10">
+                            <td colSpan={7} className="px-[18px] pb-4 pt-1">
+                              <ExpenseExpandedDetails
+                                expense={expense}
+                                relatedPurchaseExpense={relatedPurchaseExpense}
+                                accountPlanMap={accountPlanMap}
+                                resultCenterNameById={resultCenterNameById}
+                                canViewPersonnelCosts={canViewPersonnelCosts}
+                                canViewExpenses={canViewExpenses}
+                                canEdit={permissions.financial?.expenses?.edit === true}
+                                canPay={permissions.financial?.expenses?.pay === true}
+                                canDelete={permissions.financial?.expenses?.delete === true}
+                                finalizingAudit={finalizingAuditId === expense.id}
+                                onFinalizeAudit={() => void handleFinalizeAudit(expense)}
+                                onPay={() => setPayTarget({
+                                  ...expense,
+                                  accountPlanName: planName,
+                                  resultCenter: primaryUnit,
+                                })}
+                                onDelete={() => setDeleteTarget(expense)}
+                              />
                             </td>
                           </tr>
                         )}
