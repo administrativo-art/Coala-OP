@@ -158,6 +158,11 @@ export type MovementRecord = {
   activityId?: string;
   reverted?: boolean;
   revertedFromId?: string;
+  /** Exceção manual e auditável: mantém o movimento no estoque, mas o exclui do CMV da DRE. */
+  excludeFromDreStockCmv?: boolean;
+  dreStockCmvExclusionReason?: string;
+  dreStockCmvExcludedAt?: any;
+  dreStockCmvExcludedBy?: string;
   sourceType?: string;
   sourceId?: string;
   uniformEventId?: string;
