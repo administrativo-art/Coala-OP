@@ -17,6 +17,7 @@ import {
   ArrowUp,
   CalendarDays,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   CreditCard,
   FileCheck2,
@@ -417,10 +418,11 @@ function matchesBaseFilters(
 }
 
 type ExpenseDisplayEntry = ExpenseCardStatementListEntry<any>;
+type GroupedExpenseDisplayEntry = ExpenseDisplayEntry & { dueWeekKey?: string };
 
 type ExpenseListRow =
   | { kind: "week"; group: ExpenseDueWeekGroup<ExpenseDisplayEntry> }
-  | ExpenseDisplayEntry;
+  | GroupedExpenseDisplayEntry;
 
 type ExpenseSortKey = "dueDate" | "value";
 
@@ -500,6 +502,7 @@ export function ExpensesPage() {
   const [finalizingAuditId, setFinalizingAuditId] = useState<string | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
   const [expandedCardStatementKey, setExpandedCardStatementKey] = useState<string | null>(null);
+  const [collapsedDueWeeks, setCollapsedDueWeeks] = useState<Set<string>>(() => new Set());
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const canAccessAudits = permissions.financial?.audits?.view === true;
   const canImportAudits = canAccessAudits && permissions.financial?.audits?.import === true;
@@ -788,9 +791,18 @@ export function ExpensesPage() {
 
     return groups.flatMap((group) => [
       { kind: "week" as const, group },
-      ...group.expenses,
+      ...group.expenses.map((entry) => ({ ...entry, dueWeekKey: group.key })),
     ]);
   }, [activeCompetenceLabel, expenseSort, filteredDisplayEntries]);
+
+  function toggleDueWeek(weekKey: string) {
+    setCollapsedDueWeeks((current) => {
+      const next = new Set(current);
+      if (next.has(weekKey)) next.delete(weekKey);
+      else next.add(weekKey);
+      return next;
+    });
+  }
 
   function toggleExpenseSort(key: ExpenseSortKey) {
     setExpenseSort((current) => current.key === key
@@ -1248,11 +1260,19 @@ export function ExpensesPage() {
                 ) : (
                   expenseListRows.map((row) => {
                     if (row.kind === "week") {
+                      const isCollapsed = collapsedDueWeeks.has(row.group.key);
                       return (
                         <tr key={`week-${row.group.key}`} className="border-b border-primary/10 bg-primary/[0.035]">
-                          <td colSpan={7} className="px-4 py-2.5">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
+                          <td colSpan={7} className="p-0">
+                            <button
+                              type="button"
+                              className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors hover:bg-primary/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                              aria-expanded={!isCollapsed}
+                              aria-label={`${isCollapsed ? "Expandir" : "Recolher"} semana de vencimento ${row.group.label}`}
+                              onClick={() => toggleDueWeek(row.group.key)}
+                            >
                               <div className="flex items-center gap-2">
+                                <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-primary transition-transform", !isCollapsed && "rotate-90")} />
                                 <CalendarDays className="h-3.5 w-3.5 text-primary" />
                                 <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/75">
                                   Semana de vencimento
@@ -1265,11 +1285,12 @@ export function ExpensesPage() {
                               <span className="font-mono text-xs font-semibold text-foreground">
                                 {formatCurrency(row.group.totalValue)}
                               </span>
-                            </div>
+                            </button>
                           </td>
                         </tr>
                       );
                     }
+                    if (row.dueWeekKey && collapsedDueWeeks.has(row.dueWeekKey)) return null;
                     if (row.kind === "card_statement") {
                       const statement = row.statement;
                       const due = statement.dueDate;
@@ -1891,11 +1912,20 @@ export function ExpensesPage() {
               <div className="flex flex-col">
                 {expenseListRows.map((row) => {
                   if (row.kind === "week") {
+                    const isCollapsed = collapsedDueWeeks.has(row.group.key);
                     return (
-                      <div key={`mobile-week-${row.group.key}`} className="border-b border-primary/10 bg-primary/[0.04] px-4 py-2.5">
+                      <button
+                        key={`mobile-week-${row.group.key}`}
+                        type="button"
+                        className="w-full border-b border-primary/10 bg-primary/[0.04] px-4 py-2.5 text-left transition-colors hover:bg-primary/[0.065] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                        aria-expanded={!isCollapsed}
+                        aria-label={`${isCollapsed ? "Expandir" : "Recolher"} semana de vencimento ${row.group.label}`}
+                        onClick={() => toggleDueWeek(row.group.key)}
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary/75">
+                              <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", !isCollapsed && "rotate-90")} />
                               <CalendarDays className="h-3.5 w-3.5" />
                               Semana de vencimento
                             </p>
@@ -1908,9 +1938,10 @@ export function ExpensesPage() {
                             </p>
                           </div>
                         </div>
-                      </div>
+                      </button>
                     );
                   }
+                  if (row.dueWeekKey && collapsedDueWeeks.has(row.dueWeekKey)) return null;
                   if (row.kind === "card_statement") {
                     const statement = row.statement;
                     const isExpanded = expandedCardStatementKey === statement.key;
