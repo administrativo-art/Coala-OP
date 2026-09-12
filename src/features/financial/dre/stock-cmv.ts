@@ -63,11 +63,12 @@ function movementCategory(type: string): StockMovementCategory | null {
 }
 
 export function isDreStockOutflowMovement(
-  movement: Pick<MovementRecord, "type" | "reverted" | "itemClass" | "fromKioskId">,
+  movement: Pick<MovementRecord, "type" | "reverted" | "excludeFromDreStockCmv" | "itemClass" | "fromKioskId">,
 ) {
   return Boolean(
     movementCategory(String(movement.type ?? ""))
     && !movement.reverted
+    && movement.excludeFromDreStockCmv !== true
     && movement.itemClass !== "uniform"
     && movement.fromKioskId,
   );
